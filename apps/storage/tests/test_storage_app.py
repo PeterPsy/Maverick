@@ -288,6 +288,25 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(kinds["storage/generated/voice.m4a"], "audio")
             self.assertEqual(content_types["storage/generated/voice.m4a"], "audio/mp4")
             self.assertEqual(result["json"]["available_kinds"], ["video", "audio", "presentation", "markdown", "text"])
+            self.assertEqual(result["json"]["schema"], "storage.file-catalog.v1")
+            self.assertRegex(result["json"]["revision"], r"^[a-f0-9]{64}$")
+            self.assertFalse(result["json"]["not_modified"])
+
+            unchanged = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog", "known_revision": result["json"]["revision"]},
+            )
+            self.assertEqual(unchanged["status_code"], 200)
+            self.assertEqual(
+                unchanged["json"],
+                {
+                    "schema": "storage.file-catalog.v1",
+                    "revision": result["json"]["revision"],
+                    "not_modified": True,
+                },
+            )
 
     def test_backend_catalog_normalizes_existing_m4a_inventory_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

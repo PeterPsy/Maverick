@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from base64 import b64decode
 import binascii
+import hashlib
+import json
 from pathlib import Path
 import tempfile
 from typing import Any, BinaryIO
@@ -847,7 +849,8 @@ def handle_action(
             file_ids=_optional_string_list(body, "file_ids"),
             workspace_relative_paths=_optional_string_list(body, "workspace_relative_paths"),
         )
-        return 200, {
+        response = {
+            "schema": "storage.file-catalog.v1",
             "state": load_state(data_root),
             "files": catalog["files"],
             "folders": catalog["folders"],
@@ -855,6 +858,22 @@ def handle_action(
             "inventory": catalog["inventory"],
             "available_kinds": catalog["available_kinds"],
         }
+        revision_payload = {
+            **response,
+            "inventory": {
+                "schema_version": str(response["inventory"].get("schema_version") or ""),
+            },
+        }
+        revision = hashlib.sha256(
+            json.dumps(revision_payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if str(body.get("known_revision") or "").strip() == revision:
+            return 200, {
+                "schema": "storage.file-catalog.v1",
+                "revision": revision,
+                "not_modified": True,
+            }
+        return 200, {**response, "revision": revision, "not_modified": False}
     if action == "view_filter":
         return 200, {"state": load_state(data_root)}
     if action == "set_view_filter":

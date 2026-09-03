@@ -1,3 +1,5 @@
+import { loadCachedCatalog, requestJson } from "./appStoreApi.js";
+
 const state = {
   apps: [],
   catalogApps: [],
@@ -7,6 +9,8 @@ const state = {
   pinnedApps: [],
   workspaces: [],
   isLoading: true,
+  catalogReady: false,
+  authorityReady: false,
   selectedWorkspaces: new Set(),
   pending: new Set(),
   publicIdentities: {},
@@ -44,18 +48,9 @@ const promotionModalBody = document.querySelector("#promotionModalBody");
 const promotionModalActions = document.querySelector("#promotionModalActions");
 const promotionModalClose = document.querySelector("#promotionModalClose");
 
-async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = payload.detail || payload.error || `HTTP ${response.status}`;
-    throw new Error(detail);
-  }
-  return payload;
+function applyCatalog(payload) {
+  state.catalogApps = payload.items || [];
+  state.apps = mergeCatalogAndServerApps(state.catalogApps, state.serverApps);
 }
 
 function setStatus() {}
@@ -467,6 +462,7 @@ function statusLabel(appId) {
 }
 
 function openApp(appId, workspaceId = null) {
+  if (!state.authorityReady) return;
   const message = { type: "maverick.app.open-app", app_id: appId };
   if (workspaceId) {
     message.workspace_id = workspaceId;
@@ -496,6 +492,7 @@ function renderWorkspaces() {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = state.selectedWorkspaces.has(workspace.workspace_id);
+    checkbox.disabled = !state.authorityReady;
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) {
         state.selectedWorkspaces.add(workspace.workspace_id);
@@ -576,7 +573,7 @@ function renderMenuItem({ label, icon, disabled = false, danger = false, action 
   const button = document.createElement("button");
   button.className = "app-row-menu-item";
   button.type = "button";
-  button.disabled = disabled;
+  button.disabled = disabled || !state.authorityReady;
   if (danger) {
     button.dataset.intent = "danger";
   }
@@ -590,7 +587,7 @@ function renderMenuItem({ label, icon, disabled = false, danger = false, action 
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     closeOpenMenus();
-    if (!disabled) {
+    if (!button.disabled) {
       action();
     }
   });
@@ -622,7 +619,7 @@ function renderWorkspaceAssignmentsMenu(app, version, mode) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = Boolean(installationFor(app.app_id, workspaceId));
-    checkbox.disabled = mode === "local" || !canAssignWorkspace(mode, version) || state.pending.has(assignmentKey);
+    checkbox.disabled = !state.authorityReady || mode === "local" || !canAssignWorkspace(mode, version) || state.pending.has(assignmentKey);
     checkbox.addEventListener("click", (event) => event.stopPropagation());
     checkbox.addEventListener("change", (event) => {
       event.stopPropagation();
@@ -663,7 +660,7 @@ function renderDetailSettingButton({ label, icon, disabled = false, danger = fal
   const button = document.createElement("button");
   button.className = "app-detail-setting-button";
   button.type = "button";
-  button.disabled = disabled;
+  button.disabled = disabled || !state.authorityReady;
   if (danger) {
     button.dataset.intent = "danger";
   }
@@ -676,7 +673,7 @@ function renderDetailSettingButton({ label, icon, disabled = false, danger = fal
   button.append(iconEl, text);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (!disabled) {
+    if (!button.disabled) {
       action();
     }
   });
@@ -701,7 +698,7 @@ function renderWorkspaceAssignmentsSettings(app, version, mode) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = Boolean(installationFor(app.app_id, workspaceId));
-    checkbox.disabled = mode === "local" || !canAssignWorkspace(mode, version) || state.pending.has(assignmentKey);
+    checkbox.disabled = !state.authorityReady || mode === "local" || !canAssignWorkspace(mode, version) || state.pending.has(assignmentKey);
     checkbox.addEventListener("click", (event) => event.stopPropagation());
     checkbox.addEventListener("change", (event) => {
       event.stopPropagation();
@@ -956,7 +953,7 @@ function fileToBase64(file) {
 function renderRow(app, mode) {
   const version = latestVersion(app) || { version: app.latest_version || "" };
   const installState = selectedInstallState(app.app_id);
-  const canOpen = canOpenInstalledApp(app, installState);
+  const canOpen = state.authorityReady && canOpenInstalledApp(app, installState);
   const openWorkspaceId = mode === "local" ? app.workspace_id : installState.launchableWorkspaceId;
   const presentationInstallation = installState.presentationInstallation;
   const row = document.createElement("article");
@@ -1088,7 +1085,7 @@ function renderStalePinnedShortcut(appId) {
   const action = document.createElement("button");
   action.className = "stale-pin-remove";
   action.type = "button";
-  action.disabled = isAppPending(appId);
+  action.disabled = !state.authorityReady || isAppPending(appId);
   action.setAttribute("aria-label", `Remove stale shortcut ${app.name}`);
   const actionLabel = document.createElement("span");
   actionLabel.textContent = "Unpin";
@@ -1160,7 +1157,7 @@ function renderFeatured() {
     action.type = "button";
     const launchable = installState.installedCount > 0 ? installState.launchableCount > 0 : isFrontendLaunchable(app);
     action.textContent = installState.installedCount > 0 ? (launchable ? "Open" : "Installed") : "Get";
-    action.disabled = installState.installedCount > 0 && !launchable;
+    action.disabled = !state.authorityReady || (installState.installedCount > 0 && !launchable);
     action.addEventListener("click", () => {
       const version = latestVersion(app);
       const currentInstallState = selectedInstallState(app.app_id);
@@ -1295,7 +1292,7 @@ function renderPublicSubmission(submission) {
 
 function render() {
   syncLoadingChrome();
-  if (state.isLoading) {
+  if (state.isLoading && !state.catalogReady) {
     renderLoading();
     return;
   }
@@ -1305,6 +1302,7 @@ function render() {
 }
 
 async function installApp(app, version) {
+  if (!state.authorityReady) return;
   const workspaceIds = selectedWorkspaceIds();
   const installKey = `${app.app_id}:${version.version}`;
   state.pending.add(installKey);
@@ -1331,6 +1329,7 @@ async function installApp(app, version) {
 }
 
 async function uninstallApp(app, version) {
+  if (!state.authorityReady) return;
   const workspaceIds = selectedWorkspaceIds();
   const installKey = `${app.app_id}:${version.version}`;
   state.pending.add(installKey);
@@ -1352,6 +1351,7 @@ async function uninstallApp(app, version) {
 }
 
 async function installServerApp(app, version) {
+  if (!state.authorityReady) return;
   const workspaceIds = selectedWorkspaceIds();
   const installKey = `${app.app_id}:${version.source_id || version.version || "server"}`;
   state.pending.add(installKey);
@@ -1374,6 +1374,7 @@ async function installServerApp(app, version) {
 }
 
 async function installLocalApp(app) {
+  if (!state.authorityReady) return;
   const workspaceId = app.workspace_id;
   const pendingKey = `${app.app_id}:local:${workspaceId || ""}`;
   if (!workspaceId) {
@@ -1402,6 +1403,7 @@ async function installLocalApp(app) {
 }
 
 async function uninstallLocalApp(app) {
+  if (!state.authorityReady) return;
   const workspaceId = app.workspace_id;
   const pendingKey = `${app.app_id}:local:${workspaceId || ""}`;
   if (!workspaceId) {
@@ -1427,6 +1429,7 @@ async function uninstallLocalApp(app) {
 }
 
 async function deleteLocalApp(app) {
+  if (!state.authorityReady) return;
   const workspaceId = app.workspace_id;
   const pendingKey = `${app.app_id}:delete:${workspaceId || ""}`;
   if (!workspaceId) {
@@ -1465,6 +1468,7 @@ async function deleteLocalApp(app) {
 }
 
 async function promoteLocalApp(app) {
+  if (!state.authorityReady) return;
   const workspaceId = app.workspace_id;
   if (app.localStatus === "invalid") {
     const detail = app.validation_error || "This local app has an invalid app_contract.json and cannot be promoted.";
@@ -1544,6 +1548,7 @@ async function promoteLocalApp(app) {
 }
 
 function requestPublicPublication(app) {
+  if (!state.authorityReady) return;
   let publicationMode = "sealed";
   const modeControl = document.createElement("div");
   modeControl.className = "app-modal__segmented";
@@ -1673,6 +1678,7 @@ async function loadPublicIdentity(app) {
 }
 
 async function setWorkspaceAssignment(app, version, mode, workspaceId, shouldInstall) {
+  if (!state.authorityReady) return;
   const assignmentKey = `${app.app_id}:${version.source_id || version.version || "server"}:${workspaceId}`;
   state.pending.add(assignmentKey);
   render();
@@ -1721,6 +1727,7 @@ async function refreshPinnedApps() {
 }
 
 async function togglePinnedApp(app) {
+  if (!state.authorityReady) return;
   const installState = selectedInstallState(app.app_id);
   if (!canTogglePinnedApp(app, installState)) {
     setStatus(`${app.name || app.app_id} has no app view to pin`, "error");
@@ -1772,12 +1779,27 @@ async function lookupPublicSubmission() {
 
 async function load() {
   state.isLoading = true;
+  state.catalogReady = false;
+  state.authorityReady = false;
   setStatus("Loading", "busy");
   render();
   try {
+    const catalogRead = loadCachedCatalog().then((result) => {
+      applyCatalog(result.payload);
+      state.catalogReady = true;
+      render();
+      if (result.revalidation) {
+        void result.revalidation.then((next) => {
+          if (!next.changed) return;
+          applyCatalog(next.payload);
+          render();
+        }).catch(() => undefined);
+      }
+      return result.payload;
+    });
     const [workspaces, catalog, serverApps, installations, pinned] = await Promise.all([
       requestJson("/api/workspaces"),
-      requestJson("/api/app-store/apps"),
+      catalogRead,
       requestJson("/api/app-store/server-apps"),
       requestJson("/api/app-store/installations"),
       requestJson("/api/apps/app-store/backend", {
@@ -1793,6 +1815,7 @@ async function load() {
     state.localApps = installations.local_apps || [];
     state.pinnedApps = pinned.pinned_apps || [];
     state.selectedWorkspaces = new Set([workspaces.active_workspace_id || state.workspaces[0]?.workspace_id].filter(Boolean));
+    state.authorityReady = true;
     state.isLoading = false;
     renderWorkspaces();
     render();

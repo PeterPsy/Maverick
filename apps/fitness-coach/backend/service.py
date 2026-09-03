@@ -166,7 +166,21 @@ def handle_action(data_root: str, action: str, arguments: dict[str, Any] | None 
             "run_count": len(state["runs"]),
         }
     if canonical == "app.bootstrap":
-        return 200, {"ok": True, **bootstrap_app(data_root, args)}
+        payload = bootstrap_app(data_root, args)
+        revision = str(payload["state_version"])
+        if normalized_text(args.get("known_revision")) == revision:
+            return 200, {
+                "ok": True,
+                "schema": "fitness-coach.bootstrap.v1",
+                "state_version": revision,
+                "not_modified": True,
+            }
+        return 200, {
+            "ok": True,
+            "schema": "fitness-coach.bootstrap.v1",
+            "not_modified": False,
+            **payload,
+        }
     if canonical == "workouts.list":
         return 200, {"ok": True, "workouts": list_workouts(data_root, args)}
     if canonical == "workout.get":
@@ -222,7 +236,7 @@ def operations_manifest() -> dict[str, Any]:
         "commands": [{"surface": "cli", "name": "fitness-coach", "description": "Manage Fitness Coach workouts and exercise library records."}],
         "tools": [{"surface": "mcp", "name": tool, "operation": action} for tool, action in MCP_TOOL_ACTIONS.items()],
         "operations": [
-            {"action": "app.bootstrap", "description": "Load initial app state in one backend action.", "optional": ["include_runs", "selected_workout_id", "runs_limit"]},
+            {"action": "app.bootstrap", "description": "Load initial app state in one backend action.", "optional": ["include_runs", "selected_workout_id", "runs_limit", "known_revision"]},
             {"action": "workouts.list", "description": "List workouts."},
             {"action": "workout.get", "required_any": ["workout_id", "id"]},
             {"action": "workout.create", "optional": ["name", "workout"]},

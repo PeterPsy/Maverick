@@ -1425,6 +1425,32 @@ closed at the implementation level. Private file-cache rollout remains blocked
 by the default-off flag and by approval/privacy/physical-device evidence, not
 by a same-origin shell frame.
 
+M5 reuses that isolated-origin boundary for structured app read models through
+a separate Base Shell `PwaDataCacheBroker`. The shell creates all M3 clients
+from its authenticated user/workspace/access-lease principal and keeps
+IndexedDB authority top-level. An app sends only its mounted app id, opaque
+entity id, declared resource, schema revision, and optional sanitized migration
+seed over a transferred `MessageChannel`. The broker verifies the exact
+registered frame source and origin, the fixed resource inventory, the global
+data gate, and the per-app registry gate before accepting. It then requests the
+conditional app-specific network read over the private port; no app endpoint or
+domain model moves into Core.
+
+The first declarations are Website Studio `site-snapshots`, Storage
+`file-catalog`, App Store `catalog`, and Fitness Coach
+`sanitized-bootstrap-and-thumbnails`. Base Shell owns only their policy
+envelopes, TTLs, and budgets; each app still owns its backend validator and
+strict sanitizer. App events are mapped from declared owner/resource aliases
+to scoped lifecycle invalidation. A `401` or `403` disables the mounted broker
+and clears the applicable structured scope. A missing broker, rejected schema,
+closed flag, unavailable quota/store, or failed migration preserves the normal
+server-first app path and loading UI. App Store's cached catalog is explicitly
+non-authoritative for install/launch/workspace decisions, and Fitness Coach
+remains session-only personal data. All M5 flags remain off by default; the
+implementation inventory and rollout procedure live in
+`docs/product/pwa_cache_resource_inventory.v2.json` and
+`docs/runbooks/pwa_data_cache_m5.md`.
+
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
 for early hints. Only transport/timeouts and `429/502/503/504` are retryable by

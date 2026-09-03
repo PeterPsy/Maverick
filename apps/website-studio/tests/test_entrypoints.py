@@ -1230,6 +1230,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, snapshot = handle_action(data_root, {"action": "workspace_snapshot", "site_id": site_id})
             self.assertEqual(status, 200)
             self.assertEqual(snapshot["schema"], "workspace_snapshot.v1")
+            self.assertRegex(snapshot["revision"], r"^[a-f0-9]{64}$")
             self.assertEqual(snapshot["workspace"]["active_project_id"], site_id)
             self.assertIn("navigation", snapshot["project"])
             self.assertIn("working_state", snapshot["project"])
@@ -1244,6 +1245,44 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertTrue(unchanged["not_modified"])
             self.assertNotIn("project", unchanged)
+
+            status, unchanged_by_revision = handle_action(data_root, {
+                "action": "workspace_snapshot",
+                "site_id": site_id,
+                "known_revision": snapshot["revision"],
+            })
+            self.assertEqual(status, 200)
+            self.assertTrue(unchanged_by_revision["not_modified"])
+            self.assertEqual(unchanged_by_revision["revision"], snapshot["revision"])
+            self.assertNotIn("workspace", unchanged_by_revision)
+
+    def test_workspace_snapshot_revision_tracks_active_site_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            _, first = handle_action(data_root, {"action": "site_create", "display_name": "First"})
+            _, second = handle_action(data_root, {"action": "site_create", "display_name": "Second"})
+            first_site_id = first["site"]["id"]
+            second_site_id = second["site"]["id"]
+
+            _, before = handle_action(
+                data_root,
+                {"action": "workspace_snapshot", "site_id": second_site_id},
+            )
+            self.assertEqual(before["workspace"]["persisted_active_project_id"], second_site_id)
+
+            handle_action(data_root, {"action": "site_set_active", "site_id": first_site_id})
+            _, after = handle_action(
+                data_root,
+                {
+                    "action": "workspace_snapshot",
+                    "site_id": second_site_id,
+                    "known_revision": before["revision"],
+                },
+            )
+
+            self.assertFalse(after["not_modified"])
+            self.assertNotEqual(after["revision"], before["revision"])
+            self.assertEqual(after["workspace"]["persisted_active_project_id"], first_site_id)
 
     def test_bootstrap_does_not_return_preview_after_source_version_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2846,7 +2885,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("cachedWorkspaceSnapshot", widget_source)
         self.assertIn("action: 'navigation_analyze'", widget_source)
         self.assertIn("hydrateVisualNavigation", widget_source)
-        self.assertLess(widget_source.index("const fresh = await request.fresh"), widget_source.index("await hydrateVisualNavigation(selectedSiteId"))
+        self.assertLess(widget_source.index("const snapshot = await request.fresh"), widget_source.index("await hydrateVisualNavigation(selectedSiteId"))
         self.assertNotIn("action: 'sitemap'", widget_source)
         self.assertNotIn("map.assets || []", widget_source)
         self.assertIn('<option value="">Select a site</option>', widget_source)
@@ -2932,6 +2971,23 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("sandbox=\"allow-scripts allow-same-origin\"", app_source)
         self.assertIn("data-preview-url={previewUrl}", app_source)
         self.assertIn("srcDoc={html}", app_source)
+
+    def test_workspace_snapshot_cache_is_parent_mediated_without_legacy_prepaint(self) -> None:
+        api_source = (APP_ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        widget_source = (
+            APP_ROOT / "frontend" / "src" / "widgets" / "website-studio-sitemap-sidebar" / "main.tsx"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("readThroughParentDataCache<WorkspaceSnapshot>", api_source)
+        self.assertIn("migrationSeed", api_source)
+        self.assertIn("sessionStorage.removeItem(legacyStorageKey)", api_source)
+        self.assertIn("sanitizeSnapshotField", api_source)
+        self.assertIn("normalized.endsWith('token')", api_source)
+        self.assertIn("validSnapshotProject", api_source)
+        self.assertNotIn("sessionStorage.setItem(`website-studio:snapshot:", api_source)
+        self.assertNotIn("snapshotRequest.cached ||", app_source)
+        self.assertNotIn("request.cached ||", widget_source)
 
     def test_preview_runtime_frontend_uses_backend_document_and_opaque_inner_frame(self) -> None:
         runtime_source = (APP_ROOT / "frontend" / "public" / "preview-runtime" / "index.html").read_text(encoding="utf-8")

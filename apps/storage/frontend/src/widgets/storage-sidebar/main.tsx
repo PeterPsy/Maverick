@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type SVGProps } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home, LogOut, RefreshCw } from 'lucide-react';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import {
   TreeExpander,
   TreeIcon,
@@ -12,7 +13,7 @@ import {
   TreeView,
 } from '../../components/ui/tree';
 import { FileCard } from '../../components/ui/file-card-collections';
-import { DRIVE_PAGE_LIMIT, currentStorageAppId, disconnectDriveConnection, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter, syncDriveConnection } from '../../storageApi';
+import { DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, currentStorageAppId, disconnectDriveConnection, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter, syncDriveConnection } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
@@ -774,6 +775,14 @@ function StorageSidebarWidget() {
     void refreshAll();
   }, []);
 
+  useEffect(() => {
+    function handleCatalogRevalidated() {
+      revalidateCatalog();
+    }
+    window.addEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, handleCatalogRevalidated);
+    return () => window.removeEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, handleCatalogRevalidated);
+  }, []);
+
   function selectKind(kind: PreviewKind | 'all') {
     if (kind === activeKind) {
       return;
@@ -893,7 +902,7 @@ function StorageSidebarWidget() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {

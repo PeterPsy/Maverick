@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, Ref, SyntheticEvent as ReactSyntheticEvent } from 'react';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import {
   ArrowDown,
   Check,
@@ -23,7 +24,6 @@ import {
   X
 } from 'lucide-react';
 import {
-  bootstrapApp,
   completeWorkout,
   createExercise,
   createWorkout,
@@ -42,11 +42,12 @@ import {
   storageMediaSelectionFromPickerParams,
   updateViewState
 } from './api';
-import { readBootstrapCache, writeBootstrapCache } from './bootstrapCache';
+import { readBootstrapCache, removeBootstrapCache } from './bootstrapCache';
+import { readCachedBootstrap } from './bootstrapReadModelCache';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
 import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, preloadMediaPlayback, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
 import { latestMediaResourceTiming, recordMediaPlaybackMetric } from './mediaPlaybackMetrics';
-import { captureMediaThumbVideoFrame, mediaThumbPreviewFrameKey, readMediaThumbPreviewFrame } from './mediaThumbPreviewCache';
+import { captureMediaThumbVideoFrame, mediaThumbPreviewFrameKey, readMediaThumbPreviewFrame, THUMB_PREVIEW_CACHE_CHANGED_EVENT } from './mediaThumbPreviewCache';
 import { TagsInputField } from './components/ui/tags-input';
 import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, StartWorkoutPayload, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
@@ -141,16 +142,20 @@ export function App() {
 
   useEffect(() => {
     let isCurrent = true;
-    const cached = readBootstrapCache();
-    if (cached) {
-      applyBootstrapPayload(cached);
-      setIsInitialLoading(false);
-    }
-    bootstrapApp({ includeRuns: false })
-      .then((payload) => {
+    const controller = new AbortController();
+    const migrationSeed = readBootstrapCache();
+    readCachedBootstrap({ includeRuns: false, migrationSeed, signal: controller.signal })
+      .then((result) => {
         if (!isCurrent) return;
-        writeBootstrapCache(payload);
-        applyBootstrapPayload(payload);
+        if (result.brokered && result.migrationCommitted) removeBootstrapCache(result.payload);
+        applyBootstrapPayload(result.payload);
+        if (result.revalidation) {
+          void result.revalidation.then((next) => {
+            if (isCurrent && next.changed) applyBootstrapPayload(next.payload);
+          }).catch((error: Error) => {
+            if (isCurrent && error.name !== 'AbortError') setNotice(error.message);
+          });
+        }
         setNotice('');
       })
       .catch((error: Error) => {
@@ -165,6 +170,7 @@ export function App() {
       });
     return () => {
       isCurrent = false;
+      controller.abort();
     };
   }, [applyBootstrapPayload]);
 
@@ -198,7 +204,7 @@ export function App() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: Record<string, unknown>; app_page?: string };
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'fitness-coach') {
         const resource = String(payload.resource || '');
@@ -1938,6 +1944,19 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
     setResolvedPreviewUrl('');
     setPreviewFrameUrl(cachedPreviewFrame);
   }, [previewFrameKey, previewUrl, variant]);
+
+  useEffect(() => {
+    if (!previewFrameKey) return undefined;
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<{ key?: string; dataUrl?: string }>).detail;
+      if (detail?.key === previewFrameKey && detail.dataUrl) {
+        setPreviewFrameUrl(detail.dataUrl);
+        setIsVisible(true);
+      }
+    };
+    window.addEventListener(THUMB_PREVIEW_CACHE_CHANGED_EVENT, listener);
+    return () => window.removeEventListener(THUMB_PREVIEW_CACHE_CHANGED_EVENT, listener);
+  }, [previewFrameKey]);
 
   useEffect(() => {
     if (isVisible || !previewUrl) return;

@@ -1,10 +1,13 @@
-import { currentStorageAppId } from './api';
+import { createRequestFingerprint, readThroughParentDataCache } from '@maverick/pwa-cache';
+import { currentStorageAppId, mountedAppIdFromPath } from './api';
 import { mediaCacheKey } from './mediaPlaybackResolver';
 import type { ExerciseMediaRef } from './types';
 
 const THUMB_PREVIEW_STORAGE_KEY = 'fitness-coach:media-thumb-preview:v1';
 const THUMB_PREVIEW_CACHE_LIMIT = 48;
 const THUMB_PREVIEW_MAX_WIDTH = 192;
+const THUMB_PREVIEW_MAX_DATA_URL_CHARS = 480_000;
+export const THUMB_PREVIEW_CACHE_CHANGED_EVENT = 'maverick.fitness.thumb-cache-changed';
 
 type ThumbPreviewEntry = {
   key: string;
@@ -12,24 +15,40 @@ type ThumbPreviewEntry = {
   updatedAt: number;
 };
 
+type PendingBrokerRead = {
+  controller: AbortController;
+  promise: Promise<void>;
+};
+
+// Only parent-broker results and frames captured in this page are renderable.
+// Old sessionStorage values remain quarantined as migration seeds until the
+// parent confirms that they were committed into its authenticated scope.
 const memoryCache = new Map<string, ThumbPreviewEntry>();
+const legacySeeds = new Map<string, ThumbPreviewEntry>();
+const pendingBrokerReads = new Map<string, PendingBrokerRead>();
 let hydrated = false;
+let generation = 0;
 
 export function mediaThumbPreviewFrameKey(media: ExerciseMediaRef, storageAppId = currentStorageAppId()) {
   return mediaCacheKey(media, storageAppId, 'thumb-frame');
 }
 
 export function readMediaThumbPreviewFrame(key: string): string {
-  hydrateThumbPreviewCache();
+  hydrateLegacyThumbPreviewSeeds();
+  if (hasStableThumbIdentity(key) && !memoryCache.has(key)) {
+    void brokerThumb(key, legacySeeds.get(key) || null);
+  }
   return memoryCache.get(key)?.dataUrl || '';
 }
 
 export function writeMediaThumbPreviewFrame(key: string, dataUrl: string) {
-  if (!key || !isSupportedThumbDataUrl(dataUrl)) return;
-  hydrateThumbPreviewCache();
-  memoryCache.set(key, { key, dataUrl, updatedAt: Date.now() });
-  trimThumbPreviewCache();
-  persistThumbPreviewCache();
+  const entry = sanitizeThumbPreviewEntry({ key, dataUrl, updatedAt: Date.now() });
+  if (!entry) return;
+  hydrateLegacyThumbPreviewSeeds();
+  memoryCache.set(key, entry);
+  trimMemoryCache();
+  if (legacySeeds.delete(key)) persistLegacyThumbPreviewSeeds();
+  if (hasStableThumbIdentity(key)) void brokerThumb(key, entry, true);
 }
 
 export function captureMediaThumbVideoFrame(video: HTMLVideoElement, key: string): string {
@@ -56,66 +75,172 @@ export function captureMediaThumbVideoFrame(video: HTMLVideoElement, key: string
 }
 
 export function clearMediaThumbPreviewFrameCache(options: { storage?: boolean } = {}) {
+  generation += 1;
+  pendingBrokerReads.forEach(({ controller }) => controller.abort());
+  pendingBrokerReads.clear();
   memoryCache.clear();
+  legacySeeds.clear();
   hydrated = false;
   if (options.storage === false) return;
   storage()?.removeItem(THUMB_PREVIEW_STORAGE_KEY);
 }
 
-function hydrateThumbPreviewCache() {
+function hydrateLegacyThumbPreviewSeeds() {
   if (hydrated) return;
   hydrated = true;
   const payload = storage()?.getItem(THUMB_PREVIEW_STORAGE_KEY);
   if (!payload) return;
   try {
-    const parsed = JSON.parse(payload) as { entries?: ThumbPreviewEntry[] };
-    parsed.entries?.forEach((entry) => {
-      if (entry?.key && isSupportedThumbDataUrl(entry.dataUrl)) {
-        memoryCache.set(entry.key, {
-          key: entry.key,
-          dataUrl: entry.dataUrl,
-          updatedAt: Number(entry.updatedAt) || 0
-        });
-      }
+    const parsed = JSON.parse(payload) as { entries?: unknown[] };
+    parsed.entries?.forEach((value) => {
+      const entry = sanitizeThumbPreviewEntry(value);
+      if (entry && hasStableThumbIdentity(entry.key)) legacySeeds.set(entry.key, entry);
     });
-    trimThumbPreviewCache();
+    trimLegacySeeds();
   } catch {
-    memoryCache.clear();
+    legacySeeds.clear();
+    storage()?.removeItem(THUMB_PREVIEW_STORAGE_KEY);
   }
 }
 
-function persistThumbPreviewCache() {
+function persistLegacyThumbPreviewSeeds() {
   const target = storage();
   if (!target) return;
   try {
-    target.setItem(THUMB_PREVIEW_STORAGE_KEY, JSON.stringify({ entries: orderedEntries() }));
+    if (!legacySeeds.size) {
+      target.removeItem(THUMB_PREVIEW_STORAGE_KEY);
+      return;
+    }
+    target.setItem(THUMB_PREVIEW_STORAGE_KEY, JSON.stringify({ entries: orderedEntries(legacySeeds) }));
   } catch {
-    const entries = orderedEntries();
-    while (entries.length > 0) {
-      entries.shift();
-      try {
-        target.setItem(THUMB_PREVIEW_STORAGE_KEY, JSON.stringify({ entries }));
-        break;
-      } catch {
-        // Keep trimming until the browser accepts the smaller cache payload.
-      }
+    // Migration cleanup is best-effort; legacy values are never rendered here.
+  }
+}
+
+function trimMemoryCache() {
+  trimEntries(memoryCache);
+}
+
+function trimLegacySeeds() {
+  trimEntries(legacySeeds);
+  persistLegacyThumbPreviewSeeds();
+}
+
+function trimEntries(entries: Map<string, ThumbPreviewEntry>) {
+  orderedEntries(entries)
+    .slice(0, Math.max(0, entries.size - THUMB_PREVIEW_CACHE_LIMIT))
+    .forEach((entry) => entries.delete(entry.key));
+}
+
+function orderedEntries(entries: Map<string, ThumbPreviewEntry>) {
+  return Array.from(entries.values()).sort((first, second) => first.updatedAt - second.updatedAt);
+}
+
+function isSupportedThumbDataUrl(dataUrl: string | undefined) {
+  const normalized = String(dataUrl || '');
+  return normalized.length <= THUMB_PREVIEW_MAX_DATA_URL_CHARS
+    && /^data:image\/(?:jpeg|png|webp);base64,/i.test(normalized);
+}
+
+function hasStableThumbIdentity(key: string): boolean {
+  return key.startsWith('thumb-frame:') && !key.endsWith(':');
+}
+
+function brokerThumb(
+  key: string,
+  migrationEntry: ThumbPreviewEntry | null,
+  supersede = false
+): Promise<void> {
+  const existing = pendingBrokerReads.get(key);
+  if (existing && !supersede) return existing.promise;
+  if (existing) {
+    existing.controller.abort();
+    pendingBrokerReads.delete(key);
+  }
+  const controller = new AbortController();
+  const startedGeneration = generation;
+  let promise!: Promise<void>;
+  promise = runBrokeredThumb(key, migrationEntry, controller.signal, startedGeneration)
+    .catch(() => undefined)
+    .finally(() => {
+      if (pendingBrokerReads.get(key)?.promise === promise) pendingBrokerReads.delete(key);
+    });
+  pendingBrokerReads.set(key, { controller, promise });
+  return promise;
+}
+
+async function runBrokeredThumb(
+  key: string,
+  migrationEntry: ThumbPreviewEntry | null,
+  signal: AbortSignal,
+  startedGeneration: number
+) {
+  const revision = migrationEntry ? await createRequestFingerprint(migrationEntry.dataUrl) : '';
+  const result = await readThroughParentDataCache<ThumbPreviewEntry>({
+    appId: mountedAppIdFromPath(typeof window === 'undefined' ? '' : window.location.pathname, 'fitness-coach'),
+    entityId: `thumbnail:${key}`,
+    ...(migrationEntry ? {
+      migrationSeed: { payload: migrationEntry, revision }
+    } : {}),
+    resource: 'sanitized-bootstrap-and-thumbnails',
+    schemaRevision: 'fitness-coach.sanitized-bootstrap-and-thumbnails.v1'
+  }, async ({ knownRevision }) => {
+    // A broker first persists the migration seed, then revalidates it with the
+    // known revision. Direct fallback has no revision and therefore cannot
+    // render untrusted legacy storage while the feature is disabled.
+    // Existing thumbnails are current because their cache identity already
+    // includes the immutable media source version.
+    if (knownRevision && (!migrationEntry || knownRevision === revision)) {
+      return { kind: 'not_modified', revision: knownRevision } as const;
+    }
+    if (migrationEntry && knownRevision) {
+      return { kind: 'value', payload: migrationEntry, revision } as const;
+    }
+    const error = new Error('Thumbnail source requires normal media loading.');
+    error.name = 'TerminalError';
+    throw error;
+  }, { sanitize: sanitizeThumbPreviewEntry, signal });
+
+  if (signal.aborted || startedGeneration !== generation) return;
+  applyBrokeredThumb(key, result.payload);
+  if (result.brokered && migrationEntry && result.migrationCommitted) {
+    legacySeeds.delete(key);
+    persistLegacyThumbPreviewSeeds();
+  }
+  if (result.revalidation) {
+    const next = await result.revalidation;
+    if (!signal.aborted && startedGeneration === generation && next.changed) {
+      applyBrokeredThumb(key, next.payload);
     }
   }
 }
 
-function trimThumbPreviewCache() {
-  const entries = orderedEntries();
-  entries.slice(0, Math.max(0, entries.length - THUMB_PREVIEW_CACHE_LIMIT)).forEach((entry) => {
-    memoryCache.delete(entry.key);
-  });
+function applyBrokeredThumb(key: string, payload: ThumbPreviewEntry) {
+  if (payload.key !== key) return;
+  memoryCache.set(key, payload);
+  trimMemoryCache();
+  dispatchThumbChanged(key, payload.dataUrl);
 }
 
-function orderedEntries() {
-  return Array.from(memoryCache.values()).sort((first, second) => first.updatedAt - second.updatedAt);
+export function sanitizeThumbPreviewEntry(value: unknown): ThumbPreviewEntry | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entry = value as Partial<ThumbPreviewEntry>;
+  return typeof entry.key === 'string'
+      && entry.key.length > 0
+      && entry.key.length <= 220
+      && isSupportedThumbDataUrl(entry.dataUrl)
+      && typeof entry.updatedAt === 'number'
+      && Number.isFinite(entry.updatedAt)
+      && entry.updatedAt >= 0
+    ? { key: entry.key, dataUrl: entry.dataUrl as string, updatedAt: entry.updatedAt }
+    : null;
 }
 
-function isSupportedThumbDataUrl(dataUrl: string | undefined) {
-  return /^data:image\/(?:jpeg|png|webp);base64,/i.test(String(dataUrl || ''));
+function dispatchThumbChanged(key: string, dataUrl: string) {
+  if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(THUMB_PREVIEW_CACHE_CHANGED_EVENT, {
+    detail: { key, dataUrl }
+  }));
 }
 
 function storage(): Storage | null {

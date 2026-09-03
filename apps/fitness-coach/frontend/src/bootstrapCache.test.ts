@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readBootstrapCache, writeBootstrapCache } from './bootstrapCache';
+import { readBootstrapCache, sanitizeBootstrapReadModel } from './bootstrapCache';
 import type { AppBootstrapPayload } from './types';
 
 function bootstrapPayload(overrides: Partial<AppBootstrapPayload> = {}): AppBootstrapPayload {
   return {
+    schema: 'fitness-coach.bootstrap.v1',
     workspace_id: 'default',
     app_id: 'fitness-coach',
     state_version: 'v1',
@@ -32,6 +33,14 @@ function stubWindow(search = '') {
   return { values, sessionStorage };
 }
 
+function seedLegacyBootstrap(values: Map<string, string>, value: unknown) {
+  values.set('fitness-coach:bootstrap:default:fitness-coach:storage', JSON.stringify({
+    version: 1,
+    cached_at: '2026-09-03T00:00:00.000Z',
+    payload: value
+  }));
+}
+
 describe('bootstrap cache', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -45,28 +54,57 @@ describe('bootstrap cache', () => {
 
   it('does not prepaint cached workspace data after a workspace switch leaves the iframe URL unscoped', () => {
     const { values } = stubWindow('');
-    writeBootstrapCache({
+    seedLegacyBootstrap(values, {
       ...bootstrapPayload(),
       stream_url: 'must-not-persist'
-    } as unknown as AppBootstrapPayload);
+    });
 
     expect(readBootstrapCache()).toBeNull();
-    expect(Array.from(values.values()).join('\n')).not.toContain('must-not-persist');
+  });
+
+  it('removes normalized credentials and signed URLs from a legacy migration seed', () => {
+    const sanitized = sanitizeBootstrapReadModel({
+      ...bootstrapPayload(),
+      nested: {
+        accessToken: 'secret-token',
+        signed_url: 'https://files.test/item?X-Amz-Signature=secret',
+        safe_label: 'Workout A'
+      }
+    });
+
+    const serialized = JSON.stringify(sanitized);
+    expect(serialized).not.toContain('secret-token');
+    expect(serialized).not.toContain('X-Amz-Signature');
+    expect(serialized).toContain('Workout A');
   });
 
   it('reads cached data only when the URL workspace matches the stored payload scope', () => {
-    const { sessionStorage } = stubWindow('');
-    writeBootstrapCache(bootstrapPayload());
+    const { sessionStorage, values } = stubWindow('');
+    seedLegacyBootstrap(values, bootstrapPayload());
     vi.stubGlobal('window', { location: { search: '?workspace_id=default' }, sessionStorage });
 
     expect(readBootstrapCache()).toEqual(bootstrapPayload());
   });
 
   it('does not read cached data when the URL workspace differs from the stored payload scope', () => {
-    const { sessionStorage } = stubWindow('');
-    writeBootstrapCache(bootstrapPayload());
+    const { sessionStorage, values } = stubWindow('');
+    seedLegacyBootstrap(values, bootstrapPayload());
     vi.stubGlobal('window', { location: { search: '?workspace_id=other' }, sessionStorage });
 
     expect(readBootstrapCache()).toBeNull();
+  });
+
+  it('rejects a cache-poisoned bootstrap whose app records do not match the schema', () => {
+    expect(sanitizeBootstrapReadModel({
+      ...bootstrapPayload(),
+      workouts: ['not-a-workout']
+    })).toBeNull();
+  });
+
+  it('rejects a broker payload with the wrong schema identifier', () => {
+    expect(sanitizeBootstrapReadModel({
+      ...bootstrapPayload(),
+      schema: 'fitness-coach.bootstrap.v2'
+    } as unknown as AppBootstrapPayload)).toBeNull();
   });
 });

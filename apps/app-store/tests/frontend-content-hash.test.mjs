@@ -6,6 +6,39 @@ import test from "node:test";
 import { build } from "vite";
 
 import { maverickFrontendAssets } from "../../../scripts/vite-frontend-assets.mjs";
+import { sanitizeCatalog } from "../frontend/src/assets/catalogReadModel.js";
+
+test("App Store catalog cache accepts only sanitized app-shaped records", () => {
+  const revision = "a".repeat(64);
+  const sanitized = sanitizeCatalog({
+    schema: "maverick.app-store-catalog.v1",
+    revision,
+    items: [{
+      app_id: "notes",
+      name: "Notes",
+      access_token: "must-not-persist",
+      versions: [{
+        version: "1.0.0",
+        artifact_download_url: "https://store.test/notes?X-Amz-Signature=must-not-persist",
+      }],
+    }],
+  });
+
+  assert.equal(sanitized.revision, revision);
+  assert.equal(sanitized.items[0].access_token, undefined);
+  assert.equal(sanitized.items[0].versions[0].artifact_download_url, undefined);
+  assert.equal(sanitizeCatalog({ schema: "maverick.app-store-catalog.v1", revision, items: [{}] }), null);
+});
+
+test("a cached catalog cannot authorize App Store actions", () => {
+  const source = readFileSync(resolve(import.meta.dirname, "../frontend/src/assets/main.js"), "utf8");
+
+  assert.match(source, /authorityReady:\s*false/);
+  assert.match(source, /const canOpen = state\.authorityReady && canOpenInstalledApp/);
+  assert.match(source, /button\.disabled = disabled \|\| !state\.authorityReady/);
+  assert.match(source, /async function installApp[\s\S]*?if \(!state\.authorityReady\) return;/);
+  assert.match(source, /state\.authorityReady = true;[\s\S]*?state\.isLoading = false;/);
+});
 
 test("App Store changes asset filename and digest when one source byte changes", async (context) => {
   const temporaryRoot = mkdtempSync(resolve(tmpdir(), "maverick-app-store-hash-"));
@@ -20,6 +53,11 @@ test("App Store changes asset filename and digest when one source byte changes",
       logLevel: "silent",
       base: "/apps/app-store/",
       root: sourceRoot,
+      resolve: {
+        alias: {
+          "@maverick/pwa-cache": resolve(import.meta.dirname, "../../../packages/pwa-cache/src/index.ts"),
+        },
+      },
       plugins: [maverickFrontendAssets()],
       build: {
         outDir,

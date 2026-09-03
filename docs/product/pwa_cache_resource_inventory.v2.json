@@ -2,14 +2,14 @@
   "schema": "maverick.pwa-cache-resource-inventory.v2",
   "policy_revision": "maverick.local-persistence-policy.v2",
   "resource_schema_revision_required": true,
-  "private_app_origin_boundary": "isolated_origin_or_opaque_frame_parent_broker",
+  "private_app_origin_boundary": "isolated_origin_and_exact_frame_parent_broker",
   "canonical_data_class_source": "core.providers.agentic_models.RuntimeDataClass",
   "local_persistence_policy_values": [
     "deny",
     "session",
     "cache"
   ],
-  "approved_at": "2026-08-31",
+  "approved_at": "2026-09-03",
   "unknown_classification_policy": "deny",
   "resources": [
     {
@@ -37,18 +37,18 @@
       ],
       "resource": "catalog",
       "owner": "app-store",
-      "read_surface": "App Store backend catalog/list actions",
+      "read_surface": "GET /api/app-store/apps after session authorization",
       "canonical_data_class": "public",
       "provenance": "app_reference",
       "local_persistence_policy": "cache",
       "fresh_ttl_seconds": 300,
       "expiry_ttl_seconds": 86400,
-      "revision": "required before data-cache rollout; artifact digest is not record revision",
+      "revision": "SHA-256 of the authorized visible catalog plus strong ETag/If-None-Match",
       "max_entry_bytes": 1048576,
       "max_scope_bytes": 4194304,
-      "invalidation": "catalog refresh or app install/update event",
-      "data_event": "records",
-      "rollout": "M5"
+      "invalidation": "conditional revalidation on every warm read; catalog revision replacement",
+      "data_event": "none",
+      "rollout": "M5 pilot implemented behind global and per-app default-off gates"
     },
     {
       "app_ids": [
@@ -75,18 +75,18 @@
       ],
       "resource": "site-snapshots",
       "owner": "website-studio",
-      "read_surface": "website bootstrap/status read model",
+      "read_surface": "workspace_snapshot app backend action",
       "canonical_data_class": "workspace_internal",
       "provenance": "app_reference",
       "local_persistence_policy": "cache",
       "fresh_ttl_seconds": 60,
       "expiry_ttl_seconds": 86400,
-      "revision": "existing version map and known_versions/not_modified contract",
+      "revision": "SHA-256 of the complete snapshot version map; known_revision/not_modified",
       "max_entry_bytes": 2097152,
       "max_scope_bytes": 16777216,
-      "invalidation": "resource revision or data event",
-      "data_event": "records",
-      "rollout": "M5 reference adapter"
+      "invalidation": "source, working-state, navigation, preview, activity, settings, or view-selection data event plus warm revalidation",
+      "data_event": "source, working-state, navigation, preview, activity, settings, view-selection",
+      "rollout": "M5 pilot implemented behind global and per-app default-off gates"
     },
     {
       "app_ids": [
@@ -94,18 +94,18 @@
       ],
       "resource": "file-catalog",
       "owner": "storage",
-      "read_surface": "Storage list/info/reference surfaces",
+      "read_surface": "Storage catalog first-page read model; metadata included, bytes excluded",
       "canonical_data_class": "workspace_internal",
       "provenance": "attachment",
       "local_persistence_policy": "cache",
       "fresh_ttl_seconds": 30,
       "expiry_ttl_seconds": 86400,
-      "revision": "file_id + etag_or_version/source_version/modified_at",
+      "revision": "SHA-256 of the canonical catalog response excluding volatile inventory timestamp; known_revision/not_modified",
       "max_entry_bytes": 262144,
       "max_scope_bytes": 16777216,
-      "invalidation": "files data event and reconnect revalidation",
-      "data_event": "files",
-      "rollout": "M5"
+      "invalidation": "files, drive-connections, or view-state data event plus warm revalidation",
+      "data_event": "files, drive-connections, view-state",
+      "rollout": "M5 pilot implemented behind global and per-app default-off gates"
     },
     {
       "app_ids": [
@@ -150,7 +150,7 @@
       "max_scope_bytes": 0,
       "invalidation": "If-None-Match/source-version revalidation, access revocation, logout",
       "data_event": "files",
-      "rollout": "M4 engine and parent broker complete behind the default-off gate; opaque/isolated frame still required"
+      "rollout": "M4 engine and parent broker complete behind the default-off gate; isolated-origin boundary complete"
     },
     {
       "app_ids": [
@@ -210,7 +210,7 @@
       "max_scope_bytes": 33554432,
       "invalidation": "projects data event, runtime cursor, reconnect, 401/403",
       "data_event": "projects",
-      "rollout": "M5 after privacy gate"
+      "rollout": "M5 backlog after pilot stability and privacy review"
     },
     {
       "app_ids": [
@@ -232,7 +232,7 @@
       "max_scope_bytes": 16777216,
       "invalidation": "overlapping events data event or transport recovery",
       "data_event": "events",
-      "rollout": "M5"
+      "rollout": "M5 backlog after pilot stability and privacy review"
     },
     {
       "app_ids": [
@@ -324,7 +324,7 @@
       ],
       "resource": "sanitized-bootstrap-and-thumbnails",
       "owner": "fitness-coach",
-      "read_surface": "workout/exercise bootstrap and bounded media preview",
+      "read_surface": "app.bootstrap read model and bounded captured video thumbnail frames",
       "canonical_data_class": "personal_data",
       "provenance": "app_reference",
       "local_persistence_policy": "session",
@@ -333,12 +333,12 @@
       ],
       "fresh_ttl_seconds": 300,
       "expiry_ttl_seconds": 86400,
-      "revision": "storage app id plus workout/media version required",
+      "revision": "bootstrap state_version with known_revision/not_modified; thumbnail SHA-256 over the sanitized data URL",
       "max_entry_bytes": 524288,
       "max_scope_bytes": 16777216,
-      "invalidation": "workouts/exercises/runs events or media version change",
-      "data_event": "workouts, exercises, runs",
-      "rollout": "M5"
+      "invalidation": "workouts, exercises, runs, or view-state data event; storage app id and media source version are part of entity identity",
+      "data_event": "workouts, exercises, runs, view-state",
+      "rollout": "M5 session-only pilot implemented behind global and per-app default-off gates"
     },
     {
       "app_ids": [

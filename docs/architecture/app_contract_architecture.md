@@ -1597,10 +1597,10 @@ read model into the shared PWA SDK must declare a canonical Maverick
 budget, invalidation event, and sanitization rule. The local persistence policy
 is derived from that canonical classification under ADR-0012 and has only
 `deny`, `session`, and `cache` values; it is not an app-defined sensitivity
-taxonomy. Missing classification or revision remains network-only. App
-frontends receive only a client capability whose user/workspace/app principal
-was bound by the top-level host; they cannot select another scope through SDK
-client options. Every app and widget document now runs on an authenticated
+taxonomy. Missing classification or revision remains network-only. Only the
+top-level host creates a client capability whose user/workspace/app principal
+it binds; embedded app frontends reach it through the constrained parent broker
+and cannot select another scope. Every app and widget document now runs on an authenticated
 per-app, per-login-session isolated origin. Direct non-shell documents on the
 platform origin are blocked, and retaining iframe `allow-same-origin` grants an
 app access only to its own isolated-origin storage. It cannot inspect Base
@@ -1625,6 +1625,29 @@ renders a valid cached result through its normal component and keeps a cache
 miss in its normal loading state during a transient transport failure. App
 contracts must not add a network-absence mode, availability badge, pin action,
 or persistent mutation queue as an implicit consequence of cache support.
+
+M5 app frontends use the Base Shell parent broker rather than constructing the
+host capability themselves. A child request names only its own mounted app,
+opaque entity, fixed resource, and exact resource schema revision. Base Shell
+accepts it only from that app's registered frame window and exact isolated
+origin and only when both global and per-app gates are open. The app performs
+its conditional backend read when requested over the private channel and
+returns an app-sanitized model; it never receives the host principal, access
+lease, IndexedDB backend, or another resource namespace. A rejected or absent
+broker invokes the same server read directly. Sanitized legacy state is a
+migration seed, never an independently renderable value, and may be removed
+only after the parent verifies the scoped commit.
+
+The initial declarations are Website Studio site snapshots, Storage catalog
+metadata, the App Store catalog, and Fitness Coach bootstrap/thumbnail data.
+Their schemas, classifications, validators, TTLs, byte budgets, event aliases,
+and persistence outcomes are normative in
+`docs/product/pwa_cache_resource_inventory.v2.json`. App Store catalog data
+cannot enable an install, launch, workspace assignment, pin, or publication
+control before fresh server authority loads. Fitness Coach personal data is
+session-only until a separate privacy decision changes the resource policy;
+feature flags cannot make that promotion. Calendar, Chat, CRM, and Mail are not
+implicitly enabled by the existence of the broker.
 
 The M3 shared implementation is `packages/pwa-cache/`. The top-level host must
 create an app-bound capability with explicit non-empty user id, workspace id,

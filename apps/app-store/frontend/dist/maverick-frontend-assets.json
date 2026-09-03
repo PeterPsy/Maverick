@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "8249551638a6c7aac3e015f65423bc96d469b09ac519b2c6e2635e2490b29359",
+  "build_id": "79e910286feaebaa54939ea00957791a8771ee2a6b173320ba15e473f58fd8ce",
   "entrypoints": [
     "index.html",
     "widgets/app-shortcuts/index.html"
@@ -12,9 +12,9 @@
       "size_bytes": 33135
     },
     {
-      "path": "assets/app-YPIr4flN.js",
-      "sha256": "a2528bc339ec982d41f1fb0c140cc4ccadda8f04a69767cbed3d8376b52b6bc9",
-      "size_bytes": 45690
+      "path": "assets/app-DhgnkqmU.js",
+      "sha256": "bd0957c511230cd46bd67b07f2641ddd80cf26ff6a20e5a5ebbd606011c63c2e",
+      "size_bytes": 55276
     },
     {
       "path": "assets/app-icons-BA-XArPW.js",
@@ -35,7 +35,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "32f3afbc02b965ea14224cc932212e6a129fcd141d29cddd3cda35a3680091fb",
+      "sha256": "4fe9d85bb56db5c448fad381bc6946d74b1f30efb2771d53b816f3013282509e",
       "size_bytes": 2515
     },
     {

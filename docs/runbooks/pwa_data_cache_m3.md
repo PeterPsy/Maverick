@@ -1,10 +1,10 @@
 # PWA data cache M3 operations and integration
 
 This runbook covers the shared structured-data cache and RAM retry primitives
-implemented in `packages/pwa-cache/`. It does not enable an app read model,
-authorize the M4 Storage file cache, or create a network-absence product mode.
-The global data-cache feature remains off until an app completes its own M5
-resource, privacy, and device gates.
+implemented in `packages/pwa-cache/`. M3 by itself does not enable an app read
+model, authorize the M4 Storage file cache, or create a network-absence product
+mode. The first default-off M5 adapters and their rollout procedure are
+documented in `docs/runbooks/pwa_data_cache_m5.md`.
 
 ## Owned browser state
 
@@ -102,11 +102,13 @@ const records = client.resource("records", {
 
 The host capability is app-bound and must not be exposed to an embedded app.
 `createPwaCacheHost` rejects embedded browser frames and browser workers.
-Because current Maverick app iframes still use `allow-same-origin`, this SDK
-boundary does not prevent hostile frame code from opening origin IndexedDB
-directly. No app read model, especially no private read model, may be enabled
-until the app has an isolated origin or an opaque-origin frame with a real
-parent-owned cache broker. `features.data_cache` remains `false` meanwhile.
+Every Maverick app frame now uses an authenticated per-app, per-session
+isolated origin. M5 additionally keeps the structured store in Base Shell and
+mediates app-owned adapters through an exact-source, exact-origin parent
+broker: the child receives neither IndexedDB nor a host principal. This closes
+the implementation boundary but does not waive the per-resource privacy,
+rollout, or physical-device gates. `features.data_cache` and every app gate
+remain false by default.
 
 Do not copy those TTLs or budgets into a private adapter without a resource
 review. `session` data stays in the client RAM backend. `deny` data bypasses all
@@ -285,3 +287,5 @@ rolling back structured data.
 M3 does not waive the physical Safari/Home Screen evidence required before a
 private app read model is enabled. Safari, browser tabs, private browsing, and
 installed Home Screen/Dock containers remain distinct storage containers.
+Use `docs/runbooks/pwa_data_cache_m5.md` for the pilot resource inventory,
+per-app flags, acceptance sequence, and rollback.

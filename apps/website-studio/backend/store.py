@@ -214,6 +214,7 @@ def workspace_snapshot(
     *,
     route: object = None,
     known_versions: object = None,
+    known_revision: object = None,
 ) -> dict[str, object]:
     """Return the compact, versioned UI read model shared by app and widgets.
 
@@ -228,12 +229,18 @@ def workspace_snapshot(
     selected = next((site for site in available if site["id"] == requested), None)
     selected = selected or next((site for site in available if site["id"] == persisted), None)
     selected = selected or next(iter(available), None)
-    versions = _snapshot_versions(data_root, selected)
+    versions = _snapshot_versions(data_root, selected, active_site_id=persisted)
+    revision = hashlib.sha256(
+        json.dumps(versions, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).hexdigest()
     known = known_versions if isinstance(known_versions, dict) else {}
     payload: dict[str, object] = {
         "schema": "workspace_snapshot.v1",
         "versions": versions,
-        "not_modified": bool(known and all(str(known.get(key) or "") == value for key, value in versions.items())),
+        "revision": revision,
+        "not_modified": str(known_revision or "").strip() == revision or bool(
+            known and all(str(known.get(key) or "") == value for key, value in versions.items())
+        ),
     }
     if payload["not_modified"]:
         return payload
@@ -264,7 +271,12 @@ def _compact_site(site: dict[str, object]) -> dict[str, object]:
     )}
 
 
-def _snapshot_versions(data_root: Path, site: dict[str, object] | None) -> dict[str, str]:
+def _snapshot_versions(
+    data_root: Path,
+    site: dict[str, object] | None,
+    *,
+    active_site_id: str,
+) -> dict[str, str]:
     site_id = str((site or {}).get("id") or "")
     with connect(data_root) as db:
         workspace = db.execute("SELECT COUNT(*) AS count, COALESCE(MAX(updated_at), '') AS version FROM sites").fetchone()
@@ -282,7 +294,7 @@ def _snapshot_versions(data_root: Path, site: dict[str, object] | None) -> dict[
             activity = preview = working = {"version": ""}
     source_version = str((site or {}).get("source_version") or "")
     return {
-        "workspace_version": f"{workspace['version']}:{workspace['count']}",
+        "workspace_version": f"{workspace['version']}:{workspace['count']}:{active_site_id}",
         "project_version": str((site or {}).get("updated_at") or ""),
         "source_version": source_version,
         "navigation_version": source_version,

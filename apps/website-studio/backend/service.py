@@ -127,6 +127,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 payload.get("site_id"),
                 route=payload.get("route"),
                 known_versions=payload.get("known_versions"),
+                known_revision=payload.get("known_revision"),
             )
         if action == "site_create":
             return 201, {

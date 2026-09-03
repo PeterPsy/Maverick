@@ -1,3 +1,9 @@
+import {
+  createRequestFingerprint,
+  readThroughParentDataCache,
+  type ParentDataCacheReadResult
+} from '@maverick/pwa-cache';
+
 export type BackendStatus = {
   app_id?: string;
   workspace_id?: string | null;
@@ -100,6 +106,7 @@ export type SnapshotVersions = Record<'workspace_version' | 'project_version' | 
 export type WorkspaceSnapshot = {
   schema: 'workspace_snapshot.v1';
   versions: SnapshotVersions;
+  revision: string;
   not_modified?: boolean;
   workspace?: { projects: Site[]; active_project_id: string; persisted_active_project_id: string };
   project?: null | {
@@ -189,58 +196,144 @@ type AppDependencies = {
 };
 
 export async function callBackend<T = BackendStatus>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
-  const response = await fetch('/api/apps/website-studio/backend', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(String(payload.detail || payload.error || `Backend request failed with ${response.status}`));
+  let response: Response;
+  try {
+    response = await fetch('/api/apps/website-studio/backend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    const transport = new Error('Website Studio backend transport failed.', { cause: error });
+    transport.name = 'MaverickTransportError';
+    throw transport;
   }
-  return response.json() as Promise<T>;
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { detail?: unknown; error?: unknown };
+    throw new WebsiteHttpError(
+      String(payload.detail || payload.error || `Backend request failed with ${response.status}`),
+      response.status,
+      parseRetryAfter(response.headers.get('retry-after'))
+    );
+  }
+  try {
+    return await response.json() as T;
+  } catch (error) {
+    throw new TypeError('Website Studio returned an invalid JSON response.', { cause: error });
+  }
 }
 
-const snapshotMemory = new Map<string, WorkspaceSnapshot>();
-type SnapshotRequest = { promise: Promise<WorkspaceSnapshot>; signal?: AbortSignal };
+export class WebsiteHttpError extends Error {
+  constructor(message: string, readonly status: number, readonly retryAfterMs: number | null) {
+    super(message);
+    this.name = 'MaverickHttpError';
+  }
+}
+
+type SnapshotRequest = {
+  promise: Promise<WorkspaceSnapshot>;
+  revalidated: Promise<WorkspaceSnapshot | null>;
+  signal?: AbortSignal;
+};
 const snapshotRequests = new Map<string, SnapshotRequest>();
 
-export function cachedWorkspaceSnapshot(siteId = '', route = '/', options: { revalidate?: boolean; signal?: AbortSignal } = {}): { cached: WorkspaceSnapshot | null; fresh: Promise<WorkspaceSnapshot> } {
+export function cachedWorkspaceSnapshot(
+  siteId = '',
+  route = '/',
+  options: { revalidate?: boolean; signal?: AbortSignal } = {}
+): { fresh: Promise<WorkspaceSnapshot>; revalidated: Promise<WorkspaceSnapshot | null> } {
   const key = `${siteId || 'active'}::${route || '/'}`;
-  let cached = snapshotMemory.get(key) || null;
-  if (!cached) {
-    try {
-      const value = sessionStorage.getItem(`website-studio:snapshot:${key}`);
-      cached = value ? JSON.parse(value) as WorkspaceSnapshot : null;
-      if (cached) snapshotMemory.set(key, cached);
-    } catch { /* storage can be unavailable in sandboxed widgets */ }
-  }
+  const legacyStorageKey = `website-studio:snapshot:${key}`;
+  let migrationPayload: WorkspaceSnapshot | null = null;
+  try {
+    const value = sessionStorage.getItem(legacyStorageKey);
+    migrationPayload = value ? sanitizeLegacyWorkspaceSnapshot(JSON.parse(value)) : null;
+  } catch { /* storage can be unavailable in sandboxed widgets */ }
   const existing = snapshotRequests.get(key);
   if (existing && ((!options.signal && !existing.signal) || existing.signal === options.signal)) {
-    return { cached, fresh: existing.promise };
+    return { fresh: existing.promise, revalidated: existing.revalidated };
   }
+  const migrationSeed = migrationPayload
+    ? { payload: migrationPayload, revision: migrationPayload.revision }
+    : undefined;
+  let resolveRevalidated!: (value: WorkspaceSnapshot | null) => void;
+  let rejectRevalidated!: (error: unknown) => void;
+  const revalidated = new Promise<WorkspaceSnapshot | null>((resolve, reject) => {
+    resolveRevalidated = resolve;
+    rejectRevalidated = reject;
+  });
+  void revalidated.catch(() => undefined);
   let fresh: Promise<WorkspaceSnapshot>;
-  fresh = callBackend<WorkspaceSnapshot>({
-    action: 'workspace_snapshot',
-    site_id: siteId || undefined,
-    route: route || undefined,
-    known_versions: options.revalidate ? cached?.versions : undefined
-  }, options.signal).then((payload) => {
-    if (payload.not_modified && cached) return cached;
-    snapshotMemory.set(key, payload);
-    try { sessionStorage.setItem(`website-studio:snapshot:${key}`, JSON.stringify(payload)); } catch { /* best effort */ }
-    return payload;
+  const loader = async ({ knownRevision, signal }: { knownRevision?: string; signal?: AbortSignal }) => {
+    const payload = await callBackend<WorkspaceSnapshot>({
+      action: 'workspace_snapshot',
+      site_id: siteId || undefined,
+      route: route || undefined,
+      known_revision: options.revalidate === false ? undefined : knownRevision
+    }, signal);
+    if (payload.not_modified) {
+      if (!knownRevision) throw new TypeError('Website Studio returned not_modified without a known revision.');
+      if (payload.revision !== knownRevision) throw new TypeError('Website Studio returned not_modified for a different revision.');
+      return { kind: 'not_modified', revision: knownRevision } as const;
+    }
+    const sanitized = sanitizeWorkspaceSnapshot(payload);
+    if (!sanitized) throw new TypeError('Website Studio returned an invalid workspace snapshot.');
+    return { kind: 'value', payload: sanitized, revision: sanitized.revision } as const;
+  };
+  fresh = createRequestFingerprint(JSON.stringify({ route: route || '/', site_id: siteId || 'active' }))
+    .then((entityId) => readThroughParentDataCache<WorkspaceSnapshot>({
+      appId: 'website-studio',
+      entityId,
+      migrationSeed,
+      resource: 'site-snapshots',
+      schemaRevision: 'website-studio.site-snapshots.v2'
+    }, loader, {
+      sanitize: sanitizeWorkspaceSnapshot,
+      signal: options.signal
+    }))
+    .catch(async (error): Promise<ParentDataCacheReadResult<WorkspaceSnapshot>> => {
+      if (error instanceof Error && error.message.startsWith('SHA-256 is unavailable')) {
+        const direct = await loader({ signal: options.signal });
+        if (direct.kind === 'not_modified') throw new TypeError('Website Studio direct reads require a value.');
+        return {
+          brokered: false,
+          freshness: 'fresh' as const,
+          migrationCommitted: false,
+          payload: direct.payload,
+          revision: direct.revision,
+          source: 'network' as const
+        };
+      }
+      throw error;
+    })
+    .then((result) => {
+    if (migrationSeed && result.brokered && result.migrationCommitted) {
+      try { sessionStorage.removeItem(legacyStorageKey); } catch { /* best effort */ }
+    }
+    if (result.revalidation) {
+      void result.revalidation.then((next) => {
+        resolveRevalidated(next.changed ? next.payload : null);
+      }, rejectRevalidated);
+    } else {
+      resolveRevalidated(null);
+    }
+    return result.payload;
+  }).catch((error) => {
+    rejectRevalidated(error);
+    throw error;
   }).finally(() => {
     if (snapshotRequests.get(key)?.promise === fresh) snapshotRequests.delete(key);
   });
-  snapshotRequests.set(key, { promise: fresh, signal: options.signal });
-  return { cached, fresh };
+  snapshotRequests.set(key, { promise: fresh, revalidated, signal: options.signal });
+  return { fresh, revalidated };
 }
 
 export function invalidateWorkspaceSnapshots(resources: string[] = []) {
-  if (!resources.length || resources.some((resource) => ['source', 'navigation', 'view-selection'].includes(resource))) {
-    snapshotMemory.clear();
+  if (!resources.length || resources.some((resource) => [
+    'records', 'source', 'working-state', 'navigation', 'preview', 'activity', 'settings', 'view-selection'
+  ].includes(resource))) {
     snapshotRequests.clear();
     try {
       for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
@@ -249,6 +342,109 @@ export function invalidateWorkspaceSnapshots(resources: string[] = []) {
       }
     } catch { /* storage can be unavailable in sandboxed widgets */ }
   }
+}
+
+export function sanitizeWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const payload = value as Partial<WorkspaceSnapshot>;
+  if (payload.schema !== 'workspace_snapshot.v1'
+      || !payload.versions
+      || typeof payload.versions !== 'object'
+      || !SNAPSHOT_VERSION_KEYS.every((key) => typeof payload.versions?.[key] === 'string')
+      || !validSnapshotRevision(payload.revision)) return null;
+  try {
+    const cloned = JSON.parse(JSON.stringify(payload, sanitizeSnapshotField)) as WorkspaceSnapshot;
+    if (cloned.not_modified === true
+        || (cloned.workspace === undefined && cloned.project === undefined)
+        || (cloned.workspace !== undefined && !validSnapshotWorkspace(cloned.workspace))
+        || (cloned.project !== undefined && cloned.project !== null && !validSnapshotProject(cloned.project))) {
+      return null;
+    }
+    return cloned;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeSnapshotField(key: string, item: unknown): unknown {
+  const normalized = key.replace(/[^A-Za-z0-9]/gu, '').toLowerCase();
+  if (['authorization', 'credential', 'credentials', 'downloadurl', 'localpath', 'password', 'signedurl', 'streamurl', 'token'].includes(normalized)
+      || normalized.endsWith('token')
+      || normalized.endsWith('secret')) return undefined;
+  if (typeof item === 'string'
+      && (/^blob\s*:/iu.test(item)
+        || /[?&](?:sig|signature|x-amz-signature|x-goog-signature)=/iu.test(item))) return undefined;
+  return item;
+}
+
+function validSnapshotWorkspace(value: unknown): boolean {
+  if (!isSnapshotRecord(value)) return false;
+  const workspace = value as { projects?: unknown; active_project_id?: unknown; persisted_active_project_id?: unknown };
+  return Array.isArray(workspace.projects)
+    && workspace.projects.every((site) => isSnapshotRecord(site) && typeof site.id === 'string')
+    && typeof workspace.active_project_id === 'string'
+    && typeof workspace.persisted_active_project_id === 'string';
+}
+
+function validSnapshotProject(value: unknown): boolean {
+  if (!isSnapshotRecord(value)) return false;
+  const project = value as { site?: unknown; navigation?: unknown; working_state?: unknown; activity?: unknown };
+  if (!isSnapshotRecord(project.site)
+      || typeof project.site.id !== 'string'
+      || !isSnapshotRecord(project.navigation)
+      || !Array.isArray(project.navigation.pages)
+      || !Array.isArray(project.navigation.routes)
+      || !isSnapshotRecord(project.working_state)
+      || !isSnapshotRecord(project.activity)) return false;
+  return project.navigation.pages.every((page) => isSnapshotRecord(page) && typeof page.id === 'string')
+    && project.navigation.routes.every((route) => isSnapshotRecord(route) && typeof route.id === 'string');
+}
+
+function isSnapshotRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function sanitizeLegacyWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const payload = value as Partial<WorkspaceSnapshot>;
+  if (!payload.versions || typeof payload.versions !== 'object'
+      || !SNAPSHOT_VERSION_KEYS.every((key) => typeof payload.versions?.[key] === 'string')) return null;
+  return sanitizeWorkspaceSnapshot({
+    ...payload,
+    revision: validSnapshotRevision(payload.revision)
+      ? payload.revision
+      : legacySnapshotRevision(payload.versions as SnapshotVersions)
+  });
+}
+
+function validSnapshotRevision(value: unknown): value is string {
+  return typeof value === 'string'
+    && (/^[a-f0-9]{64}$/u.test(value) || /^legacy:[a-f0-9]{16}$/u.test(value));
+}
+
+const SNAPSHOT_VERSION_KEYS: Array<keyof SnapshotVersions> = [
+  'workspace_version', 'project_version', 'source_version', 'navigation_version',
+  'working_state_version', 'preview_version', 'activity_version', 'settings_version'
+];
+
+function legacySnapshotRevision(versions: SnapshotVersions): string {
+  const serialized = SNAPSHOT_VERSION_KEYS.map((key) => `${key}:${versions[key]}`).join('|');
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < serialized.length; index += 1) {
+    const code = serialized.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ code, 0x85ebca6b);
+  }
+  return `legacy:${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 60_000);
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, Math.min(timestamp - Date.now(), 60_000)) : null;
 }
 
 export async function callStorageProvider<T = { file?: StorageFile }>(alias: string, body: Record<string, unknown>): Promise<T> {

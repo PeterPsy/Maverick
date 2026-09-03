@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 from core.api.app_store_local_projects import _local_apps_payload
@@ -10,6 +12,7 @@ from core.api.app_store_payloads import _installation_payload, _server_apps_payl
 from core.api.app_store_requests import _catalog_base_url
 from core.api.app_store_visibility import _filter_catalog_for_context, _user_workspace_ids
 from core.api.http import StartResponse, json_response, status_line
+from core.api.http_validators import format_etag, if_none_match_matches
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.apps.remote_store import fetch_remote_catalog
@@ -54,7 +57,21 @@ def handle_app_store_api(
                 {"error": "catalog_unavailable", "detail": str(error)},
                 status=status_line(500),
             )
-        return json_response(start_response, _filter_catalog_for_context(state, catalog, context))
+        payload = _filter_catalog_for_context(state, catalog, context)
+        revision = hashlib.sha256(
+            json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        response_payload = {
+            **payload,
+            "schema": "maverick.app-store-catalog.v1",
+            "revision": revision,
+        }
+        etag = format_etag(revision)
+        response_headers = [("ETag", etag), ("Cache-Control", "private, no-cache"), ("Vary", "Cookie")]
+        if if_none_match_matches(str(environ.get("HTTP_IF_NONE_MATCH") or ""), etag):
+            start_response("304 Not Modified", [*response_headers, ("Content-Length", "0")])
+            return []
+        return json_response(start_response, response_payload, headers=response_headers)
 
     if path == "/api/app-store/server-apps" and method == "GET":
         return json_response(start_response, _server_apps_payload(state, context))

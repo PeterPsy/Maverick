@@ -4,6 +4,9 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache"
+  },
   "scripts": {
     "prebuild": "node ../../scripts/check-node-runtime.mjs",
     "build": "vite build",

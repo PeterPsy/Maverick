@@ -14,18 +14,44 @@ const EMPTY_STORAGE_SECRET_REQUEST = {
 
 const UPLOAD_BUCKET_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
-  const response = await fetch('/api/apps/fitness-coach/backend', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const payload = (await response.json()) as T & { error?: string; detail?: string };
+export async function callBackend<T>(body: Record<string, unknown>, options: { signal?: AbortSignal } = {}): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch('/api/apps/fitness-coach/backend', {
+      method: 'POST',
+      credentials: 'same-origin',
+      signal: options.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    const transport = new Error('Fitness Coach backend transport failed.', { cause: error });
+    transport.name = 'MaverickTransportError';
+    throw transport;
+  }
+  let payload: T & { error?: string; detail?: string };
+  try {
+    payload = (await response.json()) as T & { error?: string; detail?: string };
+  } catch (error) {
+    if (response.ok) throw new TypeError('Fitness Coach returned an invalid JSON response.', { cause: error });
+    payload = {} as T & { error?: string; detail?: string };
+  }
   if (!response.ok) {
-    throw new Error(payload.detail || payload.error || `Backend request failed with ${response.status}`);
+    throw new FitnessHttpError(
+      payload.detail || payload.error || `Backend request failed with ${response.status}`,
+      response.status,
+      parseRetryAfter(response.headers.get('retry-after'))
+    );
   }
   return payload;
+}
+
+export class FitnessHttpError extends Error {
+  constructor(message: string, readonly status: number, readonly retryAfterMs: number | null) {
+    super(message);
+    this.name = 'MaverickHttpError';
+  }
 }
 
 export async function listWorkouts(query = '') {
@@ -180,6 +206,14 @@ export function mountedAppIdFromPath(pathname: string, fallback: string): string
   } catch {
     return match[1] || fallback;
   }
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 60_000);
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, Math.min(timestamp - Date.now(), 60_000)) : null;
 }
 
 export function openStorageForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null) {

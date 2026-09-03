@@ -170,8 +170,20 @@ class FitnessCoachServiceTest(unittest.TestCase):
             _, workout_payload = handle_action(data_root, "workout.create", {"name": "Morning", "blocks": [block]})
 
             status, payload = handle_action(data_root, "app.bootstrap", {"include_runs": True, "_workspace_id": "default", "_app_id": "fitness-coach"})
+            unchanged_status, unchanged = handle_action(
+                data_root,
+                "app.bootstrap",
+                {
+                    "include_runs": True,
+                    "_workspace_id": "default",
+                    "_app_id": "fitness-coach",
+                    "known_revision": payload["state_version"],
+                },
+            )
 
             self.assertEqual(status, 200)
+            self.assertEqual(payload["schema"], "fitness-coach.bootstrap.v1")
+            self.assertFalse(payload["not_modified"])
             self.assertEqual(payload["workspace_id"], "default")
             self.assertEqual(payload["app_id"], "fitness-coach")
             self.assertTrue(payload["state_version"])
@@ -181,6 +193,16 @@ class FitnessCoachServiceTest(unittest.TestCase):
             self.assertEqual(payload["tags"], ["legs", "warmup"])
             self.assertEqual(payload["runs"], [])
             self.assertEqual(payload["view_state"]["selected_workout_id"], workout_payload["workout"]["id"])
+            self.assertEqual(unchanged_status, 200)
+            self.assertEqual(
+                unchanged,
+                {
+                    "ok": True,
+                    "schema": "fitness-coach.bootstrap.v1",
+                    "state_version": payload["state_version"],
+                    "not_modified": True,
+                },
+            )
 
     def test_start_accepts_workout_update_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as data_root:

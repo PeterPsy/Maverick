@@ -145,6 +145,15 @@ not to the shell's browser storage. Private persistence still requires the
 resource, privacy, lifecycle, and rollout gates above; origin isolation alone
 does not authorize caching.
 
+M5 structured app adapters are parent-mediated. Base Shell binds the principal
+and owns IndexedDB; an accepted child receives only conditional network-read
+requests over a private channel and returns its sanitized read model. A cached
+catalog or content record cannot enable an authoritative action, and a legacy
+value cannot paint until the parent verifies its scoped migration. The pilot
+resource and rollout contracts are defined in
+`docs/product/pwa_cache_resource_inventory.v2.json` and
+`docs/runbooks/pwa_data_cache_m5.md`.
+
 ## Acceptance contract
 
 Automated and physical-device checks must prove:

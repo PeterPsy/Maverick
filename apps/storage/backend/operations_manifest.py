@@ -218,6 +218,7 @@ def operations_manifest_payload() -> dict[str, Any]:
                     "workspace_relative_paths",
                     "offset",
                     "limit",
+                    "known_revision",
                 ],
                 "payload_profile": "paginated_metadata",
             },

@@ -56,6 +56,18 @@ describe('storage Drive navigation stability', () => {
     expect(source).toContain('if (!appVisibleRef.current) {');
   });
 
+  it('applies changed catalog revalidations in both Storage sidebar surfaces', () => {
+    const sidebarSource = readSource('widgets/storage-sidebar/main.tsx');
+    const footerSource = readSource('widgets/storage-sidebar-footer/main.tsx');
+
+    for (const source of [sidebarSource, footerSource]) {
+      expect(source).toContain('STORAGE_CATALOG_REVALIDATED_EVENT');
+      expect(source).toContain('window.addEventListener(STORAGE_CATALOG_REVALIDATED_EVENT');
+      expect(source).toContain('window.removeEventListener(STORAGE_CATALOG_REVALIDATED_EVENT');
+      expect(source).toContain('revalidateCatalog();');
+    }
+  });
+
   it('uses stable Drive folder ids across roots and navigation params', () => {
     const source = readSource('widgets/storage-sidebar/main.tsx');
 

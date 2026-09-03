@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "b5c4edbd3fa4e9920e89d73ac63721a82b4e59fa79bae8d1b2d8944e1831c604",
+  "build_id": "a1b6cc6777479decad4b1da3754105346568f831df02c5f4220ce5fa614356e5",
   "entrypoints": [
     "index.html",
     "widgets/file-preview/index.html",
@@ -14,18 +14,18 @@
       "size_bytes": 43048
     },
     {
-      "path": "assets/app-1tmYWNs3.js",
-      "sha256": "bdb747d2b7e4b9dcd2757e650249f813561bbed59aea4c3e1bdc0c61bb6733a4",
-      "size_bytes": 91574
+      "path": "assets/app-BeIFMJID.js",
+      "sha256": "007335d52de9df6d73872122272ce4b1d75f02a14827780ef3b77221e4ba0bf8",
+      "size_bytes": 91989
     },
     {
-      "path": "assets/browserFullscreen-n6aEqaN-.js",
-      "sha256": "58330725b5fad332088a9fd89417a0a248e51e0c4c683b62018d3887befd75f9",
+      "path": "assets/browserFullscreen-D7VxnBB3.js",
+      "sha256": "1ad00f0d4a83e737fc4b50e93bf0a460ecc87869797c569d84ee4c0760f0fe3c",
       "size_bytes": 11418
     },
     {
-      "path": "assets/docx-preview-CPiiRJWx.js",
-      "sha256": "26f4dd4347d26feac70d04c1e45b50b67b0fb4cdfc9768d2f73ecfee21c719ec",
+      "path": "assets/docx-preview-rgafI0jq.js",
+      "sha256": "5b6f94c925613fe75d213aee7542d61b2c6da0101270d0e24ca8c1d087c19470",
       "size_bytes": 172974
     },
     {
@@ -39,13 +39,13 @@
       "size_bytes": 1232303
     },
     {
-      "path": "assets/storageApi-CYH3LLYx.js",
-      "sha256": "544b89cd031e7dd8b67046372a103905bdb67e4db49974a58f5265a8e17b1517",
-      "size_bytes": 212306
+      "path": "assets/storageApi-Cew34SOZ.js",
+      "sha256": "81c12767c0d51cc23a512b446dba802042a473a75b027218ca69bca66c5794ec",
+      "size_bytes": 222695
     },
     {
-      "path": "assets/storageNavigationParams-Br7f5xJk.js",
-      "sha256": "d06717956400ae87d42005d75eee6776a14bd3685d5d70637f062d489a40e38b",
+      "path": "assets/storageNavigationParams-B4zeQFXd.js",
+      "sha256": "f3a58632e07ee0ba53f84cc85b18eab2a8af7f5be4d64adf67889e034fdb79f5",
       "size_bytes": 10494
     },
     {
@@ -54,24 +54,24 @@
       "size_bytes": 638
     },
     {
-      "path": "assets/storageViewFilterEvents-BUnw1sot.js",
-      "sha256": "15d5960c3b3364b0695934e41f40e283d79ba6fd27ff9658724919acc5443805",
+      "path": "assets/storageViewFilterEvents-BR-I0Pvz.js",
+      "sha256": "cec9c9b3532505b563db4307c58605284adf7e82cd338ffee6129ec20edc894f",
       "size_bytes": 175020
     },
     {
-      "path": "assets/widgets/file-preview/index-BO7C4zHh.js",
-      "sha256": "8acd00cac12fe570d37b90da7d2778711452e07349acd96f2d5685e2fbde9166",
+      "path": "assets/widgets/file-preview/index-B08xAcKi.js",
+      "sha256": "50cfdc6fcad2b6baa773e1f6ae222a2ccebc5489b8bc1077fd608223a61a4d18",
       "size_bytes": 427200
     },
     {
-      "path": "assets/widgets/storage-sidebar/index-DrBbN6F0.js",
-      "sha256": "93998d70eac2e7db98a1dab0732210b6e30eafadb519226e8fadf91ed4b751e0",
-      "size_bytes": 26985
+      "path": "assets/widgets/storage-sidebar/index-CoH1IUbx.js",
+      "sha256": "c37353075b811d2d8ce3b1a777356dde79e462a40826d818ccc9cd637e217b83",
+      "size_bytes": 27087
     },
     {
-      "path": "assets/widgets/storage-sidebar-footer/index-M599oYxB.js",
-      "sha256": "a2db4416470d2524102f38b867ad4df2556aecb0931c4c415743115668b1d561",
-      "size_bytes": 9681
+      "path": "assets/widgets/storage-sidebar-footer/index-DXuVDs5L.js",
+      "sha256": "22be4c5ff49e1db1da7f72cd51252058a5251606117d92b28939097d4d9b8a27",
+      "size_bytes": 9782
     }
   ],
   "revalidated": [
@@ -87,22 +87,22 @@
     },
     {
       "path": "index.html",
-      "sha256": "5e17f688f546b4c3651aa6d14589f841817f5321a9667d37ac72ec24b3c5144b",
+      "sha256": "9984479ed3383af8cc5e497047a5ef5eb9cc3285b1e701547d5953d3fdaa046c",
       "size_bytes": 1054
     },
     {
       "path": "widgets/file-preview/index.html",
-      "sha256": "45e7ceb0e1bc160166f42f5a0e86418652638f4b11fb1652bfbc8d2e11f836d0",
+      "sha256": "46d0dead8e45815b8b139fa8011f545299e41dcbb0554ee4ba986702c7b0c474",
       "size_bytes": 767
     },
     {
       "path": "widgets/storage-sidebar/index.html",
-      "sha256": "a015972df5593e4541b2905ebcdc02c29f93365053851986fc8b1688d4aeff5c",
+      "sha256": "64cd7fdbca8b54897446ad5ce40937ee39f44aa394007d36bea0bf4aa9bce7d2",
       "size_bytes": 808
     },
     {
       "path": "widgets/storage-sidebar-footer/index.html",
-      "sha256": "2fccb4ee25c6cbb2d0267b2f897ff4c5110b59b018c3a74ed696aa55557122fd",
+      "sha256": "997b19205fd8f79d0d8fc4a5ae4042d8f799bfeca438fba0504673621c6af0ca",
       "size_bytes": 800
     }
   ]

@@ -20,7 +20,7 @@ Storage remains the owner of files, Drive, uploads, previews, media streaming, p
 
 ## Runtime Performance Path
 
-The frontend uses backend action `app.bootstrap` for initial app state instead of independently loading workouts, exercises, view state, and runs. Bootstrap payloads may be cached in scoped `sessionStorage` as stale-while-revalidate data after removing runtime-only media fields such as `stream_url`, token fields, local paths, and secret requests. Recent runs are loaded after the initial screen so they do not block the setup editor.
+The frontend uses backend action `app.bootstrap` for initial app state instead of independently loading workouts, exercises, view state, and runs. The action exposes `state_version` plus `known_revision/not_modified`; the default-off M5 Base Shell broker may reuse the sanitized bootstrap and bounded captured thumbnails under session-only personal-data policy. Old scoped `sessionStorage` values are migration seeds only and never paint before parent confirmation; new reads do not maintain a duplicate local cache. Recent runs are loaded after the initial screen so they do not block the setup editor. See `docs/runbooks/pwa_data_cache_m5.md`.
 
 Workout start is a single atomic `workout.start` backend action. The action accepts an optional updated workout payload, normalizes and validates it, persists the latest workout state, and marks `last_started_at` in one JSON state update. The frontend opens Work mode optimistically from the locally validated workout and reconciles the returned workout metadata when the backend responds.
 

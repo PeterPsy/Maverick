@@ -252,6 +252,38 @@ or unrelated origin storage. Storage migrates eligible raw
 image/PDF/text/markdown previews through the broker while retaining direct
 video/audio streaming and the same ordinary loading/viewer components.
 
+## M5 implementation profile
+
+M5 adds the first app-owned structured read models without exposing the M3
+host capability to an embedded app. Base Shell owns a parent broker bound to
+the authenticated user, active workspace, and access lease. It accepts a
+private `MessageChannel` only from the registered frame window at its exact
+isolated origin and only for a fixed app/resource/schema declaration whose
+global and per-app rollout gates are both enabled. The child performs the
+app-specific conditional HTTP/backend read and applies its exact sanitizer;
+the parent owns IndexedDB, policy derivation, TTL, quota, and lifecycle. A
+missing or disabled broker produces one ordinary server read.
+
+The first pilot declarations are Website Studio site snapshots, Storage file
+catalog metadata, the App Store catalog, and Fitness Coach's sanitized
+bootstrap and bounded thumbnail frames. Their complete policy, validator,
+budget, migration, and invalidation contracts are recorded in
+`docs/product/pwa_cache_resource_inventory.v2.json` and operated through
+`docs/runbooks/pwa_data_cache_m5.md`. Fitness Coach remains `session` because
+its canonical class is personal data; no feature flag promotes it to
+persistent storage. Calendar and Chat remain a later reviewed tranche, and CRM
+and Mail remain denied pending explicit privacy approval.
+
+Legacy Website Studio snapshots and Fitness Coach bootstrap/thumbnail values
+may be offered only as sanitized migration seeds. They never paint directly
+and are removed only after the parent verifies the scoped commit. App Store
+catalog rows remain read-only until fresh workspace, installation, pin, and
+other authority inputs arrive. Across every pilot, expired data is a miss,
+`401`/`403` triggers scoped cleanup and blocks reuse, and no cache result grants
+mutation, provider, capability, publication, or launch authority. Both the
+global and all per-app M5 gates remain off by default; implementation readiness
+does not replace privacy or physical Safari/Home Screen release evidence.
+
 ## Supersession boundary
 
 When ADR-0011 and this record conflict, this record is normative. Historical

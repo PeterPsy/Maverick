@@ -2,9 +2,10 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
-import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, folderMediaDownloadUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, storageMediaStreamUrl, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
+import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, folderMediaDownloadUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, storageMediaStreamUrl, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
@@ -522,6 +523,7 @@ function App() {
   const driveBreadcrumbTrailRef = useRef<DriveBreadcrumbTarget[]>([]);
   const driveFolderAbortRef = useRef<AbortController | null>(null);
   const driveLoadMoreAbortRef = useRef<AbortController | null>(null);
+  const catalogReadAbortRef = useRef<AbortController | null>(null);
   const appVisibleRef = useRef(true);
   const catalogRefreshRequestRef = useRef(0);
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
@@ -720,10 +722,14 @@ function App() {
     filter?: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
     options: CatalogRefreshOptions = {}
   ) {
+    catalogReadAbortRef.current?.abort();
+    catalogReadAbortRef.current = null;
     if (driveTargetRef.current) {
       await loadDriveFolder(driveTargetRef.current, options.loading ?? 'background');
       return;
     }
+    const catalogController = new AbortController();
+    catalogReadAbortRef.current = catalogController;
     const requestId = ++catalogRefreshRequestRef.current;
     const { loading = 'background', ...requestOptions } = options;
     if (loading === 'foreground') {
@@ -731,7 +737,7 @@ function App() {
     }
     try {
       let request = catalogRequest(filter, 0, requestOptions);
-      let payload = await loadCatalog(request);
+      let payload = await loadCatalog(request, { signal: catalogController.signal });
       if (requestId !== catalogRefreshRequestRef.current) return;
       let remoteFilter = normalizedViewFilter(payload.state.view_filter);
       if (remoteFilter.mode === 'custom' && !request.file_ids?.length && !request.workspace_relative_paths?.length) {
@@ -745,7 +751,7 @@ function App() {
             workspacePaths: remoteFilter.workspace_relative_paths,
           }
         );
-        payload = await loadCatalog(request);
+        payload = await loadCatalog(request, { signal: catalogController.signal });
         if (requestId !== catalogRefreshRequestRef.current) return;
         remoteFilter = normalizedViewFilter(payload.state.view_filter);
       }
@@ -761,7 +767,7 @@ function App() {
         await focusResolvedNavigationFile(pendingFile);
       } else if (pendingNavigationTargetRef.current?.targetType === 'file') {
         const target = pendingNavigationTargetRef.current;
-        const targetFile = await loadNavigationTarget(target);
+        const targetFile = await loadNavigationTarget(target, catalogController.signal);
         if (targetFile) {
           pendingNavigationTargetRef.current = null;
           await focusResolvedNavigationFile(targetFile);
@@ -790,14 +796,14 @@ function App() {
     }
   }
 
-  async function loadNavigationTarget(target: StorageNavigationTarget) {
+  async function loadNavigationTarget(target: StorageNavigationTarget, signal?: AbortSignal) {
     if (!target.fileId && !target.workspaceRelativePath) return null;
     const payload = await loadCatalog({
       ...(target.fileId ? { file_ids: [target.fileId] } : {}),
       ...(target.workspaceRelativePath ? { workspace_relative_paths: [target.workspaceRelativePath] } : {}),
       limit: 1,
       offset: 0,
-    });
+    }, { signal });
     return payload.files[0] || null;
   }
 
@@ -911,6 +917,8 @@ function App() {
     }, VIEW_SYNC_MS);
     return () => {
       window.clearInterval(interval);
+      catalogReadAbortRef.current?.abort();
+      catalogReadAbortRef.current = null;
       if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
       if (markdownCopyTimerRef.current !== null) window.clearTimeout(markdownCopyTimerRef.current);
       if (dropFeedbackTimerRef.current !== null) window.clearTimeout(dropFeedbackTimerRef.current);
@@ -959,7 +967,7 @@ function App() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -974,6 +982,8 @@ function App() {
         const isVisible = payload.visible !== false;
         appVisibleRef.current = isVisible;
         if (!isVisible) {
+          catalogReadAbortRef.current?.abort();
+          catalogReadAbortRef.current = null;
           abortDriveRequests();
           setCatalogLoadingMore(false);
           clearCatalogTransitionLoading();
@@ -1009,6 +1019,17 @@ function App() {
 
     window.addEventListener('message', handleShellMessage);
     return () => window.removeEventListener('message', handleShellMessage);
+  }, []);
+
+  useEffect(() => {
+    function handleCatalogRevalidated() {
+      if (!appVisibleRef.current || driveTargetRef.current) return;
+      refresh(undefined, { loading: 'background' }).catch((err: Error) => {
+        if (!isAbortError(err)) setError(err.message);
+      });
+    }
+    window.addEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, handleCatalogRevalidated);
+    return () => window.removeEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, handleCatalogRevalidated);
   }, []);
 
   useEffect(() => {

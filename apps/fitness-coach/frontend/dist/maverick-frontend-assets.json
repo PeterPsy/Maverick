@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "5266be50ebcef145eebeb498197d5873f7ab33070761ab3051c684fdd637bcf4",
+  "build_id": "09343b696dc2e16f6a51bf16cacca831d1e2b88201b6f83de87be391a1e18c19",
   "entrypoints": [
     "index.html",
     "widgets/fitness-coach-sidebar/index.html",
@@ -8,9 +8,9 @@
   ],
   "immutable": [
     {
-      "path": "assets/api-Bfya-YRT.js",
-      "sha256": "3cbfff927be5c2cc4287f4226ef320e2aaf812afc9b16f1bc2c7d3d4e3e9ab0b",
-      "size_bytes": 6582
+      "path": "assets/api-CD8yRzit.js",
+      "sha256": "76a95742edba5a37659000a038a11df01f72d82d49d058d20dacdc2f0f03defa",
+      "size_bytes": 7278
     },
     {
       "path": "assets/app-CJl-fSM1.css",
@@ -18,9 +18,9 @@
       "size_bytes": 34989
     },
     {
-      "path": "assets/app-Df_X2DoD.js",
-      "sha256": "e7d05d7ca9477eaa3138bbaafce709391c75edfb2c0227b40d19ffe2eb424d05",
-      "size_bytes": 74579
+      "path": "assets/app-DL18qock.js",
+      "sha256": "52f62092dca00ea93e1e74a2c0c34ca2260d72f1e2678cd2f563d0bd048e6225",
+      "size_bytes": 86053
     },
     {
       "path": "assets/count-down-fitness-coach-AWlrmdI5.mp3",
@@ -53,8 +53,8 @@
       "size_bytes": 9032
     },
     {
-      "path": "assets/widgets/fitness-coach-sidebar/index-s_gWlKpb.js",
-      "sha256": "660977dadca5f81c29aa3c42e037eff7e8dc6e0d79d15dbfbcc82efd312e6938",
+      "path": "assets/widgets/fitness-coach-sidebar/index-rif4MjwG.js",
+      "sha256": "a41224ab8c809e3ec61c031595adaeaf5176313b1018a4b96ea7d172bf238a06",
       "size_bytes": 4579
     },
     {
@@ -66,12 +66,12 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "957313e25df570c94ff9860edab5f0348b6de323b13afb4c454e52f71c27ce63",
+      "sha256": "82a9d3469748d6c28c52c15f6b65fe4ea59ba7d889d60f85ba0e2d0ef3642621",
       "size_bytes": 717
     },
     {
       "path": "widgets/fitness-coach-sidebar/index.html",
-      "sha256": "4c242ab3383cebe945c8bc900db8d1b00659c4127fcf3d38661a798255136083",
+      "sha256": "49ead3326671a449b9b08f091eda2ef6e8f28fdbbe576c59c13d840b1c16d727",
       "size_bytes": 687
     },
     {

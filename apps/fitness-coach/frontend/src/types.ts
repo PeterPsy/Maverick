@@ -134,6 +134,8 @@ export type ViewState = {
 };
 
 export type AppBootstrapPayload = {
+  schema?: 'fitness-coach.bootstrap.v1';
+  not_modified?: boolean;
   workspace_id: string;
   app_id: string;
   state_version: string;

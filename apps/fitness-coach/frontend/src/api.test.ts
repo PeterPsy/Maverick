@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bootstrapApp, callStorageBackend, openStorageForMedia, openStorageVideoPicker, startWorkout, storageMediaSelectionFromPickerParams, storageNavigationParamsForMedia, storageVideoPickerNavigationParamsForMedia } from './api';
+import { bootstrapApp, callBackend, callStorageBackend, FitnessHttpError, openStorageForMedia, openStorageVideoPicker, startWorkout, storageMediaSelectionFromPickerParams, storageNavigationParamsForMedia, storageVideoPickerNavigationParamsForMedia } from './api';
 import type { ExerciseMediaRef, StorageFolderRef } from './types';
 
 function jsonResponse(payload: unknown, ok = true) {
@@ -101,6 +101,29 @@ describe('Storage integration API', () => {
       action: 'app.bootstrap',
       include_runs: false
     });
+  });
+
+  it('treats malformed successful JSON as terminal rather than a retryable transport failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{broken', {
+      headers: { 'Content-Type': 'application/json' },
+      status: 200
+    })));
+
+    await expect(callBackend({ action: 'app.bootstrap' })).rejects.toMatchObject({
+      name: 'TypeError'
+    });
+  });
+
+  it('preserves HTTP status and bounded retry metadata for cache cleanup and retries', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'log in again' }), {
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '120' },
+      status: 401
+    })));
+
+    const error = await callBackend({ action: 'app.bootstrap' }).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(FitnessHttpError);
+    expect(error).toMatchObject({ name: 'MaverickHttpError', status: 401, retryAfterMs: 60_000 });
   });
 
   it('sends workout.start as one atomic start request when a workout is supplied', async () => {

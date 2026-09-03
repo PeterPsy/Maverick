@@ -12,6 +12,7 @@
     "test:visual": "playwright test --config=playwright.config.ts"
   },
   "dependencies": {
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
     "react": "^19.0.0",

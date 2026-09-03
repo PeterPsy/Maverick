@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { cachedWorkspaceSnapshot, invalidateWorkspaceSnapshots, type WorkspaceSnapshot } from '../../api';
 import {
   TreeExpander,
@@ -133,12 +134,15 @@ function WebsiteSitemapSidebarWidget() {
     const controller = new AbortController();
     loadAbortRef.current = controller;
     const request = cachedWorkspaceSnapshot(nextSiteId, '/', { revalidate: true, signal: controller.signal });
-    const snapshot = request.cached || await request.fresh;
-    let selectedSiteId = applySnapshot(snapshot, nextSiteId);
-    const fresh = await request.fresh;
-    if (fresh !== snapshot) {
-      selectedSiteId = applySnapshot(fresh, nextSiteId);
-    }
+    const snapshot = await request.fresh;
+    const selectedSiteId = applySnapshot(snapshot, nextSiteId);
+    void request.revalidated.then(async (fresh) => {
+      if (!fresh || controller.signal.aborted) return;
+      const freshSiteId = applySnapshot(fresh, nextSiteId);
+      if (freshSiteId) await hydrateVisualNavigation(freshSiteId, controller.signal);
+    }).catch((loadError: Error) => {
+      if (loadError.name !== 'AbortError' && !controller.signal.aborted) setError(loadError.message);
+    });
     if (selectedSiteId) await hydrateVisualNavigation(selectedSiteId, controller.signal);
   }
 
@@ -185,7 +189,7 @@ function WebsiteSitemapSidebarWidget() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { context?: { content?: { payload?: { active_app_params?: Record<string, string> } } }; owner_app_id?: string; resource?: string; type?: string };
       if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === 'website-studio') {
         invalidateWorkspaceSnapshots(payload.resource ? [payload.resource] : []);

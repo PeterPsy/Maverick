@@ -8,7 +8,9 @@ describe('frontend performance guardrails', () => {
   const packageJson = readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
 
   it('uses bootstrap for initial app data without fetching runs in the first Promise.all', () => {
-    expect(appSource).toContain("bootstrapApp({ includeRuns: false })");
+    expect(appSource).toContain('readCachedBootstrap({ includeRuns: false, migrationSeed, signal: controller.signal })');
+    expect(appSource).not.toContain('writeBootstrapCache');
+    expect(appSource).not.toContain('applyBootstrapPayload(cached)');
     expect(appSource).not.toContain('Promise.all([listWorkouts(), listExercises(libraryQuery, libraryTag), listRuns');
     expect(appSource).toContain('listRuns(selectedWorkoutId)');
   });
@@ -54,11 +56,13 @@ describe('frontend performance guardrails', () => {
     expect(appSource).toContain('src={visiblePreviewUrl ? withVideoFrameHint(visiblePreviewUrl) : undefined}');
   });
 
-  it('reuses cached workout-setting video preview frames across page remounts', () => {
+  it('reuses parent-brokered workout-setting video preview frames without a parallel local writer', () => {
     const thumbCacheSource = readFileSync(new URL('./mediaThumbPreviewCache.ts', import.meta.url), 'utf8');
     expect(appSource).toContain('readMediaThumbPreviewFrame(previewFrameKey)');
     expect(appSource).toContain('captureMediaThumbVideoFrame(event.currentTarget, previewFrameKey)');
     expect(thumbCacheSource).toContain("const THUMB_PREVIEW_STORAGE_KEY = 'fitness-coach:media-thumb-preview:v1';");
     expect(thumbCacheSource).toContain('globalThis.sessionStorage');
+    expect(thumbCacheSource).toContain('legacySeeds');
+    expect(thumbCacheSource).not.toContain('sessionStorage.setItem');
   });
 });

@@ -776,12 +776,22 @@ function backendResponse(action: string, body: Record<string, unknown>, state: M
   switch (action) {
     case 'workspace_snapshot':
       if (options.emptySites) {
-        return { status: 200, body: { schema: 'workspace_snapshot.v1', versions: {}, workspace: { projects: [], active_project_id: '', persisted_active_project_id: '' }, project: null } };
+        return {
+          status: 200,
+          body: {
+            schema: 'workspace_snapshot.v1',
+            revision: '0'.repeat(64),
+            versions: { workspace_version: '0', project_version: '0', source_version: '0', navigation_version: '0', working_state_version: '0', preview_version: '0', activity_version: '0', settings_version: '0' },
+            workspace: { projects: [], active_project_id: '', persisted_active_project_id: '' },
+            project: null
+          }
+        };
       }
       return {
         status: 200,
         body: {
           schema: 'workspace_snapshot.v1',
+          revision: (state.changedFilesCount ? 'b' : 'a').repeat(64),
           versions: { workspace_version: '1', project_version: '1', source_version: `src_${state.changedFilesCount}`, navigation_version: `src_${state.changedFilesCount}`, working_state_version: `src_${state.changedFilesCount}`, preview_version: '1', activity_version: String(state.changedFilesCount), settings_version: '1' },
           workspace: { projects: [site], active_project_id: SITE_ID, persisted_active_project_id: SITE_ID },
           project: {

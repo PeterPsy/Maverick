@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import {
   callBackend,
   cachedWorkspaceSnapshot,
@@ -114,16 +115,14 @@ export function App() {
       const snapshotAbort = new AbortController();
       snapshotAbortRef.current = snapshotAbort;
       const snapshotRequest = cachedWorkspaceSnapshot(nextSiteId, nextRoute || '/', { revalidate: true, signal: snapshotAbort.signal });
-      const initialSnapshot = snapshotRequest.cached || await snapshotRequest.fresh;
+      const initialSnapshot = await snapshotRequest.fresh;
       const bootstrap = snapshotToBootstrap(initialSnapshot);
-      if (snapshotRequest.cached) {
-        void snapshotRequest.fresh.then((freshSnapshot) => {
-          if (runId !== refreshRunRef.current || freshSnapshot === initialSnapshot) return;
-          return refresh(nextSiteId, nextPageId, nextRoute, nextRouteId, nextAssetId, nextTarget, { resetPreview: false });
-        }).catch((error: Error) => {
-          if (error.name !== 'AbortError' && runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error.message });
-        });
-      }
+      void snapshotRequest.revalidated.then((freshSnapshot) => {
+        if (runId !== refreshRunRef.current || !freshSnapshot || freshSnapshot === initialSnapshot) return;
+        return refresh(nextSiteId, nextPageId, nextRoute, nextRouteId, nextAssetId, nextTarget, { resetPreview: false });
+      }).catch((error: Error) => {
+        if (error.name !== 'AbortError' && runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error.message });
+      });
       if (runId !== refreshRunRef.current) return;
       setSites(bootstrap.sites);
       const availableSites = bootstrap.sites.filter((site) => site.status !== 'archived');
@@ -264,7 +263,7 @@ export function App() {
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { type?: string; resource?: string; params?: Record<string, string> };
       if (payload.type === 'maverick.app.data-changed' && (payload as { owner_app_id?: string }).owner_app_id === 'website-studio') {
         const resource = payload.resource || '';

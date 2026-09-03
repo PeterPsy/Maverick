@@ -41,7 +41,7 @@ class PwaResourceInventoryTests(unittest.TestCase):
         self.assertIs(payload["resource_schema_revision_required"], True)
         self.assertEqual(
             payload["private_app_origin_boundary"],
-            "isolated_origin_or_opaque_frame_parent_broker",
+            "isolated_origin_and_exact_frame_parent_broker",
         )
         self.assertEqual(payload["canonical_data_class_source"], "core.providers.agentic_models.RuntimeDataClass")
         self.assertEqual(payload["local_persistence_policy_values"], list(LOCAL_PERSISTENCE_POLICIES))
@@ -107,6 +107,36 @@ class PwaResourceInventoryTests(unittest.TestCase):
         self.assertNotIn("offline-file", text)
         self.assertNotIn("user opt-in", text)
         self.assertNotIn("outbox", text)
+
+    def test_m5_pilot_contracts_match_the_parent_broker_declarations(self) -> None:
+        payload = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+        resources = {
+            (resource["app_ids"][0], resource["resource"]): resource
+            for resource in payload["resources"]
+            if len(resource["app_ids"]) == 1
+        }
+        expected = {
+            ("website-studio", "site-snapshots"): ("cache", 60, 86_400, 2_097_152, 16_777_216),
+            ("storage", "file-catalog"): ("cache", 30, 86_400, 262_144, 16_777_216),
+            ("app-store", "catalog"): ("cache", 300, 86_400, 1_048_576, 4_194_304),
+            ("fitness-coach", "sanitized-bootstrap-and-thumbnails"): (
+                "session", 300, 86_400, 524_288, 16_777_216
+            ),
+        }
+
+        for identity, contract in expected.items():
+            resource = resources[identity]
+            self.assertEqual(
+                (
+                    resource["local_persistence_policy"],
+                    resource["fresh_ttl_seconds"],
+                    resource["expiry_ttl_seconds"],
+                    resource["max_entry_bytes"],
+                    resource["max_scope_bytes"],
+                ),
+                contract,
+            )
+            self.assertIn("default-off", resource["rollout"])
 
 
 if __name__ == "__main__":

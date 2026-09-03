@@ -1,4 +1,5 @@
 import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveLocalizePayload, DrivePreviewPayload, DriveStartOAuthPayload, DriveWritePayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
+import { createRequestFingerprint, readThroughParentDataCache } from '@maverick/pwa-cache';
 import { stableStorageFileSourceVersion } from './storageFileCacheClient';
 
 const DEFAULT_APP_ID = 'storage';
@@ -167,10 +168,36 @@ export async function callBackend<T>(body: Record<string, unknown>, options: Sto
   if (options.signal) {
     requestInit.signal = options.signal;
   }
-  const response = await fetchImpl(options.endpoint || storageBackendEndpoint(options.appId), requestInit);
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.detail || payload.error || 'Storage request failed');
+  let response: Response;
+  try {
+    response = await fetchImpl(options.endpoint || storageBackendEndpoint(options.appId), requestInit);
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    const transport = new Error('Storage backend transport failed.', { cause: error });
+    transport.name = 'MaverickTransportError';
+    throw transport;
+  }
+  let payload: (T & { detail?: string; error?: string }) | null = null;
+  try {
+    payload = await response.json() as T & { detail?: string; error?: string };
+  } catch (error) {
+    if (response.ok) throw new TypeError('Storage returned an invalid JSON response.', { cause: error });
+  }
+  if (!response.ok) {
+    throw new StorageHttpError(
+      payload?.detail || payload?.error || 'Storage request failed',
+      response.status,
+      parseRetryAfter(response.headers.get('retry-after'))
+    );
+  }
   return payload as T;
+}
+
+export class StorageHttpError extends Error {
+  constructor(message: string, readonly status: number, readonly retryAfterMs: number | null) {
+    super(message);
+    this.name = 'MaverickHttpError';
+  }
 }
 
 export function storageBackendEndpoint(appId = currentStorageAppId()): string {
@@ -203,6 +230,9 @@ export type CatalogRequest = Partial<Pick<StorageViewFilter, 'query' | 'role' | 
   workspace_relative_paths?: string[];
 };
 
+export type CatalogReadOptions = Pick<StorageApiOptions, 'signal'>;
+export const STORAGE_CATALOG_REVALIDATED_EVENT = 'maverick.storage.catalog-revalidated.v1';
+
 export const CATALOG_PAGE_LIMIT = 500;
 export const DRIVE_PAGE_LIMIT = 50;
 export const MAX_BASE64_WRITE_BYTES = 25 * 1024 * 1024;
@@ -210,8 +240,128 @@ export const MAX_STORAGE_FILE_TRANSFER_BYTES = 500 * 1024 * 1024;
 export const DRIVE_RESUMABLE_CHUNK_BYTES = 8 * 1024 * 1024;
 export const LOCAL_UPLOAD_SESSION_CHUNK_BYTES = 8 * 1024 * 1024;
 
-export function loadCatalog(params: CatalogRequest = {}) {
-  return callBackend<CatalogPayload>({ action: 'catalog', ...params });
+export async function loadCatalog(params: CatalogRequest = {}, options: CatalogReadOptions = {}) {
+  if (params.sync === true || (params.offset ?? 0) > 0) {
+    return callBackend<CatalogPayload>({ action: 'catalog', ...params }, options);
+  }
+  const canonical = canonicalCatalogRequest(params);
+  const appId = currentStorageAppId();
+  let entityId: string;
+  try {
+    entityId = await createRequestFingerprint(JSON.stringify(canonical));
+  } catch {
+    return callBackend<CatalogPayload>({ action: 'catalog', ...canonical }, { appId, signal: options.signal });
+  }
+  const result = await readThroughParentDataCache<CatalogPayload>({
+    appId,
+    entityId,
+    resource: 'file-catalog',
+    schemaRevision: 'storage.file-catalog.v1'
+  }, async ({ knownRevision, signal }) => {
+    const payload = await callBackend<CatalogPayload>({
+      action: 'catalog',
+      ...canonical,
+      known_revision: knownRevision
+    }, { appId, signal });
+    if (payload.not_modified) {
+      if (!knownRevision || payload.revision !== knownRevision) {
+        throw new TypeError('Storage returned not_modified without the requested revision.');
+      }
+      return { kind: 'not_modified', revision: knownRevision } as const;
+    }
+    const sanitized = sanitizeCatalogPayload(payload);
+    if (!sanitized) throw new TypeError('Storage returned an invalid catalog read model.');
+    return { kind: 'value', payload: sanitized, revision: sanitized.revision } as const;
+  }, { sanitize: sanitizeCatalogPayload, signal: options.signal });
+  if (result.revalidation) {
+    void result.revalidation.then((next) => {
+      if (next.changed) dispatchCatalogRevalidated(entityId);
+    }).catch(() => undefined);
+  }
+  return result.payload;
+}
+
+function canonicalCatalogRequest(params: CatalogRequest): CatalogRequest {
+  return {
+    query: String(params.query || ''),
+    role: params.role || 'all',
+    kind: params.kind || 'all',
+    ...(params.folder_path === undefined ? {} : { folder_path: String(params.folder_path) }),
+    offset: 0,
+    ...(params.limit === undefined ? {} : { limit: params.limit }),
+    ...(params.file_ids?.length ? { file_ids: [...params.file_ids].map(String).sort() } : {}),
+    ...(params.workspace_relative_paths?.length
+      ? { workspace_relative_paths: [...params.workspace_relative_paths].map(String).sort() }
+      : {})
+  };
+}
+
+export function sanitizeCatalogPayload(value: unknown): CatalogPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const payload = value as Partial<CatalogPayload>;
+  if (payload.schema !== 'storage.file-catalog.v1'
+      || !/^[a-f0-9]{64}$/u.test(String(payload.revision || ''))
+      || !payload.state || typeof payload.state !== 'object'
+      || !Array.isArray(payload.files)
+      || !Array.isArray(payload.folders)
+      || !Array.isArray(payload.available_kinds)) return null;
+  try {
+    const sanitized = JSON.parse(JSON.stringify(payload, (key, item) => {
+      const normalized = key.replace(/[^A-Za-z0-9]/gu, '').toLowerCase();
+      if (normalized === 'weburl') return safeCatalogWebUrl(item);
+      if (['authorizationurl', 'credential', 'credentials', 'downloadurl', 'localpath', 'remotelocator', 'signedurl', 'streamurl', 'token'].includes(normalized)
+          || normalized.endsWith('token')
+          || normalized.endsWith('secret')) return undefined;
+      if (typeof item === 'string' && (/^blob\s*:/iu.test(item) || /[?&](?:sig|signature|x-amz-signature|x-goog-signature)=/iu.test(item))) {
+        return undefined;
+      }
+      return item;
+    })) as CatalogPayload;
+    if (sanitized.inventory) {
+      sanitized.inventory = { schema_version: String(sanitized.inventory.schema_version || '') };
+    }
+    if (!sanitized.files.every(validCatalogFile)
+        || !sanitized.folders.every(validCatalogFolder)
+        || !sanitized.available_kinds.every((kind) => typeof kind === 'string')) return null;
+    return sanitized;
+  } catch {
+    return null;
+  }
+}
+
+function validCatalogFile(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const file = value as { id?: unknown; file_id?: unknown };
+  return (typeof file.id === 'string' && file.id.length > 0)
+    || (typeof file.file_id === 'string' && file.file_id.length > 0);
+}
+
+function validCatalogFolder(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return typeof (value as { id?: unknown }).id === 'string'
+    && Boolean((value as { id: string }).id);
+}
+
+function safeCatalogWebUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password) return undefined;
+    for (const key of url.searchParams.keys()) {
+      const normalized = key.replace(/[^A-Za-z0-9]/gu, '').toLowerCase();
+      if (['googleaccessid', 'sig', 'signature', 'xamzsignature', 'xgoogsignature'].includes(normalized)
+          || normalized.endsWith('token')
+          || normalized.endsWith('secret')) return undefined;
+    }
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function dispatchCatalogRevalidated(entityId: string) {
+  if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(STORAGE_CATALOG_REVALIDATED_EVENT, { detail: { entityId } }));
 }
 
 export function loadViewFilter() {
@@ -1009,4 +1159,12 @@ function assertNotAborted(signal?: AbortSignal) {
 
 function delay(milliseconds: number) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 60_000);
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, Math.min(timestamp - Date.now(), 60_000)) : null;
 }

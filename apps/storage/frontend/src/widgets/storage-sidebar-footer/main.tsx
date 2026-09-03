@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Check, FolderPlus, HardDrive, Upload, X } from 'lucide-react';
-import { createFolder, currentStorageAppId, loadCatalog, startDriveOAuth, uploadDriveFile, uploadFile, type UploadProgress } from '../../storageApi';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { STORAGE_CATALOG_REVALIDATED_EVENT, createFolder, currentStorageAppId, loadCatalog, startDriveOAuth, uploadDriveFile, uploadFile, type UploadProgress } from '../../storageApi';
 import { roleLabels } from '../../storageMeta';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta } from '../../lib/storageCatalogDelta';
@@ -214,6 +215,14 @@ function StorageSidebarFooterWidget() {
   }, []);
 
   useEffect(() => {
+    function handleCatalogRevalidated() {
+      revalidateCatalog();
+    }
+    window.addEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, handleCatalogRevalidated);
+    return () => window.removeEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, handleCatalogRevalidated);
+  }, []);
+
+  useEffect(() => {
     if (isNamingFolder) {
       folderNameInputRef.current?.select();
     }
@@ -221,7 +230,7 @@ function StorageSidebarFooterWidget() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {

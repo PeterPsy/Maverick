@@ -1,0 +1,69 @@
+import { readThroughParentDataCache, type ParentDataCacheReadResult } from '@maverick/pwa-cache';
+import { callBackend, currentStorageAppId, mountedAppIdFromPath } from './api';
+import { sanitizeBootstrapReadModel } from './bootstrapCache';
+import type { AppBootstrapPayload } from './types';
+
+export type CachedBootstrapOptions = {
+  includeRuns?: boolean;
+  migrationSeed?: AppBootstrapPayload | null;
+  selectedWorkoutId?: string | null;
+  signal?: AbortSignal;
+};
+
+export async function readCachedBootstrap(
+  options: CachedBootstrapOptions = {},
+): Promise<ParentDataCacheReadResult<AppBootstrapPayload>> {
+  const appId = mountedAppIdFromPath(
+    typeof window === 'undefined' ? '' : window.location.pathname,
+    'fitness-coach'
+  );
+  const storageAppId = currentStorageAppId();
+  const workspaceId = mountedWorkspaceId();
+  const includeRuns = options.includeRuns === true;
+  const selectedWorkoutId = String(options.selectedWorkoutId || 'active');
+  const sanitize = (value: unknown) => {
+    const payload = sanitizeBootstrapReadModel(value);
+    if (!payload
+        || payload.app_id !== appId
+        || (workspaceId && payload.workspace_id !== workspaceId)) return null;
+    return payload;
+  };
+  const migrationSeed = options.migrationSeed
+    ? sanitize(options.migrationSeed)
+    : null;
+  return readThroughParentDataCache<AppBootstrapPayload>({
+    appId,
+    entityId: `bootstrap:${storageAppId}:${includeRuns ? 'runs' : 'no-runs'}:${selectedWorkoutId}`,
+    ...(migrationSeed ? {
+      migrationSeed: { payload: migrationSeed, revision: migrationSeed.state_version }
+    } : {}),
+    resource: 'sanitized-bootstrap-and-thumbnails',
+    schemaRevision: 'fitness-coach.sanitized-bootstrap-and-thumbnails.v1'
+  }, async ({ knownRevision, signal }) => {
+    const payload = await callBackend<AppBootstrapPayload>({
+      action: 'app.bootstrap',
+      include_runs: includeRuns,
+      selected_workout_id: options.selectedWorkoutId || '',
+      storage_app_id: storageAppId,
+      known_revision: knownRevision
+    }, { signal });
+    if (payload.not_modified) {
+      if (!knownRevision || payload.state_version !== knownRevision) {
+        throw new TypeError('Fitness Coach returned not_modified without the requested revision.');
+      }
+      return { kind: 'not_modified', revision: knownRevision } as const;
+    }
+    const sanitized = sanitize(payload);
+    if (!sanitized) throw new TypeError('Fitness Coach returned an invalid bootstrap read model.');
+    return { kind: 'value', payload: sanitized, revision: sanitized.state_version } as const;
+  }, {
+    sanitize,
+    signal: options.signal
+  });
+}
+
+function mountedWorkspaceId(): string {
+  if (typeof window === 'undefined') return '';
+  const params = new URLSearchParams(window.location.search);
+  return params.get('workspace_id') || params.get('workspace') || '';
+}

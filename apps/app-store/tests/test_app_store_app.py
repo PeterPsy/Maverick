@@ -51,6 +51,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         body: dict | None = None,
         cookie: str | None = None,
         query_string: str = "",
+        request_headers: dict[str, str] | None = None,
     ) -> tuple[int, dict | bytes, dict[str, str]]:
         payload = b"" if body is None else json.dumps(body).encode("utf-8")
         headers: dict[str, str] = {}
@@ -64,6 +65,8 @@ class AppStoreAppTestCase(unittest.TestCase):
         }
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
+        for name, value in (request_headers or {}).items():
+            environ[f"HTTP_{name.upper().replace('-', '_')}"] = value
 
         def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
             headers.update(dict(response_headers))
@@ -874,6 +877,40 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         self.assertIn("admin-panel", {item["app_id"] for item in admin_payload["items"]})
         self.assertNotIn("admin-panel", {item["app_id"] for item in member_payload["items"]})
         self.assertEqual(member_payload["count"], 1)
+
+    @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_catalog_api_exposes_a_private_stable_validator_after_authentication(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+        catalog = {"count": 1, "items": [{"app_id": "notes", "name": "Notes"}]}
+
+        with patch("core.api.app_store_http.fetch_remote_catalog", return_value=catalog):
+            status, payload, headers = self.invoke(app, path="/api/app-store/apps", cookie=cookie)
+            unchanged_status, unchanged_body, unchanged_headers = self.invoke(
+                app,
+                path="/api/app-store/apps",
+                cookie=cookie,
+                request_headers={"If-None-Match": headers["ETag"]},
+            )
+            unauthenticated_status, unauthenticated_payload, _ = self.invoke(
+                app,
+                path="/api/app-store/apps",
+                request_headers={"If-None-Match": headers["ETag"]},
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["schema"], "maverick.app-store-catalog.v1")
+        self.assertRegex(payload["revision"], r"^[a-f0-9]{64}$")
+        self.assertEqual(headers["ETag"], f'"{payload["revision"]}"')
+        self.assertEqual(headers["Cache-Control"], "private, no-cache")
+        self.assertEqual(headers["Vary"], "Cookie")
+        self.assertEqual(unchanged_status, 304)
+        self.assertEqual(unchanged_body, b"")
+        self.assertEqual(unchanged_headers["ETag"], headers["ETag"])
+        self.assertEqual(unauthenticated_status, 401)
+        self.assertEqual(unauthenticated_payload["error"], "authentication_required")
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_catalog_api_normalizes_frontend_presentation_metadata(self) -> None:

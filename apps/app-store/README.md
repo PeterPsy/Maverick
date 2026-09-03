@@ -2,6 +2,8 @@
 
 Authenticated Maverick app catalog for inspecting remote catalog apps, server-registered app sources, and workspace installation state.
 
+The default-off M5 adapter may reuse only the authorized public catalog through the Base Shell parent broker. `/api/app-store/apps` exposes a stable SHA-256/strong ETag after authentication and evaluates `If-None-Match` only after that check. Installations, workspace membership, pinned apps, publication state, and all actions remain fresh server state; cached rows stay read-only until those authority inputs load. See `docs/runbooks/pwa_data_cache_m5.md`.
+
 ## Contract Notes
 
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, folderMediaDownloadUrl, listDriveChildren, listDriveConnections, listDriveRoots, localizeDriveFile, LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_BASE64_WRITE_BYTES, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, storageMediaStreamUrl, syncDriveConnection, trashDriveFile, uploadDriveFile, uploadFile } from './storageApi';
+import { PWA_DATA_CACHE_BROKER_ACCEPTED, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST, PWA_DATA_CACHE_BROKER_NETWORK_RESULT, PWA_DATA_CACHE_BROKER_RESULT } from '@maverick/pwa-cache';
+import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, folderMediaDownloadUrl, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, localizeDriveFile, LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_BASE64_WRITE_BYTES, moveItemsReferences, previewDriveFile, sanitizeCatalogPayload, startDriveOAuth, STORAGE_CATALOG_REVALIDATED_EVENT, storageBackendEndpoint, storageMediaStreamUrl, syncDriveConnection, trashDriveFile, uploadDriveFile, uploadFile } from './storageApi';
 
 class FakeFileReader {
   onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
@@ -41,6 +42,161 @@ describe('storage api client', () => {
         method: 'POST'
       })
     );
+  });
+
+  it('treats malformed successful JSON as a terminal schema failure, not a transport retry', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{broken', { status: 200 }));
+
+    let error: unknown;
+    try {
+      await callBackend({ action: 'catalog' }, { fetchImpl });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(TypeError);
+    if (!(error instanceof Error)) throw new Error('Expected malformed JSON to reject.');
+    expect(error.name).not.toBe('MaverickTransportError');
+  });
+
+  it('preserves the catalog distinction between an omitted folder scope and the root folder', async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      schema: 'storage.file-catalog.v1',
+      revision: 'a'.repeat(64),
+      state: { view_filter: {} },
+      files: [],
+      folders: [],
+      available_kinds: [],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchImpl);
+
+    try {
+      await loadCatalog();
+      await loadCatalog({ folder_path: '' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    const unscoped = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body || '{}'));
+    const rootScoped = JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body || '{}'));
+    expect(unscoped).not.toHaveProperty('folder_path');
+    expect(rootScoped).toHaveProperty('folder_path', '');
+  });
+
+  it('sanitizes catalog persistence without removing safe Drive web links', () => {
+    const payload = sanitizeCatalogPayload({
+      schema: 'storage.file-catalog.v1',
+      revision: 'a'.repeat(64),
+      state: { view_filter: {} },
+      files: [{
+        id: 'file-one',
+        name: 'Plan',
+        web_url: 'https://drive.google.com/file/d/file-one/view',
+        remote_locator: { drive_file_id: 'provider-private' },
+        local_path: '/srv/maverick/private',
+        signed_url: 'https://objects.test/file?X-Amz-Signature=secret',
+      }],
+      folders: [],
+      available_kinds: [],
+    });
+
+    expect(payload?.files[0]).toMatchObject({
+      id: 'file-one',
+      web_url: 'https://drive.google.com/file/d/file-one/view',
+    });
+    expect(payload?.files[0]).not.toHaveProperty('remote_locator');
+    expect(payload?.files[0]).not.toHaveProperty('local_path');
+    expect(payload?.files[0]).not.toHaveProperty('signed_url');
+  });
+
+  it('rejects a cache-poisoned catalog whose entries do not match the app schema', () => {
+    expect(sanitizeCatalogPayload({
+      schema: 'storage.file-catalog.v1',
+      revision: 'a'.repeat(64),
+      state: { view_filter: {} },
+      files: ['not-a-file'],
+      folders: [],
+      available_kinds: [],
+    })).toBeNull();
+  });
+
+  it('announces changed background revalidation after returning a warm catalog hit', async () => {
+    const cached = {
+      schema: 'storage.file-catalog.v1',
+      revision: 'a'.repeat(64),
+      state: { view_filter: {} },
+      files: [{ id: 'cached' }],
+      folders: [],
+      available_kinds: [],
+    };
+    const updated = { ...cached, revision: 'b'.repeat(64), files: [{ id: 'updated' }] };
+    const parent = {
+      postMessage(message: Record<string, unknown>, _origin: string, transfer: Transferable[]) {
+        const port = transfer[0] as MessagePort;
+        port.addEventListener('message', (event) => {
+          const response = event.data as Record<string, unknown>;
+          if (response.type !== PWA_DATA_CACHE_BROKER_NETWORK_RESULT) return;
+          port.postMessage({
+            app_id: 'storage',
+            changed: true,
+            payload: response.payload,
+            phase: 'revalidation',
+            request_id: message.request_id,
+            revision: response.revision,
+            status: 'ok',
+            type: PWA_DATA_CACHE_BROKER_RESULT,
+          });
+        });
+        port.start();
+        port.postMessage({
+          app_id: 'storage',
+          request_id: message.request_id,
+          type: PWA_DATA_CACHE_BROKER_ACCEPTED,
+        });
+        port.postMessage({
+          app_id: 'storage',
+          freshness: 'fresh',
+          has_revalidation: true,
+          payload: cached,
+          phase: 'initial',
+          request_id: message.request_id,
+          revision: cached.revision,
+          source: 'cache',
+          status: 'ok',
+          type: PWA_DATA_CACHE_BROKER_RESULT,
+        });
+        port.postMessage({
+          app_id: 'storage',
+          known_revision: cached.revision,
+          network_request_id: 'network-one',
+          request_id: message.request_id,
+          type: PWA_DATA_CACHE_BROKER_NETWORK_REQUEST,
+        });
+      },
+    };
+    const frameWindow = new EventTarget() as EventTarget & Window & { __MAVERICK_PLATFORM_ORIGIN__: string };
+    Object.assign(frameWindow, {
+      __MAVERICK_PLATFORM_ORIGIN__: 'https://maverick.test',
+      location: { origin: 'https://af-storage.sidecars.maverick.test', pathname: '/apps/storage/' },
+      parent,
+    });
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body || '{}'))).toMatchObject({ known_revision: cached.revision });
+      return new Response(JSON.stringify(updated), { status: 200 });
+    });
+    vi.stubGlobal('window', frameWindow);
+    vi.stubGlobal('fetch', fetchImpl);
+    const changed = new Promise<CustomEvent<{ entityId: string }>>((resolve) => {
+      frameWindow.addEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, (event) => resolve(event as CustomEvent<{ entityId: string }>), { once: true });
+    });
+
+    try {
+      await expect(loadCatalog()).resolves.toMatchObject({ revision: cached.revision, files: [{ id: 'cached' }] });
+      await expect(changed).resolves.toMatchObject({ detail: { entityId: expect.stringMatching(/^sha256:/u) } });
+      expect(fetchImpl).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('preserves explicit app secret requests for provider actions', async () => {

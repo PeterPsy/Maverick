@@ -163,6 +163,9 @@ export type StorageState = {
 };
 
 export type CatalogPayload = {
+  schema: 'storage.file-catalog.v1';
+  revision: string;
+  not_modified?: boolean;
   state: StorageState;
   files: StorageFile[];
   folders: StorageFolder[];
@@ -176,7 +179,7 @@ export type CatalogPayload = {
   };
   inventory?: {
     schema_version: string;
-    updated_at: string;
+    updated_at?: string;
   };
 };
 

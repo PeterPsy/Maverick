@@ -20,6 +20,11 @@ from core.api.app_mounts import (
 from core.api.app_references_api import handle_app_references_api
 from core.api.app_registry import enabled_app_items
 from core.api.app_frame_browser import handle_app_frame_browser_launch, handle_app_frame_oauth_relay
+from core.api.app_frame_scope import (
+    APP_FRAME_OWNER_MISMATCH_ERROR,
+    APP_FRAME_PROXY_SCOPE_KEY,
+    app_frame_owner_matches,
+)
 from core.api.app_sdk_api import handle_app_sdk_api
 from core.api.app_store_api import handle_app_store_api
 from core.api.http import HttpRequestError, StartResponse, enforce_same_origin_for_unsafe_request, json_response, text_response
@@ -226,7 +231,17 @@ class PlatformHost:
                 app_id, _, subpath = app_path.partition("/")
                 public_static_asset = is_public_app_static_asset(subpath)
                 allow_unauthenticated_frontend = app_id == self.state.root_shell_app_id
-                isolated_app_frame = environ.get("maverick.app_frame_proxy") is True
+                isolated_app_frame = environ.get(APP_FRAME_PROXY_SCOPE_KEY) is True
+                if (
+                    isolated_app_frame
+                    and not public_static_asset
+                    and not app_frame_owner_matches(environ, app_id)
+                ):
+                    return json_response(
+                        start_response,
+                        {"error": APP_FRAME_OWNER_MISMATCH_ERROR},
+                        status="403 Forbidden",
+                    )
                 if not allow_unauthenticated_frontend and not public_static_asset and not isolated_app_frame:
                     return json_response(
                         start_response,

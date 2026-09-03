@@ -13,11 +13,18 @@ import unittest
 from unittest.mock import patch
 
 from core.api.app_frame_browser import APP_FRAME_BOOTSTRAP_PATH, APP_FRAME_LAUNCH_PATH
+from core.api.app_frame_scope import (
+    APP_FRAME_APP_ID_SCOPE_KEY,
+    APP_FRAME_MOUNT_APP_ID_SCOPE_KEY,
+    APP_FRAME_PROXY_SCOPE_KEY,
+)
 from core.api.asgi_application import PlatformAsgiHost
 from core.apps.contracts import (
     build_app_contract,
     build_app_entrypoints,
     build_parsed_app_contract,
+    build_widget_declaration,
+    build_widget_frontend,
     write_app_contract_file,
 )
 from core.apps.service import install_store_app, register_app_source_from_contract
@@ -33,6 +40,121 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
 
     def test_invalid_sidecar_origin_mode_fails_closed(self) -> None:
         asyncio.run(self._assert_invalid_sidecar_origin_mode_fails_closed())
+
+    def test_each_origin_rejects_foreign_app_and_widget_documents(self) -> None:
+        asyncio.run(self._assert_each_origin_rejects_foreign_documents())
+
+    async def _assert_each_origin_rejects_foreign_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(Path(temp_dir))
+            state = self._state_with_frontend(repo_root, include_other_app=True)
+            app = PlatformAsgiHost(state)
+            platform_host = "maverick.localhost:8000"
+            platform_origin = f"http://{platform_host}"
+            platform_cookie = await self._login(app, host=platform_host)
+
+            frame_demo = await self._bootstrap_app_frame(
+                app,
+                app_id="frame-demo",
+                launch_path="/apps/frame-demo/",
+                platform_host=platform_host,
+                platform_origin=platform_origin,
+                platform_cookie=platform_cookie,
+            )
+            other_demo = await self._bootstrap_app_frame(
+                app,
+                app_id="other-demo",
+                launch_path="/apps/other-demo/",
+                platform_host=platform_host,
+                platform_origin=platform_origin,
+                platform_cookie=platform_cookie,
+            )
+
+            for current, foreign in ((frame_demo, other_demo), (other_demo, frame_demo)):
+                with self.subTest(
+                    current=current["app_id"],
+                    foreign=foreign["app_id"],
+                    transport="http-app",
+                ):
+                    status, body, _headers = await self._invoke(
+                        app,
+                        host=current["host"],
+                        path=f"/apps/{foreign['app_id']}/",
+                        headers={"cookie": current["cookie"]},
+                    )
+                    self.assertEqual(status, 403)
+                    self.assertEqual(json.loads(body), {"error": "app_frame_owner_mismatch"})
+
+                with self.subTest(
+                    current=current["app_id"],
+                    foreign=foreign["app_id"],
+                    transport="http-widget",
+                ):
+                    status, body, _headers = await self._invoke(
+                        app,
+                        host=current["host"],
+                        path=(
+                            f"/api/apps/widgets/{foreign['app_id']}/{foreign['widget_id']}/frontend/"
+                        ),
+                        headers={"cookie": current["cookie"]},
+                    )
+                    self.assertEqual(status, 403)
+                    self.assertEqual(json.loads(body), {"error": "app_frame_owner_mismatch"})
+
+                for foreign_path in (
+                    f"/apps/{foreign['app_id']}/",
+                    f"/api/apps/widgets/{foreign['app_id']}/{foreign['widget_id']}/frontend/",
+                ):
+                    with self.subTest(
+                        current=current["app_id"],
+                        foreign=foreign["app_id"],
+                        transport="websocket",
+                        path=foreign_path,
+                    ):
+                        messages = await self._invoke_websocket(
+                            app,
+                            host=current["host"],
+                            origin=current["origin"],
+                            path=foreign_path,
+                            cookie=current["cookie"],
+                        )
+                        self.assertEqual(messages, [{"type": "websocket.close", "code": 4403}])
+
+            own_app_status, own_app_body, _headers = await self._invoke(
+                app,
+                host=frame_demo["host"],
+                path="/apps/frame-demo/",
+                headers={"cookie": frame_demo["cookie"]},
+            )
+            own_widget_status, own_widget_body, _headers = await self._invoke(
+                app,
+                host=frame_demo["host"],
+                path="/api/apps/widgets/frame-demo/frame-widget/frontend/",
+                headers={"cookie": frame_demo["cookie"]},
+            )
+            self.assertEqual(own_app_status, 200)
+            self.assertIn(b"frame-demo", own_app_body)
+            self.assertEqual(own_widget_status, 200)
+            self.assertIn(b"frame-widget", own_widget_body)
+
+            forwarded_scope: dict = {}
+
+            async def capture_scope(scope, _receive, send) -> None:
+                forwarded_scope.update(scope)
+                await send({"type": "websocket.close", "code": 1000})
+
+            app._handle_platform_websocket = capture_scope
+            messages = await self._invoke_websocket(
+                app,
+                host=frame_demo["host"],
+                origin=frame_demo["origin"],
+                path="/api/apps/events/ws",
+                cookie=frame_demo["cookie"],
+            )
+            self.assertEqual(messages, [{"type": "websocket.close", "code": 1000}])
+            self.assertIs(forwarded_scope[APP_FRAME_PROXY_SCOPE_KEY], True)
+            self.assertEqual(forwarded_scope[APP_FRAME_APP_ID_SCOPE_KEY], "frame-demo")
+            self.assertEqual(forwarded_scope[APP_FRAME_MOUNT_APP_ID_SCOPE_KEY], "frame-demo")
 
     async def _assert_legacy_same_origin_override_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -366,13 +488,16 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             self.assertEqual(stale_status, 401)
 
     @staticmethod
-    def _state_with_frontend(repo_root: Path):
+    def _state_with_frontend(repo_root: Path, *, include_other_app: bool = False):
         from core.api.platform_state import bootstrap_platform_state
 
         state = bootstrap_platform_state(start_path=repo_root)
         app_root = repo_root / "apps" / "frame-demo"
         frontend_root = app_root / "frontend" / "dist"
         frontend_root.mkdir(parents=True)
+        widget_root = frontend_root / "widgets" / "frame-widget"
+        widget_root.mkdir(parents=True)
+        (widget_root / "index.html").write_text("<div>frame-widget</div>", encoding="utf-8")
         assets_root = frontend_root / "assets"
         assets_root.mkdir()
         (assets_root / "app-contenthash.js").write_bytes(AppFrameBrowserOriginIntegrationTests._asset_source())
@@ -425,7 +550,17 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             version="1.0.0",
             description="Isolated app-frame integration fixture.",
             publisher="maverick",
-            contract=build_app_contract(entrypoints=build_app_entrypoints(frontend="frontend/dist")),
+            contract=build_app_contract(
+                entrypoints=build_app_entrypoints(frontend="frontend/dist"),
+                widgets=[
+                    build_widget_declaration(
+                        widget_id="frame-widget",
+                        host="frame-host",
+                        content_kinds=["frame.demo"],
+                        frontend=build_widget_frontend(mount="frontend/dist/widgets/frame-widget"),
+                    )
+                ],
+            ),
         )
         write_app_contract_file(app_root, parsed)
         source = register_app_source_from_contract(
@@ -440,7 +575,134 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             start_path=repo_root,
             observability_store=state.observability_store,
         )
+        if include_other_app:
+            AppFrameBrowserOriginIntegrationTests._install_other_frontend(state, repo_root)
         return state
+
+    @staticmethod
+    def _install_other_frontend(state, repo_root: Path) -> None:
+        app_root = repo_root / "apps" / "other-demo"
+        frontend_root = app_root / "frontend" / "dist"
+        widget_root = frontend_root / "widgets" / "other-widget"
+        widget_root.mkdir(parents=True)
+        (frontend_root / "index.html").write_text(
+            "<!doctype html><html><head><title>other-demo</title></head><body>other-demo</body></html>",
+            encoding="utf-8",
+        )
+        (widget_root / "index.html").write_text("<div>other-widget</div>", encoding="utf-8")
+        parsed = build_parsed_app_contract(
+            app_id="other-demo",
+            name="Other Demo",
+            version="1.0.0",
+            description="Second isolated app-frame integration fixture.",
+            publisher="maverick",
+            contract=build_app_contract(
+                entrypoints=build_app_entrypoints(frontend="frontend/dist"),
+                widgets=[
+                    build_widget_declaration(
+                        widget_id="other-widget",
+                        host="frame-host",
+                        content_kinds=["frame.demo"],
+                        frontend=build_widget_frontend(mount="frontend/dist/widgets/other-widget"),
+                    )
+                ],
+            ),
+        )
+        write_app_contract_file(app_root, parsed)
+        source = register_app_source_from_contract(
+            state.app_store,
+            source_kind="platform",
+            source_path=str(app_root),
+        )
+        install_store_app(
+            state.app_store,
+            source_id=source.source_id,
+            workspace_id="default",
+            start_path=repo_root,
+            observability_store=state.observability_store,
+        )
+
+    async def _bootstrap_app_frame(
+        self,
+        app: PlatformAsgiHost,
+        *,
+        app_id: str,
+        launch_path: str,
+        platform_host: str,
+        platform_origin: str,
+        platform_cookie: str,
+    ) -> dict[str, str]:
+        launch_status, launch_body, _headers = await self._invoke(
+            app,
+            host=platform_host,
+            path=APP_FRAME_LAUNCH_PATH,
+            method="POST",
+            body=json.dumps({"app_id": app_id, "path": launch_path}).encode(),
+            headers={
+                "content-type": "application/json",
+                "cookie": platform_cookie,
+                "origin": platform_origin,
+            },
+        )
+        self.assertEqual(launch_status, 200)
+        launch = json.loads(launch_body)
+        origin = str(launch["origin"])
+        host = origin.removeprefix("http://")
+        bootstrap_status, _body, bootstrap_headers = await self._invoke(
+            app,
+            host=host,
+            path=APP_FRAME_BOOTSTRAP_PATH,
+            method="POST",
+            body=f"ticket={launch['ticket']}".encode(),
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+        self.assertEqual(bootstrap_status, 303)
+        return {
+            "app_id": app_id,
+            "widget_id": "frame-widget" if app_id == "frame-demo" else "other-widget",
+            "origin": origin,
+            "host": host,
+            "cookie": bootstrap_headers["set-cookie"].split(";", 1)[0],
+        }
+
+    @staticmethod
+    async def _invoke_websocket(
+        app: PlatformAsgiHost,
+        *,
+        host: str,
+        origin: str,
+        path: str,
+        cookie: str,
+    ) -> list[dict]:
+        messages: list[dict] = []
+        delivered = False
+
+        async def receive() -> dict:
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {"type": "websocket.connect"}
+            return {"type": "websocket.disconnect"}
+
+        async def send(message: dict) -> None:
+            messages.append(message)
+
+        await app(
+            {
+                "type": "websocket",
+                "scheme": "ws",
+                "path": path,
+                "query_string": b"",
+                "headers": [
+                    (b"host", host.encode("latin1")),
+                    (b"origin", origin.encode("latin1")),
+                    (b"cookie", cookie.encode("latin1")),
+                ],
+            },
+            receive,
+            send,
+        )
+        return messages
 
     @staticmethod
     def _asset_source() -> bytes:

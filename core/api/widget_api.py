@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from core.api.app_mounts import is_public_app_static_asset, serve_frontend
+from core.api.app_frame_scope import (
+    APP_FRAME_OWNER_MISMATCH_ERROR,
+    APP_FRAME_PROXY_SCOPE_KEY,
+    app_frame_owner_matches,
+)
 from core.api.http import StartResponse, json_response, query_params, read_json_body, text_response
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
@@ -163,18 +168,24 @@ def handle_widget_api(
         return json_response(start_response, {"context": payload})
 
     if path.startswith("/api/apps/widgets/") and "/frontend" in path and method in {"GET", "HEAD"}:
+        remainder = path.removeprefix("/api/apps/widgets/")
+        owner_app_id, _, tail = remainder.partition("/")
+        widget_id, _, subpath = tail.partition("/frontend")
         if (
             not public_widget_static_asset
-            and environ.get("maverick.app_frame_proxy") is not True
+            and environ.get(APP_FRAME_PROXY_SCOPE_KEY) is not True
         ):
             return json_response(
                 start_response,
                 {"error": "app_frame_isolation_required"},
                 status="403 Forbidden",
             )
-        remainder = path.removeprefix("/api/apps/widgets/")
-        owner_app_id, _, tail = remainder.partition("/")
-        widget_id, _, subpath = tail.partition("/frontend")
+        if not public_widget_static_asset and not app_frame_owner_matches(environ, owner_app_id):
+            return json_response(
+                start_response,
+                {"error": APP_FRAME_OWNER_MISMATCH_ERROR},
+                status="403 Forbidden",
+            )
         resolved = resolve_workspace_widget(
             state.app_store,
             workspace_id=workspace_id,

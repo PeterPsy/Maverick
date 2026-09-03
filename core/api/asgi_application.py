@@ -17,6 +17,7 @@ from core.api.app_frame_browser import (
     handle_app_frame_browser_websocket,
     is_reserved_app_frame_browser_host,
 )
+from core.api.app_frame_scope import copy_app_frame_scope_to_environ
 from core.api.backend_recovery import start_backend_restart_recovery
 from core.api.background_hooks import start_background_hook_scheduler
 from core.api.http import max_json_body_bytes
@@ -405,8 +406,7 @@ def _wsgi_environ(scope: dict[str, Any], body: bytes) -> dict[str, Any]:
             environ[name] = value
         else:
             environ[f"HTTP_{name}"] = value
-    if scope.get("maverick.app_frame_proxy") is True:
-        environ["maverick.app_frame_proxy"] = True
+    copy_app_frame_scope_to_environ(scope, environ)
     return environ
 
 
@@ -424,6 +424,7 @@ def _websocket_environ(scope: dict[str, Any]) -> dict[str, Any]:
     }
     for name, value in headers.items():
         environ[f"HTTP_{name}"] = value
+    copy_app_frame_scope_to_environ(scope, environ)
     return environ
 
 

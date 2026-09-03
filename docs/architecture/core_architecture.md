@@ -1198,8 +1198,11 @@ rejected; the Core-owned no-store OAuth callback relay contains no app bundle
 and bootstraps the actual callback on the isolated origin. `allow-same-origin`
 therefore preserves normal app behavior only
 inside the app's distinct origin and does not expose shell-owned IndexedDB or
-OPFS. Base Shell validates both the exact registered frame window and origin
-for inbound messages and never broadens host-to-frame delivery to `*`. The
+OPFS. The validated session propagates its canonical local and mount app ids as
+internal HTTP and WebSocket scope authority. Every app or widget frontend path
+must match that bound owner before routing; the proxy marker alone grants no
+document authority. Base Shell validates both the exact registered frame window
+and origin for inbound messages and never broadens host-to-frame delivery to `*`. The
 default-off `data_cache` flag still enforces the separate resource, privacy,
 and physical-rollout gates for M3.
 
@@ -1213,8 +1216,8 @@ batches every launchable app name for one login session into one SAN lineage,
 publishes validated key pairs atomically for Nginx, and fails ticket issuance
 until the exact host is ready. It does not accept a manually frozen list of
 observed origins. Installer health checks exercise reserved hosts from both
-families with normal hostname verification before the hosted boundary is
-accepted.
+families with normal hostname verification and require their distinct exact
+unauthenticated-session errors before the hosted boundary is accepted.
 
 Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
 source of platform authority or satisfy capability, certificate, provider

@@ -12,6 +12,11 @@ from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from core.api.app_frame_assets import rewrite_public_app_asset_urls
+from core.api.app_frame_scope import (
+    APP_FRAME_OWNER_MISMATCH_ERROR,
+    app_frame_path_matches_owner,
+    bind_app_frame_scope,
+)
 from core.api.app_registry import enabled_app_items, resolve_app_surface, user_can_mount_app
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
@@ -133,6 +138,7 @@ def handle_app_frame_browser_launch(
         content_security_policy=_content_security_policy(platform_origin),
         surface_kind=APP_FRAME_SURFACE_KIND,
         platform_session_id=context.session.session_id,
+        mount_app_id=binding.mount_app_id or binding.app_id,
     )
     ticket = state.sidecar_browser_sessions.issue_ticket(browser_binding)
     return json_response(
@@ -251,6 +257,9 @@ async def handle_app_frame_browser_origin(
     if resolved is None:
         return
     token, session = resolved
+    if not _request_path_matches_session(scope, session):
+        await _deny(send, session.binding, APP_FRAME_OWNER_MISMATCH_ERROR, status=403)
+        return
     if method not in _SAFE_METHODS:
         if _header_values(scope, b"origin") != [session.binding.origin] \
                 or _header_values(scope, b"sec-fetch-site") != ["same-origin"]:
@@ -293,6 +302,9 @@ async def handle_app_frame_browser_websocket(
         return
     _token, session = resolved
     if _header_values(scope, b"origin") != [session.binding.origin]:
+        await send({"type": "websocket.close", "code": 4403})
+        return
+    if not _request_path_matches_session(scope, session):
         await send({"type": "websocket.close", "code": 4403})
         return
     await forward(_platform_scope(scope, session, websocket=True), receive, send)
@@ -497,14 +509,32 @@ def _platform_scope(scope: dict[str, Any], session: SidecarBrowserSession, *, we
         ]
     )
     port = platform.port or (443 if platform.scheme == "https" else 80)
-    transformed = {
-        **scope,
-        "headers": headers,
-        "scheme": "wss" if websocket and platform.scheme == "https" else ("ws" if websocket else platform.scheme),
-        "server": (str(platform.hostname or ""), port),
-        "maverick.app_frame_proxy": True,
-    }
+    transformed = bind_app_frame_scope(
+        scope,
+        app_id=binding.app_id,
+        mount_app_id=binding.mount_app_id or binding.app_id,
+    )
+    transformed.update(
+        {
+            "headers": headers,
+            "scheme": (
+                "wss"
+                if websocket and platform.scheme == "https"
+                else ("ws" if websocket else platform.scheme)
+            ),
+            "server": (str(platform.hostname or ""), port),
+        }
+    )
     return transformed
+
+
+def _request_path_matches_session(scope: dict[str, Any], session: SidecarBrowserSession) -> bool:
+    binding = session.binding
+    return app_frame_path_matches_owner(
+        str(scope.get("path") or "/"),
+        app_id=binding.app_id,
+        mount_app_id=binding.mount_app_id or binding.app_id,
+    )
 
 
 class _IsolatedHttpResponse:

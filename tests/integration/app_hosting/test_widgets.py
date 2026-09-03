@@ -12,6 +12,11 @@ import unittest
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.api.app_frame_scope import (
+    APP_FRAME_APP_ID_SCOPE_KEY,
+    APP_FRAME_MOUNT_APP_ID_SCOPE_KEY,
+    APP_FRAME_PROXY_SCOPE_KEY,
+)
 from core.apps.contracts import (
     build_app_contract,
     build_app_distribution,
@@ -31,6 +36,13 @@ from core.apps.service import (
     transition_workspace_app_status,
 )
 from tests.support.markers import slow_test_class
+
+
+CHECKLIST_APP_FRAME_SCOPE = {
+    APP_FRAME_PROXY_SCOPE_KEY: True,
+    APP_FRAME_APP_ID_SCOPE_KEY: "checklists",
+    APP_FRAME_MOUNT_APP_ID_SCOPE_KEY: "checklists",
+}
 
 
 @slow_test_class("slow widget integration suite; run with scripts/test_suite.py --level slow")
@@ -190,20 +202,20 @@ class WidgetsTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/styles.css",
             cookie=cookie,
-            extra_headers={"maverick.app_frame_proxy": True},
+            extra_headers=CHECKLIST_APP_FRAME_SCOPE,
         )
         status_css_head, _css_head_body, css_head_headers = self.invoke(
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/styles.css",
             method="HEAD",
             cookie=cookie,
-            extra_headers={"maverick.app_frame_proxy": True},
+            extra_headers=CHECKLIST_APP_FRAME_SCOPE,
         )
         status_js, js_body, js_headers = self.invoke(
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/main.js",
             cookie=cookie,
-            extra_headers={"maverick.app_frame_proxy": True},
+            extra_headers=CHECKLIST_APP_FRAME_SCOPE,
         )
 
         self.assertEqual(status_html, 401)
@@ -300,7 +312,7 @@ class WidgetsTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/",
             cookie=cookie,
-            extra_headers={"maverick.app_frame_proxy": True},
+            extra_headers=CHECKLIST_APP_FRAME_SCOPE,
         )
 
         self.assertEqual(direct_status, 403)
@@ -330,7 +342,7 @@ class WidgetsTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/missing-route",
             cookie=cookie,
-            extra_headers={"maverick.app_frame_proxy": True},
+            extra_headers=CHECKLIST_APP_FRAME_SCOPE,
         )
 
         self.assertEqual(status, 404)
@@ -445,7 +457,7 @@ class WidgetsTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/",
             cookie=cookie,
-            extra_headers={"maverick.app_frame_proxy": True},
+            extra_headers=CHECKLIST_APP_FRAME_SCOPE,
         )
 
         event_types = [event.event_type for event in state.observability_store.list_events(workspace_id="default")]

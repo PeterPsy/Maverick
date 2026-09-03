@@ -1554,7 +1554,11 @@ and `/api/apps/<app_id>/backend` require a valid user session. A direct non-shel
 app or widget document at the platform origin is rejected even with a session;
 the Core-owned OAuth callback relay is no-store and contains no app bundle.
 Core serves the actual app document only through a host-bound app-frame session
-on the app's isolated origin. App and widget frontend HTML documents use
+on the app's isolated origin. That session carries the canonical local and mount
+app ids into the internal HTTP and WebSocket scope. Core compares every app and
+widget frontend owner with that binding before routing, and a bare internal
+proxy marker is never sufficient document authority. App and widget frontend
+HTML documents use
 `Cache-Control: no-store` because they point at the current built asset hashes
 and must not pin clients
 to obsolete bundles after an official frontend rebuild. Static built frontend
@@ -1741,7 +1745,9 @@ origin, and submits the body-only one-shot ticket to that origin in a hidden
 form targeted at the iframe. The ticket is never placed in a URL. Core binds
 the resulting host-only `HttpOnly`, `SameSite=Strict` cookie to actor,
 workspace, app generation, platform login session, and exact host; logout or a
-stale binding revokes it.
+stale binding revokes it. HTTP and WebSocket forwarding preserve the bound app
+identity, and any app/widget frontend path naming another owner fails with an
+authorization denial before its document can be served.
 
 During shell app switches, a host may keep the previously visible app frame on screen while the newly requested iframe loads hidden. If a third-party app does not yet emit `maverick.app.ready`, the host may use a bounded post-load fallback to reveal the frame, but it should avoid exposing the browser's initial blank iframe canvas during normal cold mounts.
 

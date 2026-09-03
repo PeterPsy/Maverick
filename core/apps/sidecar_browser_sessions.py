@@ -38,6 +38,7 @@ class SidecarBrowserBinding:
     content_security_policy: str
     surface_kind: str = "sidecar"
     platform_session_id: str = ""
+    mount_app_id: str = ""
 
 
 @dataclass(frozen=True)

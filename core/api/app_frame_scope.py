@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import secrets
 from typing import Any, Mapping, MutableMapping
 
 
@@ -54,7 +53,7 @@ def app_frame_owner_matches(container: Mapping[str, Any], owner_app_id: str) -> 
     return any(
         isinstance(candidate, str)
         and bool(candidate)
-        and secrets.compare_digest(candidate, owner_app_id)
+        and candidate == owner_app_id
         for candidate in (
             container.get(APP_FRAME_APP_ID_SCOPE_KEY),
             container.get(APP_FRAME_MOUNT_APP_ID_SCOPE_KEY),
@@ -73,7 +72,7 @@ def app_frame_path_matches_owner(
     if owner_app_id is None:
         return True
     return any(
-        candidate and secrets.compare_digest(candidate, owner_app_id)
+        bool(candidate) and candidate == owner_app_id
         for candidate in (app_id, mount_app_id)
     )
 

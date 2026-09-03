@@ -120,6 +120,30 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
                         )
                         self.assertEqual(messages, [{"type": "websocket.close", "code": 4403}])
 
+            for unicode_path in (
+                "/apps/é/",
+                "/api/apps/widgets/é/frame-widget/frontend/",
+            ):
+                with self.subTest(transport="http-unicode", path=unicode_path):
+                    status, body, _headers = await self._invoke(
+                        app,
+                        host=frame_demo["host"],
+                        path=unicode_path,
+                        headers={"cookie": frame_demo["cookie"]},
+                    )
+                    self.assertEqual(status, 403)
+                    self.assertEqual(json.loads(body), {"error": "app_frame_owner_mismatch"})
+
+                with self.subTest(transport="websocket-unicode", path=unicode_path):
+                    messages = await self._invoke_websocket(
+                        app,
+                        host=frame_demo["host"],
+                        origin=frame_demo["origin"],
+                        path=unicode_path,
+                        cookie=frame_demo["cookie"],
+                    )
+                    self.assertEqual(messages, [{"type": "websocket.close", "code": 4403}])
+
             own_app_status, own_app_body, _headers = await self._invoke(
                 app,
                 host=frame_demo["host"],

@@ -71,6 +71,27 @@ class AppFrameScopeTests(unittest.TestCase):
             )
         )
 
+    def test_unicode_app_and_widget_owners_fail_closed(self) -> None:
+        bound = bind_app_frame_scope(
+            {},
+            app_id="notes-local",
+            mount_app_id="notes-mount",
+        )
+        self.assertFalse(app_frame_owner_matches(bound, "é"))
+
+        for path in (
+            "/apps/é/",
+            "/api/apps/widgets/é/sidebar/frontend/",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(
+                    app_frame_path_matches_owner(
+                        path,
+                        app_id="notes-local",
+                        mount_app_id="notes-mount",
+                    )
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -63,6 +63,7 @@ class HostedAgenticPreparedRequest:
     request: AgenticModelRequest
     workspace_id: str
     egress_decisions: tuple[AgenticEgressDecision, ...]
+    tool_handles: tuple[str, ...] = ()
 
 
 def hosted_request_lineage_digest(request: AgenticModelRequest) -> str:
@@ -447,6 +448,9 @@ class HostedAgenticRequestBuilder:
             request=request,
             workspace_id=context.session.workspace_id,
             egress_decisions=tuple(egress_decisions),
+            tool_handles=tuple(
+                descriptor.handle for descriptor in catalog.descriptors
+            ),
         )
 
     def commit(
@@ -469,7 +473,24 @@ class HostedAgenticRequestBuilder:
         *,
         context,
     ) -> None:
-        """Recheck every source at the last synchronous boundary before transport."""
+        """Recheck request authority at the last boundary before transport."""
+        if context is None:
+            raise HostedAgenticLoopError("runtime_authority_unavailable")
+        self._validate_context_capabilities(context)
+        authority = getattr(context, "effective_authority", None)
+        if authority is None:
+            raise HostedAgenticLoopError("runtime_authority_unavailable")
+        if any(
+            handle not in authority.allowed_tool_handles
+            for handle in prepared.tool_handles
+        ):
+            raise HostedAgenticLoopError("tool_not_authorized")
+        if any(
+            metadata.source_data_class
+            not in authority.allowed_remote_data_classes
+            for metadata in prepared.request.source_metadata
+        ):
+            raise HostedAgenticLoopError("egress_data_class_denied")
         if self.classification_revalidator is None:
             if any(
                 _metadata_requires_live_authority(metadata)
@@ -479,8 +500,6 @@ class HostedAgenticRequestBuilder:
                     "classification_authority_unavailable"
                 )
             return
-        if context is None:
-            raise HostedAgenticLoopError("classification_authority_unavailable")
         for metadata in prepared.request.source_metadata:
             snapshot = _metadata_classification(metadata)
             try:

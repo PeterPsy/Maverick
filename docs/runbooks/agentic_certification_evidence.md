@@ -1,6 +1,6 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-09-02
+Status date: 2026-09-03
 
 Scope: trusted CI or operator-controlled certification worker
 
@@ -11,7 +11,7 @@ Phase-4 repository closure executes only the explicitly selected deterministic
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
-Suite 33 retains the P2 crash/pairing/outbox matrix and P3 finalization
+Suite 34 retains the P2 crash/pairing/outbox matrix and P3 finalization
 coverage, including durable step/tool/output/cost/time reservation, complete
 terminal-request cost projections, tool-less provider payloads, staged
 request-specific preflight, and request-scoped instructions. It also verifies
@@ -21,12 +21,13 @@ and adds semantic-envelope source/projection, scoped instruction, full-skill,
 journal-evidence, atomic Full Workspace contract, descriptor-confined mutation,
 fixed-path shell, managed-process, discovery-first CLI/MCP, compaction, and
 orphan-cleanup fixtures.
-It additionally binds recipe/catalog identity, compiler revision 8,
-the `codex-baseline-v16` behavioral Full Workspace gate, the hosted governed
+It additionally binds recipe/catalog identity, compiler revision 9,
+the `codex-baseline-v17` behavioral Full Workspace gate, the hosted governed
 result contract, mandatory commit-bound instruction digests and governed
-rollback-safe shell/process effect transactions, semantic compaction schema 3, artifact-backed
-large results, UTF-8/base64 attachment
-workspace references, explicit steering fallback, production-composed
+rollback-safe shell/process effect transactions, semantic compaction schema 3,
+artifact-backed large results, and UTF-8/base64 attachment workspace references
+whose server-observed identity/revision/digest fences are injected into the
+first and every later read. It also covers explicit steering fallback, production-composed
 server-admitted classification/resource-taint continuation, fail-closed generic
 tool results, preflight-before-egress ordering, Google stateless
 continuation and live OpenAPI/model preflight, and OpenRouter request-scoped
@@ -50,14 +51,15 @@ quiescence, post-SIGTERM explicit-session managed-process sweeping, and
 full-request-triggered compaction. It also covers lexical skill symlink
 rejection, direct edit metadata fidelity, rollback of created parents, and
 public-preimage post-image taint through read-after-write. The executable Full
-Workspace behavior probe now returns all 21 required workflows, including
-create/read-after-create after orchestrator rebuild and shell/process plus
-CLI/MCP result paths plus a production-composed inter-agent CLI-create/MCP-wait
-workflow with reviewed public projections. Its seven negative probes require raw/base64/chunked
+Workspace behavior probe now returns all 24 required workflows: 16 concrete
+filesystem, shell/process, and CLI/MCP capability paths, a production-composed
+inter-agent CLI-create/MCP-wait workflow with reviewed public projections, and
+seven security probes. Those probes require raw/base64/chunked
 filesystem markers to narrow a public result, require an
 issue-write-revoke-rebuild-read sequence to fail closed, require a delayed
 persisted tool result to pair only a public error after revocation, deny a
-prepared request when authority changes during endpoint preflight, deny a
+prepared request when full authority or credential authorization changes during
+endpoint preflight or before lazy transport, deny a
 second provider event after revocation, roll back real shell/process overlays
 when authority changes after their first batch write, and prove that immutable
 workspace snapshots exclude root/nested `.git` entries plus post-spawn create
@@ -91,8 +93,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v33 matrix revision
-  `2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23` declared by the provider
+- the dated suite-v34 matrix revision
+  `2026-09-03-r34-p4-last-mile-attachment-process-tcb24` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -127,7 +129,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 33 \
+  --suite-version 34 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -136,9 +138,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `33`, matrix revision
-`2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23`, and the OpenRouter manifest.
-The Google suite uses version `33` and the same matrix revision. The
+version `34`, matrix revision
+`2026-09-03-r34-p4-last-mile-attachment-process-tcb24`, and the OpenRouter manifest.
+The Google suite uses version `34` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.

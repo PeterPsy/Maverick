@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, Callable
 
 from core.egress.agentic_transforms import canonical_egress_content
@@ -19,9 +19,16 @@ from core.runtime.app_reference_classification import (
     classify_runtime_app_reference,
 )
 from core.runtime.app_references import input_text_with_app_references
-from core.runtime.attachment_projection import attachment_read_encoding
+from core.runtime.attachment_projection import (
+    RuntimeAttachmentReadFence,
+    attachment_read_encoding,
+    canonical_attachment_path,
+)
 from core.runtime.attachments import input_text_with_attachment_links
-from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
+from core.runtime.confined_filesystem import (
+    ConfinedWorkspaceFilesystem,
+    FilesystemResourceObservation,
+)
 from core.runtime.provider_input_capture_manifest import (
     persist_runtime_provider_input_capture,
 )
@@ -40,6 +47,7 @@ class RuntimeProviderInputSource:
     classification: CanonicalSourceClassification | None = None
     capability_modality: str | None = None
     projection_mode: str | None = None
+    attachment_read_fence: RuntimeAttachmentReadFence | None = None
 
 
 @dataclass(frozen=True)
@@ -143,6 +151,49 @@ def runtime_provider_input_sources(
     for index, attachment in enumerate(attachments or ()):
         content, media_type, normalized = _attachment_input_metadata(attachment)
         attachment_entries.append((index, normalized, content, media_type))
+    filesystem = _attachment_filesystem(state, session=session)
+    observed_attachment_entries: list[
+        tuple[
+            int,
+            dict[str, object],
+            dict[str, object],
+            str,
+            RuntimeAttachmentReadFence | None,
+            CanonicalSourceClassification,
+        ]
+    ] = []
+    try:
+        for index, attachment, content, media_type in attachment_entries:
+            observation, file_classification = _attachment_observation(
+                filesystem,
+                attachment=attachment,
+            )
+            fence = (
+                None
+                if observation is None
+                else RuntimeAttachmentReadFence(
+                    workspace_relative_path=observation.resource_ref,
+                    read_encoding=attachment_read_encoding(media_type),
+                    resource_identity=observation.resource_identity,
+                    resource_revision=observation.resource_revision,
+                    resource_digest=observation.resource_digest,
+                )
+            )
+            if fence is not None:
+                content = {**content, "projection": fence.projection()}
+            observed_attachment_entries.append(
+                (
+                    index,
+                    attachment,
+                    content,
+                    media_type,
+                    fence,
+                    file_classification,
+                )
+            )
+    finally:
+        if filesystem is not None:
+            filesystem.close()
     persist_runtime_provider_input_capture(
         state,
         session=session,
@@ -151,7 +202,11 @@ def runtime_provider_input_sources(
         agent_instruction=agent_instruction,
         orchestration=resolved_orchestration,
         app_reference_entries=tuple(app_reference_entries),
-        attachment_entries=tuple(attachment_entries),
+        attachment_entries=tuple(
+            (index, attachment, content, media_type)
+            for index, attachment, content, media_type, _fence, _classification
+            in observed_attachment_entries
+        ),
     )
     if agent_instruction:
         sources.append(
@@ -243,24 +298,27 @@ def runtime_provider_input_sources(
                 ),
             )
         )
-    filesystem = _attachment_filesystem(state, session=session)
-    try:
-        for index, attachment, content, media_type in attachment_entries:
-            sources.append(
-                _attachment_input_source(
-                    state,
-                    session=session,
-                    turn_id=turn_id,
-                    filesystem=filesystem,
-                    index=index,
-                    attachment=attachment,
-                    content=content,
-                    media_type=media_type,
-                )
+    for (
+        index,
+        attachment,
+        content,
+        media_type,
+        fence,
+        file_classification,
+    ) in observed_attachment_entries:
+        sources.append(
+            _attachment_input_source(
+                state,
+                session=session,
+                turn_id=turn_id,
+                index=index,
+                attachment=attachment,
+                content=content,
+                media_type=media_type,
+                attachment_read_fence=fence,
+                file_classification=file_classification,
             )
-    finally:
-        if filesystem is not None:
-            filesystem.close()
+        )
     return tuple(sources)
 
 
@@ -337,11 +395,12 @@ def _attachment_input_source(
     *,
     session: Any,
     turn_id: str,
-    filesystem: ConfinedWorkspaceFilesystem | None,
     index: int,
     attachment: object,
     content: dict[str, object] | None = None,
     media_type: str | None = None,
+    attachment_read_fence: RuntimeAttachmentReadFence | None = None,
+    file_classification: CanonicalSourceClassification | None = None,
 ) -> RuntimeProviderInputSource:
     normalized_content, normalized_media_type, normalized_attachment = (
         _attachment_input_metadata(attachment)
@@ -357,11 +416,12 @@ def _attachment_input_source(
         state,
         session=session,
         turn_id=turn_id,
-        filesystem=filesystem,
         index=index,
         attachment=attachment,
         content=content,
         media_type=media_type,
+        attachment_read_fence=attachment_read_fence,
+        file_classification=file_classification,
     )
 
 
@@ -418,11 +478,12 @@ def _classified_attachment_input_source(
     *,
     session: Any,
     turn_id: str,
-    filesystem: ConfinedWorkspaceFilesystem | None,
     index: int,
     attachment: dict[str, object],
     content: dict[str, object],
     media_type: str,
+    attachment_read_fence: RuntimeAttachmentReadFence | None,
+    file_classification: CanonicalSourceClassification | None,
 ) -> RuntimeProviderInputSource:
     metadata_classification = _transient_input_classification(
         state,
@@ -433,10 +494,15 @@ def _classified_attachment_input_source(
         content_type="application/json",
         content=content,
     )
-    file_classification = _attachment_classification(
-        filesystem,
-        attachment=attachment,
-    )
+    if file_classification is None:
+        file_classification = fail_closed_classification(
+            provenance="attachment",
+            source_ref=str(
+                attachment.get("relativePath")
+                or attachment.get("relative_path")
+                or ""
+            ),
+        )
     classification = derive_content_classification(
         content=canonical_egress_content(content),
         provenance="attachment",
@@ -452,24 +518,12 @@ def _classified_attachment_input_source(
         classification=classification,
         capability_modality=media_type,
         projection_mode="workspace_reference",
+        attachment_read_fence=attachment_read_fence,
     )
 
 
 def _validated_attachment_relative_path(value: object) -> str:
-    if not isinstance(value, str):
-        raise ValueError("agentic_attachment_metadata_invalid")
-    relative_path = value.strip()
-    path = PurePosixPath(relative_path)
-    if (
-        not relative_path
-        or "\\" in relative_path
-        or "\x00" in relative_path
-        or path.is_absolute()
-        or path.as_posix() != relative_path
-        or any(part in {"", ".", ".."} for part in path.parts)
-    ):
-        raise ValueError("agentic_attachment_metadata_invalid")
-    return relative_path
+    return canonical_attachment_path(value)
 
 
 def generalist_orchestration_source(state: Any, *, session: Any) -> dict[str, object] | None:
@@ -527,33 +581,42 @@ def _attachment_filesystem(
         return None
 
 
-def _attachment_classification(
+def _attachment_observation(
     filesystem: ConfinedWorkspaceFilesystem | None,
     *,
     attachment: dict[str, object],
-) -> CanonicalSourceClassification:
+) -> tuple[
+    FilesystemResourceObservation | None,
+    CanonicalSourceClassification,
+]:
     relative_path = str(
         attachment.get("relativePath")
         or attachment.get("relative_path")
         or ""
     ).strip()
     if filesystem is None:
-        return fail_closed_classification(
-            provenance="attachment",
-            source_ref=relative_path,
+        return (
+            None,
+            fail_closed_classification(
+                provenance="attachment",
+                source_ref=relative_path,
+            ),
         )
     if not relative_path:
-        return fail_closed_classification(provenance="attachment")
+        return None, fail_closed_classification(provenance="attachment")
     try:
-        _observation, classification = filesystem.observe_file(
+        observation, classification = filesystem.observe_file(
             relative_path,
             provenance="attachment",
         )
-        return classification
+        return observation, classification
     except Exception:
-        return fail_closed_classification(
-            provenance="attachment",
-            source_ref=relative_path,
+        return (
+            None,
+            fail_closed_classification(
+                provenance="attachment",
+                source_ref=relative_path,
+            ),
         )
 
 

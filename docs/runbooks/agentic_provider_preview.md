@@ -1,6 +1,6 @@
 # Agentic provider preview operations
 
-Status date: 2026-09-02
+Status date: 2026-09-03
 
 Scope: operator runbook
 
@@ -114,9 +114,17 @@ operation.
 - The effective capability snapshot is the intersection of certificate,
   profile, workspace, actor, live catalog, feature flags, and health and is
   shared by admission, request/catalog construction, API, Chat, and Settings.
+- Endpoint preflight is followed by full authority/policy and credential
+  authorization before egress commit. The same guard runs in the task that
+  opens and first advances the lazy provider stream and before every later
+  advance.
+- Attachment workspace references retain server-observed identity, revision,
+  digest, and MIME-derived encoding. Core injects that immutable fence into
+  every matching filesystem read, including its first chunk and equivalent
+  path spellings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v23 statically audits six maintained
+  authority refresh, or dispatch. Manifest v24 statically audits six maintained
   import closures, including package initializers and the
   `core/inter_agent/generalist_context.py` content-composition path, and hashes
   the executable roots of every built-in app surface admitted as a hosted read;
@@ -154,7 +162,7 @@ binding:
    selected policy allow that class and destination. Attestation may only narrow
    policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile and retains
-   the complete `codex-baseline-v16` handle set atomically, bounded
+   the complete `codex-baseline-v17` handle set atomically, bounded
    steps/tokens/cost, and confirmation for mutating/destructive classes. A
    partial read-only binding is not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the

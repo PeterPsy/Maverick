@@ -16,6 +16,7 @@ from core.providers.provider_registry import ProviderRegistry
 from core.runtime.authority import (
     intersect_runtime_policies,
 )
+from core.runtime.attachment_projection import runtime_attachment_read_fences
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.filesystem_mutation_lineage import (
     resolve_filesystem_mutation_lineage,
@@ -64,7 +65,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "29"
+HOSTED_AGENTIC_ADAPTER_VERSION = "30"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -333,6 +334,9 @@ def _tool_orchestrator(
                 tool_ledger=ledger,
                 result_classification_resolver=result_admission_resolver,
                 resource_classification_resolver=classify_resource,
+                attachment_read_fences=runtime_attachment_read_fences(
+                    getattr(context, "input_sources", ())
+                ),
             ),
             result_classification_resolver=result_admission_resolver,
             result_preflight_resolver=result_preflight_resolver,

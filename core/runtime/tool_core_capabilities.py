@@ -5,6 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
+from core.runtime.attachment_projection import (
+    RuntimeAttachmentReadFence,
+    attachment_read_fence_for_path,
+)
 from core.runtime.confined_filesystem import (
     ConfinedWorkspaceFilesystem,
     FilesystemRaceHook,
@@ -69,6 +73,7 @@ def build_core_runtime_tool_capabilities(
     tool_ledger=None,
     result_classification_resolver=None,
     workspace_spawn_observer: Callable[[str], None] | None = None,
+    attachment_read_fences: tuple[RuntimeAttachmentReadFence, ...] = (),
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build workspace-bound Core capabilities over one fd-relative boundary."""
     filesystem = ConfinedWorkspaceFilesystem(
@@ -128,17 +133,43 @@ def build_core_runtime_tool_capabilities(
         encoding = str(arguments.get("encoding") or "utf-8")
         if encoding not in {"utf-8", "base64"}:
             raise RuntimeToolError("tool_arguments_invalid")
+        path = str(arguments.get("path") or "")
+        expected_identity = _optional_string(
+            arguments.get("expected_resource_identity")
+        )
+        expected_revision = _optional_string(
+            arguments.get("expected_resource_revision")
+        )
+        expected_digest = _optional_string(
+            arguments.get("expected_resource_digest")
+        )
+        attachment_fence = attachment_read_fence_for_path(
+            attachment_read_fences,
+            path,
+        )
+        if attachment_fence is not None:
+            if encoding != attachment_fence.read_encoding:
+                raise RuntimeToolError("attachment_read_encoding_mismatch")
+            expected_identity = _attachment_fence_value(
+                expected_identity,
+                attachment_fence.resource_identity,
+            )
+            expected_revision = _attachment_fence_value(
+                expected_revision,
+                attachment_fence.resource_revision,
+            )
+            expected_digest = _attachment_fence_value(
+                expected_digest,
+                attachment_fence.resource_digest,
+            )
         reader = filesystem.read_text if encoding == "utf-8" else filesystem.read_bytes
         result = reader(
-            str(arguments.get("path") or ""),
+            path,
             offset=offset,
             max_bytes=min(requested, MAX_FILESYSTEM_READ_BYTES),
-            expected_resource_identity=_optional_string(
-                arguments.get("expected_resource_identity")
-            ),
-            expected_resource_revision=_optional_string(
-                arguments.get("expected_resource_revision")
-            ),
+            expected_resource_identity=expected_identity,
+            expected_resource_revision=expected_revision,
+            expected_resource_digest=expected_digest,
         )
         return RuntimeToolSurfaceResult(result.payload, result.classification)
 
@@ -351,6 +382,15 @@ def _required_string(value: object) -> str:
     return resolved
 
 
+def _attachment_fence_value(
+    requested: str | None,
+    observed: str,
+) -> str:
+    if requested is not None and requested != observed:
+        raise RuntimeToolError("filesystem_resource_changed")
+    return observed
+
+
 def _filesystem_read_schema() -> dict[str, object]:
     return {
         "type": "object",
@@ -372,6 +412,11 @@ def _filesystem_read_schema() -> dict[str, object]:
                 "maxLength": 256,
             },
             "expected_resource_revision": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64,
+            },
+            "expected_resource_digest": {
                 "type": "string",
                 "minLength": 64,
                 "maxLength": 64,

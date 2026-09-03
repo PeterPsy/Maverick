@@ -24,6 +24,10 @@ from core.shared.in_memory_collection import InMemoryCollection
 
 
 HOSTED_COLLABORATION_BEHAVIOR_IDS = (
+    "core-capability:cli.list",
+    "core-capability:cli.run",
+    "core-capability:mcp.list",
+    "core-capability:mcp.call",
     "collaboration:cli-create-mcp-wait",
 )
 _WORKSPACE_ID = "behavior-probe"

@@ -312,10 +312,17 @@ class HostedAgenticLoopTest(unittest.TestCase):
         self.assertEqual(self.harness.cli_calls, 0)
         records = self.harness.store.list_tool_invocations(session_id="session-hosted")
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0].resolution_status, "revoked")
+        # The revocation occurs while the tool-call event is in flight. The
+        # next advance is blocked, so provider completion is unprovable and the
+        # proposal must remain unresolved behind session quarantine.
+        self.assertEqual(records[0].resolution_status, "unresolved")
+        self.assertEqual(
+            self.harness.store.get_session("session-hosted").status,
+            "recovery_required",
+        )
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "certificate_revoked"}],
+            [{"reason_code": "provider_acceptance_ambiguous"}],
         )
 
     def test_private_state_quota_failure_is_explicit_and_redaction_safe(self) -> None:

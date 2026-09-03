@@ -7,6 +7,7 @@ import unittest
 from core.runtime.hosted_agentic_factory import classify_hosted_content_fail_closed
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_agentic_policy import hosted_egress_policy
+from core.runtime.attachment_projection import RuntimeAttachmentReadFence
 from core.providers.agentic_adapter import RuntimeTurnContext
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.provider_input_context import RuntimeProviderInputSource
@@ -187,10 +188,20 @@ class HostedAgenticEgressTest(unittest.TestCase):
                             "mode": "workspace_reference",
                             "read_capability": "core-capability:filesystem.read",
                             "read_encoding": "utf-8",
+                            "expected_resource_identity": "linux:1:2",
+                            "expected_resource_revision": "a" * 64,
+                            "expected_resource_digest": "b" * 64,
                         },
                     },
                     capability_modality="text/plain",
                     projection_mode="workspace_reference",
+                    attachment_read_fence=RuntimeAttachmentReadFence(
+                        workspace_relative_path="storage/uploaded/fixture.txt",
+                        read_encoding="utf-8",
+                        resource_identity="linux:1:2",
+                        resource_revision="a" * 64,
+                        resource_digest="b" * 64,
+                    ),
                 ),
                 RuntimeProviderInputSource(
                     "app-reference",

@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-02
+Status date: 2026-09-03
 
 Target: Phase 4A-D implementation closure complete; provider certification,
 security review, canary, and release gates remain open;
@@ -88,7 +88,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v23 records six maintained transitive dependency contracts and
+- [x] Manifest v24 records six maintained transitive dependency contracts and
   the exact executable roots for every admitted built-in app CLI/MCP surface. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
@@ -100,8 +100,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v33 / matrix
-  `2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23`
+- [x] Google and OpenRouter suite v34 / matrix
+  `2026-09-03-r34-p4-last-mile-attachment-process-tcb24`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -438,7 +438,11 @@ completion claim.
   source class.
 - [x] Semantic classifications bind the exact canonical projected bytes.
   Attachment metadata and file observations are classified separately then
-  restrictively joined; attachment-only turns omit the empty prompt. Skills
+  restrictively joined. Each attachment workspace reference carries the exact
+  server-observed identity, revision, digest, and MIME-derived encoding; Core
+  injects those fences into every matching `filesystem.read`, including the
+  first chunk and equivalent path spellings. Attachment-only turns omit the
+  empty prompt. Skills
   project exact `SKILL.md` bytes without unbound catalog/state metadata, and a
   digest mismatch fails closed to `unclassified`.
 - [x] Production app-reference composition derives an exact stable resource
@@ -510,28 +514,31 @@ completion claim.
   catalog version; OpenRouter uses `provider_alias` together with its exact
   endpoint/upstream catalog constraints. Legacy Codex documents hydrate to the
   prior alias policy without changing the Codex profile or artifact.
-- [x] Live mutable authority is checked in every task that actually advances a
-  provider stream, including between two provider events. Revocation after the
-  first event blocks the second before the provider iterator advances.
+- [x] Endpoint preflight is followed by one last-mile guard that refreshes the
+  complete certificate, binding, feature, actor, health, policy, Full Workspace,
+  classification, and credential authority before egress commit. The same
+  guard executes in the task that opens and first advances the lazy provider
+  stream and before every later advance. Revocation after the first event
+  blocks the second before the provider iterator advances.
 - [x] P4 test modules over the repository line budget are split by behavioral
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 29, semantic compiler revision 8, Full Workspace result contract
-  `codex-baseline-v16`, context-compaction schema 3, TCB manifest v23, suite 33,
-  and matrix `2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23` create
-  immutable Google revision 37 and OpenRouter revision 36 previews. Historical
-  revisions 36/35
+- [x] Adapter 30, semantic compiler revision 9, Full Workspace result contract
+  `codex-baseline-v17`, context-compaction schema 3, TCB manifest v24, suite 34,
+  and matrix `2026-09-03-r34-p4-last-mile-attachment-process-tcb24` create
+  immutable Google revision 38 and OpenRouter revision 37 previews. Historical
+  revisions 37/36
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v16`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v17`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v16` repository claim
-  only after the executable behavior probe verifies all 21 required result
-  workflows: 13 create/replace/edit/patch/move/delete/read-after-write,
-  shell/process, and CLI/MCP paths; one inter-agent CLI-create/MCP-wait path;
-  plus marker narrowing, revoke-then-rebuild,
+- [x] Admit the hosted Full Workspace `codex-baseline-v17` repository claim
+  only after the executable behavior probe verifies all 24 required result
+  workflows: 16 concrete filesystem, shell/process, and CLI/MCP capability
+  paths; one inter-agent CLI-create/MCP-wait path; plus seven security probes
+  for marker narrowing, revoke-then-rebuild,
   revoke-before-delayed-egress, revoke-before-provider-transport, and
   revoke-between-provider-events, revoke-during-overlay-commit, and immutable
   `.git`-excluding shell/process snapshot negative probes. The negative gate traverses the

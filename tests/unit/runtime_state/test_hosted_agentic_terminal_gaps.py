@@ -148,7 +148,10 @@ class HostedAgenticTerminalGapTest(unittest.TestCase):
                     client,
                     adapter=harness.adapter(client, authority_refresher=refresh),
                 )
-                self.assertEqual(result.failure_reason_code, reason_code)
+                self.assertEqual(
+                    result.failure_reason_code,
+                    "provider_acceptance_ambiguous",
+                )
                 self._assert_terminal_pairing_contained(harness)
 
     def test_new_turn_cannot_consume_previous_turn_pairing_or_ignore_input(self) -> None:

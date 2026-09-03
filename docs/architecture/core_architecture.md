@@ -676,10 +676,24 @@ catalog and encrypted invocation ledger. Provider-private protocol bytes remain
 behind the matching codec service and public events are bounded, normalized,
 and private-field-free.
 
+Provider preflight is not the final authority boundary. After preflight and
+before the staged egress CAS, one shared last-mile guard re-resolves the full
+certificate/binding/feature/actor/health/Full Workspace authority, rechecks the
+prepared request against the resulting data and tool policy, and obtains a
+fresh credential lease. The same guard runs in the task that constructs and
+first advances the lazy provider iterator and before every later advance, so a
+revoked binding, certificate, policy, feature, health state, or credential
+cannot cross transport merely because endpoint discovery was slow.
+
 Before egress, that loop compiles a Core-owned semantic-envelope schema. Its
 ordered blocks preserve platform, runtime/capability, workspace, agent, user,
 governed-context, attachment, app-reference, skill, tool, result, and
 provider-state provenance instead of flattening them into one prompt. The
+attachment projection carries the exact server-observed resource identity,
+revision, and digest plus its required UTF-8 or base64 encoding. Those
+server-owned fences are injected into every `filesystem.read` for that path,
+including the first chunk; caller omission or equivalent path spelling cannot
+turn the reference back into a mutable pathname. The
 runtime resolves the complete root-to-workdir `AGENTS.md` chain and complete
 invoked `SKILL.md` documents through descriptor-confined, version-fenced reads
 on every provider step, including continuation and recovery. A canonical source
@@ -785,9 +799,10 @@ shell/process, and CLI/MCP scenarios. A declared mode string or the mere
 presence of a handle is not evidence. Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 37 and OpenRouter
-revision 36 definitions make that atomic claim only because the executable
-gate returns all 21 required result behaviors, including real app-owned
+complete atomic contract. The current Google revision 38 and OpenRouter
+revision 37 definitions make that atomic claim only because the executable
+gate returns all 24 required result behaviors, including the concrete
+`shell.run` and `process.start/status/input/interrupt` handlers, real app-owned
 CLI/MCP reads with Core-audited conservative effect metadata and executable
 closure bytes, a real inter-agent CLI-create/MCP-wait workflow with bounded
 public result projections, raw/base64/chunk marker
@@ -1052,6 +1067,9 @@ Reference search aggregation must remain app-agnostic but should not let one pro
 Runtime turn submissions treat client-supplied `app_references` as reference identities, not trusted provider context. Before the provider prompt is built, the core verifies that the app is enabled and visible in the workspace, resolves or summarizes entity references through the owning app's reference tools, and uses only owner-returned labels, summaries, and deep links. Unverified references are omitted rather than materialized from client-provided descriptive fields.
 
 App-owned runtime launch requests may include Storage-backed `attachments` for the submitted turn. The app-hosting boundary validates these attachments before runtime submission: the field must be a list of objects with no more than five entries, each entry must name a `workspace_relative_path` or `relative_path` under `storage/uploaded/` or `storage/generated/`, absolute paths and `..` segments are rejected, optional `size_bytes` values must be numeric non-negative integers, and the referenced file must already exist in the workspace Storage tree. The core normalizes accepted attachments to workspace-relative Storage paths and passes them to the runtime turn submission path.
+Immediately before hosted dispatch, Core independently observes the file
+through the confined filesystem and makes that identity/revision/digest, not
+client metadata, the mandatory read fence for the turn.
 
 The common reference tool convention is:
 

@@ -675,18 +675,19 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 37
-and OpenRouter revision 36, both bound to
-`maverick-hosted-tool-loop==29`; older revisions are suspended rather than
-overwritten. Their suite-33 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 38
+and OpenRouter revision 37, both bound to
+`maverick-hosted-tool-loop==30`; older revisions are suspended rather than
+overwritten. Their suite-34 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v16` requires executable create, replace, edit, patch, move,
+`codex-baseline-v17` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
-than a mode string. The executable repository gate now proves all 21 required
-behaviors: the 13 original positive result workflows, a production-composed
-inter-agent CLI-create/MCP-wait workflow, plus sensitive-marker narrowing,
+than a mode string. The executable repository gate now proves all 24 required
+behaviors: 16 concrete filesystem, shell/process, and CLI/MCP capability
+workflows, a production-composed inter-agent CLI-create/MCP-wait workflow, plus
+seven security probes for sensitive-marker narrowing,
 revoke-then-orchestrator-rebuild, revoke-before-delayed-egress,
 revoke-before-provider-transport, revoke-between-provider-events,
 revoke-during-overlay-commit, and shell/process immutable-snapshot probes that
@@ -700,8 +701,15 @@ then CAS-terminalizes the same audit as success or failure, so concurrency can
 never leave a false successful record.
 Exact authority id/revision/digest lineage survives tool records and
 provider-private continuations and is revalidated again before every reuse and
-egress. Prepared provider requests are revalidated after endpoint preflight and
-again in every task that advances the lazy provider stream. Filesystem reads scan
+egress. After endpoint preflight, the last-mile transport guard refreshes the
+complete certificate, binding, feature, actor, health, policy, Full Workspace,
+classification, and credential authority. It runs again in the task that opens
+and first advances the lazy provider stream and before every later advance.
+Attachment workspace references retain the exact server-observed resource
+identity, revision, digest, and MIME-derived encoding. Core injects those
+values into every matching `filesystem.read`, including the first chunk and
+equivalent path spellings; client metadata is not authority.
+Filesystem reads scan
 the complete bounded raw resource before base64 projection and retain that
 classification on every version-bound chunk, so neither encoding nor a chunk
 boundary can split a marker. Certified Core CLI/MCP result contracts are a
@@ -733,11 +741,11 @@ uses `exact` and compares the authenticated live catalog version. OpenRouter
 uses the explicit `provider_alias` policy in addition to its endpoint,
 upstream, quantization, and router constraints. Revision or policy drift is a
 pre-execution failure. The profiles therefore pin
-`codex-baseline-v16` as both the
+`codex-baseline-v17` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 29, recipe
-revision 16, context-compaction schema 3, suite 33, and TCB manifest v23 retain
+certificate, and executable behavior gate are complete. Adapter 30, recipe
+revision 17, context-compaction schema 3, suite 34, and TCB manifest v24 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

@@ -7,12 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+from core.providers.agentic_adapter import RuntimeTurnContext
 from core.providers.agentic_models import (
     codex_routing_constraint,
     codex_runtime_policy,
 )
-from core.providers.capability_models import RuntimeCapabilitySet
 from core.providers.agentic_protocol import AgenticModelEvent
+from core.providers.capability_models import RuntimeCapabilitySet
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import (
@@ -99,7 +100,6 @@ async def consume_transport_probe_stream(
         async for _emission in consume_hosted_provider_step(
             client=client,
             request=request,
-            credential=None,
             budget=budget,
             cancellation=RuntimeCancellationSignal(),
             destination_upstream_id=None,
@@ -133,9 +133,11 @@ def build_transport_probe_context(root: Path):
         workdir=str(root),
         system_prompt="",
     )
-    return SimpleNamespace(
+    return RuntimeTurnContext(
         binding=binding,
         session=session,
+        provider_state=SimpleNamespace(),
+        input_text="synthetic public transport probe",
         correlation_id="security-probe-turn",
         effective_authority=EffectiveRuntimeAuthority(
             execution_binding_id=binding.execution_binding_id,

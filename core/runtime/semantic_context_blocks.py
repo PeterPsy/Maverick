@@ -10,7 +10,10 @@ from core.egress.classification import (
     CanonicalSourceClassification,
     derive_content_classification,
 )
-from core.runtime.attachment_projection import attachment_read_encoding
+from core.runtime.attachment_projection import (
+    RuntimeAttachmentReadFence,
+    attachment_read_encoding,
+)
 from core.runtime.confined_filesystem import (
     ConfinedWorkspaceFilesystem,
     ResourceClassificationResolver,
@@ -259,19 +262,18 @@ class SemanticContextMaterializer:
         projection_mode = str(
             getattr(source, "projection_mode", "") or ""
         )
+        fence = getattr(source, "attachment_read_fence", None)
         context_policy = getattr(context.binding, "context_policy_snapshot", None)
         if (
             projection_mode != "workspace_reference"
+            or not isinstance(fence, RuntimeAttachmentReadFence)
             or not isinstance(content, dict)
             or not isinstance(content.get("projection"), dict)
-            or content.get("projection")
-            != {
-                "mode": "workspace_reference",
-                "read_capability": "core-capability:filesystem.read",
-                "read_encoding": attachment_read_encoding(
-                    str(content.get("media_type") or "")
-                ),
-            }
+            or content.get("projection") != fence.projection()
+            or str(content.get("workspace_relative_path") or "")
+            != fence.workspace_relative_path
+            or fence.read_encoding
+            != attachment_read_encoding(str(content.get("media_type") or ""))
             or str(content.get("media_type") or "")
             != str(getattr(source, "capability_modality", "") or "")
             or not str(content.get("workspace_relative_path") or "").strip()

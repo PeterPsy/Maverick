@@ -206,6 +206,7 @@ class ConfinedWorkspaceFilesystem:
         max_bytes: int,
         expected_resource_identity: str | None = None,
         expected_resource_revision: str | None = None,
+        expected_resource_digest: str | None = None,
     ) -> ConfinedFilesystemResult:
         """Read one UTF-8 chunk and reject cross-call or in-call mutations."""
         components = self._components(relative_path, allow_root=False)
@@ -229,6 +230,7 @@ class ConfinedWorkspaceFilesystem:
                     observation,
                     identity=expected_resource_identity,
                     revision=expected_resource_revision,
+                    digest=expected_resource_digest,
                 )
                 if offset > before.st_size:
                     raise RuntimeToolError("filesystem_chunk_offset_invalid")
@@ -275,6 +277,7 @@ class ConfinedWorkspaceFilesystem:
         max_bytes: int,
         expected_resource_identity: str | None = None,
         expected_resource_revision: str | None = None,
+        expected_resource_digest: str | None = None,
     ) -> ConfinedFilesystemResult:
         """Read one raw byte chunk as base64 with the same version fencing."""
         components = self._components(relative_path, allow_root=False)
@@ -298,6 +301,7 @@ class ConfinedWorkspaceFilesystem:
                     observation,
                     identity=expected_resource_identity,
                     revision=expected_resource_revision,
+                    digest=expected_resource_digest,
                 )
                 if offset > before.st_size:
                     raise RuntimeToolError("filesystem_chunk_offset_invalid")
@@ -1500,10 +1504,13 @@ class ConfinedWorkspaceFilesystem:
         *,
         identity: str | None,
         revision: str | None,
+        digest: str | None = None,
     ) -> None:
         if identity is not None and identity != observation.resource_identity:
             raise RuntimeToolError("filesystem_resource_changed")
         if revision is not None and revision != observation.resource_revision:
+            raise RuntimeToolError("filesystem_resource_changed")
+        if digest is not None and digest != observation.resource_digest:
             raise RuntimeToolError("filesystem_resource_changed")
 
     def _components(self, value: str, *, allow_root: bool) -> tuple[str, ...]:

@@ -10,6 +10,8 @@ from core.egress.classification import validated_classification
 from core.providers.agentic_adapter import RuntimeTurnContext
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_agentic_policy import hosted_egress_policy
+from core.runtime.attachment_projection import RuntimeAttachmentReadFence
+from core.runtime.confined_filesystem import FilesystemResourceObservation
 from core.runtime.provider_input_context import (
     RuntimeProviderInputSource,
     runtime_provider_input_sources,
@@ -114,10 +116,20 @@ class SemanticEnvelopeTest(unittest.TestCase):
                     "mode": "workspace_reference",
                     "read_capability": "core-capability:filesystem.read",
                     "read_encoding": "base64",
+                    "expected_resource_identity": "linux:1:2",
+                    "expected_resource_revision": "a" * 64,
+                    "expected_resource_digest": "b" * 64,
                 },
             },
             capability_modality="application/pdf",
             projection_mode="workspace_reference",
+            attachment_read_fence=RuntimeAttachmentReadFence(
+                workspace_relative_path="attachments/evidence.pdf",
+                read_encoding="base64",
+                resource_identity="linux:1:2",
+                resource_revision="a" * 64,
+                resource_digest="b" * 64,
+            ),
         )
         context = RuntimeTurnContext(
             session=harness.session,
@@ -144,6 +156,21 @@ class SemanticEnvelopeTest(unittest.TestCase):
             "core-capability:filesystem.read",
         )
         self.assertEqual(projection["projection"]["read_encoding"], "base64")
+        self.assertEqual(
+            projection["projection"]["expected_resource_identity"],
+            "linux:1:2",
+        )
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "attachment_projection_not_supported",
+        ):
+            self._request(
+                harness,
+                replace(
+                    context,
+                    input_sources=(replace(source, attachment_read_fence=None),),
+                ),
+            )
         with self.assertRaisesRegex(
             HostedAgenticLoopError,
             "attachment_projection_not_supported",
@@ -200,14 +227,22 @@ class SemanticEnvelopeTest(unittest.TestCase):
             resource_identity="attachment-file:benign",
             classification_revision=2,
         )
+        file_observation = FilesystemResourceObservation(
+            workspace_id="default",
+            resource_kind="filesystem_file",
+            resource_ref="attachments/benign.txt",
+            resource_identity="attachment-file:benign",
+            resource_revision="a" * 64,
+            resource_digest="a" * 64,
+        )
         state = SimpleNamespace(
             inter_agent_store=None,
             workspace_store=None,
             runtime_input_classification_resolver=classify,
         )
         with patch(
-            "core.runtime.provider_input_context._attachment_classification",
-            return_value=file_classification,
+            "core.runtime.provider_input_context._attachment_observation",
+            return_value=(file_observation, file_classification),
         ):
             benign_sources = runtime_provider_input_sources(
                 state,

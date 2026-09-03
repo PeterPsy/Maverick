@@ -105,6 +105,7 @@ from core.runtime.hosted_agentic_stream import (
     consume_hosted_provider_step,
 )
 from core.runtime.hosted_agentic_transport import (
+    HostedTransportAuthorityGuard,
     preflight_and_commit_hosted_request,
 )
 from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
@@ -498,6 +499,14 @@ class HostedAgenticLoop:
                         forced_context_compaction = True
                         continue
                     raise
+                transport_guard = HostedTransportAuthorityGuard(
+                    context=context,
+                    prepared_request=prepared_request,
+                    request_builder=self.request_builder,
+                    authority_refresher=self.authority_refresher,
+                    credential_resolver=self.credential_resolver,
+                    credential_required=provider_runtime.credential_required,
+                )
                 request_lineage_digest = hosted_request_lineage_digest(request)
                 self._validate_request_pairing(
                     request,
@@ -523,10 +532,10 @@ class HostedAgenticLoop:
                 request = await preflight_and_commit_hosted_request(
                     request_builder=self.request_builder,
                     prepared_request=prepared_request,
-                    context=effective_context,
                     request_preflight=provider_runtime.request_preflight,
                     credential=credential,
                     require_preflight=provider_runtime.recipe is not None,
+                    transport_guard=transport_guard,
                 )
                 request_control_digest = hosted_request_control_digest(request)
                 break
@@ -706,16 +715,10 @@ class HostedAgenticLoop:
                 async for emission in consume_hosted_provider_step(
                     client=provider_runtime.client,
                     request=request,
-                    credential=credential,
                     budget=budget,
                     cancellation=cancellation,
                     destination_upstream_id=destination_upstream_id,
-                    before_transport=lambda: (
-                        self.request_builder.revalidate_for_transport(
-                            prepared_request,
-                            context=effective_context,
-                        )
-                    ),
+                    before_transport=transport_guard.authorize,
                     on_accepted=accepted,
                     on_tool_call=observe,
                     on_private_state=stage,

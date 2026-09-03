@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v16"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v17"
 MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
 MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY = "maverick_agent_candidate"
 
@@ -41,7 +41,10 @@ FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS = (
     "core-capability:filesystem.delete",
     "core-capability:filesystem.read-after-write",
     "core-capability:shell.run",
+    "core-capability:process.start",
     "core-capability:process.status",
+    "core-capability:process.input",
+    "core-capability:process.interrupt",
     "core-capability:cli.list",
     "core-capability:cli.run",
     "core-capability:mcp.list",

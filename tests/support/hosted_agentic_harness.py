@@ -312,6 +312,7 @@ class HostedAgenticHarness:
         *,
         private_codec: HostedProviderPrivateCodec | None = None,
         credential: EphemeralCredential | None = None,
+        credential_resolver=None,
         cost_estimator=None,
         authority_refresher=None,
         private_state_inspector=None,
@@ -367,7 +368,11 @@ class HostedAgenticHarness:
                 session_id="session-hosted",
                 execution_mode="full-access",
             ),
-            credential_resolver=lambda _context: credential,
+            credential_resolver=(
+                credential_resolver
+                if credential_resolver is not None
+                else lambda _context: credential
+            ),
             turn_status_callback=self._turn_status_callback(),
             confirmation_poll_seconds=0.01,
         )

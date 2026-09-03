@@ -20,6 +20,7 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     raise_if_hosted_cancelled,
 )
+from core.runtime.hosted_agentic_transport import HostedTransportAuthorization
 from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 
 
@@ -55,11 +56,10 @@ async def consume_hosted_provider_step(
     *,
     client: AgenticModelProviderClient,
     request,
-    credential: EphemeralCredential | None,
     budget: HostedAgenticBudget,
     cancellation: RuntimeCancellationSignal,
     destination_upstream_id: str | None,
-    before_transport: Callable[[], None],
+    before_transport: Callable[[], HostedTransportAuthorization],
     on_accepted: Callable[[AgenticModelEvent], None] | None = None,
     on_tool_call: Callable[[AgenticModelEvent], dict[str, object]] | None = None,
     on_private_state: Callable[[AgenticModelEvent], None] | None = None,
@@ -74,15 +74,11 @@ async def consume_hosted_provider_step(
     usage_seen = False
     last_ordinal = 0
     try:
-        stream = open_hosted_provider_response_stream(
+        async for provider_event in _cancellable_provider_events(
             client=client,
             request=request,
-            credential=credential,
-        )
-        async for provider_event in _cancellable_events(
-            stream,
-            cancellation,
-            budget,
+            cancellation=cancellation,
+            budget=budget,
             before_transport=before_transport,
         ):
             _validate_provider_event(provider_event, request.request_id, last_ordinal)
@@ -182,15 +178,56 @@ async def _cancellable_events(
     cancellation: RuntimeCancellationSignal,
     budget: HostedAgenticBudget,
     *,
-    before_transport: Callable[[], None],
+    before_transport: Callable[[], object],
 ):
+    """Retain the guarded iterator helper for already-constructed test streams."""
     iterator = stream.__aiter__()
-    pending = asyncio.create_task(
-        _next_provider_event(
+    async for item in _drive_cancellable_events(
+        iterator_holder=[iterator],
+        initial_next=_next_provider_event(
             iterator,
             before_transport=before_transport,
-        )
-    )
+        ),
+        cancellation=cancellation,
+        budget=budget,
+        before_transport=before_transport,
+    ):
+        yield item
+
+
+async def _cancellable_provider_events(
+    *,
+    client,
+    request,
+    cancellation: RuntimeCancellationSignal,
+    budget: HostedAgenticBudget,
+    before_transport: Callable[[], HostedTransportAuthorization],
+):
+    iterator_holder: list[object] = []
+    async for item in _drive_cancellable_events(
+        iterator_holder=iterator_holder,
+        initial_next=_open_and_next_provider_event(
+            client=client,
+            request=request,
+            iterator_holder=iterator_holder,
+            before_transport=before_transport,
+        ),
+        cancellation=cancellation,
+        budget=budget,
+        before_transport=before_transport,
+    ):
+        yield item
+
+
+async def _drive_cancellable_events(
+    *,
+    iterator_holder: list[object],
+    initial_next,
+    cancellation: RuntimeCancellationSignal,
+    budget: HostedAgenticBudget,
+    before_transport: Callable[[], object],
+):
+    pending = asyncio.create_task(initial_next)
     try:
         while True:
             done, _pending = await asyncio.wait({pending}, timeout=0.05)
@@ -203,6 +240,7 @@ async def _cancellable_events(
             except StopAsyncIteration:
                 return
             yield item
+            iterator = iterator_holder[0]
             pending = asyncio.create_task(
                 _next_provider_event(
                     iterator,
@@ -214,16 +252,38 @@ async def _cancellable_events(
             pending.cancel()
             with suppress(asyncio.CancelledError):
                 await pending
-        close = getattr(iterator, "aclose", None)
-        if callable(close):
-            with suppress(RuntimeError):
-                await close()
+        if iterator_holder:
+            close = getattr(iterator_holder[0], "aclose", None)
+            if callable(close):
+                with suppress(RuntimeError):
+                    await close()
+
+
+async def _open_and_next_provider_event(
+    *,
+    client,
+    request,
+    iterator_holder: list[object],
+    before_transport: Callable[[], HostedTransportAuthorization],
+) -> object:
+    """Authorize, bind the fresh credential, and advance without yielding."""
+    authorization = before_transport()
+    if not isinstance(authorization, HostedTransportAuthorization):
+        raise HostedAgenticLoopError("runtime_authority_unavailable")
+    stream = open_hosted_provider_response_stream(
+        client=client,
+        request=request,
+        credential=authorization.credential,
+    )
+    iterator = stream.__aiter__()
+    iterator_holder.append(iterator)
+    return await iterator.__anext__()
 
 
 async def _next_provider_event(
     iterator,
     *,
-    before_transport: Callable[[], None],
+    before_transport: Callable[[], object],
 ) -> object:
     """Run the live guard in the task that advances the lazy client stream."""
     before_transport()

@@ -23,6 +23,7 @@ from core.runtime.hosted_agentic_models import (
 )
 from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
 from core.runtime.hosted_agentic_transport import (
+    HostedTransportAuthorityGuard,
     preflight_and_commit_hosted_request,
 )
 from core.runtime.public_content_authority_store import (
@@ -145,6 +146,7 @@ async def _probe_transport_boundaries(
 ) -> bool:
     """Compose the same production preflight/commit/stream path as the loop."""
     prepared = builder.prepare(**arguments)
+    transport_guard = _transport_guard(builder, prepared, context)
     preflight_called = False
 
     def revoking_preflight(_request, _credential):
@@ -164,10 +166,10 @@ async def _probe_transport_boundaries(
         await preflight_and_commit_hosted_request(
             request_builder=builder,
             prepared_request=prepared,
-            context=context,
             request_preflight=revoking_preflight,
             credential=None,
             require_preflight=True,
+            transport_guard=transport_guard,
         )
     except HostedAgenticLoopError as error:
         commit_denied = error.reason_code == "egress_data_class_denied"
@@ -184,15 +186,16 @@ async def _probe_transport_boundaries(
         now=PROBE_TIME,
     )
     prepared = builder.prepare(**arguments)
+    transport_guard = _transport_guard(builder, prepared, context)
     request = await preflight_and_commit_hosted_request(
         request_builder=builder,
         prepared_request=prepared,
-        context=context,
         request_preflight=lambda _request, _credential: SimpleNamespace(
             snapshot_digest="e" * 64
         ),
         credential=None,
         require_preflight=True,
+        transport_guard=transport_guard,
     )
     if (
         request.endpoint_capability_snapshot_digest != "e" * 64
@@ -211,10 +214,7 @@ async def _probe_transport_boundaries(
     reason_code = await consume_transport_probe_stream(
         client=client,
         request=request,
-        before_transport=lambda: builder.revalidate_for_transport(
-            prepared,
-            context=context,
-        ),
+        before_transport=transport_guard.authorize,
     )
     initial_advance_blocked = bool(
         reason_code == "egress_data_class_denied"
@@ -228,20 +228,21 @@ async def _probe_transport_boundaries(
         now=PROBE_TIME,
     )
     prepared = builder.prepare(**arguments)
+    transport_guard = _transport_guard(builder, prepared, context)
     request = await preflight_and_commit_hosted_request(
         request_builder=builder,
         prepared_request=prepared,
-        context=context,
         request_preflight=lambda _request, _credential: SimpleNamespace(
             snapshot_digest="f" * 64
         ),
         credential=None,
         require_preflight=True,
+        transport_guard=transport_guard,
     )
     event_client = TransportProbeEventClient()
     advances = 0
 
-    def revoke_before_second_advance() -> None:
+    def revoke_before_second_advance():
         nonlocal advances
         advances += 1
         if advances == 2:
@@ -253,7 +254,7 @@ async def _probe_transport_boundaries(
                 reason="negative between-event transport probe",
                 now=PROBE_TIME,
             )
-        builder.revalidate_for_transport(prepared, context=context)
+        return transport_guard.authorize()
 
     stream_reason = await consume_transport_probe_stream(
         client=event_client,
@@ -266,6 +267,17 @@ async def _probe_transport_boundaries(
         and advances == 2
         and event_client.request_count == 1
         and event_client.event_count == 1
+    )
+
+
+def _transport_guard(builder, prepared, context) -> HostedTransportAuthorityGuard:
+    return HostedTransportAuthorityGuard(
+        context=context,
+        prepared_request=prepared,
+        request_builder=builder,
+        authority_refresher=lambda current: current.effective_authority,
+        credential_resolver=lambda _current: None,
+        credential_required=False,
     )
 
 

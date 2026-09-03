@@ -9,9 +9,9 @@ from core.runtime.full_workspace_contract import (
 
 
 class FullWorkspaceSecurityContractTest(unittest.TestCase):
-    def test_v16_requires_product_boundary_and_collaboration_probes(self) -> None:
-        self.assertEqual(FULL_WORKSPACE_CONTRACT_REVISION, "codex-baseline-v16")
-        self.assertEqual(len(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS), 21)
+    def test_v17_requires_executable_process_and_boundary_probes(self) -> None:
+        self.assertEqual(FULL_WORKSPACE_CONTRACT_REVISION, "codex-baseline-v17")
+        self.assertEqual(len(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS), 24)
         self.assertTrue(
             {
                 "security:filesystem.marker-narrowing",
@@ -22,6 +22,10 @@ class FullWorkspaceSecurityContractTest(unittest.TestCase):
                 "security:workspace-effect.revoke-commit",
                 "security:workspace.git-masked",
                 "collaboration:cli-create-mcp-wait",
+                "core-capability:process.start",
+                "core-capability:process.status",
+                "core-capability:process.input",
+                "core-capability:process.interrupt",
             }.issubset(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS)
         )
 

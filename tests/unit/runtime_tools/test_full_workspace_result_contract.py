@@ -30,6 +30,10 @@ from tests.unit.runtime_tools.test_tool_orchestrator import (
 from core.runtime.hosted_tool_result_behavior import (
     inspect_hosted_tool_result_behavior,
 )
+from core.runtime.hosted_shell_process_behavior import (
+    HOSTED_SHELL_PROCESS_BEHAVIOR_IDS,
+    inspect_hosted_shell_process_behavior,
+)
 
 
 class FullWorkspaceResultContractTest(unittest.TestCase):
@@ -86,6 +90,21 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
                 "core-capability:filesystem.read-after-write",
             }.issubset(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS)
         )
+
+    def test_result_gate_executes_every_process_handler(self) -> None:
+        inspect_hosted_shell_process_behavior.cache_clear()
+        self.addCleanup(inspect_hosted_shell_process_behavior.cache_clear)
+        self.assertEqual(
+            inspect_hosted_shell_process_behavior(),
+            HOSTED_SHELL_PROCESS_BEHAVIOR_IDS,
+        )
+
+        with patch(
+            "core.runtime.hosted_shell_process_behavior.build_core_runtime_tool_capabilities",
+            side_effect=RuntimeError("broken process adapter"),
+        ):
+            inspect_hosted_shell_process_behavior.cache_clear()
+            self.assertEqual(inspect_hosted_shell_process_behavior(), ())
 
     def test_result_gate_executes_revocation_and_marker_negative_probes(self) -> None:
         self.assertTrue(

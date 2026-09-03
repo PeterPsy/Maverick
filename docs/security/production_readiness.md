@@ -66,7 +66,7 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v23 makes the known transitive boundary executable through six static
+Manifest v24 makes the known transitive boundary executable through six static
 import contracts and adds the exact executable roots for every built-in app
 CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
 input-context projection closure, continuation/recovery, app-entrypoint, audit,
@@ -74,10 +74,12 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 29 and the Full Workspace result contract
-`codex-baseline-v16` are bound by TCB manifest v23. Google revision 37 and
-OpenRouter revision 36 atomically claim that contract and the `maverick_agent`
-family because the executable result gate reports all 21 required behaviors.
+Hosted adapter 30 and the Full Workspace result contract
+`codex-baseline-v17` are bound by TCB manifest v24. Google revision 38 and
+OpenRouter revision 37 atomically claim that contract and the `maverick_agent`
+family because the executable result gate reports all 24 required behaviors:
+16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
+inter-agent workflow, and seven security probes.
 The gate includes a production-composed inter-agent CLI-create/MCP-wait workflow
 whose operation-specific effects and safe public projections omit all message,
 prompt, event, participant-output, final-answer, label, and cleanup content. Its
@@ -92,9 +94,12 @@ namespace. Concurrent post-spawn create and rename probes cover read-only and
 mutation-overlay modes. The direct filesystem boundary continues to reject the
 same metadata paths.
 Tool records and provider-state generations
-retain exact mutable-authority id/revision/digest lineage, and Core revalidates
-it immediately before reuse, continuation, request commit, and every actual
-lazy provider-stream advance. Runtime-public issue/revoke state is accepted only after its
+retain exact mutable-authority id/revision/digest lineage. After endpoint
+preflight, Core refreshes complete certificate, binding, feature, actor, health,
+policy, Full Workspace, classification, and credential authority before commit,
+then runs the same guard in the task that opens and first advances the lazy
+transport and before every later provider-stream advance. Runtime-public
+issue/revoke state is accepted only after its
 pending audit and classification CAS are terminalized coherently; a CAS loss is
 never recorded as success. Raw filesystem bytes are scanned before base64 and
 the complete-resource class is retained across chunks. Shell/process overlay
@@ -119,7 +124,7 @@ explicit `provider_alias` policy while retaining its exact endpoint/upstream
 catalog checks. A policy or revision mismatch fails before execution.
 Those definitions remain uncertified, unbound, contained previews; the local
 claim is not live-provider evidence or launch authorization. The adapter places
-all provider-bound context in semantic-envelope schema v1/compiler revision 8,
+all provider-bound context in semantic-envelope schema v1/compiler revision 9,
 materializes scoped instructions through the confined filesystem, requires
 commit-bound instruction digests for direct mutations, and uses rollback-safe
 batch COW overlays for shell/process effects. Terminal process polling is
@@ -150,7 +155,10 @@ behind a call-paired public error. Core-certified CLI/MCP result declarations
 may supply explicit authority, while app declarations cannot. Mutating
 shell/process output is classified from the exact private-overlay result before
 commit and the overlay is discarded on denial. Composite attachment metadata
-is classified separately and restrictively joined with the file observation; skills export exact
+is classified separately and restrictively joined with the file observation.
+Each workspace reference carries a server-observed identity/revision/digest and
+required encoding that Core injects into every matching filesystem read,
+including its first chunk; skills export exact
 classified `SKILL.md` bytes, and every semantic class is bound to the exact
 projected digest. The runtime journals distinct source/projection evidence.
 Exact app-reference observations still resolve through revisioned workspace

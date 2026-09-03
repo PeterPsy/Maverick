@@ -6,9 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IsolatedMaverickFrame, requestAppFrameLaunch } from "../src/components/IsolatedMaverickFrame";
 import {
+  appFrameBrowserFeaturePolicy,
   isMaverickFrameMessage,
   postToMaverickFrame,
   setMaverickFrameOrigin,
+  widgetFrameBrowserFeaturePolicy,
 } from "../src/iframePolicy";
 
 describe("isolated Maverick frame policy", () => {
@@ -45,6 +47,13 @@ describe("isolated Maverick frame policy", () => {
       "https://af-session.sidecars.maverick.test",
     );
     expect(postMessage).not.toHaveBeenCalledWith(expect.anything(), "*");
+  });
+
+  it("delegates clipboard writes only to Chat app and widget frames", () => {
+    expect(appFrameBrowserFeaturePolicy("chat")).toBe("clipboard-write; fullscreen; microphone");
+    expect(widgetFrameBrowserFeaturePolicy("chat")).toBe("clipboard-write; fullscreen; microphone");
+    expect(appFrameBrowserFeaturePolicy("storage")).toBe("fullscreen; microphone");
+    expect(widgetFrameBrowserFeaturePolicy("storage")).toBe("fullscreen");
   });
 
   it("keeps the iframe on about:blank until it submits the isolated bootstrap", async () => {

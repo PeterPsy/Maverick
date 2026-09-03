@@ -1755,6 +1755,11 @@ proxied HTTP methods require the exact isolated `Origin` and browser
 Mounted app and widget iframes also allow the browser `fullscreen` feature so
 app-owned preview surfaces can request real fullscreen from a user gesture
 while still falling back to in-frame fullscreen when the browser denies it.
+Base Shell delegates `clipboard-write` only to app and widget frames whose
+public app owner is Chat, preserving user-initiated message copying across the
+isolated-origin boundary without granting clipboard access to unrelated apps.
+Full app frames retain microphone delegation, while Chat-owned widget frames
+receive it for composer dictation.
 Public static assets remain cross-origin readable and must never carry
 user-specific data, but their document interpretation is sandboxed and
 `nosniff`.

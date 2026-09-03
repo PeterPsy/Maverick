@@ -3,6 +3,20 @@ import { shellThemeMessage } from "./theme";
 
 export const MAVERICK_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts";
 
+const CHAT_PUBLIC_APP_ID = "chat";
+
+export function appFrameBrowserFeaturePolicy(publicAppId: string): string {
+  return publicAppId === CHAT_PUBLIC_APP_ID
+    ? "clipboard-write; fullscreen; microphone"
+    : "fullscreen; microphone";
+}
+
+export function widgetFrameBrowserFeaturePolicy(publicAppId: string): string {
+  return publicAppId === CHAT_PUBLIC_APP_ID
+    ? "clipboard-write; fullscreen; microphone"
+    : "fullscreen";
+}
+
 const registeredFrames = new Set<HTMLIFrameElement>();
 
 export function setMaverickFrameOrigin(frame: HTMLIFrameElement, origin: string | null) {

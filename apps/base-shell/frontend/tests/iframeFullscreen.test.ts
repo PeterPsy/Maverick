@@ -11,13 +11,13 @@ function readSource(path: string) {
 }
 
 describe("base shell iframe browser feature policy", () => {
-  it("allows mounted app frames to request browser fullscreen and microphone access", () => {
+  it("applies the app-owned browser feature policy to mounted app and widget frames", () => {
     const appFrameHost = readSource("src/components/AppFrameHost.tsx");
     const widgetSlot = readSource("src/components/WidgetSlot.tsx");
 
-    expect(appFrameHost).toContain('allow="fullscreen; microphone"');
+    expect(appFrameHost).toContain("allow={appFrameBrowserFeaturePolicy(app.public_app_id || app.app_id)}");
     expect(appFrameHost).toContain("allowFullScreen");
-    expect(widgetSlot).toContain('widget.owner_app_id === "chat" ? "fullscreen; microphone" : "fullscreen"');
+    expect(widgetSlot).toContain("widgetFrameBrowserFeaturePolicy(widget.owner_app_id)");
     expect(widgetSlot).toContain("allow={widgetAllowPolicy}");
     expect(widgetSlot).toContain("allowFullScreen");
   });

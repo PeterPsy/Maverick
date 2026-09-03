@@ -13,6 +13,7 @@ export type AppLogo = {
 
 export type AppRegistryItem = {
   app_id: string;
+  public_app_id?: string;
   name: string;
   version: string;
   description: string;
@@ -428,6 +429,7 @@ export function normalizeAppRegistryItem(value: unknown): AppRegistryItem {
   const name = stringField(item.name, appId || "Unnamed app");
   return {
     app_id: appId,
+    public_app_id: stringField(item.public_app_id, appId),
     name,
     version: stringField(item.version, "0.0.0"),
     description: stringField(item.description),

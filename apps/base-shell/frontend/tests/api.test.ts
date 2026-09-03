@@ -37,6 +37,24 @@ describe("base-shell api normalization", () => {
     ]);
   });
 
+  it("preserves public app identity independently from the workspace binding id", () => {
+    const payload = normalizeAppRegistryPayload({
+      items: [
+        {
+          app_id: "workspace-chat",
+          public_app_id: "chat",
+          frontend_mount: "/apps/workspace-chat/",
+          name: "Workspace Chat",
+        },
+      ],
+    });
+
+    expect(payload.items[0]).toMatchObject({
+      app_id: "workspace-chat",
+      public_app_id: "chat",
+    });
+  });
+
   it("reads app registry through the platform endpoint", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ items: [{ app_id: "chat", name: "Chat", frontend_mount: "/apps/chat/" }] }), {

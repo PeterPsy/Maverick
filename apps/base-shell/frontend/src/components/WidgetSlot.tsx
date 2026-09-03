@@ -7,6 +7,7 @@ import {
   postMaverickFrameVisibility,
   postMaverickShellTheme,
   postToMaverickFrame,
+  widgetFrameBrowserFeaturePolicy,
 } from "../iframePolicy";
 import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
@@ -604,7 +605,7 @@ export function WidgetSlot({
   const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision, bootstrapTheme);
   const isWidgetFrameLoading = supportsShellPending && loadedFrameKey !== widgetFrameKey;
   const isCollapsedOverlay = size === "overlay" && overlaySize.width === COLLAPSED_OVERLAY_SIZE && overlaySize.height === COLLAPSED_OVERLAY_SIZE;
-  const widgetAllowPolicy = widget.owner_app_id === "chat" ? "fullscreen; microphone" : "fullscreen";
+  const widgetAllowPolicy = widgetFrameBrowserFeaturePolicy(widget.owner_app_id);
 
   return (
     <>

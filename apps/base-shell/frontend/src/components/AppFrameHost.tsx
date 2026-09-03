@@ -3,6 +3,7 @@ import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import {
   MAVERICK_IFRAME_SANDBOX,
+  appFrameBrowserFeaturePolicy,
   isMaverickFrameMessage,
   isShellWindowMessage,
   postMaverickFrameVisibility,
@@ -453,7 +454,7 @@ export function AppFrameHost({
           const isDisplayed = frameKey === visibleFrameKey;
           return (
             <IsolatedMaverickFrame
-              allow="fullscreen; microphone"
+              allow={appFrameBrowserFeaturePolicy(app.public_app_id || app.app_id)}
               allowFullScreen
               appId={app.app_id}
               aria-hidden={!isDisplayed}

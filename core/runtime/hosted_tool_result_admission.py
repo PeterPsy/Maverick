@@ -19,13 +19,20 @@ from core.runtime.hosted_tool_result_authority import (
     _public_authority,
 )
 from core.runtime.hosted_tool_result_projections import (
+    certified_tool_result_classification_projection,
     definition_has_certified_result_projection,
     project_certified_tool_result,
+)
+from core.runtime.tool_discovery_authority import (
+    authenticated_discovery_classification_projection,
 )
 from core.runtime.tool_catalog import (
     RuntimeToolActorContext,
     RuntimeToolResultPreflightDecision,
     RuntimeToolSurfaceResult,
+)
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
 )
 from core.shared.tool_effects import resolve_tool_effect_class
 
@@ -76,6 +83,12 @@ def build_hosted_tool_result_admission_resolver(
                 projection,
                 context,
                 trust_level="trusted_platform",
+                classification_projection=(
+                    _core_managed_classification_projection(
+                        handle,
+                        projection,
+                    )
+                ),
             )
         if handle in {
             "core-capability:shell.run",
@@ -85,6 +98,12 @@ def build_hosted_tool_result_admission_resolver(
                 handle,
                 result,
                 context,
+                classification_projection=(
+                    _core_managed_classification_projection(
+                        handle,
+                        result,
+                    )
+                ),
                 public_content_authority=_public_authority(
                     public_content_authority_resolver,
                     context,
@@ -98,7 +117,13 @@ def build_hosted_tool_result_admission_resolver(
                 handle,
                 dict(result),
                 context,
-                core_session_token_fields=True,
+                classification_projection=(
+                    authenticated_discovery_classification_projection(
+                        handle,
+                        dict(result),
+                        session_id=context.session_id,
+                    )
+                ),
                 declared_public=_discovery_has_public_authority(
                     handle,
                     result,
@@ -126,6 +151,12 @@ def build_hosted_tool_result_admission_resolver(
                     projection,
                     context,
                     trust_level="trusted_platform",
+                    classification_projection=(
+                        certified_tool_result_classification_projection(
+                            definition,
+                            projection,
+                        )
+                    ),
                 )
             if definition_has_certified_result_projection(definition):
                 return _invalid_projection_surface(
@@ -161,6 +192,12 @@ def build_hosted_tool_result_admission_resolver(
                     projection,
                     context,
                     trust_level="trusted_platform",
+                    classification_projection=(
+                        certified_tool_result_classification_projection(
+                            definition,
+                            projection,
+                        )
+                    ),
                 )
             if definition_has_certified_result_projection(definition):
                 return _invalid_projection_surface(
@@ -351,6 +388,33 @@ def _invalid_projection_surface(
 
 def _safe_metadata_value(value: object) -> bool:
     return value is None or isinstance(value, (str, int, bool))
+
+
+def _core_managed_classification_projection(
+    handle: str,
+    payload: dict[str, object],
+) -> RuntimeToolClassificationProjection | None:
+    """Bind omissions to fields minted by exact Core process/shell surfaces."""
+    omitted_paths: list[tuple[str | int, ...]] = []
+    if handle.startswith("core-capability:process.") and "process_id" in payload:
+        omitted_paths.append(("process_id",))
+    if handle == "core-capability:shell.run" and "mutation_scope_digest" in payload:
+        omitted_paths.append(("mutation_scope_digest",))
+    workspace_effects = payload.get("workspace_effects")
+    if (
+        handle == "core-capability:process.status"
+        and isinstance(workspace_effects, dict)
+        and "mutation_scope_digest" in workspace_effects
+    ):
+        omitted_paths.append(("workspace_effects", "mutation_scope_digest"))
+    return (
+        RuntimeToolClassificationProjection.bind(
+            payload,
+            omitted_paths=tuple(omitted_paths),
+        )
+        if omitted_paths
+        else None
+    )
 
 
 __all__ = [

@@ -51,6 +51,11 @@ from core.runtime.tool_full_workspace_schemas import (
 from core.runtime.tool_result_artifacts import (
     build_tool_result_artifact_capabilities,
 )
+from core.runtime.tool_result_classification import (
+    filesystem_listing_classification_projection,
+    filesystem_mutation_classification_projection,
+    filesystem_read_classification_projection,
+)
 
 
 MAX_FILESYSTEM_READ_BYTES = 262_144
@@ -111,7 +116,11 @@ def build_core_runtime_tool_capabilities(
                 else None
             ),
         )
-        return RuntimeToolSurfaceResult(result.payload, result.classification)
+        return RuntimeToolSurfaceResult(
+            result.payload,
+            result.classification,
+            filesystem_listing_classification_projection(result.payload),
+        )
 
     def filesystem_read(
         arguments: dict[str, object],
@@ -171,7 +180,11 @@ def build_core_runtime_tool_capabilities(
             expected_resource_revision=expected_revision,
             expected_resource_digest=expected_digest,
         )
-        return RuntimeToolSurfaceResult(result.payload, result.classification)
+        return RuntimeToolSurfaceResult(
+            result.payload,
+            result.classification,
+            filesystem_read_classification_projection(result.payload),
+        )
 
     def filesystem_write(
         arguments: dict[str, object],
@@ -211,9 +224,11 @@ def build_core_runtime_tool_capabilities(
             ),
             mutation_guard=guard,
         )
+        payload = {**result.payload, **guard.evidence}
         return RuntimeToolSurfaceResult(
-            {**result.payload, **guard.evidence},
+            payload,
             result.classification,
+            filesystem_mutation_classification_projection(payload),
         )
 
     def shell_run(

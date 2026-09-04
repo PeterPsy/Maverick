@@ -12,13 +12,19 @@ from core.runtime.public_content_authority import (
 from core.runtime.public_content_classification import (
     classification_from_runtime_public_content_authority,
 )
-from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 from core.runtime.hosted_tool_result_projections import (
     definition_has_certified_result_projection,
 )
+from core.runtime.tool_catalog import (
+    RuntimeToolActorContext,
+    RuntimeToolSurfaceResult,
+)
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
+)
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 9
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 10
 _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
 
 
@@ -27,20 +33,20 @@ def _content_derived_surface(
     payload: dict[str, object],
     context: RuntimeToolActorContext,
     *,
-    core_session_token_fields: bool = False,
+    classification_projection: RuntimeToolClassificationProjection | None = None,
     declared_public: bool = False,
     public_content_authority=None,
 ) -> RuntimeToolSurfaceResult:
     classification_payload = (
-        _without_core_session_tokens(payload)
-        if core_session_token_fields
+        classification_projection.resolve(payload)
+        if classification_projection is not None
         else payload
     )
     detected = classify_runtime_content(
         classification_payload,
         content_type=(
-            "text/plain"
-            if core_session_token_fields
+            classification_projection.content_type
+            if classification_projection is not None
             else "application/json"
         ),
     )
@@ -85,27 +91,8 @@ def _content_derived_surface(
         classification_revision=classification_revision,
         authority_ref=authority_ref,
         classification_authority=classification_authority,
+        classification_projection=classification_projection,
     )
-
-
-def _without_core_session_tokens(payload: dict[str, object]) -> dict[str, object]:
-    """Exclude only Core-minted same-session invocation tokens from scanning."""
-    projected = dict(payload)
-    for collection in ("commands", "tools"):
-        raw_items = projected.get(collection)
-        if not isinstance(raw_items, list):
-            continue
-        items: list[object] = []
-        for raw_item in raw_items:
-            if not isinstance(raw_item, dict):
-                items.append(raw_item)
-                continue
-            item = dict(raw_item)
-            if "invocation_token" in item:
-                item["invocation_token"] = "core-session-invocation-token"
-            items.append(item)
-        projected[collection] = items
-    return projected
 
 
 def _admitted_surface(
@@ -118,6 +105,7 @@ def _admitted_surface(
     classification_revision: int = HOSTED_TOOL_RESULT_ADMISSION_REVISION,
     authority_ref: str = "",
     classification_authority=None,
+    classification_projection: RuntimeToolClassificationProjection | None = None,
 ) -> RuntimeToolSurfaceResult:
     digest = _payload_digest(payload)
     return RuntimeToolSurfaceResult(
@@ -186,6 +174,7 @@ def _admitted_surface(
                 classification_authority is not None
             ),
         ),
+        classification_projection,
     )
 
 

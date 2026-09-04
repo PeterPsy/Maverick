@@ -117,6 +117,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_tool_filesystem_listing",
     "tests.unit.runtime_tools.test_tool_orchestrator",
     "tests.unit.runtime_tools.test_tool_orchestrator_execution",
+    "tests.unit.runtime_tools.test_tool_result_classification_projection",
     "tests.unit.runtime_tools.test_tool_preliminary_ledger",
     "tests.unit.runtime_tools.test_tool_store",
     "tests.unit.runtime_tools.test_tool_catalog_security",
@@ -136,11 +137,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="38",
+        suite_version="39",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-04-r38-p4-pan-classification-determinism-tcb28"
+            "2026-09-04-r39-p4-typed-result-classification-tcb29"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

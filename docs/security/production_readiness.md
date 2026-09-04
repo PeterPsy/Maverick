@@ -66,7 +66,7 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v28 makes the known transitive boundary executable through six static
+Manifest v29 makes the known transitive boundary executable through six static
 import contracts and adds the exact executable roots for every built-in app
 CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
 input-context projection closure, continuation/recovery, app-entrypoint, audit,
@@ -74,9 +74,9 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 34 and the Full Workspace result contract
-`codex-baseline-v20` are bound by TCB manifest v28. Google revision 42 and
-OpenRouter revision 41 atomically claim that contract and the `maverick_agent`
+Hosted adapter 35 and the Full Workspace result contract
+`codex-baseline-v20` are bound by TCB manifest v29. Google revision 43 and
+OpenRouter revision 42 atomically claim that contract and the `maverick_agent`
 family because the executable result gate reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes. Their exact profile policies
@@ -84,6 +84,11 @@ retain the required `cli`, `mcp`, `app-interface`, and `core-capability`
 surfaces, and a public-resolver fixture proves complete live authority. The gate
 caches only the complete successful result; transient, empty, and partial probe
 evidence remains fail-closed and retryable.
+Opaque Core filesystem, instruction, process, discovery, artifact, certified
+inter-agent, and compactor identities are excluded from marker scanning only by
+typed projections bound to the full result payload. Every path, content/output,
+description, and arbitrary external result value remains on the conservative
+PAN/secret scan surface.
 The gate includes a production-composed inter-agent CLI-create/MCP-wait workflow
 whose operation-specific effects and safe public projections omit all message,
 prompt, event, participant-output, final-answer, label, and cleanup content. Its

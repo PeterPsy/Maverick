@@ -192,6 +192,15 @@ class FullWorkspaceLimitsAndDiscoveryTest(FullWorkspaceContractFixture, unittest
         mcp_listing = first["core-capability:mcp.list"].handler(
             {}, self.context, None
         )
+        self.assertIsNotNone(cli_listing.classification_projection)
+        self.assertIsNotNone(mcp_listing.classification_projection)
+        tampered_listing = dict(cli_listing.payload)
+        tampered_listing["registry_revision"] = "0" * 64
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "tool_result_classification_projection_invalid",
+        ):
+            cli_listing.classification_projection.resolve(tampered_listing)
 
         refreshed = self._discovery(cli, mcp)
         cli_result = refreshed["core-capability:cli.run"].handler(

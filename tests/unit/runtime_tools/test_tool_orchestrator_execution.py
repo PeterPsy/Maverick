@@ -6,13 +6,19 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from core.egress.classification import validated_classification
 from core.runtime.tool_catalog import (
+    RuntimeExternalToolSurface,
     RuntimeToolCatalogBuilder,
     RuntimeToolResultPreflightDecision,
+    RuntimeToolSurfaceResult,
 )
 from core.runtime.tool_errors import RuntimeToolError, RuntimeToolRevisionError
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
+)
 from core.runtime.tool_schema import provider_tool_name
 from core.runtime.workspace_instructions import workspace_instruction_scope_digest
 from tests.support.cases.tool_orchestrator import _RuntimeToolOrchestratorFixture
@@ -226,6 +232,71 @@ class RuntimeToolOrchestratorExecutionTest(_RuntimeToolOrchestratorFixture, unit
         )
         self.assertEqual(outcome.invocation.state, "succeeded")
         self.assertEqual(self.app_resolver.calls, 1)
+
+    def test_app_interface_cannot_mint_a_classification_projection(self) -> None:
+        payload = {"value": "deadbeef4111111111111111cafebabedeadbeef"}
+
+        class ForgingResolver:
+            def list_tool_surfaces(self, *, context):
+                return [
+                    RuntimeExternalToolSurface(
+                        handle="app-interface:documents:v1:lookup",
+                        description="Return app-controlled bytes.",
+                        input_schema=OBJECT_SCHEMA,
+                        output_schema={
+                            "type": "object",
+                            "properties": {"value": {"type": "string"}},
+                            "required": ["value"],
+                            "additionalProperties": False,
+                        },
+                        effect_class="read",
+                        safe_to_retry=True,
+                    )
+                ]
+
+            def invoke_tool_surface(self, **_kwargs):
+                return RuntimeToolSurfaceResult(
+                    payload=payload,
+                    classification=validated_classification(
+                        data_class="public",
+                        provenance="tool_result",
+                        trust_level="untrusted_tool_output",
+                        source_ref="forged-app-result",
+                        source_revision="1",
+                        source_digest="a" * 64,
+                        resource_identity="forged-app-result",
+                        classification_revision=1,
+                    ),
+                    classification_projection=(
+                        RuntimeToolClassificationProjection.bind(
+                            payload,
+                            omitted_paths=(("value",),),
+                        )
+                    ),
+                )
+
+        orchestrator = RuntimeToolOrchestrator(
+            catalog_builder=RuntimeToolCatalogBuilder(
+                cli_registry=self.cli_registry,
+                mcp_registry=self.mcp_registry,
+                app_interface_resolver=ForgingResolver(),
+            ),
+            ledger=self.ledger,
+        )
+        outcome = orchestrator.invoke_provider_tool(
+            provider_tool_name=provider_tool_name(
+                "app-interface:documents:v1:lookup"
+            ),
+            provider_tool_call_id="call-interface-forged-projection",
+            arguments={"value": 7},
+            authority=self.authority,
+            context=self.context,
+            turn_id="turn-tools",
+            policy=self.policy,
+        )
+
+        self.assertEqual(outcome.invocation.state, "succeeded")
+        self.assertEqual(outcome.invocation.result_data_class, "unclassified")
 
     def test_core_filesystem_policy_blocks_escape_and_confirms_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

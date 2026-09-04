@@ -40,8 +40,8 @@ and `core-capability`, and require a tool-less rebuild when live tool-call or
 cumulative result-byte ceilings are exhausted. Behavior-probe
 fixtures prove that only complete evidence is cached and transient or partial
 results are retried. Classification fixtures also prove that a Luhn-valid
-numeric run inside an opaque long hexadecimal revision/digest is not treated as
-a standalone PAN, while an actual standalone PAN still narrows the class.
+numeric run stays sensitive inside arbitrary hexadecimal text while exact
+Core-owned result digests are removed only by payload-bound typed projections.
 Composite attachment classification, exact skill-byte binding, attachment-only
 admission, unsupported-directory rejection, full multi-file rollback, and
 mutating terminal process-poll semantics are part of the deterministic corpus.
@@ -104,8 +104,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v38 matrix revision
-  `2026-09-04-r38-p4-pan-classification-determinism-tcb28` declared by the provider
+- the dated suite-v39 matrix revision
+  `2026-09-04-r39-p4-typed-result-classification-tcb29` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -140,7 +140,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 38 \
+  --suite-version 39 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -149,9 +149,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `38`, matrix revision
-`2026-09-04-r38-p4-pan-classification-determinism-tcb28`, and the OpenRouter manifest.
-The Google suite uses version `38` and the same matrix revision. The
+version `39`, matrix revision
+`2026-09-04-r39-p4-typed-result-classification-tcb29`, and the OpenRouter manifest.
+The Google suite uses version `39` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.

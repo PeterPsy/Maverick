@@ -35,6 +35,9 @@ from core.runtime.tool_full_workspace_support import (
 from core.runtime.tool_process_capabilities import (
     build_process_capabilities as _process_surfaces,
 )
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
+)
 from core.runtime.workspace_instructions import (
     read_complete_confined_text,
     resolve_workspace_instruction_chain_for_path,
@@ -77,9 +80,20 @@ def build_full_workspace_capabilities(
                 for item in chain
             ],
         }
-        return RuntimeToolSurfaceResult(
+        classification_paths = [("scope_digest",)]
+        classification_paths.extend(
+            ("instructions", index, field_name)
+            for index in range(len(payload["instructions"]))
+            for field_name in (
+                "resource_identity",
+                "resource_revision",
+                "resource_digest",
+            )
+        )
+        return _projected_core_result(
             payload,
             _instruction_classification(chain, digest),
+            omitted_paths=tuple(classification_paths),
         )
 
     def search(arguments, context, _idempotency_key):
@@ -92,7 +106,20 @@ def build_full_workspace_capabilities(
             cursor=_optional_string(arguments.get("cursor")),
             case_sensitive=arguments.get("case_sensitive") is not False,
         )
-        return RuntimeToolSurfaceResult(result.payload, result.classification)
+        return _projected_core_result(
+            result.payload,
+            result.classification,
+            omitted_paths=tuple(
+                (field_name,)
+                for field_name in (
+                    "next_cursor",
+                    "snapshot_id",
+                    "resource_identity",
+                    "resource_revision",
+                    "resource_digest",
+                )
+            ),
+        )
 
     def edit(arguments, context, _idempotency_key):
         _require_context(context, filesystem.workspace_id)
@@ -273,7 +300,22 @@ def build_full_workspace_capabilities(
             "source_instruction_scope": source_guard.evidence,
             "destination_instruction_scope": destination_guard.evidence,
         }
-        return RuntimeToolSurfaceResult(payload, result.classification)
+        return _projected_core_result(
+            payload,
+            result.classification,
+            omitted_paths=(
+                ("resource_identity",),
+                ("resource_revision",),
+                ("resource_digest",),
+                ("source_instruction_scope", "instruction_scope_digest"),
+                ("source_instruction_scope", "instruction_revisions"),
+                (
+                    "destination_instruction_scope",
+                    "instruction_scope_digest",
+                ),
+                ("destination_instruction_scope", "instruction_revisions"),
+            ),
+        )
 
     def delete(arguments, context, _idempotency_key):
         _require_context(context, filesystem.workspace_id)
@@ -306,7 +348,17 @@ def build_full_workspace_capabilities(
             mutation_guard=guard,
         )
         payload = {**result.payload, **guard.evidence}
-        return RuntimeToolSurfaceResult(payload, result.classification)
+        return _projected_core_result(
+            payload,
+            result.classification,
+            omitted_paths=(
+                ("resource_identity",),
+                ("resource_revision",),
+                ("resource_digest",),
+                ("instruction_scope_digest",),
+                ("instruction_revisions",),
+            ),
+        )
 
     surfaces = [
         _surface("workspace.instructions", "Read applicable root-to-target AGENTS.md instructions and a mutation scope digest.", workspace_instructions_schema(), "read", instructions),
@@ -327,3 +379,19 @@ def build_full_workspace_capabilities(
             )
         )
     return tuple(surfaces)
+
+
+def _projected_core_result(
+    payload: dict[str, object],
+    classification,
+    *,
+    omitted_paths: tuple[tuple[str | int, ...], ...],
+) -> RuntimeToolSurfaceResult:
+    return RuntimeToolSurfaceResult(
+        payload,
+        classification,
+        RuntimeToolClassificationProjection.bind(
+            payload,
+            omitted_paths=omitted_paths,
+        ),
+    )

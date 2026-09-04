@@ -19,6 +19,7 @@ ROOT_TEST_LINE_BUDGETS = {
     "tests/contracts/app_contract/test_services.py": 590,
     "tests/e2e/install/test_install_maverick.py": 560,
     "tests/e2e/websocket/test_runtime_events.py": 869,
+    "tests/integration/app_hosting/test_app_frame_browser_origin.py": 941,
     "tests/integration/app_hosting/test_sidecar_browser_origin.py": 582,
     "tests/integration/app_hosting/test_sidecar_execution.py": 521,
     "tests/integration/cli_mcp/test_core_surfaces.py": 1761,

@@ -25,6 +25,9 @@ from tests.support.repo import make_temp_repo_root
 
 
 NOW = datetime(2026, 8, 28, tzinfo=UTC)
+DIGEST_WITH_LUHN_SUBSEQUENCE = (
+    "20914ef24928d26319dd8ac4ff04b2204cf4630440387733486e3cc0cc2084f0"
+)
 
 
 class HostedAgenticFactoryDispatchTest(unittest.TestCase):
@@ -118,16 +121,22 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
             attachments=None,
         )
 
-        result = execute_runtime_turn(
-            session=harness.session,
-            provider=harness.provider,
-            input_text="Use the public fixture tool and finish.",
-            agentic_adapter=harness.adapter(client),
-            provider_state=harness.store.get_provider_state("session-hosted"),
-            correlation_id="turn-hosted",
-            effective_authority=harness.authority,
-            input_sources=input_sources,
-        )
+        with patch(
+            "core.runtime.confined_filesystem._snapshot_digest",
+            return_value=DIGEST_WITH_LUHN_SUBSEQUENCE,
+        ):
+            result = execute_runtime_turn(
+                session=harness.session,
+                provider=harness.provider,
+                input_text="Use the public fixture tool and finish.",
+                agentic_adapter=harness.adapter(client),
+                provider_state=harness.store.get_provider_state(
+                    "session-hosted"
+                ),
+                correlation_id="turn-hosted",
+                effective_authority=harness.authority,
+                input_sources=input_sources,
+            )
 
         self.assertEqual(result.exit_code, 0)
         self.assertGreaterEqual(len(client.requests), 2)

@@ -46,6 +46,9 @@ from core.runtime.output_compaction.cli_result import compact_runtime_cli_result
 from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.tool_models import ToolConfirmationGrant, ToolInvocationRecord
 from core.runtime.tool_result_artifacts import TOOL_RESULT_ARTIFACT_READ_HANDLE
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
+)
 from core.runtime.tool_schema import validate_tool_arguments
 
 
@@ -671,17 +674,32 @@ class RuntimeToolOrchestrator:
             )
             if control is not None:
                 control.check()
-            if isinstance(surface_result, RuntimeToolSurfaceResult):
+            if (
+                isinstance(surface_result, RuntimeToolSurfaceResult)
+                and descriptor.surface_kind == "core-capability"
+            ):
                 result = surface_result.payload
                 classification = join_classifications(
                     (surface_result.classification,)
                 ).sources[0]
+                classification_projection = (
+                    surface_result.classification_projection
+                )
             else:
-                result = surface_result
+                # Only an in-process Core capability may mint the typed result
+                # classification envelope.  App, CLI, and MCP implementations
+                # are outside this trust boundary; their payload can receive a
+                # Core-owned classification only through the resolver below.
+                result = (
+                    surface_result.payload
+                    if isinstance(surface_result, RuntimeToolSurfaceResult)
+                    else surface_result
+                )
                 classification = fail_closed_classification(
                     provenance="tool_result",
                     source_ref=descriptor.handle,
                 )
+                classification_projection = None
             # Validate the capability result before the shared CLI compactor
             # projects it into the bounded transport representation.  The
             # projection is intentionally generic and need not preserve an
@@ -707,6 +725,9 @@ class RuntimeToolOrchestrator:
                     classification = join_classifications(
                         (resolved.classification,)
                     ).sources[0]
+                    classification_projection = (
+                        resolved.classification_projection
+                    )
                 elif isinstance(resolved, CanonicalSourceClassification):
                     classification = join_classifications((resolved,)).sources[0]
                 elif resolved is not None:
@@ -721,10 +742,16 @@ class RuntimeToolOrchestrator:
                 separators=(",", ":"),
                 sort_keys=True,
             ).encode("utf-8")
+            classification_payload, classification_content_type = (
+                _tool_result_classification_payload(
+                    result,
+                    classification_projection,
+                )
+            )
             classification = narrow_runtime_content_classification(
                 classification,
-                encoded_original,
-                content_type="application/json",
+                classification_payload,
+                content_type=classification_content_type,
             )
             if len(encoded_original) > policy.max_tool_result_bytes:
                 raise RuntimeToolError("tool_result_too_large")
@@ -746,10 +773,22 @@ class RuntimeToolOrchestrator:
                 separators=(",", ":"),
                 sort_keys=True,
             ).encode("utf-8")
+            classification_payload, classification_content_type = (
+                _tool_result_classification_payload(
+                    projected_result,
+                    classification_projection,
+                    derived=True,
+                    compaction_metadata_path=(
+                        _generated_compaction_metadata_path(
+                            result, projected_result
+                        )
+                    ),
+                )
+            )
             classification = narrow_runtime_content_classification(
                 classification,
-                encoded,
-                content_type="application/json",
+                classification_payload,
+                content_type=classification_content_type,
             )
             classification = derive_content_classification(
                 content=encoded,
@@ -1089,3 +1128,44 @@ class RuntimeToolOrchestrator:
         ) or (
             descriptor.effect_class == "destructive" and policy.require_confirmation_for_destructive
         )
+
+
+def _tool_result_classification_payload(
+    payload: dict[str, object],
+    projection: RuntimeToolClassificationProjection | None,
+    *,
+    derived: bool = False,
+    compaction_metadata_path: tuple[str | int, ...] | None = None,
+) -> tuple[dict[str, object], str]:
+    """Resolve only exact typed omissions, including trusted compactor metadata."""
+    active = projection
+    if derived and active is not None:
+        active = active.rebind_after_core_compaction(
+            payload,
+            compaction_metadata_path=compaction_metadata_path,
+        )
+    elif compaction_metadata_path is not None:
+        active = RuntimeToolClassificationProjection.bind(
+            payload,
+            omitted_paths=(compaction_metadata_path,),
+        )
+    return (
+        (payload, "application/json")
+        if active is None
+        else (active.resolve(payload), active.content_type)
+    )
+
+
+def _generated_compaction_metadata_path(
+    original: dict[str, object],
+    compacted: dict[str, object],
+) -> tuple[str | int, ...] | None:
+    """Identify only metadata introduced by the trusted Core compactor call."""
+    if compacted == original:
+        return None
+    metadata_key = (
+        "runtime_cli_output_compaction"
+        if "output_compaction" in original
+        else "output_compaction"
+    )
+    return (metadata_key,) if metadata_key in compacted else None

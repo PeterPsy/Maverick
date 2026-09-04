@@ -18,6 +18,9 @@ from core.runtime.tool_catalog import (
     RuntimeToolSurfaceResult,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.tool_result_classification import (
+    filesystem_mutation_classification_projection,
+)
 from core.runtime.workspace_instructions import (
     resolve_workspace_instruction_chain_for_path,
     workspace_instruction_scope_digest,
@@ -135,7 +138,11 @@ def commit_text_change(
     # write_text binds the proven pre-image taint to the exact committed
     # post-image.  Persist that observation with the mutation result so a later
     # hosted orchestrator can reconstruct read-after-write lineage.
-    return RuntimeToolSurfaceResult(payload, written.classification)
+    return RuntimeToolSurfaceResult(
+        payload,
+        written.classification,
+        filesystem_mutation_classification_projection(payload),
+    )
 
 
 def prepare_mutation_instruction_guard(

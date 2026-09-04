@@ -12,6 +12,7 @@ from core.runtime.hosted_collaboration_behavior import (
     HOSTED_COLLABORATION_BEHAVIOR_IDS,
     inspect_hosted_collaboration_behavior,
 )
+from core.runtime.content_data_classification import classify_runtime_content
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
     build_hosted_tool_result_preflight_resolver,
@@ -29,6 +30,9 @@ from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfac
 _PRIVATE_MARKER = "customer SSN 123-45-6789"
 _RUN_ID = "iarun_0123456789abcdef0123456789abcdef"
 _PARTICIPANT_ID = "iap_0123456789abcdef0123456789abcdef"
+_DIGEST_WITH_LUHN_SUBSEQUENCE = (
+    "20914ef24928d26319dd8ac4ff04b2204cf4630440387733486e3cc0cc2084f0"
+)
 
 
 class HostedCollaborationContractTest(unittest.TestCase):
@@ -176,6 +180,43 @@ class HostedCollaborationContractTest(unittest.TestCase):
         )
         self.assertEqual(replayed.payload, first.payload)
         self.assertNotIn(_PRIVATE_MARKER, repr(replayed.payload))
+
+    def test_certified_reference_digest_uses_authenticated_classification_view(
+        self,
+    ) -> None:
+        admission = build_hosted_tool_result_admission_resolver(
+            cli_registry=self.cli,
+            mcp_registry=self.mcp,
+        )
+        result = admission(
+            "core-capability:cli.run",
+            {"command_id": "inter-agent.runs.create", "arguments": {}},
+            {
+                "projection_contract": INTER_AGENT_RESULT_PROJECTIONS["create"],
+                "operation": "create",
+                "outcome": "succeeded",
+                "run_ref_sha256": _DIGEST_WITH_LUHN_SUBSEQUENCE,
+                "run_status": "created",
+            },
+            self.context,
+        )
+
+        self.assertEqual(
+            classify_runtime_content(result.payload, content_type="application/json"),
+            "regulated_or_customer_data",
+        )
+        self.assertIsNotNone(result.classification_projection)
+        classification_payload = result.classification_projection.resolve(
+            result.payload
+        )
+        self.assertNotIn("run_ref_sha256", classification_payload)
+        self.assertEqual(
+            classify_runtime_content(
+                classification_payload,
+                content_type="application/json",
+            ),
+            "unclassified",
+        )
 
     def test_behavior_gate_executes_cli_create_then_mcp_wait(self) -> None:
         self.assertEqual(

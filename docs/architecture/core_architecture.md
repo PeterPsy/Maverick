@@ -813,8 +813,8 @@ partial result is fail-closed for that evaluation and must remain retryable.
 Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 42 and OpenRouter
-revision 41 definitions make that atomic claim only because the executable
+complete atomic contract. The current Google revision 43 and OpenRouter
+revision 42 definitions make that atomic claim only because the executable
 gate returns all 24 required result behaviors, including the concrete
 `shell.run` and `process.start/status/input/interrupt` handlers, real app-owned
 CLI/MCP reads with Core-audited conservative effect metadata and executable
@@ -937,9 +937,15 @@ Variable hosted tool output is also conservatively classified from its exact
 canonical bytes; marker absence remains `unclassified` without the same active
 runtime-public authority or an exact resource/result contract. A Luhn-valid PAN
 remains sensitive even when embedded in a longer hexadecimal token. Opaque
-attachment fence identities are omitted from marker scanning only through a
-typed projection that exactly matches the server-observed read fence; arbitrary
+attachment-fence identities and exact Core-minted tool-result identity metadata
+are omitted from marker scanning only through typed projections bound to the
+complete source payload. Filesystem, instruction, process, discovery, artifact,
+certified inter-agent, and compactor projections are minted at their owning
+Core boundary; discovery tokens are additionally HMAC-verified. Arbitrary
 fields with digest-like names and every user-controlled byte stay in scope.
+Classification envelopes returned directly by app, CLI, or MCP handlers are
+ignored; only in-process Core capabilities and the Core-owned admission resolver
+may attach a typed result projection.
 Read-only shell/process streams and CLI/MCP discovery/read results retain the
 complete payload through the common compactor. If their derived class is not
 allowed remotely, Core keeps the private result and sends a public, call-id

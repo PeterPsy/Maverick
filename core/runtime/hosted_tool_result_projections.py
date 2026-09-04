@@ -5,6 +5,10 @@ from __future__ import annotations
 import hashlib
 import re
 
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
+)
+
 
 INTER_AGENT_RESULT_PROJECTIONS = {
     "create": "inter-agent.run-create.v1",
@@ -192,6 +196,29 @@ def project_certified_tool_result(
             projection["deleted_record_count"] = sum(deleted.values())
         return projection
     return None
+
+
+def certified_tool_result_classification_projection(
+    definition,
+    result: dict[str, object],
+) -> RuntimeToolClassificationProjection | None:
+    """Authenticate and omit only identifiers emitted by a certified projector."""
+    if project_certified_tool_result(definition, result) != result:
+        return None
+    paths = tuple(
+        (field_name,)
+        for label in ("run", "participant", "runtime_session", "turn")
+        for field_name in (f"{label}_id", f"{label}_ref_sha256")
+        if field_name in result
+    )
+    return (
+        RuntimeToolClassificationProjection.bind(
+            result,
+            omitted_paths=paths,
+        )
+        if paths
+        else None
+    )
 
 
 def _expected_projection(definition) -> str | None:
@@ -426,6 +453,7 @@ __all__ = [
     "INTER_AGENT_EFFECTS",
     "INTER_AGENT_MCP_PROJECTIONS",
     "INTER_AGENT_RESULT_PROJECTIONS",
+    "certified_tool_result_classification_projection",
     "definition_has_certified_result_projection",
     "project_certified_tool_result",
 ]

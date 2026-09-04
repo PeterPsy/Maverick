@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
-import secrets
-
 from core.cli.errors import CliInvocationNotAllowedError
 from core.cli.runner import CliRunner, _enforce_invocation_policy
 from core.egress.classification import fail_closed_classification
 from core.mcp.errors import McpInvocationNotAllowedError
 from core.mcp.runner import McpRunner, enforce_mcp_invocation_policy
-from core.runtime.tool_catalog import RuntimeCoreCapabilitySurface, RuntimeToolSurfaceResult
+from core.runtime.tool_catalog import (
+    RuntimeCoreCapabilitySurface,
+    RuntimeToolSurfaceResult,
+)
 from core.runtime.tool_discovery_support import (
     CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT,
     MAX_DISCOVERY_RESULTS,
@@ -27,12 +24,13 @@ from core.runtime.tool_discovery_support import (
     registry_revision as _registry_revision,
     required_string as _required_string,
 )
+from core.runtime.tool_discovery_authority import (
+    authenticated_discovery_classification_projection,
+    issue_discovery_token,
+    validate_discovery_token,
+)
 from core.runtime.tool_errors import RuntimeToolError
 from core.shared.tool_effects import ToolArgumentEffectMap
-
-
-_DISCOVERY_TOKEN_KEY = secrets.token_bytes(32)
-_DISCOVERY_TOKEN_DOMAIN = b"maverick.runtime-tool-discovery.v1\0"
 
 
 def _argument_effect_payload(definition) -> dict[str, object]:
@@ -125,7 +123,15 @@ class RuntimeToolDiscoveryBroker:
         )
         if isinstance(classification, RuntimeToolSurfaceResult):
             return classification
-        return RuntimeToolSurfaceResult(payload, classification)
+        return RuntimeToolSurfaceResult(
+            payload,
+            classification,
+            authenticated_discovery_classification_projection(
+                "core-capability:cli.list",
+                payload,
+                session_id=context.session_id,
+            ),
+        )
 
     def run_cli(self, arguments, context, idempotency_key):
         command_id = _required_string(arguments.get("command_id"))
@@ -220,7 +226,15 @@ class RuntimeToolDiscoveryBroker:
         )
         if isinstance(classification, RuntimeToolSurfaceResult):
             return classification
-        return RuntimeToolSurfaceResult(payload, classification)
+        return RuntimeToolSurfaceResult(
+            payload,
+            classification,
+            authenticated_discovery_classification_projection(
+                "core-capability:mcp.list",
+                payload,
+                session_id=context.session_id,
+            ),
+        )
 
     def call_mcp(self, arguments, context, idempotency_key):
         tool_name = _required_string(arguments.get("tool_name"))
@@ -283,22 +297,12 @@ class RuntimeToolDiscoveryBroker:
         )
 
     def _token(self, kind: str, target: str, session_id: str) -> str:
-        raw = json.dumps(
-            {
-                "kind": kind,
-                "target": target,
-                "session_id": session_id,
-                "registry_revision": self.revision,
-            },
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-        signature = hmac.new(
-            _DISCOVERY_TOKEN_KEY,
-            _DISCOVERY_TOKEN_DOMAIN + raw,
-            hashlib.sha256,
-        ).digest()
-        return base64.urlsafe_b64encode(signature + raw).decode("ascii").rstrip("=")
+        return issue_discovery_token(
+            kind=kind,
+            target=target,
+            session_id=session_id,
+            registry_revision=self.revision,
+        )
 
     def _validate_token(
         self,
@@ -308,31 +312,13 @@ class RuntimeToolDiscoveryBroker:
         target: str,
         session_id: str,
     ) -> None:
-        if not isinstance(value, str) or not value:
-            raise RuntimeToolError("tool_discovery_required")
-        try:
-            padded = value + "=" * (-len(value) % 4)
-            decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
-            signature, raw = decoded[:32], decoded[32:]
-            expected_signature = hmac.new(
-                _DISCOVERY_TOKEN_KEY,
-                _DISCOVERY_TOKEN_DOMAIN + raw,
-                hashlib.sha256,
-            ).digest()
-            payload = json.loads(raw)
-        except (UnicodeError, ValueError, TypeError, json.JSONDecodeError) as error:
-            raise RuntimeToolError("tool_discovery_token_invalid") from error
-        if (
-            not hmac.compare_digest(signature, expected_signature)
-            or payload
-            != {
-                "kind": kind,
-                "target": target,
-                "session_id": session_id,
-                "registry_revision": self.revision,
-            }
-        ):
-            raise RuntimeToolError("tool_discovery_token_invalid")
+        validate_discovery_token(
+            value,
+            kind=kind,
+            target=target,
+            session_id=session_id,
+            registry_revision=self.revision,
+        )
 
     @staticmethod
     def _page(definitions: list[object], arguments: dict[str, object]):
@@ -350,7 +336,6 @@ class RuntimeToolDiscoveryBroker:
         page = definitions[cursor : cursor + max_results]
         next_offset = cursor + len(page)
         return page, (next_offset if next_offset < len(definitions) else None)
-
 
 def build_discovery_first_capabilities(
     *,

@@ -12,6 +12,9 @@ from core.mcp.tool_registry import McpToolRegistry
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_models import ToolEffectClass
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
+)
 from core.runtime.tool_schema import provider_safe_tool_schema, provider_tool_name
 
 
@@ -59,6 +62,18 @@ class RuntimeToolSurfaceResult:
 
     payload: dict[str, object]
     classification: CanonicalSourceClassification
+    classification_projection: RuntimeToolClassificationProjection | None = None
+
+    def __post_init__(self) -> None:
+        if self.classification_projection is not None:
+            if not isinstance(
+                self.classification_projection,
+                RuntimeToolClassificationProjection,
+            ):
+                raise RuntimeToolError(
+                    "tool_result_classification_projection_invalid"
+                )
+            self.classification_projection.resolve(self.payload)
 
     def __getitem__(self, key: str) -> object:
         return self.payload[key]

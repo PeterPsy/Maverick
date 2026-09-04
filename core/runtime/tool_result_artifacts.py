@@ -14,6 +14,9 @@ from core.runtime.tool_full_workspace_support import (
     full_workspace_surface,
     require_workspace_context,
 )
+from core.runtime.tool_result_classification import (
+    RuntimeToolClassificationProjection,
+)
 
 
 TOOL_RESULT_ARTIFACT_PREFIX = "runtime-tool-result:"
@@ -154,6 +157,10 @@ def build_tool_result_artifact_capabilities(
         return RuntimeToolSurfaceResult(
             result,
             _artifact_classification(invocation),
+            RuntimeToolClassificationProjection.bind(
+                result,
+                omitted_paths=(("artifact_ref",), ("sha256",)),
+            ),
         )
 
     schema = {

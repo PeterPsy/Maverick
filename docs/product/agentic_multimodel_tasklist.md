@@ -72,10 +72,11 @@ completion claim.
 - [x] Filesystem/tool results bind classification to the exact observed resource
   identity, revision, and digest. Missing/incoherent classification becomes
   `unclassified` and cannot egress.
-- [x] PAN marker detection ignores numeric runs contained inside complete
-  hexadecimal identity/digest tokens of at least 32 characters, while standalone valid
-  Luhn candidates remain `regulated_or_customer_data`. Random filesystem
-  revisions therefore cannot make the certification corpus nondeterministic.
+- [x] PAN marker detection remains conservative inside arbitrary hexadecimal
+  text and JSON. Only exact Core-minted identity/digest metadata is removed from
+  the scan through a typed projection bound to the complete tool payload;
+  filesystem paths/content, shell output, discovery descriptions, and every
+  other controllable byte remain in scope.
 - [x] Encrypted provider-private state persists only redaction-safe source
   digests/classes/trust plus exact classification-authority id, kind, ref,
   revision, digest, policy revision, and binding state. Mutable authority
@@ -92,7 +93,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v28 records six maintained transitive dependency contracts and
+- [x] Manifest v29 records six maintained transitive dependency contracts and
   the exact executable roots for every admitted built-in app CLI/MCP surface. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
@@ -104,8 +105,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v38 / matrix
-  `2026-09-04-r38-p4-pan-classification-determinism-tcb28`
+- [x] Google and OpenRouter suite v39 / matrix
+  `2026-09-04-r39-p4-typed-result-classification-tcb29`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -552,11 +553,11 @@ completion claim.
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 34, semantic compiler revision 10, Full Workspace result contract
-  `codex-baseline-v20`, context-compaction schema 3, TCB manifest v28, suite 38,
-  and matrix `2026-09-04-r38-p4-pan-classification-determinism-tcb28` create
-  immutable Google revision 42 and OpenRouter revision 41 previews. Historical
-  revisions 41/40
+- [x] Adapter 35, semantic compiler revision 10, Full Workspace result contract
+  `codex-baseline-v20`, context-compaction schema 3, TCB manifest v29, suite 39,
+  and matrix `2026-09-04-r39-p4-typed-result-classification-tcb29` create
+  immutable Google revision 43 and OpenRouter revision 42 previews. Historical
+  revisions 42/41
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
   `full_workspace_contract_revision=codex-baseline-v20`; the central validator

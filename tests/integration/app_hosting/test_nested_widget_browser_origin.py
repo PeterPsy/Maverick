@@ -110,6 +110,23 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
             self.assertEqual(wrong_path_status, 404)
             self.assertEqual(json.loads(wrong_path_body), {"error": "widget_frame_unavailable"})
 
+            undeclared_subpath_status, undeclared_subpath_body, _undeclared_subpath_headers = await self._invoke(
+                app,
+                host=parent["host"],
+                path=WIDGET_BROWSER_LAUNCH_PATH,
+                method="POST",
+                body=json.dumps({
+                    **request,
+                    "frontend_path": f"{request['frontend_path']}undeclared",
+                }).encode(),
+                headers=self._parent_headers(parent),
+            )
+            self.assertEqual(undeclared_subpath_status, 404)
+            self.assertEqual(
+                json.loads(undeclared_subpath_body),
+                {"error": "widget_frame_unavailable"},
+            )
+
             wrong_parent_launch = await self._issue_launch(app, parent, request)
             nested_origin = wrong_parent_launch["origin"]
             nested_host = nested_origin.removeprefix("http://")

@@ -22,7 +22,7 @@ def clean_nested_widget_launch_path(
     raw = clean_relative_origin_url(value)
     parsed = urlsplit(raw)
     expected_prefix = f"/api/apps/widgets/{owner_app_id}/{widget_id}/frontend/"
-    if parsed.fragment or not parsed.path.startswith(expected_prefix):
+    if parsed.fragment or parsed.path != expected_prefix:
         raise AppHostingError("Widget frame launch path does not match the requested widget.")
     return f"{raw}#context={quote(context_token, safe='')}"
 

@@ -65,11 +65,12 @@ switcher component must never call the API directly.
 
 All parent-side authorization observations use the shared shell revocation
 channel: ordinary shell APIs, both `/api/pwa/config` projections, structured
-broker reads, Storage file broker reads, and isolated-frame launch. Notification
-and iframe teardown are synchronous and idempotent; durable deletion remains
-serialized. Do not await that deletion inside an HTTP request timeout window:
-an observed `401`/`403` must remain terminal HTTP rather than becoming a
-transport timeout.
+broker reads, Storage file broker reads, and isolated-frame launch. Every
+observation repeats the synchronous AppShell notification and iframe teardown,
+even if an earlier cleanup has not settled. Coalesce only the durable cleanup
+promise, which remains serialized. Do not await that deletion inside an HTTP
+request timeout window: an observed `401`/`403` must remain terminal HTTP rather
+than becoming a transport timeout.
 Cached catalog or content data is never used to authorize launch, install,
 write, publish, provider, capability, or confirmation actions.
 

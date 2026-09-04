@@ -1677,11 +1677,12 @@ does not remount frames through a follow-up session read.
 
 Every parent-owned path that can observe `401` or `403`—shell APIs, PWA config,
 structured data, Storage file bytes, and isolated-frame launch—uses one
-idempotent authorization-revocation channel. The channel synchronously cancels
-the active shell load and removes authenticated UI before awaiting its
-serialized durable cleanup. Cleanup latency is outside request timeout
-classification: once an HTTP authorization response exists, it remains the
-terminal HTTP result and cannot be rewritten as a transport timeout.
+idempotent authorization-revocation channel. Each observed authorization
+failure synchronously signals AppShell, cancels the active shell load, and
+removes authenticated UI even when a prior cleanup is pending. Only the durable
+cleanup promise is coalesced and serialized. Cleanup latency is outside request
+timeout classification: once an HTTP authorization response exists, it remains
+the terminal HTTP result and cannot be rewritten as a transport timeout.
 
 The initial declarations are Website Studio site snapshots, Storage catalog
 metadata, the App Store catalog, and Fitness Coach bootstrap/thumbnail data.

@@ -25,10 +25,19 @@ export function subscribeShellAuthorizationRevocation(
 }
 
 export function revokeShellAuthorization(status: ShellAuthorizationStatus): Promise<void> {
-  if (authorizationRevocationInFlight) {
-    return authorizationRevocationInFlight;
-  }
+  const revocation = authorizationRevocationInFlight ?? startAuthorizationRevocationCleanup();
 
+  for (const listener of [...authorizationRevocationListeners]) {
+    try {
+      listener(status);
+    } catch {
+      // UI teardown is best-effort per listener; cache cleanup remains authoritative.
+    }
+  }
+  return revocation;
+}
+
+function startAuthorizationRevocationCleanup(): Promise<void> {
   let cleanup: Promise<unknown>;
   try {
     cleanup = shellCacheLifecycle.authorizationFailure();
@@ -44,14 +53,6 @@ export function revokeShellAuthorization(status: ShellAuthorizationStatus): Prom
       }
     });
   authorizationRevocationInFlight = revocation;
-
-  for (const listener of [...authorizationRevocationListeners]) {
-    try {
-      listener(status);
-    } catch {
-      // UI teardown is best-effort per listener; cache cleanup remains authoritative.
-    }
-  }
   return revocation;
 }
 

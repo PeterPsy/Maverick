@@ -321,11 +321,11 @@ resulting session.
 
 Shell API requests, PWA-config reads, structured-data reads, Storage file
 reads, and isolated-frame launch share one authorization-revocation channel.
-The channel is safe to invoke repeatedly, signals AppShell synchronously, and
-performs durable cleanup through the serialized lifecycle. That cleanup is not
-part of network timeout classification: a received `401`/`403` remains a
-terminal HTTP response even if cleanup is delayed behind another lifecycle
-operation.
+Every invocation signals AppShell synchronously, including while another
+revocation cleanup is pending; only the durable cleanup promise is coalesced
+through the serialized lifecycle. That cleanup is not part of network timeout
+classification: a received `401`/`403` remains a terminal HTTP response even
+if cleanup is delayed behind another lifecycle operation.
 
 ## Supersession boundary
 

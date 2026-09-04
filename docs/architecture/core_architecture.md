@@ -1476,10 +1476,11 @@ clears the applicable structured scope, and notifies AppShell to discard its
 authenticated state and unmount every app/widget frame; successful login then
 mounts fresh documents. Shell API calls, both PWA-config projections, the
 structured-data broker, the Storage file broker, and isolated-frame launch all
-enter that same immediate, idempotent revocation channel. Its UI notification
-does not wait behind durable cleanup, and an already received `401`/`403`
-retains its terminal HTTP classification even when serialized cleanup takes
-longer than the network timeout.
+enter that same immediate, idempotent revocation channel. Every observed
+authorization failure emits a synchronous UI notification, including while a
+prior durable cleanup is still pending; only the cleanup promise is coalesced.
+An already received `401`/`403` retains its terminal HTTP classification even
+when serialized cleanup takes longer than the network timeout.
 
 AppShell owns every active-workspace mutation, including requests initiated by
 the workspace switcher. Before Core receives the mutation, the shell cancels

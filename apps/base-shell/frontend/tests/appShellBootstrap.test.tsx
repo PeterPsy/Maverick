@@ -88,7 +88,11 @@ vi.mock("../src/components/FloatingChatHost", () => ({
   FloatingChatHost: () => <div data-testid="floating-chat-host" />,
 }));
 vi.mock("../src/components/LoginScreen", () => ({
-  LoginScreen: () => <div data-testid="login-screen" />,
+  LoginScreen: ({ onAuthenticated }: { onAuthenticated: () => void }) => (
+    <div data-testid="login-screen">
+      <button data-testid="retry-authenticated-bootstrap" onClick={onAuthenticated} type="button" />
+    </div>
+  ),
 }));
 vi.mock("../src/components/ProviderSetupDialog", () => ({
   ProviderSetupDialog: () => <div data-testid="provider-setup" />,
@@ -481,6 +485,40 @@ describe("AppShell bootstrap", () => {
     expect(dataCacheBrokerHost.frameScope).toBeNull();
     expect(dataCacheBrokerHost.principal).toBeNull();
     expect(api.listApps).toHaveBeenCalledOnce();
+  });
+
+  it("does not strand a new bootstrap when authorization is revoked during an existing cleanup", async () => {
+    await renderShell();
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).not.toBeNull();
+
+    const authorizationCleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.authorizationFailure>>>();
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockReturnValue(authorizationCleanup.promise);
+    let firstRevocation!: Promise<void>;
+
+    try {
+      await act(async () => {
+        firstRevocation = revokeShellAuthorization(403);
+        await Promise.resolve();
+      });
+      expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+
+      api.getSession.mockRejectedValueOnce(
+        new MaverickHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
+      );
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>("[data-testid='retry-authenticated-bootstrap']")?.click();
+        await until(() => api.getSession.mock.calls.length === 2);
+        await Promise.resolve();
+      });
+
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(container.querySelector("[aria-label='Loading workspace']")).toBeNull();
+      expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+      expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+    } finally {
+      authorizationCleanup.resolve(completeCleanup());
+      await firstRevocation;
+    }
   });
 });
 

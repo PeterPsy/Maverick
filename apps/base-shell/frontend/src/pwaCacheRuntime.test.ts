@@ -6,7 +6,7 @@ import {
 } from "./pwaCacheRuntime";
 
 describe("Base Shell authorization revocation channel", () => {
-  it("notifies synchronously and coalesces cleanup for one revocation wave", async () => {
+  it("repeats synchronous notifications while coalescing cleanup for one revocation wave", async () => {
     const pendingCleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.authorizationFailure>>>();
     const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockReturnValue(pendingCleanup.promise);
     const listener = vi.fn();
@@ -15,15 +15,16 @@ describe("Base Shell authorization revocation channel", () => {
     const first = revokeShellAuthorization(401);
     const duplicate = revokeShellAuthorization(403);
 
-    expect(first).toBe(duplicate);
-    expect(listener).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledWith(401);
-    expect(cleanup).toHaveBeenCalledOnce();
-
-    pendingCleanup.resolve({ pendingCleanupCount: 0, removed: 1, status: "complete" });
-    await first;
-    unsubscribe();
-    vi.restoreAllMocks();
+    try {
+      expect(first).toBe(duplicate);
+      expect(listener.mock.calls).toEqual([[401], [403]]);
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      pendingCleanup.resolve({ pendingCleanupCount: 0, removed: 1, status: "complete" });
+      await first;
+      unsubscribe();
+      vi.restoreAllMocks();
+    }
   });
 });
 

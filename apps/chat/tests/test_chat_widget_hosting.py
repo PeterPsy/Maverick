@@ -115,6 +115,7 @@ class ChatWidgetHostingTests(unittest.TestCase):
     def test_chat_structured_messages_use_generic_widget_host(self) -> None:
         structured_source = (REPO_ROOT / "apps/chat/frontend/src/components/StructuredContentMessage.tsx").read_text()
         host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()
+        launch_source = (REPO_ROOT / "apps/chat/frontend/src/lib/nestedWidgetFrame.ts").read_text()
         structured_styles = (REPO_ROOT / "apps/chat/frontend/src/styles/chat/transcript/structured-content.css").read_text()
 
         self.assertIn("<WidgetHostFrame", structured_source)
@@ -131,8 +132,14 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn("widget_id: widget.widget_id", host_source)
         self.assertIn("message_id: messageId", host_source)
         self.assertIn("content,", host_source)
-        self.assertIn("state.widget.frontend_mount", host_source)
-        self.assertIn("#context=", host_source)
+        self.assertIn("requestNestedWidgetLaunch(widget, context.context_token)", host_source)
+        self.assertIn('src="about:blank"', host_source)
+        self.assertIn("submitNestedWidgetBootstrap(frame, state.launch)", host_source)
+        self.assertIn('"/api/apps/widgets/browser-launch"', launch_source)
+        self.assertIn("record.parent_origin !== normalizedParentOrigin", launch_source)
+        self.assertIn("record.owner_app_id !== widget.owner_app_id", launch_source)
+        self.assertIn("event.origin !== launch.origin", launch_source)
+        self.assertIn("event.source !== frame?.contentWindow", launch_source)
         self.assertIn("sandbox={MAVERICK_WIDGET_IFRAME_SANDBOX}", host_source)
         self.assertNotIn("widgetContextTokenFromLocation", host_source)
 
@@ -150,8 +157,8 @@ class ChatWidgetHostingTests(unittest.TestCase):
         resize_source = (REPO_ROOT / "apps/chat/frontend/src/lib/widgetResize.ts").read_text()
 
         self.assertIn("boundedWidgetHeightPx(payload.height)", host_source)
-        self.assertIn("payload.owner_app_id !== widget.owner_app_id", host_source)
-        self.assertIn("payload.widget_id !== widget.widget_id", host_source)
+        self.assertIn("payload.owner_app_id === widget.owner_app_id", host_source)
+        self.assertIn("payload.widget_id === widget.widget_id", host_source)
         self.assertIn("STRUCTURED_WIDGET_MIN_HEIGHT_PX", resize_source)
         self.assertIn("STRUCTURED_WIDGET_MAX_HEIGHT_PX", resize_source)
 

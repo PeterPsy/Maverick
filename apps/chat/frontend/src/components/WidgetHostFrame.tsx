@@ -2,15 +2,30 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createWidgetContext, listWidgets } from "../api/client";
 import type { StructuredContent, WidgetRegistryItem } from "../api/client";
+import {
+  isNestedWidgetLoadedMessage,
+  NESTED_WIDGET_LOAD_TIMEOUT_MS,
+  requestNestedWidgetLaunch,
+  submitNestedWidgetBootstrap,
+} from "../lib/nestedWidgetFrame";
+import type { NestedWidgetLaunch } from "../lib/nestedWidgetFrame";
 import { openAppParamsInShell } from "../lib/shellNavigation";
 import { boundedWidgetHeightPx } from "../lib/widgetResize";
 
 const MAVERICK_WIDGET_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-same-origin allow-scripts";
 
+type MountedWidgetState = {
+  contextToken: string;
+  launch: NestedWidgetLaunch;
+  widget: WidgetRegistryItem;
+};
+
 type WidgetHostState =
   | { status: "loading" }
   | { status: "fallback"; reason?: string }
-  | { status: "ready"; widget: WidgetRegistryItem; contextToken: string };
+  | ({ status: "launching" | "ready" } & MountedWidgetState);
+
+type WidgetFallbackState = Extract<WidgetHostState, { status: "loading" | "fallback" }>;
 
 export function WidgetHostFrame({
   content,
@@ -20,7 +35,7 @@ export function WidgetHostFrame({
   title,
 }: {
   content: StructuredContent;
-  fallback: (state: Extract<WidgetHostState, { status: "loading" | "fallback" }>) => ReactNode;
+  fallback: (state: WidgetFallbackState) => ReactNode;
   hostAppId: string;
   messageId: string;
   title?: string;
@@ -28,7 +43,12 @@ export function WidgetHostFrame({
   const [state, setState] = useState<WidgetHostState>({ status: "loading" });
   const [frameHeight, setFrameHeight] = useState<number | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const submittedTicketRef = useRef("");
   const contentSignature = useMemo(() => stableContentSignature(content), [content]);
+  const frameName = useMemo(
+    () => `maverick-widget-${Math.random().toString(36).slice(2)}`,
+    [contentSignature, hostAppId, messageId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -51,12 +71,18 @@ export function WidgetHostFrame({
           message_id: messageId,
           content,
         });
+        const launch = await requestNestedWidgetLaunch(widget, context.context_token);
         if (!cancelled) {
-          setState({ status: "ready", widget, contextToken: context.context_token });
+          setState({
+            status: "launching",
+            widget,
+            contextToken: context.context_token,
+            launch,
+          });
         }
       } catch (error) {
         if (!cancelled) {
-          setState({ status: "fallback", reason: error instanceof Error ? error.message : "Widget unavailable." });
+          setState({ status: "fallback", reason: widgetErrorMessage(error) });
         }
       }
     }
@@ -69,28 +95,57 @@ export function WidgetHostFrame({
   }, [contentSignature, hostAppId, messageId]);
 
   useEffect(() => {
-    if (state.status !== "ready") {
+    if (state.status !== "launching" && state.status !== "ready") {
       return;
     }
-    const widget = state.widget;
+    const { launch, widget } = state;
 
     function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || !event.data || typeof event.data !== "object") {
+      if (isNestedWidgetLoadedMessage(event, frameRef.current, launch)) {
+        setState((current) => (
+          current.status === "launching" && current.launch.ticket === launch.ticket
+            ? { ...current, status: "ready" }
+            : current
+        ));
         return;
       }
-      const payload = event.data as { type?: string; height?: string; owner_app_id?: string; widget_id?: string };
       if (
-        payload.type !== "maverick.widget.resize" ||
-        payload.owner_app_id !== widget.owner_app_id ||
-        payload.widget_id !== widget.widget_id
+        event.origin !== launch.origin
+        || event.source !== frameRef.current?.contentWindow
+        || !event.data
+        || typeof event.data !== "object"
       ) {
         return;
       }
-      const nextHeight = boundedWidgetHeightPx(payload.height);
-      if (nextHeight === null) {
+      const payload = event.data as {
+        app_id?: string;
+        height?: string;
+        owner_app_id?: string;
+        params?: unknown;
+        type?: string;
+        widget_id?: string;
+      };
+      if (payload.type === "maverick.app-frame.authorization-required") {
+        setState({ status: "fallback", reason: "Widget session unavailable." });
         return;
       }
-      setFrameHeight(nextHeight);
+      if (state.status !== "ready") {
+        return;
+      }
+      if (
+        payload.type === "maverick.widget.resize"
+        && payload.owner_app_id === widget.owner_app_id
+        && payload.widget_id === widget.widget_id
+      ) {
+        const nextHeight = boundedWidgetHeightPx(payload.height);
+        if (nextHeight !== null) {
+          setFrameHeight(nextHeight);
+        }
+        return;
+      }
+      if (payload.type === "maverick.widget.open-app" && typeof payload.app_id === "string") {
+        openAppParamsInShell(payload.app_id, shellRouteParamsFromWidgetParams(payload.params));
+      }
     }
 
     window.addEventListener("message", handleMessage);
@@ -98,44 +153,63 @@ export function WidgetHostFrame({
   }, [state]);
 
   useEffect(() => {
-    if (state.status !== "ready") {
+    if (state.status !== "launching") {
       return;
     }
-
-    function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || !event.data || typeof event.data !== "object") {
-        return;
-      }
-      const payload = event.data as { type?: string; app_id?: string; params?: unknown };
-      if (payload.type !== "maverick.widget.open-app" || typeof payload.app_id !== "string") {
-        return;
-      }
-      openAppParamsInShell(payload.app_id, shellRouteParamsFromWidgetParams(payload.params));
+    const frame = frameRef.current;
+    if (!frame) {
+      setState({ status: "fallback", reason: "Widget frame unavailable." });
+      return;
     }
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
+    try {
+      if (submittedTicketRef.current !== state.launch.ticket) {
+        submittedTicketRef.current = state.launch.ticket;
+        submitNestedWidgetBootstrap(frame, state.launch);
+      }
+    } catch (error) {
+      setState({ status: "fallback", reason: widgetErrorMessage(error) });
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setState((current) => (
+        current.status === "launching" && current.launch.ticket === state.launch.ticket
+          ? { status: "fallback", reason: "Widget load timed out." }
+          : current
+      ));
+    }, NESTED_WIDGET_LOAD_TIMEOUT_MS);
+    return () => window.clearTimeout(timeout);
   }, [state]);
 
-  if (state.status === "ready") {
-    const src = `${state.widget.frontend_mount}#context=${encodeURIComponent(state.contextToken)}`;
-    return (
+  if (state.status === "loading" || state.status === "fallback") {
+    return <>{fallback(state)}</>;
+  }
+
+  const loading = state.status === "launching";
+  return (
+    <>
+      {loading ? fallback({ status: "loading" }) : null}
       <iframe
         allow="fullscreen"
         allowFullScreen
+        aria-hidden={loading}
         className="chatapp-structured-widget"
-        ref={frameRef}
+        hidden={loading}
         key={`${hostAppId}:${messageId}:${state.widget.owner_app_id}:${state.widget.widget_id}:${state.contextToken}`}
+        name={frameName}
+        onError={() => setState({ status: "fallback", reason: "Widget frame failed to load." })}
+        ref={frameRef}
         sandbox={MAVERICK_WIDGET_IFRAME_SANDBOX}
         scrolling="no"
-        src={src}
+        src="about:blank"
         style={frameHeight ? { height: `${frameHeight}px` } : undefined}
         title={title || `${content.kind} widget`}
       />
-    );
-  }
+    </>
+  );
+}
 
-  return <>{fallback(state)}</>;
+function widgetErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : "Widget unavailable.";
 }
 
 function shellRouteParamsFromWidgetParams(params: unknown): Record<string, string | boolean | null> {

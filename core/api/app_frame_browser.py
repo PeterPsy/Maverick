@@ -3,38 +3,45 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from hashlib import sha256
 import json
-import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from core.api.app_frame_assets import rewrite_public_app_asset_urls
+from core.api.app_frame_launch import (
+    APP_FRAME_BOOTSTRAP_PATH,
+    APP_FRAME_SIDECAR_ID,
+    APP_FRAME_SURFACE_KIND,
+    app_frame_label,
+    app_generation_id,
+    authorized_app_surface,
+    clean_app_launch_path,
+    content_security_policy,
+    ensure_app_frame_tls,
+    isolated_origin,
+    request_platform_origin,
+    valid_exact_host,
+)
 from core.api.app_frame_scope import (
     APP_FRAME_OWNER_MISMATCH_ERROR,
     app_frame_path_matches_owner,
     bind_app_frame_scope,
 )
-from core.api.app_registry import enabled_app_items, resolve_app_surface, user_can_mount_app
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, SESSION_COOKIE
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
-from core.apps.presentation import app_frontend_is_launchable
 from core.apps.sidecar_browser_sessions import (
     MAX_TICKET_TTL_SECONDS,
     SESSION_IDLE_TTL_SECONDS,
     SidecarBrowserBinding,
     SidecarBrowserSession,
 )
+from core.apps.widgets import resolve_workspace_widget
 from core.identity.errors import SessionNotFoundError, UserNotFoundError
-from core.shared.browser_origin_tls import (
-    BrowserOriginTlsError,
-    ensure_browser_origin_tls,
-    managed_browser_origin_tls_enabled,
-)
+from core.shared.browser_origin_tls import BrowserOriginTlsError
 from core.workspaces.service import resolve_active_workspace_for_user
 
 
@@ -43,19 +50,13 @@ AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 AsgiForward = Callable[[dict[str, Any], AsgiReceive, AsgiSend], Awaitable[None]]
 
 APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch"
-APP_FRAME_BOOTSTRAP_PATH = "/.well-known/maverick-app-frame-bootstrap"
 APP_FRAME_SESSION_LEASE_PATH = "/.well-known/maverick-app-frame-session"
 APP_FRAME_COOKIE_NAME = "maverick_app_frame_session"
-APP_FRAME_SURFACE_KIND = "app-frame"
-APP_FRAME_SIDECAR_ID = "__maverick_app_frame__"
 APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "maverick.app-frame.authorization-required"
+APP_FRAME_LOADED_MESSAGE = "maverick.app-frame.loaded"
 _APP_FRAME_SESSION_LEASE_INTERVAL_MS = 2 * 60 * 1000
 _APP_FRAME_SESSION_LEASE_RETRY_MAX_MS = 15 * 1000
 _MAX_BOOTSTRAP_BODY_BYTES = 4096
-_DOMAIN_PATTERN = re.compile(
-    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
-    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
-)
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
@@ -79,26 +80,26 @@ def handle_app_frame_browser_launch(
         return json_response(start_response, {"error": "invalid_app_frame_launch_request"}, status="400 Bad Request")
     app_id = str(body.get("app_id") or "").strip()
     try:
-        binding, _source_root, parsed = _authorized_app_surface(
+        binding, _source_root, _parsed = authorized_app_surface(
             state,
             actor_user_id=context.user.user_id,
             workspace_id=context.workspace_id,
             app_id=app_id,
             start_path=start_path,
         )
-        clean_path = _clean_app_launch_path(
+        clean_path = clean_app_launch_path(
             body.get("path"),
             local_app_id=binding.app_id,
             mount_app_id=binding.mount_app_id or binding.app_id,
         )
-        platform_origin = _request_platform_origin(environ)
-        origin, host, secure = _isolated_origin(
+        platform_origin = request_platform_origin(environ)
+        origin, host, secure = isolated_origin(
             environ,
-            label=_app_frame_label(
+            label=app_frame_label(
                 actor_user_id=context.user.user_id,
                 workspace_id=context.workspace_id,
                 app_id=binding.app_id,
-                generation_id=_app_generation_id(binding),
+                generation_id=app_generation_id(binding),
                 platform_session_id=context.session.session_id,
             ),
             platform_origin=platform_origin,
@@ -111,7 +112,7 @@ def handle_app_frame_browser_launch(
             headers=_launch_headers(),
         )
     try:
-        _ensure_app_frame_tls(
+        ensure_app_frame_tls(
             state,
             context=context,
             environ=environ,
@@ -126,7 +127,7 @@ def handle_app_frame_browser_launch(
             status="503 Service Unavailable",
             headers=_launch_headers(),
         )
-    generation_id = _app_generation_id(binding)
+    generation_id = app_generation_id(binding)
     browser_binding = SidecarBrowserBinding(
         actor_user_id=context.user.user_id,
         workspace_id=context.workspace_id,
@@ -139,7 +140,7 @@ def handle_app_frame_browser_launch(
         sidecar_instance_id=context.session.session_id,
         clean_path=clean_path,
         secure=secure,
-        content_security_policy=_content_security_policy(platform_origin),
+        content_security_policy=content_security_policy(platform_origin),
         surface_kind=APP_FRAME_SURFACE_KIND,
         platform_session_id=context.session.session_id,
         mount_app_id=binding.mount_app_id or binding.app_id,
@@ -181,7 +182,7 @@ def handle_app_frame_oauth_relay(
         return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
     app_id = match.group(1)
     try:
-        binding, _source_root, _parsed = _authorized_app_surface(
+        binding, _source_root, _parsed = authorized_app_surface(
             state,
             actor_user_id=context.user.user_id,
             workspace_id=context.workspace_id,
@@ -239,7 +240,7 @@ async def handle_app_frame_browser_origin(
 ) -> None:
     """Authenticate an isolated origin request and proxy it into PlatformHost."""
     hosts = _header_values(scope, b"host")
-    if len(hosts) != 1 or not _valid_exact_host(hosts[0]):
+    if len(hosts) != 1 or not valid_exact_host(hosts[0]):
         await _send_json(send, {"error": "app_frame_host_invalid"}, status=421, headers=_denial_headers())
         return
     host = hosts[0].lower()
@@ -306,7 +307,7 @@ async def handle_app_frame_browser_websocket(
 ) -> None:
     """Authorize an isolated-origin WebSocket and bind it to the login session."""
     hosts = _header_values(scope, b"host")
-    if len(hosts) != 1 or not _valid_exact_host(hosts[0]):
+    if len(hosts) != 1 or not valid_exact_host(hosts[0]):
         await send({"type": "websocket.close", "code": 4401})
         return
     host = hosts[0].lower()
@@ -402,7 +403,12 @@ async def _handle_bootstrap(
     if set(fields) != {"ticket"} or len(ticket_values) != 1 or not ticket_values[0]:
         await _send_json(send, {"error": "bootstrap_ticket_invalid"}, status=400, headers=_denial_headers())
         return
-    issued = state.sidecar_browser_sessions.consume_ticket(ticket_values[0], host=host)
+    parent_origins = _header_values(scope, b"origin")
+    issued = state.sidecar_browser_sessions.consume_ticket(
+        ticket_values[0],
+        host=host,
+        parent_origin=parent_origins[0] if len(parent_origins) == 1 else "",
+    )
     if issued is None or issued.session.binding.surface_kind != APP_FRAME_SURFACE_KIND:
         await _send_json(send, {"error": "bootstrap_ticket_expired_or_spent"}, status=410, headers=_denial_headers())
         return
@@ -508,46 +514,35 @@ def _current_app_frame(
     selection = resolve_active_workspace_for_user(state.workspace_store, user_id=user.user_id, now=now)
     if selection is None or selection.workspace_id != binding.workspace_id:
         return None
-    try:
-        current = _authorized_app_surface(
-            state,
-            actor_user_id=user.user_id,
+    if binding.widget_id:
+        resolved_widget = resolve_workspace_widget(
+            state.app_store,
             workspace_id=binding.workspace_id,
-            app_id=binding.app_id,
+            owner_app_id=binding.app_id,
+            widget_id=binding.widget_id,
+            workspace_store=state.workspace_store,
+            user=user,
             start_path=start_path,
         )
-    except (AppHostingError, WorkspaceAppBindingNotFoundError):
-        return None
-    return current if _app_generation_id(current[0]) == binding.generation_id else None
-
-
-def _authorized_app_surface(
-    state: PlatformState,
-    *,
-    actor_user_id: str,
-    workspace_id: str,
-    app_id: str,
-    start_path: Path,
-) -> tuple[Any, Path, Any]:
-    if not app_id:
-        raise AppHostingError("An app id is required for isolated frame launch.")
-    user = state.identity_store.get_user(actor_user_id)
-    binding, source_root, parsed = resolve_app_surface(
-        state,
-        workspace_id=workspace_id,
-        app_id=app_id,
-        start_path=start_path,
-    )
-    if not user_can_mount_app(
-        state,
-        user=user,
-        workspace_id=workspace_id,
-        visibility=parsed.contract.visibility,
-    ):
-        raise AppHostingError("The app frame is not visible to this actor.")
-    if not app_frontend_is_launchable(parsed.contract) or parsed.contract.entrypoints.frontend is None:
-        raise AppHostingError("The app does not expose a launchable frontend.")
-    return binding, source_root, parsed
+        if resolved_widget is None or resolved_widget.widget.host != binding.widget_host:
+            return None
+        current = (
+            resolved_widget.binding,
+            resolved_widget.source_root,
+            resolved_widget.parsed,
+        )
+    else:
+        try:
+            current = authorized_app_surface(
+                state,
+                actor_user_id=user.user_id,
+                workspace_id=binding.workspace_id,
+                app_id=binding.app_id,
+                start_path=start_path,
+            )
+        except (AppHostingError, WorkspaceAppBindingNotFoundError):
+            return None
+    return current if app_generation_id(current[0]) == binding.generation_id else None
 
 
 def _platform_scope(scope: dict[str, Any], session: SidecarBrowserSession, *, websocket: bool) -> dict[str, Any]:
@@ -585,6 +580,7 @@ def _platform_scope(scope: dict[str, Any], session: SidecarBrowserSession, *, we
         scope,
         app_id=binding.app_id,
         mount_app_id=binding.mount_app_id or binding.app_id,
+        origin=binding.origin,
     )
     transformed.update(
         {
@@ -707,8 +703,10 @@ def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
     except UnicodeDecodeError:
         return body
     platform_origin = binding.platform_origin
+    parent_origin = binding.parent_origin or platform_origin
     html = rewrite_public_app_asset_urls(html, platform_origin)
     origin = json.dumps(platform_origin, ensure_ascii=True)
+    parent = json.dumps(parent_origin, ensure_ascii=True)
     frame_context = json.dumps(
         {
             "app_id": binding.mount_app_id or binding.app_id,
@@ -719,9 +717,18 @@ def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
     ).replace("<", "\\u003c")
     lease_path = json.dumps(APP_FRAME_SESSION_LEASE_PATH, ensure_ascii=True)
     authorization_message = json.dumps(APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE, ensure_ascii=True)
+    loaded_message = json.dumps(
+        {
+            "type": APP_FRAME_LOADED_MESSAGE,
+            "owner_app_id": binding.mount_app_id or binding.app_id,
+            **({"widget_id": binding.widget_id} if binding.widget_id else {}),
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).replace("<", "\\u003c")
     script = (
         "<script>"
-        "(()=>{const o=" + origin + ";"
+        "(()=>{const o=" + origin + ",po=" + parent + ";"
         "const fc=Object.freeze(" + frame_context + ");"
         "const lp=" + lease_path + ",am=" + authorization_message + ";"
         "let hv=true,lt=0,lr=0,lf=false;"
@@ -740,7 +747,7 @@ def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
         + ";try{const r=await fetch(lp,{method:'POST',credentials:'same-origin',cache:'no-store'});"
         "if(r.status===401||r.status===403||r.status===410){lr=0;d="
         + str(_APP_FRAME_SESSION_LEASE_RETRY_MAX_MS)
-        + ";window.parent.postMessage({type:am,path:location.pathname+location.search+location.hash},o);}"
+        + ";window.parent.postMessage({type:am,path:location.pathname+location.search+location.hash},po);}"
         "else if(r.ok){lr=0;}else{lr=Math.min(lr+1,4);d=Math.min("
         + str(_APP_FRAME_SESSION_LEASE_RETRY_MAX_MS)
         + ",1000*(2**lr));}}"
@@ -755,13 +762,14 @@ def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
         "{value:fc,writable:false,configurable:false});"
         "a({type:'maverick.shell.layout-changed',mobile:new URLSearchParams(location.search).get('maverick_mobile_layout')==='1'});"
         "window.addEventListener('message',e=>{"
-        "if(e.source!==window.parent||e.origin!==o)return;"
+        "if(e.source!==window.parent||e.origin!==po)return;"
         "a(e.data);v(e.data);"
         "try{window.postMessage(e.data,window.location.origin,[...e.ports]);}"
         "catch(_){window.postMessage(e.data,window.location.origin);}},true);"
         "document.addEventListener('visibilitychange',lw);"
         "window.addEventListener('focus',lw);window.addEventListener('online',lw);"
-        "window.addEventListener('pageshow',lw);ls(0);"
+        "window.addEventListener('pageshow',lw);"
+        "window.parent.postMessage(" + loaded_message + ",po);ls(0);"
         "})();"
         "</script>"
     )
@@ -771,154 +779,6 @@ def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
     else:
         html = f"{script}{html}"
     return html.encode("utf-8")
-
-
-def _app_generation_id(binding: Any) -> str:
-    identity = "\0".join(
-        str(getattr(binding, field, "") or "")
-        for field in ("binding_id", "source_record_id", "active_version", "data_root", "mount_app_id")
-    )
-    return sha256(identity.encode("utf-8")).hexdigest()
-
-
-def _app_frame_label(
-    *,
-    actor_user_id: str,
-    workspace_id: str,
-    app_id: str,
-    generation_id: str,
-    platform_session_id: str,
-) -> str:
-    identity = "\0".join(
-        (actor_user_id, workspace_id, app_id, generation_id, platform_session_id)
-    ).encode("utf-8")
-    return f"af-{sha256(identity).hexdigest()[:24]}"
-
-
-def _ensure_app_frame_tls(
-    state: PlatformState,
-    *,
-    context: RequestSession,
-    environ: dict[str, Any],
-    start_path: Path,
-    platform_origin: str,
-    requested_host: str,
-) -> None:
-    if not managed_browser_origin_tls_enabled():
-        return
-    if os.environ.get("MAVERICK_SIDECAR_ORIGIN_MODE", "local").strip().lower() != "hosted":
-        raise BrowserOriginTlsError("Managed browser-origin TLS requires hosted origins.")
-    hosts = {requested_host}
-    for item in enabled_app_items(
-        state,
-        workspace_id=context.workspace_id,
-        start_path=start_path,
-        user=context.user,
-    ):
-        if item.get("frontend_launchable") is not True:
-            continue
-        app_id = str(item.get("app_id") or "")
-        try:
-            binding, _source_root, _parsed = _authorized_app_surface(
-                state,
-                actor_user_id=context.user.user_id,
-                workspace_id=context.workspace_id,
-                app_id=app_id,
-                start_path=start_path,
-            )
-            _origin, candidate_host, _secure = _isolated_origin(
-                environ,
-                label=_app_frame_label(
-                    actor_user_id=context.user.user_id,
-                    workspace_id=context.workspace_id,
-                    app_id=binding.app_id,
-                    generation_id=_app_generation_id(binding),
-                    platform_session_id=context.session.session_id,
-                ),
-                platform_origin=platform_origin,
-            )
-        except (AppHostingError, UserNotFoundError, WorkspaceAppBindingNotFoundError):
-            continue
-        hosts.add(candidate_host)
-    ensure_browser_origin_tls(
-        sorted(hosts),
-        group_key=f"app-frame-session:{context.session.session_id}",
-        repository_root=state.repository_root,
-    )
-
-
-def _clean_app_launch_path(value: object, *, local_app_id: str, mount_app_id: str) -> str:
-    raw = str(value or "").strip()
-    parsed = urlsplit(raw)
-    path = parsed.path
-    if (
-        not path.startswith("/")
-        or path.startswith("//")
-        or parsed.scheme
-        or parsed.netloc
-        or "\\" in raw
-        or any(ord(character) < 32 for character in raw)
-        or any(part in {".", ".."} for part in PurePosixPath(path).parts)
-    ):
-        raise AppHostingError("App frame launch path must be one clean relative-origin URL.")
-    app_prefix = f"/apps/{mount_app_id}/"
-    widget_prefixes = {
-        f"/api/apps/widgets/{local_app_id}/",
-        f"/api/apps/widgets/{mount_app_id}/",
-    }
-    if not path.startswith(app_prefix) and not any(path.startswith(prefix) for prefix in widget_prefixes):
-        raise AppHostingError("App frame launch path does not belong to the requested app.")
-    return raw
-
-
-def _request_platform_origin(environ: dict[str, Any]) -> str:
-    scheme = str(environ.get("wsgi.url_scheme") or "").strip().lower()
-    host = str(environ.get("HTTP_HOST") or "").strip().lower()
-    if scheme not in {"http", "https"} or not _valid_exact_host(host):
-        raise AppHostingError("The platform request does not provide one exact HTTP Host and scheme.")
-    return _normalize_origin(f"{scheme}://{host}")
-
-
-def _isolated_origin(environ: dict[str, Any], *, label: str, platform_origin: str) -> tuple[str, str, bool]:
-    mode = os.environ.get("MAVERICK_SIDECAR_ORIGIN_MODE", "local").strip().lower() or "local"
-    platform = urlsplit(platform_origin)
-    if mode == "local":
-        hostname = str(platform.hostname or "").lower()
-        if not hostname.endswith(".localhost"):
-            raise AppHostingError("Local app-frame origins require a named .localhost platform host.")
-        suffix = f":{platform.port}" if platform.port is not None else ""
-        host = f"{label}.sidecars.{hostname}{suffix}"
-        return f"{platform.scheme}://{host}", host, platform.scheme == "https"
-    if mode == "hosted":
-        domain = os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
-        configured = os.environ.get("MAVERICK_SIDECAR_PLATFORM_ORIGIN", "").strip()
-        if not domain or not _DOMAIN_PATTERN.fullmatch(domain) or not configured:
-            raise AppHostingError("Hosted app-frame origins require the sidecar installation domain and platform origin.")
-        configured_origin = _normalize_origin(configured)
-        if configured_origin != platform_origin or not platform_origin.startswith("https://"):
-            raise AppHostingError("Hosted app-frame origins require the exact configured HTTPS platform origin.")
-        host = f"{label}.sidecars.{domain}"
-        return f"https://{host}", host, True
-    raise AppHostingError("MAVERICK_SIDECAR_ORIGIN_MODE must be `local` or `hosted`.")
-
-
-def _normalize_origin(value: str) -> str:
-    parsed = urlsplit(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
-        raise AppHostingError("App-frame platform origin configuration is invalid.")
-    if parsed.username is not None or parsed.password is not None:
-        raise AppHostingError("App-frame platform origin configuration is invalid.")
-    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
-
-
-def _content_security_policy(platform_origin: str) -> str:
-    return "; ".join(
-        (
-            "base-uri 'self'",
-            "object-src 'none'",
-            f"frame-ancestors 'self' {platform_origin}",
-        )
-    )
 
 
 def _security_headers(binding: SidecarBrowserBinding) -> list[tuple[str, str]]:
@@ -963,19 +823,8 @@ def _header_values(scope: dict[str, Any], name: bytes) -> list[str]:
     ]
 
 
-def _valid_exact_host(value: str) -> bool:
-    if not value or any(character.isspace() for character in value) or "," in value or "/" in value or "@" in value:
-        return False
-    try:
-        parsed = urlsplit(f"//{value}")
-        _ = parsed.port
-    except ValueError:
-        return False
-    return bool(parsed.hostname)
-
-
 def _looks_like_app_frame_host(value: str) -> bool:
-    if not _valid_exact_host(value):
+    if not valid_exact_host(value):
         return value.lower().startswith("af-") and ".sidecars." in value.lower()
     hostname = str(urlsplit(f"//{value}").hostname or "").lower()
     return hostname.startswith("af-") and ".sidecars." in hostname

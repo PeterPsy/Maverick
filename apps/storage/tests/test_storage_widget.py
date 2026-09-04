@@ -11,6 +11,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from core.api.app_frame_scope import (
+    APP_FRAME_APP_ID_SCOPE_KEY,
+    APP_FRAME_MOUNT_APP_ID_SCOPE_KEY,
+    APP_FRAME_PROXY_SCOPE_KEY,
+)
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 
@@ -54,7 +59,7 @@ class StorageWidgetTestCase(unittest.TestCase):
         method: str = "GET",
         body: dict | None = None,
         cookie: str | None = None,
-        isolated_proxy: bool = False,
+        isolated_owner_app_id: str | None = None,
         query_string: str = "",
     ) -> tuple[int, dict | bytes, dict[str, str]]:
         payload = b"" if body is None else json.dumps(body).encode("utf-8")
@@ -69,8 +74,10 @@ class StorageWidgetTestCase(unittest.TestCase):
         }
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
-        if isolated_proxy:
-            environ["maverick.app_frame_proxy"] = True
+        if isolated_owner_app_id is not None:
+            environ[APP_FRAME_PROXY_SCOPE_KEY] = True
+            environ[APP_FRAME_APP_ID_SCOPE_KEY] = isolated_owner_app_id
+            environ[APP_FRAME_MOUNT_APP_ID_SCOPE_KEY] = isolated_owner_app_id
 
         def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
             headers.update(dict(response_headers))
@@ -111,7 +118,7 @@ class StorageWidgetTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/storage/file-preview/frontend/",
             cookie=cookie,
-            isolated_proxy=True,
+            isolated_owner_app_id="storage",
         )
 
         self.assertEqual(registry_status, 200)
@@ -138,7 +145,7 @@ class StorageWidgetTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/storage/storage-sidebar/frontend/",
             cookie=cookie,
-            isolated_proxy=True,
+            isolated_owner_app_id="storage",
         )
 
         self.assertEqual(registry_status, 200)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core.apps.errors import AppHostingError
-from core.apps.models import WidgetDeclaration
+from core.apps.models import ParsedAppContract, WidgetDeclaration, WorkspaceAppBindingRecord
 from core.apps.store import AppStore
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.authorization.service import can_mount_app_visibility
@@ -32,6 +32,8 @@ class ResolvedWidget:
     owner_app_id: str
     widget: WidgetDeclaration
     source_root: Path
+    binding: WorkspaceAppBindingRecord
+    parsed: ParsedAppContract
 
 
 def widget_registry_item(owner_app_id: str, widget: WidgetDeclaration) -> WidgetRegistryItem:
@@ -81,7 +83,7 @@ def list_workspace_widgets(
                 continue
             if content_kind is not None and content_kind not in widget.content_kinds:
                 continue
-            items.append(widget_registry_item(parsed.app_id, widget))
+            items.append(widget_registry_item(binding.app_id, widget))
     return sorted(items, key=lambda item: (item.owner_app_id, item.widget_id))
 
 
@@ -114,5 +116,11 @@ def resolve_workspace_widget(
             return None
         for widget in parsed.contract.widgets:
             if widget.widget_id == widget_id:
-                return ResolvedWidget(owner_app_id=parsed.app_id, widget=widget, source_root=source_root)
+                return ResolvedWidget(
+                    owner_app_id=binding.app_id,
+                    widget=widget,
+                    source_root=source_root,
+                    binding=binding,
+                    parsed=parsed,
+                )
     return None

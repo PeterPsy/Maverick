@@ -9,6 +9,7 @@ from typing import Any, Mapping, MutableMapping
 APP_FRAME_PROXY_SCOPE_KEY = "maverick.app_frame_proxy"
 APP_FRAME_APP_ID_SCOPE_KEY = "maverick.app_frame_app_id"
 APP_FRAME_MOUNT_APP_ID_SCOPE_KEY = "maverick.app_frame_mount_app_id"
+APP_FRAME_ORIGIN_SCOPE_KEY = "maverick.app_frame_origin"
 APP_FRAME_OWNER_MISMATCH_ERROR = "app_frame_owner_mismatch"
 
 _APP_DOCUMENT_PATH = re.compile(r"^/apps/([^/]+)(?:/|$)")
@@ -22,6 +23,7 @@ def bind_app_frame_scope(
     *,
     app_id: str,
     mount_app_id: str,
+    origin: str,
 ) -> dict[str, Any]:
     """Return a copied ASGI scope carrying the authenticated frame owner."""
     return {
@@ -29,6 +31,7 @@ def bind_app_frame_scope(
         APP_FRAME_PROXY_SCOPE_KEY: True,
         APP_FRAME_APP_ID_SCOPE_KEY: app_id,
         APP_FRAME_MOUNT_APP_ID_SCOPE_KEY: mount_app_id,
+        APP_FRAME_ORIGIN_SCOPE_KEY: origin,
     }
 
 
@@ -40,7 +43,11 @@ def copy_app_frame_scope_to_environ(
     if scope.get(APP_FRAME_PROXY_SCOPE_KEY) is not True:
         return
     environ[APP_FRAME_PROXY_SCOPE_KEY] = True
-    for key in (APP_FRAME_APP_ID_SCOPE_KEY, APP_FRAME_MOUNT_APP_ID_SCOPE_KEY):
+    for key in (
+        APP_FRAME_APP_ID_SCOPE_KEY,
+        APP_FRAME_MOUNT_APP_ID_SCOPE_KEY,
+        APP_FRAME_ORIGIN_SCOPE_KEY,
+    ):
         value = scope.get(key)
         if isinstance(value, str):
             environ[key] = value

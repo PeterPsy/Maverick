@@ -39,6 +39,10 @@ class SidecarBrowserBinding:
     surface_kind: str = "sidecar"
     platform_session_id: str = ""
     mount_app_id: str = ""
+    parent_origin: str = ""
+    parent_app_id: str = ""
+    widget_host: str = ""
+    widget_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -143,13 +147,27 @@ class SidecarBrowserSessionStore:
             binding=binding,
         )
 
-    def consume_ticket(self, value: str, *, host: str) -> IssuedSidecarBrowserSession | None:
+    def consume_ticket(
+        self,
+        value: str,
+        *,
+        host: str,
+        parent_origin: str = "",
+    ) -> IssuedSidecarBrowserSession | None:
         now = self._clock()
         digest = _token_digest(value)
         with self._lock:
             self._prune(now)
             ticket = self._tickets.pop(digest, None)
-            if ticket is None or ticket.expires_at < now or not secrets.compare_digest(ticket.binding.host, host):
+            if (
+                ticket is None
+                or ticket.expires_at < now
+                or not secrets.compare_digest(ticket.binding.host, host)
+                or (
+                    bool(ticket.binding.parent_origin)
+                    and not secrets.compare_digest(ticket.binding.parent_origin, parent_origin)
+                )
+            ):
                 if ticket is not None:
                     self._confirmations.pop(ticket.confirmation_digest, None)
                 return None

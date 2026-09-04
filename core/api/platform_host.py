@@ -43,6 +43,7 @@ from core.api.settings_api import handle_settings_api
 from core.api.usage_api import handle_usage_api
 from core.api.sidecar_proxy import handle_app_sidecar_proxy, parse_app_sidecar_proxy_route
 from core.api.widget_api import handle_widget_api
+from core.api.widget_browser_launch import handle_widget_browser_launch
 from core.api.workspace_files_api import handle_workspace_files_api
 from core.api.workspace_api import handle_workspace_api
 from core.shared.entrypoints import EntrypointShutdownController
@@ -88,6 +89,16 @@ class PlatformHost:
             user = context.user if context is not None else None
 
             routed = handle_app_frame_browser_launch(
+                self.state,
+                context,
+                environ,
+                start_response,
+                start_path=self.start_path,
+            )
+            if routed is not None:
+                return routed
+
+            routed = handle_widget_browser_launch(
                 self.state,
                 context,
                 environ,

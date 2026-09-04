@@ -7,6 +7,7 @@ import unittest
 from core.api.app_frame_scope import (
     APP_FRAME_APP_ID_SCOPE_KEY,
     APP_FRAME_MOUNT_APP_ID_SCOPE_KEY,
+    APP_FRAME_ORIGIN_SCOPE_KEY,
     APP_FRAME_PROXY_SCOPE_KEY,
     app_frame_owner_matches,
     app_frame_path_matches_owner,
@@ -22,9 +23,11 @@ class AppFrameScopeTests(unittest.TestCase):
                 APP_FRAME_PROXY_SCOPE_KEY: False,
                 APP_FRAME_APP_ID_SCOPE_KEY: "attacker",
                 APP_FRAME_MOUNT_APP_ID_SCOPE_KEY: "attacker-mount",
+                APP_FRAME_ORIGIN_SCOPE_KEY: "https://attacker.example",
             },
             app_id="notes-local",
             mount_app_id="notes-mount",
+            origin="https://af-notes.sidecars.example",
         )
         environ: dict[str, object] = {}
 
@@ -33,6 +36,7 @@ class AppFrameScopeTests(unittest.TestCase):
         self.assertIs(environ[APP_FRAME_PROXY_SCOPE_KEY], True)
         self.assertEqual(environ[APP_FRAME_APP_ID_SCOPE_KEY], "notes-local")
         self.assertEqual(environ[APP_FRAME_MOUNT_APP_ID_SCOPE_KEY], "notes-mount")
+        self.assertEqual(environ[APP_FRAME_ORIGIN_SCOPE_KEY], "https://af-notes.sidecars.example")
         self.assertTrue(app_frame_owner_matches(environ, "notes-local"))
         self.assertTrue(app_frame_owner_matches(environ, "notes-mount"))
         self.assertFalse(app_frame_owner_matches(environ, "other-app"))
@@ -76,6 +80,7 @@ class AppFrameScopeTests(unittest.TestCase):
             {},
             app_id="notes-local",
             mount_app_id="notes-mount",
+            origin="https://af-notes.sidecars.example",
         )
         self.assertFalse(app_frame_owner_matches(bound, "é"))
 

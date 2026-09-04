@@ -44,6 +44,42 @@ class SidecarBrowserSessionStoreTestCase(unittest.TestCase):
         self.now += 2
         self.assertIsNone(self.store.consume_ticket(expired.value, host=self.binding.host))
 
+    def test_nested_ticket_requires_the_exact_parent_origin(self) -> None:
+        binding = SidecarBrowserBinding(
+            **{
+                **self.binding.__dict__,
+                "parent_origin": "https://af-chat.sidecars.example",
+                "parent_app_id": "chat",
+                "widget_host": "chat",
+                "widget_id": "file-preview",
+            }
+        )
+        wrong_parent = self.store.issue_ticket(binding)
+
+        self.assertIsNone(
+            self.store.consume_ticket(
+                wrong_parent.value,
+                host=binding.host,
+                parent_origin="https://attacker.example",
+            )
+        )
+        self.assertIsNone(
+            self.store.consume_ticket(
+                wrong_parent.value,
+                host=binding.host,
+                parent_origin=binding.parent_origin,
+            )
+        )
+
+        exact_parent = self.store.issue_ticket(binding)
+        self.assertIsNotNone(
+            self.store.consume_ticket(
+                exact_parent.value,
+                host=binding.host,
+                parent_origin=binding.parent_origin,
+            )
+        )
+
     def test_bootstrap_confirmation_is_actor_bound_and_changes_only_after_validated_bootstrap(self) -> None:
         ticket = self.store.issue_ticket(self.binding)
 

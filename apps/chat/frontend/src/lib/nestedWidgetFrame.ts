@@ -14,6 +14,7 @@ export type NestedWidgetLaunch = {
   origin: string;
   ownerAppId: string;
   parentOrigin: string;
+  targetUrl: string;
   ticket: string;
   widgetId: string;
 };
@@ -33,13 +34,14 @@ export async function requestNestedWidgetLaunch(
       widget_id: widget.widget_id,
     }),
   });
-  return validateNestedWidgetLaunch(payload, widget, parentOrigin);
+  return validateNestedWidgetLaunch(payload, widget, parentOrigin, contextToken);
 }
 
 export function validateNestedWidgetLaunch(
   payload: unknown,
   widget: WidgetRegistryItem,
   parentOrigin: string,
+  contextToken: string,
 ): NestedWidgetLaunch {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("Invalid nested widget launch response.");
@@ -48,12 +50,14 @@ export function validateNestedWidgetLaunch(
   const origin = exactHttpOrigin(record.origin);
   const normalizedParentOrigin = exactHttpOrigin(parentOrigin);
   const bootstrapUrl = exactBootstrapUrl(record.bootstrap_url, origin);
+  const targetUrl = exactFrontendUrl(record.frontend_url, origin, widget.frontend_mount, contextToken);
   const ticket = boundedOpaqueString(record.ticket, 1024);
   const expiresInSeconds = record.expires_in_seconds;
   if (
     origin === normalizedParentOrigin
     || origin === configuredPlatformOrigin()
     || record.parent_origin !== normalizedParentOrigin
+    || record.bootstrap_transport !== "cors"
     || record.host_app_id !== widget.host
     || record.owner_app_id !== widget.owner_app_id
     || record.widget_id !== widget.widget_id
@@ -74,6 +78,7 @@ export function validateNestedWidgetLaunch(
     origin,
     ownerAppId: widget.owner_app_id,
     parentOrigin: normalizedParentOrigin,
+    targetUrl,
     ticket,
     widgetId: widget.widget_id,
   };
@@ -82,26 +87,60 @@ export function validateNestedWidgetLaunch(
 export function submitNestedWidgetBootstrap(
   frame: HTMLIFrameElement,
   launch: NestedWidgetLaunch,
-): void {
-  if (!frame.name) {
-    throw new Error("Nested widget frame target is unavailable.");
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  return fetchImpl(launch.bootstrapUrl, {
+    body: new URLSearchParams({ ticket: launch.ticket }).toString(),
+    cache: "no-store",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    method: "POST",
+    mode: "cors",
+    redirect: "error",
+    referrerPolicy: "no-referrer",
+  }).then((response) => {
+    if (!response.ok || response.status !== 204) {
+      throw new Error("Nested widget bootstrap failed.");
+    }
+    frame.setAttribute("src", launch.targetUrl);
+  });
+}
+
+function exactFrontendUrl(
+  value: unknown,
+  origin: string,
+  frontendMount: string,
+  contextToken: string,
+): string {
+  if (typeof value !== "string" || !contextToken) {
+    throw new Error("Nested widget frontend URL is invalid.");
   }
-  const form = document.createElement("form");
-  form.hidden = true;
-  form.method = "POST";
-  form.action = launch.bootstrapUrl;
-  form.target = frame.name;
-  const ticket = document.createElement("input");
-  ticket.type = "hidden";
-  ticket.name = "ticket";
-  ticket.value = launch.ticket;
-  form.append(ticket);
-  document.body.append(form);
+  let parsed: URL;
+  let expected: URL;
   try {
-    form.submit();
-  } finally {
-    form.remove();
+    parsed = new URL(value);
+    expected = new URL(frontendMount, origin);
+  } catch {
+    throw new Error("Nested widget frontend URL is invalid.");
   }
+  const fragment = parsed.hash.startsWith("#") ? parsed.hash.slice(1) : "";
+  const parameters = new URLSearchParams(fragment);
+  if (
+    parsed.origin !== origin
+    || parsed.username
+    || parsed.password
+    || parsed.pathname !== expected.pathname
+    || parsed.search !== expected.search
+    || expected.hash
+    || [...parameters.keys()].length !== 1
+    || parameters.get("context") !== contextToken
+  ) {
+    throw new Error("Nested widget frontend URL is invalid.");
+  }
+  return parsed.href;
 }
 
 export function isNestedWidgetLoadedMessage(

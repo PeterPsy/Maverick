@@ -3,6 +3,7 @@
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import type { DetachedWindowAPI } from "happy-dom";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +19,7 @@ vi.mock("../api/client", async (importOriginal) => ({
 }));
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
+const happyDOM = (window as typeof window & { happyDOM: DetachedWindowAPI }).happyDOM;
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const widget: WidgetRegistryItem = {
   actions: {},
@@ -31,9 +33,16 @@ const widget: WidgetRegistryItem = {
 describe("WidgetHostFrame", () => {
   let container: HTMLDivElement;
   let root: Root;
-  let submit: ReturnType<typeof vi.spyOn>;
+  let previousFetchInterceptor: typeof happyDOM.settings.fetch.interceptor;
 
   beforeEach(() => {
+    previousFetchInterceptor = happyDOM.settings.fetch.interceptor;
+    happyDOM.settings.fetch.interceptor = {
+      beforeAsyncRequest: async ({ window: frameWindow }) => new frameWindow.Response(
+        "<!doctype html><title>Nested widget test document</title>",
+        { headers: { "Content-Type": "text/html" }, status: 200 },
+      ),
+    };
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -42,16 +51,21 @@ describe("WidgetHostFrame", () => {
       context: {},
       context_token: "signed-context",
     });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(validLaunch()), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-    })));
-    submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => (
+      String(input) === "/api/apps/widgets/browser-launch"
+        ? new Response(JSON.stringify(validLaunch()), {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          })
+        : new Response(null, { status: 204 })
+    )));
   });
 
   afterEach(async () => {
+    await happyDOM.waitUntilComplete();
     await act(async () => root.unmount());
     container.remove();
+    happyDOM.settings.fetch.interceptor = previousFetchInterceptor;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -61,9 +75,8 @@ describe("WidgetHostFrame", () => {
 
     const frame = container.querySelector("iframe");
     expect(frame).not.toBeNull();
-    expect(frame?.getAttribute("src")).toBe("about:blank");
+    expect(frame?.getAttribute("src")).toBe(validLaunch().frontend_url);
     expect(frame?.hidden).toBe(true);
-    expect(submit).toHaveBeenCalledTimes(1);
 
     const fetchCall = vi.mocked(fetch).mock.calls[0];
     expect(fetchCall[0]).toBe("/api/apps/widgets/browser-launch");
@@ -73,6 +86,7 @@ describe("WidgetHostFrame", () => {
       owner_app_id: "storage",
       widget_id: "file-preview",
     });
+    expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe(validLaunch().bootstrap_url);
 
     await dispatchReady(frame!, "https://attacker.example");
     expect(frame?.hidden).toBe(true);
@@ -92,6 +106,17 @@ describe("WidgetHostFrame", () => {
 
     expect(container.querySelector("iframe")).toBeNull();
     expect(container.textContent).toContain("Nested widget launch attestation failed.");
+  });
+
+  it("shows the host fallback when the exact-origin bootstrap is denied", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify(validLaunch()), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+
+    await renderWidget();
+
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.textContent).toContain("Nested widget bootstrap failed.");
   });
 
   it("shows the host fallback when the nested frame never confirms readiness", async () => {
@@ -136,7 +161,9 @@ describe("WidgetHostFrame", () => {
 function validLaunch() {
   return {
     bootstrap_url: "https://storage-widget.example/.well-known/maverick-app-frame-bootstrap",
+    bootstrap_transport: "cors",
     expires_in_seconds: 60,
+    frontend_url: "https://storage-widget.example/api/apps/widgets/storage/file-preview/frontend/#context=signed-context",
     host_app_id: "chat",
     method: "POST",
     origin: "https://storage-widget.example",

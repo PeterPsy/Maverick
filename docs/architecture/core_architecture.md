@@ -1264,11 +1264,16 @@ parent-frame scope. The signed widget context and current declaration must
 agree on workspace, user, host surface, owner, widget id, and content kind. The
 ticket additionally binds the target host, login session, installation
 generation, parent app, and exact parent origin; bootstrap requires that exact
-origin and remains one shot. Nested document CSP lists the exact platform and
-parent origins in `frame-ancestors`, while normal owner matching continues to
-deny the widget document on the parent app's own origin. The nested document
-announces `maverick.app-frame.loaded` only to its bound parent origin so an
-embedding app can apply exact-origin/source readiness and a bounded fallback.
+origin and remains one shot. The parent exchanges only that opaque ticket with
+a credentialed CORS `POST`; Core returns `204` with the exact bound origin and
+sets the target-origin session before the parent navigates to the separately
+attested frontend URL. This two-step transport is required because an inherited
+iframe sandbox can serialize a direct hidden-form navigation's `Origin` as
+`null`. Nested document CSP lists the exact platform and parent origins in
+`frame-ancestors`, while normal owner matching continues to deny the widget
+document on the parent app's own origin. The nested document announces
+`maverick.app-frame.loaded` only to its bound parent origin so an embedding app
+can apply exact-origin/source readiness and a bounded fallback.
 
 This isolation boundary is mandatory. Core has no same-platform-origin app or
 widget launch mode: invalid or unavailable isolated-origin routing fails the

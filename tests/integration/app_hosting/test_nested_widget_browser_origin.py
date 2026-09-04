@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from urllib.parse import urlsplit
 
 from core.api.app_frame_browser import APP_FRAME_BOOTSTRAP_PATH
 from core.api.asgi_application import PlatformAsgiHost
@@ -140,8 +141,14 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
                 wrong_parent_launch["bootstrap_url"],
                 f"{nested_origin}{APP_FRAME_BOOTSTRAP_PATH}",
             )
+            self.assertEqual(wrong_parent_launch["bootstrap_transport"], "cors")
+            self.assertTrue(
+                wrong_parent_launch["frontend_url"].startswith(
+                    f"{nested_origin}/api/apps/widgets/other-demo/other-widget/frontend/#context="
+                )
+            )
 
-            wrong_parent_status, _wrong_parent_body, _wrong_parent_headers = await self._invoke(
+            wrong_parent_status, _wrong_parent_body, wrong_parent_headers = await self._invoke(
                 app,
                 host=nested_host,
                 path=APP_FRAME_BOOTSTRAP_PATH,
@@ -153,6 +160,20 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
                 },
             )
             self.assertEqual(wrong_parent_status, 410)
+            self.assertNotIn("access-control-allow-origin", wrong_parent_headers)
+
+            spent_status, _spent_body, _spent_headers = await self._invoke(
+                app,
+                host=nested_host,
+                path=APP_FRAME_BOOTSTRAP_PATH,
+                method="POST",
+                body=f"ticket={wrong_parent_launch['ticket']}".encode(),
+                headers={
+                    "content-type": "application/x-www-form-urlencoded",
+                    "origin": parent["origin"],
+                },
+            )
+            self.assertEqual(spent_status, 410)
 
             launch = await self._issue_launch(app, parent, request)
             bootstrap_status, _bootstrap_body, bootstrap_headers = await self._invoke(
@@ -166,12 +187,11 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
                     "origin": parent["origin"],
                 },
             )
-            self.assertEqual(bootstrap_status, 303)
-            self.assertTrue(
-                bootstrap_headers["location"].startswith(
-                    "/api/apps/widgets/other-demo/other-widget/frontend/#context="
-                )
-            )
+            self.assertEqual(bootstrap_status, 204)
+            self.assertNotIn("location", bootstrap_headers)
+            self.assertEqual(bootstrap_headers["access-control-allow-origin"], parent["origin"])
+            self.assertEqual(bootstrap_headers["access-control-allow-credentials"], "true")
+            self.assertEqual(bootstrap_headers["vary"], "Origin")
             nested_cookie = bootstrap_headers["set-cookie"].split(";", 1)[0]
             nested_csp = bootstrap_headers["content-security-policy"]
             self.assertIn(
@@ -182,7 +202,7 @@ class NestedWidgetBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport,
             widget_status, widget_body, widget_headers = await self._invoke(
                 app,
                 host=launch["origin"].removeprefix("http://"),
-                path="/api/apps/widgets/other-demo/other-widget/frontend/",
+                path=urlsplit(launch["frontend_url"]).path,
                 headers={"cookie": nested_cookie},
             )
             self.assertEqual(widget_status, 200)

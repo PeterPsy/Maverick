@@ -222,7 +222,9 @@ def handle_widget_browser_launch(
         start_response,
         {
             "bootstrap_url": f"{origin}{APP_FRAME_BOOTSTRAP_PATH}",
+            "bootstrap_transport": "cors",
             "expires_in_seconds": MAX_TICKET_TTL_SECONDS,
+            "frontend_url": f"{origin}{clean_path}",
             "host_app_id": resolved.widget.host,
             "method": "POST",
             "origin": origin,

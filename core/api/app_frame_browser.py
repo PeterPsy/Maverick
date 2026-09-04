@@ -420,16 +420,29 @@ async def _handle_bootstrap(
         return
     binding = issued.session.binding
     headers = _security_headers(binding)
-    headers.extend(
-        [
-            ("Location", binding.clean_path),
-            ("Set-Cookie", _session_cookie(issued.value, secure=binding.secure)),
-        ]
-    )
+    headers.append(("Set-Cookie", _session_cookie(issued.value, secure=binding.secure)))
+    if binding.parent_origin:
+        # A nested browsing context inherits its ancestor's sandbox flags and
+        # serializes a form-navigation Origin as `null` in Chromium, even when
+        # the parent document itself has a concrete allow-same-origin origin.
+        # Credentialed CORS preserves the exact parent Origin for validation;
+        # the client navigates only after this one-shot exchange sets the
+        # target-origin session cookie.
+        headers.extend(
+            [
+                ("Access-Control-Allow-Origin", binding.parent_origin),
+                ("Access-Control-Allow-Credentials", "true"),
+                ("Vary", "Origin"),
+            ]
+        )
+        status = 204
+    else:
+        headers.append(("Location", binding.clean_path))
+        status = 303
     await send(
         {
             "type": "http.response.start",
-            "status": 303,
+            "status": status,
             "headers": [(name.lower().encode("latin1"), value.encode("latin1")) for name, value in headers],
         }
     )

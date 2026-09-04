@@ -102,10 +102,16 @@ force: a Chat frame, for example, never acquires authority to serve a Storage
 widget document itself.
 
 The embedding app must initially target `about:blank`, validate the launch
-response's exact HTTP(S) origin, bootstrap URL, parent origin, host, owner, and
-widget id, and submit the ticket through a hidden POST form. It may reveal the
-frame only after `maverick.app-frame.loaded` arrives from that exact origin and
-iframe `Window`; denial, malformed attestation, frame error, authorization loss,
+response's exact HTTP(S) origin, bootstrap URL, frontend URL and context
+fragment, parent origin, host, owner, and widget id, and exchange the opaque
+ticket with a credentialed CORS `POST`. Core permits that bootstrap only for
+the exact bound parent origin, returns `204`, and sets the target-origin frame
+session before the embedding app navigates to the validated frontend URL. A
+direct hidden-form navigation is not valid for this nested flow because the
+inherited iframe sandbox can serialize its browser `Origin` as `null`. The host
+may reveal the frame only after `maverick.app-frame.loaded` arrives from that
+exact origin and iframe `Window`; denial, malformed attestation, frame error,
+authorization loss,
 or a bounded readiness timeout must render the app's generic fallback.
 
 OAuth started from an installed/standalone PWA must preserve the platform

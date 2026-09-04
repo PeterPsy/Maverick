@@ -156,6 +156,7 @@ export function WidgetHostFrame({
     if (state.status !== "launching") {
       return;
     }
+    let active = true;
     const frame = frameRef.current;
     if (!frame) {
       setState({ status: "fallback", reason: "Widget frame unavailable." });
@@ -164,7 +165,15 @@ export function WidgetHostFrame({
     try {
       if (submittedTicketRef.current !== state.launch.ticket) {
         submittedTicketRef.current = state.launch.ticket;
-        submitNestedWidgetBootstrap(frame, state.launch);
+        void submitNestedWidgetBootstrap(frame, state.launch).catch((error: unknown) => {
+          if (active) {
+            setState((current) => (
+              current.status === "launching" && current.launch.ticket === state.launch.ticket
+                ? { status: "fallback", reason: widgetErrorMessage(error) }
+                : current
+            ));
+          }
+        });
       }
     } catch (error) {
       setState({ status: "fallback", reason: widgetErrorMessage(error) });
@@ -177,7 +186,10 @@ export function WidgetHostFrame({
           : current
       ));
     }, NESTED_WIDGET_LOAD_TIMEOUT_MS);
-    return () => window.clearTimeout(timeout);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
   }, [state]);
 
   if (state.status === "loading" || state.status === "fallback") {

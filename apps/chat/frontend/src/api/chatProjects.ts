@@ -8,6 +8,9 @@ import type {
   DeleteThreadsPayload,
 } from "./types";
 
+// Core keeps destructive cleanup requests bounded; a sidebar selection can span the full catalog.
+const RUNTIME_THREAD_DELETE_BATCH_MAX = 20;
+
 function threadTimestamp(value: string | null | undefined): number {
   if (!value) {
     return 0;
@@ -152,12 +155,33 @@ export async function deleteThread(threadId: string): Promise<ChatSidebarPayload
   });
 }
 
-export function deleteThreads(threadIds: string[]): Promise<DeleteThreadsPayload> {
+function deleteThreadBatch(threadIds: string[]): Promise<DeleteThreadsPayload> {
   return requestJson<DeleteThreadsPayload>("/api/runtime/threads/delete-batch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason: "chat_threads_deleted", thread_ids: threadIds }),
   });
+}
+
+export async function deleteThreads(threadIds: string[]): Promise<DeleteThreadsPayload> {
+  if (threadIds.length <= RUNTIME_THREAD_DELETE_BATCH_MAX) {
+    return deleteThreadBatch(threadIds);
+  }
+
+  const payloads: DeleteThreadsPayload[] = [];
+  for (let start = 0; start < threadIds.length; start += RUNTIME_THREAD_DELETE_BATCH_MAX) {
+    payloads.push(await deleteThreadBatch(threadIds.slice(start, start + RUNTIME_THREAD_DELETE_BATCH_MAX)));
+  }
+
+  return {
+    deleted_thread_ids: uniqueStrings(payloads.flatMap((payload) => payload.deleted_thread_ids || [])),
+    deleted_runtime_session_ids: uniqueStrings(payloads.flatMap((payload) => payload.deleted_runtime_session_ids)),
+    results: payloads.flatMap((payload) => payload.results),
+  };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values));
 }
 
 export async function createProject(name: string): Promise<{ project: ChatProject } & ChatProjectsPayload> {

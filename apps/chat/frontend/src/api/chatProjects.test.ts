@@ -86,6 +86,45 @@ describe("thread delete API", () => {
       }),
     );
   });
+
+  it("splits selections larger than the runtime batch limit and merges the results", async () => {
+    const threadIds = Array.from({ length: 25 }, (_, index) => `thread-${index + 1}`);
+    vi.mocked(fetch).mockImplementation(async (_path: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { thread_ids: string[] };
+      return okJson({
+        deleted_thread_ids: body.thread_ids,
+        deleted_runtime_session_ids: body.thread_ids.map((threadId) => `session-${threadId}`),
+        results: body.thread_ids.map((threadId) => ({
+          thread_id: threadId,
+          runtime_session_id: `session-${threadId}`,
+          status: "deleted",
+        })),
+      });
+    });
+
+    const payload = await deleteThreads(threadIds);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/runtime/threads/delete-batch",
+      expect.objectContaining({
+        body: JSON.stringify({ reason: "chat_threads_deleted", thread_ids: threadIds.slice(0, 20) }),
+      }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/runtime/threads/delete-batch",
+      expect.objectContaining({
+        body: JSON.stringify({ reason: "chat_threads_deleted", thread_ids: threadIds.slice(20) }),
+      }),
+    );
+    expect(payload.deleted_thread_ids).toEqual(threadIds);
+    expect(payload.deleted_runtime_session_ids).toEqual(
+      threadIds.map((threadId) => `session-${threadId}`),
+    );
+    expect(payload.results.map((result) => result.thread_id)).toEqual(threadIds);
+  });
 });
 
 function okJson(payload: unknown): Response {

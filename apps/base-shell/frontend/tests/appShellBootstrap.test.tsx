@@ -6,10 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MaverickHttpError, MaverickTransportError } from "../src/api";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
-import { shellCacheLifecycle, shellRetryCoordinator } from "../src/pwaCacheRuntime";
+import { revokeShellAuthorization, shellCacheLifecycle, shellRetryCoordinator } from "../src/pwaCacheRuntime";
 
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
+  createWorkspace: vi.fn(),
   getPlatformSettings: vi.fn(),
   getProviderSetupSettings: vi.fn(),
   getPlatformStatus: vi.fn(),
@@ -23,7 +24,6 @@ const api = vi.hoisted(() => ({
 }));
 const dataCacheBrokerHost = vi.hoisted(() => ({
   frameScope: null as null | { sessionGeneration: string; workspaceId: string },
-  onAuthorizationFailure: null as null | ((status: 401 | 403) => Promise<void> | void),
   principal: null as null | { sessionExpiresAt: string; userId: string; workspaceId: string },
 }));
 
@@ -32,6 +32,7 @@ vi.mock("../src/api", async (importOriginal) => {
   return {
     ...actual,
     configureActiveProvider: api.configureActiveProvider,
+    createWorkspace: api.createWorkspace,
     getPlatformSettings: api.getPlatformSettings,
     getProviderSetupSettings: api.getProviderSetupSettings,
     getPlatformStatus: api.getPlatformStatus,
@@ -47,11 +48,9 @@ vi.mock("../src/api", async (importOriginal) => {
 vi.mock("../src/usePwaDataCacheBrokerHost", () => ({
   usePwaDataCacheBrokerHost: (options: {
     frameScope: null | { sessionGeneration: string; workspaceId: string };
-    onAuthorizationFailure: (status: 401 | 403) => Promise<void> | void;
     principal: null | { sessionExpiresAt: string; userId: string; workspaceId: string };
   }) => {
     dataCacheBrokerHost.frameScope = options.frameScope;
-    dataCacheBrokerHost.onAuthorizationFailure = options.onAuthorizationFailure;
     dataCacheBrokerHost.principal = options.principal;
   },
 }));
@@ -67,12 +66,12 @@ vi.mock("../src/components/Sidebar", () => ({
   Sidebar: ({
     isLoading,
     isWorkspacesLoading,
-    onWorkspaceChanged,
+    onWorkspaceChange,
     workspaces,
   }: {
     isLoading: boolean;
     isWorkspacesLoading: boolean;
-    onWorkspaceChanged: () => Promise<void>;
+    onWorkspaceChange: (workspaceId: string) => Promise<void>;
     workspaces: WorkspaceItem[];
   }) => (
     <aside
@@ -81,7 +80,7 @@ vi.mock("../src/components/Sidebar", () => ({
       data-workspace-count={String(workspaces.length)}
       data-workspaces-loading={String(isWorkspacesLoading)}
     >
-      <button data-testid="revalidate-workspace" onClick={() => void onWorkspaceChanged()} type="button" />
+      <button data-testid="switch-workspace" onClick={() => void onWorkspaceChange("other")} type="button" />
     </aside>
   ),
 }));
@@ -103,7 +102,6 @@ describe("AppShell bootstrap", () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.clearAllMocks();
     dataCacheBrokerHost.frameScope = null;
-    dataCacheBrokerHost.onAuthorizationFailure = null;
     dataCacheBrokerHost.principal = null;
     container = document.createElement("div");
     document.body.append(container);
@@ -116,6 +114,8 @@ describe("AppShell bootstrap", () => {
     api.getPlatformSettings.mockRejectedValue(new Error("/api/settings/platform should not be part of shell bootstrap"));
     api.getProviderSetupSettings.mockResolvedValue(platformSettings());
     api.getPlatformStatus.mockRejectedValue(new Error("/api/status should not be part of shell bootstrap"));
+    api.createWorkspace.mockResolvedValue(workspace("created"));
+    api.switchWorkspace.mockResolvedValue({ active_workspace_id: "other" });
   });
 
   afterEach(() => {
@@ -298,7 +298,7 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 
-  it("ends mounted shell loading when explicit revalidation returns an authorization response", async () => {
+  it("ends mounted shell loading when workspace reload returns an authorization response", async () => {
     await act(async () => {
       root.render(<AppShell />);
       await Promise.resolve();
@@ -310,7 +310,7 @@ describe("AppShell bootstrap", () => {
       new MaverickHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
     );
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("[data-testid='revalidate-workspace']")?.click();
+      container.querySelector<HTMLButtonElement>("[data-testid='switch-workspace']")?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -328,20 +328,22 @@ describe("AppShell bootstrap", () => {
     });
     const mountedFrame = container.querySelector("[data-testid='mounted-app-frame']");
     expect(mountedFrame).not.toBeNull();
-    expect(dataCacheBrokerHost.onAuthorizationFailure).not.toBeNull();
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockResolvedValue(completeCleanup());
 
     await act(async () => {
-      await dataCacheBrokerHost.onAuthorizationFailure?.(403);
+      await revokeShellAuthorization(403);
     });
 
+    expect(cleanup).toHaveBeenCalledOnce();
     expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
     expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
   });
 
-  it("keeps the next workspace unpublished while its cache lifecycle transition is pending", async () => {
+  it("fences the real workspace mutation before the request and keeps the next scope unpublished", async () => {
     const transition = vi.spyOn(shellCacheLifecycle, "transition");
     const cleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.transition>>>();
+    const switchRequest = deferred<{ active_workspace_id: string }>();
     transition
       .mockResolvedValueOnce(completeCleanup())
       .mockImplementationOnce(() => {
@@ -356,8 +358,26 @@ describe("AppShell bootstrap", () => {
     expect(previousFrame).not.toBeNull();
 
     api.getSession.mockResolvedValueOnce(sessionPayload("other"));
+    api.switchWorkspace.mockImplementationOnce(() => {
+      expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+      expect(dataCacheBrokerHost.frameScope).toBeNull();
+      expect(dataCacheBrokerHost.principal).toBeNull();
+      return switchRequest.promise;
+    });
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("[data-testid='revalidate-workspace']")?.click();
+      container.querySelector<HTMLButtonElement>("[data-testid='switch-workspace']")?.click();
+      await until(() => api.switchWorkspace.mock.calls.length === 1);
+    });
+
+    expect(api.switchWorkspace).toHaveBeenCalledWith("other");
+    expect(api.getSession).toHaveBeenCalledOnce();
+    expect(transition).toHaveBeenCalledOnce();
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+    expect(previousFrame?.isConnected).toBe(false);
+
+    await act(async () => {
+      switchRequest.resolve({ active_workspace_id: "other" });
+      await switchRequest.promise;
       await until(() => transition.mock.calls.length === 2);
     });
 
@@ -366,8 +386,8 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[aria-label='Loading workspace']")).not.toBeNull();
     expect(dataCacheBrokerHost.frameScope).toBeNull();
     expect(dataCacheBrokerHost.principal).toBeNull();
-    expect(previousFrame?.isConnected).toBe(false);
     expect(transition).toHaveBeenNthCalledWith(2, expect.objectContaining({ workspaceId: "other" }));
+    expect(api.listApps).toHaveBeenCalledOnce();
 
     await act(async () => {
       cleanup.resolve(completeCleanup());
@@ -376,6 +396,7 @@ describe("AppShell bootstrap", () => {
     });
 
     expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("other");
+    expect(api.listApps).toHaveBeenCalledTimes(2);
     expect(dataCacheBrokerHost.frameScope?.workspaceId).toBe("other");
     expect(dataCacheBrokerHost.principal?.workspaceId).toBe("other");
   });
@@ -423,9 +444,11 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
   });
 
-  it("does not republish a pending workspace after a concurrent broker authorization failure", async () => {
+  it("does not republish a pending workspace after a concurrent authorization revocation", async () => {
     const transition = vi.spyOn(shellCacheLifecycle, "transition");
     const cleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.transition>>>();
+    const authorizationCleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.authorizationFailure>>>();
+    vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockReturnValue(authorizationCleanup.promise);
     transition
       .mockResolvedValueOnce(completeCleanup())
       .mockReturnValueOnce(cleanup.promise);
@@ -433,16 +456,23 @@ describe("AppShell bootstrap", () => {
     await renderShell();
     api.getSession.mockResolvedValueOnce(sessionPayload("other"));
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("[data-testid='revalidate-workspace']")?.click();
+      container.querySelector<HTMLButtonElement>("[data-testid='switch-workspace']")?.click();
       await until(() => transition.mock.calls.length === 2);
     });
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
 
+    let revocation!: Promise<void>;
     await act(async () => {
-      await dataCacheBrokerHost.onAuthorizationFailure?.(401);
-      cleanup.resolve(completeCleanup());
-      await cleanup.promise;
+      revocation = revokeShellAuthorization(401);
       await Promise.resolve();
+    });
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+
+    await act(async () => {
+      cleanup.resolve(completeCleanup());
+      authorizationCleanup.resolve(completeCleanup());
+      await cleanup.promise;
+      await revocation;
     });
 
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();

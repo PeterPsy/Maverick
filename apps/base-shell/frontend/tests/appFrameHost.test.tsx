@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
 import { AppFrameHost } from "../src/components/AppFrameHost";
 import { setMaverickFrameOrigin, type MaverickFrameScope } from "../src/iframePolicy";
+import { StorageFileCacheBroker } from "../src/storageFileCacheBroker";
 import type { ShellThemeState } from "../src/theme";
 
 type AppFrameParams = Record<string, string | boolean | null>;
@@ -197,6 +198,7 @@ describe("AppFrameHost app frame readiness", () => {
   });
 
   it("synchronously drops frames from the previous shell session generation", async () => {
+    const disposeFileBroker = vi.spyOn(StorageFileCacheBroker.prototype, "dispose");
     await renderHost(root, chat);
     const oldFrame = await waitForFrame(container, "Chat viewport", "chat");
     const nextScope = Object.freeze({ sessionGeneration: "session-next", workspaceId: "default" });
@@ -206,6 +208,7 @@ describe("AppFrameHost app frame readiness", () => {
 
     expect(nextFrame).not.toBe(oldFrame);
     expect(oldFrame.isConnected).toBe(false);
+    expect(disposeFileBroker).toHaveBeenCalledOnce();
   });
 
   it("opens external URLs only when requested by a mounted app frame", async () => {

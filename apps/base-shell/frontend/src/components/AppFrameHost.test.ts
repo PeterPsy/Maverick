@@ -28,6 +28,8 @@ describe("AppFrameHost Storage file-cache boundary", () => {
   it("routes Storage messages through a disposable parent-owned broker", () => {
     const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
 
+    expect(source).toContain("useLayoutEffect");
+    expect(source).toMatch(/useLayoutEffect\(\(\) => \{[\s\S]*?new StorageFileCacheBroker[\s\S]*?broker\.dispose\(\)/u);
     expect(source).toContain("new StorageFileCacheBroker");
     expect(source).toContain("fileCacheBrokerRef.current?.handleWindowMessage");
     expect(source).toContain("frameRefs.current.storage ?? null");
@@ -47,11 +49,11 @@ describe("AppFrameHost structured data-cache boundary", () => {
     expect(source).toContain("broker.dispose()");
   });
 
-  it("clears authenticated shell UI when the broker reports an authorization failure", () => {
+  it("clears authenticated shell UI through the shared authorization channel", () => {
     const source = readFileSync(resolve(currentDir, "../AppShell.tsx"), "utf8");
 
     expect(source).toContain("usePwaDataCacheBrokerHost");
-    expect(source).toContain("onAuthorizationFailure: handleShellAuthorizationFailure");
+    expect(source).toContain("subscribeShellAuthorizationRevocation(handleShellAuthorizationFailure)");
     expect(source).toContain("beginShellSessionTransition");
     expect(source).toContain("publishAnonymousShellState");
     expect(source).toContain("setSession(anonymousSession)");

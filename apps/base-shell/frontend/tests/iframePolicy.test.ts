@@ -13,6 +13,7 @@ import {
   setMaverickFrameOrigin,
   widgetFrameBrowserFeaturePolicy,
 } from "../src/iframePolicy";
+import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
 
 const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-one", workspaceId: "default" });
 
@@ -134,6 +135,22 @@ describe("isolated Maverick frame policy", () => {
 
     await expect(requestAppFrameLaunch("storage", "/apps/storage/"))
       .rejects.toThrow(/invalid isolated app-frame launch/i);
+  });
+
+  it("routes isolated launch authorization failures through the shell revocation channel", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 401 })));
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure")
+      .mockResolvedValue({ pendingCleanupCount: 0, removed: 0, status: "complete" });
+    const revoked = vi.fn();
+    const unsubscribe = subscribeShellAuthorizationRevocation(revoked);
+
+    await expect(requestAppFrameLaunch("storage", "/apps/storage/"))
+      .rejects.toThrow(/unable to launch isolated app frame/i);
+
+    expect(revoked).toHaveBeenCalledOnce();
+    expect(revoked).toHaveBeenCalledWith(401);
+    expect(cleanup).toHaveBeenCalledOnce();
+    unsubscribe();
   });
 });
 

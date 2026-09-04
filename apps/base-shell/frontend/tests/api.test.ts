@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getActiveProvider, getPlatformStatus, getSession, isRetryableReadError, listApps, listPinnedApps, MaverickHttpError, MaverickTransportError, normalizeAppRegistryPayload, retryAfterMs, savePinnedApps } from "../src/api";
 import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
-import { runShellRead, shellCacheLifecycle } from "../src/pwaCacheRuntime";
+import { runShellRead, shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
 
 describe("base-shell api normalization", () => {
   afterEach(() => {
@@ -112,10 +112,15 @@ describe("base-shell api normalization", () => {
       removed: 0,
       status: "complete",
     });
+    const revoked = vi.fn();
+    const unsubscribe = subscribeShellAuthorizationRevocation(revoked);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
 
     await expect(getSession()).rejects.toMatchObject({ status: 401 });
+    expect(revoked).toHaveBeenCalledOnce();
+    expect(revoked).toHaveBeenCalledWith(401);
     expect(cleanup).toHaveBeenCalledOnce();
+    unsubscribe();
   });
 
   it.each([401, 403])("preserves a real %i through request, lifecycle cleanup, and retry coordination", async (status) => {
@@ -135,6 +140,22 @@ describe("base-shell api normalization", () => {
 
     await expect(pending).rejects.toBeInstanceOf(MaverickHttpError);
     await expect(pending).rejects.toMatchObject({ status });
+  });
+
+  it("does not let delayed authorization cleanup reclassify an HTTP response as a timeout", async () => {
+    vi.useFakeTimers();
+    const pendingCleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.authorizationFailure>>>();
+    vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockReturnValue(pendingCleanup.promise);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 403 }));
+
+    const observed = getSession().catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(15_000);
+    pendingCleanup.resolve({ pendingCleanupCount: 0, removed: 0, status: "complete" });
+
+    const error = await observed;
+    expect(error).toBeInstanceOf(MaverickHttpError);
+    expect(error).toMatchObject({ status: 403 });
+    expect(error).not.toBeInstanceOf(MaverickTransportError);
   });
 
   it("reads and saves ordered pinned apps through the App Store backend", async () => {
@@ -299,3 +320,13 @@ describe("base-shell api normalization", () => {
     });
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}

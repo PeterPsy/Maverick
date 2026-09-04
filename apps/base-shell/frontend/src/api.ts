@@ -4,7 +4,7 @@ import {
   idempotencyHeaders,
   type MutationRetryContract,
 } from "@maverick/pwa-cache";
-import { shellCacheLifecycle, shellRetryCoordinator } from "./pwaCacheRuntime";
+import { revokeShellAuthorization, shellRetryCoordinator } from "./pwaCacheRuntime";
 
 export type AppLogo = {
   kind: "glyph" | "image";
@@ -322,13 +322,16 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     if (!response.ok) {
       const responseError = new MaverickHttpError(path, response);
       if (responseError.status === 401 || responseError.status === 403) {
-        await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
+        void revokeShellAuthorization(responseError.status);
       }
       throw responseError;
     }
     shellRetryCoordinator.confirmUsefulTransport();
     return (await response.json()) as T;
   } catch (requestError) {
+    if (requestError instanceof MaverickHttpError) {
+      throw requestError;
+    }
     if (didTimeout) {
       throw new MaverickTransportError(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
     }

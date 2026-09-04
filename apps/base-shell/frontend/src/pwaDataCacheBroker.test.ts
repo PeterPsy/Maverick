@@ -7,7 +7,7 @@ import {
   PWA_DATA_CACHE_BROKER_RESULT,
 } from "@maverick/pwa-cache";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
-import { shellCacheLifecycle } from "./pwaCacheRuntime";
+import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
 import { setMaverickFrameOrigin, type MaverickFrameScope } from "./iframePolicy";
 
 type PortMessage = Record<string, unknown>;
@@ -85,19 +85,18 @@ async function nextOfType(messages: ReturnType<typeof portMessages>, type: strin
 
 function broker(
   featureEnabled: () => Promise<boolean | null> = async () => true,
-  onAuthorizationFailure?: (status: 401 | 403) => Promise<void> | void,
   frameScope: MaverickFrameScope = FRAME_SCOPE,
 ): PwaDataCacheBroker {
   return new PwaDataCacheBroker({
     featureEnabled,
     frameScope,
-    onAuthorizationFailure,
     principal: { userId: "user-one", workspaceId: frameScope.workspaceId },
   });
 }
 
 describe("Base Shell structured data-cache broker", () => {
   const brokers: PwaDataCacheBroker[] = [];
+  const authorizationSubscriptions: Array<() => void> = [];
 
   beforeEach(() => {
     const shellWindow = new EventTarget() as EventTarget & Window;
@@ -109,6 +108,7 @@ describe("Base Shell structured data-cache broker", () => {
 
   afterEach(() => {
     brokers.splice(0).forEach((item) => item.dispose());
+    authorizationSubscriptions.splice(0).forEach((unsubscribe) => unsubscribe());
     registeredFrames.splice(0).forEach((frame) => setMaverickFrameOrigin(frame, null, "cleanup", FRAME_SCOPE));
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -186,7 +186,7 @@ describe("Base Shell structured data-cache broker", () => {
       sessionGeneration: "session-workspace-a",
       workspaceId: "workspace-a",
     });
-    const previousWorkspaceBroker = broker(async () => true, undefined, oldFrameScope);
+    const previousWorkspaceBroker = broker(async () => true, oldFrameScope);
     brokers.push(previousWorkspaceBroker);
     previousWorkspaceBroker.dispose();
     const currentBroker = broker();
@@ -363,7 +363,8 @@ describe("Base Shell structured data-cache broker", () => {
       status: "complete",
     });
     const authorizationFailure = vi.fn();
-    const subject = broker(async () => true, authorizationFailure);
+    authorizationSubscriptions.push(subscribeShellAuthorizationRevocation(authorizationFailure));
+    const subject = broker();
     brokers.push(subject);
     const entityId = `warm-auth-${crypto.randomUUID()}`;
 

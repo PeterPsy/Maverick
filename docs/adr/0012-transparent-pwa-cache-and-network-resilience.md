@@ -312,6 +312,21 @@ completed and only if that load is still current. Logout enters the barrier
 before its network request, completes local lifecycle cleanup even when the
 request fails, and never depends on a follow-up session read to remove frames.
 
+The barrier also precedes the actual Core request for a workspace switch or
+creation. `WorkspaceSwitcher` is presentation-only; AppShell cancels the active
+load, synchronously unmounts app/widget frames and both brokers (including the
+Storage file broker through layout cleanup), then performs the mutation. It
+transitions the lifecycle and loads the new registry before publishing the
+resulting session.
+
+Shell API requests, PWA-config reads, structured-data reads, Storage file
+reads, and isolated-frame launch share one authorization-revocation channel.
+The channel is safe to invoke repeatedly, signals AppShell synchronously, and
+performs durable cleanup through the serialized lifecycle. That cleanup is not
+part of network timeout classification: a received `401`/`403` remains a
+terminal HTTP response even if cleanup is delayed behind another lifecycle
+operation.
+
 ## Supersession boundary
 
 When ADR-0011 and this record conflict, this record is normative. Historical

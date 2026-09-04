@@ -27,7 +27,7 @@ import {
   type MaverickFrameScope,
 } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
-import { runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
+import { revokeShellAuthorization, runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
 
 type ResourceDeclaration = {
   aliases: readonly string[];
@@ -58,7 +58,6 @@ type PwaDataCacheBrokerOptions = {
   accessLease?: AccessLease;
   featureEnabled?: (signal?: AbortSignal) => Promise<boolean | null>;
   frameScope: MaverickFrameScope;
-  onAuthorizationFailure?: (status: 401 | 403) => Promise<void> | void;
   principal: Omit<CachePrincipal, "appId">;
 };
 
@@ -129,7 +128,6 @@ export class PwaDataCacheBroker {
   private readonly clients = new Map<string, ReturnType<ReturnType<typeof createPwaCacheHost>["createClient"]>>();
   private readonly featureEnabled: NonNullable<PwaDataCacheBrokerOptions["featureEnabled"]>;
   private readonly frameScope: MaverickFrameScope;
-  private readonly onAuthorizationFailure: PwaDataCacheBrokerOptions["onAuthorizationFailure"];
   private featureWasConfirmedEnabled = false;
   private featureWasExplicitlyDisabled = false;
   private authorizationFailureStarted: Promise<void> | null = null;
@@ -142,7 +140,6 @@ export class PwaDataCacheBroker {
     }
     this.featureEnabled = options.featureEnabled ?? dataCacheFeatureEnabled;
     this.frameScope = Object.freeze({ ...options.frameScope });
-    this.onAuthorizationFailure = options.onAuthorizationFailure;
     for (const [appId, declarations] of Object.entries(RESOURCE_DECLARATIONS)) {
       const client = createPwaCacheHost({ ...options.principal, appId }).createClient({
         accessLease: options.accessLease,
@@ -452,13 +449,7 @@ export class PwaDataCacheBroker {
         new DOMException("PWA data-cache authorization was revoked.", "AbortError"),
       );
     }
-    const cleanup = shellCacheLifecycle.authorizationFailure().catch(() => undefined);
-    try {
-      await this.onAuthorizationFailure?.(status);
-    } catch {
-      // UI notification is best-effort; durable cache cleanup still completes.
-    }
-    await cleanup;
+    await revokeShellAuthorization(status);
   }
 
   private reply(

@@ -180,7 +180,8 @@ function sidebarElement(
       onReorderPinnedApps={vi.fn()}
       onSidebarDetailsWidthChange={vi.fn()}
       onThemeModeChange={vi.fn()}
-      onWorkspaceChanged={vi.fn()}
+      onWorkspaceChange={vi.fn()}
+      onWorkspaceCreate={vi.fn()}
       pinnedAppIds={["chat"]}
       railMetrics={{}}
       shellTheme={shellTheme}

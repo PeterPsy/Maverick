@@ -56,6 +56,20 @@ a candidate authenticated session only after lifecycle transition and registry
 load succeed. A concurrent `401/403` invalidates the pending load, so its later
 cleanup completion cannot remount that session. Logout never waits for a second
 session fetch to remove authenticated frames.
+
+Workspace switch/create follows the same barrier before the mutation reaches
+Core: cancel the active load, synchronously unmount frames, dispose the
+structured broker and Storage file broker, call the workspace endpoint, run the
+lifecycle transition, load the scoped registry, then publish. The workspace
+switcher component must never call the API directly.
+
+All parent-side authorization observations use the shared shell revocation
+channel: ordinary shell APIs, both `/api/pwa/config` projections, structured
+broker reads, Storage file broker reads, and isolated-frame launch. Notification
+and iframe teardown are synchronous and idempotent; durable deletion remains
+serialized. Do not await that deletion inside an HTTP request timeout window:
+an observed `401`/`403` must remain terminal HTTP rather than becoming a
+transport timeout.
 Cached catalog or content data is never used to authorize launch, install,
 write, publish, provider, capability, or confirmation actions.
 

@@ -1,16 +1,18 @@
-import { createWorkspace, switchWorkspace, WorkspaceItem } from "../api";
+import type { WorkspaceItem } from "../api";
 
 export function WorkspaceSwitcher({
   activeWorkspaceId,
   canCreateWorkspace,
   isLoading = false,
-  onChanged,
+  onWorkspaceChange,
+  onWorkspaceCreate,
   workspaces,
 }: {
   activeWorkspaceId: string;
   canCreateWorkspace: boolean;
   isLoading?: boolean;
-  onChanged: () => void;
+  onWorkspaceChange: (workspaceId: string) => Promise<void> | void;
+  onWorkspaceCreate: (name: string) => Promise<void> | void;
   workspaces: WorkspaceItem[];
 }) {
   const hasActiveWorkspace = workspaces.some((workspace) => workspace.workspace_id === activeWorkspaceId);
@@ -19,8 +21,7 @@ export function WorkspaceSwitcher({
     if (!workspaceId || workspaceId === activeWorkspaceId) {
       return;
     }
-    await switchWorkspace(workspaceId);
-    onChanged();
+    await onWorkspaceChange(workspaceId);
   }
 
   async function handleCreate() {
@@ -28,8 +29,7 @@ export function WorkspaceSwitcher({
     if (!name?.trim()) {
       return;
     }
-    await createWorkspace(name.trim());
-    onChanged();
+    await onWorkspaceCreate(name.trim());
   }
 
   if (isLoading) {

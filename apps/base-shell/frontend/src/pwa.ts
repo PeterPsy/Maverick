@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { shellCacheLifecycle } from "./pwaCacheRuntime";
+import { revokeShellAuthorization } from "./pwaCacheRuntime";
 
 export type ShellPwaUpdateState = {
   applying: boolean;
@@ -117,7 +117,7 @@ async function projectedDataFeatureEnabled(
     });
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
-        await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
+        void revokeShellAuthorization(response.status);
         return false;
       }
       return TRANSIENT_CONFIG_STATUSES.has(response.status) ? null : false;
@@ -170,6 +170,9 @@ async function serviceWorkerV2Enabled(): Promise<boolean | null> {
       signal: controller.signal,
     });
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        void revokeShellAuthorization(response.status);
+      }
       return null;
     }
     const payload = (await response.json()) as { schema?: unknown; service_worker?: { enabled?: unknown; generation?: unknown } };

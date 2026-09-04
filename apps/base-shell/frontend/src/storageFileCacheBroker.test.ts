@@ -4,6 +4,8 @@ import {
   PWA_FILE_CACHE_BROKER_OPEN,
   PWA_FILE_CACHE_BROKER_RESULT,
 } from "@maverick/pwa-cache";
+import { MaverickHttpError } from "./api";
+import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
 import { StorageFileCacheBroker } from "./storageFileCacheBroker";
 
 const storageWindow = {} as Window;
@@ -102,6 +104,36 @@ describe("Base Shell Storage file-cache broker", () => {
       contentWindow: {} as Window,
       dataset: { maverickFrameOrigin: storageFrameOrigin },
     } as unknown as HTMLIFrameElement)).toBe(false);
+    broker.dispose();
+  });
+
+  it("revokes shell authorization when a Storage parent request returns 403", async () => {
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure")
+      .mockResolvedValue({ pendingCleanupCount: 0, removed: 0, status: "complete" });
+    const revoked = vi.fn();
+    const unsubscribe = subscribeShellAuthorizationRevocation(revoked);
+    const broker = new StorageFileCacheBroker({
+      featureEnabled: async () => true,
+      hostOrigin: "https://maverick.test",
+      openFile: async () => {
+        throw new Error("openFile must not run after descriptor authorization fails");
+      },
+      principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
+      resolveDescriptor: async () => {
+        throw new MaverickHttpError("/api/apps/storage/backend", new Response(null, { status: 403 }));
+      },
+    });
+    const channel = new MessageChannel();
+    const accepted = nextPortMessage(channel.port1);
+
+    broker.handleWindowMessage(requestEvent(channel), storageFrame);
+    await accepted;
+    await expect(nextPortMessage(channel.port1)).resolves.toMatchObject({ status: "error" });
+
+    expect(revoked).toHaveBeenCalledOnce();
+    expect(revoked).toHaveBeenCalledWith(403);
+    expect(cleanup).toHaveBeenCalledOnce();
+    unsubscribe();
     broker.dispose();
   });
 

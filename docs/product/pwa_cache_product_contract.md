@@ -27,7 +27,7 @@ replace an app icon, or select a different route.
 | Valid versioned file bytes already cached | Open them through the ordinary Storage viewer without a special badge or action. |
 | File bytes missing or invalid | Keep the ordinary open/loading state while waiting for the server. |
 | Prompt, model, agent, provider, tool, or authority dependency cannot reach the server | Keep the owning operation pending only where its normal contract allows; do not report success. |
-| Server returns `401` or `403` | Run the normal authentication/authorization and applicable cleanup flow; never substitute stale data. |
+| Server returns `401` or `403` | Immediately withdraw authenticated frames through the shared shell revocation path, run applicable durable cleanup, and never substitute stale data. |
 | Server returns validation or conflict response | Show the function's normal terminal outcome; do not classify it as a transport wait. |
 | Useful transport returns | Retry or revalidate internally without a banner, toast, route change, or icon change. |
 | First visit without network or verified shell | Allow the browser's normal navigation failure; do not synthesize a Maverick product page. |
@@ -64,7 +64,7 @@ must not reveal expired data merely because transport is unavailable.
 - Pending attempts live only in RAM and accept cancellation.
 - Logout, unmount, user/workspace change, and scope revision cancel pending
   attempts and prevent late results from updating the new scope.
-- `401`, `403`, `409`, and `422` are terminal for this classification.
+- `401`, `403`, `409`, and `422` are terminal for this classification; cleanup latency cannot rewrite a received authorization response as a transport timeout.
 - A `429` or selected `502`/`503`/`504` response is retryable only where an
   explicit resource policy permits it and honors `Retry-After` when present.
 

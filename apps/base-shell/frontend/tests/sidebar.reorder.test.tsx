@@ -292,7 +292,8 @@ describe("Sidebar desktop rail reorder", () => {
           onReorderPinnedApps={(appIds) => reorderPinnedApps(appIds)}
           onSidebarDetailsWidthChange={(widthPx) => resizeSidebar(widthPx)}
           onSidebarResizeActiveChange={vi.fn()}
-          onWorkspaceChanged={vi.fn()}
+          onWorkspaceChange={vi.fn()}
+          onWorkspaceCreate={vi.fn()}
           pinnedAppIds={overrides.pinnedAppIds ?? ["chat", "agents", "skills"]}
           railMetrics={{}}
           sidebarDetailsWidthPx={320}

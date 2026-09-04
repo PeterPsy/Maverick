@@ -1662,15 +1662,26 @@ widget frame. Reauthentication creates new frame documents, so private data
 from the revoked scope cannot remain in the DOM.
 
 The session handoff is an AppShell publication barrier, not an eventual effect.
-Before a replacement session is fetched or a logout request is awaited, the
-shell synchronously withdraws its broker principal and frame scope and removes
-the authenticated frame tree. Lifecycle transition, end-session,
+Before a replacement session is fetched, a workspace mutation is sent, or a
+logout request is awaited, the shell synchronously withdraws its broker
+principal and frame scope, removes the authenticated frame tree, and disposes
+the Storage file broker in a layout cleanup. `WorkspaceSwitcher` only requests
+the action; AppShell owns the boundary and calls Core after that synchronous
+commit. Lifecycle transition, end-session,
 authorization-failure, invalidation, and clear operations are serialized. The
 candidate session and its registry become renderable only after the applicable
 lifecycle transition completes and only while that load remains current; a
 concurrent authorization failure cancels publication. Logout finishes in the
 anonymous shell after local cleanup regardless of a failed network response and
 does not remount frames through a follow-up session read.
+
+Every parent-owned path that can observe `401` or `403`—shell APIs, PWA config,
+structured data, Storage file bytes, and isolated-frame launch—uses one
+idempotent authorization-revocation channel. The channel synchronously cancels
+the active shell load and removes authenticated UI before awaiting its
+serialized durable cleanup. Cleanup latency is outside request timeout
+classification: once an HTTP authorization response exists, it remains the
+terminal HTTP result and cannot be rewritten as a transport timeout.
 
 The initial declarations are Website Studio site snapshots, Storage catalog
 metadata, the App Store catalog, and Fitness Coach bootstrap/thumbnail data.

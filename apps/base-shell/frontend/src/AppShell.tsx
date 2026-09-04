@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { flushSync } from "react-dom";
 import {
   AppRegistryItem,
   configureActiveProvider,
+  createWorkspace,
   getProviderSetupSettings,
   getSession,
   listApps,
@@ -38,10 +39,12 @@ import type { ShellEffectiveTheme, ShellThemeMode } from "./theme";
 import { markStartupMetric, measureStartupMetric } from "./startupMetrics";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
 import {
+  revokeShellAuthorization,
   runShellRead,
   shellCacheLifecycle,
   shellCachePrincipal,
   shellRetryCoordinator,
+  subscribeShellAuthorizationRevocation,
 } from "./pwaCacheRuntime";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import {
@@ -183,10 +186,13 @@ export function AppShell() {
     beginShellSessionTransition();
     publishAnonymousShellState();
   }, [beginShellSessionTransition, cancelShellLoading, publishAnonymousShellState]);
+  useLayoutEffect(
+    () => subscribeShellAuthorizationRevocation(handleShellAuthorizationFailure),
+    [handleShellAuthorizationFailure],
+  );
   usePwaDataCacheBrokerHost({
     appRegistry: apps,
     frameScope,
-    onAuthorizationFailure: handleShellAuthorizationFailure,
     principal: authenticatedSession ? {
       sessionExpiresAt: authenticatedSession.expires_at,
       userId: authenticatedSession.user.user_id,
@@ -307,15 +313,6 @@ export function AppShell() {
     );
   }
 
-  async function clearShellAfterAuthorizationFailure(controller: AbortController, loadVersion: number) {
-    controller.abort();
-    await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
-    if (shellLoadVersionRef.current !== loadVersion) {
-      return;
-    }
-    publishAnonymousShellState();
-  }
-
   async function loadShellState() {
     if (shellLoadInFlightRef.current) {
       return;
@@ -344,11 +341,7 @@ export function AppShell() {
         return;
       }
       if (!currentSession.authenticated) {
-        await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
-        if (shellLoadVersionRef.current !== loadVersion) {
-          return;
-        }
-        publishAnonymousShellState();
+        void revokeShellAuthorization(401);
         measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
@@ -389,7 +382,7 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        await clearShellAfterAuthorizationFailure(controller, loadVersion);
+        void revokeShellAuthorization(loadError.status as 401 | 403);
         return;
       }
       await shellCacheLifecycle.endSession().catch(() => undefined);
@@ -440,7 +433,7 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        handleShellAuthorizationFailure();
+        void revokeShellAuthorization(loadError.status as 401 | 403);
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -472,7 +465,7 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        handleShellAuthorizationFailure();
+        void revokeShellAuthorization(loadError.status as 401 | 403);
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -506,7 +499,7 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        handleShellAuthorizationFailure();
+        void revokeShellAuthorization(loadError.status as 401 | 403);
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -711,9 +704,8 @@ export function AppShell() {
     const activeWorkspaceId = authenticatedSession?.workspace_id ?? null;
     if (requestedWorkspaceId && requestedWorkspaceId !== activeWorkspaceId) {
       try {
-        await switchWorkspace(requestedWorkspaceId);
-        cancelShellLoading({ resetRecovery: true });
-        await loadShellState();
+        const switched = await runWorkspaceMutation(() => switchWorkspace(requestedWorkspaceId));
+        if (!switched) return;
       } catch (switchError) {
         setError(switchError instanceof Error ? switchError.message : "Unable to switch workspace.");
         return;
@@ -730,6 +722,42 @@ export function AppShell() {
       closeSidebar();
     }
     pushShellAppRoute(appId, resolvedParams);
+  }
+
+  async function runWorkspaceMutation(mutation: () => Promise<unknown>): Promise<boolean> {
+    cancelShellLoading({ resetRecovery: true });
+    const boundaryVersion = shellLoadVersionRef.current;
+    beginShellSessionTransition();
+    setIsLoading(true);
+    try {
+      await mutation();
+    } catch (mutationError) {
+      if (shellLoadVersionRef.current === boundaryVersion) {
+        await loadShellState();
+      }
+      throw mutationError;
+    }
+    if (shellLoadVersionRef.current !== boundaryVersion) {
+      return false;
+    }
+    await loadShellState();
+    return publishedSessionRef.current?.authenticated === true;
+  }
+
+  async function handleWorkspaceChange(workspaceId: string) {
+    try {
+      await runWorkspaceMutation(() => switchWorkspace(workspaceId));
+    } catch (switchError) {
+      setError(switchError instanceof Error ? switchError.message : "Unable to switch workspace.");
+    }
+  }
+
+  async function handleWorkspaceCreate(name: string) {
+    try {
+      await runWorkspaceMutation(() => createWorkspace(name));
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to create workspace.");
+    }
   }
 
   function handleSidebarModeChange(nextMode: SidebarMode) {
@@ -948,7 +976,8 @@ export function AppShell() {
         onPrimaryActionStateChange={setMobilePrimaryAction}
         onOpenSettings={openSettingsApp}
         onReorderPinnedApps={handlePinnedAppsReorder}
-        onWorkspaceChanged={loadShellState}
+        onWorkspaceChange={handleWorkspaceChange}
+        onWorkspaceCreate={handleWorkspaceCreate}
         pinnedAppIds={pinnedAppIds}
         railMetrics={shellSidebarMetrics}
         sidebarDetailsWidthPx={sidebarDetailsWidthPx}

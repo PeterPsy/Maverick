@@ -21,7 +21,7 @@ import {
   type PwaFileCache,
 } from "@maverick/pwa-cache";
 import { MaverickHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
-import { runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
+import { revokeShellAuthorization, runShellRead } from "./pwaCacheRuntime";
 import { storageFileCacheFeatureEnabled } from "./pwa";
 import { isMaverickFrameMessage } from "./iframePolicy";
 
@@ -205,7 +205,7 @@ export class StorageFileCacheBroker {
         this.featureWasExplicitlyDisabled = true;
         this.featureWasConfirmedEnabled = false;
         this.resolvedFiles.clear();
-        await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
+        await revokeShellAuthorization(error.status);
       }
       if (!signal.aborted && !isAbortError(error)) this.reply(request.request_id, "error");
       else this.finish(request.request_id);

@@ -13,20 +13,16 @@ type AuthenticatedCachePrincipal = {
 export function usePwaDataCacheBrokerHost({
   appRegistry,
   frameScope,
-  onAuthorizationFailure,
   principal,
 }: {
   appRegistry: readonly AppRegistryItem[];
   frameScope: MaverickFrameScope | null;
-  onAuthorizationFailure: (status: 401 | 403) => Promise<void> | void;
   principal: AuthenticatedCachePrincipal | null;
 }): void {
   const enabledAppIdsRef = useRef<ReadonlySet<string>>(new Set());
-  const authorizationFailureRef = useRef(onAuthorizationFailure);
   enabledAppIdsRef.current = new Set(
     appRegistry.filter((app) => app.data_cache_enabled).map((app) => app.app_id),
   );
-  authorizationFailureRef.current = onAuthorizationFailure;
 
   useLayoutEffect(() => {
     if (!principal || !frameScope || frameScope.workspaceId !== principal.workspaceId) return undefined;
@@ -37,7 +33,6 @@ export function usePwaDataCacheBrokerHost({
     const broker = new PwaDataCacheBroker({
       accessLease,
       frameScope,
-      onAuthorizationFailure: (status) => authorizationFailureRef.current(status),
       principal: {
         userId: principal.userId,
         workspaceId: principal.workspaceId,

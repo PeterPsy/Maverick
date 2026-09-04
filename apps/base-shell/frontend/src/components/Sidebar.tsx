@@ -50,7 +50,8 @@ export function Sidebar({
   onSidebarDetailsWidthChange,
   onSidebarResizeActiveChange,
   onThemeModeChange = () => undefined,
-  onWorkspaceChanged,
+  onWorkspaceChange,
+  onWorkspaceCreate,
   pinnedAppIds,
   railMetrics,
   sidebarDetailsWidthPx,
@@ -81,7 +82,8 @@ export function Sidebar({
   onSidebarDetailsWidthChange: (widthPx: number) => void;
   onSidebarResizeActiveChange?: (active: boolean) => void;
   onThemeModeChange?: (mode: ShellThemeMode) => void;
-  onWorkspaceChanged: () => void;
+  onWorkspaceChange: (workspaceId: string) => Promise<void> | void;
+  onWorkspaceCreate: (name: string) => Promise<void> | void;
   pinnedAppIds: string[];
   railMetrics: CSSProperties;
   sidebarDetailsWidthPx: number;
@@ -342,7 +344,8 @@ export function Sidebar({
               activeWorkspaceId={activeWorkspaceId}
               canCreateWorkspace={user?.platform_role === "admin"}
               isLoading={isWorkspacesLoading}
-              onChanged={onWorkspaceChanged}
+              onWorkspaceChange={onWorkspaceChange}
+              onWorkspaceCreate={onWorkspaceCreate}
               workspaces={workspaces}
             />
           </div>

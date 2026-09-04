@@ -11,6 +11,50 @@ export const shellCacheLifecycle = createCacheLifecycleController({
   retryCoordinator: shellRetryCoordinator,
 });
 
+export type ShellAuthorizationStatus = 401 | 403;
+type ShellAuthorizationRevocationListener = (status: ShellAuthorizationStatus) => void;
+
+const authorizationRevocationListeners = new Set<ShellAuthorizationRevocationListener>();
+let authorizationRevocationInFlight: Promise<void> | null = null;
+
+export function subscribeShellAuthorizationRevocation(
+  listener: ShellAuthorizationRevocationListener,
+): () => void {
+  authorizationRevocationListeners.add(listener);
+  return () => authorizationRevocationListeners.delete(listener);
+}
+
+export function revokeShellAuthorization(status: ShellAuthorizationStatus): Promise<void> {
+  if (authorizationRevocationInFlight) {
+    return authorizationRevocationInFlight;
+  }
+
+  let cleanup: Promise<unknown>;
+  try {
+    cleanup = shellCacheLifecycle.authorizationFailure();
+  } catch {
+    cleanup = Promise.resolve();
+  }
+  const revocation = cleanup
+    .catch(() => undefined)
+    .then(() => undefined)
+    .finally(() => {
+      if (authorizationRevocationInFlight === revocation) {
+        authorizationRevocationInFlight = null;
+      }
+    });
+  authorizationRevocationInFlight = revocation;
+
+  for (const listener of [...authorizationRevocationListeners]) {
+    try {
+      listener(status);
+    } catch {
+      // UI teardown is best-effort per listener; cache cleanup remains authoritative.
+    }
+  }
+  return revocation;
+}
+
 export function initializeShellPwaCacheRuntime(): void {
   shellRetryCoordinator.start();
   void shellCacheLifecycle.initialize().catch(() => undefined);

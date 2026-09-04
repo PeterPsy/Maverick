@@ -1474,7 +1474,19 @@ to scoped lifecycle invalidation only after the sender's registered owner
 matches the declared owner. A `401` or `403` disables the mounted broker,
 clears the applicable structured scope, and notifies AppShell to discard its
 authenticated state and unmount every app/widget frame; successful login then
-mounts fresh documents. A workspace or session transition rotates the opaque
+mounts fresh documents. Shell API calls, both PWA-config projections, the
+structured-data broker, the Storage file broker, and isolated-frame launch all
+enter that same immediate, idempotent revocation channel. Its UI notification
+does not wait behind durable cleanup, and an already received `401`/`403`
+retains its terminal HTTP classification even when serialized cleanup takes
+longer than the network timeout.
+
+AppShell owns every active-workspace mutation, including requests initiated by
+the workspace switcher. Before Core receives the mutation, the shell cancels
+the current load and synchronously removes its broker principal, frame scope,
+authenticated frame tree, and Storage file broker. Only after the mutation
+succeeds does it transition the cache lifecycle, load the scoped registry, and
+publish the replacement session. A workspace or session transition rotates the opaque
 generation and synchronously removes frames from the previous scope. Any late
 old-frame request is unavailable before cache lookup, even when the new
 workspace has a warm entry. App and widget fan-out enforces the same scoped

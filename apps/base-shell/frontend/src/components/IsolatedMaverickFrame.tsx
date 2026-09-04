@@ -12,6 +12,7 @@ import {
   setMaverickFrameOrigin,
   type MaverickFrameScope,
 } from "../iframePolicy";
+import { revokeShellAuthorization } from "../pwaCacheRuntime";
 
 const APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch";
 export const APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "maverick.app-frame.authorization-required";
@@ -143,6 +144,9 @@ export async function requestAppFrameLaunch(
     method: "POST",
     signal,
   });
+  if (!response.ok && (response.status === 401 || response.status === 403)) {
+    void revokeShellAuthorization(response.status);
+  }
   const payload = (await response.json().catch(() => ({}))) as RawLaunchPayload;
   if (!response.ok) {
     throw new Error(typeof payload.error === "string" ? payload.error : "Unable to launch isolated app frame.");

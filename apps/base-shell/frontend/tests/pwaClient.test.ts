@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { disableShellServiceWorker, recoverShellStaticCache, storageFileCacheFeatureEnabled } from "../src/pwa";
-import { shellCacheLifecycle } from "../src/pwaCacheRuntime";
+import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
 
 describe("PWA client recovery", () => {
   const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
@@ -97,9 +97,14 @@ describe("PWA client recovery", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
     const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure")
       .mockResolvedValue({ pendingCleanupCount: 0, removed: 0, status: "complete" });
+    const revoked = vi.fn();
+    const unsubscribe = subscribeShellAuthorizationRevocation(revoked);
 
     await expect(storageFileCacheFeatureEnabled()).resolves.toBe(false);
 
+    expect(revoked).toHaveBeenCalledOnce();
+    expect(revoked).toHaveBeenCalledWith(401);
     expect(cleanup).toHaveBeenCalledOnce();
+    unsubscribe();
   });
 });

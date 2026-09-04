@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import {
@@ -164,7 +164,7 @@ export function AppFrameHost({
     dependencyCacheRef.current = dependencyCache;
   }, [dependencyCache]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (frameScope.workspaceId !== activeWorkspaceId) return undefined;
     const sessionExpiry = Date.parse(sessionExpiresAt);
     const accessLease = Number.isFinite(sessionExpiry)

@@ -36,6 +36,7 @@ export class CacheLifecycleController {
   private readonly quotaAdapter: StorageQuotaAdapter;
   private readonly retryCoordinator?: RetryCoordinator;
   private current: CacheLifecyclePrincipal | null = null;
+  private operationTail: Promise<void> = Promise.resolve();
 
   constructor(options: CacheLifecycleControllerOptions = {}) {
     this.backend = options.backend instanceof ResilientCacheBackend
@@ -52,78 +53,95 @@ export class CacheLifecycleController {
     await Promise.all([this.backend.initialize(), this.fileCache.initialize()]);
   }
 
-  async transition(next: CacheLifecyclePrincipal): Promise<CacheCleanupResult> {
-    const principal = { ...validatePrincipal(next), accessLease: normalizeLease(next.accessLease, this.now()) };
-    const previous = this.current;
-    let cleanup = completeCleanup();
-    if (previous && !samePrincipal(previous, principal)) {
-      cleanup = await this.clearPrevious(previous, principal);
-    }
-    this.current = principal;
-    this.retryCoordinator?.setScope(scopeKey(principal));
-    if (principal.accessLease) {
-      await Promise.all([
-        this.renewAccessLease(principal).catch(() => undefined),
-        this.fileCache.renewAccessLease({
-          appId: "storage",
-          userId: principal.userId,
-          workspaceId: principal.workspaceId,
-        }, principal.accessLease).catch(() => undefined),
-      ]);
-    }
-    return cleanup;
+  transition(next: CacheLifecyclePrincipal): Promise<CacheCleanupResult> {
+    return this.serialize(async () => {
+      const principal = { ...validatePrincipal(next), accessLease: normalizeLease(next.accessLease, this.now()) };
+      const previous = this.current;
+      let cleanup = completeCleanup();
+      if (previous && !samePrincipal(previous, principal)) {
+        cleanup = await this.clearPrevious(previous, principal);
+      }
+      this.current = principal;
+      this.retryCoordinator?.setScope(scopeKey(principal));
+      if (principal.accessLease) {
+        await Promise.all([
+          this.renewAccessLease(principal).catch(() => undefined),
+          this.fileCache.renewAccessLease({
+            appId: "storage",
+            userId: principal.userId,
+            workspaceId: principal.workspaceId,
+          }, principal.accessLease).catch(() => undefined),
+        ]);
+      }
+      return cleanup;
+    });
   }
 
-  async endSession(): Promise<CacheCleanupResult> {
-    const previous = this.current;
-    this.current = null;
-    this.retryCoordinator?.setScope("anonymous");
-    if (!previous) {
-      return this.clearAll();
-    }
-    return this.clearFilter({ userId: previous.userId });
-  }
-
-  async authorizationFailure(principal = this.current): Promise<CacheCleanupResult> {
-    this.retryCoordinator?.setScope("anonymous");
-    if (!principal) {
-      return this.clearAll();
-    }
-    const cleanup = await this.clearFilter({ userId: principal.userId, workspaceId: principal.workspaceId });
-    if (this.current && samePrincipal(this.current, principal)) {
+  endSession(): Promise<CacheCleanupResult> {
+    return this.serialize(async () => {
+      const previous = this.current;
       this.current = null;
-    }
-    return cleanup;
+      this.retryCoordinator?.setScope("anonymous");
+      if (!previous) {
+        return this.clearAllNow();
+      }
+      return this.clearFilter({ userId: previous.userId });
+    });
   }
 
-  async handleDataChanged(payload: {
+  authorizationFailure(principal?: CacheLifecyclePrincipal | null): Promise<CacheCleanupResult> {
+    return this.serialize(async () => {
+      const failedPrincipal = principal === undefined ? this.current : principal;
+      this.retryCoordinator?.setScope("anonymous");
+      if (!failedPrincipal) {
+        return this.clearAllNow();
+      }
+      const cleanup = await this.clearFilter({
+        userId: failedPrincipal.userId,
+        workspaceId: failedPrincipal.workspaceId,
+      });
+      if (this.current && samePrincipal(this.current, failedPrincipal)) {
+        this.current = null;
+      }
+      return cleanup;
+    });
+  }
+
+  handleDataChanged(payload: {
     entityId?: string;
     ownerAppId: string;
     resource: string;
   }): Promise<CacheCleanupResult> {
-    if (!this.current) {
-      return completeCleanup();
-    }
-    const filter = {
-      userId: this.current.userId,
-      workspaceId: this.current.workspaceId,
-      appId: payload.ownerAppId,
-      resource: payload.resource,
-      ...(payload.entityId ? { entityId: payload.entityId } : {}),
-    };
-    const cleanup = await this.clearWithStatus(filter);
-    this.bus.publish({
-      appId: payload.ownerAppId,
-      ...(payload.entityId ? { entityId: payload.entityId } : {}),
-      resource: payload.resource,
-      type: "data-changed",
-      userId: this.current.userId,
-      workspaceId: this.current.workspaceId,
+    return this.serialize(async () => {
+      if (!this.current) {
+        return completeCleanup();
+      }
+      const current = this.current;
+      const filter = {
+        userId: current.userId,
+        workspaceId: current.workspaceId,
+        appId: payload.ownerAppId,
+        resource: payload.resource,
+        ...(payload.entityId ? { entityId: payload.entityId } : {}),
+      };
+      const cleanup = await this.clearWithStatus(filter);
+      this.bus.publish({
+        appId: payload.ownerAppId,
+        ...(payload.entityId ? { entityId: payload.entityId } : {}),
+        resource: payload.resource,
+        type: "data-changed",
+        userId: current.userId,
+        workspaceId: current.workspaceId,
+      });
+      return cleanup;
     });
-    return cleanup;
   }
 
-  async clearAll(): Promise<CacheCleanupResult> {
+  clearAll(): Promise<CacheCleanupResult> {
+    return this.serialize(() => this.clearAllNow());
+  }
+
+  private async clearAllNow(): Promise<CacheCleanupResult> {
     const cleanup = await this.clearWithStatus({});
     this.bus.publish({ type: "all-cleared" });
     return cleanup;
@@ -204,6 +222,12 @@ export class CacheLifecycleController {
     await Promise.all(entries.filter(isPrivateEntry).map((entry) =>
       this.backend.touch(entry.key, { accessLeaseExpiresAt: lease.expiresAt }).catch(() => false),
     ));
+  }
+
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operationTail.then(operation, operation);
+    this.operationTail = result.then(() => undefined, () => undefined);
+    return result;
   }
 }
 

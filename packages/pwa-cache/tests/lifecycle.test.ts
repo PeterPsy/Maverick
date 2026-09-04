@@ -84,6 +84,53 @@ describe("cache lifecycle", () => {
     expect(await backend.list()).toEqual([]);
   });
 
+  it.each([
+    {
+      expectedCleanup: { userId: "user-a", workspaceId: "next" },
+      operation: (controller: CacheLifecycleController) => controller.authorizationFailure(),
+      operationName: "authorization failure",
+    },
+    {
+      expectedCleanup: { userId: "user-a" },
+      operation: (controller: CacheLifecycleController) => controller.endSession(),
+      operationName: "logout",
+    },
+  ])("serializes $operationName behind an in-flight scope transition", async ({ expectedCleanup, operation }) => {
+    const backend = new MemoryCacheBackend();
+    await backend.put({ metadata: entry({ workspaceId: "previous" }), payload: { value: "old" } });
+    await backend.put({ metadata: entry({ workspaceId: "next" }), payload: { value: "new" } });
+    const previousCleanup = deferred<Awaited<ReturnType<FileCacheMaintenance["clear"]>>>();
+    let delayedPreviousCleanup = true;
+    const fileCache: FileCacheMaintenance = {
+      clear: vi.fn(async (filter) => {
+        if (filter.workspaceId === "previous" && delayedPreviousCleanup) {
+          delayedPreviousCleanup = false;
+          return previousCleanup.promise;
+        }
+        return completeFileCleanup();
+      }),
+      diagnostics: async () => ({ available: true, bytes: 0, entryCount: 0, pendingCleanupCount: 0 }),
+      initialize: async () => undefined,
+      renewAccessLease: async () => undefined,
+    };
+    const controller = new CacheLifecycleController({ backend, bus: new CacheBus(null), fileCacheMaintenance: fileCache });
+    await controller.transition({ appId: "base-shell", userId: "user-a", workspaceId: "previous" });
+
+    const transition = controller.transition({ appId: "base-shell", userId: "user-a", workspaceId: "next" });
+    await until(() => vi.mocked(fileCache.clear).mock.calls.length === 1);
+    const terminatingOperation = operation(controller);
+
+    expect(vi.mocked(fileCache.clear)).toHaveBeenCalledTimes(1);
+    previousCleanup.resolve(completeFileCleanup());
+    await Promise.all([transition, terminatingOperation]);
+
+    expect(vi.mocked(fileCache.clear)).toHaveBeenNthCalledWith(2, expectedCleanup);
+    expect(await backend.list({ userId: "user-a", workspaceId: "next" })).toEqual([]);
+    await backend.put({ metadata: entry({ workspaceId: "next" }), payload: { value: "should-not-invalidate" } });
+    await controller.handleDataChanged({ ownerAppId: "docs", resource: "records" });
+    expect(await backend.list({ userId: "user-a", workspaceId: "next" })).toHaveLength(1);
+  });
+
   it("invalidates only the owning app resource after a data-changed event", async () => {
     const backend = new MemoryCacheBackend();
     await backend.put({ metadata: entry(), payload: { value: "one" } });
@@ -198,3 +245,25 @@ describe("cache lifecycle", () => {
     expect(await resilient.pendingCleanupCount()).toBe(0);
   });
 });
+
+function completeFileCleanup() {
+  return { pendingCleanupCount: 0, removed: 0, status: "complete" as const };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+async function until(condition: () => boolean, attempts = 20): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (condition()) return;
+    await Promise.resolve();
+  }
+  throw new Error("Condition was not reached before the test deadline.");
+}

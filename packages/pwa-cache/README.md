@@ -28,6 +28,12 @@ cleanup barrier, and blocks persistent reads and writes until the primary store
 confirms deletion. Ordinary IndexedDB failures may still use the performance
 fallback when no cleanup is pending.
 
+Lifecycle operations that depend on the active principal are serialized:
+scope transition, logout, authorization failure, invalidation, and aggregate
+clear cannot race updates to the controller's current principal. A terminating
+operation queued during a delayed transition observes and clears the resulting
+principal rather than capturing the preceding one.
+
 The package never renders UI, reads `navigator.onLine`, calls
 `navigator.storage.persist()`, stores pending requests, or turns cached data
 into authority. See `docs/runbooks/pwa_data_cache_m3.md` for integration and

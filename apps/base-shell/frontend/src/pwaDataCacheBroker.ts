@@ -20,7 +20,12 @@ import {
   type ParentDataCacheSerializedError,
   type ResourceCachePolicy,
 } from "@maverick/pwa-cache";
-import { isMaverickOwnerMessage, registeredMaverickFrameOwner } from "./iframePolicy";
+import {
+  isMaverickOwnerMessage,
+  registeredMaverickFrameIdentity,
+  sameMaverickFrameScope,
+  type MaverickFrameScope,
+} from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
 import { runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
 
@@ -52,6 +57,7 @@ type ActiveRead = {
 type PwaDataCacheBrokerOptions = {
   accessLease?: AccessLease;
   featureEnabled?: (signal?: AbortSignal) => Promise<boolean | null>;
+  frameScope: MaverickFrameScope;
   onAuthorizationFailure?: (status: 401 | 403) => Promise<void> | void;
   principal: Omit<CachePrincipal, "appId">;
 };
@@ -122,6 +128,7 @@ export class PwaDataCacheBroker {
   private readonly active = new Map<string, ActiveRead>();
   private readonly clients = new Map<string, ReturnType<ReturnType<typeof createPwaCacheHost>["createClient"]>>();
   private readonly featureEnabled: NonNullable<PwaDataCacheBrokerOptions["featureEnabled"]>;
+  private readonly frameScope: MaverickFrameScope;
   private readonly onAuthorizationFailure: PwaDataCacheBrokerOptions["onAuthorizationFailure"];
   private featureWasConfirmedEnabled = false;
   private featureWasExplicitlyDisabled = false;
@@ -130,7 +137,11 @@ export class PwaDataCacheBroker {
   private disposed = false;
 
   constructor(options: PwaDataCacheBrokerOptions) {
+    if (options.frameScope.workspaceId !== options.principal.workspaceId) {
+      throw new Error("PWA data-cache broker frame scope must match its cache principal workspace.");
+    }
     this.featureEnabled = options.featureEnabled ?? dataCacheFeatureEnabled;
+    this.frameScope = Object.freeze({ ...options.frameScope });
     this.onAuthorizationFailure = options.onAuthorizationFailure;
     for (const [appId, declarations] of Object.entries(RESOURCE_DECLARATIONS)) {
       const client = createPwaCacheHost({ ...options.principal, appId }).createClient({
@@ -155,13 +166,14 @@ export class PwaDataCacheBroker {
       return true;
     }
     const request = event.data;
-    const frameOwnerAppId = registeredMaverickFrameOwner(event);
-    if (!frameOwnerAppId) return false;
+    const frameIdentity = registeredMaverickFrameIdentity(event);
+    if (!frameIdentity) return false;
     const port = event.ports.length === 1 ? event.ports[0] : null;
     const declaration = RESOURCE_DECLARATIONS[request.app_id]?.[request.resource];
     const resource = this.resources.get(resourceKey(request.app_id, request.resource));
     if (!port) return true;
-    if (frameOwnerAppId !== request.app_id
+    if (frameIdentity.ownerAppId !== request.app_id
+        || !sameMaverickFrameScope(frameIdentity.scope, this.frameScope)
         || !enabledAppIds.has(request.app_id)
         || !declaration
         || !resource
@@ -205,7 +217,7 @@ export class PwaDataCacheBroker {
         || typeof payload.owner_app_id !== "string"
         || typeof payload.resource !== "string") return;
     const ownerAppId = payload.owner_app_id;
-    if (!isMaverickOwnerMessage(event, ownerAppId)) return;
+    if (!isMaverickOwnerMessage(event, ownerAppId, this.frameScope)) return;
     const declarations = RESOURCE_DECLARATIONS[ownerAppId];
     if (!declarations) return;
     for (const [resourceName, resourceDeclaration] of Object.entries(declarations)) {

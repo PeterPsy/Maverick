@@ -258,8 +258,10 @@ M5 adds the first app-owned structured read models without exposing the M3
 host capability to an embedded app. Base Shell owns a parent broker bound to
 the authenticated user, active workspace, and access lease. It accepts a
 private `MessageChannel` only from a registered app or widget frame window at
-its exact isolated origin. Each registration records the real owner app id;
-the broker requires that owner to match the request app id and a fixed
+its exact isolated origin. Each registration records the real owner app id,
+active workspace, and an opaque shell-session generation. The broker requires
+that complete frame scope to match its current principal, the owner to match
+the request app id, and a fixed
 app/resource/schema declaration whose global and per-app rollout gates are
 both enabled. The child performs the
 app-specific conditional HTTP/backend read and applies its exact sanitizer;
@@ -292,6 +294,13 @@ authenticated session creates fresh frames. No cache result grants
 mutation, provider, capability, publication, or launch authority. Both the
 global and all per-app M5 gates remain off by default; implementation readiness
 does not replace privacy or physical Safari/Home Screen release evidence.
+
+Workspace or authenticated-session transitions rotate the shell generation
+and synchronously remove frames from the previous generation before the new
+broker becomes usable. A late old-frame request is answered unavailable
+without consulting or exposing a warm entry from the new workspace. Shell
+fan-out applies the same scoped owner check to app and widget recipients; only
+an exact top-level shell message may intentionally cross owners.
 
 ## Supersession boundary
 

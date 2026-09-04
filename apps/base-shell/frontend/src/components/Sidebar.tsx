@@ -8,6 +8,7 @@ import type {
   TouchEvent as ReactTouchEvent,
 } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
+import type { MaverickFrameScope } from "../iframePolicy";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
 import { CHAT_APP_ID, SETTINGS_APP_ID, shellAppRailApps, shellVisibleApps } from "../navigation";
 import { clampSidebarDetailsWidth, DEFAULT_SIDEBAR_DETAILS_WIDTH_PX } from "../session";
@@ -31,6 +32,7 @@ export function Sidebar({
   activeAppParams,
   apps,
   activeWorkspaceId,
+  frameScope,
   isLoading = false,
   isWorkspacesLoading = false,
   isOpen,
@@ -61,6 +63,7 @@ export function Sidebar({
   activeAppParams: Record<string, string | boolean | null>;
   apps: AppRegistryItem[];
   activeWorkspaceId: string;
+  frameScope: MaverickFrameScope;
   isOpen: boolean;
   isLoading?: boolean;
   isWorkspacesLoading?: boolean;
@@ -110,6 +113,7 @@ export function Sidebar({
         activeWorkspaceId={activeWorkspaceId}
         content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
         contentKind="shell.sidebar.footer"
+        frameScope={frameScope}
         hostAppId="base-shell"
         label="App sidebar footer"
         isActive={appId === activeAppId}
@@ -351,6 +355,7 @@ export function Sidebar({
               activeWorkspaceId={activeWorkspaceId}
               content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, user: user?.username || null }}
               contentKind="shell.sidebar.primary"
+              frameScope={frameScope}
               hostAppId="base-shell"
               label="App sidebar content"
               isActive={appId === activeAppId}

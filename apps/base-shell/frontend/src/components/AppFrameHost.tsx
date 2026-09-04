@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import {
   MAVERICK_IFRAME_SANDBOX,
   appFrameBrowserFeaturePolicy,
   isMaverickFrameMessage,
+  isMaverickOwnerMessage,
   isShellWindowMessage,
   postMaverickFrameVisibility,
   postMaverickShellTheme,
   postToMaverickFrame,
+  registeredMaverickFrameOwner,
+  type MaverickFrameScope,
 } from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
 import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
@@ -51,6 +54,7 @@ export function AppFrameHost({
   activeAppParams,
   activeWorkspaceId,
   cacheUserId,
+  frameScope,
   isMobileLayout,
   onOpenApp,
   sessionExpiresAt,
@@ -60,15 +64,21 @@ export function AppFrameHost({
   activeAppParams: AppFrameParams;
   activeWorkspaceId: string;
   cacheUserId: string;
+  frameScope: MaverickFrameScope;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
   sessionExpiresAt: string;
   shellTheme?: ShellThemeState;
 }) {
-  const activeMountKey = `${activeWorkspaceId}:${activeApp.app_id}`;
+  const mountScopePrefix = `${frameScope.sessionGeneration}:${activeWorkspaceId}:`;
+  const activeMountKey = `${mountScopePrefix}${activeApp.app_id}`;
   const [mountedApps, setMountedApps] = useState<Array<{ app: AppRegistryItem; mountKey: string }>>([
     { app: activeApp, mountKey: activeMountKey },
   ]);
+  const scopedMountedApps = useMemo(
+    () => mountedApps.filter((item) => item.mountKey.startsWith(mountScopePrefix)),
+    [mountScopePrefix, mountedApps],
+  );
   const [frameRevisions, setFrameRevisions] = useState<Record<string, number>>({});
   const [readyFrames, setReadyFrames] = useState<Record<string, boolean>>(() => ({
     [appFrameInstanceKey(activeMountKey, 0)]: true,
@@ -96,7 +106,7 @@ export function AppFrameHost({
   const activeFrameRevision = frameRevisions[activeMountKey] || 0;
   const activeFrameKey = appFrameInstanceKey(activeMountKey, activeFrameRevision);
   const activeFrameReady = Boolean(readyFrames[activeFrameKey]);
-  const visibleFrameIsMounted = mountedApps.some(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0) === visibleFrameKey);
+  const visibleFrameIsMounted = scopedMountedApps.some(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0) === visibleFrameKey);
   const activeFramePending = !activeFrameReady;
   const showPendingState = activeFramePending && (!visibleFrameIsMounted || showDelayedPendingOverlay);
 
@@ -156,6 +166,7 @@ export function AppFrameHost({
   }, [dependencyCache]);
 
   useEffect(() => {
+    if (frameScope.workspaceId !== activeWorkspaceId) return undefined;
     const sessionExpiry = Date.parse(sessionExpiresAt);
     const accessLease = Number.isFinite(sessionExpiry)
       ? clampPrivateAccessLease(sessionExpiry) ?? undefined
@@ -173,11 +184,17 @@ export function AppFrameHost({
       if (fileCacheBrokerRef.current === broker) fileCacheBrokerRef.current = null;
       broker.dispose();
     };
-  }, [activeWorkspaceId, cacheUserId, sessionExpiresAt]);
+  }, [
+    activeWorkspaceId,
+    cacheUserId,
+    frameScope.sessionGeneration,
+    frameScope.workspaceId,
+    sessionExpiresAt,
+  ]);
 
   useEffect(() => {
     setMountedApps((current) => {
-      const workspaceMountedApps = current.filter((item) => item.mountKey.startsWith(`${activeWorkspaceId}:`));
+      const workspaceMountedApps = current.filter((item) => item.mountKey.startsWith(mountScopePrefix));
       if (workspaceMountedApps.some((item) => item.mountKey === activeMountKey)) {
         return workspaceMountedApps.map((item) =>
           item.mountKey === activeMountKey ? { app: activeApp, mountKey: activeMountKey } : item,
@@ -185,7 +202,7 @@ export function AppFrameHost({
       }
       return [...workspaceMountedApps, { app: activeApp, mountKey: activeMountKey }];
     });
-  }, [activeApp, activeMountKey, activeWorkspaceId]);
+  }, [activeApp, activeMountKey, mountScopePrefix]);
 
   useEffect(() => {
     if (activeFrameReady) {
@@ -213,7 +230,7 @@ export function AppFrameHost({
 
   useEffect(() => {
     const mountedFrameKeys = new Set(
-      mountedApps.map(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0)),
+      scopedMountedApps.map(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0)),
     );
     setReadyFrames((current) => filterFrameRecord(current, mountedFrameKeys));
     Object.keys(readyDeliveredNavigationSignaturesRef.current).forEach((frameKey) => {
@@ -236,7 +253,7 @@ export function AppFrameHost({
         clearReadyFallbackTimer(frameKey);
       }
     });
-  }, [frameRevisions, mountedApps]);
+  }, [frameRevisions, scopedMountedApps]);
 
   useEffect(() => {
     latestNavigationRef.current = { appId: activeApp.app_id, params: activeAppParams };
@@ -246,11 +263,11 @@ export function AppFrameHost({
   }, [activeApp.app_id, paramsSignature]);
 
   useEffect(() => {
-    mountedApps.forEach(({ app }) => postMaverickShellTheme(frameRefs.current[app.app_id], shellTheme));
-  }, [mountedApps, themeSignature]);
+    scopedMountedApps.forEach(({ app }) => postMaverickShellTheme(frameRefs.current[app.app_id], shellTheme));
+  }, [scopedMountedApps, themeSignature]);
 
   useEffect(() => {
-    mountedApps.forEach(({ app, mountKey }) => {
+    scopedMountedApps.forEach(({ app, mountKey }) => {
       const frameKey = appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0);
       syncAppFrameShellLayout(frameRefs.current[app.app_id], isMobileLayout);
       postMaverickFrameVisibility(frameRefs.current[app.app_id], {
@@ -258,7 +275,7 @@ export function AppFrameHost({
         visible: frameKey === visibleFrameKey,
       });
     });
-  }, [frameRevisions, isMobileLayout, mountedApps, visibleFrameKey]);
+  }, [frameRevisions, isMobileLayout, scopedMountedApps, visibleFrameKey]);
 
   useEffect(() => {
     latestDependenciesRef.current = null;
@@ -306,32 +323,38 @@ export function AppFrameHost({
         return;
       }
       window.postMessage(event, window.location.origin);
-      const eventMountKey = `${activeWorkspaceId}:${event.owner_app_id}`;
+      const eventMountKey = `${mountScopePrefix}${event.owner_app_id}`;
       setFrameRevisions((current) => ({
         ...current,
         [eventMountKey]: (current[eventMountKey] || 0) + 1,
       }));
     });
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, mountScopePrefix]);
 
   useEffect(() => {
     function handleAppMessage(event: MessageEvent) {
+      const senderOwnerAppId = registeredMaverickFrameOwner(event, frameScope);
+      const senderIsShell = isShellWindowMessage(event);
       if (fileCacheBrokerRef.current?.handleWindowMessage(
         event,
-        frameRefs.current.storage ?? null,
+        senderOwnerAppId === "storage" ? frameRefs.current.storage ?? null : null,
       )) {
         return;
       }
       const senderFrame = Object.values(frameRefs.current)
         .find((frame) => isMaverickFrameMessage(event, frame));
-      if ((!senderFrame && !isShellWindowMessage(event)) || !event.data || typeof event.data !== "object") {
+      if ((!senderOwnerAppId && !senderIsShell) || !event.data || typeof event.data !== "object") {
         return;
       }
       const payload = event.data as AppReadyMessage;
       if (!payload.type) {
         return;
       }
-      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id) {
+      if (
+        payload.type === "maverick.app.data-changed"
+        && payload.owner_app_id
+        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+      ) {
         const ownerFrame = frameRefs.current[payload.owner_app_id];
         if (ownerFrame?.contentWindow && event.source !== ownerFrame.contentWindow) {
           postToMaverickFrame(
@@ -388,7 +411,7 @@ export function AppFrameHost({
         if (!frame || event.source !== frame.contentWindow) {
           return;
         }
-        const frameKey = frameKeyForApp(payload.app_id, mountedApps, frameRevisions);
+        const frameKey = frameKeyForApp(payload.app_id, scopedMountedApps, frameRevisions);
         if (frameKey) {
           markFrameReady(frameKey);
           if (latestNavigationRef.current.appId === payload.app_id) {
@@ -417,7 +440,7 @@ export function AppFrameHost({
 
     window.addEventListener("message", handleAppMessage);
     return () => window.removeEventListener("message", handleAppMessage);
-  }, [frameRevisions, mountedApps, onOpenApp]);
+  }, [frameRevisions, frameScope, onOpenApp, scopedMountedApps]);
 
   useEffect(() => {
     return () => {
@@ -448,7 +471,7 @@ export function AppFrameHost({
   return (
     <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>
       <div className="bs-workspace-app-surface">
-        {mountedApps.map(({ app, mountKey }) => {
+        {scopedMountedApps.map(({ app, mountKey }) => {
           const revision = frameRevisions[mountKey] || 0;
           const frameKey = appFrameInstanceKey(mountKey, revision);
           const isDisplayed = frameKey === visibleFrameKey;
@@ -457,6 +480,7 @@ export function AppFrameHost({
               allow={appFrameBrowserFeaturePolicy(app.public_app_id || app.app_id)}
               allowFullScreen
               appId={app.app_id}
+              frameScope={frameScope}
               aria-hidden={!isDisplayed}
               className={`bs-workspace-app-frame ${isDisplayed ? "is-active" : "is-hidden"}`}
               key={frameKey}

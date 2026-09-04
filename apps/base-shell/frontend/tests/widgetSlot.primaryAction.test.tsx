@@ -15,6 +15,7 @@ vi.mock("../src/api", () => ({
 
 const ownerAppId = "agents";
 const widgetId = "agents-sidebar-footer";
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-default", workspaceId: "default" });
 
 function footerWidget(): WidgetRegistryItem {
   return {
@@ -55,6 +56,7 @@ function PrimaryActionHarness({ onOpenSidebar }: { onOpenSidebar: () => void }) 
         activeWorkspaceId="default"
         content={{ is_mobile_layout: true }}
         contentKind="shell.sidebar.footer"
+        frameScope={FRAME_SCOPE}
         hostAppId="base-shell"
         label="App sidebar footer"
         onOpenApp={vi.fn()}
@@ -150,6 +152,7 @@ describe("WidgetSlot primary action protocol", () => {
           activeWorkspaceId="default"
           content={{ is_mobile_layout: false }}
           contentKind="shell.sidebar.primary"
+          frameScope={FRAME_SCOPE}
           hostAppId="base-shell"
           label="App sidebar content"
           onOpenApp={vi.fn()}
@@ -184,6 +187,7 @@ describe("WidgetSlot primary action protocol", () => {
           activeWorkspaceId="default"
           content={{ is_mobile_layout: false }}
           contentKind="shell.sidebar.primary"
+          frameScope={FRAME_SCOPE}
           hostAppId="base-shell"
           label="App sidebar content"
           onOpenApp={vi.fn()}
@@ -207,6 +211,7 @@ describe("WidgetSlot primary action protocol", () => {
           activeWorkspaceId="default"
           content={{ is_mobile_layout: true }}
           contentKind="shell.sidebar.footer"
+          frameScope={FRAME_SCOPE}
           hostAppId="base-shell"
           label="App sidebar footer"
           onOpenApp={vi.fn()}
@@ -266,7 +271,7 @@ async function waitForIframe(parent: HTMLElement): Promise<HTMLIFrameElement> {
     const iframe = parent.querySelector("iframe");
     if (iframe instanceof HTMLIFrameElement) {
       if (!iframe.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test", ownerAppId);
+        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test", ownerAppId, FRAME_SCOPE);
       }
       iframe.dataset.maverickFrameBootstrapArmed = "true";
       return iframe;

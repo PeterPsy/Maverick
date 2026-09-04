@@ -29,6 +29,7 @@ const shellTheme = {
   effective: "dark",
   mode: "dark",
 } satisfies ShellThemeState;
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-default", workspaceId: "default" });
 
 describe("Sidebar widget mount gate", () => {
   let container: HTMLDivElement;
@@ -188,6 +189,7 @@ function sidebarElement(
       user={{ platform_role: "admin", username: "admin" } as SessionUser}
       workspaces={[{ workspace_id: "default", name: "Default", description: null, status: "active", governance: {}, quota: {}, is_active: true } as WorkspaceItem]}
       {...overrides}
+      frameScope={overrides.frameScope ?? FRAME_SCOPE}
     />
   );
 }

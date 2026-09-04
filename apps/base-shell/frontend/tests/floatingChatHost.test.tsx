@@ -21,6 +21,7 @@ const shellTheme = {
   effective: "dark",
   mode: "dark",
 } satisfies ShellThemeState;
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-default", workspaceId: "default" });
 
 describe("FloatingChatHost mount gate", () => {
   let container: HTMLDivElement;
@@ -111,6 +112,7 @@ async function renderHost(root: Root, overrides: Partial<ComponentProps<typeof F
         user={{ username: "admin" }}
         widthPx={420}
         {...overrides}
+        frameScope={overrides.frameScope ?? FRAME_SCOPE}
       />,
     );
     await Promise.resolve();

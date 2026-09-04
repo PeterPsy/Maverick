@@ -270,6 +270,7 @@ describe("Sidebar desktop rail reorder", () => {
           activeAppParams={{}}
           activeWorkspaceId="default"
           apps={overrides.apps ?? apps}
+          frameScope={{ sessionGeneration: "session-default", workspaceId: "default" }}
           isLoading={false}
           isMobileLayout={overrides.isMobileLayout ?? false}
           isOpen={true}

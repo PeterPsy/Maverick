@@ -1,4 +1,5 @@
 import { AppRegistryItem } from "../api";
+import type { MaverickFrameScope } from "../iframePolicy";
 import type { ShellThemeState } from "../theme";
 import { AppFrameHost } from "./AppFrameHost";
 import { AppsPanel } from "./AppsPanel";
@@ -10,6 +11,7 @@ export function WorkspaceView({
   apps,
   cacheUserId,
   error,
+  frameScope,
   isLoading,
   isMobileLayout,
   onOpenApp,
@@ -22,6 +24,7 @@ export function WorkspaceView({
   apps: AppRegistryItem[];
   cacheUserId: string;
   error: string | null;
+  frameScope: MaverickFrameScope;
   isLoading: boolean;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
@@ -44,6 +47,7 @@ export function WorkspaceView({
       activeAppParams={activeAppParams}
       activeWorkspaceId={activeWorkspaceId}
       cacheUserId={cacheUserId}
+      frameScope={frameScope}
       isMobileLayout={isMobileLayout}
       onOpenApp={onOpenApp}
       sessionExpiresAt={sessionExpiresAt}

@@ -20,6 +20,7 @@ type LaunchPayload = {
 };
 
 const roots: Root[] = [];
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-one", workspaceId: "default" });
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 afterEach(() => {
@@ -58,6 +59,7 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
       root.render(
         <IsolatedMaverickFrame
           appId="chat"
+          frameScope={FRAME_SCOPE}
           launchPath="/apps/chat/?thread=initial"
           title="Chat"
         />,
@@ -74,7 +76,7 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     expect(registeredMaverickFrameOwner(new MessageEvent("message", {
       origin,
       source: frame?.contentWindow,
-    }))).toBe("chat");
+    }), FRAME_SCOPE)).toBe("chat");
 
     window.dispatchEvent(new MessageEvent("message", {
       data: { type: APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE },

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import type { AppRegistryItem } from "./api";
+import type { MaverickFrameScope } from "./iframePolicy";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
 
 type AuthenticatedCachePrincipal = {
@@ -11,10 +12,12 @@ type AuthenticatedCachePrincipal = {
 
 export function usePwaDataCacheBrokerHost({
   appRegistry,
+  frameScope,
   onAuthorizationFailure,
   principal,
 }: {
   appRegistry: readonly AppRegistryItem[];
+  frameScope: MaverickFrameScope | null;
   onAuthorizationFailure: (status: 401 | 403) => Promise<void> | void;
   principal: AuthenticatedCachePrincipal | null;
 }): void {
@@ -26,13 +29,14 @@ export function usePwaDataCacheBrokerHost({
   authorizationFailureRef.current = onAuthorizationFailure;
 
   useEffect(() => {
-    if (!principal) return undefined;
+    if (!principal || !frameScope || frameScope.workspaceId !== principal.workspaceId) return undefined;
     const sessionExpiry = Date.parse(principal.sessionExpiresAt);
     const accessLease = Number.isFinite(sessionExpiry)
       ? clampPrivateAccessLease(sessionExpiry) ?? undefined
       : undefined;
     const broker = new PwaDataCacheBroker({
       accessLease,
+      frameScope,
       onAuthorizationFailure: (status) => authorizationFailureRef.current(status),
       principal: {
         userId: principal.userId,
@@ -48,5 +52,11 @@ export function usePwaDataCacheBrokerHost({
       window.removeEventListener("message", handleMessage);
       broker.dispose();
     };
-  }, [principal?.sessionExpiresAt, principal?.userId, principal?.workspaceId]);
+  }, [
+    frameScope?.sessionGeneration,
+    frameScope?.workspaceId,
+    principal?.sessionExpiresAt,
+    principal?.userId,
+    principal?.workspaceId,
+  ]);
 }

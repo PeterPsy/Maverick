@@ -15,14 +15,16 @@ are operated with `docs/runbooks/pwa_data_cache_m3.md`.
 
 Base Shell creates `PwaDataCacheBroker` with the freshly authenticated user,
 workspace, and bounded access lease. Every isolated app and widget frame is
-registered with its real owner app id and may open a private `MessageChannel`;
-the shell accepts it only when all of these match:
+registered with its real owner app id, active workspace, and opaque
+authenticated shell-session generation, and may open a private
+`MessageChannel`; the shell accepts it only when all of these match:
 
 1. the registered frame window and its exact isolated origin;
-2. the registered owner app id and requested mounted app id;
-3. a fixed app/resource declaration and exact resource schema revision;
-4. the global `MAVERICK_FEATURE_PWA_DATA_CACHE` gate; and
-5. the matching `MAVERICK_FEATURE_PWA_APP_CACHE_<APP_ID>` gate.
+2. the registered workspace/session generation and the current broker scope;
+3. the registered owner app id and requested mounted app id;
+4. a fixed app/resource declaration and exact resource schema revision;
+5. the global `MAVERICK_FEATURE_PWA_DATA_CACHE` gate; and
+6. the matching `MAVERICK_FEATURE_PWA_APP_CACHE_<APP_ID>` gate.
 
 The app never receives a shell IndexedDB handle, cache principal, access lease,
 or policy capability. The shell asks the accepted frame to perform the
@@ -36,7 +38,12 @@ falls back to one normal server read.
 widget frame whose registered owner matches the declared owner app. Resource
 aliases (including Storage `files`, `drive-connections`, and `view-state`) are
 mapped only after that owner check. Logout and user/workspace transition use
-the M3 durable cleanup path and cancel accepted work. A `401` or `403` from a
+the M3 durable cleanup path, rotate the shell-session generation, synchronously
+unmount frames from the previous scope, and cancel accepted work. A late frame
+from the old scope receives an immediate unavailable result and cannot inspect
+a warm entry belonging to the new workspace. App and widget fan-out handlers
+also compare the sender's registered owner with the declared owner; only an
+exact top-level shell message may fan out across owners. A `401` or `403` from a
 brokered network read additionally tells AppShell to clear authenticated UI and
 unmount every app/widget iframe immediately; reauthentication mounts fresh
 documents after cleanup, preventing an earlier warm paint from remaining in
@@ -124,7 +131,8 @@ Storage, App Store, then Fitness Coach. For each app:
 4. exercise cold miss, warm fresh hit, stale hit, changed and unchanged
    revalidation, app- and widget-originated mutation events, cross-owner spoof
    rejection, expiration, warm-paint `401/403` iframe teardown, logout,
-   user/workspace switch, quota denial, IndexedDB denial, and cache clear;
+   user/workspace switch (including old-frame rejection against a warm
+   new-workspace cache), quota denial, IndexedDB denial, and cache clear;
 5. compare normal layout and actions between equivalent cache and server
    results; and
 6. record aggregate request/byte/time results and required physical-device

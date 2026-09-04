@@ -8,7 +8,7 @@ import {
 } from "@maverick/pwa-cache";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
 import { shellCacheLifecycle } from "./pwaCacheRuntime";
-import { setMaverickFrameOrigin } from "./iframePolicy";
+import { setMaverickFrameOrigin, type MaverickFrameScope } from "./iframePolicy";
 
 type PortMessage = Record<string, unknown>;
 
@@ -19,13 +19,23 @@ const appFrame = {
   dataset: {},
 } as unknown as HTMLIFrameElement;
 const registeredFrames: HTMLIFrameElement[] = [];
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-default", workspaceId: "default" });
 
-function registerFrame(frame: HTMLIFrameElement, origin: string, ownerAppId: string): void {
-  setMaverickFrameOrigin(frame, origin, ownerAppId);
+function registerFrame(
+  frame: HTMLIFrameElement,
+  origin: string,
+  ownerAppId: string,
+  frameScope: MaverickFrameScope = FRAME_SCOPE,
+): void {
+  setMaverickFrameOrigin(frame, origin, ownerAppId, frameScope);
   registeredFrames.push(frame);
 }
 
-function requestEvent(channel: MessageChannel, overrides: Record<string, unknown> = {}): MessageEvent {
+function requestEvent(
+  channel: MessageChannel,
+  overrides: Record<string, unknown> = {},
+  sender: { origin: string; source: Window } = { origin: appOrigin, source: appWindow },
+): MessageEvent {
   return {
     data: {
       app_id: "app-store",
@@ -36,9 +46,9 @@ function requestEvent(channel: MessageChannel, overrides: Record<string, unknown
       type: PWA_DATA_CACHE_BROKER_OPEN,
       ...overrides,
     },
-    origin: appOrigin,
+    origin: sender.origin,
     ports: [channel.port2],
-    source: appWindow,
+    source: sender.source,
   } as unknown as MessageEvent;
 }
 
@@ -76,11 +86,13 @@ async function nextOfType(messages: ReturnType<typeof portMessages>, type: strin
 function broker(
   featureEnabled: () => Promise<boolean | null> = async () => true,
   onAuthorizationFailure?: (status: 401 | 403) => Promise<void> | void,
+  frameScope: MaverickFrameScope = FRAME_SCOPE,
 ): PwaDataCacheBroker {
   return new PwaDataCacheBroker({
     featureEnabled,
+    frameScope,
     onAuthorizationFailure,
-    principal: { userId: "user-one", workspaceId: "default" },
+    principal: { userId: "user-one", workspaceId: frameScope.workspaceId },
   });
 }
 
@@ -97,7 +109,7 @@ describe("Base Shell structured data-cache broker", () => {
 
   afterEach(() => {
     brokers.splice(0).forEach((item) => item.dispose());
-    registeredFrames.splice(0).forEach((frame) => setMaverickFrameOrigin(frame, null, "cleanup"));
+    registeredFrames.splice(0).forEach((frame) => setMaverickFrameOrigin(frame, null, "cleanup", FRAME_SCOPE));
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -161,6 +173,92 @@ describe("Base Shell structured data-cache broker", () => {
       phase: "revalidation",
       revision: "revision-one",
       status: "ok",
+    });
+  });
+
+  it("never serves a new-workspace warm value to a frame from the previous workspace scope", async () => {
+    vi.stubGlobal("navigator", {
+      storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) },
+    });
+    const enabled = new Set(["app-store"]);
+    const entityId = `workspace-scope-${crypto.randomUUID()}`;
+    const oldFrameScope = Object.freeze({
+      sessionGeneration: "session-workspace-a",
+      workspaceId: "workspace-a",
+    });
+    const previousWorkspaceBroker = broker(async () => true, undefined, oldFrameScope);
+    brokers.push(previousWorkspaceBroker);
+    previousWorkspaceBroker.dispose();
+    const currentBroker = broker();
+    brokers.push(currentBroker);
+
+    const seedChannel = new MessageChannel();
+    const seedMessages = portMessages(seedChannel.port1);
+    currentBroker.handleWindowMessage(requestEvent(seedChannel, {
+      entity_id: entityId,
+      request_id: "request-scope-seed",
+    }), enabled);
+    await nextOfType(seedMessages, PWA_DATA_CACHE_BROKER_ACCEPTED);
+    const seedNetwork = await nextOfType(seedMessages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
+    seedChannel.port1.postMessage({
+      app_id: "app-store",
+      kind: "value",
+      network_request_id: seedNetwork.network_request_id,
+      payload: { items: [{ app_id: "private-b" }], revision: "workspace-b-revision", schema: "maverick.app-store-catalog.v1" },
+      request_id: "request-scope-seed",
+      revision: "workspace-b-revision",
+      status: "ok",
+      type: PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
+    });
+    await expect(nextOfType(seedMessages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
+      source: "network",
+      status: "ok",
+    });
+
+    const currentChannel = new MessageChannel();
+    const currentMessages = portMessages(currentChannel.port1);
+    currentBroker.handleWindowMessage(requestEvent(currentChannel, {
+      entity_id: entityId,
+      request_id: "request-current-workspace",
+    }), enabled);
+    await nextOfType(currentMessages, PWA_DATA_CACHE_BROKER_ACCEPTED);
+    await expect(nextOfType(currentMessages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
+      payload: { items: [{ app_id: "private-b" }] },
+      source: "cache",
+      status: "ok",
+    });
+    const revalidation = await nextOfType(currentMessages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
+    currentChannel.port1.postMessage({
+      app_id: "app-store",
+      kind: "not_modified",
+      network_request_id: revalidation.network_request_id,
+      request_id: "request-current-workspace",
+      revision: "workspace-b-revision",
+      status: "ok",
+      type: PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
+    });
+    await nextOfType(currentMessages, PWA_DATA_CACHE_BROKER_RESULT);
+
+    const oldWindow = {} as Window;
+    const oldOrigin = "https://af-old-app-store.sidecars.maverick.test";
+    const oldFrame = { contentWindow: oldWindow, dataset: {} } as unknown as HTMLIFrameElement;
+    const shellWindow = { location: { origin: "https://maverick.test" } } as unknown as Window;
+    Object.assign(shellWindow, { top: shellWindow });
+    vi.stubGlobal("window", shellWindow);
+    registerFrame(oldFrame, oldOrigin, "app-store", oldFrameScope);
+    const oldChannel = new MessageChannel();
+    const oldMessages = portMessages(oldChannel.port1);
+    expect(currentBroker.handleWindowMessage(requestEvent(oldChannel, {
+      entity_id: entityId,
+      request_id: "request-old-workspace",
+    }, { origin: oldOrigin, source: oldWindow }), enabled)).toBe(true);
+    await expect(oldMessages.next(100)).resolves.toMatchObject({
+      type: PWA_DATA_CACHE_BROKER_ACCEPTED,
+    });
+    await expect(oldMessages.next(100)).resolves.toMatchObject({
+      phase: "initial",
+      status: "unavailable",
+      type: PWA_DATA_CACHE_BROKER_RESULT,
     });
   });
 

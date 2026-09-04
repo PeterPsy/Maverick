@@ -14,6 +14,7 @@ vi.mock("../src/api", () => ({
 
 const ownerAppId = "chat";
 const widgetId = "chat-floating";
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-default", workspaceId: "default" });
 
 function overlayWidget(): WidgetRegistryItem {
   return {
@@ -121,6 +122,32 @@ describe("WidgetSlot overlay widget messages", () => {
       threadId: "selected-thread",
     });
   });
+
+  it("blocks cross-owner data-changed fan-out while allowing trusted shell fan-out", async () => {
+    await renderOverlay(root);
+    const widgetFrame = await waitForIframe(container);
+    const widgetPostMessage = vi.spyOn(requireFrameWindow(widgetFrame), "postMessage");
+    widgetPostMessage.mockClear();
+    const foreignFrame = document.createElement("iframe");
+    document.body.append(foreignFrame);
+    const foreignOrigin = "https://af-storage-widget.sidecars.maverick.test";
+    setMaverickFrameOrigin(foreignFrame, foreignOrigin, "storage", FRAME_SCOPE);
+
+    await dispatchDataChanged(foreignFrame.contentWindow!, foreignOrigin);
+    expect(widgetDataChangedMessages(widgetPostMessage)).toEqual([]);
+
+    await dispatchDataChanged(window, window.location.origin);
+    expect(widgetDataChangedMessages(widgetPostMessage)).toEqual([
+      expect.objectContaining({
+        owner_app_id: ownerAppId,
+        resource: "threads",
+        type: "maverick.widget.data-changed",
+      }),
+    ]);
+
+    setMaverickFrameOrigin(foreignFrame, null, "storage", FRAME_SCOPE);
+    foreignFrame.remove();
+  });
 });
 
 async function renderOverlay(
@@ -135,6 +162,7 @@ async function renderOverlay(
         activeWorkspaceId="default"
         content={{ placement: "bottom-right" }}
         contentKind="shell.overlay.bottomright"
+        frameScope={FRAME_SCOPE}
         hostAppId="base-shell"
         label="Floating shell widget"
         onActiveThreadChange={props.onActiveThreadChange}
@@ -178,7 +206,7 @@ async function waitForIframe(parent: HTMLElement): Promise<HTMLIFrameElement> {
     const iframe = parent.querySelector("iframe");
     if (iframe instanceof HTMLIFrameElement) {
       if (!iframe.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test", ownerAppId);
+        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test", ownerAppId, FRAME_SCOPE);
       }
       iframe.dataset.maverickFrameBootstrapArmed = "true";
       return iframe;
@@ -240,6 +268,32 @@ async function dispatchActiveThreadChanged(source: MessageEventSource, activeThr
     );
     await Promise.resolve();
   });
+}
+
+async function dispatchDataChanged(source: MessageEventSource, origin: string) {
+  await act(async () => {
+    window.dispatchEvent(new MessageEvent("message", {
+      data: {
+        owner_app_id: ownerAppId,
+        resource: "threads",
+        type: "maverick.app.data-changed",
+      },
+      origin,
+      source,
+    }));
+    await Promise.resolve();
+  });
+}
+
+function widgetDataChangedMessages(postMessageSpy: { mock: { calls: unknown[][] } }): Record<string, unknown>[] {
+  return postMessageSpy.mock.calls
+    .map(([message]) => message)
+    .filter((message): message is Record<string, unknown> => (
+      Boolean(message)
+      && typeof message === "object"
+      && !Array.isArray(message)
+      && (message as { type?: unknown }).type === "maverick.widget.data-changed"
+    ));
 }
 
 function messageOrigin(source: MessageEventSource): string {

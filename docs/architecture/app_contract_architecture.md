@@ -1636,9 +1636,11 @@ or persistent mutation queue as an implicit consequence of cache support.
 M5 app frontends use the Base Shell parent broker rather than constructing the
 host capability themselves. A child request names only its own mounted app,
 opaque entity, fixed resource, and exact resource schema revision. Base Shell
-registers every app and widget frame together with its real owner app id and
-accepts a request only when that owner matches the request, the frame window
-and exact isolated origin match, and both global and per-app gates are open.
+registers every app and widget frame together with its real owner app id,
+active workspace, and opaque authenticated shell-session generation. It
+accepts a request only when that complete scope matches the current broker
+principal, the owner matches the request, the frame window and exact isolated
+origin match, and both global and per-app gates are open.
 The app performs
 its conditional backend read when requested over the private channel and
 returns an app-sanitized model; it never receives the host principal, access
@@ -1649,8 +1651,12 @@ only after the parent verifies the scoped commit.
 
 Structured invalidation messages follow that same owner registration:
 neither an app nor one of its widgets may claim another app's owner id. Declared
-resource aliases are resolved only after owner verification. If a warm read has
-already rendered and its revalidation returns `401` or `403`, the broker starts
+resource aliases and shell fan-out recipients are resolved only after scoped
+owner verification; only an exact top-level shell message may intentionally
+cross owners. Workspace and authenticated-session transitions rotate the
+generation and synchronously remove frames from the previous scope, so a late
+old frame is rejected before a warm new-workspace value can be read. If a warm
+read has already rendered and its revalidation returns `401` or `403`, the broker starts
 durable cleanup and AppShell clears authenticated UI and unmounts every app and
 widget frame. Reauthentication creates new frame documents, so private data
 from the revoked scope cannot remain in the DOM.

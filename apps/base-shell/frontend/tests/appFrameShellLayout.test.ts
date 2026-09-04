@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { syncAppFrameShellLayout } from "../src/lib/appFrameShellLayout";
 import { setMaverickFrameOrigin } from "../src/iframePolicy";
 
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-one", workspaceId: "default" });
+
 describe("app frame shell layout bridge", () => {
   it("sends mobile shell layout only to the registered isolated frame origin", () => {
     const iframe = document.createElement("iframe");
@@ -13,7 +15,7 @@ describe("app frame shell layout bridge", () => {
     expect(syncAppFrameShellLayout(iframe, true)).toBe(false);
     expect(postMessage).not.toHaveBeenCalled();
 
-    setMaverickFrameOrigin(iframe, "https://af-layout.sidecars.maverick.test", "chat");
+    setMaverickFrameOrigin(iframe, "https://af-layout.sidecars.maverick.test", "chat", FRAME_SCOPE);
     expect(syncAppFrameShellLayout(iframe, true)).toBe(true);
     expect(postMessage).toHaveBeenLastCalledWith(
       { mobile: true, type: "maverick.shell.layout-changed" },
@@ -26,7 +28,7 @@ describe("app frame shell layout bridge", () => {
       "https://af-layout.sidecars.maverick.test",
     );
 
-    setMaverickFrameOrigin(iframe, null, "chat");
+    setMaverickFrameOrigin(iframe, null, "chat", FRAME_SCOPE);
     iframe.remove();
   });
 });

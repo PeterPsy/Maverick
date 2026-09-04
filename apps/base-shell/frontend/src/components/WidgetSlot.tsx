@@ -2,11 +2,13 @@ import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } f
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import {
   MAVERICK_IFRAME_SANDBOX,
-  isRegisteredMaverickFrameMessage,
+  isMaverickOwnerMessage,
   isShellWindowMessage,
   postMaverickFrameVisibility,
   postMaverickShellTheme,
   postToMaverickFrame,
+  registeredMaverickFrameOwner,
+  type MaverickFrameScope,
   widgetFrameBrowserFeaturePolicy,
 } from "../iframePolicy";
 import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
@@ -73,6 +75,7 @@ export function WidgetSlot({
   activeWorkspaceId,
   content,
   contentKind,
+  frameScope,
   hostAppId,
   label,
   isActive = true,
@@ -92,6 +95,7 @@ export function WidgetSlot({
   activeWorkspaceId: string;
   content: Record<string, unknown>;
   contentKind: string;
+  frameScope: MaverickFrameScope;
   hostAppId: string;
   label: string;
   isActive?: boolean;
@@ -278,8 +282,10 @@ export function WidgetSlot({
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
+      const senderOwnerAppId = registeredMaverickFrameOwner(event, frameScope);
+      const senderIsShell = isShellWindowMessage(event);
       if (
-        (!isShellWindowMessage(event) && !isRegisteredMaverickFrameMessage(event))
+        (!senderIsShell && !senderOwnerAppId)
         || !event.data
         || typeof event.data !== "object"
       ) {
@@ -288,7 +294,9 @@ export function WidgetSlot({
       const payload = event.data as WidgetMessagePayload;
       if (
         ["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(payload.type || "") &&
+        typeof payload.owner_app_id === "string" &&
         payload.owner_app_id === widget?.owner_app_id &&
+        isMaverickOwnerMessage(event, payload.owner_app_id, frameScope) &&
         (!payload.workspace_id || payload.workspace_id === activeWorkspaceId)
       ) {
         setFrameRevision((current) => current + 1);
@@ -382,7 +390,12 @@ export function WidgetSlot({
           }
         }
       }
-      if (payload.type === "maverick.chat.active-thread-changed" && widget && payload.owner_app_id === widget.owner_app_id) {
+      if (
+        payload.type === "maverick.chat.active-thread-changed"
+        && widget
+        && payload.owner_app_id === widget.owner_app_id
+        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+      ) {
         const ownerAppId = widget.owner_app_id;
         const activeThreadId = typeof payload.active_thread_id === "string" ? payload.active_thread_id.trim() : "";
         const navigationScope = typeof payload.navigation_scope === "string" ? payload.navigation_scope.trim() : "";
@@ -404,10 +417,19 @@ export function WidgetSlot({
         );
       }
       const selectionMessage = widgetSelectionChangedMessage(payload, widget?.owner_app_id);
-      if (selectionMessage) {
+      if (
+        selectionMessage
+        && payload.owner_app_id
+        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+      ) {
         postToMaverickFrame(widgetFrameRef.current, selectionMessage);
       }
-      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === widget?.owner_app_id) {
+      if (
+        payload.type === "maverick.app.data-changed"
+        && typeof payload.owner_app_id === "string"
+        && payload.owner_app_id === widget?.owner_app_id
+        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+      ) {
         postToMaverickFrame(
           widgetFrameRef.current,
           {
@@ -425,6 +447,7 @@ export function WidgetSlot({
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [
+    frameScope,
     isActive,
     onCloseDock,
     onCloseSidebar,
@@ -600,7 +623,7 @@ export function WidgetSlot({
     return error ? <p className="bs-widget-slot__fallback">{error}</p> : null;
   }
 
-  const widgetFrameKey = `${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`;
+  const widgetFrameKey = `${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`;
   const bootstrapTheme = bootstrapThemeForFrame(widgetFrameBootstrapThemesRef.current, widgetFrameKey, shellTheme);
   const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision, bootstrapTheme);
   const isWidgetFrameLoading = supportsShellPending && loadedFrameKey !== widgetFrameKey;
@@ -618,6 +641,7 @@ export function WidgetSlot({
           allow={widgetAllowPolicy}
           allowFullScreen
           appId={widget.owner_app_id}
+          frameScope={frameScope}
           className="bs-widget-slot__frame"
           key={widgetFrameKey}
           onLoad={() => {

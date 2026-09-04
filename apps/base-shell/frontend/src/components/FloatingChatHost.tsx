@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { AppRegistryItem } from "../api";
+import type { MaverickFrameScope } from "../iframePolicy";
 import { clampFloatingChatWidth, type FloatingChatMode } from "../session";
 import type { ShellThemeState } from "../theme";
 import { WidgetSlot } from "./WidgetSlot";
@@ -11,6 +12,7 @@ export function FloatingChatHost({
   activeApp,
   activeAppParams = {},
   activeWorkspaceId,
+  frameScope,
   floatingChatMode,
   isChatAppActive,
   isMobileChatClosing,
@@ -32,6 +34,7 @@ export function FloatingChatHost({
   activeApp: AppRegistryItem | null;
   activeAppParams?: Record<string, string | boolean | null>;
   activeWorkspaceId: string;
+  frameScope: MaverickFrameScope;
   floatingChatMode: FloatingChatMode;
   isChatAppActive: boolean;
   isMobileChatClosing: boolean;
@@ -184,6 +187,7 @@ export function FloatingChatHost({
           activeWorkspaceId={activeWorkspaceId}
           content={content}
           contentKind={contentKind}
+          frameScope={frameScope}
           hostAppId="base-shell"
           label={widgetLabel}
           onActiveThreadChange={({ navigationScope: nextNavigationScope, threadId: nextThreadId }) =>

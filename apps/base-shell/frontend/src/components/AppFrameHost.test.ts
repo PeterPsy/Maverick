@@ -59,7 +59,7 @@ describe("AppFrameHost structured data-cache boundary", () => {
   it("uses the owner-verified broker as the only structured-cache invalidation path", () => {
     const source = readFileSync(resolve(currentDir, "../AppShell.tsx"), "utf8");
 
-    expect(source).toContain("isMaverickOwnerMessage(event, payload.owner_app_id)");
+    expect(source).toContain("isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)");
     expect(source).not.toContain("shellCacheLifecycle.handleDataChanged(");
   });
 });

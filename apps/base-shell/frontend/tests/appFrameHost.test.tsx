@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
 import { AppFrameHost } from "../src/components/AppFrameHost";
-import { setMaverickFrameOrigin } from "../src/iframePolicy";
+import { setMaverickFrameOrigin, type MaverickFrameScope } from "../src/iframePolicy";
 import type { ShellThemeState } from "../src/theme";
 
 type AppFrameParams = Record<string, string | boolean | null>;
@@ -48,6 +48,9 @@ function app(app_id: string, name = app_id): AppRegistryItem {
 
 const chat = app("chat", "Chat");
 const agents = app("agents", "Agents");
+const storage = app("storage", "Storage");
+const websiteStudio = app("website-studio", "Website Studio");
+const FRAME_SCOPE = Object.freeze({ sessionGeneration: "session-default", workspaceId: "default" });
 const defaultTheme = {
   color_scheme: "dark" as const,
   effective: "dark" as const,
@@ -193,6 +196,18 @@ describe("AppFrameHost app frame readiness", () => {
     ]);
   });
 
+  it("synchronously drops frames from the previous shell session generation", async () => {
+    await renderHost(root, chat);
+    const oldFrame = await waitForFrame(container, "Chat viewport", "chat");
+    const nextScope = Object.freeze({ sessionGeneration: "session-next", workspaceId: "default" });
+
+    await renderHost(root, chat, {}, defaultTheme, nextScope);
+    const nextFrame = await waitForFrame(container, "Chat viewport", "chat", nextScope);
+
+    expect(nextFrame).not.toBe(oldFrame);
+    expect(oldFrame.isConnected).toBe(false);
+  });
+
   it("opens external URLs only when requested by a mounted app frame", async () => {
     const openedWindow = { focus: vi.fn(), opener: window } as unknown as Window;
     const openSpy = vi.spyOn(window, "open").mockReturnValue(openedWindow);
@@ -213,9 +228,35 @@ describe("AppFrameHost app frame readiness", () => {
     expect(openSpy).toHaveBeenCalledWith(authorizationUrl, "_blank", "noopener,noreferrer");
     expect(openedWindow.focus).toHaveBeenCalledTimes(1);
   });
+
+  it("blocks cross-owner data-changed fan-out while allowing trusted shell fan-out", async () => {
+    await renderHost(root, websiteStudio);
+    const websiteFrame = await waitForFrame(container, "Website Studio viewport", "website-studio");
+    await renderHost(root, storage);
+    const storageFrame = await waitForFrame(container, "Storage viewport", "storage");
+    const websitePostMessage = vi.spyOn(websiteFrame.contentWindow!, "postMessage");
+
+    await dispatchDataChanged(storageFrame.contentWindow!, "website-studio", "source");
+    expect(dataChangedMessages(websitePostMessage)).toEqual([]);
+
+    await dispatchDataChanged(window, "website-studio", "source");
+    expect(dataChangedMessages(websitePostMessage)).toEqual([
+      expect.objectContaining({
+        owner_app_id: "website-studio",
+        resource: "source",
+        type: "maverick.app.data-changed",
+      }),
+    ]);
+  });
 });
 
-async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParams: AppFrameParams = {}, shellTheme: ShellThemeState = defaultTheme) {
+async function renderHost(
+  root: Root,
+  activeApp: AppRegistryItem,
+  activeAppParams: AppFrameParams = {},
+  shellTheme: ShellThemeState = defaultTheme,
+  frameScope: MaverickFrameScope = FRAME_SCOPE,
+) {
   await act(async () => {
     root.render(
       <AppFrameHost
@@ -223,6 +264,7 @@ async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParam
         activeAppParams={activeAppParams}
         activeWorkspaceId="default"
         cacheUserId="user-test"
+        frameScope={frameScope}
         isMobileLayout={true}
         onOpenApp={vi.fn()}
         sessionExpiresAt="2099-01-01T00:00:00Z"
@@ -233,12 +275,17 @@ async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParam
   });
 }
 
-async function waitForFrame(parent: HTMLElement, title: string, ownerAppId: string): Promise<HTMLIFrameElement> {
+async function waitForFrame(
+  parent: HTMLElement,
+  title: string,
+  ownerAppId: string,
+  frameScope: MaverickFrameScope = FRAME_SCOPE,
+): Promise<HTMLIFrameElement> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const frame = parent.querySelector(`iframe[title="${title}"]`);
     if (frame instanceof HTMLIFrameElement) {
       if (!frame.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(frame, "https://af-test.sidecars.maverick.test", ownerAppId);
+        setMaverickFrameOrigin(frame, "https://af-test.sidecars.maverick.test", ownerAppId, frameScope);
       }
       frame.dataset.maverickFrameBootstrapArmed = "true";
       return frame;
@@ -281,6 +328,17 @@ function themeMessages(postMessageSpy: { mock: { calls: unknown[][] } }): Posted
     });
 }
 
+function dataChangedMessages(postMessageSpy: { mock: { calls: unknown[][] } }): PostedMessage[] {
+  return postMessageSpy.mock.calls
+    .map(([message]) => message)
+    .filter((message): message is PostedMessage => (
+      Boolean(message)
+      && typeof message === "object"
+      && !Array.isArray(message)
+      && (message as PostedMessage).type === "maverick.app.data-changed"
+    ));
+}
+
 function pendingIndicator(parent: HTMLElement): HTMLElement | null {
   return parent.querySelector(".bs-shell-pending-indicator");
 }
@@ -316,6 +374,21 @@ async function dispatchExternalUrl(source: MessageEventSource, url: string) {
         source,
       }),
     );
+    await Promise.resolve();
+  });
+}
+
+async function dispatchDataChanged(source: MessageEventSource, ownerAppId: string, resource: string) {
+  await act(async () => {
+    window.dispatchEvent(new MessageEvent("message", {
+      data: {
+        owner_app_id: ownerAppId,
+        resource,
+        type: "maverick.app.data-changed",
+      },
+      origin: messageOrigin(source),
+      source,
+    }));
     await Promise.resolve();
   });
 }

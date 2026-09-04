@@ -43,7 +43,12 @@ import {
   shellRetryCoordinator,
 } from "./pwaCacheRuntime";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
-import { isMaverickOwnerMessage, isRegisteredMaverickFrameMessage, isShellWindowMessage } from "./iframePolicy";
+import {
+  isMaverickOwnerMessage,
+  isRegisteredMaverickFrameMessage,
+  isShellWindowMessage,
+  type MaverickFrameScope,
+} from "./iframePolicy";
 import { usePwaDataCacheBrokerHost } from "./usePwaDataCacheBrokerHost";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
@@ -115,6 +120,18 @@ export function AppShell() {
   const shellLoadVersionRef = useRef(0);
   const shellLoadAbortRef = useRef<AbortController | null>(null);
   const shellLoadInFlightRef = useRef(false);
+  const authenticatedFrameScopeIdentity = session?.authenticated
+    ? JSON.stringify([session.user.user_id, session.workspace_id, session.expires_at])
+    : null;
+  const authenticatedFrameWorkspaceId = session?.authenticated ? session.workspace_id : null;
+  const frameScope = useMemo<MaverickFrameScope | null>(() => (
+    authenticatedFrameScopeIdentity && authenticatedFrameWorkspaceId
+      ? Object.freeze({
+          sessionGeneration: crypto.randomUUID(),
+          workspaceId: authenticatedFrameWorkspaceId,
+        })
+      : null
+  ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId]);
   const cancelShellLoading = useCallback(({ resetRecovery = false } = {}) => {
     shellLoadAbortRef.current?.abort();
     shellLoadAbortRef.current = null;
@@ -139,6 +156,7 @@ export function AppShell() {
   }, [cancelShellLoading, clearShellUiAfterAuthorizationFailure]);
   usePwaDataCacheBrokerHost({
     appRegistry: apps,
+    frameScope,
     onAuthorizationFailure: handleEmbeddedAuthorizationFailure,
     principal: session?.authenticated ? {
       sessionExpiresAt: session.expires_at,
@@ -506,7 +524,8 @@ export function AppShell() {
       if (payload.type !== "maverick.app.data-changed"
           || !payload.owner_app_id
           || !payload.resource
-          || !isMaverickOwnerMessage(event, payload.owner_app_id)) {
+          || !frameScope
+          || !isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)) {
         return;
       }
       if (payload.owner_app_id !== "app-store"
@@ -520,12 +539,13 @@ export function AppShell() {
 
     window.addEventListener("message", handleAppDataChanged);
     return () => window.removeEventListener("message", handleAppDataChanged);
-  }, []);
+  }, [frameScope]);
 
   useEffect(() => {
     function handleShellCommand(event: MessageEvent) {
       if (
-        (!isShellWindowMessage(event) && !isRegisteredMaverickFrameMessage(event))
+        (!isShellWindowMessage(event)
+          && (!frameScope || !isRegisteredMaverickFrameMessage(event, frameScope)))
         || !event.data
         || typeof event.data !== "object"
       ) {
@@ -541,7 +561,7 @@ export function AppShell() {
 
     window.addEventListener("message", handleShellCommand);
     return () => window.removeEventListener("message", handleShellCommand);
-  }, []);
+  }, [frameScope]);
 
   const registryActiveApp = preferredActiveApp(apps, activeAppId);
   const provisionalActiveApp = useMemo(
@@ -784,7 +804,7 @@ export function AppShell() {
     );
   }
 
-  if (!session?.authenticated) {
+  if (!session?.authenticated || !frameScope) {
     return <LoginScreen onAuthenticated={(authenticatedSession) => {
       setSession(authenticatedSession);
       shellRetryCoordinator.setScope(JSON.stringify([
@@ -845,6 +865,7 @@ export function AppShell() {
           error={error}
           isLoading={isLoading}
           isMobileLayout={isMobileLayout}
+          frameScope={frameScope}
           onOpenApp={openApp}
           sessionExpiresAt={session.expires_at}
           shellTheme={shellTheme}
@@ -855,6 +876,7 @@ export function AppShell() {
         activeAppParams={activeAppParams}
         activeWorkspaceId={activeWorkspaceId}
         apps={apps}
+        frameScope={frameScope}
         isLoading={isLoading}
         isWorkspacesLoading={isWorkspacesLoading}
         isOpen={isSidebarOpen}
@@ -885,6 +907,7 @@ export function AppShell() {
         activeApp={activeApp}
         activeAppParams={activeAppParams}
         activeWorkspaceId={activeWorkspaceId}
+        frameScope={frameScope}
         floatingChatMode={floatingChatMode}
         isChatAppActive={isChatAppActive}
         isMobileChatClosing={isMobileChatClosing}

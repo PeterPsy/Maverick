@@ -57,7 +57,8 @@ class BaseShellAppMountingTests(unittest.TestCase):
         floating_host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/FloatingChatHost.tsx").read_text()
         widget_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WidgetSlot.tsx").read_text()
 
-        self.assertIn("activeMountKey = `${activeWorkspaceId}:${activeApp.app_id}`", host_source)
+        self.assertIn("mountScopePrefix = `${frameScope.sessionGeneration}:${activeWorkspaceId}:`", host_source)
+        self.assertIn("activeMountKey = `${mountScopePrefix}${activeApp.app_id}`", host_source)
         self.assertIn("mountKey: activeMountKey", host_source)
         self.assertIn("const frameKey = appFrameInstanceKey(mountKey, revision)", host_source)
         self.assertIn("key={frameKey}", host_source)
@@ -85,7 +86,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("activeWorkspaceId: string", widget_source)
         self.assertIn("message_id: `${activeWorkspaceId}:${hostAppId}:${contentKind}`", widget_source)
         self.assertIn("workspace_id: activeWorkspaceId", widget_source)
-        self.assertIn("const widgetFrameKey = `${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`", widget_source)
+        self.assertIn("const widgetFrameKey = `${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`", widget_source)
         self.assertIn("key={widgetFrameKey}", widget_source)
         self.assertIn("url.hash = `context=${encodeURIComponent(contextToken)}`", widget_source)
         self.assertIn("maverick.widget.resize", widget_source)

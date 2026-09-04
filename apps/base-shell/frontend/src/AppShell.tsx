@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { flushSync } from "react-dom";
 import {
   AppRegistryItem,
   configureActiveProvider,
@@ -73,6 +74,7 @@ export function AppShell() {
   const [apps, setApps] = useState<AppRegistryItem[]>([]);
   const [pinnedAppIds, setPinnedAppIds] = useState<string[]>(["chat"]);
   const [session, setSession] = useState<SessionPayload | null>(null);
+  const [isSessionTransitioning, setIsSessionTransitioning] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [settings, setSettings] = useState<ProviderSetupSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
@@ -120,10 +122,13 @@ export function AppShell() {
   const shellLoadVersionRef = useRef(0);
   const shellLoadAbortRef = useRef<AbortController | null>(null);
   const shellLoadInFlightRef = useRef(false);
-  const authenticatedFrameScopeIdentity = session?.authenticated
-    ? JSON.stringify([session.user.user_id, session.workspace_id, session.expires_at])
+  const publishedSessionRef = useRef<SessionPayload | null>(session);
+  publishedSessionRef.current = session;
+  const authenticatedSession = !isSessionTransitioning && session?.authenticated ? session : null;
+  const authenticatedFrameScopeIdentity = authenticatedSession
+    ? JSON.stringify([authenticatedSession.user.user_id, authenticatedSession.workspace_id, authenticatedSession.expires_at])
     : null;
-  const authenticatedFrameWorkspaceId = session?.authenticated ? session.workspace_id : null;
+  const authenticatedFrameWorkspaceId = authenticatedSession?.workspace_id ?? null;
   const frameScope = useMemo<MaverickFrameScope | null>(() => (
     authenticatedFrameScopeIdentity && authenticatedFrameWorkspaceId
       ? Object.freeze({
@@ -141,27 +146,51 @@ export function AppShell() {
       shellRetryCoordinator.cancelAll("Base Shell scope reset.");
     }
   }, []);
-  const clearShellUiAfterAuthorizationFailure = useCallback(() => {
-    setSession({ authenticated: false });
-    setApps([]);
-    setWorkspaces([]);
-    setSettings(null);
-    setError(null);
-    setIsLoading(false);
-    setIsWorkspacesLoading(false);
+  const beginShellSessionTransition = useCallback(() => {
+    const hadAuthenticatedUi = publishedSessionRef.current?.authenticated === true;
+    publishedSessionRef.current = null;
+    const unmountAuthenticatedUi = () => {
+      setSession(null);
+      setIsSessionTransitioning(true);
+      setApps([]);
+      setWorkspaces([]);
+      setSettings(null);
+      setError(null);
+      setIsWorkspacesLoading(true);
+    };
+    if (hadAuthenticatedUi) {
+      flushSync(unmountAuthenticatedUi);
+      return;
+    }
+    unmountAuthenticatedUi();
   }, []);
-  const handleEmbeddedAuthorizationFailure = useCallback(() => {
+  const publishAnonymousShellState = useCallback(() => {
+    const anonymousSession = { authenticated: false } as const;
+    publishedSessionRef.current = anonymousSession;
+    flushSync(() => {
+      setSession(anonymousSession);
+      setIsSessionTransitioning(false);
+      setApps([]);
+      setWorkspaces([]);
+      setSettings(null);
+      setError(null);
+      setIsLoading(false);
+      setIsWorkspacesLoading(false);
+    });
+  }, []);
+  const handleShellAuthorizationFailure = useCallback(() => {
     cancelShellLoading({ resetRecovery: true });
-    clearShellUiAfterAuthorizationFailure();
-  }, [cancelShellLoading, clearShellUiAfterAuthorizationFailure]);
+    beginShellSessionTransition();
+    publishAnonymousShellState();
+  }, [beginShellSessionTransition, cancelShellLoading, publishAnonymousShellState]);
   usePwaDataCacheBrokerHost({
     appRegistry: apps,
     frameScope,
-    onAuthorizationFailure: handleEmbeddedAuthorizationFailure,
-    principal: session?.authenticated ? {
-      sessionExpiresAt: session.expires_at,
-      userId: session.user.user_id,
-      workspaceId: session.workspace_id,
+    onAuthorizationFailure: handleShellAuthorizationFailure,
+    principal: authenticatedSession ? {
+      sessionExpiresAt: authenticatedSession.expires_at,
+      userId: authenticatedSession.user.user_id,
+      workspaceId: authenticatedSession.workspace_id,
     } : null,
   });
   const railApps = shellAppRailApps(apps, pinnedAppIds);
@@ -278,10 +307,13 @@ export function AppShell() {
     );
   }
 
-  async function clearShellAfterAuthorizationFailure(controller: AbortController) {
+  async function clearShellAfterAuthorizationFailure(controller: AbortController, loadVersion: number) {
     controller.abort();
     await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
-    clearShellUiAfterAuthorizationFailure();
+    if (shellLoadVersionRef.current !== loadVersion) {
+      return;
+    }
+    publishAnonymousShellState();
   }
 
   async function loadShellState() {
@@ -297,6 +329,7 @@ export function AppShell() {
     shellLoadVersionRef.current = loadVersion;
     const loadStartedAt = performance.now();
     markStartupMetric("shell.bootstrap.start");
+    beginShellSessionTransition();
     setIsLoading(true);
     setIsWorkspacesLoading(true);
     try {
@@ -310,22 +343,19 @@ export function AppShell() {
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
-      setSession(currentSession);
       if (!currentSession.authenticated) {
         await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
-        setApps([]);
-        setWorkspaces([]);
-        setSettings(null);
-        setError(null);
-        setIsWorkspacesLoading(false);
+        if (shellLoadVersionRef.current !== loadVersion) {
+          return;
+        }
+        publishAnonymousShellState();
         measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
       await shellCacheLifecycle.transition(shellCachePrincipal(currentSession));
-      deferredLoads.push(
-        loadWorkspaceState(loadVersion, controller.signal),
-        loadProviderSetupState(loadVersion, controller.signal),
-      );
+      if (shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
       const blockingStartedAt = performance.now();
       const registry = await runShellRead(
         "base-shell:app-registry",
@@ -335,8 +365,17 @@ export function AppShell() {
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
-      setApps(registry.items);
-      setError(null);
+      publishedSessionRef.current = currentSession;
+      flushSync(() => {
+        setSession(currentSession);
+        setApps(registry.items);
+        setError(null);
+        setIsSessionTransitioning(false);
+      });
+      deferredLoads.push(
+        loadWorkspaceState(loadVersion, controller.signal),
+        loadProviderSetupState(loadVersion, controller.signal),
+      );
       measureStartupMetric("shell.bootstrap.blocking_payloads", blockingStartedAt, {
         app_count: registry.items.length,
       });
@@ -350,9 +389,14 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        await clearShellAfterAuthorizationFailure(controller);
+        await clearShellAfterAuthorizationFailure(controller, loadVersion);
         return;
       }
+      await shellCacheLifecycle.endSession().catch(() => undefined);
+      if (shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      publishAnonymousShellState();
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
       measureStartupMetric("shell.bootstrap.error", loadStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
@@ -395,6 +439,10 @@ export function AppShell() {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
+      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+        handleShellAuthorizationFailure();
+        return;
+      }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
         resource: "workspaces",
@@ -421,6 +469,10 @@ export function AppShell() {
       });
     } catch (loadError) {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+        handleShellAuthorizationFailure();
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -451,6 +503,10 @@ export function AppShell() {
       });
     } catch (loadError) {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+        handleShellAuthorizationFailure();
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -652,7 +708,7 @@ export function AppShell() {
 
   async function openApp(appId: string, params: Record<string, string | boolean | null> = {}) {
     const requestedWorkspaceId = typeof params.workspace_id === "string" && params.workspace_id.trim() ? params.workspace_id.trim() : null;
-    const activeWorkspaceId = session?.authenticated ? session.workspace_id : null;
+    const activeWorkspaceId = authenticatedSession?.workspace_id ?? null;
     if (requestedWorkspaceId && requestedWorkspaceId !== activeWorkspaceId) {
       try {
         await switchWorkspace(requestedWorkspaceId);
@@ -712,13 +768,20 @@ export function AppShell() {
   }
 
   async function handleLogout() {
+    cancelShellLoading({ resetRecovery: true });
+    beginShellSessionTransition();
+    let logoutError: unknown = null;
     try {
       await logout();
+    } catch (error) {
+      logoutError = error;
     } finally {
-      cancelShellLoading({ resetRecovery: true });
       await shellCacheLifecycle.endSession().catch(() => undefined);
+      publishAnonymousShellState();
     }
-    await loadShellState();
+    if (logoutError) {
+      throw logoutError;
+    }
   }
 
   async function handleInitialProviderConfigured(payload: {
@@ -794,7 +857,7 @@ export function AppShell() {
     }
   }
 
-  if (isLoading && session === null) {
+  if (isSessionTransitioning || (isLoading && session === null)) {
     return (
       <main className="bs-shell">
         <div className="bs-shell-initial-pending">
@@ -804,19 +867,13 @@ export function AppShell() {
     );
   }
 
-  if (!session?.authenticated || !frameScope) {
-    return <LoginScreen onAuthenticated={(authenticatedSession) => {
-      setSession(authenticatedSession);
-      shellRetryCoordinator.setScope(JSON.stringify([
-        authenticatedSession.user.user_id,
-        authenticatedSession.workspace_id,
-        "base-shell",
-      ]));
+  if (!authenticatedSession || !frameScope) {
+    return <LoginScreen onAuthenticated={() => {
       void loadShellState();
     }} />;
   }
 
-  const activeWorkspaceId = session.workspace_id;
+  const activeWorkspaceId = authenticatedSession.workspace_id;
   const needsProviderSetup =
     !!settings && !settings.provider.active_provider && dismissedProviderSetupWorkspaceId !== activeWorkspaceId;
 
@@ -861,13 +918,13 @@ export function AppShell() {
           activeAppParams={activeAppParams}
           activeWorkspaceId={activeWorkspaceId}
           apps={apps}
-          cacheUserId={session.user.user_id}
+          cacheUserId={authenticatedSession.user.user_id}
           error={error}
           isLoading={isLoading}
           isMobileLayout={isMobileLayout}
           frameScope={frameScope}
           onOpenApp={openApp}
-          sessionExpiresAt={session.expires_at}
+          sessionExpiresAt={authenticatedSession.expires_at}
           shellTheme={shellTheme}
         />
       </div>
@@ -900,7 +957,7 @@ export function AppShell() {
         onThemeModeChange={setThemeMode}
         onSidebarDetailsWidthChange={setSidebarDetailsWidthPx}
         onSidebarResizeActiveChange={setIsSidebarResizing}
-        user={session.user}
+        user={authenticatedSession.user}
         workspaces={workspaces}
       />
       <FloatingChatHost
@@ -923,7 +980,7 @@ export function AppShell() {
         onWidthChange={setFloatingChatWidthPx}
         shellTheme={shellTheme}
         threadId={floatingChatThreadId}
-        user={session.user}
+        user={authenticatedSession.user}
         widthPx={floatingChatWidthPx}
       />
       <ProviderSetupDialog

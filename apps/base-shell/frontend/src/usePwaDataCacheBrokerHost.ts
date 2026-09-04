@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import type { AppRegistryItem } from "./api";
 import type { MaverickFrameScope } from "./iframePolicy";
@@ -28,7 +28,7 @@ export function usePwaDataCacheBrokerHost({
   );
   authorizationFailureRef.current = onAuthorizationFailure;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!principal || !frameScope || frameScope.workspaceId !== principal.workspaceId) return undefined;
     const sessionExpiry = Date.parse(principal.sessionExpiresAt);
     const accessLease = Number.isFinite(sessionExpiry)

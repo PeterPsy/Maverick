@@ -51,9 +51,10 @@ describe("AppFrameHost structured data-cache boundary", () => {
     const source = readFileSync(resolve(currentDir, "../AppShell.tsx"), "utf8");
 
     expect(source).toContain("usePwaDataCacheBrokerHost");
-    expect(source).toContain("onAuthorizationFailure: handleEmbeddedAuthorizationFailure");
-    expect(source).toContain("clearShellUiAfterAuthorizationFailure");
-    expect(source).toContain("setSession({ authenticated: false })");
+    expect(source).toContain("onAuthorizationFailure: handleShellAuthorizationFailure");
+    expect(source).toContain("beginShellSessionTransition");
+    expect(source).toContain("publishAnonymousShellState");
+    expect(source).toContain("setSession(anonymousSession)");
   });
 
   it("uses the owner-verified broker as the only structured-cache invalidation path", () => {

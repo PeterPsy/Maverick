@@ -302,6 +302,16 @@ without consulting or exposing a warm entry from the new workspace. Shell
 fan-out applies the same scoped owner check to app and widget recipients; only
 an exact top-level shell message may intentionally cross owners.
 
+AppShell enters an explicit transition barrier before requesting or applying a
+replacement session: the published session, broker principal, frame scope, and
+authenticated frame tree are removed in the same synchronous commit. Cache
+lifecycle transition, logout, authorization failure, invalidation, and clear
+operations execute through one serialized queue. A newly authenticated session
+and its app registry are published only after its lifecycle transition has
+completed and only if that load is still current. Logout enters the barrier
+before its network request, completes local lifecycle cleanup even when the
+request fails, and never depends on a follow-up session read to remove frames.
+
 ## Supersession boundary
 
 When ADR-0011 and this record conflict, this record is normative. Historical

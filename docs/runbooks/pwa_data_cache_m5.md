@@ -48,6 +48,14 @@ brokered network read additionally tells AppShell to clear authenticated UI and
 unmount every app/widget iframe immediately; reauthentication mounts fresh
 documents after cleanup, preventing an earlier warm paint from remaining in
 memory or the DOM.
+
+AppShell treats every session reload or logout as a publication barrier. It
+synchronously withdraws the broker principal and frame scope before awaiting
+network or durable cleanup, serializes every lifecycle mutation, and publishes
+a candidate authenticated session only after lifecycle transition and registry
+load succeed. A concurrent `401/403` invalidates the pending load, so its later
+cleanup completion cannot remount that session. Logout never waits for a second
+session fetch to remove authenticated frames.
 Cached catalog or content data is never used to authorize launch, install,
 write, publish, provider, capability, or confirmation actions.
 
@@ -130,9 +138,11 @@ Storage, App Store, then Fitness Coach. For each app:
 3. reload the authenticated shell so its registry and broker use the new gate;
 4. exercise cold miss, warm fresh hit, stale hit, changed and unchanged
    revalidation, app- and widget-originated mutation events, cross-owner spoof
-   rejection, expiration, warm-paint `401/403` iframe teardown, logout,
-   user/workspace switch (including old-frame rejection against a warm
-   new-workspace cache), quota denial, IndexedDB denial, and cache clear;
+   rejection, expiration, warm-paint `401/403` iframe teardown, logout with a
+   delayed request/cleanup, concurrent authorization failure during a delayed
+   transition, user/workspace switch (including unpublished new scope during
+   cleanup and old-frame rejection against a warm new-workspace cache), quota
+   denial, IndexedDB denial, and cache clear;
 5. compare normal layout and actions between equivalent cache and server
    results; and
 6. record aggregate request/byte/time results and required physical-device

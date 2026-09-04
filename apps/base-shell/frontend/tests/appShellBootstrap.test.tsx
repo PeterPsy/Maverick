@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MaverickHttpError, MaverickTransportError } from "../src/api";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
-import { shellRetryCoordinator } from "../src/pwaCacheRuntime";
+import { shellCacheLifecycle, shellRetryCoordinator } from "../src/pwaCacheRuntime";
 
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
@@ -22,7 +22,9 @@ const api = vi.hoisted(() => ({
   switchWorkspace: vi.fn(),
 }));
 const dataCacheBrokerHost = vi.hoisted(() => ({
+  frameScope: null as null | { sessionGeneration: string; workspaceId: string },
   onAuthorizationFailure: null as null | ((status: 401 | 403) => Promise<void> | void),
+  principal: null as null | { sessionExpiresAt: string; userId: string; workspaceId: string },
 }));
 
 vi.mock("../src/api", async (importOriginal) => {
@@ -44,9 +46,13 @@ vi.mock("../src/api", async (importOriginal) => {
 });
 vi.mock("../src/usePwaDataCacheBrokerHost", () => ({
   usePwaDataCacheBrokerHost: (options: {
+    frameScope: null | { sessionGeneration: string; workspaceId: string };
     onAuthorizationFailure: (status: 401 | 403) => Promise<void> | void;
+    principal: null | { sessionExpiresAt: string; userId: string; workspaceId: string };
   }) => {
+    dataCacheBrokerHost.frameScope = options.frameScope;
     dataCacheBrokerHost.onAuthorizationFailure = options.onAuthorizationFailure;
+    dataCacheBrokerHost.principal = options.principal;
   },
 }));
 
@@ -96,7 +102,9 @@ describe("AppShell bootstrap", () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.clearAllMocks();
+    dataCacheBrokerHost.frameScope = null;
     dataCacheBrokerHost.onAuthorizationFailure = null;
+    dataCacheBrokerHost.principal = null;
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -114,7 +122,16 @@ describe("AppShell bootstrap", () => {
     act(() => root.unmount());
     container.remove();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
+
+  async function renderShell() {
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
 
   it("shows the shell from session workspace without waiting for platform status", async () => {
     await act(async () => {
@@ -321,9 +338,123 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
     expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
   });
+
+  it("keeps the next workspace unpublished while its cache lifecycle transition is pending", async () => {
+    const transition = vi.spyOn(shellCacheLifecycle, "transition");
+    const cleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.transition>>>();
+    transition
+      .mockResolvedValueOnce(completeCleanup())
+      .mockImplementationOnce(() => {
+        expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+        expect(dataCacheBrokerHost.frameScope).toBeNull();
+        expect(dataCacheBrokerHost.principal).toBeNull();
+        return cleanup.promise;
+      });
+
+    await renderShell();
+    const previousFrame = container.querySelector("[data-testid='mounted-app-frame']");
+    expect(previousFrame).not.toBeNull();
+
+    api.getSession.mockResolvedValueOnce(sessionPayload("other"));
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[data-testid='revalidate-workspace']")?.click();
+      await until(() => transition.mock.calls.length === 2);
+    });
+
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(container.querySelector("[aria-label='Loading workspace']")).not.toBeNull();
+    expect(dataCacheBrokerHost.frameScope).toBeNull();
+    expect(dataCacheBrokerHost.principal).toBeNull();
+    expect(previousFrame?.isConnected).toBe(false);
+    expect(transition).toHaveBeenNthCalledWith(2, expect.objectContaining({ workspaceId: "other" }));
+
+    await act(async () => {
+      cleanup.resolve(completeCleanup());
+      await cleanup.promise;
+      await until(() => container.querySelector("[data-testid='workspace-view']") !== null);
+    });
+
+    expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("other");
+    expect(dataCacheBrokerHost.frameScope?.workspaceId).toBe("other");
+    expect(dataCacheBrokerHost.principal?.workspaceId).toBe("other");
+  });
+
+  it("unmounts authenticated frames before logout or cache cleanup can settle", async () => {
+    const transition = vi.spyOn(shellCacheLifecycle, "transition").mockResolvedValue(completeCleanup());
+    const logoutRequest = deferred<SessionPayload>();
+    const cleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.endSession>>>();
+    vi.spyOn(shellCacheLifecycle, "endSession").mockReturnValue(cleanup.promise);
+    api.logout.mockReturnValue(logoutRequest.promise);
+
+    await renderShell();
+    expect(transition).toHaveBeenCalledOnce();
+    const mountedFrame = container.querySelector("[data-testid='mounted-app-frame']");
+    expect(mountedFrame).not.toBeNull();
+
+    await act(async () => {
+      dispatchShellLogout();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(dataCacheBrokerHost.frameScope).toBeNull();
+    expect(dataCacheBrokerHost.principal).toBeNull();
+    expect(mountedFrame?.isConnected).toBe(false);
+    expect(shellCacheLifecycle.endSession).not.toHaveBeenCalled();
+
+    await act(async () => {
+      logoutRequest.resolve({ authenticated: false });
+      await logoutRequest.promise;
+      await until(() => vi.mocked(shellCacheLifecycle.endSession).mock.calls.length === 1);
+    });
+
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+    expect(container.querySelector("[aria-label='Loading workspace']")).not.toBeNull();
+
+    await act(async () => {
+      cleanup.resolve(completeCleanup());
+      await cleanup.promise;
+      await until(() => container.querySelector("[data-testid='login-screen']") !== null);
+    });
+
+    expect(api.getSession).toHaveBeenCalledOnce();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+  });
+
+  it("does not republish a pending workspace after a concurrent broker authorization failure", async () => {
+    const transition = vi.spyOn(shellCacheLifecycle, "transition");
+    const cleanup = deferred<Awaited<ReturnType<typeof shellCacheLifecycle.transition>>>();
+    transition
+      .mockResolvedValueOnce(completeCleanup())
+      .mockReturnValueOnce(cleanup.promise);
+
+    await renderShell();
+    api.getSession.mockResolvedValueOnce(sessionPayload("other"));
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[data-testid='revalidate-workspace']")?.click();
+      await until(() => transition.mock.calls.length === 2);
+    });
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+
+    await act(async () => {
+      await dataCacheBrokerHost.onAuthorizationFailure?.(401);
+      cleanup.resolve(completeCleanup());
+      await cleanup.promise;
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+    expect(dataCacheBrokerHost.frameScope).toBeNull();
+    expect(dataCacheBrokerHost.principal).toBeNull();
+    expect(api.listApps).toHaveBeenCalledOnce();
+  });
 });
 
-function sessionPayload(): Extract<SessionPayload, { authenticated: true }> {
+function sessionPayload(workspaceId = "default"): Extract<SessionPayload, { authenticated: true }> {
   return {
     authenticated: true,
     expires_at: "2026-07-08T00:00:00Z",
@@ -335,8 +466,38 @@ function sessionPayload(): Extract<SessionPayload, { authenticated: true }> {
       user_id: "user-1",
       username: "admin",
     },
-    workspace_id: "default",
+    workspace_id: workspaceId,
   };
+}
+
+function completeCleanup() {
+  return { pendingCleanupCount: 0, removed: 0, status: "complete" as const };
+}
+
+function dispatchShellLogout() {
+  window.dispatchEvent(new MessageEvent("message", {
+    data: { type: "maverick.shell.logout" },
+    origin: window.location.origin,
+    source: window,
+  }));
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+async function until(condition: () => boolean, attempts = 20): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (condition()) return;
+    await Promise.resolve();
+  }
+  throw new Error("Condition was not reached before the test deadline.");
 }
 
 function app(appId: string): AppRegistryItem {

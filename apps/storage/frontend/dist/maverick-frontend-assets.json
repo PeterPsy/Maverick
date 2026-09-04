@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "a1b6cc6777479decad4b1da3754105346568f831df02c5f4220ce5fa614356e5",
+  "build_id": "bb978ebbe9f84c8a44563ad3f8eff903098a798f075aa86bb7b0af776b0a4425",
   "entrypoints": [
     "index.html",
     "widgets/file-preview/index.html",
@@ -14,9 +14,9 @@
       "size_bytes": 43048
     },
     {
-      "path": "assets/app-BeIFMJID.js",
-      "sha256": "007335d52de9df6d73872122272ce4b1d75f02a14827780ef3b77221e4ba0bf8",
-      "size_bytes": 91989
+      "path": "assets/app-DtM0gHVP.js",
+      "sha256": "a36bc7396fc672ad1ee4bcf292f5642f11dff35a09f0c9a1a02947fc166b8fe3",
+      "size_bytes": 92080
     },
     {
       "path": "assets/browserFullscreen-D7VxnBB3.js",
@@ -49,9 +49,9 @@
       "size_bytes": 10494
     },
     {
-      "path": "assets/storageOAuthRuntime-DQYg-vca.js",
-      "sha256": "0bbf36c5e7046edbdc95d8dd46c10dc5b052666854b9279cd7463d5d35705dfa",
-      "size_bytes": 638
+      "path": "assets/storageOAuthRuntime-C_-VgVe4.js",
+      "sha256": "bdb0e0fc1b565f3e1a0ce47ea3b02ec966935c8610939227265f4c6139c42bce",
+      "size_bytes": 789
     },
     {
       "path": "assets/storageViewFilterEvents-BR-I0Pvz.js",
@@ -69,9 +69,9 @@
       "size_bytes": 27087
     },
     {
-      "path": "assets/widgets/storage-sidebar-footer/index-DXuVDs5L.js",
-      "sha256": "22be4c5ff49e1db1da7f72cd51252058a5251606117d92b28939097d4d9b8a27",
-      "size_bytes": 9782
+      "path": "assets/widgets/storage-sidebar-footer/index-DOxZxCoA.js",
+      "sha256": "93f5ea2010bb8138fc3102175624e0d8b2173cdad39d7fd8848a3bdd57146d5b",
+      "size_bytes": 9868
     }
   ],
   "revalidated": [
@@ -87,7 +87,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "9984479ed3383af8cc5e497047a5ef5eb9cc3285b1e701547d5953d3fdaa046c",
+      "sha256": "a7b85da8894f5daca271b3ae131bafcd11364836b519bbe1c6052c72540d26c1",
       "size_bytes": 1054
     },
     {
@@ -102,7 +102,7 @@
     },
     {
       "path": "widgets/storage-sidebar-footer/index.html",
-      "sha256": "997b19205fd8f79d0d8fc4a5ae4042d8f799bfeca438fba0504673621c6af0ca",
+      "sha256": "b288c89255fc97daa14c055f19d660394e1fbae8cb339d351838ea0465f6c2a8",
       "size_bytes": 800
     }
   ]

@@ -87,6 +87,38 @@ subresources remain available at the platform namespace, but
 are sandboxed and `nosniff` when interpreted as documents. The namespace is not
 the canonical browser URL for workspace navigation.
 
+A widget nested inside an already isolated app frame must not load its frontend
+mount on the parent app's origin. The parent frame requests a second launch with
+`POST /api/apps/widgets/browser-launch`. Core accepts that route only through a
+trusted isolated-frame scope and verifies the signed widget context, current
+workspace/user session, enabled owner binding, declared host/content kind,
+widget id, and exact frontend mount. The one-shot ticket is bound to the target
+host, widget owner, workspace, login session, parent app, and exact parent
+origin. Bootstrap requires that parent origin as browser `Origin`; a failed
+attempt spends the ticket. The nested origin's `frame-ancestors` policy names
+both the exact platform origin and exact parent-frame origin, because both are
+ancestors of the nested document. The ordinary owner comparison remains in
+force: a Chat frame, for example, never acquires authority to serve a Storage
+widget document itself.
+
+The embedding app must initially target `about:blank`, validate the launch
+response's exact HTTP(S) origin, bootstrap URL, parent origin, host, owner, and
+widget id, and submit the ticket through a hidden POST form. It may reveal the
+frame only after `maverick.app-frame.loaded` arrives from that exact origin and
+iframe `Window`; denial, malformed attestation, frame error, authorization loss,
+or a bounded readiness timeout must render the app's generic fallback.
+
+OAuth started from an installed/standalone PWA must preserve the platform
+session's browser container. An app-owned widget requests the generic validated
+`maverick.app.external-url` shell broker with `disposition: "same-window"` in
+that mode instead of opening a popup that may be handed to a separate Safari
+cookie jar. The shell accepts the disposition only from the already registered
+app/widget frame and only for a validated HTTP(S) URL. Normal browser mode may
+retain the popup flow. The callback does not become anonymous: the Core-owned
+relay still requires the active platform session before minting the isolated
+callback frame, and a successful top-level standalone callback returns to the
+platform shell.
+
 The public app id declared by the app artifact and the local app id used for one workspace binding are separate identities:
 
 - `public_app_id` is the catalog or source identity declared by the app contract and used for distribution, upgrade lineage, compatibility, and publisher ownership.
@@ -2051,8 +2083,14 @@ The initial core implementation uses:
 - `GET /api/apps/widgets/<owner_app_id>/<widget_id>/frontend/...` for controlled iframe frontend mounting
 - `POST /api/apps/widgets/context` to create a signed context token after validating workspace, authenticated user, requested host surface, widget owner, widget id, and content kind
 - `GET /api/apps/widgets/context/<token>` to read the explicit context from the widget iframe without exposing source paths or registry internals
+- `POST /api/apps/widgets/browser-launch` from an authenticated isolated parent frame to create the parent-bound, owner-scoped one-shot launch for a nested widget document
 
 Widgets are reusable app-owned surfaces. Any authenticated app frontend may discover a compatible widget and request a context token for the widget's declared host surface and content kind. The signed context token is not proof of the requester app's identity: it must not include or imply `requester_app_id`, and widget owners must treat `host_app_id` as the requested compatible surface, not as an attested caller. The registry endpoint must not mint reusable requester capabilities, and mounted app backend responses must not cause the core to sign widget contexts as a side effect.
+
+The nested browser launch separately records the authenticated parent app and
+exact parent origin from Core-owned scope. That binding authenticates where the
+returned document may be embedded; it does not reinterpret the context token's
+`host_app_id` as requester identity.
 
 The widget frontend document route is a controlled authenticated mount. Static non-HTML files below that widget frontend mount, such as `styles.css`, `main.js`, fonts, or images, follow the same public-cacheable rule as app frontend assets: they must not contain user-specific data and may be served with cross-origin headers so sandboxed widget iframes can load their own bundle without per-asset session cookies.
 

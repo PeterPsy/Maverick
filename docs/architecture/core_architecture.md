@@ -1200,6 +1200,7 @@ The core is responsible only for:
 - exposing enabled widget metadata through the workspace app registry
 - mounting widget frontend surfaces through controlled routes
 - enforcing auth, workspace context, install state, and enablement before loading a widget
+- issuing parent-bound isolated launch tickets when an app frame nests a widget owned by another app
 - providing deterministic routing metadata so host apps can find compatible widgets
 
 The core must not:
@@ -1252,6 +1253,18 @@ exact registered frame window and origin for inbound messages and never
 broadens host-to-frame delivery to `*`. The
 default-off `data_cache` flag still enforces the separate resource, privacy,
 and physical-rollout gates for M3.
+
+When an isolated app embeds a cross-owner widget, Core derives a second origin
+and accepts `POST /api/apps/widgets/browser-launch` only from the authenticated
+parent-frame scope. The signed widget context and current declaration must
+agree on workspace, user, host surface, owner, widget id, and content kind. The
+ticket additionally binds the target host, login session, installation
+generation, parent app, and exact parent origin; bootstrap requires that exact
+origin and remains one shot. Nested document CSP lists the exact platform and
+parent origins in `frame-ancestors`, while normal owner matching continues to
+deny the widget document on the parent app's own origin. The nested document
+announces `maverick.app-frame.loaded` only to its bound parent origin so an
+embedding app can apply exact-origin/source readiness and a bounded fallback.
 
 This isolation boundary is mandatory. Core has no same-platform-origin app or
 widget launch mode: invalid or unavailable isolated-origin routing fails the

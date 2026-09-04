@@ -564,6 +564,20 @@ through this generic contract without changing its existing app-server adapter
 or certified artifact digest; the Gemini CLI registration is a discovery-only
 second candidate and has no execution controller or release authority.
 
+Maverick Agent onboarding is likewise composition-driven. A trusted protocol
+adapter manifest owns transport, request/response codec, private state, usage,
+cancellation, and recovery identities; a provider config separately owns the
+endpoint, upstream/routing, credential logical name, retention, and data
+destination; an immutable model profile references those records and one
+versioned harness recipe. Registering a new trusted protocol factory composes a
+`HostedProviderRuntimeRegistry` without a branch in the Core-owned execution
+loop, while another model compatible with that protocol requires only a new
+recipe/profile record. Discovery snapshots vendor model metadata into a digest
+but always return `authority_granted=false` and no execution family. Publication
+classifies a profile as `maverick_agent` only after the complete Full Workspace
+contract, context, tool, streaming, usage, cancellation, and policy prerequisites
+are present; otherwise it cannot be published under that family.
+
 The core must also be installable and bootable with no AI provider configured or available.
 
 No provider is a valid initial platform state, not an installation failure.

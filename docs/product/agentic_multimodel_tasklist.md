@@ -2,7 +2,7 @@
 
 Status date: 2026-09-04
 
-Target: Phase 5A native-agent framework complete; Phase 5B-D and provider
+Target: Phase 5A-B runtime onboarding frameworks complete; Phase 5C-D and provider
 certification, security review, canary, and release gates remain open;
 remote agentic release remains **NO-GO**.
 
@@ -618,7 +618,22 @@ completion claim.
 
 ### 5B — Maverick Agent framework
 
-- [ ] Data-driven model/recipe onboarding and immutable candidate publication.
+- [x] Trusted protocol adapter, provider config, immutable model profile, and
+  harness recipe are distinct records whose exact identities must agree.
+- [x] The onboarding catalog registers protocol runtime factories and composes
+  the existing provider-neutral hosted runtime registry without adding a branch
+  to the Core loop. A second compatible model is admitted through data-only
+  recipe/profile registration in the conformance test.
+- [x] Candidate discovery hashes observed model metadata but always emits no
+  execution family and `authority_granted=false`; vendor capability flags are
+  never translated into tool or workspace authority.
+- [x] Profile publication is insert-once, detects immutable tuple conflicts,
+  and keeps rollout status in its independent CAS record. Google/OpenRouter
+  preview publication now uses this common path without changing their profile,
+  recipe, adapter, or certification revisions.
+- [x] `maverick_agent` classification fails closed unless the exact Full
+  Workspace revision, complete tool policy, context compaction, streaming,
+  usage accounting, tool calling, and cancellation prerequisites are present.
 
 ### 5C — Text-only separation
 

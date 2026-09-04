@@ -1,0 +1,107 @@
+"""Trusted protocol and provider-config records for builtin API agents."""
+
+from __future__ import annotations
+
+from core.providers.agentic_models import RoutingConstraint
+from core.providers.google_interactions_models import (
+    GOOGLE_INTERACTIONS_CODEC_ID,
+    GOOGLE_INTERACTIONS_CODEC_VERSION,
+)
+from core.providers.maverick_agent_onboarding import (
+    MaverickProtocolAdapterManifest,
+    MaverickProviderConfig,
+)
+from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_CODEC_ID,
+    OPENROUTER_AGENTIC_CODEC_VERSION,
+    OPENROUTER_AGENTIC_ENDPOINT_ID,
+    OPENROUTER_AGENTIC_UPSTREAM_ID,
+)
+
+
+HOSTED_TOOL_LOOP_ADAPTER_ID = "maverick-hosted-tool-loop"
+HOSTED_TOOL_LOOP_ADAPTER_VERSION = "35"
+
+GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
+    protocol_adapter_id="google-interactions-protocol",
+    protocol_adapter_version=GOOGLE_INTERACTIONS_CODEC_VERSION,
+    runtime_adapter_id=HOSTED_TOOL_LOOP_ADAPTER_ID,
+    runtime_adapter_version=HOSTED_TOOL_LOOP_ADAPTER_VERSION,
+    provider_protocol="google-interactions",
+    provider_api_version="v1",
+    transport_id="google-interactions-sse",
+    request_codec_id=f"{GOOGLE_INTERACTIONS_CODEC_ID}@{GOOGLE_INTERACTIONS_CODEC_VERSION}",
+    response_codec_id=f"{GOOGLE_INTERACTIONS_CODEC_ID}@{GOOGLE_INTERACTIONS_CODEC_VERSION}",
+    private_state_codec_id=f"{GOOGLE_INTERACTIONS_CODEC_ID}@{GOOGLE_INTERACTIONS_CODEC_VERSION}",
+    usage_accounting_id="google-interactions-usage-v1",
+    cancellation_id="cooperative-stream-cancel-v1",
+    recovery_id="core-stateless-history-v1",
+    trusted_distribution="maverick_builtin",
+)
+
+OPENROUTER_CHAT_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
+    protocol_adapter_id="openrouter-chat-completions-protocol",
+    protocol_adapter_version=OPENROUTER_AGENTIC_CODEC_VERSION,
+    runtime_adapter_id=HOSTED_TOOL_LOOP_ADAPTER_ID,
+    runtime_adapter_version=HOSTED_TOOL_LOOP_ADAPTER_VERSION,
+    provider_protocol="openrouter-chat-completions",
+    provider_api_version="v1",
+    transport_id="openrouter-chat-sse",
+    request_codec_id=f"{OPENROUTER_AGENTIC_CODEC_ID}@{OPENROUTER_AGENTIC_CODEC_VERSION}",
+    response_codec_id=f"{OPENROUTER_AGENTIC_CODEC_ID}@{OPENROUTER_AGENTIC_CODEC_VERSION}",
+    private_state_codec_id=f"{OPENROUTER_AGENTIC_CODEC_ID}@{OPENROUTER_AGENTIC_CODEC_VERSION}",
+    usage_accounting_id="openrouter-chat-usage-v1",
+    cancellation_id="cooperative-stream-cancel-v1",
+    recovery_id="core-chat-history-v1",
+    trusted_distribution="maverick_builtin",
+)
+
+GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
+    config_id="google-ai-studio-interactions",
+    revision="1",
+    model_provider_id="google-ai-studio",
+    provider_protocol="google-interactions",
+    provider_api_version="v1",
+    routing_constraint=RoutingConstraint(
+        endpoint_id="google-generativelanguage-v1-interactions",
+        allowed_upstream_ids=(),
+        allow_fallbacks=False,
+        require_parameters=True,
+        data_collection_policy="provider_contract",
+        require_zdr=False,
+        allowed_quantizations=(),
+    ),
+    credential_logical_name="google_ai_studio_api_key",
+    data_destination="Google AI Studio API",
+    retention_policy="provider_contract",
+)
+
+OPENROUTER_DEEPINFRA_PROVIDER_CONFIG = MaverickProviderConfig(
+    config_id="openrouter-deepinfra-fp8",
+    revision="1",
+    model_provider_id="openrouter",
+    provider_protocol="openrouter-chat-completions",
+    provider_api_version="v1",
+    routing_constraint=RoutingConstraint(
+        endpoint_id=OPENROUTER_AGENTIC_ENDPOINT_ID,
+        allowed_upstream_ids=(OPENROUTER_AGENTIC_UPSTREAM_ID,),
+        allow_fallbacks=False,
+        require_parameters=True,
+        data_collection_policy="deny",
+        require_zdr=True,
+        allowed_quantizations=("fp8",),
+    ),
+    credential_logical_name="openrouter_api_key",
+    data_destination="OpenRouter via DeepInfra FP8",
+    retention_policy="zdr_required",
+)
+
+
+__all__ = [
+    "GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER",
+    "GOOGLE_INTERACTIONS_PROVIDER_CONFIG",
+    "HOSTED_TOOL_LOOP_ADAPTER_ID",
+    "HOSTED_TOOL_LOOP_ADAPTER_VERSION",
+    "OPENROUTER_CHAT_PROTOCOL_ADAPTER",
+    "OPENROUTER_DEEPINFRA_PROVIDER_CONFIG",
+]

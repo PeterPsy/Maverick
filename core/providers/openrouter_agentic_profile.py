@@ -7,26 +7,31 @@ from datetime import UTC, datetime
 
 from core.providers.agentic_models import (
     AgenticProfileDefinition,
-    AgenticProfileDefinitionStatus,
     AgenticRuntimePolicy,
     RoutingConstraint,
 )
-from core.providers.errors import ProviderNotFoundError
 from core.providers.agentic_workspace_policy import (
     REMOTE_PREVIEW_EGRESS_POLICY_ID,
     REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
 )
+from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.providers.openrouter_agentic_models import (
-    OPENROUTER_AGENTIC_ENDPOINT_ID,
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_MODEL_REVISION,
-    OPENROUTER_AGENTIC_UPSTREAM_ID,
+)
+from core.providers.maverick_agent_builtins import (
+    OPENROUTER_CHAT_PROTOCOL_ADAPTER,
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+)
+from core.providers.maverick_agent_onboarding import (
+    MaverickAgentProfilePublication,
+    publish_maverick_agent_profile,
+    validate_maverick_runtime_adapter,
 )
 from core.providers.store import ProviderStore
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
-    MAVERICK_AGENT_EXECUTION_FAMILY,
 )
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 
@@ -78,15 +83,7 @@ def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
 
 def openrouter_agentic_routing_constraint() -> RoutingConstraint:
     """Pin every OpenRouter router control used by the certified profile."""
-    return RoutingConstraint(
-        endpoint_id=OPENROUTER_AGENTIC_ENDPOINT_ID,
-        allowed_upstream_ids=(OPENROUTER_AGENTIC_UPSTREAM_ID,),
-        allow_fallbacks=False,
-        require_parameters=True,
-        data_collection_policy="deny",
-        require_zdr=True,
-        allowed_quantizations=("fp8",),
-    )
+    return OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.routing_constraint
 
 
 def ensure_openrouter_agentic_preview_profile(
@@ -97,6 +94,7 @@ def ensure_openrouter_agentic_preview_profile(
 ) -> AgenticProfileDefinition:
     """Publish an uncertified Full Workspace preview without enabling a binding."""
     timestamp = now or datetime.now(tz=UTC)
+    validate_maverick_runtime_adapter(OPENROUTER_CHAT_PROTOCOL_ADAPTER, adapter)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
@@ -108,8 +106,10 @@ def ensure_openrouter_agentic_preview_profile(
         model_revision_policy="provider_alias",
         provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
-        adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==35",
+        adapter_id=OPENROUTER_CHAT_PROTOCOL_ADAPTER.runtime_adapter_id,
+        adapter_version_constraint=(
+            f"=={OPENROUTER_CHAT_PROTOCOL_ADAPTER.runtime_adapter_version}"
+        ),
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
@@ -132,24 +132,17 @@ def ensure_openrouter_agentic_preview_profile(
         ),
         context_policy=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.context_policy,
     )
-    try:
-        stored = store.get_agentic_profile_definition(
-            definition.definition_id,
-            definition.revision,
-        )
-    except ProviderNotFoundError:
-        stored = store.save_agentic_profile_definition(definition)
-    if store.get_agentic_profile_definition_status(stored.definition_id, stored.revision) is None:
-        store.save_agentic_profile_definition_status(
-            AgenticProfileDefinitionStatus(
-                definition_id=stored.definition_id,
-                definition_revision=stored.revision,
-                rollout_status="preview",
-                revision=0,
-                updated_at=timestamp,
-            ),
-            expected_revision=None,
-        )
+    stored = publish_maverick_agent_profile(
+        store,
+        publication=MaverickAgentProfilePublication(
+            adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
+            provider_config=OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+            recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
+            profile=definition,
+            rollout_status="preview",
+        ),
+        now=timestamp,
+    )
     _suspend_previous_revisions(store, now=timestamp)
     return stored
 

@@ -190,6 +190,20 @@ before the family field; arbitrary vendor labels and flags are never used for
 that inference. The discovery-only Gemini CLI candidate demonstrates a second
 native registration while remaining hard-disabled until full certification.
 
+For the Maverick-owned API loop, onboarding records are data rather than Core
+loop branches. `MaverickProtocolAdapterManifest` identifies the trusted
+transport/codecs/private-state/usage/cancellation/recovery implementation;
+`MaverickProviderConfig` pins endpoint, upstream, routing, credential, retention,
+and destination policy; `HostedHarnessRecipeManifest` owns the semantic/tool and
+context recipe; and `AgenticProfileDefinition` is the exact immutable model
+profile. The onboarding catalog can build the existing provider runtime registry
+from trusted factories and these records. Candidate discovery records vendor
+metadata only as an observation digest with no family or authority. Immutable
+publication rejects in-place tuple drift and refuses `maverick_agent`
+classification until the Full Workspace revision, complete tool set, context
+contract, streaming, usage accounting, tool calling, and cancellation contract
+all match.
+
 The single deterministic manifest in
 `core/providers/certified_execution_tcb.py` owns every component that can alter
 attestation/classification/egress, API/app admission, input composition/request

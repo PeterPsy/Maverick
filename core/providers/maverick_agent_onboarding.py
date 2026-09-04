@@ -1,0 +1,398 @@
+"""Data-driven onboarding boundary for Maverick-owned API agent loops."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from datetime import datetime
+from typing import Callable, Literal
+
+from core.providers.agentic_models import (
+    AgenticProfileDefinition,
+    AgenticProfileDefinitionStatus,
+    ProfileRolloutStatus,
+    RoutingConstraint,
+)
+from core.providers.errors import AgenticProfileError, ProviderNotFoundError
+from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
+from core.providers.models import ProviderDefinition
+from core.providers.store import ProviderStore
+from core.runtime.execution_binding import canonical_digest
+from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CONTRACT_REVISION,
+    FULL_WORKSPACE_CORE_TOOL_HANDLES,
+    MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+)
+from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
+from core.runtime.hosted_provider_runtime import (
+    HostedProviderRuntime,
+    HostedProviderRuntimeRegistry,
+)
+
+
+RuntimeFactory = Callable[
+    ["MaverickProviderConfig", HostedHarnessRecipeManifest],
+    HostedProviderRuntime,
+]
+
+
+@dataclass(frozen=True)
+class MaverickProtocolAdapterManifest:
+    """Trusted provider-protocol implementation, independent of any model."""
+
+    protocol_adapter_id: str
+    protocol_adapter_version: str
+    runtime_adapter_id: str
+    runtime_adapter_version: str
+    provider_protocol: str
+    provider_api_version: str | None
+    transport_id: str
+    request_codec_id: str
+    response_codec_id: str
+    private_state_codec_id: str
+    usage_accounting_id: str
+    cancellation_id: str
+    recovery_id: str
+    trusted_distribution: str
+
+
+@dataclass(frozen=True)
+class MaverickProviderConfig:
+    """Endpoint, upstream, credential, and data policy for one provider."""
+
+    config_id: str
+    revision: str
+    model_provider_id: str
+    provider_protocol: str
+    provider_api_version: str | None
+    routing_constraint: RoutingConstraint
+    credential_logical_name: str
+    data_destination: str
+    retention_policy: str
+
+    @property
+    def digest(self) -> str:
+        return canonical_digest(self)
+
+
+@dataclass(frozen=True)
+class MaverickAgentProfilePublication:
+    """Exact model profile plus separately versioned adapter/config/recipe."""
+
+    adapter: MaverickProtocolAdapterManifest
+    provider_config: MaverickProviderConfig
+    recipe: HostedHarnessRecipeManifest
+    profile: AgenticProfileDefinition
+    rollout_status: ProfileRolloutStatus
+
+
+@dataclass(frozen=True)
+class MaverickModelCandidate:
+    """Discovery observation that deliberately carries no runtime authority."""
+
+    candidate_id: str
+    model_provider_id: str
+    model_id: str
+    model_revision: str | None
+    provider_config_id: str
+    compatible_recipe_ids: tuple[str, ...]
+    observed_metadata_digest: str
+    authority_granted: Literal[False] = False
+    execution_family: None = None
+
+
+@dataclass(frozen=True)
+class MaverickProtocolRuntimeRegistration:
+    """Trusted factory plugged into the provider-neutral hosted registry."""
+
+    manifest: MaverickProtocolAdapterManifest
+    runtime_factory: RuntimeFactory
+
+
+class MaverickAgentOnboardingCatalog:
+    """Register data records and compose runtimes without changing Core loop code."""
+
+    def __init__(self) -> None:
+        self._runtime_adapters: dict[
+            tuple[str, str | None], MaverickProtocolRuntimeRegistration
+        ] = {}
+        self._provider_configs: dict[str, MaverickProviderConfig] = {}
+        self._publications: dict[
+            tuple[str, str], MaverickAgentProfilePublication
+        ] = {}
+
+    def register_protocol_adapter(
+        self,
+        registration: MaverickProtocolRuntimeRegistration,
+    ) -> None:
+        manifest = registration.manifest
+        _validate_protocol_adapter(manifest)
+        if not callable(registration.runtime_factory):
+            raise AgenticProfileError("maverick_protocol_factory_invalid")
+        key = (manifest.provider_protocol, manifest.provider_api_version)
+        if key in self._runtime_adapters:
+            raise AgenticProfileError("maverick_protocol_adapter_duplicate")
+        self._runtime_adapters[key] = registration
+
+    def register_provider_config(self, config: MaverickProviderConfig) -> None:
+        _validate_provider_config(config)
+        if config.config_id in self._provider_configs:
+            raise AgenticProfileError("maverick_provider_config_duplicate")
+        self._provider_configs[config.config_id] = config
+
+    def register_profile(
+        self,
+        publication: MaverickAgentProfilePublication,
+    ) -> None:
+        _validate_publication(publication)
+        config = self._provider_configs.get(publication.provider_config.config_id)
+        if config != publication.provider_config:
+            raise AgenticProfileError("maverick_provider_config_unregistered")
+        adapter_key = (
+            publication.adapter.provider_protocol,
+            publication.adapter.provider_api_version,
+        )
+        registration = self._runtime_adapters.get(adapter_key)
+        if registration is None or registration.manifest != publication.adapter:
+            raise AgenticProfileError("maverick_protocol_adapter_unregistered")
+        key = (publication.profile.definition_id, publication.profile.revision)
+        if key in self._publications:
+            raise AgenticProfileError("maverick_profile_publication_duplicate")
+        self._publications[key] = publication
+
+    def discover_candidates(
+        self,
+        definition: ProviderDefinition,
+    ) -> tuple[MaverickModelCandidate, ...]:
+        """Observe models without treating mutable vendor flags as authority."""
+        configs = tuple(
+            config
+            for config in self._provider_configs.values()
+            if config.model_provider_id == definition.provider_id
+        )
+        candidates: list[MaverickModelCandidate] = []
+        for config in sorted(configs, key=lambda item: item.config_id):
+            recipes = tuple(
+                publication.recipe
+                for publication in self._publications.values()
+                if publication.provider_config == config
+            )
+            for option in definition.model_options:
+                compatible = tuple(
+                    sorted(
+                        recipe.recipe_id
+                        for recipe in recipes
+                        if recipe.model_id == option.model_id
+                    )
+                )
+                candidates.append(
+                    MaverickModelCandidate(
+                        candidate_id=(
+                            f"maverick-candidate:{definition.provider_id}:"
+                            f"{option.model_id}:{config.revision}"
+                        ),
+                        model_provider_id=definition.provider_id,
+                        model_id=option.model_id,
+                        model_revision=str(option.metadata.get("model_revision") or "") or None,
+                        provider_config_id=config.config_id,
+                        compatible_recipe_ids=compatible,
+                        observed_metadata_digest=canonical_digest(
+                            {
+                                "model_id": option.model_id,
+                                "metadata": option.metadata,
+                                "input_modalities": option.input_modalities,
+                                "output_modalities": option.output_modalities,
+                                "upstream_provider_options": option.upstream_provider_options,
+                            }
+                        ),
+                    )
+                )
+        return tuple(candidates)
+
+    def build_runtime_registry(self) -> HostedProviderRuntimeRegistry:
+        """Compose trusted protocol factories from registered data only."""
+        registry = HostedProviderRuntimeRegistry()
+        for key in sorted(self._publications):
+            publication = self._publications[key]
+            adapter_key = (
+                publication.adapter.provider_protocol,
+                publication.adapter.provider_api_version,
+            )
+            registration = self._runtime_adapters[adapter_key]
+            runtime = registration.runtime_factory(
+                publication.provider_config,
+                publication.recipe,
+            )
+            if runtime.recipe != publication.recipe:
+                raise AgenticProfileError("maverick_runtime_recipe_mismatch")
+            registry.register(runtime)
+        return registry
+
+
+def publish_maverick_agent_profile(
+    store: ProviderStore,
+    *,
+    publication: MaverickAgentProfilePublication,
+    now: datetime,
+) -> AgenticProfileDefinition:
+    """Publish one exact immutable profile and an independent rollout record."""
+    _validate_publication(publication)
+    expected = publication.profile
+    try:
+        stored = store.get_agentic_profile_definition(
+            expected.definition_id,
+            expected.revision,
+        )
+    except ProviderNotFoundError:
+        stored = store.save_agentic_profile_definition(expected)
+    else:
+        if stored != replace(expected, created_at=stored.created_at):
+            raise AgenticProfileError("maverick_profile_immutable_conflict")
+    status = store.get_agentic_profile_definition_status(
+        stored.definition_id,
+        stored.revision,
+    )
+    if status is None:
+        store.save_agentic_profile_definition_status(
+            AgenticProfileDefinitionStatus(
+                definition_id=stored.definition_id,
+                definition_revision=stored.revision,
+                rollout_status=publication.rollout_status,
+                revision=0,
+                updated_at=now,
+            ),
+            expected_revision=None,
+        )
+    return stored
+
+
+def validate_maverick_runtime_adapter(
+    manifest: MaverickProtocolAdapterManifest,
+    adapter: object,
+) -> None:
+    """Require the executable engine to match the trusted adapter manifest."""
+    if (
+        str(getattr(adapter, "runtime_engine_id", "")) != "maverick-tool-loop"
+        or str(getattr(adapter, "adapter_id", ""))
+        != manifest.runtime_adapter_id
+        or str(getattr(adapter, "adapter_version", ""))
+        != manifest.runtime_adapter_version
+    ):
+        raise AgenticProfileError("maverick_runtime_adapter_identity_mismatch")
+
+
+def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
+    adapter = publication.adapter
+    config = publication.provider_config
+    recipe = publication.recipe
+    profile = publication.profile
+    _validate_protocol_adapter(adapter)
+    _validate_provider_config(config)
+    if (
+        profile.runtime_engine_id != "maverick-tool-loop"
+        or profile.adapter_id != adapter.runtime_adapter_id
+        or profile.adapter_version_constraint
+        != f"=={adapter.runtime_adapter_version}"
+        or profile.model_provider_id != config.model_provider_id
+        or profile.provider_protocol != adapter.provider_protocol
+        or profile.provider_api_version != adapter.provider_api_version
+        or profile.routing_constraint != config.routing_constraint
+        or profile.model_provider_id != recipe.model_provider_id
+        or profile.model_id != recipe.model_id
+        or profile.model_revision != recipe.model_revision
+        or profile.model_revision_policy != recipe.model_revision_policy
+        or profile.harness_recipe_id != recipe.recipe_id
+        or profile.harness_recipe_revision != recipe.revision
+        or profile.harness_recipe_digest != recipe.recipe_digest
+        or profile.provider_capability_catalog_digest
+        != recipe.capability_catalog_digest
+        or profile.semantic_projection_compiler_revision
+        != recipe.semantic_projection_compiler_revision
+        or profile.tool_contract_revision != recipe.tool_contract_revision
+        or profile.context_policy != recipe.context_policy
+    ):
+        raise AgenticProfileError("maverick_profile_composition_mismatch")
+    _validate_maverick_family(profile, recipe, publication.rollout_status)
+
+
+def _validate_maverick_family(
+    profile: AgenticProfileDefinition,
+    recipe: HostedHarnessRecipeManifest,
+    rollout_status: ProfileRolloutStatus,
+) -> None:
+    if profile.execution_family == MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY:
+        if profile.full_workspace_contract_revision or rollout_status != "disabled":
+            raise AgenticProfileError("maverick_candidate_must_remain_disabled")
+        return
+    if profile.execution_family != MAVERICK_AGENT_EXECUTION_FAMILY:
+        raise AgenticProfileError("maverick_execution_family_invalid")
+    policy = profile.policy_ceiling
+    flags = recipe.support_flags
+    if (
+        profile.full_workspace_contract_revision
+        != FULL_WORKSPACE_CONTRACT_REVISION
+        or recipe.tool_contract_revision != FULL_WORKSPACE_CONTRACT_REVISION
+        or recipe.context_policy.compaction_mode != "provider_history"
+        or not flags.streaming
+        or not flags.usage_accounting
+        or not flags.tool_calling
+        or not flags.cooperative_cancellation
+        or policy.tool_handle_mode != "exact"
+        or not set(FULL_WORKSPACE_CORE_TOOL_HANDLES).issubset(
+            policy.allowed_tool_handles
+        )
+        or not policy.allow_filesystem_list
+        or not policy.allow_filesystem_read
+        or not policy.allow_filesystem_write
+        or not policy.allow_shell
+    ):
+        raise AgenticProfileError("maverick_full_workspace_contract_required")
+
+
+def _validate_protocol_adapter(adapter: MaverickProtocolAdapterManifest) -> None:
+    fields = (
+        adapter.protocol_adapter_id,
+        adapter.protocol_adapter_version,
+        adapter.runtime_adapter_id,
+        adapter.runtime_adapter_version,
+        adapter.provider_protocol,
+        adapter.transport_id,
+        adapter.request_codec_id,
+        adapter.response_codec_id,
+        adapter.private_state_codec_id,
+        adapter.usage_accounting_id,
+        adapter.cancellation_id,
+        adapter.recovery_id,
+    )
+    if not all(str(value or "").strip() for value in fields):
+        raise AgenticProfileError("maverick_protocol_adapter_incomplete")
+    if adapter.trusted_distribution not in {"maverick_builtin", "operator_trusted"}:
+        raise AgenticProfileError("maverick_protocol_adapter_untrusted")
+
+
+def _validate_provider_config(config: MaverickProviderConfig) -> None:
+    if not all(
+        str(value or "").strip()
+        for value in (
+            config.config_id,
+            config.revision,
+            config.model_provider_id,
+            config.provider_protocol,
+            config.routing_constraint.endpoint_id,
+            config.credential_logical_name,
+            config.data_destination,
+            config.retention_policy,
+        )
+    ):
+        raise AgenticProfileError("maverick_provider_config_incomplete")
+
+
+__all__ = [
+    "MaverickAgentOnboardingCatalog",
+    "MaverickAgentProfilePublication",
+    "MaverickModelCandidate",
+    "MaverickProtocolAdapterManifest",
+    "MaverickProtocolRuntimeRegistration",
+    "MaverickProviderConfig",
+    "publish_maverick_agent_profile",
+    "validate_maverick_runtime_adapter",
+]

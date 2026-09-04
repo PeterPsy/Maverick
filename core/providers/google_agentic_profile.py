@@ -7,21 +7,28 @@ from datetime import UTC, datetime
 
 from core.providers.agentic_models import (
     AgenticProfileDefinition,
-    AgenticProfileDefinitionStatus,
     AgenticRuntimePolicy,
     RoutingConstraint,
 )
-from core.providers.errors import ProviderNotFoundError
 from core.providers.agentic_workspace_policy import (
     REMOTE_PREVIEW_EGRESS_POLICY_ID,
     REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+)
+from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
+from core.providers.maverick_agent_builtins import (
+    GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+)
+from core.providers.maverick_agent_onboarding import (
+    MaverickAgentProfilePublication,
+    publish_maverick_agent_profile,
+    validate_maverick_runtime_adapter,
 )
 from core.providers.store import ProviderStore
 from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
-    MAVERICK_AGENT_EXECUTION_FAMILY,
 )
 from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 
@@ -73,15 +80,7 @@ def google_agentic_preview_policy() -> AgenticRuntimePolicy:
 
 
 def google_interactions_routing_constraint() -> RoutingConstraint:
-    return RoutingConstraint(
-        endpoint_id="google-generativelanguage-v1-interactions",
-        allowed_upstream_ids=(),
-        allow_fallbacks=False,
-        require_parameters=True,
-        data_collection_policy="provider_contract",
-        require_zdr=False,
-        allowed_quantizations=(),
-    )
+    return GOOGLE_INTERACTIONS_PROVIDER_CONFIG.routing_constraint
 
 
 def ensure_google_agentic_preview_profile(
@@ -92,6 +91,7 @@ def ensure_google_agentic_preview_profile(
 ) -> AgenticProfileDefinition:
     """Publish an uncertified Full Workspace preview without enabling a binding."""
     timestamp = now or datetime.now(tz=UTC)
+    validate_maverick_runtime_adapter(GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER, adapter)
     definition = AgenticProfileDefinition(
         definition_id=GOOGLE_AGENTIC_PROFILE_ID,
         revision=GOOGLE_AGENTIC_PROFILE_REVISION,
@@ -103,8 +103,10 @@ def ensure_google_agentic_preview_profile(
         model_revision_policy="exact",
         provider_protocol="google-interactions",
         provider_api_version="v1",
-        adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==35",
+        adapter_id=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.runtime_adapter_id,
+        adapter_version_constraint=(
+            f"=={GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.runtime_adapter_version}"
+        ),
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,
@@ -125,24 +127,17 @@ def ensure_google_agentic_preview_profile(
         tool_contract_revision=GOOGLE_GOVERNED_WORKSPACE_RECIPE.tool_contract_revision,
         context_policy=GOOGLE_GOVERNED_WORKSPACE_RECIPE.context_policy,
     )
-    try:
-        stored = store.get_agentic_profile_definition(
-            definition.definition_id,
-            definition.revision,
-        )
-    except ProviderNotFoundError:
-        stored = store.save_agentic_profile_definition(definition)
-    if store.get_agentic_profile_definition_status(stored.definition_id, stored.revision) is None:
-        store.save_agentic_profile_definition_status(
-            AgenticProfileDefinitionStatus(
-                definition_id=stored.definition_id,
-                definition_revision=stored.revision,
-                rollout_status="preview",
-                revision=0,
-                updated_at=timestamp,
-            ),
-            expected_revision=None,
-        )
+    stored = publish_maverick_agent_profile(
+        store,
+        publication=MaverickAgentProfilePublication(
+            adapter=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
+            provider_config=GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+            recipe=GOOGLE_GOVERNED_WORKSPACE_RECIPE,
+            profile=definition,
+            rollout_status="preview",
+        ),
+        now=timestamp,
+    )
     _suspend_previous_revisions(store, now=timestamp)
     return stored
 

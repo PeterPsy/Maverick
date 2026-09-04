@@ -9,6 +9,10 @@ from typing import Literal
 
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import RuntimeDataClass
+from core.providers.hosted_text_profiles import (
+    HostedTextExecutionBinding,
+    hosted_text_binding_from_document,
+)
 from core.runtime.execution_binding import RuntimeExecutionBinding, execution_binding_from_document
 
 
@@ -96,6 +100,7 @@ class RuntimeSessionRecord:
     continuation_successor_session_id: str | None = None
     grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] = field(default_factory=list)
     execution_binding: RuntimeExecutionBinding | None = None
+    hosted_text_binding: HostedTextExecutionBinding | None = None
     provider_id: str | None = None
     provider_thread_id: str | None = None
     hosted_provider_id: str | None = None
@@ -212,7 +217,38 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
         payload["execution_binding"] = execution_binding_from_document(execution_binding)
     elif execution_binding is not None and not isinstance(execution_binding, RuntimeExecutionBinding):
         raise ValueError("Runtime execution binding must be an object.")
+    hosted_text_binding = payload.get("hosted_text_binding")
+    if isinstance(hosted_text_binding, Mapping):
+        payload["hosted_text_binding"] = hosted_text_binding_from_document(
+            hosted_text_binding
+        )
+    elif hosted_text_binding is not None and not isinstance(
+        hosted_text_binding,
+        HostedTextExecutionBinding,
+    ):
+        raise ValueError("Hosted text execution binding must be an object.")
+    payload.setdefault("hosted_text_binding", None)
+    _validate_runtime_family_pins(payload)
     return RuntimeSessionRecord(**payload)
+
+
+def _validate_runtime_family_pins(payload: Mapping[str, object]) -> None:
+    """Prevent one stored session from carrying authority for two families."""
+    runtime_mode = payload.get("runtime_mode")
+    execution_binding = payload.get("execution_binding")
+    hosted_text_binding = payload.get("hosted_text_binding")
+    if runtime_mode == "plain_hosted_chat" and execution_binding is not None:
+        raise ValueError("Text-only runtime session cannot carry an agentic binding.")
+    if runtime_mode == "agentic" and hosted_text_binding is not None:
+        raise ValueError("Agentic runtime session cannot carry a text-only binding.")
+    if isinstance(hosted_text_binding, HostedTextExecutionBinding):
+        if (
+            hosted_text_binding.session_id != payload.get("session_id")
+            or hosted_text_binding.workspace_id != payload.get("workspace_id")
+            or hosted_text_binding.provider_id != payload.get("hosted_provider_id")
+            or hosted_text_binding.model_id != payload.get("hosted_model_id")
+        ):
+            raise ValueError("Hosted text execution binding does not match its session.")
 
 
 def runtime_session_allows_user_thread(session: RuntimeSessionRecord) -> bool:

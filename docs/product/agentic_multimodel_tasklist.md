@@ -2,7 +2,7 @@
 
 Status date: 2026-09-04
 
-Target: Phase 5A-B runtime onboarding frameworks complete; Phase 5C-D and provider
+Target: Phase 5A-C runtime-family separation complete; Phase 5D and provider
 certification, security review, canary, and release gates remain open;
 remote agentic release remains **NO-GO**.
 
@@ -637,7 +637,23 @@ completion claim.
 
 ### 5C — Text-only separation
 
-- [ ] Immutable text profile/session pinning and no-agent-journal path.
+- [x] Text-only provider/model identity is an immutable profile with independent
+  status and `hosted_text_capability` certificate ids; the certificate fixes
+  workspace tools, action loop, and workspace actions to false and is never
+  valid as an agentic certificate.
+- [x] Browser and app preflight resolve and pin the exact provider, model, model
+  metadata revision, endpoint, modalities, limits, data destination, retention,
+  and provider-routing snapshot before creating a new text session.
+- [x] Text-only session preparation receives no agentic execution binding and
+  therefore creates no provider-private agent state or provider-step journal.
+  Skills, app references, and agent-child creation remain blocked.
+- [x] Every dispatch verifies the self-digesting text binding and routes only to
+  its pinned provider/model with its pinned upstream policy. Provider disable or
+  route drift fails closed instead of falling back, and an existing session
+  rejects a requested family/provider/model change.
+- [x] Continuations fork only the text binding session identity. Historical
+  text-session documents hydrate without synthesizing authority or rewriting
+  their stored provider/model fields.
 
 ### 5D — Settings and Chat
 

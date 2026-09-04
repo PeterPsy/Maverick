@@ -12,6 +12,7 @@ from typing import Callable
 
 from core.observability.service import record_platform_event
 from core.providers.models import ProviderDefinition, ProviderModelOption, RoutingDecision
+from core.providers.hosted_text_profiles import validate_hosted_text_execution_binding
 from core.providers.payloads import routing_decision_payload
 from core.providers.routing import ProviderRoutingContext, primary_routing_failure_reason, select_provider_for_profile
 from core.providers.service import effective_provider_registry
@@ -96,8 +97,11 @@ def execute_plain_hosted_text_turn(
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
 ) -> tuple[RuntimeExecutionResult, RoutingDecision]:
     """Execute one plain hosted chat turn through a routed hosted text provider."""
+    text_binding = session.hosted_text_binding
+    if text_binding is not None:
+        validate_hosted_text_execution_binding(text_binding)
     decision = select_provider_for_profile(
-        "fast_model",
+        "plain_hosted_chat",
         ProviderRoutingContext(
             workspace_id=session.workspace_id,
             provider_store=state.provider_store,
@@ -107,8 +111,16 @@ def execute_plain_hosted_text_turn(
             ),
             secret_store=state.secret_store,
             request_id=None,
-            hosted_provider_id=session.hosted_provider_id,
-            hosted_model_id=session.hosted_model_id,
+            hosted_provider_id=(
+                text_binding.provider_id
+                if text_binding is not None
+                else session.hosted_provider_id
+            ),
+            hosted_model_id=(
+                text_binding.model_id
+                if text_binding is not None
+                else session.hosted_model_id
+            ),
         ),
     )
     _emit_routing_decision_event(event_sink, decision)
@@ -116,6 +128,14 @@ def execute_plain_hosted_text_turn(
     if decision.execution_path != "plain_hosted_text" or decision.selected_provider_id is None:
         reason = primary_routing_failure_reason(decision)
         raise HostedTextGenerationError(reason, reason_codes=decision.reason_codes)
+    if text_binding is not None and (
+        decision.selected_provider_id != text_binding.provider_id
+        or decision.selected_model_id_or_voice_id != text_binding.model_id
+    ):
+        raise HostedTextGenerationError(
+            "hosted_text_session_route_changed",
+            reason_codes=[*decision.reason_codes, "hosted_text_session_route_changed"],
+        )
     model_option = _selected_model_option(
         effective_provider_registry(
             state.provider_store,
@@ -143,7 +163,7 @@ def execute_plain_hosted_text_turn(
         model_id=decision.selected_model_id_or_voice_id or "",
         system_prompt=session.system_prompt,
         messages=messages,
-        max_output_tokens=DEFAULT_HOSTED_TEXT_MAX_OUTPUT_TOKENS,
+        max_output_tokens=_max_output_tokens(session),
         stream=True,
         timeout_seconds=30,
         workspace_id=session.workspace_id,
@@ -294,6 +314,8 @@ def _openrouter_provider_routing_for_decision(
 ) -> dict[str, object] | None:
     if decision.selected_provider_id != "openrouter" or not decision.selected_model_id_or_voice_id:
         return None
+    if session.hosted_text_binding is not None:
+        return dict(session.hosted_text_binding.provider_routing_snapshot) or None
     get_selection = getattr(state.provider_store, "get_hosted_provider_selection", None)
     if not callable(get_selection):
         return None
@@ -302,6 +324,14 @@ def _openrouter_provider_routing_for_decision(
         return None
     routing = selection.openrouter_provider_routing_by_model.get(decision.selected_model_id_or_voice_id)
     return dict(routing) if isinstance(routing, dict) else None
+
+
+def _max_output_tokens(session: RuntimeSessionRecord) -> int:
+    binding = session.hosted_text_binding
+    limit = None if binding is None else binding.profile.output_limit_tokens
+    if limit is None:
+        return DEFAULT_HOSTED_TEXT_MAX_OUTPUT_TOKENS
+    return min(DEFAULT_HOSTED_TEXT_MAX_OUTPUT_TOKENS, limit)
 
 
 def _selected_model_option(definition: ProviderDefinition, model_id: str | None) -> ProviderModelOption | None:

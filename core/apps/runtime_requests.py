@@ -23,6 +23,10 @@ from core.providers.agentic_profiles import (
     resolve_workspace_agentic_profile,
 )
 from core.providers.agentic_workspace_policy import actor_selection_allowed
+from core.providers.hosted_text_profiles import (
+    HostedTextExecutionBinding,
+    pin_hosted_text_execution_binding,
+)
 from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.execution_binding import RuntimeExecutionBinding
@@ -82,6 +86,7 @@ class RuntimeRequestPreflight:
     session_id: str | None
     governance: WorkspaceGovernanceRecord | None
     execution_binding: RuntimeExecutionBinding | None
+    hosted_text_binding: HostedTextExecutionBinding | None
 
 
 def apply_app_runtime_requests(
@@ -544,8 +549,11 @@ def _runtime_session_for_request(
     )
     runtime_mode = coerce_runtime_mode(request.get("runtime_mode"))
     execution_binding = preflight.execution_binding
+    hosted_text_binding = preflight.hosted_text_binding
     if (
         (runtime_mode == "agentic") != (execution_binding is not None)
+        or (runtime_mode == "plain_hosted_chat")
+        != (hosted_text_binding is not None)
         or (
             execution_binding is not None
             and (
@@ -563,8 +571,12 @@ def _runtime_session_for_request(
         agent_id=agent_id,
         requested_mode=request.get("requested_mode"),
         runtime_mode=runtime_mode,
-        hosted_provider_id=request.get("hosted_provider_id"),
-        hosted_model_id=request.get("hosted_model_id"),
+        hosted_provider_id=(
+            hosted_text_binding.provider_id if hosted_text_binding else None
+        ),
+        hosted_model_id=(
+            hosted_text_binding.model_id if hosted_text_binding else None
+        ),
         declared_remote_data_class=None,
         system_prompt=system_prompt,
         skill_ids=_list_of_text(request.get("skill_ids")),
@@ -585,6 +597,7 @@ def _runtime_session_for_request(
         start_path=start_path,
         observability_store=state.observability_store,
         execution_binding=execution_binding,
+        hosted_text_binding=hosted_text_binding,
         routing=routing,
     )
     session = transition_runtime_session(
@@ -637,6 +650,15 @@ def _preflight_runtime_request_before_persistence(
             workspace_id=workspace_id,
             app_id=app_id,
         )
+        requested_runtime_mode = _text(request.get("runtime_mode"))
+        if requested_runtime_mode and requested_runtime_mode != session.runtime_mode:
+            raise ProviderError("runtime_session_execution_family_immutable")
+        for requested, pinned in (
+            (_text(request.get("hosted_provider_id")), session.hosted_provider_id),
+            (_text(request.get("hosted_model_id")), session.hosted_model_id),
+        ):
+            if requested and requested != str(pinned or ""):
+                raise ProviderError("hosted_text_session_route_immutable")
         require_turn_queue_session_executable(state.runtime_store, session)
         if runtime_session_is_plain_hosted_chat(session):
             if request.get("skill_ids") or request.get("invoked_skill_ids"):
@@ -669,6 +691,7 @@ def _preflight_runtime_request_before_persistence(
             session_id=None,
             governance=None,
             execution_binding=None,
+            hosted_text_binding=None,
         )
     agent_id = _text(request.get("agent_id") or request.get("agent_type_id"))
     if not agent_id:
@@ -699,6 +722,15 @@ def _preflight_runtime_request_before_persistence(
             actor_user_id=actor_user_id,
         )
     session_id = str(uuid4())
+    hosted_text_binding = None
+    if runtime_mode == "plain_hosted_chat":
+        hosted_text_binding = pin_hosted_text_execution_binding(
+            state,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            hosted_provider_id=_text(request.get("hosted_provider_id")) or None,
+            hosted_model_id=_text(request.get("hosted_model_id")) or None,
+        )
     governance = state.workspace_store.get_governance(workspace_id)
     execution_binding = None
     if authorized_profile is not None:
@@ -744,6 +776,7 @@ def _preflight_runtime_request_before_persistence(
         session_id=session_id,
         governance=governance,
         execution_binding=execution_binding,
+        hosted_text_binding=hosted_text_binding,
     )
 
 

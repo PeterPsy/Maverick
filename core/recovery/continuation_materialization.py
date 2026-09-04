@@ -12,6 +12,7 @@ from core.runtime.errors import (
     RuntimeThreadNotFoundError,
 )
 from core.runtime.execution_binding import canonical_digest
+from core.providers.hosted_text_profiles import fork_hosted_text_execution_binding
 from core.runtime.lifecycle import create_runtime_session, transition_runtime_session
 from core.runtime.process_control import runtime_processes_alive_for_session
 from core.runtime.provider_state import RuntimeProviderState
@@ -58,6 +59,15 @@ def ensure_successor_session(
             runtime_mode=predecessor.runtime_mode,
             hosted_provider_id=predecessor.hosted_provider_id,
             hosted_model_id=predecessor.hosted_model_id,
+            hosted_text_binding=(
+                fork_hosted_text_execution_binding(
+                    predecessor.hosted_text_binding,
+                    session_id=handoff.successor_session_id,
+                    created_at=handoff.created_at,
+                )
+                if getattr(predecessor, "hosted_text_binding", None) is not None
+                else None
+            ),
             declared_remote_data_class=None,
             grants=_session_grants(predecessor),
             governance=(
@@ -75,9 +85,29 @@ def ensure_successor_session(
         successor.predecessor_session_id != predecessor.session_id
         or successor.continuation_handoff_id != handoff.handoff_id
         or successor.execution_binding != handoff.target_execution_binding
+        or not _same_hosted_text_route(predecessor, successor)
     ):
         raise RuntimeProviderStateError("runtime_continuation_successor_conflict")
     return successor
+
+
+def _same_hosted_text_route(
+    predecessor: RuntimeSessionRecord,
+    successor: RuntimeSessionRecord,
+) -> bool:
+    source = getattr(predecessor, "hosted_text_binding", None)
+    target = getattr(successor, "hosted_text_binding", None)
+    if source is None or target is None:
+        return source is target
+    return (
+        target.session_id == successor.session_id
+        and target.workspace_id == source.workspace_id
+        and target.profile == source.profile
+        and target.status == source.status
+        and target.certificate == source.certificate
+        and target.provider_routing_digest == source.provider_routing_digest
+        and target.provider_routing_snapshot == source.provider_routing_snapshot
+    )
 
 
 def transfer_provider_state(

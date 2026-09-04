@@ -44,6 +44,10 @@ from core.providers.agentic_profiles import (
     resolve_workspace_agentic_profile,
 )
 from core.providers.agentic_workspace_policy import actor_selection_allowed
+from core.providers.hosted_text_profiles import (
+    HostedTextExecutionBinding,
+    pin_hosted_text_execution_binding,
+)
 from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
 from core.recovery.continuation_admission import runtime_session_admission_payload
 from core.recovery.continuation_fork import admit_runtime_session
@@ -174,6 +178,7 @@ class RuntimeSessionCreationPreflight:
     session_id: str
     governance: WorkspaceGovernanceRecord
     execution_binding: RuntimeExecutionBinding | None
+    hosted_text_binding: HostedTextExecutionBinding | None
 
 
 def _session_payload(
@@ -193,6 +198,47 @@ def _session_payload(
         reason_code=session.recovery_reason_code,
     )
     payload["provider_id"] = provider_id
+    if session.hosted_text_binding is not None:
+        text_binding = session.hosted_text_binding
+        payload["hosted_text_binding"] = {
+            "binding_id": text_binding.binding_id,
+            "profile_id": text_binding.profile.profile_id,
+            "profile_revision": text_binding.profile.revision,
+            "certificate_id": text_binding.certificate.certificate_id,
+            "provider_id": text_binding.provider_id,
+            "model_id": text_binding.model_id,
+            "provider_routing_digest": text_binding.provider_routing_digest,
+            "binding_digest": text_binding.binding_digest,
+            "created_at": text_binding.created_at,
+        }
+        payload["execution_family"] = text_binding.profile.execution_family
+        payload["hosted_text_profile"] = {
+            "profile_id": text_binding.profile.profile_id,
+            "profile_revision": text_binding.profile.revision,
+            "status": text_binding.status.status,
+            "status_reason": text_binding.status.reason_code,
+            "provider_id": text_binding.profile.provider_id,
+            "model_id": text_binding.profile.model_id,
+            "model_revision": text_binding.profile.model_revision,
+            "provider_protocol": text_binding.profile.provider_protocol,
+            "provider_api_version": text_binding.profile.provider_api_version,
+            "endpoint_id": text_binding.profile.endpoint_id,
+            "input_modalities": text_binding.profile.input_modalities,
+            "output_modalities": text_binding.profile.output_modalities,
+            "context_limit_tokens": text_binding.profile.context_limit_tokens,
+            "output_limit_tokens": text_binding.profile.output_limit_tokens,
+            "cost_policy": text_binding.profile.cost_policy,
+            "retention_policy": text_binding.profile.retention_policy,
+            "data_destination": text_binding.profile.data_destination,
+            "certificate": {
+                "certificate_id": text_binding.certificate.certificate_id,
+                "certificate_kind": text_binding.certificate.certificate_kind,
+                "workspace_tools": False,
+                "action_loop": False,
+                "workspace_actions": False,
+            },
+            "message": "No workspace tools or actions.",
+        }
     if session.execution_binding is not None:
         binding = session.execution_binding
         containment_reason = remote_agentic_containment_reason(binding)
@@ -970,9 +1016,13 @@ def _create_session(
         start_path=start_path,
     )
     execution_binding = preflight.execution_binding
+    hosted_text_binding = preflight.hosted_text_binding
+    runtime_mode = coerce_runtime_mode(body.get("runtime_mode"))
     if (
-        (coerce_runtime_mode(body.get("runtime_mode")) == "agentic")
+        (runtime_mode == "agentic")
         != (execution_binding is not None)
+        or (runtime_mode == "plain_hosted_chat")
+        != (hosted_text_binding is not None)
         or (
             execution_binding is not None
             and (
@@ -989,9 +1039,13 @@ def _create_session(
         workspace_id=context.workspace_id,
         agent_id=agent_id,
         requested_mode=body.get("requested_mode"),
-        runtime_mode=body.get("runtime_mode"),
-        hosted_provider_id=body.get("hosted_provider_id"),
-        hosted_model_id=body.get("hosted_model_id"),
+        runtime_mode=runtime_mode,
+        hosted_provider_id=(
+            hosted_text_binding.provider_id if hosted_text_binding else None
+        ),
+        hosted_model_id=(
+            hosted_text_binding.model_id if hosted_text_binding else None
+        ),
         declared_remote_data_class=None,
         prepared_session_fingerprint=prepared_fingerprint,
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
@@ -1022,6 +1076,7 @@ def _create_session(
         start_path=start_path,
         observability_store=state.observability_store,
         execution_binding=execution_binding,
+        hosted_text_binding=hosted_text_binding,
         routing=routing,
     )
     session = transition_runtime_session(
@@ -1073,6 +1128,17 @@ def _preflight_runtime_session_creation_before_persistence(
         if attachment_error is not None:
             raise ProviderError(attachment_error)
     session_id = str(uuid4())
+    hosted_text_binding = None
+    if runtime_mode == "plain_hosted_chat":
+        hosted_text_binding = pin_hosted_text_execution_binding(
+            state,
+            session_id=session_id,
+            workspace_id=context.workspace_id,
+            hosted_provider_id=str(body.get("hosted_provider_id") or "").strip()
+            or None,
+            hosted_model_id=str(body.get("hosted_model_id") or "").strip()
+            or None,
+        )
     authorized_profile = None
     if runtime_mode == "agentic":
         definition, workspace_binding = resolve_workspace_agentic_profile(
@@ -1164,6 +1230,7 @@ def _preflight_runtime_session_creation_before_persistence(
         session_id=session_id,
         governance=governance,
         execution_binding=execution_binding,
+        hosted_text_binding=hosted_text_binding,
     )
 
 
@@ -1246,6 +1313,7 @@ def _handle_session_collection(
                     body,
                     agent_id=agent_id,
                     execution_binding=preflight.execution_binding,
+                    hosted_text_binding=preflight.hosted_text_binding,
                 )
                 prepared_acquisition = acquire_prepared_session(
                     state,

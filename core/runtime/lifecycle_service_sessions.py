@@ -9,6 +9,11 @@ from typing import TYPE_CHECKING
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
 from core.runtime.execution_binding import RuntimeExecutionBinding, fork_runtime_execution_binding
+from core.providers.hosted_text_profiles import (
+    HostedTextExecutionBinding,
+    fork_hosted_text_execution_binding,
+    validate_hosted_text_execution_binding,
+)
 from core.runtime.models import RuntimeRoutingDecision
 from core.runtime.paths import normalize_runtime_session_id
 from core.runtime.routing import build_runtime_routing
@@ -83,6 +88,7 @@ def create_runtime_session(
     start_path: Path | None = None,
     observability_store=None,
     execution_binding: RuntimeExecutionBinding | None = None,
+    hosted_text_binding: HostedTextExecutionBinding | None = None,
     routing: RuntimeRoutingDecision | None = None,
 ) -> RuntimeSessionRecord:
     """Create one runtime session and its initial runtime state."""
@@ -115,6 +121,27 @@ def create_runtime_session(
         or execution_binding.execution_mode != routing.effective_mode
     ):
         raise ValueError("Runtime execution binding does not match the session routing decision.")
+    if normalized_runtime_mode == "plain_hosted_chat" and execution_binding is not None:
+        raise ValueError("Text-only runtime sessions cannot carry agentic bindings.")
+    if normalized_runtime_mode == "agentic" and hosted_text_binding is not None:
+        raise ValueError("Agentic runtime sessions cannot carry text-only bindings.")
+    if hosted_text_binding is not None and (
+        hosted_text_binding.session_id != session_id
+        or hosted_text_binding.workspace_id != workspace_id
+        or (
+            _optional_text(hosted_provider_id) is not None
+            and _optional_text(hosted_provider_id) != hosted_text_binding.provider_id
+        )
+        or (
+            _optional_text(hosted_model_id) is not None
+            and _optional_text(hosted_model_id) != hosted_text_binding.model_id
+        )
+    ):
+        raise ValueError("Hosted text execution binding does not match the session request.")
+    if hosted_text_binding is not None:
+        validate_hosted_text_execution_binding(hosted_text_binding)
+        hosted_provider_id = hosted_text_binding.provider_id
+        hosted_model_id = hosted_text_binding.model_id
     session = RuntimeSessionRecord(
         session_id=session_id,
         workspace_id=workspace_id,
@@ -152,6 +179,7 @@ def create_runtime_session(
         continuation_fork_reason=_optional_text(continuation_fork_reason),
         grants=_platform_runtime_grants(grants),
         execution_binding=execution_binding,
+        hosted_text_binding=hosted_text_binding,
         provider_id=execution_binding.runtime_engine_id if execution_binding is not None else None,
         hosted_provider_id=_optional_text(hosted_provider_id),
         hosted_model_id=_optional_text(hosted_model_id),
@@ -173,6 +201,11 @@ def create_runtime_session(
             "runtime_mode": session.runtime_mode,
             "hosted_provider_id": session.hosted_provider_id,
             "hosted_model_id": session.hosted_model_id,
+            "hosted_text_profile_id": (
+                session.hosted_text_binding.profile.profile_id
+                if session.hosted_text_binding is not None
+                else None
+            ),
         }
         record_platform_event(
             observability_store,
@@ -237,6 +270,8 @@ def create_child_runtime_session(
     """Create one runtime child session using only explicit materialized authority."""
     parent = store.get_session(parent_session_id)
     require_remote_agentic_session_admission(parent.execution_binding)
+    if parent.runtime_mode == "plain_hosted_chat":
+        raise ValueError("Text-only runtime sessions cannot create agent children.")
     timestamp = now or utcnow()
     child_session_id = normalize_runtime_session_id(child_session_id)
     runtime_root = Path(parent.runtime_root).parent / child_session_id

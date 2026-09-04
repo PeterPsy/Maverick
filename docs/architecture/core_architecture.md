@@ -578,6 +578,22 @@ classifies a profile as `maverick_agent` only after the complete Full Workspace
 contract, context, tool, streaming, usage, cancellation, and policy prerequisites
 are present; otherwise it cannot be published under that family.
 
+Text-only API sessions have a third and disjoint identity path. Before a new
+session is persisted, Core resolves the exact hosted provider/model and creates
+a self-digesting `HostedTextExecutionBinding`. That binding embeds an immutable
+`HostedTextProfileDefinition`, an independent availability status, a
+`hosted_text_capability` certificate that explicitly fixes workspace tools,
+action loop, and workspace actions to false, plus the exact provider-routing
+snapshot. It is never passed to agentic provider-state initialization, the
+provider-step journal, tool orchestration, or an agentic certificate validator.
+Every text dispatch revalidates the binding and requests its pinned provider and
+model; a missing/disabled route fails rather than selecting another provider or
+execution family. Continuation may fork the binding identity but cannot change
+its route. Stored pre-P5 text sessions hydrate without manufacturing or
+rewriting a pin. An existing session cannot accept a different runtime family,
+provider, or model through a later app request, and text sessions cannot create
+agent children.
+
 The core must also be installable and bootable with no AI provider configured or available.
 
 No provider is a valid initial platform state, not an installation failure.

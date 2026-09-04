@@ -9,7 +9,7 @@ import json
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
-_PREPARED_SESSION_FINGERPRINT_VERSION = 2
+_PREPARED_SESSION_FINGERPRINT_VERSION = 3
 
 
 def prepared_session_fingerprint(
@@ -17,6 +17,7 @@ def prepared_session_fingerprint(
     *,
     agent_id: str,
     execution_binding: object | None = None,
+    hosted_text_binding: object | None = None,
 ) -> str:
     """Hash normalized requested and resolved configuration, never turn content."""
     payload = {
@@ -36,6 +37,9 @@ def prepared_session_fingerprint(
         "hosted_provider_id": _text(body.get("hosted_provider_id")) or None,
         "hosted_model_id": _text(body.get("hosted_model_id")) or None,
         "execution_binding": _resolved_execution_binding(execution_binding),
+        "hosted_text_binding": _resolved_hosted_text_binding(
+            hosted_text_binding
+        ),
         "workspace_profile_binding_id": (
             _text(getattr(execution_binding, "workspace_binding_id", None))
             or _text(body.get("workspace_profile_binding_id"))
@@ -70,11 +74,27 @@ def _resolved_execution_binding(binding: object | None) -> dict[str, object] | N
     }
 
 
+def _resolved_hosted_text_binding(binding: object | None) -> dict[str, object] | None:
+    if binding is None:
+        return None
+    profile = getattr(binding, "profile", None)
+    return {
+        "profile_id": _text(getattr(profile, "profile_id", None)),
+        "profile_revision": _text(getattr(profile, "revision", None)),
+        "provider_id": _text(getattr(profile, "provider_id", None)),
+        "model_id": _text(getattr(profile, "model_id", None)),
+        "provider_routing_digest": _text(
+            getattr(binding, "provider_routing_digest", None)
+        ),
+    }
+
+
 def stored_prepared_session_configuration_key(session: RuntimeSessionRecord) -> str:
     """Return a deduplication key for new and pre-fingerprint prepared records."""
     if session.prepared_session_fingerprint:
         return f"request:{session.prepared_session_fingerprint}"
     binding = session.execution_binding
+    text_binding = session.hosted_text_binding
     payload = {
         "agent_id": session.agent_id,
         "agent_role_id": session.agent_role_id,
@@ -99,6 +119,17 @@ def stored_prepared_session_configuration_key(session: RuntimeSessionRecord) -> 
                 "reasoning_effort": binding.reasoning_effort,
             }
             if binding is not None
+            else None
+        ),
+        "hosted_text_binding": (
+            {
+                "profile_id": text_binding.profile.profile_id,
+                "profile_revision": text_binding.profile.revision,
+                "provider_id": text_binding.provider_id,
+                "model_id": text_binding.model_id,
+                "provider_routing_digest": text_binding.provider_routing_digest,
+            }
+            if text_binding is not None
             else None
         ),
     }

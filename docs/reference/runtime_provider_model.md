@@ -204,6 +204,20 @@ classification until the Full Workspace revision, complete tool set, context
 contract, streaming, usage accounting, tool calling, and cancellation contract
 all match.
 
+`hosted_text` is not an incomplete agent profile. Its immutable
+`HostedTextProfileDefinition`, separate `HostedTextProfileStatus`, and
+`HostedTextCapabilityCertificate` use their own ids and schemas. The text
+certificate always records `workspace_tools=false`, `action_loop=false`, and
+`workspace_actions=false`; it is never accepted where an agentic capability
+certificate is required. A new text session pins these records, provider/model,
+and provider-routing snapshot in `HostedTextExecutionBinding` before
+persistence. The session initializer receives no agentic execution binding, so
+it creates neither provider-private agent state nor a provider-step journal.
+Dispatch supplies the exact pinned provider/model and routing snapshot and
+fails on drift instead of falling back. A continuation only forks the binding's
+session identity. Legacy stored text sessions remain byte-for-byte unmigrated;
+hydration does not synthesize authority for them.
+
 The single deterministic manifest in
 `core/providers/certified_execution_tcb.py` owns every component that can alter
 attestation/classification/egress, API/app admission, input composition/request

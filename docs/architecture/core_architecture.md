@@ -1451,9 +1451,11 @@ from its authenticated user/workspace/access-lease principal and keeps
 IndexedDB authority top-level. An app sends only its mounted app id, opaque
 entity id, declared resource, schema revision, and optional sanitized migration
 seed over a transferred `MessageChannel`. The shell registers every isolated
-app and widget frame with its real owner app id. The broker verifies that owner,
-the exact registered frame source and origin, the fixed resource inventory,
-the global data gate, and the per-app registry gate before accepting. It then
+app and widget frame with its real owner app id, active workspace, and opaque
+authenticated shell-session generation. The broker verifies that complete
+scope against its current principal, the exact registered frame source and
+origin, the fixed resource inventory, the global data gate, and the per-app
+registry gate before accepting. It then
 requests the conditional app-specific network read over the private port; no
 app endpoint or domain model moves into Core.
 
@@ -1466,7 +1468,12 @@ to scoped lifecycle invalidation only after the sender's registered owner
 matches the declared owner. A `401` or `403` disables the mounted broker,
 clears the applicable structured scope, and notifies AppShell to discard its
 authenticated state and unmount every app/widget frame; successful login then
-mounts fresh documents. Fitness Coach validates legacy bootstrap migration
+mounts fresh documents. A workspace or session transition rotates the opaque
+generation and synchronously removes frames from the previous scope. Any late
+old-frame request is unavailable before cache lookup, even when the new
+workspace has a warm entry. App and widget fan-out enforces the same scoped
+owner identity; only exact top-level shell messages may cross owners. Fitness
+Coach validates legacy bootstrap migration
 scope against Core's immutable app-frame context rather than URL search
 parameters. A missing broker, rejected schema,
 closed flag, unavailable quota/store, or failed migration preserves the normal

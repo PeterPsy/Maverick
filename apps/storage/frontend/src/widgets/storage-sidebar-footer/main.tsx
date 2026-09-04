@@ -8,7 +8,12 @@ import { roleLabels } from '../../storageMeta';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta } from '../../lib/storageCatalogDelta';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
-import { maverickPlatformOrigin, storageOAuthRedirectUri } from '../../lib/storageOAuthRuntime';
+import {
+  maverickPlatformOrigin,
+  storageOAuthNavigationDisposition,
+  storageOAuthRedirectUri,
+  type StorageOAuthNavigationDisposition,
+} from '../../lib/storageOAuthRuntime';
 import type { FileRole, StorageFile, StorageFolder } from '../../types';
 import '../../styles/sidebar-widget.css';
 
@@ -327,7 +332,10 @@ function StorageSidebarFooterWidget() {
   }
 
   async function connectDrive() {
-    const authorizationWindow = openBlankAuthorizationWindow();
+    const navigationDisposition = storageOAuthNavigationDisposition();
+    const authorizationWindow = navigationDisposition === 'new-window'
+      ? openBlankAuthorizationWindow()
+      : null;
     setIsConnectingDrive(true);
     setStatus('');
     try {
@@ -342,7 +350,7 @@ function StorageSidebarFooterWidget() {
         setStatus('Google Drive authorization could not be started.');
         return;
       }
-      openAuthorizationUrl(payload.authorization_url, authorizationWindow);
+      openAuthorizationUrl(payload.authorization_url, authorizationWindow, navigationDisposition, appId);
     } catch (connectError) {
       closeAuthorizationWindow(authorizationWindow);
       setStatus(connectError instanceof Error ? connectError.message : 'Unable to connect Google Drive.');
@@ -544,7 +552,12 @@ function openBlankAuthorizationWindow() {
   return popup;
 }
 
-function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
+function openAuthorizationUrl(
+  authorizationUrl: string,
+  popup: Window | null,
+  disposition: StorageOAuthNavigationDisposition,
+  ownerAppId: string,
+) {
   if (popup && !popup.closed) {
     popup.location.replace(authorizationUrl);
     try {
@@ -556,7 +569,13 @@ function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
     return;
   }
   if (window.top && window.top !== window) {
-    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, "*");
+    window.parent.postMessage({
+      type: 'maverick.app.external-url',
+      url: authorizationUrl,
+      disposition,
+      owner_app_id: ownerAppId,
+      widget_id: WIDGET_ID,
+    }, "*");
     return;
   }
   window.location.assign(authorizationUrl);

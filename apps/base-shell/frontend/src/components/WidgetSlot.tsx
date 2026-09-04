@@ -10,7 +10,11 @@ import {
   type MaverickFrameScope,
   widgetFrameBrowserFeaturePolicy,
 } from "../iframePolicy";
-import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
+import {
+  externalHttpUrlFromMessage,
+  externalUrlDispositionFromMessage,
+  openExternalUrl,
+} from "../lib/externalUrl";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
 import { measureStartupMetric } from "../startupMetrics";
 import type { ShellThemeState } from "../theme";
@@ -52,6 +56,7 @@ type WidgetMessagePayload = {
   active_thread_id?: string;
   app_id?: string;
   detail?: Record<string, unknown>;
+  disposition?: unknown;
   height?: string;
   owner_app_id?: string;
   navigation_scope?: string;
@@ -358,7 +363,7 @@ export function WidgetSlot({
       ) {
         const url = externalHttpUrlFromMessage(payload.url);
         if (url) {
-          openExternalUrl(url);
+          openExternalUrl(url, externalUrlDispositionFromMessage(payload.disposition));
         }
         return;
       }

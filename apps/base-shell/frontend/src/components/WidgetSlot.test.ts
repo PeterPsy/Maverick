@@ -33,6 +33,15 @@ describe("WidgetSlot app-scoped runtime remount", () => {
   });
 });
 
+describe("WidgetSlot external navigation", () => {
+  it("passes only the normalized disposition from an owner-verified widget", () => {
+    const source = readFileSync(resolve(currentDir, "WidgetSlot.tsx"), "utf8");
+
+    expect(source).toContain("isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)");
+    expect(source).toContain("externalUrlDispositionFromMessage(payload.disposition)");
+  });
+});
+
 describe("Sidebar widget frame persistence", () => {
   it("keeps visited app widgets mounted and only hides inactive frames", () => {
     const source = readFileSync(resolve(currentDir, "Sidebar.tsx"), "utf8");

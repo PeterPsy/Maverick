@@ -23,4 +23,17 @@ describe('storage sidebar footer layout', () => {
     const footerSource = readSource('widgets/storage-sidebar-footer/main.tsx');
     expect(footerSource).toContain("aria-label={isConnectingDrive ? 'Connecting Google Drive' : 'Connect Drive'}");
   });
+
+  it('routes installed-PWA OAuth through the same-window shell broker', () => {
+    const footerSource = readSource('widgets/storage-sidebar-footer/main.tsx');
+    const appSource = readSource('main.tsx');
+
+    expect(footerSource).toContain('storageOAuthNavigationDisposition()');
+    expect(footerSource).toContain("navigationDisposition === 'new-window'");
+    expect(footerSource).toContain('disposition,');
+    expect(footerSource).toContain('owner_app_id: ownerAppId');
+    expect(footerSource).toContain('widget_id: WIDGET_ID');
+    expect(appSource).toContain("window.top === window && storageOAuthNavigationDisposition() === 'same-window'");
+    expect(appSource).toContain('window.location.replace(maverickPlatformOrigin())');
+  });
 });

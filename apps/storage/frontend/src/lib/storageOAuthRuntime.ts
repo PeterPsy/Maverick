@@ -6,6 +6,8 @@ export type StorageOAuthCallback = {
   state: string;
 };
 
+export type StorageOAuthNavigationDisposition = 'new-window' | 'same-window';
+
 export function storageOAuthRedirectUri(appId: string, origin: string) {
   const normalizedOrigin = origin.replace(/\/+$/g, '');
   return `${normalizedOrigin}/apps/${encodeURIComponent(appId)}/oauth/callback`;
@@ -14,6 +16,13 @@ export function storageOAuthRedirectUri(appId: string, origin: string) {
 export function maverickPlatformOrigin(): string {
   const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
   return typeof value === 'string' && /^https?:\/\//u.test(value) ? value : window.location.origin;
+}
+
+export function storageOAuthNavigationDisposition(
+  displayModeStandalone = window.matchMedia?.('(display-mode: standalone)').matches === true,
+  navigatorStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true,
+): StorageOAuthNavigationDisposition {
+  return displayModeStandalone || navigatorStandalone ? 'same-window' : 'new-window';
 }
 
 export function storageOAuthCallbackFromLocation(pathname: string, search: string, origin: string): StorageOAuthCallback | null {

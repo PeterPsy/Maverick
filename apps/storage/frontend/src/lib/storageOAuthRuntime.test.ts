@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { storageOAuthCallbackFromLocation, storageOAuthRedirectUri } from './storageOAuthRuntime';
+import {
+  storageOAuthCallbackFromLocation,
+  storageOAuthNavigationDisposition,
+  storageOAuthRedirectUri,
+} from './storageOAuthRuntime';
 
 describe('storage OAuth runtime helpers', () => {
   it('builds the mounted Storage OAuth callback URL for the active app id', () => {
@@ -26,5 +30,11 @@ describe('storage OAuth runtime helpers', () => {
 
   it('ignores non-callback routes', () => {
     expect(storageOAuthCallbackFromLocation('/apps/storage/', '?code=auth-code', 'https://maverick.local')).toBeNull();
+  });
+
+  it('keeps OAuth in the installed PWA container on both standard and iOS signals', () => {
+    expect(storageOAuthNavigationDisposition(true, false)).toBe('same-window');
+    expect(storageOAuthNavigationDisposition(false, true)).toBe('same-window');
+    expect(storageOAuthNavigationDisposition(false, false)).toBe('new-window');
   });
 });

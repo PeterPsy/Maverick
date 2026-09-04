@@ -24,6 +24,14 @@ describe("AppFrameHost app-scoped runtime remount", () => {
   });
 });
 
+describe("AppFrameHost external navigation", () => {
+  it("passes only the normalized disposition to the external URL broker", () => {
+    const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
+
+    expect(source).toContain("externalUrlDispositionFromMessage(payload.disposition)");
+  });
+});
+
 describe("AppFrameHost Storage file-cache boundary", () => {
   it("routes Storage messages through a disposable parent-owned broker", () => {
     const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");

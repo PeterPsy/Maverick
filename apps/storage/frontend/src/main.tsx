@@ -21,7 +21,12 @@ import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requ
 import { sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
 import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storagePickerAcceptsFile, storagePickerContextFromParams, storagePickerResultForFile, type StoragePickerContext } from './lib/storagePicker';
-import { maverickPlatformOrigin, storageOAuthCallbackFromLocation, type StorageOAuthCallback } from './lib/storageOAuthRuntime';
+import {
+  maverickPlatformOrigin,
+  storageOAuthCallbackFromLocation,
+  storageOAuthNavigationDisposition,
+  type StorageOAuthCallback,
+} from './lib/storageOAuthRuntime';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
 import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
 import { loadFullPreview } from './previewCache';
@@ -878,6 +883,10 @@ function App() {
         { appId },
       );
       await refresh();
+      if (window.top === window && storageOAuthNavigationDisposition() === 'same-window') {
+        window.location.replace(maverickPlatformOrigin());
+        return;
+      }
       window.history.replaceState({}, '', `/apps/${encodeURIComponent(appId)}/`);
     } catch (oauthError) {
       await refresh();

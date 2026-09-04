@@ -13,7 +13,11 @@ import {
   type MaverickFrameScope,
 } from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
-import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
+import {
+  externalHttpUrlFromMessage,
+  externalUrlDispositionFromMessage,
+  openExternalUrl,
+} from "../lib/externalUrl";
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
@@ -27,6 +31,7 @@ type AppReadyMessage = {
   app_id?: string;
   deleted_thread_id?: string;
   detail?: Record<string, unknown>;
+  disposition?: unknown;
   owner_app_id?: string;
   params?: Record<string, string | boolean | null>;
   resource?: string;
@@ -376,7 +381,7 @@ export function AppFrameHost({
         }
         const url = externalHttpUrlFromMessage(payload.url);
         if (url) {
-          openExternalUrl(url);
+          openExternalUrl(url, externalUrlDispositionFromMessage(payload.disposition));
         }
         return;
       }

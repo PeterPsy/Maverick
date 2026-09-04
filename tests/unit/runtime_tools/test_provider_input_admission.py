@@ -10,8 +10,11 @@ from unittest.mock import patch
 from core.api.platform_state import bootstrap_platform_state
 from core.egress import AgenticEgressContentBlock, public_remote_egress_policy
 from core.egress.agentic_transforms import canonical_egress_content
+from core.runtime.attachment_projection import RuntimeAttachmentReadFence
 from core.runtime.content_data_classification import classify_runtime_content
 from core.runtime.provider_input_capture import (
+    RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID,
+    RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
     RuntimeProviderInputCaptureSource,
     capture_runtime_provider_input_classifications,
     classify_runtime_provider_input_content,
@@ -29,28 +32,92 @@ from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 
 NOW = datetime(2026, 8, 28, tzinfo=UTC)
+HEX_WRAPPED_PAN = "deadbeef4111111111111111cafebabedeadbeef"
+DIGEST_WITH_LUHN_SUBSEQUENCE = (
+    "20914ef24928d26319dd8ac4ff04b2204cf4630440387733486e3cc0cc2084f0"
+)
 
 
 class RuntimeProviderInputAdmissionTest(unittest.TestCase):
-    def test_hex_digest_does_not_masquerade_as_payment_card(self) -> None:
-        digest_with_luhn_subsequence = (
-            "20914ef24928d26319dd8ac4ff04b2204cf4630440387733486e3cc0cc2084f0"
+    def test_long_hex_never_suppresses_an_embedded_payment_card(self) -> None:
+        for content, content_type in (
+            (HEX_WRAPPED_PAN, "text/plain"),
+            ({"value": HEX_WRAPPED_PAN}, "application/json"),
+            (
+                {"resource_revision": DIGEST_WITH_LUHN_SUBSEQUENCE},
+                "application/json",
+            ),
+        ):
+            with self.subTest(content=content):
+                self.assertEqual(
+                    classify_runtime_content(
+                        content,
+                        content_type=content_type,
+                    ),
+                    "regulated_or_customer_data",
+                )
+
+    def test_typed_attachment_fence_projects_only_server_owned_identity(self) -> None:
+        harness, state = self._state_with_turn(input_text="Inspect attachment")
+        fence = RuntimeAttachmentReadFence(
+            workspace_relative_path="storage/uploaded/fixture.txt",
+            read_encoding="utf-8",
+            resource_identity="linux:1:2",
+            resource_revision=DIGEST_WITH_LUHN_SUBSEQUENCE,
+            resource_digest=DIGEST_WITH_LUHN_SUBSEQUENCE,
+        )
+        content = {
+            "attachment_id": "attachment-1",
+            "name": "fixture.txt",
+            "workspace_relative_path": fence.workspace_relative_path,
+            "media_type": "text/plain",
+            "size_bytes": 1,
+            "projection": fence.projection(),
+        }
+
+        manifest = capture_runtime_provider_input_classifications(
+            state.runtime_store,
+            workspace_id=harness.session.workspace_id,
+            session_id=harness.session.session_id,
+            turn_id="turn-sensitive",
+            sources=(
+                RuntimeProviderInputCaptureSource(
+                    "attachment:0:metadata",
+                    "attachment",
+                    "application/json",
+                    content,
+                    attachment_read_fence=fence,
+                ),
+            ),
         )
 
+        entry = manifest["sources"][
+            "runtime-turn:turn-sensitive:attachment:0:metadata"
+        ]
+        self.assertEqual(entry["data_class"], "unclassified")
         self.assertEqual(
-            classify_runtime_content(
-                {"resource_revision": digest_with_luhn_subsequence},
-                content_type="application/json",
-            ),
-            "unclassified",
+            manifest["classifier_id"],
+            RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID,
         )
         self.assertEqual(
+            manifest["classifier_revision"],
+            RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
+        )
+        user_controlled = {**content, "name": HEX_WRAPPED_PAN}
+        self.assertEqual(
             classify_runtime_content(
-                {"value": "4111111111111111"},
+                fence.classification_projection(user_controlled),
                 content_type="application/json",
             ),
             "regulated_or_customer_data",
         )
+        forged_projection = deepcopy(content)
+        forged_projection["projection"]["expected_resource_digest"] = "0" * 64
+        with self.assertRaisesRegex(
+            ValueError,
+            "agentic_attachment_fence_invalid",
+        ):
+            fence.classification_projection(forged_projection)
 
     def test_production_capture_classifies_sensitive_prompt_from_exact_bytes(
         self,
@@ -120,7 +187,10 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         )
 
         self.assertEqual(sources[0].classification.data_class, "unclassified")
-        self.assertEqual(sources[0].classification.classification_revision, 3)
+        self.assertEqual(
+            sources[0].classification.classification_revision,
+            RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
+        )
 
     def test_operator_public_authority_admits_exact_marker_free_prompt(self) -> None:
         harness, state = self._state_with_turn(
@@ -178,6 +248,35 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         self.assertEqual(
             resolved_after_revocation.data_class,
             "unclassified",
+        )
+
+    def test_runtime_public_authority_cannot_promote_hex_wrapped_pan(self) -> None:
+        harness, state = self._state_with_turn(input_text=HEX_WRAPPED_PAN)
+        authority = issue_runtime_public_content_authority(
+            state.workspace_store,
+            workspace_id=harness.session.workspace_id,
+            actor_id="operator-1",
+            expected_revision=0,
+            now=NOW,
+        )
+
+        sources = runtime_provider_input_sources(
+            state,
+            session=harness.session,
+            turn_id="turn-sensitive",
+            input_text=HEX_WRAPPED_PAN,
+            app_references=None,
+            attachments=None,
+        )
+
+        classification = sources[0].classification
+        self.assertEqual(
+            classification.data_class,
+            "regulated_or_customer_data",
+        )
+        self.assertEqual(
+            classification.classification_authority_id,
+            authority.classification_id,
         )
 
     def test_content_scanning_never_promotes_benign_looking_text_to_public(

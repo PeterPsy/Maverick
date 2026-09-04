@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-03
+Status date: 2026-09-04
 
 Target: Phase 4A-D implementation closure complete; provider certification,
 security review, canary, and release gates remain open;
@@ -92,7 +92,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v27 records six maintained transitive dependency contracts and
+- [x] Manifest v28 records six maintained transitive dependency contracts and
   the exact executable roots for every admitted built-in app CLI/MCP surface. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
@@ -104,8 +104,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v37 / matrix
-  `2026-09-03-r37-p4-semantic-budget-authority-tcb27`
+- [x] Google and OpenRouter suite v38 / matrix
+  `2026-09-04-r38-p4-pan-classification-determinism-tcb28`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -552,11 +552,11 @@ completion claim.
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 33, semantic compiler revision 10, Full Workspace result contract
-  `codex-baseline-v20`, context-compaction schema 3, TCB manifest v27, suite 37,
-  and matrix `2026-09-03-r37-p4-semantic-budget-authority-tcb27` create
-  immutable Google revision 41 and OpenRouter revision 40 previews. Historical
-  revisions 40/39
+- [x] Adapter 34, semantic compiler revision 10, Full Workspace result contract
+  `codex-baseline-v20`, context-compaction schema 3, TCB manifest v28, suite 38,
+  and matrix `2026-09-04-r38-p4-pan-classification-determinism-tcb28` create
+  immutable Google revision 42 and OpenRouter revision 41 previews. Historical
+  revisions 41/40
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
   `full_workspace_contract_revision=codex-baseline-v20`; the central validator

@@ -98,7 +98,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v27 also
+status, workspace binding, and upstream constraint. TCB manifest v28 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance, and hashes the exact executable roots of every built-in app surface
@@ -653,10 +653,16 @@ shell/process overlays revalidate exact result authority around the batch and
 roll back on drift. Sensitive markers can only narrow the class. Large artifact
 summaries carry a digest of their exact provider-visible bytes while retaining
 the original result class/trust/identity separately.
-Payment-card detection still requires a valid standalone Luhn candidate; a
-numeric run wholly contained in a long hexadecimal resource revision or digest
-is opaque identity metadata rather than a PAN. This exclusion never promotes
-the bytes—marker-free content still needs explicit public authority.
+Payment-card detection treats every 13–19 digit Luhn-valid candidate as
+sensitive even when hexadecimal characters surround it. The scanner has no
+global digest exception: arbitrary prompts, JSON values, runtime-public input,
+and declared-public tool results all remain on the conservative surface.
+Only a typed attachment read fence may project out its exact server-observed
+identity/revision/digest fields after the model-visible projection matches that
+fence; user-controlled attachment metadata remains scanned, and classification
+evidence still binds the complete unmodified bytes. Classifier revision 4,
+hosted result-admission revision 9, and runtime-public policy v3 invalidate the
+older vulnerable manifests and mutable-authority lineage.
 
 Google profile/binding/certificate/request identity uses the `exact` revision
 policy and must match the authenticated catalog `version`. OpenRouter uses the

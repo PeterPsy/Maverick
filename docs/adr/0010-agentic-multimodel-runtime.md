@@ -680,10 +680,10 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 41
-and OpenRouter revision 40, both bound to
-`maverick-hosted-tool-loop==33`; older revisions are suspended rather than
-overwritten. Their suite-37 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 42
+and OpenRouter revision 41, both bound to
+`maverick-hosted-tool-loop==34`; older revisions are suspended rather than
+overwritten. Their suite-38 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
@@ -764,8 +764,8 @@ pre-execution failure. The profiles therefore pin
 `codex-baseline-v20` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 33, recipe
-revision 20, context-compaction schema 3, suite 37, and TCB manifest v27 retain
+certificate, and executable behavior gate are complete. Adapter 34, recipe
+revision 21, context-compaction schema 3, suite 38, and TCB manifest v28 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

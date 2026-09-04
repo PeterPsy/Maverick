@@ -23,9 +23,6 @@ _PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:\+?\d{1,3}[ .-]?)?(?:\(?\d{3}\)?[ .-]?)\d{3}[ .-]\d{4}(?!\d)"
 )
 _PAYMENT_CARD_CANDIDATE = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
-_LONG_HEX_TOKEN = re.compile(
-    r"(?i)(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])"
-)
 MAX_RUNTIME_CONTENT_CLASSIFICATION_BYTES = 1_500_000
 
 
@@ -58,7 +55,10 @@ def classify_runtime_content(
             return "credential_or_secret"
     if redact_text(text) != text:
         return "credential_or_secret"
-    if _SSN_PATTERN.search(text) or _contains_payment_card(text):
+    if _SSN_PATTERN.search(text) or any(
+        _luhn_valid(match.group(0))
+        for match in _PAYMENT_CARD_CANDIDATE.finditer(text)
+    ):
         return "regulated_or_customer_data"
     if _EMAIL_PATTERN.search(text) or _PHONE_PATTERN.search(text):
         return "personal_data"
@@ -119,27 +119,6 @@ def _luhn_valid(value: str) -> bool:
                 digit -= 9
         checksum += digit
     return checksum % 10 == 0
-
-
-def _contains_payment_card(text: str) -> bool:
-    hex_spans = tuple(
-        (match.start(), match.end())
-        for match in _LONG_HEX_TOKEN.finditer(text)
-    )
-    for match in _PAYMENT_CARD_CANDIDATE.finditer(text):
-        if not _luhn_valid(match.group(0)):
-            continue
-        if any(
-            start <= match.start() and match.end() <= end
-            for start, end in hex_spans
-        ):
-            # Resource revisions and content digests are opaque hexadecimal
-            # identities; a numeric run inside one is not a standalone PAN.
-            continue
-        return True
-    return False
-
-
 __all__ = [
     "MAX_RUNTIME_CONTENT_CLASSIFICATION_BYTES",
     "classify_runtime_content",

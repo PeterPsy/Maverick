@@ -7,6 +7,7 @@ import hashlib
 import re
 
 from core.egress.agentic_transforms import canonical_egress_content
+from core.runtime.attachment_projection import RuntimeAttachmentReadFence
 from core.runtime.content_data_classification import classify_runtime_content
 from core.runtime.public_content_authority import (
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
@@ -21,8 +22,8 @@ from core.runtime.provider_input_governed_sources import (
 
 
 RUNTIME_PROVIDER_INPUT_CAPTURE_REVISION = 1
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 3
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v3"
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 4
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v4"
 RUNTIME_PROVIDER_INPUT_RESOURCE_KIND = "runtime_input"
 GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND = "inter_agent_governed_context"
 _INDEXED_SOURCE = re.compile(r"^(app-reference|attachment):(\d+):metadata$")
@@ -45,6 +46,7 @@ class RuntimeProviderInputCaptureSource:
     provenance: str
     content_type: str
     content: object
+    attachment_read_fence: RuntimeAttachmentReadFence | None = None
 
 
 def capture_runtime_provider_input_classifications(
@@ -74,6 +76,13 @@ def capture_runtime_provider_input_classifications(
         for source in sources
     ):
         raise ValueError("runtime_provider_input_capture_invalid")
+    try:
+        classification_content_by_id = {
+            source.source_id: _classification_content(source)
+            for source in sources
+        }
+    except (TypeError, ValueError) as error:
+        raise ValueError("runtime_provider_input_capture_invalid") from error
     source_by_id = {source.source_id: source for source in sources}
     if len(source_by_id) != len(sources):
         raise ValueError("runtime_provider_input_capture_invalid")
@@ -100,6 +109,7 @@ def capture_runtime_provider_input_classifications(
                     provenance="governed_context",
                     content_type="application/json",
                     content=content,
+                    classification_content=content,
                     resource_kind=GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
                     resource_ref=resource_ref,
                     public_content_authority=public_content_authority,
@@ -114,6 +124,9 @@ def capture_runtime_provider_input_classifications(
             provenance=source.provenance,
             content_type=source.content_type,
             content=source.content,
+            classification_content=classification_content_by_id[
+                source.source_id
+            ],
             resource_kind=RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
             resource_ref=f"runtime-turn:{turn_id}:{source.source_id}",
             public_content_authority=public_content_authority,
@@ -144,6 +157,7 @@ def _classification_entry(
     provenance: str,
     content_type: str,
     content: object,
+    classification_content: object,
     resource_kind: str,
     resource_ref: str,
     public_content_authority,
@@ -157,7 +171,7 @@ def _classification_entry(
         else f"governed-context-source:{workspace_id}:{resource_ref}:{digest}"
     )
     data_class = classify_runtime_provider_input_content(
-        content,
+        classification_content,
         content_type=content_type,
         workspace_id=workspace_id,
         provenance=provenance,
@@ -208,6 +222,21 @@ def _classification_entry(
             }
         )
     return entry
+
+
+def _classification_content(
+    source: RuntimeProviderInputCaptureSource,
+) -> object:
+    fence = source.attachment_read_fence
+    if fence is None:
+        return source.content
+    if (
+        source.provenance != "attachment"
+        or not source.source_id.startswith("attachment:")
+        or _INDEXED_SOURCE.fullmatch(source.source_id) is None
+    ):
+        raise ValueError("runtime_provider_input_capture_invalid")
+    return fence.classification_projection(source.content)
 
 
 def classify_runtime_provider_input_content(

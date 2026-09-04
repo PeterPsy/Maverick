@@ -66,7 +66,7 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v27 makes the known transitive boundary executable through six static
+Manifest v28 makes the known transitive boundary executable through six static
 import contracts and adds the exact executable roots for every built-in app
 CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
 input-context projection closure, continuation/recovery, app-entrypoint, audit,
@@ -74,9 +74,9 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 33 and the Full Workspace result contract
-`codex-baseline-v20` are bound by TCB manifest v27. Google revision 41 and
-OpenRouter revision 40 atomically claim that contract and the `maverick_agent`
+Hosted adapter 34 and the Full Workspace result contract
+`codex-baseline-v20` are bound by TCB manifest v28. Google revision 42 and
+OpenRouter revision 41 atomically claim that contract and the `maverick_agent`
 family because the executable result gate reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes. Their exact profile policies

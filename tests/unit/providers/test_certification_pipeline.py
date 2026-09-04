@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "0fc47313f873d3392232f2fbdf1a940f3628302b6a4e2f57753634ddba2493b1"
+                "6e2572efcd84cd460693c4f649c05902cb7a7811957bdc25efea43aa97147426"
             ),
             "openrouter": (
-                "c26a0712c34790c58ba52e0454878d870b03bed6b22b81b29b6e1f8919c8970d"
+                "2f75b6d3868dfa073cf3fd9a1c1ed35b68d91541022789ece8b08cbd9665f2b9"
             ),
         }
         for manifest in (
@@ -190,10 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "37")
+                self.assertEqual(manifest.suite_version, "38")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-03-r37-p4-semantic-budget-authority-tcb27",
+                    "2026-09-04-r38-p4-pan-classification-determinism-tcb28",
                 )
                 self.assertEqual(
                     manifest.digest,

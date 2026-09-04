@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 import json
 import unittest
@@ -8,14 +9,23 @@ from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.egress.classification import content_sha256
 from core.mcp.tool_registry import McpToolRegistry
+from core.runtime.classification_authority import (
+    revalidate_canonical_classification,
+)
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
     build_hosted_tool_result_preflight_resolver,
+)
+from core.runtime.hosted_tool_result_authority import (
+    HOSTED_TOOL_RESULT_ADMISSION_REVISION,
 )
 from core.runtime.public_content_authority import (
     build_runtime_public_content_authority_record,
 )
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
+
+
+HEX_WRAPPED_PAN = "deadbeef4111111111111111cafebabedeadbeef"
 
 
 class HostedToolResultPublicAuthorityTest(unittest.TestCase):
@@ -115,6 +125,12 @@ class HostedToolResultPublicAuthorityTest(unittest.TestCase):
             {"status": "completed"},
             self.actor,
         )
+        sensitive = resolve(
+            "core-capability:cli.run",
+            {"command_id": "core.public-result"},
+            {"value": HEX_WRAPPED_PAN},
+            self.actor,
+        )
         preflight_result = preflight(
             "core-capability:cli.run",
             {"command_id": "core.public-result"},
@@ -122,8 +138,28 @@ class HostedToolResultPublicAuthorityTest(unittest.TestCase):
         )
 
         self.assertEqual(result.classification.data_class, "public")
+        self.assertEqual(
+            result.classification.classification_revision,
+            HOSTED_TOOL_RESULT_ADMISSION_REVISION,
+        )
+        self.assertEqual(
+            sensitive.classification.data_class,
+            "regulated_or_customer_data",
+        )
         self.assertTrue(preflight_result.admitted_before_effect)
         self.assertEqual(preflight_result.guaranteed_data_class, "public")
+        stale = replace(
+            result.classification,
+            classification_revision=HOSTED_TOOL_RESULT_ADMISSION_REVISION - 1,
+        )
+        self.assertEqual(
+            revalidate_canonical_classification(
+                None,
+                workspace_id="default",
+                classification=stale,
+            ).data_class,
+            "unclassified",
+        )
 
     def _assert_digest_matches(self, result: RuntimeToolSurfaceResult) -> None:
         encoded = json.dumps(

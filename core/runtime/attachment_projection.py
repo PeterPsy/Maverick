@@ -38,6 +38,30 @@ class RuntimeAttachmentReadFence:
             "expected_resource_digest": self.resource_digest,
         }
 
+    def classification_projection(
+        self,
+        content: object,
+    ) -> dict[str, object]:
+        """Remove only authenticated server-owned identity bytes before scanning."""
+        if not isinstance(content, dict):
+            raise ValueError("agentic_attachment_fence_invalid")
+        projection = content.get("projection")
+        if (
+            not isinstance(projection, dict)
+            or projection != self.projection()
+            or content.get("workspace_relative_path")
+            != self.workspace_relative_path
+        ):
+            raise ValueError("agentic_attachment_fence_invalid")
+        classification_projection = dict(projection)
+        for field_name in (
+            "expected_resource_identity",
+            "expected_resource_revision",
+            "expected_resource_digest",
+        ):
+            classification_projection.pop(field_name)
+        return {**content, "projection": classification_projection}
+
 
 _TEXTUAL_APPLICATION_TYPES = {
     "application/graphql",

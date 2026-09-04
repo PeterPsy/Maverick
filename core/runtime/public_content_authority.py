@@ -23,10 +23,11 @@ from core.workspaces.errors import WorkspaceDataGovernanceError
 RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND = "runtime_public_content_authority"
 RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF = "hosted-full-workspace"
 RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION = (
-    "core-hosted-public-workspace-v2"
+    "core-hosted-public-workspace-v3"
 )
-_LEGACY_RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION = (
-    "core-hosted-public-workspace-v1"
+_LEGACY_RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISIONS = (
+    "core-hosted-public-workspace-v1",
+    "core-hosted-public-workspace-v2",
 )
 
 
@@ -57,12 +58,15 @@ def build_runtime_public_content_authority_record(
             prior,
             workspace_id=workspace_id,
         )
-        or _runtime_public_content_authority_is_valid_for_policy(
-            prior,
-            workspace_id=workspace_id,
-            policy_revision=(
-                _LEGACY_RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION
-            ),
+        or any(
+            _runtime_public_content_authority_is_valid_for_policy(
+                prior,
+                workspace_id=workspace_id,
+                policy_revision=policy_revision,
+            )
+            for policy_revision in (
+                _LEGACY_RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISIONS
+            )
         )
     ):
         raise WorkspaceDataGovernanceError(

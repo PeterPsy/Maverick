@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.runtime.attachment_projection import RuntimeAttachmentReadFence
 from core.runtime.provider_input_capture import (
     RuntimeProviderInputCaptureSource,
     capture_runtime_provider_input_classifications,
@@ -23,7 +24,14 @@ def persist_runtime_provider_input_capture(
     orchestration: dict[str, object] | None,
     app_reference_entries: tuple[tuple[int, dict[str, object], str], ...],
     attachment_entries: tuple[
-        tuple[int, dict[str, object], dict[str, object], str], ...
+        tuple[
+            int,
+            dict[str, object],
+            dict[str, object],
+            str,
+            RuntimeAttachmentReadFence | None,
+        ],
+        ...,
     ],
 ) -> None:
     """Persist exact materialized sources before their admission lookup."""
@@ -70,8 +78,9 @@ def persist_runtime_provider_input_capture(
             "attachment",
             "application/json",
             content,
+            attachment_read_fence=fence,
         )
-        for index, _attachment, content, _media_type in attachment_entries
+        for index, _attachment, content, _media_type, fence in attachment_entries
     )
     runtime_store = getattr(state, "runtime_store", None)
     writer = getattr(

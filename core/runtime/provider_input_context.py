@@ -203,8 +203,8 @@ def runtime_provider_input_sources(
         orchestration=resolved_orchestration,
         app_reference_entries=tuple(app_reference_entries),
         attachment_entries=tuple(
-            (index, attachment, content, media_type)
-            for index, attachment, content, media_type, _fence, _classification
+            (index, attachment, content, media_type, fence)
+            for index, attachment, content, media_type, fence, _classification
             in observed_attachment_entries
         ),
     )

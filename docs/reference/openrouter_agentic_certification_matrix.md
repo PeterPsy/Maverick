@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-09-03
-Matrix revision: `2026-09-03-r37-p4-semantic-budget-authority-tcb27`
+Status date: 2026-09-04
+Matrix revision: `2026-09-04-r38-p4-pan-classification-determinism-tcb28`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==33`
+Adapter: `maverick-hosted-tool-loop==34`
 
 ## Preview combination
 
@@ -13,7 +13,7 @@ Adapter: `maverick-hosted-tool-loop==33`
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-08-17`, with exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `40` (revision `39` suspended) |
+| Immutable profile revision | `41` (revision `40` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
@@ -46,7 +46,7 @@ The certification probe fetches both official catalogs immediately before any
 completion request and fails unless this exact record is active, ZDR-listed,
 large enough for the requested completion budget, and supports every parameter
 the translated payload sends that participates in endpoint parameter routing.
-Suite 37 also requires `supports_tool_choice.none=true` in both exact records,
+Suite 38 also requires `supports_tool_choice.none=true` in both exact records,
 so the current DeepInfra record is an explicit certification blocker rather
 than a capability Maverick guesses or works around. A changed endpoint or
 upstream requires a new recipe/catalog digest and immutable profile revision.
@@ -91,8 +91,8 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
-| Certified execution TCB | manifest v27 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-03-p4-builtin-effects-execution-v3`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, typed authenticated projection of only server-owned attachment-fence identity, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
+| Certified execution TCB | manifest v28 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-03-p4-builtin-effects-execution-v3`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, `tool_choice:none`, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -118,7 +118,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r37 |
+| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r38 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -438,6 +438,18 @@ Storage, and Website Studio read-model closure updates. The immutable definition
 remains uncertified, unbound, contained, and unavailable; no live probe, signed
 run, provider completion, certificate, canary, or remote activation has been
 performed.
+
+Revision 41 pins adapter 34, governed recipe 21, semantic compiler 10, suite
+38, matrix `2026-09-04-r38-p4-pan-classification-determinism-tcb28`, and TCB
+manifest v28. The generic scanner no longer exempts long hexadecimal tokens,
+and regression coverage keeps embedded PANs sensitive for raw text, JSON,
+runtime-public input, and declared-public tool output. Only exact typed
+attachment-fence identity is removed from the scan surface. Runtime-public
+policy v3 invalidates older mutable-authority lineage, while the hosted
+finalization deadline fixture now uses controlled time and leaves no delayed
+worker behind. The immutable definition remains uncertified, unbound,
+contained, and unavailable; no live probe, signed run, provider completion,
+certificate, canary, or remote activation has been performed.
 
 ## Fail-closed conditions
 

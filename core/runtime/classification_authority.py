@@ -11,6 +11,9 @@ from core.egress.classification import (
     join_data_classes,
     join_trust_levels,
 )
+from core.runtime.hosted_tool_result_authority import (
+    HOSTED_TOOL_RESULT_ADMISSION_REVISION,
+)
 from core.runtime.public_content_authority import (
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
@@ -35,6 +38,17 @@ def classification_authority_is_current(
     bound = getattr(classification, "classification_authority_bound", None)
     lineage = _lineage(classification)
     if bound is False:
+        if (
+            classification.data_class == "public"
+            and classification.provenance == "tool_result"
+            and classification.source_ref.startswith(
+                "core-hosted-tool-result:"
+            )
+            and classification.source_ref.endswith(":core-result-contract")
+            and classification.classification_revision
+            != HOSTED_TOOL_RESULT_ADMISSION_REVISION
+        ):
+            return False
         return lineage == ("", "", "", None, "", "")
     if bound is not True or not _lineage_is_well_formed(lineage):
         return False

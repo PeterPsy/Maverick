@@ -18,7 +18,7 @@ from core.runtime.hosted_tool_result_projections import (
 )
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 8
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 9
 _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
 
 

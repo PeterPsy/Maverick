@@ -9,11 +9,20 @@ from unittest.mock import patch
 from core.providers.agentic_protocol import HOSTED_FINALIZATION_INSTRUCTION
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_events import RuntimeExecutionEvent
+from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import HostedFinalizationPolicy
 from core.runtime.hosted_agentic_request import hosted_request_control_digest
 from core.runtime.tool_orchestrator import RuntimeToolExecutionControl
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
 
 
 class HostedAgenticFinalizationTest(unittest.TestCase):
@@ -290,11 +299,28 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         )
 
     def test_slow_tool_is_fenced_before_it_consumes_finalization_time(self) -> None:
+        clock = _Clock()
+
+        def budget_factory(policy, finalization_policy, **kwargs):
+            return HostedAgenticBudget(
+                policy,
+                finalization_policy,
+                monotonic=clock,
+                **kwargs,
+            )
+
+        registry = self.harness.orchestrator.catalog_builder.cli_registry
+        definition = registry.get_command("fixture.read")
+
+        def cross_tool_deadline(arguments, _context):
+            clock.value = 0.13
+            return {"value": arguments["value"]}
+
+        registry.register_command(definition, cross_tool_deadline)
         self.harness.policy = replace(
             self.harness.policy,
             max_wall_time_seconds=0.2,
         )
-        self.harness.read_delay_seconds = 0.25
         client = DeterministicFakeAgenticClient(
             tool_name=self.harness.read_tool_name
         )
@@ -309,7 +335,11 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
             ),
         )
 
-        result, events = self.execute(client, adapter=adapter)
+        with patch(
+            "core.runtime.hosted_agentic_loop.HostedAgenticBudget",
+            side_effect=budget_factory,
+        ):
+            result, events = self.execute(client, adapter=adapter)
 
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(

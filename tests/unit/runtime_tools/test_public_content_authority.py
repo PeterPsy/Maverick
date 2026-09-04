@@ -12,8 +12,10 @@ from core.egress.classification import fail_closed_classification
 from core.runtime import public_content_authority as public_authority_module
 from core.runtime.public_content_authority import (
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
     build_runtime_public_content_authority_record,
+    runtime_public_content_authority_is_active,
 )
 from core.runtime.public_content_classification import (
     classification_from_runtime_public_content_authority,
@@ -239,47 +241,69 @@ class RuntimePublicContentAuthorityTest(unittest.TestCase):
             )
         )
 
-    def test_issue_migrates_a_legacy_authority_to_the_new_policy_revision(
+    def test_issue_migrates_legacy_authorities_to_the_new_policy_revision(
         self,
     ) -> None:
-        legacy = build_runtime_public_content_authority_record(
-            workspace_id="workspace-1",
-            actor_id="operator-legacy",
-            active=True,
-            expected_revision=0,
-            now=NOW,
-        )
-        legacy_digest = public_authority_module._record_digest(
-            legacy,
-            policy_revision="core-hosted-public-workspace-v1",
-        )
-        legacy = replace(
-            legacy,
-            resource_revision=legacy_digest,
-            resource_digest=legacy_digest,
-        )
-        self.store.save_resource_classification(
-            legacy,
-            expected_revision=0,
-        )
-
-        migrated = issue_runtime_public_content_authority(
-            self.store,
-            workspace_id="workspace-1",
-            actor_id="operator-current",
-            expected_revision=1,
-            now=NOW,
-        )
-
-        self.assertEqual(migrated.revision, 2)
-        self.assertEqual(migrated.classification_id, legacy.classification_id)
-        self.assertEqual(
-            runtime_public_content_authority_for_workspace(
-                self.store,
-                "workspace-1",
+        for index, policy_revision in enumerate(
+            (
+                "core-hosted-public-workspace-v1",
+                "core-hosted-public-workspace-v2",
             ),
-            migrated,
-        )
+            start=1,
+        ):
+            workspace_id = f"workspace-{index}"
+            with self.subTest(policy_revision=policy_revision):
+                legacy = build_runtime_public_content_authority_record(
+                    workspace_id=workspace_id,
+                    actor_id="operator-legacy",
+                    active=True,
+                    expected_revision=0,
+                    now=NOW,
+                )
+                legacy_digest = public_authority_module._record_digest(
+                    legacy,
+                    policy_revision=policy_revision,
+                )
+                legacy = replace(
+                    legacy,
+                    resource_revision=legacy_digest,
+                    resource_digest=legacy_digest,
+                )
+                self.store.save_resource_classification(
+                    legacy,
+                    expected_revision=0,
+                )
+
+                self.assertFalse(
+                    runtime_public_content_authority_is_active(
+                        legacy,
+                        workspace_id=workspace_id,
+                    )
+                )
+                migrated = issue_runtime_public_content_authority(
+                    self.store,
+                    workspace_id=workspace_id,
+                    actor_id="operator-current",
+                    expected_revision=1,
+                    now=NOW,
+                )
+
+                self.assertEqual(migrated.revision, 2)
+                self.assertEqual(
+                    migrated.classification_id,
+                    legacy.classification_id,
+                )
+                self.assertEqual(
+                    runtime_public_content_authority_for_workspace(
+                        self.store,
+                        workspace_id,
+                    ),
+                    migrated,
+                )
+                self.assertEqual(
+                    RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+                    "core-hosted-public-workspace-v3",
+                )
 
     def test_prepared_audit_does_not_create_authority_when_cas_fails(self) -> None:
         with patch.object(

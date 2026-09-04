@@ -136,11 +136,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="37",
+        suite_version="38",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-03-r37-p4-semantic-budget-authority-tcb27"
+            "2026-09-04-r38-p4-pan-classification-determinism-tcb28"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

@@ -2,7 +2,6 @@ import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } f
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import {
   MAVERICK_IFRAME_SANDBOX,
-  isMaverickOwnerMessage,
   isShellWindowMessage,
   postMaverickFrameVisibility,
   postMaverickShellTheme,
@@ -296,7 +295,7 @@ export function WidgetSlot({
         ["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(payload.type || "") &&
         typeof payload.owner_app_id === "string" &&
         payload.owner_app_id === widget?.owner_app_id &&
-        isMaverickOwnerMessage(event, payload.owner_app_id, frameScope) &&
+        (senderIsShell || senderOwnerAppId === payload.owner_app_id) &&
         (!payload.workspace_id || payload.workspace_id === activeWorkspaceId)
       ) {
         setFrameRevision((current) => current + 1);
@@ -394,7 +393,7 @@ export function WidgetSlot({
         payload.type === "maverick.chat.active-thread-changed"
         && widget
         && payload.owner_app_id === widget.owner_app_id
-        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+        && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
       ) {
         const ownerAppId = widget.owner_app_id;
         const activeThreadId = typeof payload.active_thread_id === "string" ? payload.active_thread_id.trim() : "";
@@ -420,7 +419,7 @@ export function WidgetSlot({
       if (
         selectionMessage
         && payload.owner_app_id
-        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+        && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
       ) {
         postToMaverickFrame(widgetFrameRef.current, selectionMessage);
       }
@@ -428,7 +427,7 @@ export function WidgetSlot({
         payload.type === "maverick.app.data-changed"
         && typeof payload.owner_app_id === "string"
         && payload.owner_app_id === widget?.owner_app_id
-        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+        && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
       ) {
         postToMaverickFrame(
           widgetFrameRef.current,

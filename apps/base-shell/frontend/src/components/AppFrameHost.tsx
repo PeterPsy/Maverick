@@ -5,7 +5,6 @@ import {
   MAVERICK_IFRAME_SANDBOX,
   appFrameBrowserFeaturePolicy,
   isMaverickFrameMessage,
-  isMaverickOwnerMessage,
   isShellWindowMessage,
   postMaverickFrameVisibility,
   postMaverickShellTheme,
@@ -353,7 +352,7 @@ export function AppFrameHost({
       if (
         payload.type === "maverick.app.data-changed"
         && payload.owner_app_id
-        && isMaverickOwnerMessage(event, payload.owner_app_id, frameScope)
+        && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
       ) {
         const ownerFrame = frameRefs.current[payload.owner_app_id];
         if (ownerFrame?.contentWindow && event.source !== ownerFrame.contentWindow) {

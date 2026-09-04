@@ -31,6 +31,11 @@ from core.providers.models import (
     RuntimeBackendLaunchSpec,
     WorkspaceProviderStatus,
 )
+from core.providers.native_agent_builtins import (
+    build_codex_native_installation,
+    build_gemini_cli_candidate_definition,
+    build_gemini_cli_candidate_installation,
+)
 from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
 from core.providers.provider_codex_reasoning import normalize_codex_model_options
 from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
@@ -81,7 +86,15 @@ def builtin_provider_registry(*, codex_command: str | None = None, refresh_model
     """Build the builtin provider registry shipped by the core."""
     registry = ProviderRegistry()
     adapter = CodexProviderAdapter(codex_command=codex_command)
-    registry.register_runtime_adapter(adapter)
+    registry.register_native_agent_installation(
+        build_codex_native_installation(adapter),
+        definition=adapter.provider_definition(),
+        runtime_adapter=adapter,
+    )
+    registry.register_native_agent_installation(
+        build_gemini_cli_candidate_installation(),
+        definition=build_gemini_cli_candidate_definition(),
+    )
     for definition in build_hosted_provider_definitions():
         registry.register_provider_definition(definition)
     if refresh_model_catalog:

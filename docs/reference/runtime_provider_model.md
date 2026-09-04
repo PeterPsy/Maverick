@@ -176,6 +176,20 @@ the task that opens and first advances the lazy transport. Every subsequent
 provider event uses the cheap mutable-authority/TCB
 metadata, classification, credential, policy, and deadline fence.
 
+The product execution-family catalog is Core-owned and ordered as
+`native_agent`, `maverick_agent`, then `hosted_text`. Native installations bind
+five independent records: a structured adapter manifest, an immutable harness
+recipe, one or more model selections, a sandbox/effect-observation contract,
+and a certificate reference. `ProviderRegistry` validates this composition and
+exposes a structured controller for discovery/version/health/update status,
+launch, connect, resume, event streaming/final output, steering, interrupt,
+recovery, cleanup, and close. A candidate cannot acquire an executable
+controller or become active merely from provider capability metadata. Exact
+legacy Codex identity is the sole safe family inference for profiles created
+before the family field; arbitrary vendor labels and flags are never used for
+that inference. The discovery-only Gemini CLI candidate demonstrates a second
+native registration while remaining hard-disabled until full certification.
+
 The single deterministic manifest in
 `core/providers/certified_execution_tcb.py` owns every component that can alter
 attestation/classification/egress, API/app admission, input composition/request

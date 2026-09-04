@@ -548,6 +548,22 @@ backend selection path unless they also implement a runtime engine contract.
 
 The system must be designed so that other backends and model providers can be supported without changing the app model.
 
+Native coding-agent integrations use the provider-neutral native-agent
+installation contract. Adapter protocol, harness recipe, model selection,
+effect/sandbox mapping, and certificate reference are separate immutable
+records. A native integration must expose machine-readable discovery, version,
+health, update status, launch/connect/resume, structured turn events and final
+output, steering, interrupt, recovery, process cleanup, and close operations.
+Only an official app-server/SDK/API, stable JSON-RPC/JSONL protocol, or
+documented structured headless CLI is admissible; terminal, ANSI, or free-text
+human UI scraping is rejected. Native effects must either use Maverick tools or
+run inside a supervised Maverick sandbox with structured effect events. An
+uncertified native installation is always clamped to `disabled`, including
+when stale persisted provider metadata says otherwise. Codex is registered
+through this generic contract without changing its existing app-server adapter
+or certified artifact digest; the Gemini CLI registration is a discovery-only
+second candidate and has no execution controller or release authority.
+
 The core must also be installable and bootable with no AI provider configured or available.
 
 No provider is a valid initial platform state, not an installation failure.

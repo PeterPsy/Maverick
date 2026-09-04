@@ -2,8 +2,8 @@
 
 Status date: 2026-09-04
 
-Target: Phase 4A-D implementation closure complete; provider certification,
-security review, canary, and release gates remain open;
+Target: Phase 5A native-agent framework complete; Phase 5B-D and provider
+certification, security review, canary, and release gates remain open;
 remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
@@ -590,7 +590,43 @@ completion claim.
   partial evidence fail closed for that evaluation and are retried later.
   No live probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4. This closes the P4 review
-  findings only; P5 has not started.
+  findings only; P5 certification/release authority is not implied.
+
+## Phase 5 — runtime families, onboarding, and UI
+
+### 5A — Native Agent framework
+
+- [x] A Core-owned execution-family catalog defines the normative ordering and
+  copy independently of provider capability flags. Exact legacy Codex identity
+  is the only permitted inference for a pre-family agentic profile.
+- [x] Native adapter manifest, harness recipe, model selection,
+  sandbox/effect-observation contract, and certificate reference are separate
+  immutable records validated during registry installation.
+- [x] The native controller exposes structured discovery, version, health,
+  update status, launch, connect, resume, event stream/final output, steering,
+  interrupt, recovery, cleanup, and close boundaries over the generic agentic
+  engine contract.
+- [x] Human-terminal/ANSI/free-text scraping, incomplete lifecycle contracts,
+  unconfined effects, unobserved effects, and unsupervised process trees fail
+  closed before registration.
+- [x] Codex now enters the provider registry through the generic native
+  contract while its adapter source, profile revision 14, certificate, and
+  artifact digest remain unchanged and active.
+- [x] A second Gemini CLI discovery-only candidate exercises the abstraction.
+  It has no executable controller/certificate and is forcibly clamped to
+  `disabled`, even if stale persisted provider metadata requests activation.
+
+### 5B — Maverick Agent framework
+
+- [ ] Data-driven model/recipe onboarding and immutable candidate publication.
+
+### 5C — Text-only separation
+
+- [ ] Immutable text profile/session pinning and no-agent-journal path.
+
+### 5D — Settings and Chat
+
+- [ ] Shared three-family presentation, certified status, and safe migration.
 
 ## Certification and release gates — still open
 
@@ -607,7 +643,7 @@ profile, or certificate is enabled by P4; no Google/OpenRouter session, provider
 HTTP/SSE request, live probe, real-store containment/migration apply, canary,
 production release, or push is part of this closure. A backend restart after
 the verified commit is an operational code/schema reload only and does not
-alter those control-plane states. Exact Codex stays on profile revision 12 and
+alter those control-plane states. Exact Codex stays on profile revision 14 and
 its existing artifact digest.
 
 ## Evidence and acceptance links

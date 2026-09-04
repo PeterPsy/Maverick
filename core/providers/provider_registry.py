@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from core.providers.errors import ProviderNotFoundError
@@ -11,6 +12,11 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 
 if TYPE_CHECKING:
     from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter
+    from core.providers.native_agent_contract import (
+        NativeAgentInstallation,
+        NativeRuntimeStatus,
+    )
+    from core.providers.native_agent_runtime import NativeAgentRuntimeController
     from core.runtime.execution import RuntimeExecutionResult
     from core.runtime.execution_events import RuntimeExecutionEventSink
     from core.skills.models import SkillDefinition, SkillMaterialization
@@ -104,21 +110,70 @@ class ProviderRegistry:
         self._definitions: dict[str, ProviderDefinition] = {}
         self._runtime_adapters: dict[str, RuntimeBackendAdapter] = {}
         self._agentic_runtime_adapters: dict[str, AgenticRuntimeEngineAdapter] = {}
+        self._native_agent_installations: dict[str, NativeAgentInstallation] = {}
+        self._native_agent_controllers: dict[str, NativeAgentRuntimeController] = {}
 
     def register_provider_definition(self, definition: ProviderDefinition) -> ProviderDefinition:
         """Register one provider definition without a runtime adapter."""
+        installation = self._native_agent_installations.get(definition.provider_id)
+        if installation is not None and not installation.release_eligible:
+            definition = replace(definition, status="disabled")
         self._definitions[definition.provider_id] = definition
         return definition
 
     def register_runtime_adapter(self, adapter: RuntimeBackendAdapter) -> ProviderDefinition:
         """Register one runtime backend adapter and its canonical definition."""
-        definition = adapter.provider_definition()
-        self._definitions[definition.provider_id] = definition
+        definition = self.register_provider_definition(adapter.provider_definition())
         self._runtime_adapters[definition.provider_id] = adapter
         from core.providers.provider_legacy_agentic_bridge import LegacyRuntimeBackendAgenticBridge
 
         self._agentic_runtime_adapters[definition.provider_id] = LegacyRuntimeBackendAgenticBridge(adapter)
         return definition
+
+    def register_native_agent_installation(
+        self,
+        installation: "NativeAgentInstallation",
+        *,
+        definition: ProviderDefinition,
+        runtime_adapter: RuntimeBackendAdapter | None = None,
+    ) -> ProviderDefinition:
+        """Register a validated native adapter/recipe/model/certificate tuple.
+
+        Candidate registrations are clamped to disabled even if persisted
+        provider metadata later attempts to activate them.
+        """
+        from core.providers.native_agent_contract import validate_native_agent_installation
+
+        validate_native_agent_installation(installation)
+        manifest = installation.manifest
+        if definition.provider_id != manifest.runtime_engine_id:
+            raise ValueError("native_agent_provider_identity_mismatch")
+        if runtime_adapter is not None:
+            adapter_definition = runtime_adapter.provider_definition()
+            if adapter_definition.provider_id != manifest.runtime_engine_id:
+                raise ValueError("native_agent_adapter_identity_mismatch")
+            if str(getattr(runtime_adapter, "adapter_id", "")) != manifest.adapter_id:
+                raise ValueError("native_agent_adapter_identity_mismatch")
+            if str(getattr(runtime_adapter, "adapter_version", "")) != manifest.adapter_version:
+                raise ValueError("native_agent_adapter_version_mismatch")
+        elif installation.release_eligible:
+            raise ValueError("native_agent_certified_adapter_missing")
+        self._native_agent_installations[manifest.runtime_engine_id] = installation
+        if runtime_adapter is not None:
+            definition = self.register_runtime_adapter(runtime_adapter)
+            from core.providers.native_agent_runtime import NativeAgentRuntimeController
+
+            self._native_agent_controllers[manifest.runtime_engine_id] = (
+                NativeAgentRuntimeController(
+                    installation=installation,
+                    engine_adapter=self._agentic_runtime_adapters[
+                        manifest.runtime_engine_id
+                    ],
+                    legacy_adapter=runtime_adapter,
+                )
+            )
+            return definition
+        return self.register_provider_definition(definition)
 
     def register_agentic_runtime_adapter(
         self,
@@ -157,6 +212,39 @@ class ProviderRegistry:
                 f"Agentic runtime engine adapter `{runtime_engine_id}` is not registered."
             )
         return self._agentic_runtime_adapters[runtime_engine_id]
+
+    def list_native_agent_installations(self) -> list["NativeAgentInstallation"]:
+        """Return native registrations sorted by runtime identity."""
+        return [
+            self._native_agent_installations[runtime_engine_id]
+            for runtime_engine_id in sorted(self._native_agent_installations)
+        ]
+
+    def get_native_agent_installation(
+        self,
+        runtime_engine_id: str,
+    ) -> "NativeAgentInstallation":
+        """Return one native registration without inferring from capabilities."""
+        if runtime_engine_id not in self._native_agent_installations:
+            raise ProviderNotFoundError(
+                f"Native agent installation `{runtime_engine_id}` is not registered."
+            )
+        return self._native_agent_installations[runtime_engine_id]
+
+    def inspect_native_agent(self, runtime_engine_id: str) -> "NativeRuntimeStatus":
+        """Read redaction-safe discovery/version/health/update status on demand."""
+        return self.get_native_agent_installation(runtime_engine_id).inspector.inspect()
+
+    def get_native_agent_controller(
+        self,
+        runtime_engine_id: str,
+    ) -> "NativeAgentRuntimeController":
+        """Return the structured lifecycle facade for an executable native agent."""
+        if runtime_engine_id not in self._native_agent_controllers:
+            raise ProviderNotFoundError(
+                f"Native agent controller `{runtime_engine_id}` is not registered."
+            )
+        return self._native_agent_controllers[runtime_engine_id]
 
     def get_subscription_usage_adapter(self, provider_id: str) -> SubscriptionUsageAdapter:
         """Return a provider adapter that implements subscription usage reads."""

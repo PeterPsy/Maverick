@@ -1602,6 +1602,12 @@ record in the generated manifest receive
 revalidated. Any public app artifact is served with a restrictive document CSP
 (`sandbox`) and `X-Content-Type-Options: nosniff`, preventing script-capable SVG
 or mislabeled bytes from becoming app-controlled platform-origin documents.
+The root `/sw.js` executable is the narrow exception to the document sandbox:
+an HTTP `sandbox` directive gives a service worker an opaque origin and removes
+its CacheStorage authority in Chromium. Core therefore serves only that exact
+root asset with `default-src 'none'; connect-src 'self'`, preserving the
+same-origin fetches required for verified precache while continuing to block
+all unrelated subresources.
 Gzip or Brotli content encoding and cross-origin headers allow isolated app and
 widget frames plus Vite-generated `crossorigin` module/style tags to load
 bundles without platform session cookies on every asset request. When Core

@@ -269,11 +269,16 @@ def serve_frontend(
         if cache_control:
             headers.append(("Cache-Control", cache_control))
         if cross_origin:
+            content_security_policy = (
+                "default-src 'none'; connect-src 'self'"
+                if served_subpath == "sw.js"
+                else "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+            )
             headers.extend(
                 [
                     ("Access-Control-Allow-Origin", "*"),
                     ("Cross-Origin-Resource-Policy", "cross-origin"),
-                    ("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'"),
+                    ("Content-Security-Policy", content_security_policy),
                     ("X-Content-Type-Options", "nosniff"),
                 ]
             )
@@ -281,6 +286,9 @@ def serve_frontend(
             # document. Sandbox that document interpretation (not its normal
             # subresource use) so a mislabeled file or script-capable SVG can
             # never become an app-controlled shell-origin execution context.
+            # The root service worker is the sole exception: CSP sandboxing
+            # gives it an opaque origin and removes CacheStorage in Chromium.
+            # Its dedicated policy permits only same-origin network reads.
         timing.update(
             {
                 "bytes": len(body),

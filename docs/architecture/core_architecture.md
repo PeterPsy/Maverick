@@ -1232,6 +1232,10 @@ and an automatic bounded file cache. Shared browser mechanics may live in a
 platform package, but that package must not import app models. Its client
 capability is minted by the top-level host with one bound user/workspace/app
 principal; embedded app options cannot select or replace that scope.
+The platform serves the exact root `/sw.js` with a non-sandboxed worker CSP
+(`default-src 'none'; connect-src 'self'`): a document-style `sandbox` would
+opaque the worker origin and disable CacheStorage. Other public frontend
+artifacts retain their restrictive document sandbox.
 
 The SDK boundary is reinforced by browser-origin isolation. Core issues a
 one-shot body-only launch ticket for every app or widget document and serves it

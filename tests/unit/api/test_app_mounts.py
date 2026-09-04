@@ -65,6 +65,21 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Content-Security-Policy"], "sandbox; default-src 'none'; style-src 'unsafe-inline'")
         self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
 
+    def test_root_service_worker_keeps_its_origin_for_cache_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sw.js").write_text("self.addEventListener('install', () => undefined);", encoding="utf-8")
+
+            status, headers = _serve(root, "/sw.js", cross_origin=True)
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["Cache-Control"], "no-cache")
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(headers["Cross-Origin-Resource-Policy"], "cross-origin")
+        self.assertEqual(headers["Content-Security-Policy"], "default-src 'none'; connect-src 'self'")
+        self.assertNotIn("sandbox", headers["Content-Security-Policy"])
+        self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
+
     def test_static_assets_use_gzip_when_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

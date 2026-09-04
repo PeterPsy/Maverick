@@ -32,7 +32,9 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
         shutdown_controller = object()
         with patch(
             "core.api.background_hooks.start_prepared_session_cleanup_scheduler"
-        ) as start_cleanup, patch("core.api.background_hooks.Thread") as thread_type:
+        ) as start_cleanup, patch(
+            "core.api.background_hooks.start_runtime_session_root_purge_scheduler"
+        ) as start_root_purge, patch("core.api.background_hooks.Thread") as thread_type:
             thread = start_background_hook_scheduler(
                 state,
                 interval_seconds=15,
@@ -42,6 +44,11 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
         start_cleanup.assert_called_once_with(
             state,
             initial_delay_seconds=7.5,
+            shutdown_controller=shutdown_controller,
+        )
+        start_root_purge.assert_called_once_with(
+            state,
+            initial_delay_seconds=1.0,
             shutdown_controller=shutdown_controller,
         )
         thread_type.return_value.start.assert_called_once_with()

@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from core.api.runtime_cleanup import RuntimeCleanupError, _delete_runtime_root, cleanup_runtime_session
+from core.api.runtime_cleanup import RuntimeCleanupError, _stage_runtime_root_deletion, cleanup_runtime_session
 from core.runtime.service import (
     build_runtime_routing,
     create_child_runtime_session,
@@ -210,8 +210,8 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         marker = unsafe_root / "do-not-delete.txt"
         marker.write_text("keep\n", encoding="utf-8")
 
-        with self.assertRaisesRegex(RuntimeCleanupError, "Refusing to delete runtime root"):
-            _delete_runtime_root(
+        with self.assertRaisesRegex(RuntimeCleanupError, "runtime_session_root_unsafe"):
+            _stage_runtime_root_deletion(
                 unsafe_root,
                 workspace_id="acme",
                 session_id="sess-1",

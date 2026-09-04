@@ -6,7 +6,7 @@ import logging
 import time
 
 from core.api.platform_state import PlatformState
-from core.api.runtime_cleanup import _delete_runtime_root, cleanup_runtime_session
+from core.api.runtime_cleanup import _stage_runtime_root_deletion, cleanup_runtime_session
 from core.api.runtime_cleanup_errors import RuntimeCleanupError
 from core.api.runtime_cleanup_hooks import cleanup_app_runtime_session_metadata
 from core.inter_agent.service import (
@@ -156,8 +156,12 @@ def cleanup_runtime_sessions_batch(
     deleted_records = state.runtime_store.delete_session_records_batch(existing_session_ids)
     usage_store = getattr(state, "usage_store", None)
     if usage_store is not None:
+        deleted_usage_by_session_id = usage_store.delete_sessions(existing_session_ids)
         for session_id in existing_session_ids:
-            deleted_records.setdefault(session_id, {})["usage_samples"] = usage_store.delete_session(session_id)
+            deleted_records.setdefault(session_id, {})["usage_samples"] = deleted_usage_by_session_id.get(
+                session_id,
+                0,
+            )
     records_finished_at = time.perf_counter()
     deleted_threads_by_session_id: dict[str, list[str]] = {
         session_id: [] for session_id in existing_session_ids
@@ -201,12 +205,14 @@ def cleanup_runtime_sessions_batch(
         }
         result["deleted_thread_ids"] = deleted_threads_by_session_id[session_id]
         result["deleted_threads"] = len(deleted_threads_by_session_id[session_id])
-        result["runtime_root_deleted"] = _delete_runtime_root(
+        runtime_root_deleted = _stage_runtime_root_deletion(
             runtime_roots_by_session_id[session_id],
             workspace_id=workspace_id,
             session_id=session_id,
             start_path=repository_root,
         )
+        result["runtime_root_deleted"] = runtime_root_deleted
+        result["runtime_root_purge_pending"] = runtime_root_deleted
     cleanup_finished_at = time.perf_counter()
     timings_ms = {
         "expand_children": _elapsed_ms(started_at, expansion_finished_at),
@@ -260,4 +266,5 @@ def _missing_session_cleanup_result(session_id: str) -> dict[str, object]:
         "deleted_threads": 0,
         "deleted_thread_ids": [],
         "runtime_root_deleted": False,
+        "runtime_root_purge_pending": False,
     }

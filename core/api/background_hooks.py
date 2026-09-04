@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from core.api.prepared_session_cleanup import start_prepared_session_cleanup_scheduler
+from core.api.runtime_session_root_purge import start_runtime_session_root_purge_scheduler
 from core.apps.runtime_event_hooks import dispatch_workspace_app_background_hooks
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,11 @@ def start_background_hook_scheduler(state, *, interval_seconds: float | None = N
     start_prepared_session_cleanup_scheduler(
         state,
         initial_delay_seconds=max(1.0, interval / 2),
+        shutdown_controller=shutdown_controller,
+    )
+    start_runtime_session_root_purge_scheduler(
+        state,
+        initial_delay_seconds=1.0,
         shutdown_controller=shutdown_controller,
     )
     thread = Thread(

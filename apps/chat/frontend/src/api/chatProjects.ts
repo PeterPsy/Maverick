@@ -9,7 +9,7 @@ import type {
 } from "./types";
 
 // Core keeps destructive cleanup requests bounded; a sidebar selection can span the full catalog.
-const RUNTIME_THREAD_DELETE_BATCH_MAX = 20;
+const RUNTIME_THREAD_DELETE_BATCH_MAX = 500;
 
 function threadTimestamp(value: string | null | undefined): number {
   if (!value) {
@@ -159,18 +159,27 @@ function deleteThreadBatch(threadIds: string[]): Promise<DeleteThreadsPayload> {
   return requestJson<DeleteThreadsPayload>("/api/runtime/threads/delete-batch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    keepalive: true,
     body: JSON.stringify({ reason: "chat_threads_deleted", thread_ids: threadIds }),
   });
 }
 
-export async function deleteThreads(threadIds: string[]): Promise<DeleteThreadsPayload> {
-  if (threadIds.length <= RUNTIME_THREAD_DELETE_BATCH_MAX) {
-    return deleteThreadBatch(threadIds);
+export async function deleteThreads(
+  threadIds: string[],
+  onBatchComplete?: (payload: DeleteThreadsPayload) => void,
+): Promise<DeleteThreadsPayload> {
+  const uniqueThreadIds = uniqueStrings(threadIds);
+  if (uniqueThreadIds.length <= RUNTIME_THREAD_DELETE_BATCH_MAX) {
+    const payload = await deleteThreadBatch(uniqueThreadIds);
+    onBatchComplete?.(payload);
+    return payload;
   }
 
   const payloads: DeleteThreadsPayload[] = [];
-  for (let start = 0; start < threadIds.length; start += RUNTIME_THREAD_DELETE_BATCH_MAX) {
-    payloads.push(await deleteThreadBatch(threadIds.slice(start, start + RUNTIME_THREAD_DELETE_BATCH_MAX)));
+  for (let start = 0; start < uniqueThreadIds.length; start += RUNTIME_THREAD_DELETE_BATCH_MAX) {
+    const payload = await deleteThreadBatch(uniqueThreadIds.slice(start, start + RUNTIME_THREAD_DELETE_BATCH_MAX));
+    payloads.push(payload);
+    onBatchComplete?.(payload);
   }
 
   return {

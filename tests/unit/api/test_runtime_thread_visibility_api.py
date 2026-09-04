@@ -451,7 +451,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                     state.runtime_store.get_session(session.session_id)
                 self.assertFalse((repo_root / "workspaces" / "default" / "runtime" / "sessions" / session.session_id).exists())
 
-    def test_runtime_thread_batch_delete_rejects_more_than_twenty_items(self) -> None:
+    def test_runtime_thread_batch_delete_rejects_more_than_five_hundred_items(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -470,12 +470,12 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 app,
                 path="/api/runtime/threads/delete-batch",
                 method="POST",
-                body={"thread_ids": [f"thread-{index}" for index in range(21)]},
+                body={"thread_ids": [f"thread-{index}" for index in range(501)]},
                 cookie=cookie,
             )
 
             self.assertEqual(status, 400)
-            self.assertEqual(payload, {"error": "runtime_thread_delete_batch_too_large", "maximum": 20})
+            self.assertEqual(payload, {"error": "runtime_thread_delete_batch_too_large", "maximum": 500})
 
     def test_invalid_runtime_session_visibility_is_controlled_for_raw_session_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

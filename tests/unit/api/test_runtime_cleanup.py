@@ -9,6 +9,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.paths import runtime_session_root
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_state import RuntimeStateRecord
+from core.runtime.session_root_cleanup import runtime_session_deletion_quarantine_root
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
@@ -125,7 +126,13 @@ class RuntimeCleanupTest(unittest.TestCase):
 
         self.assertTrue(result["found"])
         self.assertTrue(result["runtime_root_deleted"])
+        self.assertTrue(result["runtime_root_purge_pending"])
         self.assertFalse(root.exists())
+        quarantined_roots = list(
+            runtime_session_deletion_quarantine_root("default", start_path=repo_root).iterdir()
+        )
+        self.assertEqual(len(quarantined_roots), 1)
+        self.assertEqual((quarantined_roots[0] / "marker.txt").read_text(encoding="utf-8"), "prepared")
         with self.assertRaises(RuntimeSessionNotFoundError):
             runtime_store.get_session(session_id)
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import shutil
 import time
 
 from core.api.platform_state import PlatformState
@@ -15,6 +14,10 @@ from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.paths import runtime_session_root
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import thread_payload
+from core.runtime.session_root_cleanup import (
+    RuntimeSessionRootCleanupError,
+    stage_runtime_session_root_deletion,
+)
 from core.runtime.session_termination import terminate_runtime_session
 
 
@@ -47,6 +50,7 @@ def cleanup_runtime_session(
             "deleted_threads": 0,
             "deleted_thread_ids": [],
             "runtime_root_deleted": False,
+            "runtime_root_purge_pending": False,
         }
     if not runtime_session_allows_user_thread(session):
         hidden_prepared_chat_allowed = (
@@ -135,7 +139,7 @@ def cleanup_runtime_session(
     runtime_root_deleted = (
         False
         if defer_persistence_cleanup
-        else _delete_runtime_root(
+        else _stage_runtime_root_deletion(
             runtime_root,
             workspace_id=session.workspace_id,
             session_id=session.session_id,
@@ -152,6 +156,7 @@ def cleanup_runtime_session(
         "deleted_threads": len(deleted_threads),
         "deleted_thread_ids": deleted_threads,
         "runtime_root_deleted": runtime_root_deleted,
+        "runtime_root_purge_pending": runtime_root_deleted,
         "timings_ms": {
             "session_validation": _elapsed_ms(started_at, validated_at),
             "inter_agent_cleanup": _elapsed_ms(validated_at, inter_agent_finished_at),
@@ -230,7 +235,7 @@ def _publish_deleted_thread_cleanup(
     )
 
 
-def _delete_runtime_root(
+def _stage_runtime_root_deletion(
     runtime_root: Path,
     *,
     workspace_id: str,
@@ -238,22 +243,16 @@ def _delete_runtime_root(
     start_path,
 ) -> bool:
     try:
-        expected_root = runtime_session_root(
+        staged_root = stage_runtime_session_root_deletion(
+            runtime_root,
             workspace_id=workspace_id,
             session_id=session_id,
             start_path=start_path,
-        ).resolve()
-    except ValueError as error:
-        raise RuntimeCleanupError("runtime_session_id_unsafe") from error
-    resolved_root = runtime_root.resolve(strict=False)
-    if resolved_root != expected_root:
-        raise RuntimeCleanupError(
-            f"Refusing to delete runtime root `{runtime_root}` because it does not match `{expected_root}`."
         )
-    if not resolved_root.exists():
-        return False
-    shutil.rmtree(resolved_root)
-    return True
+    except (RuntimeSessionRootCleanupError, ValueError) as error:
+        reason = getattr(error, "reason", "runtime_session_id_unsafe")
+        raise RuntimeCleanupError(reason) from error
+    return staged_root is not None
 
 
 def _elapsed_ms(started_at: float, finished_at: float) -> float:

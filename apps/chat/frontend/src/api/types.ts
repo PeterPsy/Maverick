@@ -477,6 +477,7 @@ export type RuntimeCleanup = {
   cancelled_turns: number;
   deleted_threads?: number;
   runtime_root_deleted?: boolean;
+  runtime_root_purge_pending?: boolean;
 };
 
 export type DeleteThreadPayload = ChatSidebarPayload & {

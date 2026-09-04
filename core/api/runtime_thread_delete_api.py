@@ -8,12 +8,12 @@ from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.api.session_api import RequestSession
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_runtime_session_operation
-from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeThreadNotFoundError
-from core.runtime.runtime_session import runtime_session_allows_user_thread
+from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_thread import RuntimeThreadRecord
 
 
-RUNTIME_THREAD_DELETE_BATCH_MAX = 20
+RUNTIME_THREAD_DELETE_BATCH_MAX = 500
 
 
 def thread_cleanup_forbidden_reason(
@@ -30,6 +30,15 @@ def thread_cleanup_forbidden_reason(
         return None
     except ValueError:
         return "runtime_thread_not_found"
+    return _runtime_session_cleanup_forbidden_reason(state, context, session=session)
+
+
+def _runtime_session_cleanup_forbidden_reason(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    session: RuntimeSessionRecord,
+) -> str | None:
     if session.workspace_id != context.workspace_id:
         return "runtime_thread_not_found"
     try:
@@ -124,21 +133,32 @@ def handle_thread_delete_batch(
         if thread_id not in thread_ids:
             thread_ids.append(thread_id)
 
+    catalog_threads_by_id = {
+        thread.thread_id: thread
+        for thread in state.runtime_store.list_threads(context.workspace_id)
+    }
     threads_by_id: dict[str, RuntimeThreadRecord] = {}
     results_by_id: dict[str, dict[str, object]] = {}
     for thread_id in thread_ids:
+        thread = catalog_threads_by_id.get(thread_id)
+        if thread is None:
+            results_by_id[thread_id] = {"thread_id": thread_id, "status": "not_found"}
+            continue
+        runtime_session_id = thread.runtime_session_id.strip()
         try:
-            thread = state.runtime_store.get_thread(thread_id)
-        except RuntimeThreadNotFoundError:
+            session = state.runtime_store.get_session(runtime_session_id) if runtime_session_id else None
+        except RuntimeSessionNotFoundError:
+            session = None
+        except ValueError:
             results_by_id[thread_id] = {"thread_id": thread_id, "status": "not_found"}
             continue
-        if thread.workspace_id != context.workspace_id or _thread_references_hidden_session(state, thread):
+        if session is not None and not runtime_session_allows_user_thread(session):
             results_by_id[thread_id] = {"thread_id": thread_id, "status": "not_found"}
             continue
-        forbidden_reason = thread_cleanup_forbidden_reason(
-            state,
-            context,
-            runtime_session_id=thread.runtime_session_id,
+        forbidden_reason = (
+            _runtime_session_cleanup_forbidden_reason(state, context, session=session)
+            if session is not None
+            else None
         )
         if forbidden_reason == "runtime_thread_not_found":
             results_by_id[thread_id] = {"thread_id": thread_id, "status": "not_found"}

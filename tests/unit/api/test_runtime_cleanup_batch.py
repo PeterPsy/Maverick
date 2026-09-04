@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.inter_agent.service import RUNTIME_CHILD_EXECUTION_MODE
@@ -21,6 +21,9 @@ class RuntimeCleanupBatchTest(unittest.TestCase):
             session_id: SimpleNamespace(session_id=session_id, workspace_id="default")
             for session_id in ("root", "child")
         }
+        usage_store = SimpleNamespace(
+            delete_sessions=Mock(return_value={"root": 2, "child": 1}),
+        )
         state = SimpleNamespace(
             repository_root=repo_root,
             runtime_store=SimpleNamespace(
@@ -33,6 +36,7 @@ class RuntimeCleanupBatchTest(unittest.TestCase):
                 list_runs=lambda _workspace_id: [run],
                 list_participants=lambda _run_id, workspace_id: [participant],
             ),
+            usage_store=usage_store,
         )
         cleanup_calls: list[tuple[str, bool]] = []
 
@@ -74,8 +78,13 @@ class RuntimeCleanupBatchTest(unittest.TestCase):
             start_path=repo_root,
         )
         self.assertEqual(cleanup_calls, [("child", True), ("root", False)])
+        usage_store.delete_sessions.assert_called_once_with(["root", "child"])
         self.assertEqual(result["expanded_session_ids"], ["root", "child"])
         self.assertEqual([item["session_id"] for item in result["session_results"]], ["root", "child"])
+        self.assertEqual(
+            [item["deleted"]["usage_samples"] for item in result["session_results"]],
+            [2, 1],
+        )
 
     def test_batch_does_not_clean_a_session_from_another_workspace(self) -> None:
         repo_root = make_temp_repo_root(self)

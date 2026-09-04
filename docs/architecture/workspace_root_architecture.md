@@ -289,8 +289,14 @@ created. The mutable recent tail is only a fallback when no historical archive
 exists. Stopped and failed user-visible
 sessions remain readable while the session, thread, turns, and event archive
 exist. Normal runtime/thread cleanup removes those records and the historical
-archive together; deleted conversations are not recovered from residual files
-or backups by transcript surfaces.
+archive together. Once record cleanup succeeds, Core atomically moves each
+canonical session root out of `runtime/sessions/` and into the private
+`runtime/session-deletion-quarantine/` directory, so a large provider home does
+not keep the destructive request open while every file is unlinked. A bounded
+backend-owned worker physically purges staged roots and resumes scanning the
+on-disk queue after a backend restart. Runtime and transcript surfaces never
+read the quarantine; deleted conversations are not recovered from residual
+files or backups.
 
 Installation-level runtime state under `.maverick/local-state/runtime/` is reserved for platform security records such as runtime API token lifecycle state. It must not store runtime sessions, threads, turns, events, process records, state snapshots, or other workspace-scoped runtime records.
 

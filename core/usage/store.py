@@ -24,6 +24,8 @@ class UsageCollection(Protocol):
 
     def delete_many(self, query: dict[str, Any]) -> int: ...
 
+    def delete_many_documents(self, query: dict[str, Any]) -> list[dict[str, Any]]: ...
+
 
 @dataclass(frozen=True)
 class UsageCollections:
@@ -101,4 +103,19 @@ class UsageDocumentStore:
 
     def delete_session(self, session_id: str) -> int:
         """Delete detailed usage for one runtime session; rollups reconcile on read."""
-        return int(self.collections.samples.delete_many({"session_id": session_id}))
+        return self.delete_sessions([session_id]).get(session_id, 0)
+
+    def delete_sessions(self, session_ids: list[str]) -> dict[str, int]:
+        """Delete detailed usage for many sessions with one collection mutation."""
+        unique_session_ids = list(dict.fromkeys(session_ids))
+        deleted_by_session_id = {session_id: 0 for session_id in unique_session_ids}
+        if not unique_session_ids:
+            return deleted_by_session_id
+        deleted_documents = self.collections.samples.delete_many_documents(
+            {"session_id": {"$in": unique_session_ids}}
+        )
+        for document in deleted_documents:
+            session_id = document.get("session_id")
+            if isinstance(session_id, str) and session_id in deleted_by_session_id:
+                deleted_by_session_id[session_id] += 1
+        return deleted_by_session_id

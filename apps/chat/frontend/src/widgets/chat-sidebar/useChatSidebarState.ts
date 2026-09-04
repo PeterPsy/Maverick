@@ -575,20 +575,36 @@ export function useChatSidebarState() {
     setIsPending(true);
     setError(null);
     projectActions.cancelProjectDeletion();
-    try {
-      const payload = await deleteThreads(threadIds);
+    const applyCompletedBatch = (payload: Awaited<ReturnType<typeof deleteThreads>>) => {
+      const completedThreadIds = new Set<string>();
       for (const result of payload.results) {
         if (result.status === "deleted" || result.status === "not_found") {
           deletedThreadIds.add(result.thread_id);
+          completedThreadIds.add(result.thread_id);
         }
       }
-      const localPayload = { ...payload, deleted_thread_ids: Array.from(deletedThreadIds) };
+      if (!completedThreadIds.size) {
+        return;
+      }
+      const localPayload = { ...payload, deleted_thread_ids: Array.from(completedThreadIds) };
       setThreads((current) => applyThreadCatalogPayload(current, localPayload));
-      setMultiAgentThreadIds((current) => new Set(Array.from(current).filter((threadId) => !deletedThreadIds.has(threadId))));
+      setMultiAgentThreadIds(
+        (current) => new Set(Array.from(current).filter((threadId) => !completedThreadIds.has(threadId))),
+      );
+      clearDeletedThreadState(completedThreadIds);
+    };
+    try {
+      await deleteThreads(threadIds, applyCompletedBatch);
       projectActions.clearProjectEditing();
       setError(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete selected chats.");
+      setError(
+        deletedThreadIds.size
+          ? "Some selected chats could not be deleted. The remaining chats are still selected; try again."
+          : deleteError instanceof Error
+            ? deleteError.message
+            : "Unable to delete selected chats.",
+      );
     } finally {
       clearDeletedThreadState(deletedThreadIds);
       setIsBulkDeletePending(false);

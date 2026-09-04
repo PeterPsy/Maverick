@@ -134,9 +134,22 @@ class AgenticProfileApiTest(unittest.TestCase):
         registry = builtin_provider_registry()
         register_builtin_providers(provider_store, registry=registry)
         now = datetime(2026, 8, 18, tzinfo=UTC)
+        hosted_adapter = SimpleNamespace(
+            runtime_engine_id="maverick-tool-loop",
+            adapter_id="maverick-hosted-tool-loop",
+            adapter_version="35",
+        )
         definitions = [
-            ensure_google_agentic_preview_profile(provider_store, adapter=object(), now=now),
-            ensure_openrouter_agentic_preview_profile(provider_store, adapter=object(), now=now),
+            ensure_google_agentic_preview_profile(
+                provider_store,
+                adapter=hosted_adapter,
+                now=now,
+            ),
+            ensure_openrouter_agentic_preview_profile(
+                provider_store,
+                adapter=hosted_adapter,
+                now=now,
+            ),
         ]
         for definition in definitions:
             provider_store.save_workspace_agentic_profile_binding(

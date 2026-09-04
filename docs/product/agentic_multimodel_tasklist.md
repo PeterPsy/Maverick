@@ -2,9 +2,9 @@
 
 Status date: 2026-09-04
 
-Target: Phase 5A-C runtime-family separation complete; Phase 5D and provider
-certification, security review, canary, and release gates remain open;
-remote agentic release remains **NO-GO**.
+Target: Phase 5 runtime-family separation, onboarding, and product taxonomy
+complete; provider certification, security review, canary, and release gates
+remain open; remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
@@ -657,7 +657,38 @@ completion claim.
 
 ### 5D — Settings and Chat
 
-- [ ] Shared three-family presentation, certified status, and safe migration.
+- [x] Core, Settings, and Chat use the same ordered execution-family catalog and
+  the exact normative English labels and descriptions: `Native Agents (CLI)`,
+  `Maverick Agents (API)`, then `Text-only Models (API)`.
+- [x] Agent presentation is derived fail-closed from the exact registered
+  adapter/profile identity, complete family contract, active certificate,
+  workspace binding, rollout, effective authority, and—for native agents—live
+  installation health. Provider capability flags and browser state cannot
+  classify an agent or grant agentic authority.
+- [x] Settings exposes immutable provider/model/upstream, adapter/protocol,
+  profile, harness recipe, Full Workspace revision, data/retention/ZDR policy,
+  limits, certificate/suite/expiry, TCB, health, preflight, sandbox/approval,
+  install/version, and safe unavailable status as applicable. Full Workspace is
+  a certificate-derived read-only status; there is no capability-tier or
+  `Full/Read-only` control.
+- [x] Chat renders the same three groups in the same order before creation,
+  shows agent destination/profile/recipe/Full Workspace identity and the
+  explicit `No workspace tools or actions.` text-only boundary, and excludes
+  every incomplete agent from selection and keyboard navigation.
+- [x] The legacy selection migration is a read-only projection: it maps old
+  runtime/hosted selection records and labels to canonical picker identities,
+  reports `persisted_records_mutated=false`, and never rewrites pinned sessions.
+  Existing sessions continue from their immutable execution binding rather than
+  crossing families implicitly.
+- [x] Exact Codex remains active on profile revision 14 through the generic
+  native readiness projection; the discovery-only Gemini CLI candidate and the
+  Google/OpenRouter agentic previews remain unavailable and cannot be selected.
+
+The source-level P5 exit gate is closed: the UI family id is bound to the
+server execution contract, partial agents are unavailable rather than degraded,
+no cross-family fallback is introduced, and native effect confinement remains
+registry-validated. This does not issue or promote a remote certificate and
+does not change the release decision below.
 
 ## Certification and release gates — still open
 

@@ -1,17 +1,5 @@
 import type { PlatformSettings, ProviderModelOption } from './adminApi';
 
-export function selectedProviderDraft(settings: PlatformSettings | null) {
-  const provider = settings?.provider.active_provider;
-  const modelSettings = settings?.provider.model_settings;
-  return selectedDraft(provider, modelSettings);
-}
-
-export function modelOptionsForSettings(settings: PlatformSettings | null) {
-  const provider = settings?.provider.active_provider;
-  const modelSettings = settings?.provider.model_settings;
-  return modelOptionsForProvider(provider, modelSettings);
-}
-
 export function selectedHostedProviderDraft(settings: PlatformSettings | null) {
   const provider = settings?.provider.hosted_text?.active_provider || null;
   const modelSettings = settings?.provider.hosted_text?.model_settings || null;
@@ -30,6 +18,10 @@ export function hostedModelOptionsForSettings(settings: PlatformSettings | null)
     const modelSettings = provider.provider_id === activeProvider?.provider_id ? status?.model_settings || null : null;
     return modelOptionsForProvider(provider, modelSettings).map((option) => ({
       ...option,
+      hosted_text_profile: status?.profiles?.find(
+        (item) => item.profile.provider_id === provider.provider_id
+          && item.profile.model_id === option.model_id
+      ) || null,
       metadata: {
         ...(option.metadata || {}),
         hosted_provider_id: provider.provider_id,
@@ -59,10 +51,6 @@ function modelOptionsForProvider(
     ? usableModelOptions(modelSettings?.available_models)
     : usableModelOptions(provider?.model_options);
   return (rawOptions.length ? rawOptions : selectedModel ? [fallbackModelOption(selectedModel, modelSettings?.selected_reasoning_effort || '')] : []).map(withReasoningFallback);
-}
-
-export function defaultReasoningForOption(option: ProviderModelOption | null) {
-  return option?.default_reasoning_effort || option?.supported_reasoning_efforts[0]?.effort || '';
 }
 
 function usableModelOptions(options: ProviderModelOption[] | null | undefined) {

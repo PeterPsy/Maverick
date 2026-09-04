@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderPayload } from "../api/client";
-import { hostedProviderRuntimeConfig, providerItemsFromPayload } from "./providerRuntimeOptions";
+import {
+  hostedProviderRuntimeConfig,
+  initialProviderSelectionId,
+  providerItemsFromPayload,
+} from "./providerRuntimeOptions";
 
 const payload: ProviderPayload = {
   workspace_id: "default",
@@ -145,6 +149,14 @@ describe("provider runtime options", () => {
             enabled: true,
             is_default: true,
             selectable: true,
+            execution_family: "native_agent",
+            family_contract_status: "complete",
+            full_workspace_status: "certified",
+            full_workspace_contract_revision: "codex-baseline-v20",
+            harness_recipe: {
+              id: "codex-native-app-server",
+              revision: "1",
+            },
             containment_status: "GO",
             certified: true,
             certificate: {
@@ -259,6 +271,34 @@ describe("provider runtime options", () => {
       hosted_model_id: "gemini-3.5-flash",
       runtime_mode: "plain_hosted_chat",
     });
+  });
+
+  it("never falls across execution families when a persisted selection is unavailable", () => {
+    const textOnly = providerItemsFromPayload(payload).find(
+      (provider) => provider.execution_family === "hosted_text",
+    );
+    expect(textOnly).toBeDefined();
+
+    expect(initialProviderSelectionId("codex", [textOnly!])).toBe("");
+    expect(initialProviderSelectionId("codex", [{
+      ...payload.active_provider!,
+      selectable: false,
+    }, textOnly!])).toBe("");
+    expect(initialProviderSelectionId(null, [textOnly!])).toBe(textOnly!.provider_id);
+  });
+
+  it("fails closed when a published text-only profile is missing", () => {
+    const providers = providerItemsFromPayload({
+      ...payload,
+      hosted_text: {
+        ...payload.hosted_text!,
+        profiles: [],
+      },
+    }).filter((provider) => provider.execution_family === "hosted_text");
+
+    expect(providers).not.toHaveLength(0);
+    expect(providers.every((provider) => provider.selectable === false)).toBe(true);
+    expect(providers.every((provider) => provider.unavailable_reason === "hosted_text_profile_missing")).toBe(true);
   });
 
   it("does not apply active Google model settings to an OpenRouter persisted selection", () => {

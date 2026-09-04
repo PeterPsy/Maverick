@@ -163,6 +163,7 @@ export type ProviderModelOption = {
     max_completion_tokens?: number;
   }>;
   metadata?: Record<string, unknown>;
+  hosted_text_profile?: HostedTextProfileItem | null;
 };
 
 export type OpenRouterProviderRouting = {
@@ -215,6 +216,99 @@ export type ProviderItem = {
   default_model_family: string | null;
   model_options: ProviderModelOption[];
   capabilities: Record<string, boolean>;
+  cost_metadata?: Record<string, unknown>;
+  latency_metadata?: Record<string, unknown>;
+};
+
+export type ExecutionFamilyId = 'native_agent' | 'maverick_agent' | 'hosted_text';
+
+export type ExecutionFamilyDefinition = {
+  family_id: ExecutionFamilyId;
+  label: string;
+  description: string;
+  workspace_actions: boolean;
+};
+
+export type AgenticHarnessRecipe = {
+  id: string | null;
+  revision: string | null;
+  digest: string | null;
+  provider_capability_catalog_digest?: string | null;
+  prompt_contract_revision?: string | null;
+};
+
+export type NativeAgentStatus = {
+  runtime_engine_id: string;
+  label: string;
+  description: string;
+  execution_family: 'native_agent';
+  provider_status: string;
+  availability: 'installed' | 'not_installed' | 'unknown';
+  installed: boolean;
+  executable_name: string | null;
+  runtime_version: string | null;
+  health: string;
+  health_reason_codes: string[];
+  update: { status: string; detail: string | null };
+  adapter: { id: string; version: string; trusted_distribution: string };
+  harness_recipe: AgenticHarnessRecipe;
+  protocol: { kind: string; id: string; version: string | null; event_schema: string };
+  authentication_status: string;
+  models: Array<{
+    provider_id: string;
+    model_id: string;
+    model_revision: string | null;
+    model_revision_policy: string;
+  }>;
+  effects: {
+    mode: string;
+    workspace_confined: boolean;
+    process_tree_supervised: boolean;
+    structured_effect_events: boolean;
+    sandbox_policy_revision: string;
+    approval_policy: string;
+  };
+  certification_state: string;
+  full_workspace_status: 'certified' | 'unavailable';
+  full_workspace_contract_revision: string | null;
+  selectable: boolean;
+  unavailable_reason: string | null;
+};
+
+export type HostedTextProfileItem = {
+  profile: {
+    profile_id: string;
+    revision: string;
+    display_name: string;
+    execution_family: 'hosted_text';
+    provider_id: string;
+    model_id: string;
+    model_revision: string | null;
+    model_revision_policy: string;
+    provider_protocol: string;
+    provider_api_version: string | null;
+    endpoint_id: string;
+    input_modalities: string[];
+    output_modalities: string[];
+    context_limit_tokens: number | null;
+    output_limit_tokens: number | null;
+    cost_policy: string;
+    retention_policy: string;
+    data_destination: string;
+  };
+  status: { status: string; reason_code: string | null };
+  certificate: {
+    certificate_id: string;
+    certificate_kind: 'hosted_text_capability';
+    workspace_tools: false;
+    action_loop: false;
+    workspace_actions: false;
+  };
+  provider: { provider_id: string; label: string; status: string };
+  cost?: Record<string, unknown>;
+  selectable: boolean;
+  unavailable_reason: string | null;
+  workspace_actions_message: string;
 };
 
 export type ProviderUsageWindow = {
@@ -305,6 +399,8 @@ export type HostedTextProviderStatus = {
   selection: HostedProviderSelection | null;
   model_settings: ProviderModelSettings | null;
   available_providers: ProviderItem[];
+  profiles?: HostedTextProfileItem[];
+  workspace_actions_message?: string;
   route_preview?: {
     selected_provider_id: string | null;
     selected_model_id_or_voice_id: string | null;
@@ -333,6 +429,7 @@ export type SpeechProviderStatus = {
 
 export type ProviderStatus = {
   workspace_id: string;
+  execution_families?: ExecutionFamilyDefinition[];
   configured?: boolean;
   active_provider: ProviderItem | null;
   selection: {
@@ -351,6 +448,13 @@ export type ProviderStatus = {
   blocked_reason?: string | null;
   blocked_detail?: string | null;
   available_providers?: ProviderItem[];
+  native_agents?: { items: NativeAgentStatus[] } | null;
+  selection_migration?: {
+    schema_version: string;
+    mode: 'projection_only';
+    persisted_records_mutated: false;
+    pinned_sessions_rewritten: false;
+  };
 };
 
 export type AgenticRuntimePolicy = {
@@ -389,6 +493,12 @@ export type AgenticCertificate = {
   revoked_at: string | null;
   status_revision: number | null;
   certified_capabilities: Record<string, boolean | string[]>;
+  suite_id?: string;
+  suite_version?: string;
+  adapter_id?: string;
+  adapter_version?: string;
+  execution_family?: string | null;
+  full_workspace_contract_revision?: string | null;
   tcb?: {
     manifest_id: string | null;
     manifest_version: string | null;
@@ -445,10 +555,21 @@ export type AgenticAdminItem = {
   runtime_engine_id: string;
   model_provider_id: string;
   model_id: string;
+  model_revision?: string | null;
+  model_revision_policy?: string;
+  default_reasoning_effort?: string | null;
+  supported_reasoning_efforts?: ProviderReasoningOption[];
   provider_protocol: string;
   provider_api_version: string | null;
   adapter_id: string;
   adapter_version_constraint: string;
+  execution_family: 'native_agent' | 'maverick_agent' | null;
+  family_contract_status: string;
+  family_contract_reason: string | null;
+  harness_recipe: AgenticHarnessRecipe;
+  full_workspace_status: 'certified' | 'unavailable';
+  full_workspace_contract_revision: string | null;
+  native_runtime?: NativeAgentStatus | null;
   routing_constraint: {
     endpoint_id: string;
     allowed_upstream_ids: string[];
@@ -476,7 +597,11 @@ export type AgenticAdminItem = {
     updated_at: string;
   } | null;
   health: 'healthy' | 'blocked';
+  live_preflight_status?: 'ready' | 'unavailable';
+  selectable?: boolean;
   blocked_reason: string | null;
+  enable_eligible: boolean;
+  enable_blocked_reason: string | null;
   containment_status: 'GO' | 'NO-GO';
   containment_reason: string | null;
   binding_status: 'missing' | 'enabled' | 'disabled';
@@ -498,6 +623,7 @@ export type AgenticAdminItem = {
   data_policy: {
     collection: string;
     require_zdr: boolean;
+    retention?: string;
     attestation_state: 'unavailable' | 'not_attested' | 'active' | 'revoked' | 'invalid';
     attestation?: {
       state: 'not_attested' | 'active' | 'revoked' | 'invalid';
@@ -518,6 +644,8 @@ export type AgenticAdminItem = {
 export type AgenticAdminPayload = {
   workspace_id: string;
   release_decision: 'GO' | 'NO-GO';
+  execution_families?: ExecutionFamilyDefinition[];
+  native_agents?: { items: NativeAgentStatus[] };
   items: AgenticAdminItem[];
 };
 
@@ -692,17 +820,6 @@ export function getUsageTimeseries(
 
 export function getRuntimeSessionInventory(): Promise<RuntimeSessionInventoryPayload> {
   return requestJson<RuntimeSessionInventoryPayload>('/api/settings/runtime-sessions');
-}
-
-export function configureActiveProvider(payload: {
-  provider_id: string;
-  model_id?: string | null;
-  model_reasoning_effort?: string | null;
-}): Promise<ProviderStatus> {
-  return requestJson<ProviderStatus>('/api/providers/active', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
 }
 
 export function configureHostedProvider(payload: {

@@ -117,7 +117,7 @@
   left: 1rem;
   z-index: 24;
   display: grid;
-  max-height: min(18rem, 46vh);
+  max-height: min(28rem, 64vh);
   overflow-y: auto;
   border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
   border-radius: 0.75rem;
@@ -182,6 +182,44 @@
   border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
 }
 
+.chatapp-provider-menu__family {
+  display: grid;
+  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
+}
+
+.chatapp-provider-menu__family-heading {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.72rem;
+  background: rgba(var(--maverick-contrast-rgb), 0.035);
+}
+
+.chatapp-provider-menu__family-heading strong {
+  font-size: 0.79rem;
+  letter-spacing: 0.01em;
+}
+
+.chatapp-provider-menu__family-heading span,
+.chatapp-provider-menu__family-empty,
+.chatapp-provider-menu__meta,
+.chatapp-provider-menu__unavailable {
+  color: var(--maverick-text-soft);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.chatapp-provider-menu__family-empty {
+  padding: 0.58rem 0.72rem 0.7rem;
+}
+
+.chatapp-provider-menu__option-block.is-unavailable {
+  opacity: 0.68;
+}
+
+.chatapp-provider-menu__option-block.is-unavailable .chatapp-provider-menu__item {
+  cursor: not-allowed;
+}
+
 .chatapp-provider-menu__option-block .chatapp-provider-menu__item {
   border-top: 0;
 }
@@ -241,6 +279,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chatapp-provider-menu__meta,
+.chatapp-provider-menu__unavailable {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatapp-provider-menu__unavailable {
+  color: var(--maverick-accent);
 }
 
 .chatapp-provider-menu__empty,

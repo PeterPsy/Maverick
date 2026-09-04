@@ -594,6 +594,34 @@ rewriting a pin. An existing session cannot accept a different runtime family,
 provider, or model through a later app request, and text sessions cannot create
 agent children.
 
+The provider status boundary projects those three contracts directly for
+product clients. `GET /api/providers` returns the Core-owned catalog in the
+fixed order `native_agent`, `maverick_agent`, `hosted_text`; redaction-safe
+native installation status; agent profile family readiness; independent
+text-only profiles/status/certificates; and a presentation-only legacy
+selection map. Agent readiness is fail-closed: an agent is selectable only when
+its exact family composition is complete, Full Workspace is certified, its
+binding/rollout/certificate/effective authority are active, and a native
+runtime is installed and healthy. A narrowed binding does not become a
+read-only agent. The migration payload never writes provider selections or
+rewrites immutable session bindings; session governance may project the exact
+legacy Codex identity while retaining the stored binding bytes and reports that
+projection explicitly.
+
+Settings and Chat consume this boundary with identical normative English copy
+and ordering: `Native Agents (CLI)`, `Maverick Agents (API)`, then `Text-only
+Models (API)`. Full Workspace is certificate-derived display state, never a
+browser control. There is no capability tier, `Full/Read-only` switch, or UI
+path that removes a required agent surface. Settings shows the redaction-safe
+provider/upstream, recipe, data policy, certificate, health, native
+install/version/sandbox, and text-profile limits required for administration;
+Chat shows the pinned destination/profile/recipe before creation. Text-only
+entries always state `No workspace tools or actions.` and cannot inherit an
+agent binding. An unavailable persisted new-session target leaves the picker
+unselected instead of falling through to another family. Existing Chat sessions
+continue to resolve their pinned runtime or hosted-text identity before
+considering any new-session default.
+
 The core must also be installable and bootable with no AI provider configured or available.
 
 No provider is a valid initial platform state, not an installation failure.

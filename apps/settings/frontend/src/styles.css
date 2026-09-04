@@ -1401,6 +1401,51 @@ button.settings-adapter-card {
   margin-top: 2px;
 }
 
+.settings-runtime-family {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.settings-runtime-family-heading {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-runtime-family-heading h3 {
+  margin: 0;
+  color: var(--maverick-text);
+  font-size: 1rem;
+}
+
+.settings-runtime-family-heading p,
+.settings-runtime-family-description {
+  margin: 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.settings-agentic-contract-callout {
+  grid-column: 1 / -1;
+  margin: 0;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 10px 12px;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-agentic-contract-callout > strong {
+  color: var(--maverick-text);
+}
+
+.settings-text-only-callout {
+  display: grid;
+  gap: 10px;
+}
+
 .settings-models-toolbar {
   display: flex;
   justify-content: flex-end;

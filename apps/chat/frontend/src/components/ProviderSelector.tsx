@@ -8,6 +8,10 @@ import {
   useState,
 } from "react";
 import type { ProviderItem } from "../api/client";
+import {
+  orderedExecutionFamilies,
+  safeProviderExecutionFamily,
+} from "../lib/executionFamilies";
 
 function normalizeProviderQuery(value: string) {
   return value.trim().toLowerCase();
@@ -24,6 +28,11 @@ function providerSearchText(provider: ProviderItem) {
     provider.agentic_rollout_status,
     provider.agentic_certificate_status,
     provider.agentic_egress_policy_id,
+    provider.execution_family_label,
+    provider.execution_family_description,
+    provider.provider_detail,
+    provider.profile_detail,
+    provider.unavailable_reason,
   ]
     .filter(Boolean)
     .join(" ")
@@ -32,6 +41,10 @@ function providerSearchText(provider: ProviderItem) {
 
 function providerMatchesQuery(provider: ProviderItem, normalizedQuery: string) {
   return !normalizedQuery || providerSearchText(provider).includes(normalizedQuery);
+}
+
+function providerIsSelectable(provider: ProviderItem) {
+  return provider.selectable !== false && provider.status === "active";
 }
 
 export function ProviderSelector({
@@ -78,12 +91,18 @@ export function ProviderSelector({
     () => providers.filter((provider) => providerMatchesQuery(provider, normalizedQuery)),
     [providers, normalizedQuery],
   );
-  const activeProvider = filteredProviders[activeIndex] || filteredProviders[0];
+  const selectableFilteredProviders = useMemo(
+    () => filteredProviders.filter(providerIsSelectable),
+    [filteredProviders],
+  );
+  const executionFamilies = useMemo(() => orderedExecutionFamilies(providers), [providers]);
+  const activeProvider = selectableFilteredProviders[activeIndex] || selectableFilteredProviders[0];
   const activeProviderOptionId = activeProvider ? `${menuId}-option-${activeProvider.provider_id}` : undefined;
-  const isDisabled = disabled || locked || !providers.length;
+  const isDisabled = disabled || locked || !providers.some(providerIsSelectable);
 
   function selectedProviderIndex(options: ProviderItem[]) {
-    const optionIndex = options.findIndex((provider) => provider.provider_id === activeProviderId);
+    const selectableOptions = options.filter(providerIsSelectable);
+    const optionIndex = selectableOptions.findIndex((provider) => provider.provider_id === activeProviderId);
     return optionIndex >= 0 ? optionIndex : 0;
   }
 
@@ -106,7 +125,7 @@ export function ProviderSelector({
   }
 
   function moveActiveProvider(direction: 1 | -1) {
-    const providerCount = filteredProviders.length;
+    const providerCount = selectableFilteredProviders.length;
     const nextIndex = providerCount ? (activeIndexRef.current + direction + providerCount) % providerCount : 0;
     activeIndexRef.current = nextIndex;
     setActiveIndex(nextIndex);
@@ -152,12 +171,16 @@ export function ProviderSelector({
     if (!isOpen) {
       return;
     }
-    const nextIndex = Math.min(activeIndexRef.current, Math.max(filteredProviders.length - 1, 0));
+    const nextIndex = Math.min(activeIndexRef.current, Math.max(selectableFilteredProviders.length - 1, 0));
     activeIndexRef.current = nextIndex;
     setActiveIndex(nextIndex);
-  }, [filteredProviders.length, isOpen]);
+  }, [selectableFilteredProviders.length, isOpen]);
 
   function selectProvider(providerId: string) {
+    const provider = providers.find((candidate) => candidate.provider_id === providerId);
+    if (!provider || !providerIsSelectable(provider)) {
+      return;
+    }
     onSelect(providerId);
     closeMenu();
   }
@@ -180,7 +203,7 @@ export function ProviderSelector({
   }
 
   function selectActiveProvider() {
-    const provider = filteredProviders[activeIndexRef.current] || filteredProviders[0];
+    const provider = selectableFilteredProviders[activeIndexRef.current] || selectableFilteredProviders[0];
     if (!provider) {
       return;
     }
@@ -275,44 +298,75 @@ export function ProviderSelector({
               value={query}
             />
           </label>
-          {filteredProviders.map((provider, providerIndex) => (
-            <div className="chatapp-provider-menu__option-block" key={provider.provider_id}>
-              <button
-                aria-selected={provider.provider_id === activeProviderId}
-                className={`chatapp-provider-menu__item ${provider.provider_id === activeProviderId ? "is-active" : ""} ${providerIndex === activeIndex ? "is-highlighted" : ""}`}
-                id={`${menuId}-option-${provider.provider_id}`}
-                onClick={() => {
-                  selectProvider(provider.provider_id);
-                }}
-                onMouseEnter={() => {
-                  activeIndexRef.current = providerIndex;
-                  setActiveIndex(providerIndex);
-                }}
-                role="option"
-                type="button"
-              >
-                <span className="chatapp-provider-menu__name">{provider.label}</span>
-                {provider.description ? <span className="chatapp-provider-menu__description">{provider.description}</span> : null}
-              </button>
-              {provider.supported_reasoning_efforts?.length ? (
-                <label className="chatapp-provider-menu__reasoning">
-                  <span className="chatapp-provider-menu__reasoning-label">Reasoning</span>
-                  <select
-                    aria-label={`Reasoning for ${provider.label}`}
-                    disabled={disabled || locked}
-                    onChange={(event) => selectProviderReasoning(provider, event.currentTarget.value)}
-                    value={provider.provider_id === activeProviderId
-                      ? reasoningEffort || provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""
-                      : provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""}
-                  >
-                    {provider.supported_reasoning_efforts.map((option) => (
-                      <option key={option.effort} value={option.effort}>{option.label || option.effort}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-            </div>
-          ))}
+          {executionFamilies.map((family) => {
+            const familyProviders = filteredProviders.filter(
+              (provider) => safeProviderExecutionFamily(provider) === family.family_id,
+            );
+            return (
+              <section className="chatapp-provider-menu__family" data-execution-family={family.family_id} key={family.family_id}>
+                <header className="chatapp-provider-menu__family-heading">
+                  <strong>{family.label}</strong>
+                  <span>{family.description}</span>
+                </header>
+                {familyProviders.map((provider) => {
+                  const providerIndex = selectableFilteredProviders.findIndex(
+                    (candidate) => candidate.provider_id === provider.provider_id,
+                  );
+                  const selectable = providerIsSelectable(provider);
+                  return (
+                    <div className={`chatapp-provider-menu__option-block ${selectable ? "" : "is-unavailable"}`} key={provider.provider_id}>
+                      <button
+                        aria-disabled={!selectable}
+                        aria-selected={provider.provider_id === activeProviderId}
+                        className={`chatapp-provider-menu__item ${provider.provider_id === activeProviderId ? "is-active" : ""} ${providerIndex === activeIndex ? "is-highlighted" : ""}`}
+                        disabled={!selectable}
+                        id={`${menuId}-option-${provider.provider_id}`}
+                        onClick={() => {
+                          selectProvider(provider.provider_id);
+                        }}
+                        onMouseEnter={() => {
+                          if (providerIndex >= 0) {
+                            activeIndexRef.current = providerIndex;
+                            setActiveIndex(providerIndex);
+                          }
+                        }}
+                        role="option"
+                        type="button"
+                      >
+                        <span className="chatapp-provider-menu__name">{provider.label}</span>
+                        {provider.description ? <span className="chatapp-provider-menu__description">{provider.description}</span> : null}
+                        {provider.provider_detail ? <span className="chatapp-provider-menu__meta">{provider.provider_detail}</span> : null}
+                        {provider.profile_detail ? <span className="chatapp-provider-menu__meta">{provider.profile_detail}</span> : null}
+                        {!selectable ? <span className="chatapp-provider-menu__unavailable">Unavailable · {provider.unavailable_reason || "Incomplete profile"}</span> : null}
+                      </button>
+                      {selectable && provider.supported_reasoning_efforts?.length ? (
+                        <label className="chatapp-provider-menu__reasoning">
+                          <span className="chatapp-provider-menu__reasoning-label">Reasoning</span>
+                          <select
+                            aria-label={`Reasoning for ${provider.label}`}
+                            disabled={disabled || locked}
+                            onChange={(event) => selectProviderReasoning(provider, event.currentTarget.value)}
+                            value={provider.provider_id === activeProviderId
+                              ? reasoningEffort || provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""
+                              : provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""}
+                          >
+                            {provider.supported_reasoning_efforts.map((option) => (
+                              <option key={option.effort} value={option.effort}>{option.label || option.effort}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {!familyProviders.length ? (
+                  <div className="chatapp-provider-menu__family-empty">
+                    {normalizedQuery ? "No matching profiles in this family." : "No available profiles in this family."}
+                  </div>
+                ) : null}
+              </section>
+            );
+          })}
           {!filteredProviders.length ? <div className="chatapp-provider-menu__empty">No matching models</div> : null}
         </div>
       ) : null}

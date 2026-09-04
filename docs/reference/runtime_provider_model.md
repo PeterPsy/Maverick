@@ -218,6 +218,48 @@ fails on drift instead of falling back. A continuation only forks the binding's
 session identity. Legacy stored text sessions remain byte-for-byte unmigrated;
 hydration does not synthesize authority for them.
 
+## Provider status and product taxonomy
+
+`GET /api/providers` is the authoritative redaction-safe projection used by
+both Settings and Chat. It returns the exact ordered family catalog:
+
+1. `Native Agents (CLI)` — external coding-agent runtimes supervised by
+   Maverick;
+2. `Maverick Agents (API)` — API models running the Maverick execution loop;
+3. `Text-only Models (API)` — hosted generation without tools or an action
+   loop.
+
+The response also includes `native_agents.items`, agentic profile
+`family_contract_status`/`full_workspace_status`, independent
+`hosted_text.profiles`, and `selection_migration`. Native status contains only
+safe executable-name/version and contract metadata, never an absolute host path
+or authentication secret. Agent profile selection requires the server to
+report a complete recognized family, certified Full Workspace revision, active
+certificate and effective authority, enabled binding, selectable rollout, no
+containment, and healthy native installation where applicable. Missing or
+narrowed state is `unavailable`; it is never silently offered as a lesser
+agent.
+
+Settings renders family and Full Workspace state as derived information. It
+does not expose capability tiers, a `Full/Read-only` switch, per-agent controls
+that remove required filesystem/shell/CLI/MCP/skill surfaces, or a way to
+promote text-only models. Administrative binding enable/disable, credentials,
+default selection, approvals, rollout, and kill-switch authority remain
+server-governed. Chat uses the same family order and copy, shows agent
+destination/profile/recipe before a new session, and displays `No workspace
+tools or actions.` for every text-only option.
+
+`selection_migration` uses schema
+`maverick.execution-family-selection.v1` and mode `projection_only`. It maps
+legacy runtime and `fast_model` selection records to canonical picker ids but
+reports both `persisted_records_mutated=false` and
+`pinned_sessions_rewritten=false`. The browser applies that projection only to
+the default for a new chat. A loaded agentic or text-only session continues to
+resolve its immutable binding/provider/model, so migration cannot change its
+family or cause an implicit fallback. If a persisted new-chat target is no
+longer selectable, Chat requires an explicit replacement selection rather than
+choosing the first model from another family.
+
 The single deterministic manifest in
 `core/providers/certified_execution_tcb.py` owns every component that can alter
 attestation/classification/egress, API/app admission, input composition/request

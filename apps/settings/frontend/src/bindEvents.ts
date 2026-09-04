@@ -21,7 +21,6 @@ export function bindSettingsEvents(context: {
     definitionRevision: string,
     options?: { enabled?: boolean }
   ) => Promise<void>;
-  onProviderModelChanged: (modelId: string) => void;
   refreshProviderUsageFromPanel: () => Promise<void>;
   onSpeechAudioModelChanged: (modelId: string) => void;
   onSpeechConversationModelChanged: (modelId: string) => void;
@@ -30,7 +29,6 @@ export function bindSettingsEvents(context: {
   resetSelectedUserPassword: (form: HTMLFormElement, user: User) => Promise<void>;
   saveDependencySelection: (consumerAppId: string, alias: string, providerAppIds: string[]) => Promise<void>;
   saveHostedProviderSettingsFromPanel: (modelId?: string) => Promise<void>;
-  saveProviderSettingsFromPanel: () => Promise<void>;
   saveSpeechProviderSettingsFromPanel: () => Promise<void>;
   selectedUser: () => User | undefined;
   selectUser: (userId: string) => void;
@@ -86,7 +84,6 @@ export function bindSettingsEvents(context: {
     onSaveAgenticBinding: (definitionId, definitionRevision, options) => {
       context.saveAgenticBindingFromPanel(definitionId, definitionRevision, options).catch(context.showError);
     },
-    onProviderModelChanged: context.onProviderModelChanged,
     onRefreshProviderUsage: () => {
       context.refreshProviderUsageFromPanel().catch(context.showError);
     },
@@ -94,9 +91,6 @@ export function bindSettingsEvents(context: {
     onSpeechConversationModelChanged: context.onSpeechConversationModelChanged,
     onSaveHostedProviderSettings: (modelId) => {
       context.saveHostedProviderSettingsFromPanel(modelId).catch(context.showError);
-    },
-    onSaveProviderSettings: () => {
-      context.saveProviderSettingsFromPanel().catch(context.showError);
     },
     onSaveSpeechProviderSettings: () => {
       context.saveSpeechProviderSettingsFromPanel().catch(context.showError);

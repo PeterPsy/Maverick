@@ -205,7 +205,7 @@ describe("selectedProviderForSession", () => {
     expect(selected?.provider_id).toBe("codex");
   });
 
-  it("keeps a missing local pinned option on the Codex fallback", () => {
+  it("keeps a missing local pinned option on the Codex rollout-skew fallback", () => {
     const selected = selectedProviderForSession({
       activeProviderId: "codex",
       activeSession: session({
@@ -224,6 +224,40 @@ describe("selectedProviderForSession", () => {
 
     expect(selected?.provider_id).toBe("codex");
     expect(selected?.agentic_containment_status).toBeUndefined();
+  });
+
+  it("keeps an unavailable pinned Codex session in its native family", () => {
+    const selected = selectedProviderForSession({
+      activeProviderId: "hosted:openrouter:model-a",
+      activeSession: session({
+        runtime_mode: "agentic",
+        provider_id: "codex",
+        execution_binding: {
+          workspace_binding_id: "binding-codex-unavailable",
+          model_id: "gpt-pinned",
+          runtime_engine_id: "codex",
+          adapter_id: "codex-app-server",
+          model_provider_id: "codex",
+          provider_protocol: "codex-app-server-stdio",
+          binding_digest: "codex-digest",
+        },
+      }),
+      activeThread: thread("free"),
+      providers: [provider({
+        provider_id: "hosted:openrouter:model-a",
+        label: "Hosted fallback",
+        provider_role: "model_provider",
+        kind: "hosted_api",
+      })],
+    });
+
+    expect(selected).toMatchObject({
+      provider_id: "pinned-session:binding-codex-unavailable",
+      label: "gpt-pinned",
+      execution_family: "native_agent",
+      selectable: false,
+      workspace_profile_binding_id: "binding-codex-unavailable",
+    });
   });
 
   it("renders a contained fallback for a pinned remote profile removed from selection", () => {

@@ -153,7 +153,7 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(final_event["payload"]["complete_text"], "Hosted answer")
         self.assertNotIn("super-secret-token", json.dumps(snapshot))
 
-    async def test_chat_plain_hosted_missing_credentials_returns_failed_turn_reason_without_codex(self) -> None:
+    async def test_chat_plain_hosted_missing_credentials_fails_before_persistence_without_codex(self) -> None:
         state = self.make_state(bind_openrouter=False)
         cookie = self.login_cookie(state)
 
@@ -176,19 +176,12 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        self.assertEqual(status, 201)
-        self.assertEqual(payload["session"]["provider_id"], "hosted-text-runtime")
-        self.assertEqual(payload["turn"]["status"], "failed")
-        self.assertEqual(payload["turn"]["failure_reason"], "The configured provider credentials are unavailable.")
-        failed_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.failed")
-        self.assertEqual(failed_event["payload"]["error"], "The configured provider credentials are unavailable.")
-        self.assertEqual(failed_event["payload"]["failure_reason_code"], "provider_credential_authorization_missing")
-        self.assertIn("provider_credential_binding_missing", failed_event["payload"]["reason_codes"])
-        stored_event_types = [event.event_type for event in state.runtime_store.list_events(payload["session"]["session_id"])]
-        self.assertIn("provider.routing.decision", stored_event_types)
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "provider_credential_authorization_missing")
+        self.assertEqual(state.runtime_store.list_sessions("default"), [])
         self.assertNotIn("super-secret-token", json.dumps(payload))
 
-    async def test_chat_plain_hosted_legacy_invalid_binding_is_not_selected_or_leaked(self) -> None:
+    async def test_chat_plain_hosted_legacy_invalid_binding_fails_before_persistence(self) -> None:
         state = bootstrap_platform_state(start_path=make_temp_repo_root(self))
         openrouter = state.provider_store.get_provider_definition("openrouter")
         state.provider_store.save_provider_definition(replace(openrouter, status="active"))
@@ -226,17 +219,13 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        self.assertEqual(status, 201)
-        self.assertEqual(payload["turn"]["status"], "failed")
-        self.assertEqual(payload["turn"]["failure_reason"], "The configured provider credentials are unavailable.")
-        failed_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.failed")
-        self.assertEqual(failed_event["payload"]["error"], "The configured provider credentials are unavailable.")
-        self.assertEqual(failed_event["payload"]["failure_reason_code"], "provider_credential_authorization_missing")
-        self.assertIn("provider_credential_binding_invalid_secret_ref", failed_event["payload"]["reason_codes"])
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "provider_credential_authorization_missing")
+        self.assertEqual(state.runtime_store.list_sessions("default"), [])
         self.assertNotIn("platform:providers/openrouter", json.dumps(payload))
         self.assertNotIn('"secret_ref":', json.dumps(payload))
 
-    async def test_chat_plain_hosted_missing_bound_core_secret_is_not_selected_or_leaked(self) -> None:
+    async def test_chat_plain_hosted_missing_bound_core_secret_fails_before_persistence(self) -> None:
         state = bootstrap_platform_state(start_path=make_temp_repo_root(self))
         openrouter = state.provider_store.get_provider_definition("openrouter")
         state.provider_store.save_provider_definition(replace(openrouter, status="active"))
@@ -268,13 +257,9 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        self.assertEqual(status, 201)
-        self.assertEqual(payload["turn"]["status"], "failed")
-        self.assertEqual(payload["turn"]["failure_reason"], "The configured provider credentials are unavailable.")
-        failed_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.failed")
-        self.assertEqual(failed_event["payload"]["error"], "The configured provider credentials are unavailable.")
-        self.assertEqual(failed_event["payload"]["failure_reason_code"], "provider_credential_authorization_missing")
-        self.assertIn("provider_credential_binding_secret_missing", failed_event["payload"]["reason_codes"])
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "provider_credential_authorization_missing")
+        self.assertEqual(state.runtime_store.list_sessions("default"), [])
         self.assertNotIn("platform:secret-alias/missing-openrouter", json.dumps(payload))
         self.assertNotIn('"secret_ref":', json.dumps(payload))
 

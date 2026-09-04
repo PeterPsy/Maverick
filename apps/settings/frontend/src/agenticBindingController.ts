@@ -43,6 +43,19 @@ export function createAgenticBindingController(context: AgenticBindingController
         return;
       }
       if (
+        requestedEnabled
+        && (
+          item.execution_family === null
+          || item.family_contract_status !== 'complete'
+          || item.full_workspace_status !== 'certified'
+          || item.enable_eligible !== true
+        )
+      ) {
+        context.state.agenticBindingErrors[key] = `This profile is unavailable: ${item.enable_blocked_reason || item.family_contract_reason || item.blocked_reason || 'Full Workspace contract incomplete'}.`;
+        context.render();
+        return;
+      }
+      if (
         item.runtime_engine_id !== 'codex'
         && item.effective_capabilities?.status !== 'active'
         && requestedEnabled
@@ -78,7 +91,6 @@ export function createAgenticBindingController(context: AgenticBindingController
           },
           policy_patch: {
             max_estimated_cost_microusd: costValue ? parsedCostMicrousd : null,
-            tool_access_enabled: checked('tool_access_enabled'),
             require_confirmation_for_mutating: checked('require_confirmation_for_mutating'),
             require_confirmation_for_destructive: checked('require_confirmation_for_destructive')
           }

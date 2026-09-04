@@ -140,6 +140,7 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 {
                     "collection": "provider_contract",
                     "require_zdr": False,
+                    "retention": "provider_contract",
                     "attestation_state": "not_attested",
                     "attestation": {
                         "state": "not_attested",
@@ -221,6 +222,7 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
             {
                 "collection": "provider_contract",
                 "require_zdr": False,
+                "retention": "provider_contract",
                 "attestation_state": "not_attested",
                 "attestation": {
                     "state": "not_attested",

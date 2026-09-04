@@ -259,23 +259,42 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("Platform settings", settings_source)
         self.assertIn("settings-user-settings-card", settings_source)
         self.assertIn("settings-hosted-text-model-settings-card", settings_source)
-        self.assertIn("settings-agentic-model-settings-card", settings_source)
+        self.assertIn("settings-agentic-runtimes-card", settings_source)
         self.assertIn("data-agentic-model-toggle", settings_source)
+        self.assertIn("item.enable_eligible === true", settings_source)
+        self.assertIn("item.enable_eligible !== true", agentic_binding_source)
         self.assertIn("Package limits", settings_source)
         self.assertIn("Refresh limits", settings_source)
+        self.assertIn("Reasoning modes / default", settings_source)
         self.assertIn("Token usage history", settings_source)
         self.assertEqual(settings_source.count("data-usage-history-chart"), 1)
         self.assertIn("settings-speech-model-settings-card", settings_source)
         self.assertIn("settings-runtime-settings-card", settings_source)
-        self.assertIn("configureActiveProvider", api_source)
         self.assertIn("configureHostedProvider", api_source)
         self.assertIn("/api/providers/hosted/selection", api_source)
         self.assertIn("speech_stt", api_source)
-        self.assertIn("Hosted text model settings", settings_source)
-        self.assertIn("Agentic model settings", settings_source)
+        family_source = (app_root / "frontend" / "src" / "executionFamilies.ts").read_text(encoding="utf-8")
+        self.assertIn("Native Agents (CLI)", family_source)
+        self.assertIn("Maverick Agents (API)", family_source)
+        self.assertIn("Text-only Models (API)", family_source)
+        self.assertIn("No workspace tools or actions.", family_source)
+        self.assertIn(
+            "External coding-agent runtimes such as Codex, Claude Code, and Gemini CLI. "
+            "They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.",
+            family_source,
+        )
+        self.assertIn(
+            "API models made agentic by Maverick. Maverick provides workspace context, tools, "
+            "the execution loop, approvals, finalization, and recovery.",
+            family_source,
+        )
+        self.assertIn(
+            "API models without workspace tools or an action loop. They generate text from the "
+            "context provided by Maverick but cannot perform workspace actions.",
+            family_source,
+        )
         self.assertIn("Speech model settings", settings_source)
         self.assertIn("saveHostedProviderSettingsFromPanel", main_source)
-        self.assertIn("data-agentic-provider-accordion", settings_source)
         self.assertIn("data-settings-model-accordion", settings_source)
         self.assertIn("data-hosted-model-accordion", settings_source)
         self.assertIn("data-hosted-provider-save", settings_source)
@@ -286,7 +305,17 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertNotIn("Chat only uses text-output fast models", settings_source)
         self.assertNotIn("Audio transcription uses Nova-3", settings_source)
         self.assertNotIn("OpenRouter governs", settings_source)
-        self.assertIn("runtime engine remains Codex", settings_source)
+        self.assertNotIn("data-agentic-field=\"tool_access_enabled\"", settings_source)
+        for forbidden_field in (
+            "allow_filesystem_read",
+            "allow_filesystem_write",
+            "allow_shell",
+            "allow_cli",
+            "allow_mcp",
+            "allow_skills",
+        ):
+            self.assertNotIn(f'data-agentic-field="{forbidden_field}"', settings_source)
+        self.assertNotIn("Full/Read-only", settings_source)
         self.assertIn("/api/settings/runtime-sessions", api_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
         self.assertIn("/api/usage/timeseries", api_source)
@@ -328,6 +357,7 @@ function transpile(relativePath) {
 transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/bouncyToggle.ts');
 transpile('frontend/src/providerModelOptions.ts');
+transpile('frontend/src/executionFamilies.ts');
 transpile('frontend/src/usageHistoryFilters.ts');
 transpile('frontend/src/settingsPanel.ts');
 
@@ -427,6 +457,33 @@ const settings = {
       selected_model_id: 'gpt-5.5',
       selected_reasoning_effort: 'medium',
       available_models: []
+    },
+    native_agents: {
+      items: [{
+        runtime_engine_id: 'codex',
+        label: 'Codex',
+        description: 'Native Codex runtime',
+        execution_family: 'native_agent',
+        provider_status: 'active',
+        availability: 'installed',
+        installed: true,
+        executable_name: 'codex',
+        runtime_version: 'codex-cli test',
+        health: 'healthy',
+        health_reason_codes: [],
+        update: { status: 'unknown', detail: null },
+        adapter: { id: 'codex-app-server', version: 'fixture', trusted_distribution: 'maverick_builtin' },
+        harness_recipe: { id: 'codex-native-app-server', revision: '1', digest: 'fixture' },
+        protocol: { kind: 'app_server', id: 'codex-app-server-stdio', version: null, event_schema: 'fixture' },
+        authentication_status: 'runtime_managed',
+        models: [{ provider_id: 'codex', model_id: 'gpt-5.5', model_revision: null, model_revision_policy: 'provider_alias' }],
+        effects: { mode: 'mapped_hybrid', workspace_confined: true, process_tree_supervised: true, structured_effect_events: true, sandbox_policy_revision: 'sandbox-v1', approval_policy: 'common' },
+        certification_state: 'legacy_certified',
+        full_workspace_status: 'certified',
+        full_workspace_contract_revision: 'codex-baseline-v20',
+        selectable: true,
+        unavailable_reason: null
+      }]
     },
     hosted_text: {
       profile: 'fast_model',
@@ -588,24 +645,25 @@ assert.equal((html.match(/data-usage-history-chart/g) || []).length, 1);
 assert.ok(html.includes('Last 24 hours'));
 assert.ok(html.includes('settings-user-settings-card'));
 assert.ok(html.includes('settings-hosted-text-model-settings-card'));
-assert.ok(html.includes('settings-agentic-model-settings-card'));
+assert.ok(html.includes('settings-agentic-runtimes-card'));
 assert.ok(html.includes('settings-speech-model-settings-card'));
 assert.ok(html.includes('settings-runtime-settings-card'));
-assert.ok(html.includes('Hosted text model settings'));
-assert.ok(html.includes('Agentic model settings'));
+assert.ok(html.includes('Native Agents (CLI)'));
+assert.ok(html.includes('Maverick Agents (API)'));
+assert.ok(html.includes('Text-only Models (API)'));
+assert.ok(html.includes('No workspace tools or actions.'));
+assert.ok(html.includes('Runtime available; session selection still requires an enabled certified workspace profile.'));
+assert.ok(!html.includes('Unavailable: Native Agent Unavailable'));
+assert.ok(html.includes('Installed / executable'));
+assert.ok(html.includes('Native health / update'));
+assert.ok(html.includes('Effect observation'));
+assert.ok(html.indexOf('Native Agents (CLI)') < html.indexOf('Maverick Agents (API)'));
+assert.ok(html.indexOf('Maverick Agents (API)') < html.indexOf('Text-only Models (API)'));
 assert.ok(html.includes('Speech model settings'));
-assert.ok(html.indexOf('settings-agentic-model-settings-card') < html.indexOf('settings-hosted-text-model-settings-card'));
+assert.ok(html.indexOf('settings-agentic-runtimes-card') < html.indexOf('settings-hosted-text-model-settings-card'));
 assert.ok(html.indexOf('settings-hosted-text-model-settings-card') < html.indexOf('settings-speech-model-settings-card'));
-assert.ok(html.includes('Agentic provider'));
-assert.ok(html.includes('data-agentic-provider-accordion'));
-assert.ok(!html.includes('data-settings-model-accordion="agentic-provider" data-agentic-provider-accordion open'));
-assert.ok(html.includes('Codex tools/filesystem/MCP'));
-assert.ok(html.includes('Subscription usage'));
-assert.ok(html.includes('data-provider-usage-gauge="11"'));
-assert.ok(html.includes('11%'));
-assert.ok(html.includes('7-day window'));
-assert.ok(html.includes('settings-refresh-provider-usage'));
-assert.ok(html.includes('Hosted chat / fast model'));
+assert.ok(!html.includes('data-agentic-provider-accordion'));
+assert.ok(html.includes('Text-only model'));
 assert.ok(!html.includes('Hosted text models'));
 assert.ok(!html.includes('Chat only uses text-output fast models'));
 assert.ok(html.includes('data-hosted-provider-group="openrouter"'));
@@ -644,7 +702,7 @@ assert.ok(html.includes('wss://api.deepgram.com/v2/listen?model=flux-general-mul
 assert.ok(!html.includes('id="settings-speech-save"'));
 assert.equal((html.match(/data-speech-save=/g) || []).length, 2);
 assert.equal((html.match(/Save speech model/g) || []).length, 2);
-assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 7);
+assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 6);
 assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 6);
 assert.equal((html.match(/<span class="settings-pill">Active provider<\/span>/g) || []).length, 3);
 assert.equal((html.match(/<span class="settings-pill">Inactive provider<\/span>/g) || []).length, 1);
@@ -661,7 +719,7 @@ assert.ok(html.includes('data-openrouter-routing="zdr"'));
 assert.ok(html.includes('Require zero data retention'));
 assert.ok(html.includes('data-hosted-model-id="nvidia/nemotron-3-ultra-550b-a55b:free"'));
 assert.ok(html.includes('Nvidia'));
-assert.ok(html.includes('runtime engine remains Codex'));
+assert.ok(!html.includes('runtime engine remains Codex'));
 
 settings.agentic_admin = {
   workspace_id: 'default',
@@ -677,6 +735,17 @@ settings.agentic_admin = {
     provider_api_version: 'v1beta',
     adapter_id: 'google-interactions-agentic',
     adapter_version_constraint: '==8',
+    execution_family: 'maverick_agent',
+    family_contract_status: 'incomplete',
+    family_contract_reason: 'hosted_agent_runtime_disabled',
+    full_workspace_status: 'unavailable',
+    full_workspace_contract_revision: 'codex-baseline-v20',
+    harness_recipe: {
+      id: 'google-workspace-agent',
+      revision: '8',
+      digest: 'fixture-recipe-digest',
+      provider_capability_catalog_digest: 'fixture-catalog-digest'
+    },
     routing_constraint: {
       endpoint_id: 'google-ai-studio',
       allowed_upstream_ids: ['google-ai-studio'],
@@ -752,6 +821,9 @@ settings.agentic_admin = {
     binding_status: 'disabled',
     health: 'blocked',
     blocked_reason: 'hosted_agent_runtime_disabled',
+    selectable: false,
+    enable_eligible: false,
+    enable_blocked_reason: 'hosted_agent_runtime_disabled',
     containment_status: 'NO-GO',
     containment_reason: 'hosted_agent_runtime_disabled',
     effective_capabilities: {
@@ -800,7 +872,7 @@ for (const expected of [
   'Egress policy remote-agentic-contained@2 · Core-classified data none',
   'Data policy collection=deny · ZDR required · attestation not_attested',
   'Effective capabilities · blocked',
-  'Workspace declaration (read-only): not_attested',
+  'Workspace data declaration (informational): not_attested',
   'Binding Disabled · Profile Suspended · Certificate Revoked / Ineligible',
   'Google agentic Gemini 3.5 Pro · fake-data preview',
   'Quarantined: Remote Agentic State Ambiguous',
@@ -816,7 +888,35 @@ delete rollingUpgradeSettings.agentic_admin.items[0].data_policy.attestation;
 rollingUpgradeSettings.agentic_admin.items[0].data_policy.attestation_state = 'unavailable';
 const rollingUpgradeHtml = settingsPanelHtml(rollingUpgradeSettings, state);
 assert.ok(rollingUpgradeHtml.includes('Effective capabilities · unavailable'));
-assert.ok(rollingUpgradeHtml.includes('Workspace declaration (read-only): unavailable'));
+assert.ok(rollingUpgradeHtml.includes('Workspace data declaration (informational): unavailable'));
+
+const reenableSettings = JSON.parse(JSON.stringify(settings));
+const reenableItem = reenableSettings.agentic_admin.items[0];
+Object.assign(reenableItem, {
+  runtime_engine_id: 'codex',
+  model_provider_id: 'codex',
+  model_id: 'gpt-5.5',
+  execution_family: 'native_agent',
+  family_contract_status: 'complete',
+  family_contract_reason: null,
+  full_workspace_status: 'certified',
+  selectable: false,
+  enable_eligible: true,
+  enable_blocked_reason: null,
+  blocked_reason: 'workspace_binding_disabled',
+  containment_status: 'GO',
+  containment_reason: null,
+  native_runtime: reenableSettings.provider.native_agents.items[0]
+});
+reenableItem.binding.enabled = false;
+reenableItem.binding.is_default = false;
+reenableItem.certificate.effective_status = 'active';
+const reenableHtml = settingsPanelHtml(reenableSettings, state);
+const reenableToggle = reenableHtml.match(/<input type="checkbox" role="switch" data-agentic-model-toggle[\s\S]*?>/)?.[0] || '';
+assert.ok(reenableToggle);
+assert.ok(!reenableToggle.includes('disabled'));
+assert.ok(reenableHtml.includes('codex-cli test'));
+assert.ok(reenableHtml.includes('Effect observation'));
 
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'mode', 'only');
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'provider_id', 'open-inference');
@@ -1095,7 +1195,7 @@ function makeController() {
         self.assertIn('role="progressbar"', gauge_source)
         self.assertIn("var(--maverick-accent)", usage_source)
         self.assertIn("data-provider-usage-gauge", panel_source)
-        self.assertIn("Subscription usage", panel_source)
+        self.assertIn("Package limits", panel_source)
         self.assertIn("settings-refresh-provider-usage", panel_source)
         self.assertIn('@import "tailwindcss"', styles_source)
         self.assertEqual(components["aliases"]["ui"], "@/components/ui")

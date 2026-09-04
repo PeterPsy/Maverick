@@ -7,6 +7,8 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+from threading import Lock
+from time import monotonic
 
 from core.providers.models import (
     ProviderCapabilitySet,
@@ -33,6 +35,9 @@ from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISIO
 NATIVE_AGENT_RECIPE_REVISION = "1"
 NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
 GEMINI_CLI_CANDIDATE_PROVIDER_ID = "gemini-cli"
+_INSPECTION_CACHE_SECONDS = 5.0
+_INSPECTION_CACHE: dict[tuple[str, tuple[str, ...]], tuple[float, NativeRuntimeStatus]] = {}
+_INSPECTION_CACHE_LOCK = Lock()
 
 
 class CommandNativeRuntimeInspector:
@@ -93,11 +98,21 @@ class CommandNativeRuntimeInspector:
         return "unknown", "No trusted offline update channel is configured."
 
     def inspect(self) -> NativeRuntimeStatus:
+        cache_key = (self._command, self._version_args)
+        with _INSPECTION_CACHE_LOCK:
+            cached = _INSPECTION_CACHE.get(cache_key)
+            if cached is not None and monotonic() - cached[0] < _INSPECTION_CACHE_SECONDS:
+                return cached[1]
         availability, executable_path = self.discover()
         runtime_version = self.version() if availability == "installed" else None
-        health, reason_codes = self.health()
+        if availability != "installed":
+            health, reason_codes = "unavailable", ("runtime_not_installed",)
+        elif runtime_version is None:
+            health, reason_codes = "degraded", ("runtime_version_unavailable",)
+        else:
+            health, reason_codes = "healthy", ()
         update_status, update_detail = self.update_status()
-        return NativeRuntimeStatus(
+        result = NativeRuntimeStatus(
             availability=availability,
             executable_path=executable_path,
             runtime_version=runtime_version,
@@ -106,6 +121,9 @@ class CommandNativeRuntimeInspector:
             update_status=update_status,
             update_detail=update_detail,
         )
+        with _INSPECTION_CACHE_LOCK:
+            _INSPECTION_CACHE[cache_key] = (monotonic(), result)
+        return result
 
 
 def build_codex_native_installation(adapter) -> NativeAgentInstallation:

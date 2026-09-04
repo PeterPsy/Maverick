@@ -154,6 +154,7 @@ class ProvidersTestCase(unittest.TestCase):
                 "cartesia",
                 "codex",
                 "deepgram",
+                "gemini-cli",
                 "google-ai-studio",
                 "kokoro-hosted",
                 "maverick-tool-loop",

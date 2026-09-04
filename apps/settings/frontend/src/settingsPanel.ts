@@ -1,6 +1,8 @@
 import type {
   AgenticAdminItem,
   AgenticAdminPayload,
+  ExecutionFamilyDefinition,
+  NativeAgentStatus,
   OpenRouterProviderRouting,
   PlatformSettings,
   ProviderModelOption,
@@ -11,20 +13,19 @@ import type {
   RuntimeSessionItem
 } from './adminApi';
 import {
-  defaultReasoningForOption,
   hostedModelOptionsForSettings,
-  modelOptionsForSettings,
-  selectedHostedProviderDraft,
-  selectedProviderDraft
+  selectedHostedProviderDraft
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
+import {
+  NO_WORKSPACE_ACTIONS_MESSAGE,
+  executionFamily
+} from './executionFamilies';
 import {
   defaultUsageHistoryFilters,
   usageHistoryTimeRange,
   type UsageHistoryFilters,
 } from './usageHistoryFilters';
-
-const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping', 'recovery_required']);
 
 type HostedRoutingDraft = {
   allowFallbacks: boolean;
@@ -49,18 +50,15 @@ export type SettingsPanelState = {
   cleanupError: string;
   clearingAllRuntime: boolean;
   cleaningSessionIds: Set<string>;
-  draftModelId: string;
   hostedDraftModelId: string;
   hostedProviderError: string;
   hostedProviderErrorModelId: string;
   hostedRoutingDraftsByModel: Record<string, HostedRoutingDraft>;
   isSavingHostedProvider: boolean;
-  isSavingProvider: boolean;
   isSavingSpeechProvider: boolean;
   isLoadingProviderUsage: boolean;
   isLoadingUsageHistory: boolean;
   savingAgenticBindings: Set<string>;
-  providerError: string;
   providerUsageError: string;
   providerUsageItems: ProviderSubscriptionUsage[];
   usageHistory: UsageTimeSeriesPayload | null;
@@ -82,9 +80,7 @@ export type SettingsPanelActions = {
     options?: { enabled?: boolean }
   ) => void;
   onSaveHostedProviderSettings: (modelId?: string) => void;
-  onProviderModelChanged: (modelId: string) => void;
   onRefreshProviderUsage: () => void;
-  onSaveProviderSettings: () => void;
   onSaveSpeechProviderSettings: () => void;
   onSpeechAudioModelChanged: (modelId: string) => void;
   onSpeechConversationModelChanged: (modelId: string) => void;
@@ -96,18 +92,15 @@ export function createSettingsPanelState(): SettingsPanelState {
     cleanupError: '',
     clearingAllRuntime: false,
     cleaningSessionIds: new Set(),
-    draftModelId: '',
     hostedDraftModelId: '',
     hostedProviderError: '',
     hostedProviderErrorModelId: '',
     hostedRoutingDraftsByModel: {},
     isSavingHostedProvider: false,
-    isSavingProvider: false,
     isSavingSpeechProvider: false,
     isLoadingProviderUsage: false,
     isLoadingUsageHistory: false,
     savingAgenticBindings: new Set(),
-    providerError: '',
     providerUsageError: '',
     providerUsageItems: [],
     usageHistory: null,
@@ -120,25 +113,18 @@ export function createSettingsPanelState(): SettingsPanelState {
 }
 
 export function syncSettingsPanelDraft(state: SettingsPanelState, settings: PlatformSettings | null) {
-  const { modelId } = selectedProviderDraft(settings);
   const { modelId: hostedModelId } = selectedHostedProviderDraft(settings);
   const speechDraft = selectedSpeechProviderDraft(settings);
   const hostedModelIds = new Set(hostedModelOptionsForSettings(settings).map((option) => option.model_id).filter(Boolean));
   if (hostedModelId) {
     hostedModelIds.add(hostedModelId);
   }
-  state.draftModelId = modelId;
   state.hostedDraftModelId = hostedModelId;
   state.speechAudioModelId = speechDraft.audioModelId;
   state.speechConversationModelId = speechDraft.conversationModelId;
   state.hostedRoutingDraftsByModel = Object.fromEntries(
     Array.from(hostedModelIds).map((modelId) => [modelId, routingDraftFromRouting(openRouterRoutingForModel(settings, modelId))])
   );
-}
-
-export function updateDraftModel(state: SettingsPanelState, modelId: string) {
-  state.draftModelId = modelId;
-  state.providerError = '';
 }
 
 export function updateHostedDraftModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string) {
@@ -237,41 +223,23 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
     </section>`;
   }
 
-  const provider = settings.provider.active_provider;
   const hostedProvider = settings.provider.hosted_text?.active_provider || null;
   const speechStt = settings.provider.speech_stt || null;
   const runtimeSessions = scopedRuntimeSessions(settings);
-  const activeRuntimeSessions = runtimeSessions.filter((session) => ACTIVE_RUNTIME_STATUSES.has(session.status));
   const cleanupAllowed = settings.runtime.cleanup_allowed ?? false;
   const cleanupScope = settings.runtime.cleanup_scope || 'none';
-  const modelOptions = modelOptionsForSettings(settings);
   const hostedModelOptions = hostedModelOptionsForSettings(settings);
   const hostedTextModelOptions = hostedModelOptions.filter(modelSupportsTextOutput);
   const hostedSpeechModelOptions = hostedModelOptions.filter(modelSupportsSpeechOutput);
-  const selectedModel = selectedProviderDraft(settings).modelId;
-  const selectedOption = modelOptions.find((option) => option.model_id === state.draftModelId) || modelOptions[0] || null;
-  const modelDefaultReasoning = defaultReasoningForOption(selectedOption);
   const openHostedModel = openHostedModelId(settings, state);
-  const canSaveProvider = Boolean(
-    provider &&
-      state.draftModelId &&
-      !state.isSavingProvider &&
-      state.draftModelId !== selectedModel
-  );
 
   return `${userSettingsCardHtml(settings)}
-    ${agenticRuntimeSettingsCardHtml(settings.agentic_admin || null, state)}
-    ${usageHistoryCardHtml(state)}
-    ${settings.agentic_admin ? '' : agenticModelSettingsCardHtml(
-        provider,
-        modelOptions,
-        modelDefaultReasoning,
-        canSaveProvider,
-        activeRuntimeSessions.length,
-        runtimeSessions.length,
-        false,
-        state
-      )}
+    ${agenticRuntimeSettingsCardHtml(
+      settings.agentic_admin || null,
+      state,
+      settings.provider.execution_families,
+      settings.provider.native_agents?.items || []
+    )}
     ${hostedTextModelSettingsCardHtml(
       openHostedModel,
       hostedTextModelOptions,
@@ -279,6 +247,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
       settings,
       state
     )}
+    ${usageHistoryCardHtml(state)}
     ${speechModelSettingsCardHtml(
       hostedSpeechModelOptions,
       openHostedModel,
@@ -349,8 +318,11 @@ function hostedTextModelSettingsCardHtml(
   settings: PlatformSettings,
   state: SettingsPanelState
 ) {
+  const family = executionFamily('hosted_text', settings.provider.execution_families);
   return `<section class="settings-card settings-platform settings-hosted-text-model-settings-card">
-    ${modelSettingsHeadingHtml('route', 'Hosted text model settings')}
+    ${modelSettingsHeadingHtml('text_fields', family.label)}
+    <p class="settings-card-copy settings-runtime-family-description">${escapeHtml(family.description)}</p>
+    <p class="settings-agentic-contract-callout"><strong>${NO_WORKSPACE_ACTIONS_MESSAGE}</strong></p>
     ${hostedProviderSettingsListHtml({
       modelOptions: hostedModelOptions,
       openHostedModel,
@@ -358,7 +330,7 @@ function hostedTextModelSettingsCardHtml(
       settings,
       state,
       emptyMessage: 'No hosted text models are available from the active hosted providers.',
-      inactiveMessage: 'Activate a hosted text provider before selecting a fast model.'
+      inactiveMessage: 'Activate a text-only provider before selecting a model.'
     })}
   </section>`;
 }
@@ -371,25 +343,6 @@ function modelSettingsHeadingHtml(icon: string, title: string) {
         <h2>${escapeHtml(title)}</h2>
       </div>
     </div>`;
-}
-
-function agenticModelSettingsCardHtml(
-  provider: PlatformSettings['provider']['active_provider'] | null,
-  modelOptions: ProviderModelOption[],
-  modelDefaultReasoning: string,
-  canSaveProvider: boolean,
-  activeRuntimeSessionCount: number,
-  runtimeSessionCount: number,
-  isOpen: boolean,
-  state: SettingsPanelState
-) {
-  return `<section class="settings-card settings-platform settings-agentic-model-settings-card">
-    ${modelSettingsHeadingHtml('memory', 'Agentic model settings')}
-    <div class="settings-platform-provider-forms">
-      ${providerSettingsFormHtml(provider, modelOptions, modelDefaultReasoning, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, isOpen, state)}
-      ${providerSubscriptionUsageHtml(provider, state)}
-    </div>
-  </section>`;
 }
 
 function speechModelSettingsCardHtml(
@@ -441,9 +394,6 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
       );
     });
   });
-  document.getElementById('settings-provider-model')?.addEventListener('change', (event) => {
-    actions.onProviderModelChanged((event.currentTarget as HTMLSelectElement).value);
-  });
   document.getElementById('settings-speech-audio-model')?.addEventListener('change', (event) => {
     actions.onSpeechAudioModelChanged((event.currentTarget as HTMLSelectElement).value);
   });
@@ -482,7 +432,6 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
       );
     });
   });
-  document.getElementById('settings-save-provider')?.addEventListener('click', actions.onSaveProviderSettings);
   document.getElementById('settings-refresh-provider-usage')?.addEventListener('click', actions.onRefreshProviderUsage);
   document.getElementById('settings-refresh-usage-history')?.addEventListener('click', actions.onRefreshProviderUsage);
   document.querySelectorAll<HTMLButtonElement>('[data-hosted-provider-save]').forEach((button) => {
@@ -495,12 +444,28 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   });
 }
 
-function agenticRuntimeSettingsCardHtml(admin: AgenticAdminPayload | null, state: SettingsPanelState) {
+function agenticRuntimeSettingsCardHtml(
+  admin: AgenticAdminPayload | null,
+  state: SettingsPanelState,
+  projectedFamilies: ExecutionFamilyDefinition[] | undefined,
+  nativeAgents: NativeAgentStatus[]
+) {
   const visibleItems = admin?.items || [];
   const releaseDecision = admin?.release_decision || 'GO';
+  const nativeFamily = executionFamily('native_agent', projectedFamilies || admin?.execution_families);
+  const maverickFamily = executionFamily('maverick_agent', projectedFamilies || admin?.execution_families);
+  const nativeItems = visibleItems.filter((item) =>
+    item.execution_family === 'native_agent'
+      || (!item.execution_family && item.runtime_engine_id === 'codex')
+  );
+  const maverickItems = visibleItems.filter((item) => item.execution_family === 'maverick_agent');
+  const representedNativeIds = new Set(nativeItems.map((item) => item.runtime_engine_id));
+  const standaloneNativeAgents = nativeAgents.filter(
+    (item) => !representedNativeIds.has(item.runtime_engine_id)
+  );
   return `<section class="settings-card settings-platform settings-agentic-runtimes-card">
-    ${modelSettingsHeadingHtml('account_tree', 'Models')}
-    <p class="settings-card-copy">Choose which models are available for new chats. Open a model only for optional workspace controls.</p>
+    ${modelSettingsHeadingHtml('account_tree', 'Agent runtimes')}
+    <p class="settings-card-copy">Enable complete certified profiles for new chats. Execution family and Full Workspace status are derived from immutable server contracts.</p>
     ${releaseDecision === 'NO-GO' ? `<p class="settings-platform-error settings-agentic-no-go"><strong>Remote agentic release: NO-GO</strong><br>Remote profiles remain visible for containment review but cannot be enabled or selected.</p>` : ''}
     ${visibleItems.some((item) => item.runtime_engine_id === 'codex') ? `<div class="settings-models-toolbar">
       <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
@@ -508,13 +473,88 @@ function agenticRuntimeSettingsCardHtml(admin: AgenticAdminPayload | null, state
         Refresh limits
       </button>
     </div>` : ''}
+    ${runtimeFamilySectionHtml(
+      nativeFamily,
+      [
+        ...nativeItems.map((item) => agenticRuntimeBindingHtml(item, state)),
+        ...standaloneNativeAgents.map(nativeAgentInstallationHtml)
+      ],
+      'No native-agent runtime is registered by this installation.'
+    )}
+    ${runtimeFamilySectionHtml(
+      maverickFamily,
+      maverickItems.map((item) => agenticRuntimeBindingHtml(item, state)),
+      'No complete Maverick Agent profile is currently available.'
+    )}
+  </section>`;
+}
+
+function runtimeFamilySectionHtml(
+  family: ExecutionFamilyDefinition,
+  items: string[],
+  emptyMessage: string
+) {
+  return `<section class="settings-runtime-family" data-execution-family="${escapeAttr(family.family_id)}">
+    <header class="settings-runtime-family-heading">
+      <h3>${escapeHtml(family.label)}</h3>
+      <p>${escapeHtml(family.description)}</p>
+    </header>
     <div class="settings-agentic-runtime-list">
-      ${visibleItems.length ? visibleItems.map((item) => agenticRuntimeBindingHtml(item, state)).join('') : `<div class="settings-provider-usage-unavailable">
-        <span class="material-symbols-rounded" aria-hidden="true">block</span>
-        <span><strong>No agentic definitions</strong><small>No certified runtime definitions are published by this installation.</small></span>
+      ${items.length ? items.join('') : `<div class="settings-provider-usage-unavailable">
+        <span class="material-symbols-rounded" aria-hidden="true">info</span>
+        <span><strong>No available profiles</strong><small>${escapeHtml(emptyMessage)}</small></span>
       </div>`}
     </div>
   </section>`;
+}
+
+function nativeAgentInstallationHtml(item: NativeAgentStatus) {
+  const model = item.models[0];
+  const reason = item.unavailable_reason || 'native_agent_unavailable';
+  const available = item.selectable === true;
+  return `<details class="settings-model-accordion settings-agentic-runtime settings-native-runtime-installation">
+    <summary>
+      <span class="settings-model-summary-copy">
+        <span class="settings-kicker">${escapeHtml(item.availability === 'installed' ? 'Installed runtime' : 'Runtime not installed')}</span>
+        <strong>${escapeHtml(item.label)}</strong>
+        <small>${escapeHtml(model?.model_id || 'Model not certified')}</small>
+      </span>
+      <span class="settings-agentic-summary-badges">
+        <span class="settings-pill ${available ? 'is-healthy' : 'is-warning'}">${available ? 'Available' : escapeHtml(humanizeAgenticCode(reason))}</span>
+        <span class="settings-pill">Full Workspace · ${escapeHtml(item.full_workspace_status)}</span>
+      </span>
+    </summary>
+    <div class="settings-model-content settings-agentic-runtime-content">
+      ${nativeAgentMetadataHtml(item, model?.model_id)}
+      <p class="settings-platform-note">${available ? 'Runtime available; session selection still requires an enabled certified workspace profile.' : `Unavailable: ${escapeHtml(humanizeAgenticCode(reason))}`}</p>
+    </div>
+  </details>`;
+}
+
+function nativeAgentMetadataHtml(item: NativeAgentStatus, selectedModelId?: string) {
+  const model = item.models.find((candidate) => candidate.model_id === selectedModelId)
+    || item.models[0];
+  const update = [humanizeAgenticCode(item.update.status), item.update.detail]
+    .filter(Boolean)
+    .join(' · ');
+  const health = [humanizeAgenticCode(item.health), ...item.health_reason_codes.map(humanizeAgenticCode)]
+    .join(' · ');
+  return `<dl class="settings-agentic-metadata settings-native-agent-metadata">
+    ${metadataRowHtml('Installed / executable', `${item.installed ? 'yes' : 'no'} · ${item.executable_name || 'unavailable'}`)}
+    ${metadataRowHtml('Runtime / harness', `${item.runtime_version || 'unavailable'} · ${item.harness_recipe.id || 'unavailable'}@${item.harness_recipe.revision || 'unavailable'}`)}
+    ${metadataRowHtml('Native model / revision', `${model?.model_id || 'unavailable'} · ${model?.model_revision || model?.model_revision_policy || 'unavailable'}`)}
+    ${metadataRowHtml('Integration protocol', `${item.protocol.kind} · ${item.protocol.id}${item.protocol.version ? `@${item.protocol.version}` : ''}`)}
+    ${metadataRowHtml('Authentication', humanizeAgenticCode(item.authentication_status))}
+    ${metadataRowHtml('Native health / update', `${health || 'unknown'} · ${update || 'unknown'}`)}
+    ${metadataRowHtml('Full Workspace', `${item.full_workspace_status} · ${item.full_workspace_contract_revision || 'revision unavailable'}`)}
+    ${metadataRowHtml('Sandbox / approvals', `${item.effects.sandbox_policy_revision} · ${item.effects.approval_policy}`)}
+    ${metadataRowHtml('Effect observation', `workspace confined ${item.effects.workspace_confined ? 'yes' : 'no'} · process supervised ${item.effects.process_tree_supervised ? 'yes' : 'no'} · structured events ${item.effects.structured_effect_events ? 'yes' : 'no'}`)}
+    ${metadataRowHtml('Installation certificate / rollout', `${item.certification_state} · ${item.provider_status}`)}
+  </dl>`;
+}
+
+function metadataRowHtml(label: string, value: string) {
+  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
 }
 
 function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelState) {
@@ -528,24 +568,20 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
     allowed_agent_type_ids: []
   };
   const certificate = item.certificate;
-  const isRemote = item.runtime_engine_id !== 'codex';
+  const isRemote = item.execution_family === 'maverick_agent';
   const effectiveCapabilities = item.effective_capabilities;
   const contained = item.containment_status === 'NO-GO';
   const isSaving = state.savingAgenticBindings.has(key);
   const error = state.agenticBindingErrors[key] || '';
-  const toolEnabled = policy.tool_handle_mode !== 'none';
   const costDollars = policy.max_estimated_cost_microusd === null
     ? ''
     : String(policy.max_estimated_cost_microusd / 1_000_000);
   const credentials = item.credential_bindings;
   const selectedCredential = binding?.credential_binding_id || credentials[0]?.binding_id || '';
   const enabled = Boolean(binding?.enabled);
-  const available = !contained
-    && certificate?.effective_status === 'active'
-    && item.rollout_status !== 'disabled'
-    && item.rollout_status !== 'suspended'
-    && (!isRemote || effectiveCapabilities?.status === 'active');
-  const unavailableReason = item.blocked_reason
+  const available = item.selectable === true || (!enabled && item.enable_eligible === true);
+  const unavailableReason = item.enable_blocked_reason
+    || item.blocked_reason
     || (isRemote && effectiveCapabilities?.status !== 'active'
       ? effectiveCapabilities?.reason_code || 'effective capabilities unavailable'
       : '')
@@ -561,12 +597,13 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       </span>
       <span class="settings-agentic-summary-badges">
         ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}
+        <span class="settings-pill ${item.full_workspace_status === 'certified' ? 'is-healthy' : 'is-warning'}">Full Workspace · ${escapeHtml(item.full_workspace_status || 'unavailable')}</span>
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(unavailableReason))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
             data-agentic-definition-id="${escapeAttr(item.definition_id)}"
             data-agentic-definition-revision="${escapeAttr(item.definition_revision)}"
-            ${enabled ? 'checked' : ''} ${isSaving || (!available && !enabled) ? 'disabled' : ''}>
+            ${enabled ? 'checked' : ''} ${isSaving || (item.enable_eligible !== true && !enabled) ? 'disabled' : ''}>
           <span class="settings-bouncy-toggle__label">${enabled ? 'On' : 'Off'}</span>
           <span class="settings-bouncy-toggle__track" aria-hidden="true">
             <span class="settings-bouncy-toggle__inner"></span>
@@ -587,6 +624,10 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
           <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))} · Certificate ${escapeHtml(humanizeAgenticCode(certificate?.effective_status || 'missing'))} / ${escapeHtml(humanizeAgenticCode(item.certificate_eligibility))}</small>
         </span>
       </div>` : ''}
+      ${item.execution_family === 'native_agent' && item.native_runtime
+        ? nativeAgentMetadataHtml(item.native_runtime, item.model_id)
+        : ''}
+      ${agenticContractMetadataHtml(item)}
       ${agenticCapabilityStateHtml(item)}
       ${agenticModelUsageHtml(item, state)}
       <div class="settings-agentic-controls">
@@ -608,7 +649,6 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
             <summary>Advanced controls</summary>
             ${agenticCheckbox('allow_workspace_admins', 'Workspace administrators', actor.allow_workspace_admins, isSaving || contained)}
             ${agenticCheckbox('allow_workspace_members', 'Workspace members', actor.allowed_workspace_role_ids.includes('member'), isSaving || contained)}
-            ${agenticCheckbox('tool_access_enabled', `Allow tools (${policy.allowed_tool_handles.length || 0})`, toolEnabled, isSaving || contained)}
             ${agenticCheckbox('require_confirmation_for_mutating', 'Confirm mutating tools', policy.require_confirmation_for_mutating, isSaving || contained, item.profile_policy_ceiling.require_confirmation_for_mutating)}
             ${agenticCheckbox('require_confirmation_for_destructive', 'Confirm destructive tools', policy.require_confirmation_for_destructive, isSaving || contained, item.profile_policy_ceiling.require_confirmation_for_destructive)}
           </details>
@@ -621,6 +661,30 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       ${error ? `<p class="settings-platform-error" role="alert">${escapeHtml(error)}</p>` : ''}
     </div>
   </details>`;
+}
+
+function agenticContractMetadataHtml(item: AgenticAdminItem) {
+  const recipe = item.harness_recipe;
+  const certificate = item.certificate;
+  const upstream = item.upstream_provider_ids.join(', ') || 'direct';
+  const quantization = item.routing_constraint.allowed_quantizations.join(', ') || 'provider default';
+  const modelRevision = item.model_revision || item.model_revision_policy || 'provider alias';
+  const reasoningModes = (item.supported_reasoning_efforts || [])
+    .map((option) => option.label || option.effort)
+    .join(', ') || 'none certified';
+  return `<dl class="settings-agentic-metadata">
+    ${metadataRowHtml('Provider → model', `${item.model_provider_id} → ${item.model_id} · ${modelRevision}`)}
+    ${metadataRowHtml('Endpoint / upstream', `${item.routing_constraint.endpoint_id} · ${upstream} · ${quantization}`)}
+    ${metadataRowHtml('Adapter / protocol', `${item.adapter_id}${item.adapter_version_constraint} · ${item.provider_protocol}${item.provider_api_version ? `@${item.provider_api_version}` : ''}`)}
+    ${metadataRowHtml('Agent profile', `${item.definition_id}@${item.definition_revision} · ${item.profile_status}`)}
+    ${metadataRowHtml('Harness recipe', `${recipe.id || 'unavailable'}@${recipe.revision || 'unavailable'} · ${recipe.digest || 'digest unavailable'}`)}
+    ${metadataRowHtml('Reasoning modes / default', `${reasoningModes} · ${item.default_reasoning_effort || 'none'}`)}
+    ${metadataRowHtml('Full Workspace', `${item.full_workspace_status} · ${item.full_workspace_contract_revision || 'revision unavailable'}`)}
+    ${metadataRowHtml('Data policy', `collection ${item.data_policy.collection} · retention ${item.data_policy.retention || 'provider contract'} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'}`)}
+    ${metadataRowHtml('Context / output / cost', `${item.profile_policy_ceiling.max_input_tokens} / ${item.profile_policy_ceiling.max_output_tokens} tokens · ${item.profile_policy_ceiling.max_estimated_cost_microusd === null ? 'no profile cost ceiling' : `${item.profile_policy_ceiling.max_estimated_cost_microusd} µUSD`}`)}
+    ${metadataRowHtml('Certificate', `${certificate?.certificate_id || 'missing'} · suite ${certificate?.suite_id || 'unavailable'}@${certificate?.suite_version || 'unavailable'} · expires ${certificate?.expires_at || 'unavailable'}`)}
+    ${metadataRowHtml('Health / preflight', `${item.health} · ${item.live_preflight_status || 'unavailable'}${item.blocked_reason ? ` · ${humanizeAgenticCode(item.blocked_reason)}` : ''}`)}
+  </dl>`;
 }
 
 function agenticCapabilityStateHtml(item: AgenticAdminItem): string {
@@ -656,7 +720,7 @@ function agenticWorkspaceDeclarationHtml(item: AgenticAdminItem): string {
   const scope = attestation?.scope
     ? ` · scope ${escapeHtml(attestation.scope.resource_prefixes.join(', ') || 'workspace')}`
     : '';
-  return `<small>Workspace declaration (read-only): ${escapeHtml(state)}${revision}${scope}</small>`;
+  return `<small>Workspace data declaration (informational): ${escapeHtml(state)}${revision}${scope}</small>`;
 }
 
 function agenticCheckbox(field: string, label: string, checked: boolean, disabled: boolean, forced = false) {
@@ -711,94 +775,6 @@ function humanizeAgenticCode(value: string) {
   return value.replace(/[._-]+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function providerSettingsFormHtml(
-  provider: PlatformSettings['provider']['active_provider'] | null,
-  modelOptions: ProviderModelOption[],
-  modelDefaultReasoning: string,
-  canSaveProvider: boolean,
-  activeRuntimeSessionCount: number,
-  runtimeSessionCount: number,
-  isOpen: boolean,
-  state: SettingsPanelState
-) {
-  return `<details class="settings-model-accordion settings-agentic-provider-accordion" data-settings-model-accordion="agentic-provider" data-agentic-provider-accordion ${isOpen ? 'open' : ''}>
-    <summary class="settings-model-trigger">
-      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">memory</span>
-      <span class="settings-model-copy">
-        <span class="settings-model-kicker">
-          <span class="settings-kicker">Agentic provider</span>
-        </span>
-        <strong>${escapeHtml(provider?.label || 'Provider not loaded')}</strong>
-        <small>${escapeHtml(state.draftModelId || 'model')} · per-chat reasoning · Codex tools/filesystem/MCP · ${activeRuntimeSessionCount} active / ${runtimeSessionCount} in scope</small>
-      </span>
-      <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
-    </summary>
-    <div class="settings-model-content settings-agentic-provider-content">
-    <label class="settings-platform-field">
-      <span>Model</span>
-      <select id="settings-provider-model" ${!modelOptions.length || state.isSavingProvider ? 'disabled' : ''}>
-        ${modelOptions.map((option) => `<option value="${escapeAttr(option.model_id)}" ${option.model_id === state.draftModelId ? 'selected' : ''}>${escapeHtml(option.label || option.model_id)}</option>`).join('')}
-      </select>
-    </label>
-    <p class="settings-card-copy">Reasoning is selected per chat. This model defaults to ${escapeHtml(modelDefaultReasoning || 'provider default')}.</p>
-    <button type="button" id="settings-save-provider" ${canSaveProvider ? '' : 'disabled'}>
-      <span class="material-symbols-rounded" aria-hidden="true">${state.isSavingProvider ? 'sync' : 'save'}</span>
-      ${state.isSavingProvider ? 'Saving' : 'Save model'}
-    </button>
-    ${state.providerError ? `<p class="settings-platform-error">${escapeHtml(state.providerError)}</p>` : ''}
-    </div>
-  </details>`;
-}
-
-function providerSubscriptionUsageHtml(
-  provider: PlatformSettings['provider']['active_provider'] | null,
-  state: SettingsPanelState
-) {
-  if (!provider?.capabilities?.supports_subscription_usage) {
-    return '';
-  }
-  const usage = state.providerUsageItems.find((item) => item.provider_id === provider.provider_id) || null;
-  const plan = usage?.plan_type ? usage.plan_type.replace(/[_-]+/g, ' ') : '';
-  const refreshIcon = state.isLoadingProviderUsage ? 'sync' : 'refresh';
-  let content = '';
-  if (state.isLoadingProviderUsage && !usage) {
-    content = `<div class="settings-provider-usage-loading" role="status">
-      <div data-provider-usage-gauge="0" data-provider-usage-indeterminate="true"></div>
-      <span><strong>Reading subscription limits</strong><small>Refreshing usage directly from ${escapeHtml(provider.label)}.</small></span>
-    </div>`;
-  } else if (state.providerUsageError) {
-    content = providerUsageUnavailableHtml('The current subscription usage could not be refreshed.');
-  } else if (usage && !usage.available) {
-    content = providerUsageUnavailableHtml(providerUsageUnavailableMessage(usage.unavailable_reason));
-  } else if (!usage) {
-    content = providerUsageUnavailableHtml('Usage has not been loaded yet.');
-  } else if (!usage.limits.length) {
-    content = providerUsageUnavailableHtml('This subscription did not report any active usage windows.');
-  } else {
-    content = `<div class="settings-provider-usage-limits">
-      ${usage.limits.map(providerUsageLimitHtml).join('')}
-    </div>`;
-  }
-  return `<section class="settings-provider-usage" aria-labelledby="settings-provider-usage-title">
-    <div class="settings-provider-usage-heading">
-      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">speed</span>
-      <span class="settings-provider-usage-title">
-        <span class="settings-model-kicker">
-          <span class="settings-kicker">Subscription usage</span>
-          ${plan ? `<span class="settings-provider-usage-plan">${escapeHtml(plan)}</span>` : ''}
-        </span>
-        <strong id="settings-provider-usage-title">Usage limits</strong>
-        <small>${usage?.available ? `Updated ${escapeHtml(formatUsageTimestamp(usage.fetched_at))}` : 'Account-level usage, read securely by Maverick Core'}</small>
-      </span>
-      <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
-        <span class="material-symbols-rounded ${state.isLoadingProviderUsage ? 'is-spinning' : ''}" aria-hidden="true">${refreshIcon}</span>
-        Refresh
-      </button>
-    </div>
-    ${content}
-  </section>`;
-}
-
 function providerUsageLimitHtml(limit: ProviderUsageLimit) {
   const windows = [
     { label: limit.secondary_window ? 'Primary window' : '', window: limit.primary_window },
@@ -828,16 +804,6 @@ function providerUsageUnavailableHtml(message: string) {
   </div>`;
 }
 
-function providerUsageUnavailableMessage(reason: string | null) {
-  if (reason === 'authentication_required') {
-    return 'Sign in to Codex on the Maverick host to read subscription usage.';
-  }
-  if (reason === 'usage_not_reported') {
-    return 'The provider did not report a subscription usage window.';
-  }
-  return 'The provider usage service is temporarily unavailable.';
-}
-
 function formatUsageWindow(seconds: number | null) {
   if (!seconds || seconds <= 0) return '';
   if (seconds % 86400 === 0) {
@@ -864,11 +830,6 @@ function formatUsageReset(window: ProviderUsageWindow) {
     return `resets ${new Date(window.reset_at_epoch_seconds * 1000).toLocaleString()}`;
   }
   return '';
-}
-
-function formatUsageTimestamp(value: string) {
-  const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime()) ? 'recently' : timestamp.toLocaleString();
 }
 
 function hostedProviderSettingsListHtml({
@@ -949,9 +910,9 @@ function hostedProviderModelAccordionHtml(
       (modelProviderId !== selectedHostedProviderId || modelId !== selectedHostedModelId || hostedRoutingChanged(state, settings, modelId))
   );
   const isTextOutputModel = modelSupportsTextOutput(option);
-  const modelKindLabel = isTextOutputModel ? 'Hosted chat / fast model' : 'Hosted speech model';
+  const modelKindLabel = isTextOutputModel ? 'Text-only model' : 'Hosted speech model';
   const modelRuntimeLabel = isTextOutputModel
-    ? 'plain hosted chat capable · runtime engine remains Codex'
+    ? NO_WORKSPACE_ACTIONS_MESSAGE
     : 'speech synthesis metadata · not used by plain hosted chat';
   const modelIcon = isTextOutputModel ? 'bolt' : 'record_voice_over';
   const isOpen = modelId === openHostedModel;
@@ -973,6 +934,7 @@ function hostedProviderModelAccordionHtml(
         <span>Model</span>
         <code class="settings-model-code">${escapeHtml(modelId || 'model not selected')}</code>
       </div>
+    ${isTextOutputModel ? textOnlyProfileMetadataHtml(option, providerLabel, modelProviderStatus) : ''}
     ${
       hasOpenRouterRouting
         ? `
@@ -1032,11 +994,34 @@ function hostedProviderModelAccordionHtml(
     }
     <button type="button" data-hosted-provider-save="${escapeAttr(modelId)}" ${canSaveProvider ? '' : 'disabled'}>
       <span class="material-symbols-rounded" aria-hidden="true">${isSavingThisModel ? 'sync' : 'save'}</span>
-      ${isSavingThisModel ? 'Saving' : 'Save hosted model'}
+      ${isSavingThisModel ? 'Saving' : isTextOutputModel ? 'Save text-only model' : 'Save hosted model'}
     </button>
     ${state.hostedProviderError && state.hostedProviderErrorModelId === modelId ? `<p class="settings-platform-error">${escapeHtml(state.hostedProviderError)}</p>` : ''}
     </div>
   </details>`;
+}
+
+function textOnlyProfileMetadataHtml(
+  option: ProviderModelOption,
+  providerLabel: string,
+  providerStatus: string
+) {
+  const item = option.hosted_text_profile;
+  const profile = item?.profile;
+  const cost = item?.cost && Object.keys(item.cost).length
+    ? JSON.stringify(item.cost)
+    : 'provider contract';
+  return `<div class="settings-agentic-contract-callout settings-text-only-callout">
+    <strong>${NO_WORKSPACE_ACTIONS_MESSAGE}</strong>
+    <dl class="settings-agentic-metadata">
+      ${metadataRowHtml('Provider / model', `${providerLabel} → ${option.model_id}`)}
+      ${metadataRowHtml('Profile', profile ? `${profile.profile_id}@${profile.revision}` : 'profile unavailable')}
+      ${metadataRowHtml('Input modalities', (profile?.input_modalities || option.input_modalities || ['text']).join(', ') || 'text')}
+      ${metadataRowHtml('Context / output limit', `${profile?.context_limit_tokens || 'provider limit'} / ${profile?.output_limit_tokens || 'provider limit'} tokens`)}
+      ${metadataRowHtml('Cost / retention', `${cost} · ${profile?.retention_policy || 'provider contract'}`)}
+      ${metadataRowHtml('Status', `${item?.status.status || providerStatus || 'unavailable'}${item?.unavailable_reason ? ` · ${humanizeAgenticCode(item.unavailable_reason)}` : ''}`)}
+    </dl>
+  </div>`;
 }
 
 function hostedProviderModelGroups(

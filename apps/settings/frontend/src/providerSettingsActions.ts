@@ -1,5 +1,4 @@
 import {
-  configureActiveProvider,
   configureHostedProvider,
   configureSpeechProvider,
   getPlatformSettings,
@@ -19,33 +18,6 @@ type ProviderSettingsActionContext = {
   settings: PlatformSettings | null;
   state: SettingsPanelState;
 };
-
-export async function saveActiveProviderSettings(context: ProviderSettingsActionContext) {
-  const providerId = context.settings?.provider.active_provider?.provider_id;
-  if (!providerId || !context.state.draftModelId) {
-    context.state.providerError = 'Provider not loaded.';
-    context.render();
-    return;
-  }
-  context.state.isSavingProvider = true;
-  context.state.providerError = '';
-  context.render();
-  try {
-    await configureActiveProvider({
-      provider_id: providerId,
-      model_id: context.state.draftModelId
-    });
-    const settings = await getPlatformSettings();
-    context.setSettings(settings);
-    syncSettingsPanelDraft(context.state, settings);
-    context.setNotice({ tone: 'success', message: 'Provider settings updated.' });
-  } catch (error) {
-    context.state.providerError = error instanceof Error ? error.message : 'Unable to update provider settings.';
-  } finally {
-    context.state.isSavingProvider = false;
-    context.render();
-  }
-}
 
 export async function saveHostedProviderSettings(context: ProviderSettingsActionContext) {
   const providerId = hostedProviderIdForModel(context.settings, context.state.hostedDraftModelId);

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from core.providers.agentic_models import WorkspaceAgenticProfileBinding, default_actor_selection_policy
 from core.providers.agentic_profiles import publish_codex_agentic_profile
@@ -93,7 +94,15 @@ class RemoteAgenticContainmentFixture:
             codex_certificate.certificate_id
         )
 
-        self.remote_definition = ensure_google_agentic_preview_profile(self.provider_store, adapter=object(), now=NOW)
+        self.remote_definition = ensure_google_agentic_preview_profile(
+            self.provider_store,
+            adapter=SimpleNamespace(
+                runtime_engine_id="maverick-tool-loop",
+                adapter_id="maverick-hosted-tool-loop",
+                adapter_version="35",
+            ),
+            now=NOW,
+        )
         self.remote_binding = self.provider_store.save_workspace_agentic_profile_binding(
             WorkspaceAgenticProfileBinding(
                 binding_id="binding-google-enabled",

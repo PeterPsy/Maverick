@@ -7,7 +7,6 @@ import {
   createSettingsPanelState,
   settingsPanelHtml,
   syncSettingsPanelDraft,
-  updateDraftModel,
   updateHostedDraftModel,
   updateHostedProviderRoutingDraft,
   updateSpeechAudioModel,
@@ -27,7 +26,7 @@ import { bindSettingsEvents } from './bindEvents';
 import { escapeHtml } from './html';
 import { createPersistenceController } from './persistenceController';
 import { persistenceMigrationModalHtml } from './persistencePage';
-import { saveActiveProviderSettings, saveHostedProviderSettings, saveSpeechProviderSettings } from './providerSettingsActions';
+import { saveHostedProviderSettings, saveSpeechProviderSettings } from './providerSettingsActions';
 import { mountUsageVisualizations, unmountUsageVisualizations } from './components/usageVisualizations';
 import { createProviderUsageController } from './providerUsageController';
 import { noticeHtml, type SettingsNotice } from './notice';
@@ -513,10 +512,6 @@ function bindEvents() {
       render();
     },
     saveAgenticBindingFromPanel: agenticBindingController.save,
-    onProviderModelChanged: (modelId) => {
-      updateDraftModel(settingsPanelState, modelId);
-      render();
-    },
     onSpeechAudioModelChanged: (modelId) => {
       updateSpeechAudioModel(settingsPanelState, modelId);
       render();
@@ -536,7 +531,6 @@ function bindEvents() {
       }
       return saveHostedProviderSettings(providerSettingsActionContext());
     },
-    saveProviderSettingsFromPanel: () => saveActiveProviderSettings(providerSettingsActionContext()),
     saveSpeechProviderSettingsFromPanel: () => saveSpeechProviderSettings(providerSettingsActionContext()),
     selectedUser,
     selectUser: (userId) => {

@@ -14,6 +14,7 @@ export type AgenticEgressPolicy = {
 export type AgenticDataPolicy = {
   collection: string;
   require_zdr: boolean;
+  retention?: string;
   attestation_state: "not_attested" | "active" | "revoked" | "invalid";
   attestation: {
     state: "not_attested" | "active" | "revoked" | "invalid";
@@ -97,6 +98,14 @@ export type AgenticSessionGovernance = {
   workspace_binding_id: string;
   workspace_binding_revision: number;
   runtime_engine_id: string;
+  execution_family?: "native_agent" | "maverick_agent" | null;
+  execution_family_projection?: {
+    stored_value: string | null;
+    legacy_identity_projected: boolean;
+  };
+  full_workspace_status?: "certified" | "unavailable";
+  full_workspace_contract_revision?: string | null;
+  harness_recipe?: AgenticHarnessRecipe;
   model_provider_id: string;
   model_id: string;
   rollout_status: string | null;
@@ -141,6 +150,112 @@ export type ProviderItem = {
   supported_reasoning_efforts?: ProviderReasoningOption[];
   input_modalities?: string[];
   output_modalities?: string[];
+  execution_family?: ExecutionFamilyId;
+  execution_family_label?: string;
+  execution_family_description?: string;
+  execution_family_order?: number;
+  selectable?: boolean;
+  unavailable_reason?: string | null;
+  full_workspace_status?: "certified" | "unavailable";
+  full_workspace_contract_revision?: string | null;
+  harness_recipe?: AgenticHarnessRecipe | null;
+  provider_detail?: string | null;
+  profile_detail?: string | null;
+  legacy_selection_ids?: string[];
+  hosted_text_profile?: HostedTextProfileItem | null;
+};
+
+export type ExecutionFamilyId = "native_agent" | "maverick_agent" | "hosted_text";
+
+export type ExecutionFamilyItem = {
+  family_id: ExecutionFamilyId;
+  label: string;
+  description: string;
+  workspace_actions: boolean;
+};
+
+export type AgenticHarnessRecipe = {
+  id?: string | null;
+  revision?: string | null;
+  digest?: string | null;
+  provider_capability_catalog_digest?: string | null;
+};
+
+export type HostedTextProfileItem = {
+  profile: {
+    profile_id: string;
+    revision: string;
+    display_name: string;
+    execution_family: "hosted_text";
+    provider_id: string;
+    model_id: string;
+    model_revision: string | null;
+    model_revision_policy: "exact" | "provider_alias";
+    provider_protocol: string;
+    provider_api_version: string | null;
+    endpoint_id: string;
+    input_modalities: string[];
+    output_modalities: string[];
+    context_limit_tokens: number | null;
+    output_limit_tokens: number | null;
+    cost_policy: string;
+    retention_policy: string;
+    data_destination: string;
+  };
+  status: {
+    status: "available" | "disabled" | "unavailable";
+    reason_code: string | null;
+  };
+  certificate: {
+    certificate_id: string;
+    certificate_kind: "hosted_text_capability";
+    workspace_tools: false;
+    action_loop: false;
+    workspace_actions: false;
+  };
+  provider: { provider_id: string; label: string; status: string };
+  cost?: Record<string, unknown>;
+  selectable: boolean;
+  unavailable_reason: string | null;
+  workspace_actions_message: string;
+};
+
+export type NativeAgentItem = {
+  runtime_engine_id: string;
+  label: string;
+  description: string;
+  execution_family: "native_agent";
+  provider_status: string;
+  availability: "installed" | "not_installed" | "unknown";
+  installed: boolean;
+  executable_name: string | null;
+  runtime_version: string | null;
+  health: string;
+  health_reason_codes: string[];
+  update: { status: string; detail: string | null };
+  adapter: { id: string; version: string; trusted_distribution: string };
+  harness_recipe: AgenticHarnessRecipe;
+  protocol: { kind: string; id: string; version: string | null; event_schema: string };
+  authentication_status: string;
+  models: Array<{
+    provider_id: string;
+    model_id: string;
+    model_revision: string | null;
+    model_revision_policy: string;
+  }>;
+  effects: {
+    mode: string;
+    workspace_confined: boolean;
+    process_tree_supervised: boolean;
+    structured_effect_events: boolean;
+    sandbox_policy_revision: string;
+    approval_policy: string;
+  };
+  certification_state: string;
+  full_workspace_status: "certified" | "unavailable";
+  full_workspace_contract_revision: string | null;
+  selectable: boolean;
+  unavailable_reason: string | null;
 };
 
 export type ProviderReasoningOption = {
@@ -182,6 +297,8 @@ export type HostedTextProviderStatus = {
   selection: HostedProviderSelection | null;
   model_settings: ProviderModelSettings | null;
   available_providers: ProviderItem[];
+  profiles?: HostedTextProfileItem[];
+  workspace_actions_message?: string;
   route_preview?: {
     selected_provider_id: string | null;
     selected_model_id_or_voice_id: string | null;
@@ -193,6 +310,7 @@ export type HostedTextProviderStatus = {
 
 export type ProviderPayload = {
   workspace_id: string;
+  execution_families?: ExecutionFamilyItem[];
   configured?: boolean;
   active_provider: ProviderItem | null;
   hosted_text?: HostedTextProviderStatus | null;
@@ -204,6 +322,21 @@ export type ProviderPayload = {
     default_binding_id: string | null;
     items: AgenticProfileItem[];
   } | null;
+  native_agents?: { items: NativeAgentItem[] } | null;
+  selection_migration?: {
+    schema_version: string;
+    mode: "projection_only";
+    persisted_records_mutated: false;
+    pinned_sessions_rewritten: false;
+    records: Array<{
+      source_kind: string;
+      source_profile: string;
+      source_id: string;
+      execution_family: ExecutionFamilyId | null;
+      canonical_selection_id: string | null;
+      storage_action: "preserved";
+    }>;
+  };
 };
 
 export type AgenticProfileItem = {
@@ -214,12 +347,21 @@ export type AgenticProfileItem = {
   runtime_engine_id: string;
   model_provider_id: string;
   model_id: string;
+  model_revision?: string | null;
+  model_revision_policy?: string;
   default_reasoning_effort?: string | null;
   supported_reasoning_efforts?: ProviderReasoningOption[];
   rollout_status: string | null;
   enabled: boolean;
   is_default: boolean;
   selectable?: boolean;
+  unavailable_reason?: string | null;
+  execution_family?: "native_agent" | "maverick_agent" | null;
+  family_contract_status?: string;
+  family_contract_reason?: string | null;
+  full_workspace_status?: "certified" | "unavailable";
+  full_workspace_contract_revision?: string | null;
+  harness_recipe?: AgenticHarnessRecipe;
   containment_status?: "GO" | "NO-GO";
   containment_reason?: string | null;
   certificate_eligibility?: string;

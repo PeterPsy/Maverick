@@ -6,12 +6,26 @@ import type {
   ProviderReasoningOption,
 } from "../api/client";
 import type { AgentRuntimeConfig } from "../hooks/useMessageSubmission";
+import {
+  EXECUTION_FAMILY_CATALOG,
+  NO_WORKSPACE_ACTIONS_MESSAGE,
+} from "./executionFamilies";
 
 export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem[] {
   const options: ProviderItem[] = [];
+  const familyCatalog = new Map(
+    (payload.execution_families?.length
+      ? payload.execution_families
+      : EXECUTION_FAMILY_CATALOG
+    ).map((family, index) => [family.family_id, { ...family, index }]),
+  );
   const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
     (profile) =>
       profile.selectable === true &&
+      (profile.execution_family === "native_agent" || profile.execution_family === "maverick_agent") &&
+      profile.family_contract_status === "complete" &&
+      profile.full_workspace_status === "certified" &&
+      nativeProfileRuntimeReady(payload, profile) &&
       profile.containment_status !== "NO-GO" &&
       profile.enabled &&
       profile.certified === true &&
@@ -28,7 +42,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
         const modelProvider = providerForAgenticProfile(payload, profile);
         const model = modelProvider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
         const reasoning = reasoningForAgenticProfile(payload, profile);
-        return {
+        return decorateExecutionFamily({
           ...(engine || {
             description: "Pinned agentic runtime profile",
             label: model?.label || profile.model_id,
@@ -58,6 +72,15 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           agentic_egress_policy: profile.egress_policy || null,
           agentic_data_policy: profile.data_policy || null,
           agentic_effective_capabilities: profile.effective_capabilities || null,
+          execution_family: profile.execution_family || undefined,
+          selectable: true,
+          unavailable_reason: null,
+          full_workspace_status: profile.full_workspace_status,
+          full_workspace_contract_revision: profile.full_workspace_contract_revision || null,
+          harness_recipe: profile.harness_recipe || null,
+          provider_detail: agenticProviderDetail(profile),
+          profile_detail: agenticProfileDetail(profile),
+          legacy_selection_ids: [profile.workspace_profile_binding_id],
           capabilities: {
             ...(engine?.capabilities || {}),
             supports_skills: profile.effective_capabilities?.capabilities.skill_catalog === true,
@@ -65,23 +88,89 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           input_modalities: profile.effective_capabilities?.capabilities.attachment_modalities || [],
           default_reasoning_effort: reasoning.defaultEffort,
           supported_reasoning_efforts: reasoning.options,
-        };
+        }, profile.execution_family!, familyCatalog);
       }),
     );
-  } else if (payload.active_provider && providerIsActive(payload.active_provider)) {
-    options.push(payload.active_provider);
+  } else if (
+    (!payload.agentic_profiles || !(payload.agentic_profiles.items || []).length)
+    && payload.active_provider
+    && providerIsActive(payload.active_provider)
+  ) {
+    const fallbackFamily = payload.active_provider.provider_id === "codex"
+      && payload.active_provider.provider_role === "runtime_engine"
+      && payload.active_provider.kind === "runtime_backend"
+      ? "native_agent"
+      : null;
+    const nativeRuntime = payload.native_agents?.items.find(
+      (item) => item.runtime_engine_id === payload.active_provider?.provider_id,
+    );
+    if (fallbackFamily && (!payload.native_agents || nativeRuntime?.selectable === true)) {
+      options.push(decorateExecutionFamily(
+        { ...payload.active_provider, execution_family: fallbackFamily, selectable: true },
+        fallbackFamily,
+        familyCatalog,
+      ));
+    }
   }
 
   const hostedProviders = hostedTextProviders(payload.hosted_text);
   if (hostedProviders.length) {
-    options.push(...hostedProviders.flatMap((provider) => hostedModelProviderItems(payload.hosted_text, provider)));
+    options.push(...hostedProviders.flatMap((provider) =>
+      hostedModelProviderItems(payload.hosted_text, provider).map((item) =>
+        decorateExecutionFamily(item, "hosted_text", familyCatalog),
+      ),
+    ));
   }
 
-  if (!options.length) {
+  if (
+    !options.length
+    && !payload.execution_families?.length
+    && !payload.agentic_profiles
+    && !payload.hosted_text
+  ) {
     options.push(...(payload.items || payload.available_providers || []).filter(providerIsSelectable));
   }
 
-  return dedupeProviders(options);
+  return applySelectionMigrationAliases(
+    dedupeProviders(options),
+    payload.selection_migration?.records || [],
+  );
+}
+
+function nativeProfileRuntimeReady(payload: ProviderPayload, profile: AgenticProfileItem): boolean {
+  if (profile.execution_family !== "native_agent" || !payload.native_agents) {
+    return true;
+  }
+  return payload.native_agents.items.some(
+    (item) => item.runtime_engine_id === profile.runtime_engine_id && item.selectable,
+  );
+}
+
+function decorateExecutionFamily(
+  provider: ProviderItem,
+  familyId: "native_agent" | "maverick_agent" | "hosted_text",
+  catalog: Map<string, { label: string; description: string; index: number }>,
+): ProviderItem {
+  const family = catalog.get(familyId);
+  return {
+    ...provider,
+    execution_family: familyId,
+    execution_family_label: family?.label,
+    execution_family_description: family?.description,
+    execution_family_order: family?.index,
+  };
+}
+
+function agenticProviderDetail(profile: AgenticProfileItem): string {
+  const destination = profile.data_destination?.display_label || profile.model_provider_id;
+  return `Provider: ${profile.model_provider_id} · Destination: ${destination}`;
+}
+
+function agenticProfileDetail(profile: AgenticProfileItem): string {
+  const recipe = profile.harness_recipe?.id
+    ? `${profile.harness_recipe.id}@${profile.harness_recipe.revision || "unversioned"}`
+    : "unavailable";
+  return `Profile: ${profile.definition_id}@${profile.definition_revision} · Recipe: ${recipe} · Full Workspace: ${profile.full_workspace_contract_revision || "unavailable"}`;
 }
 
 function reasoningForAgenticProfile(
@@ -133,7 +222,7 @@ export function hostedProviderRuntimeConfig(provider: ProviderItem | null | unde
     skill_activation_mode: "explicit",
     source_app_id: "chat",
     system_prompt: "",
-    title: provider?.label || "Hosted chat",
+    title: provider?.label || "Text-only model",
   };
 }
 
@@ -169,6 +258,8 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
     return left.label.localeCompare(right.label);
   });
   if (!sortedModels.length) {
+    const profile = hostedTextProfile(status, provider.provider_id, selectedModelId || provider.default_model_family || "");
+    const profileMissing = Boolean(status?.profiles && !profile);
     return [
       {
         ...provider,
@@ -177,20 +268,48 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
         hosted_model_id: selectedModelId || provider.default_model_family || "",
         label: selectedModelId || "Hosted model",
         description: provider.label || provider.provider_id,
+        execution_family: "hosted_text",
+        selectable: profile?.selectable ?? !profileMissing,
+        unavailable_reason: profile?.unavailable_reason || (profileMissing ? "hosted_text_profile_missing" : null),
+        hosted_text_profile: profile,
+        provider_detail: `Provider: ${provider.label || provider.provider_id}`,
+        profile_detail: NO_WORKSPACE_ACTIONS_MESSAGE,
+        legacy_selection_ids: [`fast_model:${provider.provider_id}:${encodeURIComponent(selectedModelId)}`],
       },
     ];
   }
-  return sortedModels.map((model) => ({
-    ...provider,
-    provider_id: hostedRuntimeOptionId(provider.provider_id, model.model_id),
-    hosted_provider_id: provider.provider_id,
-    hosted_model_id: model.model_id,
-    default_model_family: model.model_id,
-    label: model.label || model.model_id,
-    description: provider.label || provider.provider_id,
-    input_modalities: model.input_modalities || [],
-    output_modalities: model.output_modalities || [],
-  }));
+  return sortedModels.map((model) => {
+    const profile = hostedTextProfile(status, provider.provider_id, model.model_id);
+    const profileMissing = Boolean(status?.profiles && !profile);
+    return {
+      ...provider,
+      provider_id: hostedRuntimeOptionId(provider.provider_id, model.model_id),
+      hosted_provider_id: provider.provider_id,
+      hosted_model_id: model.model_id,
+      default_model_family: model.model_id,
+      label: model.label || model.model_id,
+      description: provider.label || provider.provider_id,
+      input_modalities: model.input_modalities || [],
+      output_modalities: model.output_modalities || [],
+      execution_family: "hosted_text" as const,
+      selectable: profile?.selectable ?? !profileMissing,
+      unavailable_reason: profile?.unavailable_reason || (profileMissing ? "hosted_text_profile_missing" : null),
+      hosted_text_profile: profile,
+      provider_detail: `Provider: ${provider.label || provider.provider_id}`,
+      profile_detail: NO_WORKSPACE_ACTIONS_MESSAGE,
+      legacy_selection_ids: [`fast_model:${provider.provider_id}:${encodeURIComponent(model.model_id)}`],
+    };
+  });
+}
+
+function hostedTextProfile(
+  status: HostedTextProviderStatus | null | undefined,
+  providerId: string,
+  modelId: string,
+) {
+  return (status?.profiles || []).find(
+    (item) => item.profile.provider_id === providerId && item.profile.model_id === modelId,
+  ) || null;
 }
 
 function modelSupportsPlainHostedChat(model: { output_modalities?: string[] | null }): boolean {
@@ -207,7 +326,55 @@ function providerIsActive(provider: ProviderItem): boolean {
 }
 
 function providerIsSelectable(provider: ProviderItem): boolean {
-  return providerIsActive(provider) && (provider.provider_role === "runtime_engine" || providerUsesPlainHostedRuntime(provider));
+  return provider.selectable !== false
+    && providerIsActive(provider)
+    && (provider.provider_role === "runtime_engine" || providerUsesPlainHostedRuntime(provider));
+}
+
+function applySelectionMigrationAliases(
+  providers: ProviderItem[],
+  records: Array<{ source_id: string; canonical_selection_id: string | null }>,
+): ProviderItem[] {
+  return providers.map((provider) => {
+    const aliases = records
+      .filter((record) => record.canonical_selection_id === provider.provider_id)
+      .map((record) => record.source_id);
+    return aliases.length
+      ? {
+        ...provider,
+        legacy_selection_ids: Array.from(new Set([...(provider.legacy_selection_ids || []), ...aliases])),
+      }
+      : provider;
+  });
+}
+
+export function migrateLegacyProviderSelectionId(
+  selectionId: string,
+  providers: ProviderItem[],
+): string | null {
+  const normalized = selectionId.trim();
+  if (!normalized) {
+    return null;
+  }
+  const exact = providers.find((provider) => provider.provider_id === normalized);
+  if (exact) {
+    return exact.provider_id;
+  }
+  const aliases = providers.filter((provider) =>
+    provider.legacy_selection_ids?.includes(normalized),
+  );
+  return aliases.length === 1 ? aliases[0].provider_id : null;
+}
+
+export function initialProviderSelectionId(
+  requestedSelectionId: string | null,
+  providers: ProviderItem[],
+): string {
+  const selectableProviders = providers.filter(providerIsSelectable);
+  if (requestedSelectionId !== null) {
+    return migrateLegacyProviderSelectionId(requestedSelectionId, selectableProviders) || "";
+  }
+  return selectableProviders[0]?.provider_id || "";
 }
 
 function dedupeProviders(providers: ProviderItem[]): ProviderItem[] {

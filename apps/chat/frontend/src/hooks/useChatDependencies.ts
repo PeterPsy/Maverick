@@ -12,7 +12,10 @@ import {
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
 } from "../api/client";
-import { providerItemsFromPayload } from "../lib/providerRuntimeOptions";
+import {
+  initialProviderSelectionId,
+  providerItemsFromPayload,
+} from "../lib/providerRuntimeOptions";
 import { clearAgentRuntimeConfigCache } from "./useChatRuntimeControls";
 
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
@@ -259,9 +262,17 @@ export function useChatDependencies() {
   const loadInitialChatDependencies = useCallback(async () => {
     const [providerPayload, dependencies] = await Promise.all([listProviders(), getAppDependencies("chat").catch(() => null)]);
     const providerOptions = providerItemsFromPayload(providerPayload);
+    const projectedSelection = providerPayload.selection_migration?.records.find(
+      (record) => record.source_kind === "provider_selection",
+    ) || providerPayload.selection_migration?.records.find(
+      (record) => record.source_kind === "hosted_provider_selection",
+    );
+    const requestedProviderId = projectedSelection
+      ? projectedSelection.canonical_selection_id || ""
+      : providerPayload.active_provider?.provider_id || null;
     setWorkspaceId(providerPayload.workspace_id || dependencies?.workspace_id || "");
     setProviders(providerOptions);
-    setActiveProviderId(providerPayload.active_provider?.provider_id || providerOptions[0]?.provider_id || "");
+    setActiveProviderId(initialProviderSelectionId(requestedProviderId, providerOptions));
     if (!dependencies) {
       clearAgentOptions();
       clearSpeechProvider();

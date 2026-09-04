@@ -33,6 +33,7 @@ vi.mock("../api/client", () => ({
 
 vi.mock("../lib/providerRuntimeOptions", () => ({
   providerItemsFromPayload: () => [],
+  initialProviderSelectionId: () => "",
 }));
 
 vi.mock("./useChatRuntimeControls", () => ({

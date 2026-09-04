@@ -14,6 +14,8 @@ const providerOptions: ProviderItem[] = [
     label: "GPT-5.6-Sol",
     description: "Codex",
     status: "active",
+    execution_family: "native_agent",
+    selectable: true,
     default_model_family: null,
     default_reasoning_effort: "max",
     supported_reasoning_efforts: [
@@ -30,6 +32,9 @@ const providerOptions: ProviderItem[] = [
     default_model_family: "google/gemma-4-31b-it:free",
     hosted_provider_id: "openrouter",
     hosted_model_id: "google/gemma-4-31b-it:free",
+    execution_family: "hosted_text",
+    selectable: true,
+    profile_detail: "No workspace tools or actions.",
   },
   {
     provider_id: "hosted:openrouter:nvidia%2Fnemotron-3-ultra-550b-a55b%3Afree",
@@ -39,6 +44,9 @@ const providerOptions: ProviderItem[] = [
     default_model_family: "nvidia/nemotron-3-ultra-550b-a55b:free",
     hosted_provider_id: "openrouter",
     hosted_model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    execution_family: "hosted_text",
+    selectable: true,
+    profile_detail: "No workspace tools or actions.",
   },
   {
     provider_id: "agentic:binding-google",
@@ -47,6 +55,10 @@ const providerOptions: ProviderItem[] = [
     status: "active",
     default_model_family: "gemini-3.6-flash",
     workspace_profile_binding_id: "binding-google",
+    execution_family: "maverick_agent",
+    selectable: true,
+    provider_detail: "Provider: Google AI Studio · Destination: Google AI Studio API",
+    profile_detail: "Profile: google@1 · Recipe: google@1 · Full Workspace: codex-baseline-v20",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "minimal", label: "Minimal", description: null },
@@ -62,6 +74,10 @@ const providerOptions: ProviderItem[] = [
     status: "active",
     default_model_family: "deepseek/deepseek-v4-flash",
     workspace_profile_binding_id: "binding-openrouter",
+    execution_family: "maverick_agent",
+    selectable: true,
+    provider_detail: "Provider: OpenRouter · Destination: OpenRouter via DeepInfra FP8",
+    profile_detail: "Profile: openrouter@1 · Recipe: openrouter@1 · Full Workspace: codex-baseline-v20",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "minimal", label: "Minimal", description: null },
@@ -241,7 +257,7 @@ describe("ProviderSelector", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("shows only the model, provider, and inline reasoning control in each row", async () => {
+  it("shows the normative families and pinned provider/profile details", async () => {
     const element = await renderSelector();
 
     await act(async () => {
@@ -253,10 +269,47 @@ describe("ProviderSelector", () => {
     expect(row?.querySelector(".chatapp-provider-menu__name")?.textContent).toBe("Gemini 3.6 Flash");
     expect(row?.querySelector(".chatapp-provider-menu__description")?.textContent).toBe("Google AI Studio");
     expect(row?.querySelector('[aria-label="Reasoning for Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
-    expect(element.querySelector(".chatapp-provider-menu__group")).toBeNull();
-    expect(element.querySelector(".chatapp-provider-menu__badges")).toBeNull();
-    expect(element.textContent).not.toContain("Agentic runtime");
-    expect(element.textContent).not.toContain("certificate");
-    expect(element.textContent).not.toContain("tools");
+    const familyLabels = Array.from(element.querySelectorAll(".chatapp-provider-menu__family-heading strong"))
+      .map((node) => node.textContent);
+    expect(familyLabels).toEqual([
+      "Native Agents (CLI)",
+      "Maverick Agents (API)",
+      "Text-only Models (API)",
+    ]);
+    const familyDescriptions = Array.from(element.querySelectorAll(".chatapp-provider-menu__family-heading span"))
+      .map((node) => node.textContent);
+    expect(familyDescriptions).toEqual([
+      "External coding-agent runtimes such as Codex, Claude Code, and Gemini CLI. They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.",
+      "API models made agentic by Maverick. Maverick provides workspace context, tools, the execution loop, approvals, finalization, and recovery.",
+      "API models without workspace tools or an action loop. They generate text from the context provided by Maverick but cannot perform workspace actions.",
+    ]);
+    expect(googleOption.textContent).toContain("Destination: Google AI Studio API");
+    expect(googleOption.textContent).toContain("Full Workspace: codex-baseline-v20");
+    expect(element.textContent).toContain("No workspace tools or actions.");
+  });
+
+  it("does not select an unavailable incomplete agent", async () => {
+    const onSelect = vi.fn();
+    const unavailable = {
+      ...providerOptions[3],
+      provider_id: "agentic:incomplete",
+      label: "Incomplete agent",
+      selectable: false,
+      unavailable_reason: "full_workspace_policy_incomplete",
+    };
+    const element = await renderSelector({ onSelect });
+
+    await act(async () => {
+      root?.render(
+        <ProviderSelector activeProviderId="codex" disabled={false} onSelect={onSelect} providers={[...providerOptions, unavailable]} />,
+      );
+    });
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label^="Model:"]')?.click();
+    });
+    const option = optionByText(element, "Incomplete agent");
+    expect(option.disabled).toBe(true);
+    await act(async () => option.click());
+    expect(onSelect).not.toHaveBeenCalledWith("agentic:incomplete");
   });
 });

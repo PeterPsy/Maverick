@@ -114,36 +114,18 @@ export function selectedProviderForSession({
   if (activeThread && selectionSession?.provider_id) {
     const pinnedBindingId = selectionSession.execution_binding?.workspace_binding_id || "";
     if (pinnedBindingId) {
-      if (selectionSession.agentic_containment?.status === "NO-GO") {
-        const binding = selectionSession.execution_binding;
-        const governance = selectionSession.agentic_governance;
-        return {
-          provider_id: `contained-session:${encodeURIComponent(pinnedBindingId)}`,
-          label: governance?.display_name || "Contained pinned agentic profile",
-          description: governance?.data_destination.display_label || "Pinned destination unavailable",
-          provider_role: "runtime_engine",
-          status: "contained",
-          default_model_family: governance?.model_id || binding?.model_id || null,
-          workspace_profile_binding_id: pinnedBindingId,
-          agentic_containment_status: "NO-GO",
-          agentic_containment_reason: governance?.containment.reason_code
-            || selectionSession.agentic_containment.reason_code
-            || "remote_agentic_session_contained",
-          agentic_rollout_status: governance?.rollout_status || null,
-          agentic_certificate_status: governance?.certificate_posture.effective_status || null,
-          agentic_certificate_expires_at: governance?.certificate_posture.expires_at || null,
-          agentic_egress_policy_id: governance?.egress_policy.policy_id || null,
-          agentic_data_destination: governance?.data_destination || null,
-          agentic_egress_policy: governance?.egress_policy || null,
-          agentic_data_policy: governance?.data_policy || null,
-          agentic_certificate_posture: governance?.certificate_posture || null,
-          agentic_effective_capabilities: governance?.effective_capabilities || null,
-        };
-      }
       const pinned = providers.find((provider) => provider.workspace_profile_binding_id === pinnedBindingId);
       if (pinned) {
         return pinned;
       }
+      const rolloutSkewProvider = providerById(
+        providers,
+        selectionSession.provider_id,
+      );
+      if (!selectionSession.agentic_governance && rolloutSkewProvider) {
+        return rolloutSkewProvider;
+      }
+      return pinnedAgenticSessionProvider(selectionSession, pinnedBindingId);
     }
     return providerById(providers, selectionSession.provider_id) || existingThreadDefaultProvider(providers);
   }
@@ -151,6 +133,64 @@ export function selectedProviderForSession({
     return existingThreadDefaultProvider(providers);
   }
   return providers.find((provider) => provider.provider_id === activeProviderId) || null;
+}
+
+function pinnedAgenticSessionProvider(
+  session: RuntimeSession,
+  pinnedBindingId: string,
+): ProviderItem {
+  const binding = session.execution_binding;
+  const governance = session.agentic_governance;
+  const contained = session.agentic_containment?.status === "NO-GO";
+  const executionFamily = governance?.execution_family || (
+    binding?.runtime_engine_id === "codex"
+    && binding.adapter_id === "codex-app-server"
+    && binding.model_provider_id === "codex"
+    && binding.provider_protocol === "codex-app-server-stdio"
+      ? "native_agent"
+      : undefined
+  );
+  const modelId = governance?.model_id || binding?.model_id || "Pinned model";
+  const destination = governance?.data_destination.display_label || "Pinned destination unavailable";
+  const recipe = governance?.harness_recipe;
+  return {
+    provider_id: `${contained ? "contained" : "pinned"}-session:${encodeURIComponent(pinnedBindingId)}`,
+    label: governance?.display_name || modelId,
+    description: destination,
+    kind: "runtime_backend",
+    provider_role: "runtime_engine",
+    status: contained ? "contained" : "pinned",
+    selectable: false,
+    unavailable_reason: contained
+      ? governance?.containment.reason_code
+        || session.agentic_containment?.reason_code
+        || "remote_agentic_session_contained"
+      : "Pinned to existing session",
+    default_model_family: modelId,
+    default_reasoning_effort: binding?.reasoning_effort || null,
+    workspace_profile_binding_id: pinnedBindingId,
+    execution_family: executionFamily,
+    full_workspace_status: governance?.full_workspace_status,
+    full_workspace_contract_revision: governance?.full_workspace_contract_revision || null,
+    harness_recipe: recipe || null,
+    provider_detail: `Provider: ${governance?.model_provider_id || binding?.model_provider_id || session.provider_id || "unavailable"} · Destination: ${destination}`,
+    profile_detail: `Profile: ${governance?.profile_definition_id || binding?.profile_definition_id || "unavailable"}@${governance?.profile_definition_revision || binding?.profile_definition_revision || "unavailable"} · Recipe: ${recipe?.id || "unavailable"}@${recipe?.revision || "unavailable"} · Full Workspace: ${governance?.full_workspace_contract_revision || "unavailable"}`,
+    agentic_containment_status: contained ? "NO-GO" : governance?.containment.status,
+    agentic_containment_reason: contained
+      ? governance?.containment.reason_code
+        || session.agentic_containment?.reason_code
+        || "remote_agentic_session_contained"
+      : governance?.containment.reason_code || null,
+    agentic_rollout_status: governance?.rollout_status || null,
+    agentic_certificate_status: governance?.certificate_posture.effective_status || null,
+    agentic_certificate_expires_at: governance?.certificate_posture.expires_at || null,
+    agentic_egress_policy_id: governance?.egress_policy.policy_id || null,
+    agentic_data_destination: governance?.data_destination || null,
+    agentic_egress_policy: governance?.egress_policy || null,
+    agentic_data_policy: governance?.data_policy || null,
+    agentic_certificate_posture: governance?.certificate_posture || null,
+    agentic_effective_capabilities: governance?.effective_capabilities || null,
+  };
 }
 
 function runtimeSessionSummaryFromThread(thread: ChatThread | null): RuntimeSession | null {

@@ -98,9 +98,11 @@ scenario names, but not as a user-facing application mode.
 
 ## Allowed technical surface
 
-Settings may expose a cache-size estimate and a bounded **Clear cache** action.
-That surface describes disposable storage, does not enumerate supposedly
-available content, and does not promise persistence. Existing loading
+Settings may expose aggregate cache-size/quota, hit/miss/stale/expired,
+eviction, revalidation, request wait/retry/cancellation duration, and worker
+recovery diagnostics plus a bounded **Clear cache** action. That surface
+describes disposable storage, does not enumerate supposedly available content,
+disclose resource/principal identifiers, or promise persistence. Existing loading
 indicators, terminal server errors, and domain timestamps remain allowed.
 
 Cache API, IndexedDB, OPFS, and storage persistence requests are all
@@ -177,3 +179,20 @@ Automated and physical-device checks must prove:
 The release record contains only device/browser/build/time and pass/fail or
 redaction-safe performance counters. It contains no workspace, user, content,
 file, token, or record identifiers.
+
+## Operational maintenance contract
+
+The source-controlled `pwa_cache_operational_policy.v1.json` is the release
+authority for frontend/runtime byte ceilings, retry classifier and attempt cap,
+reviewed retrying mutations, rollout suffixes, and the physical-device matrix.
+CI rejects an oversized committed asset, drift from SDK budgets, a cacheable
+unclassified/credential resource, or an unregistered mutation retry contract.
+
+Progressive rollout may narrow an enabled boolean flag by deterministic
+workspace and user percentages. It does not change classification or privacy
+policy. Invalid percentages and missing identities for partial cohorts fail
+closed, and cohort inputs are never exposed in configuration or telemetry.
+Rollback disables the narrowest boolean gate first and must preserve the normal
+server path; deleting browser data is not a prerequisite. Physical Safari and
+installed-container evidence must be complete and no older than the policy
+window. Automated browser emulation is supplemental only.

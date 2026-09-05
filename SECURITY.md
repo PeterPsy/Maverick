@@ -34,10 +34,10 @@ Known launch blockers currently include:
 - missing CSRF protection for cookie-authenticated unsafe requests
 - runtime bearer token authority gaps
 - unauthenticated app event WebSocket
-- same-origin mounted app frontend isolation
+- residual XSS risk in trusted shell and isolated app frontends
 - app backend and lifecycle hook sandboxing gaps
 - recovery automation full-access risk
-- same-origin XSS and data-remanence review for any future private PWA cache
+- per-resource privacy approval and current physical-device evidence for any private PWA cache rollout
 
 ## Safe Testing Expectations
 
@@ -80,10 +80,12 @@ This model is still being hardened. Public documentation must not claim producti
 The current PWA cache rollout is governed by
 `docs/adr/0012-transparent-pwa-cache-and-network-resilience.md`; ADR-0011 is a
 superseded historical checkpoint. M2R persists only verified standard-shell
-assets and public branding in owned Cache API namespaces. M3 adds the shared
-scoped IndexedDB, lifecycle cleanup, aggregate diagnostics, and RAM retry
-mechanics, but the data-cache feature remains disabled by default and no app
-read model or Storage file byte is opted into persistent storage by M3.
+assets and public branding in owned Cache API namespaces. M3-M5 add the shared
+scoped IndexedDB/OPFS mechanics, lifecycle cleanup, RAM retry, isolated app
+origins, and parent-mediated data/file brokers; their private rollout gates
+remain disabled by default. M6 adds aggregate diagnostics, deterministic
+workspace/user cohorts, automated budget/retry audit, and explicit XSS/data
+remanence review in `docs/security/pwa_cache_m6_review.md`.
 Credentials, secrets, signed or object URLs, Browser sessions, Speech audio,
 temporary archives, and all agentic authority/control-plane state are
 network-only and must never enter Cache API, IndexedDB, or OPFS. A private
@@ -93,10 +95,13 @@ revision, bounded retention, read-time sanitizer, quota estimate, and a fresh
 access lease. Failed durable cleanup remains pending and blocks persistent
 cache access; RAM fallback cannot report it as success. Browser-side encryption
 with a key available to the same JavaScript is not accepted as an XSS boundary.
-Nor is the current `allow-same-origin` iframe sandbox: app code can address
-origin storage outside the SDK. Any app private-cache rollout therefore still
-requires privacy review, an isolated origin or genuine opaque-frame parent
-broker, and explicit physical-device evidence.
+An app frame's `allow-same-origin` applies to its authenticated per-app,
+per-session isolated origin, not the shell origin. Exact-source/origin/scope
+parent brokers are therefore mandatory and no same-platform-origin fallback is
+allowed. A trusted shell XSS remains inside the browser-storage authority;
+encryption available to the same JavaScript is not a substitute boundary. Any
+private-cache rollout still requires its resource privacy approval and current
+physical-device evidence.
 
 App-owned HTTP sidecars that declare sandbox compatibility use the generic
 fail-closed process boundary documented in

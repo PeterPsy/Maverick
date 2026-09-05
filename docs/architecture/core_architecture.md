@@ -1599,12 +1599,40 @@ implementation inventory and rollout procedure live in
 `docs/product/pwa_cache_resource_inventory.v2.json` and
 `docs/runbooks/pwa_data_cache_m5.md`.
 
+M6 adds a diagnostics-only operations broker without weakening origin
+isolation. Settings requests diagnostics or a bounded clear over a private
+`MessageChannel`; Base Shell accepts only the exact registered Settings frame
+in the active workspace/session generation. The response contains aggregate
+byte/entry/quota gauges and fixed cache, revalidation, eviction, retry/wait,
+and worker counters. It contains no resource key, principal, URL, file name,
+record id, payload, token, or content. Active wait identities are salted and
+RAM-only; the persisted seven-day metrics window contains only aggregates.
+Explicit clear cancels pending retry, runs the existing durable structured/file
+cleanup barrier, and resets metrics only after complete deletion. It neither enumerates cached content nor
+deletes shell static assets or unrelated origin storage.
+
+Boolean PWA flags remain authoritative kill switches and may be narrowed by
+independent deterministic workspace and user percentages. Missing percentages
+mean the full population of an already-enabled flag; malformed percentages,
+zero, or a missing identity for a partial cohort fail closed. Stable SHA-256
+buckets are feature- and dimension-specific, monotonic as percentages rise,
+and never projected to clients. Core applies the same resolved-session cohort
+to `/api/pwa/config` and per-app registry gates without exposing its inputs.
+The source-controlled operational policy fixes frontend/runtime byte budgets,
+the retry classifier, and the reviewed mutation registry. CI verifies every
+committed frontend manifest, the deny-by-default resource inventory, and that
+each retrying mutation has a runtime-validated audit id plus client, server
+deduplication, and replay-test evidence. Physical-device evidence has a
+separate complete/fresh/redaction-safe verifier and remains mandatory at the
+release gate; emulation cannot satisfy it.
+
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
 for early hints. Only transport/timeouts and `429/502/503/504` are retryable by
 the standard classifier. An unsafe request remains one-shot unless it carries
 a stable `Idempotency-Key`, exact request fingerprint, and a declared server
-deduplication contract; eligible mutations are capped at three attempts and
+deduplication contract whose audit id is registered in the operational policy;
+eligible mutations are capped at three attempts and
 still cross current server authorization and admission. `401` and `403` remain
 the terminal request errors even when their cleanup changes retry scope; they
 cannot be masked as cancellation. Base Shell's `pinned_apps.set` mutation is

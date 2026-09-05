@@ -131,6 +131,8 @@ the browser; it must never receive generated fallback HTML.
    every generated precache record is present.
 
 Recovery has no product dialog and never changes the normal shell tree.
+The consolidated rollout, dashboard, redaction, and incident sequence is in
+`docs/runbooks/pwa_cache_operations_m6.md`.
 
 ## Kill switch and rollback
 

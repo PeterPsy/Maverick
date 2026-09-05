@@ -145,6 +145,11 @@ MAVERICK_FEATURE_PWA_APP_CACHE_APP_STORE=1
 MAVERICK_FEATURE_PWA_APP_CACHE_FITNESS_COACH=1
 ```
 
+M6 additionally permits deterministic workspace/user narrowing with
+`<FLAG>_ROLLOUT_WORKSPACE_PERCENT` and `<FLAG>_ROLLOUT_USER_PERCENT`. These
+cohorts only narrow an enabled flag; they never widen resource policy. Use the
+sequence and fail-closed rules in `docs/runbooks/pwa_cache_operations_m6.md`.
+
 Do not enable all app flags at once. Recommended order is Website Studio,
 Storage, App Store, then Fitness Coach. For each app:
 
@@ -183,6 +188,7 @@ npm --prefix apps/app-store run build
 npm --prefix apps/fitness-coach test -- --maxWorkers=1
 npm --prefix apps/fitness-coach run build
 python3 scripts/test_suite.py --level fast
+python3 scripts/audit_pwa_cache.py
 ```
 
 Also run the focused backend tests for the four validator contracts and use the

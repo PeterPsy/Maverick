@@ -101,3 +101,17 @@ shell-owned IndexedDB and OPFS while preserving the parent-owned broker. Both
 global cache rollouts remain disabled until their separate resource/privacy and
 physical-device release gates are complete; origin isolation alone never grants
 local-persistence policy.
+
+M6 adds a closed, redaction-safe metrics collector and the cross-origin Settings
+operations protocol. The collector stores only aggregate counters, quota
+gauges, and wait-duration summaries; pending salted keys remain in RAM and event
+reasons are discarded. Base Shell is responsible for accepting the protocol
+only from the exact registered Settings frame and for wiring data, file, quota,
+retry, and worker telemetry. An explicit clear cancels pending retry before the
+durable structured/file cleanup.
+
+Unsafe retry contracts now also require a versioned `auditId`. Production audit
+ids and their client/server/replay evidence are registered in
+`docs/product/pwa_cache_operational_policy.v1.json` and checked by
+`scripts/audit_pwa_cache.py`; the runtime still requires idempotency,
+fingerprinting, server deduplication, and the three-attempt cap.

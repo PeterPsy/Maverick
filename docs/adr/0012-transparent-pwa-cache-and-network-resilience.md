@@ -327,6 +327,36 @@ through the serialized lifecycle. That cleanup is not part of network timeout
 classification: a received `401`/`403` remains a terminal HTTP response even
 if cleanup is delayed behind another lifecycle operation.
 
+## M6 implementation profile
+
+M6 makes the existing cache boundary observable and operable without exposing
+residency or identifiers. Base Shell aggregates a closed event vocabulary for
+static/data/file hits, misses, stale/expired reads, revalidation, quota,
+eviction, worker lifecycle, and request wait/retry/cancellation. Only aggregate
+counters, quota gauges, and bounded duration summaries persist, for at most
+seven days. Pending salted operation hashes stay in RAM. The isolated Settings
+app obtains this dashboard through an exact registered-frame `MessageChannel`;
+it cannot read shell storage and receives no cache entry, URL, file name,
+principal, record id, payload, token, or content. Clear cancels RAM work,
+executes the durable structured/file cleanup, and resets metrics only after a
+complete deletion result.
+
+Each existing boolean flag may be narrowed by stable 0–100 workspace and user
+cohorts. Invalid values and missing identities in a partial cohort select
+nobody; cohort inputs and buckets are not returned by the public config. The
+operational policy is source-controlled and CI-audited against frontend asset
+manifests, SDK budgets, the resource inventory, retryable methods/statuses, and
+every RAM-retried mutation. Such a mutation now requires a registered audit id
+in addition to its idempotency key, canonical request fingerprint, bounded
+attempts, server deduplication, and replay regression test.
+
+Quota, LRU pressure, corruption, and intermittent transport have an explicit
+chaos matrix. Rollback and worker recovery remain namespace-bounded. A
+redaction-safe evidence validator enforces the full physical Safari,
+Home Screen/Dock, and Chrome matrix with a 90-day freshness limit. Tooling does
+not convert emulation into physical evidence; a missing record keeps the
+release gate open.
+
 ## Supersession boundary
 
 When ADR-0011 and this record conflict, this record is normative. Historical
@@ -338,3 +368,4 @@ artifacts, and tests must describe this decision.
 
 - `docs/product/pwa_cache_product_contract.md`
 - `docs/product/pwa_cache_resource_inventory.v2.json`
+- `docs/product/pwa_cache_operational_policy.v1.json`

@@ -1,0 +1,43 @@
+{
+  "schema": "maverick.pwa-cache-completion-candidate.v1",
+  "candidate_commit": "1e09508744c96f2929d5015ec3d91bddd274dc3c",
+  "live_flags_changed": false,
+  "apps": {
+    "calendar": {
+      "manifest_path": "apps/calendar/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "63bdd0bb2ad3e971af602328b4416c8dbf791d2cd6596d00dad9645a8239315e"
+    },
+    "chat": {
+      "manifest_path": "apps/chat/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "b196330b249d510fc0fbd423061f2b54e703f0360c41cd5aece3cea3b9d8ee1f"
+    },
+    "crm": {
+      "manifest_path": "apps/crm/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "e7d41339edc7d88d597a95809f92cc6f1cecb736e3eeff14a7ffb9dbc37dc70a"
+    },
+    "mail": {
+      "manifest_path": "apps/mail/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "bdac44002587bad3d9726c39e004722a421a2a2599b7e689235b0187dead6c71"
+    },
+    "fitness-coach": {
+      "manifest_path": "apps/fitness-coach/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "0ae1bc8ffc97672c8c6fd6d08a4d571b3cd9936464711de03b5a6ec1a70d3a8f"
+    },
+    "storage": {
+      "manifest_path": "apps/storage/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "35d48b4deaedf88638f72f4439ba067d6cec0289588a66e4151d6d66208c417f"
+    },
+    "website-studio": {
+      "manifest_path": "apps/website-studio/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "8653a626d0784d01c5a7f9a93d6585b3815f3550e518ffffe39b972acbf90706"
+    },
+    "app-store": {
+      "manifest_path": "apps/app-store/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "4815691d1a5a803428b2febb0192e1cbf23962f67fee44b06456ee4ba98bb006"
+    },
+    "base-shell": {
+      "manifest_path": "apps/base-shell/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "bf012577bbd4aca5b6a41e70ff166f43bd2189e1d538e2a7584a0d28e46a07c3"
+    }
+  }
+}

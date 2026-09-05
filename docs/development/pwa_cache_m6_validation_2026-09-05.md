@@ -1,16 +1,15 @@
 # PWA Cache M6 Validation — 2026-09-05
 
-Status: the two remaining review findings are corrected in `e729902b` and
-`b8311de7`, following the earlier five-finding remediation. M5 completion,
-physical-device evidence and private rollout remain open. This is not closure
-of the whole plan.
+Current status: the approved app implementation and automated checks are now
+recorded in `docs/development/pwa_cache_completion_validation_2026-09-05.md`,
+with exact candidate `1e09508744c96f2929d5015ec3d91bddd274dc3c`. That report
+supersedes the implementation status and build identities below. Calendar,
+Chat, CRM, Mail and Fitness persistence are implemented; physical-device
+PWA-098 and controlled rollout remain open. This document preserves the earlier
+review evidence, not a claim that the whole release plan is closed.
 
-Subsequent product decision: the owner explicitly approved the complete app
-scope, including persistent bounded Calendar, Chat, CRM, Mail and Fitness Coach
-read models. See `docs/product/pwa_cache_completion_decision_2026-09-05.md`.
-The reduced release proposal is rejected. This closes the pending product
-decision, not the missing adapters, technical privacy enforcement or release
-evidence; runtime policy and rollout flags have not been widened by the record.
+Product approval: `docs/product/pwa_cache_completion_decision_2026-09-05.md`.
+No live rollout flags were enabled by the implementation or these tests.
 
 ## Second review: durable recovery and broker metrics
 
@@ -226,10 +225,9 @@ scheduled and release-event executions continuously detect missing/stale or
 candidate-mismatched evidence; emulation and the authenticated Chromium CI
 smoke cannot satisfy this gate.
 
-M5 is also intentionally not relabeled complete. The owner has now explicitly
-approved the Calendar/Chat/CRM/Mail persistent read-model scope and the existing
-Fitness Coach projection. Calendar/Chat/CRM/Mail adapters and resource-level
-enforcement still need implementation and validation; the existing runtime
-`session`/`deny` policies are not silently changed by product approval. All
-related rollout flags remain fail-closed until the implementation and release
-gates pass.
+The missing M5 code described at this historical checkpoint has since been
+implemented and verified, including the closed CRM/Mail customer allowlists.
+Use the completion report for current per-app status, candidate, evidence,
+physical matrix, deployment handoff and controlled rollout checklist. Product
+privacy approval is no longer a pending generic gate. All live rollout flags
+remain unchanged; physical validation and rollout are still not claimed.

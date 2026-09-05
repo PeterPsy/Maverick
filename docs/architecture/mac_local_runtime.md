@@ -110,3 +110,8 @@ Version 0.1.1 corrects the unsupported Keychain attribute combination, adds
 redacted stage diagnostics and tests actual Python-to-CryptoKit interoperability,
 private cache permissions and a disposable fake Keychain roundtrip on the runner.
 The real account import and subsequent direct-provider turn remain pending.
+Native run `33986010624` passed all nine tests and installed build `4b09c08`.
+The disposable Keychain probe accepted both the old and corrected query
+(OSStatus 0): the reported failure was not reproduced by that probe. Do not
+claim a proven Keychain root cause; the next real import must use the new
+stage-specific diagnostics.

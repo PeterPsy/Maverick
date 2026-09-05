@@ -1,7 +1,8 @@
 # macOS direct-provider runtime (v1)
 
 Status: development implementation; focused tests and native runner build pass.
-Authenticated physical acceptance and production signing remain pending.
+Real-account import and a local authenticated text reply are confirmed. Physical
+computer-use acceptance and production signing remain pending.
 
 ## Decision
 
@@ -109,9 +110,27 @@ with Keychain/cache failures, so the precise failed stage was not observable.
 Version 0.1.1 corrects the unsupported Keychain attribute combination, adds
 redacted stage diagnostics and tests actual Python-to-CryptoKit interoperability,
 private cache permissions and a disposable fake Keychain roundtrip on the runner.
-The real account import and subsequent direct-provider turn remain pending.
+The subsequent user screenshots confirmed real-account import and a successful
+local authenticated text turn on build `4b09c08`.
 Native run `33986010624` passed all nine tests and installed build `4b09c08`.
 The disposable Keychain probe accepted both the old and corrected query
 (OSStatus 0): the reported failure was not reproduced by that probe. Do not
-claim a proven Keychain root cause; the next real import must use the new
-stage-specific diagnostics.
+claim a proven Keychain root cause.
+
+### Physical observation follow-up
+
+The first Notes observation was denied while the user reported both macOS grants
+and showed Notes selected. The old generic tool failure conflated request,
+session, permission, window lookup and capture errors; its model paraphrase is
+not evidence of a missing permission. Native v3 adds static MC-TOOL stage codes
+(and only numeric framework error codes), actual app-process screen/Accessibility
+status in setup, and persistent text-only tool diagnostics after turn completion.
+No diagnostic contains window titles, raw arguments, credentials or screenshots.
+The app refreshes permission status on activation and on explicit user request.
+
+Window lookup skips ineligible/transparent helper windows while retaining z-order,
+selected-PID and ScreenCaptureKit ownership checks. This fixes a code-level edge
+case but is not a proven cause of the observed failure. Synthetic metadata/policy
+tests do not capture the user's desktop. Physical screenshot/action tests and
+network-path verification remain pending; no Ubuntu relay or permission bypass
+has been introduced.

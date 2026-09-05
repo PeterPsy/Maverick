@@ -1,0 +1,1049 @@
+{
+  "bootstrap": {
+    "fields": {
+      "ok": "boolean"
+    },
+    "lists": {
+      "leads": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      },
+      "accounts": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      },
+      "contacts": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      },
+      "deals": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      },
+      "tasks": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      },
+      "notes": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      },
+      "activities": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      },
+      "pipelines": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "is_default": "number"
+        }
+      },
+      "pipeline_stages": {
+        "fields": {
+          "id": "string",
+          "pipeline_id": "string",
+          "name": "string",
+          "position": "number",
+          "probability": "number",
+          "deal_count": "number",
+          "total_value": "number",
+          "weighted_value": "number"
+        },
+        "lists": {
+          "deals": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "display_name": "string",
+              "email": "string",
+              "domain": "string",
+              "phone": "string",
+              "company": "string",
+              "industry": "string",
+              "role": "string",
+              "source": "string",
+              "owner_id": "string",
+              "account_id": "string",
+              "contact_id": "string",
+              "deal_id": "string",
+              "stage_id": "string",
+              "stage": "string",
+              "pipeline_id": "string",
+              "currency": "string",
+              "close_date": "string",
+              "subject": "string",
+              "title": "string",
+              "body": "string",
+              "activity_type": "string",
+              "status": "string",
+              "priority": "string",
+              "summary": "string",
+              "occurred_at": "string",
+              "due_at": "string",
+              "completed_at": "string",
+              "created_at": "string",
+              "updated_at": "string",
+              "archived_at": "string",
+              "deleted_at": "string",
+              "account_label": "string",
+              "contact_label": "string",
+              "value": "number",
+              "probability": "number",
+              "age_days": "number",
+              "stuck_days": "number",
+              "tags": "strings"
+            },
+            "required": [
+              "id"
+            ],
+            "maps": {
+              "custom_fields": "scalar"
+            }
+          }
+        },
+        "maps": {
+          "totals": "number",
+          "weighted": "number"
+        }
+      }
+    },
+    "objects": {
+      "schema": {
+        "fields": {
+          "schema_version": "string",
+          "ok": "boolean"
+        },
+        "lists": {
+          "custom_fields": {
+            "fields": {
+              "id": "string",
+              "entity_type": "string",
+              "field_key": "string",
+              "label": "string",
+              "field_type": "string",
+              "position": "number",
+              "required": "boolean",
+              "options": "strings"
+            }
+          },
+          "pipelines": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "is_default": "number"
+            }
+          },
+          "pipeline_stages": {
+            "fields": {
+              "id": "string",
+              "pipeline_id": "string",
+              "name": "string",
+              "position": "number",
+              "probability": "number",
+              "deal_count": "number",
+              "total_value": "number",
+              "weighted_value": "number"
+            },
+            "lists": {
+              "deals": {
+                "fields": {
+                  "id": "string",
+                  "name": "string",
+                  "display_name": "string",
+                  "email": "string",
+                  "domain": "string",
+                  "phone": "string",
+                  "company": "string",
+                  "industry": "string",
+                  "role": "string",
+                  "source": "string",
+                  "owner_id": "string",
+                  "account_id": "string",
+                  "contact_id": "string",
+                  "deal_id": "string",
+                  "stage_id": "string",
+                  "stage": "string",
+                  "pipeline_id": "string",
+                  "currency": "string",
+                  "close_date": "string",
+                  "subject": "string",
+                  "title": "string",
+                  "body": "string",
+                  "activity_type": "string",
+                  "status": "string",
+                  "priority": "string",
+                  "summary": "string",
+                  "occurred_at": "string",
+                  "due_at": "string",
+                  "completed_at": "string",
+                  "created_at": "string",
+                  "updated_at": "string",
+                  "archived_at": "string",
+                  "deleted_at": "string",
+                  "account_label": "string",
+                  "contact_label": "string",
+                  "value": "number",
+                  "probability": "number",
+                  "age_days": "number",
+                  "stuck_days": "number",
+                  "tags": "strings"
+                },
+                "required": [
+                  "id"
+                ],
+                "maps": {
+                  "custom_fields": "scalar"
+                }
+              }
+            },
+            "maps": {
+              "totals": "number",
+              "weighted": "number"
+            }
+          }
+        }
+      }
+    },
+    "maps": {
+      "counts": "number"
+    },
+    "required": [
+      "leads",
+      "accounts",
+      "contacts",
+      "deals",
+      "tasks",
+      "notes",
+      "activities"
+    ]
+  },
+  "records_table": {
+    "fields": {
+      "next_cursor": "string",
+      "ok": "boolean",
+      "has_more": "boolean"
+    },
+    "lists": {
+      "records": {
+        "fields": {
+          "entity_type": "string",
+          "id": "string",
+          "title": "string"
+        },
+        "objects": {
+          "record": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "display_name": "string",
+              "email": "string",
+              "domain": "string",
+              "phone": "string",
+              "company": "string",
+              "industry": "string",
+              "role": "string",
+              "source": "string",
+              "owner_id": "string",
+              "account_id": "string",
+              "contact_id": "string",
+              "deal_id": "string",
+              "stage_id": "string",
+              "stage": "string",
+              "pipeline_id": "string",
+              "currency": "string",
+              "close_date": "string",
+              "subject": "string",
+              "title": "string",
+              "body": "string",
+              "activity_type": "string",
+              "status": "string",
+              "priority": "string",
+              "summary": "string",
+              "occurred_at": "string",
+              "due_at": "string",
+              "completed_at": "string",
+              "created_at": "string",
+              "updated_at": "string",
+              "archived_at": "string",
+              "deleted_at": "string",
+              "account_label": "string",
+              "contact_label": "string",
+              "value": "number",
+              "probability": "number",
+              "age_days": "number",
+              "stuck_days": "number",
+              "tags": "strings"
+            },
+            "required": [
+              "id"
+            ],
+            "maps": {
+              "custom_fields": "scalar"
+            }
+          },
+          "computed": {
+            "fields": {
+              "last_activity_at": "string",
+              "next_action": "string",
+              "open_task_count": "number",
+              "open_deal_value": "number",
+              "contact_count": "number",
+              "weighted_value": "number",
+              "deal_age_days": "number"
+            }
+          },
+          "display": {
+            "fields": {
+              "account": "string",
+              "contact": "string"
+            }
+          },
+          "ref": {
+            "fields": {
+              "entity_type": "string",
+              "entity_id": "string",
+              "app_page": "string"
+            }
+          }
+        },
+        "required": [
+          "entity_type",
+          "id",
+          "title"
+        ]
+      },
+      "columns": {
+        "fields": {
+          "key": "string",
+          "label": "string"
+        },
+        "required": [
+          "key",
+          "label"
+        ]
+      }
+    },
+    "maps": {
+      "counts": "number"
+    },
+    "required": [
+      "records",
+      "columns",
+      "next_cursor",
+      "has_more"
+    ]
+  },
+  "get": {
+    "fields": {},
+    "objects": {
+      "record": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      }
+    }
+  },
+  "schema": {
+    "fields": {
+      "schema_version": "string",
+      "ok": "boolean"
+    },
+    "lists": {
+      "custom_fields": {
+        "fields": {
+          "id": "string",
+          "entity_type": "string",
+          "field_key": "string",
+          "label": "string",
+          "field_type": "string",
+          "position": "number",
+          "required": "boolean",
+          "options": "strings"
+        }
+      },
+      "pipelines": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "is_default": "number"
+        }
+      },
+      "pipeline_stages": {
+        "fields": {
+          "id": "string",
+          "pipeline_id": "string",
+          "name": "string",
+          "position": "number",
+          "probability": "number",
+          "deal_count": "number",
+          "total_value": "number",
+          "weighted_value": "number"
+        },
+        "lists": {
+          "deals": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "display_name": "string",
+              "email": "string",
+              "domain": "string",
+              "phone": "string",
+              "company": "string",
+              "industry": "string",
+              "role": "string",
+              "source": "string",
+              "owner_id": "string",
+              "account_id": "string",
+              "contact_id": "string",
+              "deal_id": "string",
+              "stage_id": "string",
+              "stage": "string",
+              "pipeline_id": "string",
+              "currency": "string",
+              "close_date": "string",
+              "subject": "string",
+              "title": "string",
+              "body": "string",
+              "activity_type": "string",
+              "status": "string",
+              "priority": "string",
+              "summary": "string",
+              "occurred_at": "string",
+              "due_at": "string",
+              "completed_at": "string",
+              "created_at": "string",
+              "updated_at": "string",
+              "archived_at": "string",
+              "deleted_at": "string",
+              "account_label": "string",
+              "contact_label": "string",
+              "value": "number",
+              "probability": "number",
+              "age_days": "number",
+              "stuck_days": "number",
+              "tags": "strings"
+            },
+            "required": [
+              "id"
+            ],
+            "maps": {
+              "custom_fields": "scalar"
+            }
+          }
+        },
+        "maps": {
+          "totals": "number",
+          "weighted": "number"
+        }
+      }
+    }
+  },
+  "pipeline_board": {
+    "fields": {
+      "ok": "boolean"
+    },
+    "objects": {
+      "pipeline": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "is_default": "number"
+        }
+      },
+      "totals": {
+        "fields": {
+          "deal_count": "number",
+          "total_value": "number",
+          "weighted_value": "number"
+        },
+        "maps": {
+          "currency_totals": "number",
+          "weighted_currency_totals": "number"
+        }
+      }
+    },
+    "lists": {
+      "stages": {
+        "fields": {
+          "id": "string",
+          "pipeline_id": "string",
+          "name": "string",
+          "position": "number",
+          "probability": "number",
+          "deal_count": "number",
+          "total_value": "number",
+          "weighted_value": "number"
+        },
+        "lists": {
+          "deals": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "display_name": "string",
+              "email": "string",
+              "domain": "string",
+              "phone": "string",
+              "company": "string",
+              "industry": "string",
+              "role": "string",
+              "source": "string",
+              "owner_id": "string",
+              "account_id": "string",
+              "contact_id": "string",
+              "deal_id": "string",
+              "stage_id": "string",
+              "stage": "string",
+              "pipeline_id": "string",
+              "currency": "string",
+              "close_date": "string",
+              "subject": "string",
+              "title": "string",
+              "body": "string",
+              "activity_type": "string",
+              "status": "string",
+              "priority": "string",
+              "summary": "string",
+              "occurred_at": "string",
+              "due_at": "string",
+              "completed_at": "string",
+              "created_at": "string",
+              "updated_at": "string",
+              "archived_at": "string",
+              "deleted_at": "string",
+              "account_label": "string",
+              "contact_label": "string",
+              "value": "number",
+              "probability": "number",
+              "age_days": "number",
+              "stuck_days": "number",
+              "tags": "strings"
+            },
+            "required": [
+              "id"
+            ],
+            "maps": {
+              "custom_fields": "scalar"
+            }
+          }
+        },
+        "maps": {
+          "totals": "number",
+          "weighted": "number"
+        }
+      }
+    }
+  },
+  "search": {
+    "fields": {
+      "ok": "boolean"
+    },
+    "lists": {
+      "items": {
+        "fields": {
+          "entity_type": "string",
+          "id": "string",
+          "title": "string"
+        },
+        "objects": {
+          "record": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "display_name": "string",
+              "email": "string",
+              "domain": "string",
+              "phone": "string",
+              "company": "string",
+              "industry": "string",
+              "role": "string",
+              "source": "string",
+              "owner_id": "string",
+              "account_id": "string",
+              "contact_id": "string",
+              "deal_id": "string",
+              "stage_id": "string",
+              "stage": "string",
+              "pipeline_id": "string",
+              "currency": "string",
+              "close_date": "string",
+              "subject": "string",
+              "title": "string",
+              "body": "string",
+              "activity_type": "string",
+              "status": "string",
+              "priority": "string",
+              "summary": "string",
+              "occurred_at": "string",
+              "due_at": "string",
+              "completed_at": "string",
+              "created_at": "string",
+              "updated_at": "string",
+              "archived_at": "string",
+              "deleted_at": "string",
+              "account_label": "string",
+              "contact_label": "string",
+              "value": "number",
+              "probability": "number",
+              "age_days": "number",
+              "stuck_days": "number",
+              "tags": "strings"
+            },
+            "required": [
+              "id"
+            ],
+            "maps": {
+              "custom_fields": "scalar"
+            }
+          },
+          "computed": {
+            "fields": {
+              "last_activity_at": "string",
+              "next_action": "string",
+              "open_task_count": "number",
+              "open_deal_value": "number",
+              "contact_count": "number",
+              "weighted_value": "number",
+              "deal_age_days": "number"
+            }
+          },
+          "display": {
+            "fields": {
+              "account": "string",
+              "contact": "string"
+            }
+          },
+          "ref": {
+            "fields": {
+              "entity_type": "string",
+              "entity_id": "string",
+              "app_page": "string"
+            }
+          }
+        },
+        "required": [
+          "entity_type",
+          "id",
+          "title"
+        ]
+      },
+      "records": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "display_name": "string",
+          "email": "string",
+          "domain": "string",
+          "phone": "string",
+          "company": "string",
+          "industry": "string",
+          "role": "string",
+          "source": "string",
+          "owner_id": "string",
+          "account_id": "string",
+          "contact_id": "string",
+          "deal_id": "string",
+          "stage_id": "string",
+          "stage": "string",
+          "pipeline_id": "string",
+          "currency": "string",
+          "close_date": "string",
+          "subject": "string",
+          "title": "string",
+          "body": "string",
+          "activity_type": "string",
+          "status": "string",
+          "priority": "string",
+          "summary": "string",
+          "occurred_at": "string",
+          "due_at": "string",
+          "completed_at": "string",
+          "created_at": "string",
+          "updated_at": "string",
+          "archived_at": "string",
+          "deleted_at": "string",
+          "account_label": "string",
+          "contact_label": "string",
+          "value": "number",
+          "probability": "number",
+          "age_days": "number",
+          "stuck_days": "number",
+          "tags": "strings"
+        },
+        "required": [
+          "id"
+        ],
+        "maps": {
+          "custom_fields": "scalar"
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@
     "dev": "vite --host 0.0.0.0"
   },
   "dependencies": {
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
     "lucide-react": "^0.468.0",
     "motion": "^12.38.0",
     "react": "^19.0.0",

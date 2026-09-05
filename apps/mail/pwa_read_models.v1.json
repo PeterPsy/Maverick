@@ -1,0 +1,305 @@
+{
+  "mailboxes": {
+    "fields": {},
+    "lists": {
+      "items": {
+        "fields": {
+          "id": "string",
+          "provider": "string",
+          "email_address": "string",
+          "display_name": "string"
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "folders": {
+        "fields": {
+          "id": "string",
+          "connection_id": "string",
+          "name": "string",
+          "path": "string",
+          "delimiter": "string",
+          "total_count": "number",
+          "unread_count": "number"
+        }
+      }
+    }
+  },
+  "threads": {
+    "fields": {
+      "limit": "number",
+      "offset": "number",
+      "total_count": "number"
+    },
+    "lists": {
+      "items": {
+        "fields": {
+          "id": "string",
+          "connection_id": "string",
+          "subject": "string",
+          "last_message_at": "string",
+          "snippet": "string",
+          "unread": "boolean",
+          "starred": "boolean",
+          "labels": "strings"
+        },
+        "lists": {
+          "participants": {
+            "fields": {
+              "name": "string",
+              "email": "string"
+            },
+            "required": [
+              "email"
+            ]
+          },
+          "messages": {
+            "fields": {
+              "id": "string",
+              "thread_id": "string",
+              "sent_at": "string",
+              "body_text": "string",
+              "body_preview": "string",
+              "has_attachments": "boolean",
+              "body_truncated": "boolean",
+              "body_source_truncated": "boolean",
+              "body_text_truncated": "boolean"
+            },
+            "objects": {
+              "sender": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            },
+            "lists": {
+              "recipients": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "cc": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "bcc": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "attachments": {
+                "fields": {
+                  "id": "string",
+                  "filename": "string",
+                  "content_type": "string",
+                  "size_bytes": "number"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "thread_id",
+              "body_text"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "connection_id",
+          "subject"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ]
+  },
+  "thread": {
+    "fields": {},
+    "objects": {
+      "thread": {
+        "fields": {
+          "id": "string",
+          "connection_id": "string",
+          "subject": "string",
+          "last_message_at": "string",
+          "snippet": "string",
+          "unread": "boolean",
+          "starred": "boolean",
+          "labels": "strings"
+        },
+        "lists": {
+          "participants": {
+            "fields": {
+              "name": "string",
+              "email": "string"
+            },
+            "required": [
+              "email"
+            ]
+          },
+          "messages": {
+            "fields": {
+              "id": "string",
+              "thread_id": "string",
+              "sent_at": "string",
+              "body_text": "string",
+              "body_preview": "string",
+              "has_attachments": "boolean",
+              "body_truncated": "boolean",
+              "body_source_truncated": "boolean",
+              "body_text_truncated": "boolean"
+            },
+            "objects": {
+              "sender": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            },
+            "lists": {
+              "recipients": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "cc": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "bcc": {
+                "fields": {
+                  "name": "string",
+                  "email": "string"
+                },
+                "required": [
+                  "email"
+                ]
+              },
+              "attachments": {
+                "fields": {
+                  "id": "string",
+                  "filename": "string",
+                  "content_type": "string",
+                  "size_bytes": "number"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "thread_id",
+              "body_text"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "connection_id",
+          "subject"
+        ]
+      }
+    }
+  },
+  "message": {
+    "fields": {},
+    "objects": {
+      "message": {
+        "fields": {
+          "id": "string",
+          "thread_id": "string",
+          "sent_at": "string",
+          "body_text": "string",
+          "body_preview": "string",
+          "has_attachments": "boolean",
+          "body_truncated": "boolean",
+          "body_source_truncated": "boolean",
+          "body_text_truncated": "boolean"
+        },
+        "objects": {
+          "sender": {
+            "fields": {
+              "name": "string",
+              "email": "string"
+            },
+            "required": [
+              "email"
+            ]
+          }
+        },
+        "lists": {
+          "recipients": {
+            "fields": {
+              "name": "string",
+              "email": "string"
+            },
+            "required": [
+              "email"
+            ]
+          },
+          "cc": {
+            "fields": {
+              "name": "string",
+              "email": "string"
+            },
+            "required": [
+              "email"
+            ]
+          },
+          "bcc": {
+            "fields": {
+              "name": "string",
+              "email": "string"
+            },
+            "required": [
+              "email"
+            ]
+          },
+          "attachments": {
+            "fields": {
+              "id": "string",
+              "filename": "string",
+              "content_type": "string",
+              "size_bytes": "number"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "thread_id",
+          "body_text"
+        ]
+      }
+    }
+  }
+}

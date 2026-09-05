@@ -15,7 +15,10 @@
     {
       "app_id": "app-store",
       "resource": "catalog",
-      "aliases": ["records", "catalog"],
+      "aliases": [
+        "records",
+        "catalog"
+      ],
       "canonical_data_class": "public",
       "provenance": "app_reference",
       "local_persistence_policy": "cache",
@@ -31,12 +34,17 @@
     {
       "app_id": "fitness-coach",
       "resource": "sanitized-bootstrap-and-thumbnails",
-      "aliases": ["workouts", "exercises", "runs", "view-state"],
+      "aliases": [
+        "workouts",
+        "exercises",
+        "runs",
+        "view-state"
+      ],
       "canonical_data_class": "personal_data",
       "provenance": "app_reference",
-      "local_persistence_policy": "session",
-      "cache_approved": false,
-      "privacy_approved": false,
+      "local_persistence_policy": "cache",
+      "cache_approved": true,
+      "privacy_approved": true,
       "regulated_allowlisted": false,
       "fresh_ttl_ms": 300000,
       "expiry_ttl_ms": 86400000,
@@ -47,7 +55,11 @@
     {
       "app_id": "storage",
       "resource": "file-catalog",
-      "aliases": ["files", "drive-connections", "view-state"],
+      "aliases": [
+        "files",
+        "drive-connections",
+        "view-state"
+      ],
       "canonical_data_class": "workspace_internal",
       "provenance": "attachment",
       "local_persistence_policy": "cache",
@@ -84,6 +96,71 @@
       "max_entry_bytes": 2097152,
       "max_scope_bytes": 16777216,
       "schema_revision": "website-studio.site-snapshots.v2"
+    },
+    {
+      "app_id": "calendar",
+      "resource": "bounded-event-window",
+      "aliases": [
+        "events",
+        "calendars",
+        "connections",
+        "view-state"
+      ],
+      "canonical_data_class": "personal_data",
+      "provenance": "app_reference",
+      "local_persistence_policy": "cache",
+      "cache_approved": true,
+      "privacy_approved": true,
+      "regulated_allowlisted": false,
+      "fresh_ttl_ms": 60000,
+      "expiry_ttl_ms": 21600000,
+      "max_entry_bytes": 1048576,
+      "max_scope_bytes": 16777216,
+      "schema_revision": "calendar.bounded-event-window.v1"
+    },
+    {
+      "app_id": "crm",
+      "resource": "lists-and-recent-records",
+      "aliases": [
+        "records",
+        "schema",
+        "pipelines",
+        "view-state"
+      ],
+      "canonical_data_class": "regulated_or_customer_data",
+      "provenance": "app_reference",
+      "local_persistence_policy": "cache",
+      "cache_approved": true,
+      "privacy_approved": true,
+      "regulated_allowlisted": true,
+      "fresh_ttl_ms": 30000,
+      "expiry_ttl_ms": 21600000,
+      "max_entry_bytes": 2097152,
+      "max_scope_bytes": 16777216,
+      "schema_revision": "crm.lists-and-recent-records.v1"
+    },
+    {
+      "app_id": "mail",
+      "resource": "thread-headers-snippets-and-bodies",
+      "aliases": [
+        "threads",
+        "messages",
+        "connections",
+        "folders",
+        "labels",
+        "view-state"
+      ],
+      "canonical_data_class": "regulated_or_customer_data",
+      "provenance": "app_reference",
+      "local_persistence_policy": "cache",
+      "cache_approved": true,
+      "privacy_approved": true,
+      "regulated_allowlisted": true,
+      "fresh_ttl_ms": 30000,
+      "expiry_ttl_ms": 3600000,
+      "max_entry_bytes": 1048576,
+      "max_scope_bytes": 16777216,
+      "schema_revision": "mail.thread-headers-snippets-and-bodies.v1"
     }
   ]
 }

@@ -9,6 +9,8 @@ from pathlib import Path
 import re
 import unicodedata
 
+from pwa_read_model import read_model
+
 from connections import (
     IMAP_PASSWORD_SECRET,
     IMAP_SMTP_PROVIDER,
@@ -91,6 +93,8 @@ INTERACTIVE_SYNC_MAX_THREADS = 25
 def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
     action = str(payload.get("action") or "threads.list")
     try:
+        if action == "pwa.read_model":
+            return 200, read_model(data_root, payload)
         if action in {"status", "health.check"}:
             return 200, {**status(data_root), **health_payload(data_root)}
         if action == "connections.list":

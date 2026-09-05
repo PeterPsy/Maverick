@@ -7,6 +7,7 @@ import sqlite3
 from typing import Any
 
 from errors import ValidationError
+from pwa_read_model import read_model
 from domains.account_insights import account_brief, summarize_account
 from domains.action_catalog import app_events_for_action, operations_manifest
 from domains.automation_rules import (
@@ -87,6 +88,8 @@ def handle_action(data_root: str | Path, action: str, payload: dict[str, Any]) -
     initialize(data_root)
     try:
         with connect(data_root) as db:
+            if action == "pwa.read_model":
+                return 200, read_model(db, data_root, payload)
             if action in {"operations.manifest", "crm.manifest"}:
                 return 200, operations_manifest()
             if action in {"health", "crm.health"}:

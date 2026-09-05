@@ -1,3 +1,5 @@
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { readCrmDisplay } from '../pwaCache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BootstrapPayload, CrmRecord, PipelineBoardPayload, RecordsTablePayload, callBackend } from '../api';
 import { buildCrmViewModel } from './viewModel';
@@ -30,12 +32,33 @@ export function useCrmDataController() {
   const lastAppliedViewFilter = useRef('');
   const lastPersistedSearchFilter = useRef(JSON.stringify({ query: '', entity_type: 'all' }));
   const hasLoadedSearchFilter = useRef(false);
+  const cacheReads = useRef(new Map<string, AbortController>());
+  const [recordsLoading, setRecordsLoading] = useState(true);
+  async function displayRead<T>(slot: string, parameters: Record<string, unknown>, apply: (data: T) => void) {
+    cacheReads.current.get(slot)?.abort();
+    const controller = new AbortController();
+    cacheReads.current.set(slot, controller);
+    const current = () => !controller.signal.aborted;
+    const update = (data: T) => { if (current()) apply(data); };
+    const value = await readCrmDisplay<T>(parameters, {
+      signal: controller.signal, onRevalidated: update,
+      onRevalidationError: (error) => { if (current()) setError(error instanceof Error ? error.message : 'CRM read failed.'); },
+    });
+    update(value);
+    return controller;
+  }
+  useEffect(() => () => { for (const controller of cacheReads.current.values()) controller.abort(); }, []);
 
   async function refresh() {
     setIsLoading(true);
     setError('');
     try {
-      setData(await callBackend<BootstrapPayload>({ action: 'bootstrap' }));
+      const controller = await displayRead<Partial<BootstrapPayload>>('bootstrap', { kind: 'bootstrap' }, (value) => setData((current) => ({ ...current, ...value })));
+      // Workflow proposals, saved filters and other live-only surfaces are not
+      // cached and never gate paint of the customer display projection.
+      void callBackend<BootstrapPayload>({ action: 'bootstrap' }).then((value) => {
+        if (!controller.signal.aborted) setData(value);
+      }).catch(() => undefined);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load CRM data.');
     } finally {
@@ -46,17 +69,15 @@ export function useCrmDataController() {
   async function refreshRecords(cursor = recordsCursor) {
     setError('');
     try {
-      setRecordsData(await callBackend<RecordsTablePayload>({
-        action: 'crm.records_table',
-        entity_type: recordEntityFilter,
-        query,
-        filters,
-        sort: recordsSort,
-        pagination: { limit: recordsPageSize, cursor }
-      }));
+      setRecordsLoading(true);
+      await displayRead<RecordsTablePayload>('records', {
+        kind: 'records_table', entity_type: recordEntityFilter, query, filters,
+        sort_field: recordsSort.field, sort_direction: recordsSort.direction,
+        limit: recordsPageSize, cursor,
+      }, setRecordsData);
     } catch (recordsError) {
-      setError(recordsError instanceof Error ? recordsError.message : 'Unable to load CRM records.');
-    }
+      if (!(recordsError instanceof Error && recordsError.name === 'AbortError')) setError(recordsError instanceof Error ? recordsError.message : 'Unable to load CRM records.');
+    } finally { setRecordsLoading(false); }
   }
 
   async function refreshReports() {
@@ -70,7 +91,7 @@ export function useCrmDataController() {
 
   async function refreshPipelineBoard() {
     try {
-      setPipelineBoard(await callBackend<PipelineBoardPayload>({ action: 'crm.pipeline_board' }));
+      await displayRead<PipelineBoardPayload>('pipeline', { kind: 'pipeline_board' }, setPipelineBoard);
     } catch {
       setPipelineBoard(null);
     }
@@ -79,11 +100,12 @@ export function useCrmDataController() {
   useEffect(() => {
     void refresh();
     function handleMessage(event: MessageEvent) {
-      if (event.origin === window.location.origin && event.data?.type === 'maverick.app.data-changed' && event.data?.owner_app_id === 'crm') {
+      if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.data-changed' && event.data?.owner_app_id === 'crm') {
         void refresh();
         void refreshPipelineBoard();
+        void refreshRecords();
       }
-      if (event.origin === window.location.origin && event.data?.type === 'maverick.app.navigate') {
+      if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.navigate') {
         const params = event.data.params && typeof event.data.params === 'object' ? event.data.params : {};
         const appPage = typeof params.app_page === 'string' ? params.app_page : typeof event.data.app_page === 'string' ? event.data.app_page : '';
         const intent = typeof params.intent === 'string' ? params.intent : '';
@@ -127,6 +149,16 @@ export function useCrmDataController() {
       void refreshPipelineBoard();
     }
   }, [view, recordEntityFilter, query, filters, recordsSort, recordsCursor, recordsPageSize]);
+
+  useEffect(() => {
+    const target = pendingSelection ?? (selected ? { entity: selected.entity, id: selected.record.id } : null);
+    if (!target) return;
+    void displayRead<{ record: CrmRecord }>('detail', { kind: 'get', entity_type: target.entity, id: target.id }, (value) => {
+      setSelected({ entity: target.entity, record: value.record });
+      setPendingSelection(null);
+    }).catch((error: unknown) => { if (!(error instanceof Error && error.name === 'AbortError')) setError(error instanceof Error ? error.message : 'CRM detail failed.'); });
+    return () => { cacheReads.current.get('detail')?.abort(); };
+  }, [pendingSelection?.id, pendingSelection?.entity, selected?.record.id, selected?.entity]);
 
   useEffect(() => {
     if (!pendingSelection) return;
@@ -214,7 +246,7 @@ export function useCrmDataController() {
     filters,
     importPreview,
     isCreateChooserOpen,
-    isLoading,
+    isLoading: isLoading || recordsLoading,
     isSaving,
     pipelineBoard,
     recordEntityFilter,

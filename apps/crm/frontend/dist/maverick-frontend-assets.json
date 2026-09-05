@@ -1,0 +1,46 @@
+{
+  "build_id": "86541cc8086b3f28c69839082b9b605fdb84e823fb182d724d0323aa0ae9aed1",
+  "entrypoints": [
+    "index.html",
+    "widgets/crm-sidebar/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-7acJll9i.css",
+      "sha256": "720e63cf31840e7158a52c13e0df11154c01d296cea04744ceb012e039238a8f",
+      "size_bytes": 46556
+    },
+    {
+      "path": "assets/app-BIBONh7X.js",
+      "sha256": "ce15f0edb969c7d7cbec3ea5874828866e648ed456c8f2aca3e4093687e43cb0",
+      "size_bytes": 285518
+    },
+    {
+      "path": "assets/handshake-C9horJz2.js",
+      "sha256": "8f1ef2432c1e1a77249547b10719fbd2cdbc4dbb59c68acc10af60202508d359",
+      "size_bytes": 197577
+    },
+    {
+      "path": "assets/index-DkVMClp4.css",
+      "sha256": "7bf1e83887dc8dcd9f2cdc6a002be404f3a14f0a508f00d98d3a5bdaebcd3d0f",
+      "size_bytes": 3094
+    },
+    {
+      "path": "assets/widgets/crm-sidebar/index-BFFQMb1E.js",
+      "sha256": "c65abb878ef540a70977cc17636e11e514649190474e63c04f6c0903bf7c60d9",
+      "size_bytes": 3390
+    },
+    {
+      "path": "index.html",
+      "sha256": "20ec9014b2936d4938cf20a89376d5a77922f3f8f6e1f598d7090fe66383e4ec",
+      "size_bytes": 491
+    },
+    {
+      "path": "widgets/crm-sidebar/index.html",
+      "sha256": "97a37059e11078252f58c5a87ba2f3631477a1a1a2cb842f5b417b50c487d013",
+      "size_bytes": 535
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

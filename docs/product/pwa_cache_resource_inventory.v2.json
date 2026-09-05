@@ -246,18 +246,27 @@
       "read_surface": "calendar_list_events",
       "canonical_data_class": "personal_data",
       "provenance": "app_reference",
-      "local_persistence_policy": "session",
+      "local_persistence_policy": "cache",
       "policy_prerequisites": [
-        "bounded persistent adapter and sanitizer verification under the 2026-09-05 product approval"
+        "privacy and bounded projection approved 2026-09-05"
       ],
       "fresh_ttl_seconds": 60,
       "expiry_ttl_seconds": 21600,
-      "revision": "sync cursor or interval revision required",
+      "revision": "SHA-256 of normalized page with known_revision/not_modified",
       "max_entry_bytes": 1048576,
       "max_scope_bytes": 16777216,
       "invalidation": "overlapping events data event or transport recovery",
       "data_event": "events",
-      "rollout": "M5 persistence approved on 2026-09-05; adapter and resource enforcement pending; default-off"
+      "rollout": "M5 persistent adapter implemented; default-off",
+      "runtime_schema_revision": "calendar.bounded-event-window.v1",
+      "invalidation_aliases": [
+        "events",
+        "calendars",
+        "connections",
+        "view-state"
+      ],
+      "cache_approved": true,
+      "privacy_approved": true
     },
     {
       "app_ids": [
@@ -287,19 +296,28 @@
       "read_surface": "CRM search/get/filter/schema read models",
       "canonical_data_class": "regulated_or_customer_data",
       "provenance": "app_reference",
-      "local_persistence_policy": "deny",
+      "local_persistence_policy": "cache",
       "policy_prerequisites": [
-        "implement and verify the resource allowlist approved on 2026-09-05",
-        "strict app-owned sanitizer and revision contract"
+        "customer display resource allowlist approved 2026-09-05; closed schema enforced by backend and broker"
       ],
-      "fresh_ttl_seconds": 0,
-      "expiry_ttl_seconds": 0,
-      "revision": "record/schema revision required",
-      "max_entry_bytes": 0,
-      "max_scope_bytes": 0,
+      "fresh_ttl_seconds": 30,
+      "expiry_ttl_seconds": 21600,
+      "revision": "SHA-256 of projected read model; known_revision/not_modified",
+      "max_entry_bytes": 2097152,
+      "max_scope_bytes": 16777216,
       "invalidation": "records data event, reconnect, access denial",
       "data_event": "records",
-      "rollout": "M5 customer-data scope approved on 2026-09-05; adapter and resource enforcement pending; default-off"
+      "rollout": "M5 persistent display integration; default-off",
+      "cache_approved": true,
+      "privacy_approved": true,
+      "regulated_allowlisted": true,
+      "runtime_schema_revision": "crm.lists-and-recent-records.v1",
+      "invalidation_aliases": [
+        "records",
+        "schema",
+        "pipelines",
+        "view-state"
+      ]
     },
     {
       "app_ids": [
@@ -310,19 +328,30 @@
       "read_surface": "mail_list_threads/mail_get_thread/search",
       "canonical_data_class": "regulated_or_customer_data",
       "provenance": "app_reference",
-      "local_persistence_policy": "deny",
+      "local_persistence_policy": "cache",
       "policy_prerequisites": [
-        "implement and verify the resource allowlist approved on 2026-09-05",
-        "strict app-owned sanitizer and revision contract"
+        "customer display resource allowlist approved 2026-09-05; closed schema enforced by backend and broker"
       ],
-      "fresh_ttl_seconds": 0,
-      "expiry_ttl_seconds": 0,
-      "revision": "thread/message revision required",
-      "max_entry_bytes": 0,
-      "max_scope_bytes": 0,
+      "fresh_ttl_seconds": 30,
+      "expiry_ttl_seconds": 3600,
+      "revision": "SHA-256 of projected read model; known_revision/not_modified",
+      "max_entry_bytes": 1048576,
+      "max_scope_bytes": 16777216,
       "invalidation": "threads data event, reconnect, access denial",
       "data_event": "threads",
-      "rollout": "M5 customer-data scope approved on 2026-09-05; adapter and resource enforcement pending; default-off"
+      "rollout": "M5 persistent display integration; default-off",
+      "cache_approved": true,
+      "privacy_approved": true,
+      "regulated_allowlisted": true,
+      "runtime_schema_revision": "mail.thread-headers-snippets-and-bodies.v1",
+      "invalidation_aliases": [
+        "threads",
+        "messages",
+        "connections",
+        "folders",
+        "labels",
+        "view-state"
+      ]
     },
     {
       "app_ids": [
@@ -352,7 +381,7 @@
       "read_surface": "app.bootstrap read model and bounded captured video thumbnail frames",
       "canonical_data_class": "personal_data",
       "provenance": "app_reference",
-      "local_persistence_policy": "session",
+      "local_persistence_policy": "cache",
       "runtime_schema_revision": "fitness-coach.sanitized-bootstrap-and-thumbnails.v1",
       "invalidation_aliases": [
         "workouts",
@@ -361,7 +390,7 @@
         "view-state"
       ],
       "policy_prerequisites": [
-        "verify persistent resource enforcement under the 2026-09-05 product approval"
+        "personal display scope approved 2026-09-05; closed bootstrap and thumbnail projections"
       ],
       "fresh_ttl_seconds": 300,
       "expiry_ttl_seconds": 86400,
@@ -370,7 +399,9 @@
       "max_scope_bytes": 16777216,
       "invalidation": "workouts, exercises, runs, or view-state data event; storage app id and media source version are part of entity identity",
       "data_event": "workouts, exercises, runs, view-state",
-      "rollout": "M5 session-only pilot implemented; persistent scope approved on 2026-09-05, resource enforcement pending; global and per-app default-off gates unchanged"
+      "rollout": "M5 persistent adapter implemented; default-off",
+      "cache_approved": true,
+      "privacy_approved": true
     },
     {
       "app_ids": [

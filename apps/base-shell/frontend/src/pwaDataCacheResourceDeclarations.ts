@@ -1,3 +1,8 @@
+import { sanitizeCrmReadModel } from '../../../crm/frontend/src/pwaReadModel';
+import { sanitizeMailReadModel } from '../../../mail/frontend/src/pwaReadModel';
+import { sanitizeBootstrapReadModel } from '../../../fitness-coach/frontend/src/bootstrapCache';
+import { sanitizeThumbPreviewEntry } from '../../../fitness-coach/frontend/src/mediaThumbPreviewCache';
+import { sanitizeCalendarReadModel } from '../../../calendar/frontend/src/pwaReadModel';
 import {
   LOCAL_PERSISTENCE_POLICY_REVISION,
   deriveLocalPersistencePolicy,
@@ -68,7 +73,11 @@ function buildResourceDeclarations(): Readonly<Record<string, Readonly<Record<st
       provenance,
       regulatedAllowlisted: record.regulated_allowlisted,
       revalidateOnRead: "always",
-      sanitize: sanitizeStructuredReadModel,
+      sanitize: record.app_id === 'calendar' ? sanitizeCalendarReadModel
+        : record.app_id === 'fitness-coach' ? (value) => sanitizeBootstrapReadModel(value) ?? sanitizeThumbPreviewEntry(value)
+        : record.app_id === 'crm' ? sanitizeCrmReadModel
+        : record.app_id === 'mail' ? sanitizeMailReadModel
+        : sanitizeStructuredReadModel,
       schemaRevision: boundedText(record.schema_revision, "schema revision"),
     };
     const appId = boundedText(record.app_id, "app id");

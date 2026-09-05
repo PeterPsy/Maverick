@@ -14,6 +14,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.14.0",
     "react": "^19.0.0",

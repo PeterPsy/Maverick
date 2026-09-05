@@ -1,3 +1,5 @@
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { readMailDisplay } from './pwaCache';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import {
@@ -894,7 +896,17 @@ export function App() {
     return connectionSecretRequest(connections.find((item) => item.id === id));
   }, [connections]);
 
+  const displayReads = useRef(new Map<string, AbortController>());
+  useEffect(() => () => { for (const controller of displayReads.current.values()) controller.abort(); }, []);
+  const beginDisplayRead = (slot: string) => {
+    displayReads.current.get(slot)?.abort();
+    const controller = new AbortController();
+    displayReads.current.set(slot, controller);
+    return controller;
+  };
+
   const openThread = useCallback(async (threadId: string, connectionId?: string, refresh = false) => {
+    const controller = beginDisplayRead('thread');
     const requestId = threadOpenRequestRef.current + 1;
     threadOpenRequestRef.current = requestId;
     setBusy(true);
@@ -903,13 +915,19 @@ export function App() {
       setSelectedThread(null);
     }
     try {
-      const payload = await callBackend<{ thread: MailThread }>({
-        action: MAIL_BACKEND_ACTIONS.threadsGet,
-        thread_id: threadId,
-        max_body_chars: READER_TEXT_BODY_CHARS,
-        max_body_html_chars: READER_HTML_BODY_CHARS,
-        ...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest())
+      const parameters = { kind: 'thread', thread_id: threadId, max_body_chars: READER_TEXT_BODY_CHARS };
+      const payload = await readMailDisplay<{ thread: MailThread }>(parameters, {
+        signal: controller.signal,
+        onRevalidated: (next) => { if (threadOpenRequestRef.current === requestId) setSelectedThread(next.thread); },
+        onRevalidationError: (error) => { if (threadOpenRequestRef.current === requestId) setNotice(error instanceof Error ? error.message : 'Mail read failed.'); },
       });
+      // Rich rendering/provider refresh remains live-only, and never gates the
+      // cached message text. No attachment bytes or send authority are cached.
+      void callBackend<{ thread: MailThread }>({
+        action: MAIL_BACKEND_ACTIONS.threadsGet, thread_id: threadId,
+        max_body_chars: READER_TEXT_BODY_CHARS, max_body_html_chars: READER_HTML_BODY_CHARS,
+        ...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest()),
+      }).then((next) => { if (!controller.signal.aborted && threadOpenRequestRef.current === requestId) setSelectedThread(next.thread); }).catch(() => undefined);
       if (threadOpenRequestRef.current !== requestId) {
         return;
       }
@@ -934,12 +952,17 @@ export function App() {
   }, [mailbox, secretRequestForConnectionId, serializedMailboxScopes]);
 
   const loadThreads = useCallback(async () => {
+    const controller = beginDisplayRead('list');
     const requestId = threadListRequestRef.current + 1;
     threadListRequestRef.current = requestId;
     setThreadListLoading(true);
     const offset = (page - 1) * THREADS_PAGE_SIZE;
     try {
-      const connectionPayload = await callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() });
+      const connectionPayload = await readMailDisplay<ConnectionPayload>({ kind: 'mailboxes' }, {
+        signal: controller.signal,
+        onRevalidated: (next) => { if (!controller.signal.aborted) setConnections(next.items); },
+        onRevalidationError: (error) => { if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Mail display failed.'); },
+      });
       if (threadListRequestRef.current !== requestId) {
         return;
       }
@@ -947,20 +970,27 @@ export function App() {
       const nextMailboxScopeIds = mailboxScopeIdsForConnections(mailboxScopeIds, nextConnections);
       const nextSerializedMailboxScopes = serializeMailboxScopeIds(nextMailboxScopeIds);
       const nextPrimaryScope = primaryMailboxScope(nextMailboxScopeIds);
-      const threadPayload = await callBackend<ThreadListPayload>({
-        action: MAIL_BACKEND_ACTIONS.threadsList,
+      const threadPayload = await readMailDisplay<ThreadListPayload>({
+        kind: 'threads',
         mailbox: nextPrimaryScope.mailbox,
         mailbox_scopes: nextSerializedMailboxScopes,
         ...(nextPrimaryScope.connectionId ? { connection_id: nextPrimaryScope.connectionId } : {}),
         ...(query ? { query } : {}),
         max_threads: THREADS_PAGE_SIZE,
         offset,
-        ...noSecretRequest()
+      }, {
+        signal: controller.signal,
+        onRevalidated: (next) => {
+          if (threadListRequestRef.current === requestId) { setThreads(next.items); setTotalThreads(next.total_count ?? next.items.length); }
+        },
+        onRevalidationError: (error) => { if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Mail list failed.'); },
       });
       if (threadListRequestRef.current !== requestId) {
         return;
       }
       setConnections(nextConnections);
+      void callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() })
+        .then((next) => { if (!controller.signal.aborted) setConnections(next.items); }).catch(() => undefined);
       if (nextSerializedMailboxScopes !== serializedMailboxScopes) {
         setMailboxScopeIds(nextMailboxScopeIds);
         setMailbox(nextPrimaryScope.mailbox);
@@ -1053,7 +1083,7 @@ export function App() {
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
+      if (!isExactMaverickParentMessage(event)) {
         return;
       }
       const data = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: MailNavigateParams };

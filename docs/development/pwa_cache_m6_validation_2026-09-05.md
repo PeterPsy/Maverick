@@ -1,10 +1,69 @@
 # PWA Cache M6 Validation — 2026-09-05
 
-Status: five follow-up review findings corrected in `233f5f85` and `2efa105d`;
-automated corrective validation is recorded below. M5 completion, physical-device
-evidence and private rollout remain open. This is not closure of the whole plan.
+Status: the two remaining review findings are corrected in `e729902b` and
+`b8311de7`, following the earlier five-finding remediation. M5 completion,
+physical-device evidence and private rollout remain open. This is not closure
+of the whole plan.
 
-## Follow-up review: corrective validation
+## Second review: durable recovery and broker metrics
+
+- **P1 — memory → IndexedDB:** `durabilityMode()` describes the stable primary
+  publication authority, independently of the active fallback. Both writer
+  admission and cleanup use that authority; initialization cannot accidentally
+  issue a local-only ticket for a writer that later reaches IndexedDB.
+  `publicationRecovery.test.ts` uses two independently imported SDK module
+  graphs, separate generation Maps and buses, and shared fake IndexedDB,
+  origin storage and lock service. It asserts that cleanup in the second graph
+  does not change the first graph's local generation. Recovery during
+  initialization reproduces the old bug (one private entry after completed
+  cleanup) and now leaves no entry; recovery during a quota wait and a fresh
+  post-cleanup write are also covered. This is an automated context-isolation
+  regression, not a claim of physical multi-tab device evidence.
+- **P2 — missing retry metrics:** the SDK binds a private telemetry observer to
+  the broker loader signal and declared app/resource. Only its validated HTTP
+  read coordinator emits retry events; the arbitrary loader still runs once.
+  The host checks the active app/read/network ids, re-keys child hashes,
+  deduplicates events, bounds bookkeeping, and measures duration with its own
+  clock. No URL, payload, entity id, error text or child-supplied duration is
+  persisted. Teardown drains waits even if the child port closes before its
+  final event arrives.
+- Real broker tests now assert dashboard-collector **pending = 1** while
+  waiting, then **one retry / one duration observation / pending = 0** on
+  recovery. Clear and dispose produce one cancelled observation without a
+  second fetch; a terminal HTTP result closes the wait without replaying the
+  loader. Additional tests cover signal/scope isolation, late unbinding,
+  mismatched network identities, duplicate/out-of-order events, equal hashes
+  across distinct host requests, and bounded teardown.
+
+### Second-review automated checks
+
+- SDK: **18 files / 166 tests**, TypeScript check passed.
+- Base Shell: **36 files / 199 tests**, TypeScript and official frontend build
+  passed.
+- Storage: **28 files / 134 tests**; Fitness Coach: **14 files / 85 tests**.
+- Worker/build/cross-origin broker suite: **16 tests**; App Store: **5 tests**.
+- Focused PWA API, rollout, inventory, audit and device-policy Python suite:
+  **37 tests**; Settings dashboard: **2 DOM tests**. Total: **644 automated tests**.
+- Operational PWA audit, unused-import checker and whitespace/diff checks
+  passed. No shared backend restart or rollout-flag change was required.
+- Authenticated Chromium smoke passed on the exact second-review shell build
+  below: **16 verified precache assets**, isolated Settings refresh/clear,
+  mounted UI during transport loss, standard-shell restart and recovery.
+  Command: `.venv/bin/python scripts/pwa_shell_cache_smoke.py`; capture time
+  `2026-09-05T19:16:22.719Z`. This does not satisfy physical PWA-098 evidence.
+
+All five affected frontends were rebuilt through the official app surface,
+which published their scoped frontend refresh events:
+
+| App | Second-review build id |
+|---|---|
+| base-shell | `81eb5a9b959a60262bd66c24fbde59aa758596da00be721ba4de89423cf885ef` |
+| storage | `37c013fb3cf35f57645734bf126a7d68aecf6c99683330bdd7b188a20c93a512` |
+| fitness-coach | `93c86fab0bcca912b991f09c4c0f237ec89d5d8af98faa248485b64723c50b19` |
+| website-studio | `6b55b8ab90c6595dddac79069ba0a4b8c7b86f4b779d2520fd00ad015efb4bd1` |
+| app-store | `29858e0ab9cce9c79a2821d6415566ed9e9333fabcbb05196f0afc9cf8d3becf` |
+
+## First follow-up review: historical corrective validation
 
 | Finding | Correction and regression evidence |
 |---|---|

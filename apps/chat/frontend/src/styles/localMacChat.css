@@ -11,3 +11,4 @@
 .chatapp-local-mac button:disabled { opacity:.4; cursor:default; }
 .chatapp-local-mac [role=alert] { color:#da5959; }
 .chatapp-execution-mode { display:flex; flex-direction:column; height:100%; min-height:0; }
+.chatapp-execution-mode > .chatapp-root { flex:1; height:auto; min-height:0; }

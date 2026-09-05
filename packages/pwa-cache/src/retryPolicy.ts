@@ -6,6 +6,7 @@ export type RetryClassification = {
 };
 
 export type MutationRetryContract = {
+  auditId: string;
   idempotencyKey: string;
   requestFingerprint: string;
   serverDeduplicates: true;
@@ -13,6 +14,7 @@ export type MutationRetryContract = {
 
 export type RetryTelemetryEvent = {
   attempt: number;
+  durationMs?: number;
   keyHash: string;
   kind: "wait_started" | "retry_attempt" | "resolved" | "cancelled";
   waitMs?: number;
@@ -44,6 +46,7 @@ export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const RETRYABLE_HTTP_STATUSES = new Set([429, 502, 503, 504]);
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,199}$/u;
 const SHA256_FINGERPRINT_PATTERN = /^sha256:[0-9a-f]{64}$/u;
+const RETRY_AUDIT_ID_PATTERN = /^[a-z0-9][a-z0-9.-]{4,126}\.v[1-9][0-9]*$/u;
 
 export class RetryCancelledError extends Error {
   constructor(message = "Retry operation was cancelled.") {
@@ -96,9 +99,10 @@ export function validateMutationContract(method: string, contract: MutationRetry
     return;
   }
   if (contract.serverDeduplicates !== true
+      || !RETRY_AUDIT_ID_PATTERN.test(contract.auditId)
       || !IDEMPOTENCY_KEY_PATTERN.test(contract.idempotencyKey)
       || !SHA256_FINGERPRINT_PATTERN.test(contract.requestFingerprint)) {
-    throw new TypeError("Mutation retry requires a stable Idempotency-Key, canonical SHA-256 request fingerprint, and server deduplication.");
+    throw new TypeError("Mutation retry requires a registered audit id, stable Idempotency-Key, canonical SHA-256 request fingerprint, and server deduplication.");
   }
 }
 

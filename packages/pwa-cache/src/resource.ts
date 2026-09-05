@@ -212,13 +212,19 @@ export class PwaCacheResource<T> {
       const revision = String(response.revision || "").trim();
       const sanitized = safeSanitize(this.policy.sanitize, response.payload);
       if (sanitized !== null && revision) {
-        await this.storeValue(entityId, sanitized, revision, response.etag);
+        await this.storeValue(entityId, sanitized, revision, response.etag, Boolean(current));
       }
       return { changed: !current || current.metadata.revision !== revision, payload: sanitized ?? response.payload, revision };
     });
   }
 
-  private async storeValue(entityId: string, payload: T, revision: string, etag?: string): Promise<void> {
+  private async storeValue(
+    entityId: string,
+    payload: T,
+    revision: string,
+    etag: string | undefined,
+    revalidation: boolean,
+  ): Promise<void> {
     const backend = this.backend();
     if (!backend) {
       return;
@@ -243,7 +249,7 @@ export class PwaCacheResource<T> {
         sizeBytes,
       });
       await backend.put({ metadata, payload });
-      this.telemetry({ bytes: sizeBytes, kind: "write" });
+      this.telemetry({ bytes: sizeBytes, kind: "write", revalidation });
       await enforceCacheBudgets(backend, this.scope, this.budgets, now, this.telemetry);
     } catch (error) {
       this.telemetry({ kind: "error", reason: errorName(error) });

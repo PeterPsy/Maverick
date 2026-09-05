@@ -36,6 +36,32 @@ describe("RAM retry coordinator", () => {
     expect(operation).toHaveBeenCalledTimes(3);
   });
 
+  it("reports one bounded wait lifecycle across retries", async () => {
+    vi.useFakeTimers();
+    const telemetry: Array<Record<string, unknown>> = [];
+    const coordinator = new RetryCoordinator({
+      random: () => 0.5,
+      telemetry: (event) => telemetry.push(event),
+    });
+    const operation = vi.fn()
+      .mockRejectedValueOnce(transportError())
+      .mockRejectedValueOnce(transportError())
+      .mockResolvedValueOnce("ok");
+    const pending = coordinator.run({ key: "read:observed", operation });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(pending).resolves.toBe("ok");
+    expect(telemetry.map((event) => event.kind)).toEqual([
+      "wait_started",
+      "retry_attempt",
+      "retry_attempt",
+      "resolved",
+    ]);
+    expect(telemetry.at(-1)).toMatchObject({ attempt: 2, durationMs: 3_000 });
+    expect(new Set(telemetry.map((event) => event.keyHash))).toHaveLength(1);
+  });
+
   it("treats 401, 403, 409, and 422 as terminal", async () => {
     for (const status of [401, 403, 409, 422]) {
       const coordinator = new RetryCoordinator();
@@ -85,6 +111,7 @@ describe("RAM retry coordinator", () => {
     vi.useFakeTimers();
     const coordinator = new RetryCoordinator({ random: () => 0.5 });
     const contract = {
+      auditId: "test.retry-contract.v1",
       idempotencyKey: createIdempotencyKey(),
       requestFingerprint: fingerprint(),
       serverDeduplicates: true as const,
@@ -111,6 +138,7 @@ describe("RAM retry coordinator", () => {
     let resolve!: (value: string) => void;
     const operation = vi.fn(() => new Promise<string>((done) => { resolve = done; }));
     const mutation = {
+      auditId: "test.retry-contract.v1",
       idempotencyKey: createIdempotencyKey(),
       requestFingerprint: fingerprint(),
       serverDeduplicates: true as const,
@@ -131,14 +159,14 @@ describe("RAM retry coordinator", () => {
     await coordinator.run({
       key: "first",
       method: "POST",
-      mutation: { idempotencyKey, requestFingerprint: fingerprint("a"), serverDeduplicates: true },
+      mutation: { auditId: "test.retry-contract.v1", idempotencyKey, requestFingerprint: fingerprint("a"), serverDeduplicates: true },
       operation: async () => "created",
     });
 
     expect(() => coordinator.run({
       key: "second",
       method: "POST",
-      mutation: { idempotencyKey, requestFingerprint: fingerprint("b"), serverDeduplicates: true },
+      mutation: { auditId: "test.retry-contract.v1", idempotencyKey, requestFingerprint: fingerprint("b"), serverDeduplicates: true },
       operation: async () => "created-again",
     })).toThrow(/different request fingerprint/);
   });
@@ -151,6 +179,7 @@ describe("RAM retry coordinator", () => {
       key: "mutation:update",
       method: "PATCH",
       mutation: {
+        auditId: "test.retry-contract.v1",
         idempotencyKey: createIdempotencyKey(),
         requestFingerprint: fingerprint(),
         serverDeduplicates: true,
@@ -177,6 +206,7 @@ describe("RAM retry coordinator", () => {
         key: "mutation:invalid-fingerprint",
         method: "POST",
         mutation: {
+          auditId: "test.retry-contract.v1",
           idempotencyKey: createIdempotencyKey(),
           requestFingerprint,
           serverDeduplicates: true,
@@ -184,6 +214,24 @@ describe("RAM retry coordinator", () => {
         operation,
       })).toThrow(/SHA-256/i);
     }
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("rejects mutation retry without a versioned registered audit identity", () => {
+    const coordinator = new RetryCoordinator();
+    const operation = vi.fn(async () => "created");
+
+    expect(() => coordinator.run({
+      key: "mutation:unaudited",
+      method: "POST",
+      mutation: {
+        auditId: "unregistered contract",
+        idempotencyKey: createIdempotencyKey(),
+        requestFingerprint: fingerprint(),
+        serverDeduplicates: true,
+      },
+      operation,
+    })).toThrow(/audit id/i);
     expect(operation).not.toHaveBeenCalled();
   });
 
@@ -226,5 +274,23 @@ describe("RAM retry coordinator", () => {
     coordinator.setScope("user-b/default");
     await expect(scoped).rejects.toBeInstanceOf(RetryCancelledError);
     expect(coordinator.pendingCount()).toBe(0);
+  });
+
+  it("reports cancellation duration for an externally aborted wait", async () => {
+    vi.useFakeTimers();
+    const telemetry: Array<Record<string, unknown>> = [];
+    const coordinator = new RetryCoordinator({ telemetry: (event) => telemetry.push(event) });
+    const controller = new AbortController();
+    const pending = coordinator.run({
+      key: "read:cancelled-wait",
+      operation: async () => { throw transportError(); },
+      signal: controller.signal,
+    });
+    await vi.advanceTimersByTimeAsync(400);
+    controller.abort();
+
+    await expect(pending).rejects.toBeInstanceOf(RetryCancelledError);
+    expect(telemetry.map((event) => event.kind)).toEqual(["wait_started", "cancelled"]);
+    expect(telemetry.at(-1)).toMatchObject({ durationMs: 400 });
   });
 });

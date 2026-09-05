@@ -184,12 +184,30 @@ test("activation cleans obsolete shell and app-static caches without touching un
   assert.equal(harness.claimCalls, 1);
 });
 
+test("worker observability emits only closed redaction-safe metric names", async () => {
+  const harness = workerHarness();
+  harness.fetchImpl = async (input) => responseFor(requestPath(input));
+  await harness.dispatchExtendable("install");
+  const record = records.find(({ url }) => url.includes("index-testhash.js"));
+  await harness.internals.cacheFirstVerifiedShellAsset(fakeRequest(record.url), record);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const metrics = harness.clientMessages.filter((message) => message.type === "MAVERICK_PWA_METRIC");
+  assert.ok(metrics.some((message) => message.metric === "pwa_sw_install"));
+  assert.ok(metrics.some((message) => message.metric === "pwa_static_cache_hit"));
+  for (const message of metrics) {
+    assert.deepEqual(Object.keys(message).sort(), ["metric", "type"]);
+    assert.doesNotMatch(JSON.stringify(message), /index-testhash|https?:|favicon|build/i);
+  }
+});
+
 function workerHarness({ activeWorker = null } = {}) {
   const listeners = new Map();
   const caches = new MemoryCacheStorage();
   const harness = {
     caches,
     claimCalls: 0,
+    clientMessages: [],
     fetchImpl: async (input) => responseFor(requestPath(input)),
     skipWaitingCalls: 0,
     unregisterCalls: 0,
@@ -198,7 +216,7 @@ function workerHarness({ activeWorker = null } = {}) {
     addEventListener(type, listener) { listeners.set(type, listener); },
     clients: {
       async claim() { harness.claimCalls += 1; },
-      async matchAll() { return []; },
+      async matchAll() { return [{ postMessage(message) { harness.clientMessages.push(message); } }]; },
     },
     location: { origin: "https://maverick.test" },
     registration: {

@@ -11,11 +11,40 @@ export {
 } from "./appFrameContext";
 export { clearPwaDataCache, readPwaCacheDiagnostics } from "./diagnostics";
 export {
+  PwaCacheMetricsCollector,
+  createPwaCacheMetricsCollector,
+} from "./metrics";
+export {
+  PWA_CACHE_COUNTER_METRICS,
+  PWA_CACHE_METRICS_SCHEMA,
+  PWA_CACHE_METRICS_STORAGE_KEY,
+  type PwaCacheCounterMetric,
+  type PwaCacheMetricsCollectorOptions,
+  type PwaCacheMetricsSnapshot,
+  type PwaCacheMetricsStorage,
+  type PwaServiceWorkerMetric,
+} from "./metricsTypes";
+export {
   PwaFileCache,
   PwaFileCacheHost,
   createPwaFileCacheHost,
 } from "./fileCache";
 export { MaverickFileHttpError } from "./fileCacheNetwork";
+export {
+  PWA_CACHE_OPERATIONS_ACCEPTED,
+  PWA_CACHE_OPERATIONS_REQUEST,
+  PWA_CACHE_OPERATIONS_RESULT,
+  clearParentPwaCache,
+  isParentPwaCacheOperationsRequest,
+  requestParentPwaCacheDashboard,
+  type ParentPwaCacheOperationsAcceptedMessage,
+  type ParentPwaCacheOperationsOptions,
+  type ParentPwaCacheOperationsRequestMessage,
+  type ParentPwaCacheOperationsResultMessage,
+  type PwaCacheClearResult,
+  type PwaCacheDashboard,
+  type PwaCacheOperation,
+} from "./cacheOperationsBrokerProtocol";
 export {
   PWA_FILE_CACHE_BROKER_ACCEPTED,
   PWA_FILE_CACHE_BROKER_CANCEL,
@@ -119,6 +148,8 @@ export {
   type ResourceCachePolicy,
   type StorageEstimate,
   type StorageQuotaAdapter,
+  type StorageQuotaTelemetry,
+  type StorageQuotaTelemetryEvent,
   type StoredCacheEntry,
 } from "./types";
 export {

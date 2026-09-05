@@ -73,6 +73,27 @@ describe("cache lifecycle", () => {
     vi.useRealTimers();
   });
 
+  it("cancels RAM retries when Settings clears the cache", async () => {
+    vi.useFakeTimers();
+    const retry = new RetryCoordinator();
+    const controller = new CacheLifecycleController({
+      backend: new MemoryCacheBackend(),
+      bus: new CacheBus(null),
+      retryCoordinator: retry,
+    });
+    const pending = retry.run({
+      key: "read:clear-cache",
+      operation: async () => { throw Object.assign(new Error(), { name: "MaverickTransportError" }); },
+    });
+    void pending.catch(() => undefined);
+
+    await controller.clearAll();
+
+    await expect(pending).rejects.toMatchObject({ name: "RetryCancelledError" });
+    expect(retry.pendingCount()).toBe(0);
+    vi.useRealTimers();
+  });
+
   it("clears unknown persisted scopes after a cold authorization failure", async () => {
     const backend = new MemoryCacheBackend();
     await backend.put({ metadata: entry(), payload: { value: "one" } });

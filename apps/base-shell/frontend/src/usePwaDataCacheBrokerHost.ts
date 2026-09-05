@@ -2,7 +2,9 @@ import { useLayoutEffect, useRef } from "react";
 import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import type { AppRegistryItem } from "./api";
 import type { MaverickFrameScope } from "./iframePolicy";
+import { PwaCacheOperationsBroker } from "./pwaCacheOperationsBroker";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
+import { shellPwaMetrics, shellPwaQuotaAdapter } from "./pwaCacheRuntime";
 
 type AuthenticatedCachePrincipal = {
   sessionExpiresAt: string;
@@ -37,14 +39,19 @@ export function usePwaDataCacheBrokerHost({
         userId: principal.userId,
         workspaceId: principal.workspaceId,
       },
+      quotaAdapter: shellPwaQuotaAdapter,
+      telemetry: (event) => shellPwaMetrics.recordDataCache(event),
     });
+    const operationsBroker = new PwaCacheOperationsBroker({ frameScope });
     const handleMessage = (event: MessageEvent) => {
+      if (operationsBroker.handleWindowMessage(event)) return;
       if (broker.handleWindowMessage(event, enabledAppIdsRef.current)) return;
       broker.handleDataChangedMessage(event);
     };
     window.addEventListener("message", handleMessage);
     return () => {
       window.removeEventListener("message", handleMessage);
+      operationsBroker.dispose();
       broker.dispose();
     };
   }, [

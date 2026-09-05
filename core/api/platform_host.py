@@ -122,7 +122,12 @@ class PlatformHost:
             routed = handle_session_api(self.state, environ, start_response)
             if routed is not None:
                 return routed
-            routed = handle_pwa_api(environ, start_response)
+            routed = handle_pwa_api(
+                environ,
+                start_response,
+                user_id=user.user_id if user is not None else None,
+                workspace_id=workspace_id if context is not None else None,
+            )
             if routed is not None:
                 return routed
             routed = handle_workspace_api(self.state, environ, start_response, start_path=self.start_path)

@@ -162,6 +162,7 @@ export type CacheTelemetryEvent = {
     | "error"
     | "not_modified";
   reason?: string;
+  revalidation?: boolean;
 };
 
 export type CacheTelemetry = (event: CacheTelemetryEvent) => void;
@@ -171,6 +172,12 @@ export type StorageEstimate = {
   supported: boolean;
   usage: number | null;
 };
+
+export type StorageQuotaTelemetryEvent =
+  | { kind: "error" }
+  | { kind: "estimate"; quota: number | null; supported: boolean; usage: number | null };
+
+export type StorageQuotaTelemetry = (event: StorageQuotaTelemetryEvent) => void;
 
 export type CacheDiagnostics = {
   backend: BackendMode;

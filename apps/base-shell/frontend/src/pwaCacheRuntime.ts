@@ -1,13 +1,22 @@
 import {
+  BrowserStorageQuotaAdapter,
   RetryCoordinator,
   clampPrivateAccessLease,
   createCacheLifecycleController,
+  createPwaCacheMetricsCollector,
   type CacheLifecyclePrincipal,
 } from "@maverick/pwa-cache";
 import type { SessionPayload } from "./api";
 
-export const shellRetryCoordinator = new RetryCoordinator();
+export const shellPwaMetrics = createPwaCacheMetricsCollector();
+export const shellPwaQuotaAdapter = new BrowserStorageQuotaAdapter({
+  telemetry: (event) => shellPwaMetrics.recordQuota(event),
+});
+export const shellRetryCoordinator = new RetryCoordinator({
+  telemetry: (event) => shellPwaMetrics.recordRetry(event),
+});
 export const shellCacheLifecycle = createCacheLifecycleController({
+  quotaAdapter: shellPwaQuotaAdapter,
   retryCoordinator: shellRetryCoordinator,
 });
 

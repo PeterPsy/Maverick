@@ -1,0 +1,89 @@
+{
+  "schema": "maverick.pwa-cache-operational-policy.v1",
+  "asset_budgets": {
+    "max_frontend_asset_bytes": 16777216,
+    "max_frontend_manifest_bytes": 67108864,
+    "max_shell_precache_bytes": 33554432
+  },
+  "runtime_budgets": {
+    "structured_app_bytes": 33554432,
+    "structured_global_bytes": 67108864,
+    "file_entry_bytes": 67108864,
+    "file_scope_bytes": 134217728,
+    "file_global_bytes": 268435456,
+    "inventory_max_entry_bytes": 67108864,
+    "inventory_max_scope_bytes": 268435456
+  },
+  "retry_policy": {
+    "safe_methods": [
+      "GET",
+      "HEAD",
+      "OPTIONS"
+    ],
+    "retryable_http_statuses": [
+      429,
+      502,
+      503,
+      504
+    ],
+    "max_mutation_attempts": 3,
+    "mutation_contracts": [
+      {
+        "audit_id": "base-shell.pinned-apps.set.v1",
+        "method": "POST",
+        "endpoint": "/api/apps/app-store/backend",
+        "action": "pinned_apps.set",
+        "client_source": "apps/base-shell/frontend/src/api.ts",
+        "server_sources": [
+          "apps/app-store/backend/service.py",
+          "apps/app-store/backend/store.py"
+        ],
+        "test_source": "apps/app-store/tests/test_app_store_app.py"
+      }
+    ]
+  },
+  "device_regression": {
+    "max_evidence_age_days": 90,
+    "required_profiles": [
+      "safari-macos-minimum-browser",
+      "safari-macos-current-browser",
+      "safari-macos-current-dock",
+      "safari-ios-ipados-minimum-browser",
+      "safari-iphone-current-browser",
+      "safari-iphone-current-home-screen",
+      "chrome-edge-current-desktop-browser",
+      "chrome-current-desktop-app"
+    ],
+    "required_scenarios": [
+      "cold-launch",
+      "warm-launch",
+      "worker-update",
+      "worker-recovery",
+      "quota-pressure",
+      "intermittent-network",
+      "logout-cleanup",
+      "workspace-switch-cleanup"
+    ],
+    "profile_scenarios": {
+      "safari-macos-minimum-browser": [
+        "private-storage-degradation"
+      ],
+      "safari-macos-current-browser": [
+        "private-storage-degradation"
+      ],
+      "safari-ios-ipados-minimum-browser": [
+        "private-storage-degradation"
+      ],
+      "safari-iphone-current-browser": [
+        "private-storage-degradation"
+      ],
+      "chrome-edge-current-desktop-browser": [
+        "private-storage-degradation"
+      ]
+    }
+  },
+  "rollout": {
+    "user_percent_suffix": "_ROLLOUT_USER_PERCENT",
+    "workspace_percent_suffix": "_ROLLOUT_WORKSPACE_PERCENT"
+  }
+}

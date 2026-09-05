@@ -538,6 +538,7 @@ export async function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayloa
   } as const;
   const serializedSemantics = JSON.stringify(semantics);
   const mutation: MutationRetryContract = {
+    auditId: "base-shell.pinned-apps.set.v1",
     idempotencyKey: createIdempotencyKey("pinned-apps"),
     requestFingerprint: await createRequestFingerprint(serializedSemantics),
     serverDeduplicates: true,

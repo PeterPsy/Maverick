@@ -19,6 +19,8 @@ import {
   type ParentFileCacheOpenMessage,
   type ParentFileCacheResultMessage,
   type PwaFileCache,
+  type FileCacheTelemetryEvent,
+  type StorageQuotaAdapter,
 } from "@maverick/pwa-cache";
 import { MaverickHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
 import { revokeShellAuthorization, runShellRead } from "./pwaCacheRuntime";
@@ -50,7 +52,9 @@ type StorageFileCacheBrokerOptions = {
   hostOrigin?: string;
   openFile?: (request: Omit<FileCacheOpenRequest, "signal">, signal: AbortSignal) => Promise<FileCacheOpenResult>;
   principal: CachePrincipal;
+  quotaAdapter?: StorageQuotaAdapter;
   resolveDescriptor?: (request: ParentFileCacheOpenMessage, signal: AbortSignal) => Promise<unknown>;
+  telemetry?: (event: FileCacheTelemetryEvent) => void;
 };
 
 export class StorageFileCacheBroker {
@@ -77,6 +81,8 @@ export class StorageFileCacheBroker {
       this.cache = createPwaFileCacheHost(options.principal).createCache({
         accessLease: options.accessLease,
         enabled: true,
+        quotaAdapter: options.quotaAdapter,
+        telemetry: options.telemetry,
       });
       this.openFile = (request, signal) => runShellRead(
         `storage:file:${request.descriptor.fileId}:${request.descriptor.sourceVersion}`,

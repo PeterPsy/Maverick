@@ -16,8 +16,10 @@ def handle_pwa_api(
     start_response: StartResponse,
     *,
     environment: Mapping[str, str] | None = None,
+    user_id: str | None = None,
+    workspace_id: str | None = None,
 ) -> list[bytes] | None:
-    """Serve the public registration kill switch without session-derived state."""
+    """Serve redaction-safe rollout state, optionally scoped by the resolved session."""
     if str(environ.get("PATH_INFO") or "") != PWA_CONFIG_PATH:
         return None
     method = str(environ.get("REQUEST_METHOD") or "GET").upper()
@@ -30,6 +32,10 @@ def handle_pwa_api(
         )
     return json_response(
         start_response,
-        public_pwa_config(environment=environment),
+        public_pwa_config(
+            environment=environment,
+            user_id=user_id,
+            workspace_id=workspace_id,
+        ),
         headers=[("Cache-Control", "no-store")],
     )

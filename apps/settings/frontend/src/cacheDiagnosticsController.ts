@@ -1,9 +1,13 @@
-import { clearPwaDataCache, readPwaCacheDiagnostics, type CacheDiagnostics } from '@maverick/pwa-cache';
+import {
+  clearParentPwaCache,
+  requestParentPwaCacheDashboard,
+  type PwaCacheDashboard,
+} from '@maverick/pwa-cache';
 import type { SettingsNotice } from './notice';
 
 export type CacheDiagnosticsViewState = {
   confirmClear: boolean;
-  diagnostics: CacheDiagnostics | null;
+  dashboard: PwaCacheDashboard | null;
   error: string;
   isClearing: boolean;
   isLoading: boolean;
@@ -13,21 +17,22 @@ export function createCacheDiagnosticsController(context: {
   render: () => void;
   setNotice: (notice: SettingsNotice | null) => void;
 }) {
-  let diagnostics: CacheDiagnostics | null = null;
+  let dashboard: PwaCacheDashboard | null = null;
   let error = '';
   let isClearing = false;
   let isLoading = false;
   let confirmClear = false;
 
   async function ensureLoaded(force = false): Promise<void> {
-    if (isLoading || (!force && diagnostics)) {
+    if (isLoading || (!force && dashboard)) {
       return;
     }
     isLoading = true;
     error = '';
     context.render();
     try {
-      diagnostics = await readPwaCacheDiagnostics();
+      dashboard = await requestParentPwaCacheDashboard();
+      if (!dashboard) throw new Error('Cache diagnostics are unavailable outside the Maverick shell.');
     } catch (loadError) {
       error = errorMessage(loadError, 'Unable to inspect this browser cache.');
     } finally {
@@ -47,12 +52,14 @@ export function createCacheDiagnosticsController(context: {
     error = '';
     context.render();
     try {
-      const cleanup = await clearPwaDataCache();
+      const result = await clearParentPwaCache();
+      if (!result) throw new Error('Cache cleanup is unavailable outside the Maverick shell.');
+      const { cleanup } = result;
       if (cleanup.status !== 'complete' || cleanup.pendingCleanupCount > 0) {
         throw new Error('Cache cleanup is still pending. Persistent cache reads remain blocked; retry Clear cache.');
       }
       confirmClear = false;
-      diagnostics = await readPwaCacheDiagnostics();
+      dashboard = result.dashboard;
       context.setNotice({
         tone: 'success',
         message: cleanup.removed === 1 ? '1 cached entry removed.' : `${cleanup.removed} cached entries removed.`
@@ -74,7 +81,7 @@ export function createCacheDiagnosticsController(context: {
   }
 
   function viewState(): CacheDiagnosticsViewState {
-    return { confirmClear, diagnostics, error, isClearing, isLoading };
+    return { confirmClear, dashboard, error, isClearing, isLoading };
   }
 
   return { cancelClear, clear, ensureLoaded, viewState };

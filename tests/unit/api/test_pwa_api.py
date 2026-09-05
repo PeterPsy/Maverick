@@ -4,7 +4,11 @@ import json
 import unittest
 
 from core.api.pwa_api import handle_pwa_api
-from core.pwa.feature_flags import MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2
+from core.pwa.feature_flags import (
+    MAVERICK_FEATURE_PWA_DATA_CACHE,
+    MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2,
+)
+from core.pwa.rollout import ROLLOUT_USER_PERCENT_SUFFIX
 
 
 class PwaApiTests(unittest.TestCase):
@@ -46,6 +50,31 @@ class PwaApiTests(unittest.TestCase):
 
         self.assertEqual(captured["status"], "405 Method Not Allowed")
         self.assertEqual(captured["headers"]["Allow"], "GET")
+
+    def test_config_applies_but_never_discloses_session_cohort_keys(self) -> None:
+        captured: dict[str, object] = {}
+
+        def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            captured["status"] = status
+
+        body = b"".join(
+            handle_pwa_api(
+                {"PATH_INFO": "/api/pwa/config", "REQUEST_METHOD": "GET"},
+                start_response,
+                environment={
+                    MAVERICK_FEATURE_PWA_DATA_CACHE: "1",
+                    f"{MAVERICK_FEATURE_PWA_DATA_CACHE}{ROLLOUT_USER_PERCENT_SUFFIX}": "0",
+                },
+                user_id="sensitive-user-id",
+                workspace_id="sensitive-workspace-id",
+            )
+            or []
+        )
+
+        self.assertEqual(captured["status"], "200 OK")
+        payload = json.loads(body)
+        self.assertFalse(payload["features"]["data_cache"])
+        self.assertNotIn("sensitive", json.dumps(payload))
 
 
 if __name__ == "__main__":

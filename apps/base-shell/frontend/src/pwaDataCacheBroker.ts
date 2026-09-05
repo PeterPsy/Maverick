@@ -19,6 +19,8 @@ import {
   type ParentDataCacheResultMessage,
   type ParentDataCacheSerializedError,
   type ResourceCachePolicy,
+  type CacheTelemetry,
+  type StorageQuotaAdapter,
 } from "@maverick/pwa-cache";
 import {
   isMaverickOwnerMessage,
@@ -59,6 +61,8 @@ type PwaDataCacheBrokerOptions = {
   featureEnabled?: (signal?: AbortSignal) => Promise<boolean | null>;
   frameScope: MaverickFrameScope;
   principal: Omit<CachePrincipal, "appId">;
+  quotaAdapter?: StorageQuotaAdapter;
+  telemetry?: CacheTelemetry;
 };
 
 const RESOURCE_DECLARATIONS: Readonly<Record<string, Readonly<Record<string, ResourceDeclaration>>>> = {
@@ -144,6 +148,8 @@ export class PwaDataCacheBroker {
       const client = createPwaCacheHost({ ...options.principal, appId }).createClient({
         accessLease: options.accessLease,
         enabled: true,
+        quotaAdapter: options.quotaAdapter,
+        telemetry: options.telemetry,
       });
       this.clients.set(appId, client);
       for (const [resourceName, resourceDeclaration] of Object.entries(declarations)) {

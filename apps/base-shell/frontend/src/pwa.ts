@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { revokeShellAuthorization } from "./pwaCacheRuntime";
+import { revokeShellAuthorization, shellPwaMetrics } from "./pwaCacheRuntime";
 
 export type ShellPwaUpdateState = {
   applying: boolean;
@@ -201,7 +201,13 @@ function installServiceWorkerLifecycleListeners(): void {
     }
   });
   navigator.serviceWorker.addEventListener("message", (event) => {
-    const message = event.data && typeof event.data === "object" ? event.data as { build_id?: unknown; type?: unknown } : {};
+    const message = event.data && typeof event.data === "object"
+      ? event.data as { build_id?: unknown; metric?: unknown; type?: unknown }
+      : {};
+    if (message.type === "MAVERICK_PWA_METRIC") {
+      shellPwaMetrics.recordServiceWorker(message.metric);
+      return;
+    }
     const buildId = typeof message.build_id === "string" ? message.build_id : null;
     if (message.type === "MAVERICK_SW_VERSION" && updateState.available) {
       setUpdateState({ ...updateState, buildId });

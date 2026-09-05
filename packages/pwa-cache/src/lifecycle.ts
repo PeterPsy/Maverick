@@ -142,6 +142,7 @@ export class CacheLifecycleController {
   }
 
   private async clearAllNow(): Promise<CacheCleanupResult> {
+    this.retryCoordinator?.cancelAll("PWA cache was cleared.");
     const cleanup = await this.clearWithStatus({});
     this.bus.publish({ type: "all-cleared" });
     return cleanup;

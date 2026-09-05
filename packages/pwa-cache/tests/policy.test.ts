@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BrowserStorageQuotaAdapter,
   LOCAL_PERSISTENCE_POLICY_REVISION,
@@ -115,8 +115,15 @@ describe("PWA cache scope and policy", () => {
 
 describe("browser quota policy", () => {
   it("fails closed when the browser cannot provide a quota estimate", async () => {
-    const adapter = new BrowserStorageQuotaAdapter();
+    const telemetry = vi.fn();
+    const adapter = new BrowserStorageQuotaAdapter({ telemetry });
     await expect(adapter.canWrite(1)).resolves.toBe(false);
+    expect(telemetry).toHaveBeenCalledWith({
+      kind: "estimate",
+      quota: null,
+      supported: false,
+      usage: null,
+    });
   });
 });
 

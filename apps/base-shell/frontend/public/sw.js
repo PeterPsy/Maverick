@@ -55,6 +55,7 @@ async function openCacheBestEffort(cacheName) {
   try {
     return await caches.open(cacheName);
   } catch {
+    emitMetric("pwa_static_cache_error");
     return null;
   }
 }
@@ -63,6 +64,7 @@ async function matchCacheBestEffort(cache, request) {
   try {
     return await cache.match(request);
   } catch {
+    emitMetric("pwa_static_cache_error");
     return null;
   }
 }
@@ -72,6 +74,7 @@ async function putCacheBestEffort(cache, request, response) {
   try {
     await cache.put(request, response.clone());
   } catch {
+    emitMetric("pwa_static_cache_error");
     // A valid network response must survive quota and Cache API failures.
   }
 }
@@ -80,6 +83,7 @@ async function deleteCacheEntryBestEffort(cache, request) {
   try {
     await cache.delete(request);
   } catch {
+    emitMetric("pwa_static_cache_error");
     // A failed cleanup must not block the network path.
   }
 }
@@ -130,12 +134,19 @@ async function cacheFirstVerifiedShellAsset(request, record) {
   if (cache) {
     const cached = await verifiedCachedRecord(cache, record);
     if (cached) {
+      emitMetric("pwa_static_cache_hit");
       return cached;
     }
   }
-  const response = await fetchVerifiedRecord(record, request);
-  await putCacheBestEffort(cache, record.url, response);
-  return response;
+  emitMetric("pwa_static_cache_miss");
+  try {
+    const response = await fetchVerifiedRecord(record, request);
+    await putCacheBestEffort(cache, record.url, response);
+    return response;
+  } catch (error) {
+    emitMetric("pwa_static_cache_error");
+    throw error;
+  }
 }
 
 async function networkFirstPrecachedAsset(request, record) {
@@ -143,14 +154,17 @@ async function networkFirstPrecachedAsset(request, record) {
   try {
     const response = await fetchVerifiedRecord(record, request);
     await putCacheBestEffort(cache, record.url, response);
+    emitMetric("pwa_static_cache_miss");
     return response;
   } catch (error) {
     if (cache) {
       const cached = await verifiedCachedRecord(cache, record);
       if (cached) {
+        emitMetric("pwa_static_cache_hit");
         return cached;
       }
     }
+    emitMetric("pwa_static_cache_error");
     throw error;
   }
 }
@@ -161,6 +175,7 @@ async function navigationFallback(request) {
     if (response.status >= 500) {
       throw new Error(`Shell navigation failed with HTTP ${response.status}`);
     }
+    emitMetric("pwa_static_cache_miss");
     return response;
   } catch (error) {
     const record = PRECACHE_BY_URL.get(SHELL_NAVIGATION_URL);
@@ -168,9 +183,11 @@ async function navigationFallback(request) {
       const cache = await caches.open(STATIC_CACHE_NAME);
       const cached = await verifiedCachedRecord(cache, record);
       if (cached) {
+        emitMetric("pwa_static_cache_hit");
         return cached;
       }
     }
+    emitMetric("pwa_static_cache_error");
     throw error;
   }
 }
@@ -198,10 +215,23 @@ async function broadcast(message) {
   clients.forEach((client) => client.postMessage(message));
 }
 
+function emitMetric(metric) {
+  void broadcast({ type: "MAVERICK_PWA_METRIC", metric }).catch(() => undefined);
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      await installPrecache();
+      try {
+        await installPrecache();
+        await broadcast({
+          type: "MAVERICK_PWA_METRIC",
+          metric: self.registration.active ? "pwa_sw_update" : "pwa_sw_install",
+        });
+      } catch (error) {
+        emitMetric("pwa_sw_error");
+        throw error;
+      }
       if (!self.registration.active) {
         await self.skipWaiting();
       }
@@ -275,8 +305,10 @@ self.addEventListener("message", (event) => {
           // Repair in place so a failed fetch never discards the already
           // verified entries that still make the active shell usable.
           await recoverPrecache();
+          await broadcast({ type: "MAVERICK_PWA_METRIC", metric: "pwa_sw_recovery" });
           await broadcast({ type: "MAVERICK_SW_RECOVERED", build_id: BUILD_ID });
         } catch {
+          emitMetric("pwa_sw_error");
           await broadcast({ type: "MAVERICK_SW_RECOVERY_FAILED", build_id: BUILD_ID });
           throw new Error("Maverick static cache recovery failed.");
         }

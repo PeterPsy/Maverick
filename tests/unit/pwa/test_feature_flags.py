@@ -10,6 +10,11 @@ from core.pwa.feature_flags import (
     public_pwa_config,
     pwa_feature_enabled,
 )
+from core.pwa.rollout import (
+    ROLLOUT_USER_PERCENT_SUFFIX,
+    ROLLOUT_WORKSPACE_PERCENT_SUFFIX,
+    pwa_rollout_allows,
+)
 
 
 class PwaFeatureFlagTests(unittest.TestCase):
@@ -58,6 +63,102 @@ class PwaFeatureFlagTests(unittest.TestCase):
         self.assertNotIn("outbox", str(payload).lower())
         self.assertNotIn("chat", str(payload).lower())
         self.assertNotIn("MAVERICK_", str(payload))
+
+    def test_rollout_is_deterministic_monotonic_and_requires_partial_dimension_identity(self) -> None:
+        flag = MAVERICK_FEATURE_PWA_DATA_CACHE
+        half = {f"{flag}{ROLLOUT_WORKSPACE_PERCENT_SUFFIX}": "50"}
+        selected = [
+            workspace_id
+            for workspace_id in (f"workspace-{index}" for index in range(100))
+            if pwa_rollout_allows(flag, environment=half, workspace_id=workspace_id)
+        ]
+
+        self.assertTrue(selected)
+        self.assertLess(len(selected), 100)
+        self.assertEqual(
+            selected,
+            [
+                workspace_id
+                for workspace_id in (f"workspace-{index}" for index in range(100))
+                if pwa_rollout_allows(flag, environment=half, workspace_id=workspace_id)
+            ],
+        )
+        self.assertFalse(pwa_rollout_allows(flag, environment=half, workspace_id=None))
+        self.assertTrue(
+            all(
+                pwa_rollout_allows(
+                    flag,
+                    environment={f"{flag}{ROLLOUT_WORKSPACE_PERCENT_SUFFIX}": "75"},
+                    workspace_id=workspace_id,
+                )
+                for workspace_id in selected
+            )
+        )
+
+    def test_rollout_percentages_fail_closed_and_intersect_workspace_and_user(self) -> None:
+        flag = MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE
+        self.assertFalse(
+            pwa_rollout_allows(
+                flag,
+                environment={f"{flag}{ROLLOUT_USER_PERCENT_SUFFIX}": "101"},
+                user_id="user-one",
+            )
+        )
+        self.assertFalse(
+            pwa_rollout_allows(
+                flag,
+                environment={f"{flag}{ROLLOUT_USER_PERCENT_SUFFIX}": "10.5"},
+                user_id="user-one",
+            )
+        )
+        self.assertFalse(
+            pwa_rollout_allows(
+                flag,
+                environment={f"{flag}{ROLLOUT_USER_PERCENT_SUFFIX}": "  "},
+                user_id="user-one",
+            )
+        )
+        self.assertFalse(
+            pwa_rollout_allows(
+                flag,
+                environment={
+                    f"{flag}{ROLLOUT_WORKSPACE_PERCENT_SUFFIX}": "100",
+                    f"{flag}{ROLLOUT_USER_PERCENT_SUFFIX}": "0",
+                },
+                user_id="user-one",
+                workspace_id="workspace-one",
+            )
+        )
+
+    def test_config_and_app_gate_apply_session_cohorts_without_exposing_identity(self) -> None:
+        app_flag = "MAVERICK_FEATURE_PWA_APP_CACHE_WEBSITE_STUDIO"
+        environment = {
+            MAVERICK_FEATURE_PWA_DATA_CACHE: "1",
+            app_flag: "1",
+            f"{MAVERICK_FEATURE_PWA_DATA_CACHE}{ROLLOUT_USER_PERCENT_SUFFIX}": "50",
+        }
+        denied_user = next(
+            user_id
+            for user_id in (f"user-{index}" for index in range(100))
+            if not pwa_rollout_allows(
+                MAVERICK_FEATURE_PWA_DATA_CACHE,
+                environment=environment,
+                user_id=user_id,
+            )
+        )
+
+        payload = public_pwa_config(environment=environment, user_id=denied_user, workspace_id="default")
+
+        self.assertFalse(payload["features"]["data_cache"])
+        self.assertFalse(
+            app_data_cache_enabled(
+                "website-studio",
+                environment=environment,
+                user_id=denied_user,
+                workspace_id="default",
+            )
+        )
+        self.assertNotIn(denied_user, str(payload))
 
 
 if __name__ == "__main__":

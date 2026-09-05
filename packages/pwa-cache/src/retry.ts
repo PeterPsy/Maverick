@@ -34,8 +34,12 @@ export type {
 } from "./retryPolicy";
 
 type PendingFlight = {
+  attempt: number;
+  completionReported: boolean;
   controller: AbortController;
+  keyHash: string;
   promise: Promise<unknown>;
+  waitStartedAt: number | null;
   wake: (() => void) | null;
 };
 
@@ -94,8 +98,16 @@ export class RetryCoordinator {
     } else {
       options.signal?.addEventListener("abort", relayAbort, { once: true });
     }
-    const flight: PendingFlight = { controller, promise: Promise.resolve(undefined), wake: null };
-    const promise = this.execute(options, method, flight, operationKey)
+    const flight: PendingFlight = {
+      attempt: 0,
+      completionReported: false,
+      controller,
+      keyHash: this.telemetryHash(flightKey),
+      promise: Promise.resolve(undefined),
+      waitStartedAt: null,
+      wake: null,
+    };
+    const promise = this.execute(options, method, flight)
       .finally(() => {
         options.signal?.removeEventListener("abort", relayAbort);
         if (this.flights.get(flightKey) === flight) {
@@ -135,8 +147,8 @@ export class RetryCoordinator {
   }
 
   cancelAll(reason = "Retry operations were cancelled."): void {
-    for (const [key, flight] of this.flights) {
-      this.telemetry({ attempt: 0, keyHash: this.telemetryHash(key), kind: "cancelled" });
+    for (const flight of this.flights.values()) {
+      this.reportCompletion(flight, "cancelled");
       flight.controller.abort(new RetryCancelledError(reason));
       flight.wake?.();
     }
@@ -156,44 +168,69 @@ export class RetryCoordinator {
     options: RetryOperationOptions<T>,
     method: string,
     flight: PendingFlight,
-    operationKey: string,
   ): Promise<T> {
     let attempt = 0;
     let lastAttemptAt = Number.NEGATIVE_INFINITY;
-    const keyHash = this.telemetryHash(operationKey);
-    while (true) {
-      throwIfAborted(flight.controller.signal);
-      lastAttemptAt = this.now();
-      if (attempt > 0) {
-        this.telemetry({ attempt, keyHash, kind: "retry_attempt" });
-      }
-      try {
-        const result = await options.operation({ attempt, signal: flight.controller.signal });
+    try {
+      while (true) {
         throwIfAborted(flight.controller.signal);
-        this.telemetry({ attempt, keyHash, kind: "resolved" });
-        return result;
-      } catch (error) {
-        const classification = (options.classify ?? classifyRetryError)(error);
-        if (classification.disposition === "terminal") {
-          throw error;
+        flight.attempt = attempt;
+        lastAttemptAt = this.now();
+        if (attempt > 0) {
+          this.telemetry({ attempt, keyHash: flight.keyHash, kind: "retry_attempt" });
         }
-        if (flight.controller.signal.aborted) {
-          throw cancellationFromSignal(flight.controller.signal);
+        try {
+          const result = await options.operation({ attempt, signal: flight.controller.signal });
+          throwIfAborted(flight.controller.signal);
+          this.reportCompletion(flight, "resolved");
+          return result;
+        } catch (error) {
+          const classification = (options.classify ?? classifyRetryError)(error);
+          if (classification.disposition === "terminal") {
+            throw error;
+          }
+          if (flight.controller.signal.aborted) {
+            throw cancellationFromSignal(flight.controller.signal);
+          }
+          if (classification.disposition === "cancelled") {
+            throw new RetryCancelledError();
+          }
+          const canRetry = classification.disposition === "retryable"
+            && (SAFE_METHODS.has(method) || Boolean(options.mutation));
+          if (!canRetry || (options.mutation && attempt + 1 >= this.maxMutationAttempts)) {
+            throw error;
+          }
+          const delay = this.retryDelay(attempt, classification.retryAfterMs);
+          if (flight.waitStartedAt === null) {
+            flight.waitStartedAt = this.now();
+            this.telemetry({ attempt, keyHash: flight.keyHash, kind: "wait_started", waitMs: delay });
+          }
+          await this.waitForRetry(flight, Math.max(delay, this.minRetryIntervalMs - (this.now() - lastAttemptAt)));
+          attempt += 1;
         }
-        if (classification.disposition === "cancelled") {
-          throw new RetryCancelledError();
-        }
-        const canRetry = classification.disposition === "retryable"
-          && (SAFE_METHODS.has(method) || Boolean(options.mutation));
-        if (!canRetry || (options.mutation && attempt + 1 >= this.maxMutationAttempts)) {
-          throw error;
-        }
-        const delay = this.retryDelay(attempt, classification.retryAfterMs);
-        this.telemetry({ attempt, keyHash, kind: "wait_started", waitMs: delay });
-        await this.waitForRetry(flight, Math.max(delay, this.minRetryIntervalMs - (this.now() - lastAttemptAt)));
-        attempt += 1;
       }
+    } catch (error) {
+      if (flight.controller.signal.aborted || error instanceof RetryCancelledError) {
+        this.reportCompletion(flight, "cancelled");
+      } else if (flight.waitStartedAt !== null) {
+        this.reportCompletion(flight, "resolved");
+      }
+      throw error;
     }
+  }
+
+  private reportCompletion(flight: PendingFlight, kind: "cancelled" | "resolved"): void {
+    if (flight.completionReported) return;
+    flight.completionReported = true;
+    const durationMs = flight.waitStartedAt === null
+      ? undefined
+      : Math.max(0, this.now() - flight.waitStartedAt);
+    this.telemetry({
+      attempt: flight.attempt,
+      ...(durationMs === undefined ? {} : { durationMs }),
+      keyHash: flight.keyHash,
+      kind,
+    });
   }
 
   private retryDelay(attempt: number, retryAfterMs: number | undefined): number {
@@ -263,7 +300,12 @@ export class RetryCoordinator {
     mutation: RetryOperationOptions<unknown>["mutation"],
   ): string {
     if (mutation) {
-      const idempotencyScope = JSON.stringify([this.scopeKey, method, mutation.idempotencyKey]);
+      const idempotencyScope = JSON.stringify([
+        this.scopeKey,
+        mutation.auditId,
+        method,
+        mutation.idempotencyKey,
+      ]);
       const knownFingerprint = this.mutationFingerprints.get(idempotencyScope);
       if (knownFingerprint && knownFingerprint !== mutation.requestFingerprint) {
         throw new TypeError("An Idempotency-Key cannot be reused with a different request fingerprint.");
@@ -273,6 +315,7 @@ export class RetryCoordinator {
       return JSON.stringify([
         this.scopeKey,
         "idempotent-mutation",
+        mutation.auditId,
         method,
         mutation.idempotencyKey,
         mutation.requestFingerprint,

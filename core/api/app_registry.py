@@ -106,7 +106,11 @@ def enabled_app_items(
                 "frontend_role": parsed.contract.presentation.frontend_role,
                 "frontend_launchable": app_frontend_is_launchable(parsed.contract),
                 "backend_mount": f"/api/apps/{mount_app_id}/backend" if parsed.contract.entrypoints.backend else "",
-                "data_cache_enabled": app_data_cache_enabled(local_app_id),
+                "data_cache_enabled": app_data_cache_enabled(
+                    local_app_id,
+                    user_id=user.user_id if user is not None else None,
+                    workspace_id=workspace_id,
+                ),
             }
             if parsed.contract.visibility.platform_roles or parsed.contract.visibility.workspace_roles or parsed.contract.visibility.capabilities:
                 item["visibility"] = {

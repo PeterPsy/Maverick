@@ -2183,6 +2183,26 @@ button.settings-danger:hover:not(:disabled) {
   gap: 0.72rem;
 }
 
+.settings-cache-diagnostics__section {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.settings-cache-diagnostics__section h4,
+.settings-cache-diagnostics__section p {
+  margin: 0;
+}
+
+.settings-cache-diagnostics__section h4 {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.settings-cache-diagnostics__section p {
+  color: var(--maverick-text-muted);
+  font-size: 0.76rem;
+}
+
 .settings-cache-diagnostics__metric {
   display: grid;
   gap: 0.32rem;

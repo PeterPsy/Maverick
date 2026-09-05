@@ -23,6 +23,7 @@ import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearch
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
 import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
 import { StorageFileCacheBroker } from "../storageFileCacheBroker";
+import { shellPwaMetrics, shellPwaQuotaAdapter } from "../pwaCacheRuntime";
 
 type AppFrameParams = Record<string, string | boolean | null>;
 const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
@@ -182,6 +183,8 @@ export function AppFrameHost({
         userId: cacheUserId,
         workspaceId: activeWorkspaceId,
       },
+      quotaAdapter: shellPwaQuotaAdapter,
+      telemetry: (event) => shellPwaMetrics.recordFileCache(event),
     });
     fileCacheBrokerRef.current = broker;
     return () => {

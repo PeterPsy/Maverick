@@ -559,6 +559,9 @@ advertised by a certified connection inherits the integration certification,
 while its exact model id, revision policy, and reasoning choice remain pinned in
 the immutable profile and session binding. A model absent from the live catalog
 fails closed for new sessions without invalidating the connection certificate.
+Server admission and historical-session rules are specified in
+`docs/architecture/native_agent_admission.md`; UI readiness alone never grants
+authority and reconciliation never overrides an operator disable.
 Connection certificates are persisted immutable records with
 `certificate_scope=native_connection`, shared evidence, issuance/expiry, an
 adapter/recipe/effect/connection identity digest, and a permanent CAS-governed

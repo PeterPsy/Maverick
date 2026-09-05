@@ -411,6 +411,14 @@ class HostedTextProfilesTest(unittest.TestCase):
 
         self.assertIsNone(session.hosted_text_binding)
         self.assertEqual(session.hosted_model_id, "legacy-model")
+        with patch("core.runtime.plain_hosted_text.select_provider_for_profile") as route, patch(
+            "core.runtime.plain_hosted_text.execute_hosted_text_generation"
+        ) as transport:
+            for _attempt in range(2):
+                with self.assertRaisesRegex(HostedTextGenerationError, "hosted_text_legacy_binding_required"):
+                    execute_plain_hosted_text_turn(self.state, session=session, input_text="No implicit routing")
+            route.assert_not_called()
+            transport.assert_not_called()
 
 
 if __name__ == "__main__":

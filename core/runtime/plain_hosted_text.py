@@ -102,11 +102,14 @@ def execute_plain_hosted_text_turn(
 ) -> tuple[RuntimeExecutionResult, RoutingDecision]:
     """Execute one plain hosted chat turn through a routed hosted text provider."""
     text_binding = session.hosted_text_binding
-    if text_binding is not None:
-        try:
-            validate_hosted_text_execution_binding(text_binding)
-        except ValueError as error:
-            raise HostedTextGenerationError("hosted_text_binding_invalid") from error
+    if text_binding is None:
+        # Historical conversations remain readable, but cannot inherit today's
+        # route. The user must explicitly start a newly pinned conversation.
+        raise HostedTextGenerationError("hosted_text_legacy_binding_required")
+    try:
+        validate_hosted_text_execution_binding(text_binding)
+    except ValueError as error:
+        raise HostedTextGenerationError("hosted_text_binding_invalid") from error
     registry = effective_provider_registry(
         state.provider_store,
         registry=getattr(state, "provider_registry", None),
@@ -119,16 +122,8 @@ def execute_plain_hosted_text_turn(
             registry=registry,
             secret_store=state.secret_store,
             request_id=None,
-            hosted_provider_id=(
-                text_binding.provider_id
-                if text_binding is not None
-                else session.hosted_provider_id
-            ),
-            hosted_model_id=(
-                text_binding.model_id
-                if text_binding is not None
-                else session.hosted_model_id
-            ),
+            hosted_provider_id=text_binding.provider_id,
+            hosted_model_id=text_binding.model_id,
         ),
     )
     _emit_routing_decision_event(event_sink, decision)
@@ -136,7 +131,7 @@ def execute_plain_hosted_text_turn(
     if decision.execution_path != "plain_hosted_text" or decision.selected_provider_id is None:
         reason = primary_routing_failure_reason(decision)
         raise HostedTextGenerationError(reason, reason_codes=decision.reason_codes)
-    if text_binding is not None and (
+    if (
         decision.selected_provider_id != text_binding.provider_id
         or decision.selected_model_id_or_voice_id != text_binding.model_id
     ):
@@ -193,15 +188,7 @@ def execute_plain_hosted_text_turn(
         timeout_seconds=30,
         workspace_id=session.workspace_id,
         workspace_root=session.workspace_root,
-        provider_routing=(
-            text_binding.provider_routing_snapshot
-            if text_binding is not None
-            else _openrouter_provider_routing_for_decision(
-                state,
-                session=session,
-                decision=decision,
-            )
-        ),
+        provider_routing=text_binding.provider_routing_snapshot,
     )
     try:
         with plain_hosted_request_cancellation(
@@ -215,11 +202,7 @@ def execute_plain_hosted_text_turn(
                 decision=decision,
                 request=request,
                 runtime_session_id=session.session_id,
-                endpoint_url=(
-                    text_binding.profile.endpoint_id
-                    if text_binding is not None
-                    else None
-                ),
+                endpoint_url=text_binding.profile.endpoint_id,
                 transport=_fake_transport_from_environment(),
                 delta_sink=_hosted_delta_sink(event_sink, decision=decision),
                 sent_sink=_hosted_provider_sent_sink(on_provider_turn_start_sent, decision=decision),
@@ -342,26 +325,6 @@ def _hosted_provider_accepted_sink(
         )
 
     return sink
-
-
-def _openrouter_provider_routing_for_decision(
-    state,
-    *,
-    session: RuntimeSessionRecord,
-    decision: RoutingDecision,
-) -> dict[str, object] | None:
-    if decision.selected_provider_id != "openrouter" or not decision.selected_model_id_or_voice_id:
-        return None
-    if session.hosted_text_binding is not None:
-        return dict(session.hosted_text_binding.provider_routing_snapshot) or None
-    get_selection = getattr(state.provider_store, "get_hosted_provider_selection", None)
-    if not callable(get_selection):
-        return None
-    selection = get_selection(workspace_id=session.workspace_id, profile="fast_model")
-    if selection is None:
-        return None
-    routing = selection.openrouter_provider_routing_by_model.get(decision.selected_model_id_or_voice_id)
-    return dict(routing) if isinstance(routing, dict) else None
 
 
 def _max_output_tokens(session: RuntimeSessionRecord) -> int:

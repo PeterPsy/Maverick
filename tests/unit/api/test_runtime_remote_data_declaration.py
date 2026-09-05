@@ -21,6 +21,31 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_partial_native_policy_is_rejected_without_rewriting_restrictions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state, app, cookie = self._platform(temp_dir)
+            _definition, binding = resolve_workspace_agentic_profile(state.provider_store, workspace_id="default")
+            restricted = replace(binding, workspace_policy_ceiling=replace(
+                binding.workspace_policy_ceiling, tool_handle_mode="none",
+                allow_filesystem_list=False, allow_filesystem_read=False,
+                allow_filesystem_write=False, allow_shell=False,
+            ), revision=binding.revision + 1)
+            state.provider_store.save_workspace_agentic_profile_binding(restricted, expected_revision=binding.revision)
+            with patch("core.api.runtime_api.create_runtime_session") as create, patch(
+                "core.api.runtime_api.acquire_prepared_session"
+            ) as prepare, patch.object(state.runtime_store, "claim_client_message_id") as claim:
+                status, payload, _headers = self._invoke(
+                    app, path="/api/runtime/sessions", method="POST", cookie=cookie,
+                    body={"agent_id": "chat", "source_app_id": "chat", "runtime_mode": "agentic",
+                          "input_text": "must not persist", "client_message_id": "partial-agent"},
+                )
+            self.assertEqual(status, 409)
+            self.assertEqual(payload["error"], "full_workspace_policy_incomplete")
+            create.assert_not_called()
+            prepare.assert_not_called()
+            claim.assert_not_called()
+            self.assertEqual(state.provider_store.get_workspace_agentic_profile_binding(binding.binding_id), restricted)
+
     def test_removed_native_model_is_rejected_before_any_session_persistence(self) -> None:
         from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
         from tests.support.native_agent_catalog import codex_snapshot

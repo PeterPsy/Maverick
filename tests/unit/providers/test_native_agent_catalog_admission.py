@@ -69,6 +69,22 @@ class NativeAgentCatalogAdmissionTest(unittest.TestCase):
         validate_certificate_for_binding(self.store, binding=old_pin,
                                          adapter=self.registry.get_agentic_runtime_adapter("codex"))
 
+    def test_disabled_successor_is_not_reenabled_or_bypassed_by_a_later_revision(self):
+        self.bind("second-model")
+        self.refresh(codex_snapshot("gpt-5.6-sol", "second-model", reasoning=("low", "high")))
+        profile = self.profile("second-model")
+        rolled = next(item for item in self.store.list_workspace_agentic_profile_bindings("default")
+                      if item.definition_revision == profile.revision)
+        disabled = replace(rolled, enabled=False, revision=rolled.revision + 1, updated_at=datetime.now(tz=UTC))
+        self.store.save_workspace_agentic_profile_binding(disabled, expected_revision=rolled.revision)
+        self.refresh(codex_snapshot("gpt-5.6-sol", "second-model", "new-slug", reasoning=("low", "high")))
+        self.assertEqual(self.store.get_workspace_agentic_profile_binding(rolled.binding_id), disabled)
+        self.refresh(codex_snapshot("gpt-5.6-sol", "second-model", reasoning=("low", "medium", "high")))
+        current = self.profile("second-model")
+        self.assertFalse(any(item.enabled and item.definition_revision == current.revision
+                             for item in self.store.list_workspace_agentic_profile_bindings("default")))
+
+
     def test_reasoning_change_publishes_new_content_addressed_revision(self):
         binding = self.bind("second-model")
         old = self.profile("second-model")

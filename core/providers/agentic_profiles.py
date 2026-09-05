@@ -315,6 +315,13 @@ def build_pinned_execution_binding(
         profile=definition,
         certificate=certificate,
     )
+    from core.providers.execution_family_readiness import inspect_agentic_family_readiness
+
+    readiness = inspect_agentic_family_readiness(
+        definition=definition, certificate=certificate, binding=binding, registry=registry, store=store,
+    )
+    if not readiness.complete:
+        raise AgenticProfileError(readiness.reason_code or "full_workspace_contract_incomplete")
     normalized_reasoning_effort = _validated_reasoning_effort(
         certificate,
         reasoning_effort=reasoning_effort,

@@ -247,6 +247,19 @@ def _roll_forward_enabled_codex_bindings(
             ),
         ):
             current = current_profiles[source.definition_id]
+            if any(
+                not item.enabled
+                and item.definition_id == source.definition_id
+                and item.updated_at >= source.updated_at
+                and (
+                    item.binding_id == _rolled_binding_id(source, item.definition_revision)
+                    or _binding_authority_digest(item) == _binding_authority_digest(source)
+                )
+                for item in bindings
+            ):
+                # A later operator disable is a tombstone for this lineage,
+                # even after another catalog epoch or a policy edit on it.
+                continue
             if (
                 source.egress_policy_id != current.egress_policy_id
                 or source.egress_policy_revision != current.egress_policy_revision
@@ -344,8 +357,7 @@ def _binding_matches_current_source(
     source: WorkspaceAgenticProfileBinding,
 ) -> bool:
     return (
-        binding.enabled
-        and binding.definition_id == current.definition_id
+        binding.definition_id == current.definition_id
         and binding.definition_revision == current.revision
         and _binding_authority_digest(binding) == _binding_authority_digest(source)
     )

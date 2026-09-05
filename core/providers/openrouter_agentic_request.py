@@ -8,8 +8,6 @@ from core.providers.agentic_protocol import (
     HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.openrouter_agentic_models import (
-    OPENROUTER_AGENTIC_ENDPOINT_ID,
-    OPENROUTER_AGENTIC_UPSTREAM_ID,
     OpenRouterAgenticProtocolError,
     OpenRouterChatState,
 )
@@ -49,12 +47,14 @@ def openrouter_chat_payload(
         "stream_options": {"include_usage": True},
         "max_tokens": request.max_output_tokens,
         "provider": {
-            "only": [OPENROUTER_AGENTIC_UPSTREAM_ID],
-            "allow_fallbacks": False,
-            "require_parameters": True,
-            "data_collection": "deny",
-            "zdr": True,
-            "quantizations": ["fp8"],
+            "only": list(request.routing_constraint.allowed_upstream_ids),
+            "allow_fallbacks": request.routing_constraint.allow_fallbacks,
+            "require_parameters": request.routing_constraint.require_parameters,
+            "data_collection": request.routing_constraint.data_collection_policy,
+            "zdr": request.routing_constraint.require_zdr,
+            "quantizations": list(
+                request.routing_constraint.allowed_quantizations
+            ),
         },
     }
     if request.reasoning_effort is not None:
@@ -68,13 +68,20 @@ def openrouter_chat_payload(
 def _validate_routing(request: AgenticModelRequest) -> None:
     routing = request.routing_constraint
     if (
-        routing.endpoint_id != OPENROUTER_AGENTIC_ENDPOINT_ID
-        or routing.allowed_upstream_ids != (OPENROUTER_AGENTIC_UPSTREAM_ID,)
+        not str(routing.endpoint_id or "").strip()
+        or len(routing.allowed_upstream_ids) != 1
+        or not str(routing.allowed_upstream_ids[0] or "").strip()
         or routing.allow_fallbacks
         or not routing.require_parameters
         or routing.data_collection_policy != "deny"
         or not routing.require_zdr
-        or routing.allowed_quantizations != ("fp8",)
+        or not routing.allowed_quantizations
+        or any(
+            not str(value or "").strip()
+            for value in routing.allowed_quantizations
+        )
+        or len(set(routing.allowed_quantizations))
+        != len(routing.allowed_quantizations)
     ):
         raise OpenRouterAgenticProtocolError("provider_routing_not_certified")
 

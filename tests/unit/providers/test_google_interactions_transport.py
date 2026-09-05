@@ -44,8 +44,13 @@ class GoogleInteractionsTransportTest(unittest.TestCase):
             asyncio.run(_events(_Response(b'data: {"event_type":"interaction.created"}\n\n')))
 
     def test_transport_pins_https_google_host_and_bounds_request(self) -> None:
-        with self.assertRaises(ValueError):
-            GoogleInteractionsHttpTransport(endpoint="https://example.com/v1/interactions")
+        for endpoint in (
+            "https://example.com/v1/interactions?alt=sse",
+            "https://generativelanguage.googleapis.com/v1/private?alt=sse",
+            "https://generativelanguage.googleapis.com/v1/interactions",
+        ):
+            with self.subTest(endpoint=endpoint), self.assertRaises(ValueError):
+                GoogleInteractionsHttpTransport(endpoint=endpoint)
         with self.assertRaisesRegex(GoogleInteractionsProtocolError, "provider_request_invalid"):
             _encode_request({"input": "x" * MAX_GOOGLE_REQUEST_BYTES})
 

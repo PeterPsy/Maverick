@@ -23,6 +23,12 @@ from core.providers.hosted_endpoint_preflight import (
     preflight_google_interactions_request,
     preflight_openrouter_completion_request,
 )
+from core.providers.maverick_agent_builtins import (
+    GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+    OPENROUTER_CHAT_PROTOCOL_ADAPTER,
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+)
 from core.providers.openrouter_agentic_catalog import (
     OpenRouterAgenticCatalogSnapshot,
 )
@@ -93,6 +99,13 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch"
         ):
             registry.resolve(replace(binding, context_policy_snapshot=None))
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "provider_config_identity_mismatch",
+        ), patch(
+            "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch"
+        ):
+            registry.resolve(replace(binding, provider_config_digest="f" * 64))
 
     def test_catalog_digest_covers_fine_grained_endpoint_flags(self) -> None:
         changed = replace(
@@ -196,6 +209,17 @@ def _binding(recipe):
         if recipe.model_provider_id == "google-ai-studio"
         else openrouter_agentic_routing_constraint()
     )
+    config, protocol_adapter = (
+        (
+            GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+            GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
+        )
+        if recipe.model_provider_id == "google-ai-studio"
+        else (
+            OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+            OPENROUTER_CHAT_PROTOCOL_ADAPTER,
+        )
+    )
     return build_runtime_execution_binding(
         session_id="session-recipe",
         workspace_id="default",
@@ -237,6 +261,11 @@ def _binding(recipe):
         ),
         tool_contract_revision=recipe.tool_contract_revision,
         context_policy=recipe.context_policy,
+        provider_config_id=config.config_id,
+        provider_config_revision=config.revision,
+        provider_config_digest=config.digest,
+        protocol_adapter_id=protocol_adapter.protocol_adapter_id,
+        protocol_adapter_version=protocol_adapter.protocol_adapter_version,
     )
 
 

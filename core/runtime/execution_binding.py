@@ -69,6 +69,11 @@ class RuntimeExecutionBinding:
     context_policy_snapshot: AgenticContextPolicy | None = None
     model_revision: str | None = None
     model_revision_policy: ModelRevisionPolicy = "provider_alias"
+    provider_config_id: str = ""
+    provider_config_revision: str = ""
+    provider_config_digest: str = ""
+    protocol_adapter_id: str = ""
+    protocol_adapter_version: str = ""
 
 
 @dataclass(frozen=True)
@@ -114,6 +119,15 @@ _LEGACY_SCHEMA_FIELD_GROUPS = (
     ),
     _LegacySchemaFieldGroup(
         binding_fields=("model_revision", "model_revision_policy"),
+    ),
+    _LegacySchemaFieldGroup(
+        binding_fields=(
+            "provider_config_id",
+            "provider_config_revision",
+            "provider_config_digest",
+            "protocol_adapter_id",
+            "protocol_adapter_version",
+        ),
     ),
 )
 
@@ -163,6 +177,11 @@ def build_runtime_execution_binding(
     context_policy: AgenticContextPolicy | None = None,
     model_revision: str | None = None,
     model_revision_policy: ModelRevisionPolicy = "provider_alias",
+    provider_config_id: str = "",
+    provider_config_revision: str = "",
+    provider_config_digest: str = "",
+    protocol_adapter_id: str = "",
+    protocol_adapter_version: str = "",
 ) -> RuntimeExecutionBinding:
     """Build one self-digesting immutable execution binding."""
     if (
@@ -205,6 +224,25 @@ def build_runtime_execution_binding(
         model_revision_policy == "exact" and normalized_model_revision is None
     ):
         raise ValueError("Runtime execution binding model revision policy is invalid.")
+    provider_identity = (
+        provider_config_id,
+        provider_config_revision,
+        provider_config_digest,
+        protocol_adapter_id,
+        protocol_adapter_version,
+    )
+    if execution_family == "maverick_agent" and (
+        not all(
+            isinstance(value, str) and bool(value) and value.strip() == value
+            for value in provider_identity
+        )
+        or len(provider_config_digest) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in provider_config_digest.lower()
+        )
+    ):
+        raise ValueError("Runtime execution binding provider config identity is invalid.")
     policy_digest = canonical_digest(workspace_policy_ceiling)
     record = RuntimeExecutionBinding(
         execution_binding_id=f"runtime-binding-{uuid4().hex}",
@@ -255,6 +293,11 @@ def build_runtime_execution_binding(
         context_policy_snapshot=context_policy,
         model_revision=normalized_model_revision,
         model_revision_policy=model_revision_policy,
+        provider_config_id=provider_config_id,
+        provider_config_revision=provider_config_revision,
+        provider_config_digest=provider_config_digest,
+        protocol_adapter_id=protocol_adapter_id,
+        protocol_adapter_version=protocol_adapter_version,
     )
     return replace(record, binding_digest=canonical_digest(record))
 
@@ -324,6 +367,11 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload.setdefault("tool_contract_revision", "")
     payload.setdefault("model_revision", None)
     payload.setdefault("model_revision_policy", "provider_alias")
+    payload.setdefault("provider_config_id", "")
+    payload.setdefault("provider_config_revision", "")
+    payload.setdefault("provider_config_digest", "")
+    payload.setdefault("protocol_adapter_id", "")
+    payload.setdefault("protocol_adapter_version", "")
     payload["context_policy_snapshot"] = _context_policy_from_document(
         payload.get("context_policy_snapshot")
     )

@@ -199,6 +199,11 @@ def _maverick_readiness(*, definition, certificate, binding) -> AgenticFamilyRea
         definition.harness_recipe_revision,
         definition.harness_recipe_digest,
         definition.provider_capability_catalog_digest,
+        definition.provider_config_id,
+        definition.provider_config_revision,
+        definition.provider_config_digest,
+        definition.protocol_adapter_id,
+        definition.protocol_adapter_version,
     )
     if certificate is None:
         return _maverick_result(definition, "maverick_agent_certificate_missing")
@@ -208,6 +213,11 @@ def _maverick_readiness(*, definition, certificate, binding) -> AgenticFamilyRea
         certificate.harness_recipe_revision,
         certificate.harness_recipe_digest,
         certificate.provider_capability_catalog_digest,
+        certificate.provider_config_id,
+        certificate.provider_config_revision,
+        certificate.provider_config_digest,
+        certificate.protocol_adapter_id,
+        certificate.protocol_adapter_version,
     )
     if (
         definition.execution_family != MAVERICK_AGENT_EXECUTION_FAMILY
@@ -215,6 +225,7 @@ def _maverick_readiness(*, definition, certificate, binding) -> AgenticFamilyRea
         or identity != certificate_identity
         or identity[0] != FULL_WORKSPACE_CONTRACT_REVISION
         or not all(str(value or "").strip() for value in identity)
+        or len(definition.provider_config_digest) != 64
     ):
         return _maverick_result(definition, "maverick_agent_contract_incomplete")
     policy = _effective_binding_policy(definition, binding)

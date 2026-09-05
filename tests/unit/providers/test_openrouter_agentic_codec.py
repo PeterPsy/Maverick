@@ -129,6 +129,20 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
                 self.assertEqual(events[0].error_code, "provider_routing_not_certified")
                 self.assertEqual(transport.payloads, [])
 
+    def test_runtime_config_requires_one_executable_upstream(self) -> None:
+        routing = replace(
+            openrouter_agentic_routing_constraint(),
+            allowed_upstream_ids=("deepinfra/fp8", "another/fp8"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "routing config is unsupported"):
+            OpenRouterAgenticClient(
+                routing_constraint=routing,
+                allowed_upstream_ids=routing.allowed_upstream_ids,
+                upstream_provider_names=("DeepInfra", "Another"),
+                resolved_model_ids=(OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,),
+            )
+
     def test_text_stream_verifies_upstream_and_keeps_reasoning_private(self) -> None:
         client = OpenRouterAgenticClient(
             transport=_ScriptedTransport([_text_stream("generation-text", "final answer")])

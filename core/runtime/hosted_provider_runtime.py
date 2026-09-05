@@ -53,6 +53,14 @@ class HostedProviderRuntime:
     recipe: HostedHarnessRecipeManifest | None = None
     context_compactor: HostedProviderStateCompactor | None = None
     request_preflight: Callable[[object, object], object] | None = None
+    provider_config_id: str = ""
+    provider_config_revision: str = ""
+    provider_config_digest: str = ""
+    protocol_adapter_id: str = ""
+    protocol_adapter_version: str = ""
+    endpoint_id: str = ""
+    endpoint_url: str = ""
+    allowed_upstream_ids: tuple[str, ...] = ()
 
 
 class HostedProviderRuntimeRegistry:
@@ -131,6 +139,7 @@ class HostedProviderRuntimeRegistry:
                     components.append(runtime.context_compactor)
                 if runtime.request_preflight is not None:
                     components.append(runtime.request_preflight)
+                components.append(runtime.cost_estimator)
         return tuple(components)
 
     @staticmethod
@@ -150,6 +159,19 @@ class HostedProviderRuntimeRegistry:
             ) or getattr(binding, "context_policy_snapshot", None) is not None:
                 raise HostedAgenticLoopError("harness_recipe_mismatch")
             return
+        runtime_provider_identity = {
+            "provider_config_id": runtime.provider_config_id,
+            "provider_config_revision": runtime.provider_config_revision,
+            "provider_config_digest": runtime.provider_config_digest,
+            "protocol_adapter_id": runtime.protocol_adapter_id,
+            "protocol_adapter_version": runtime.protocol_adapter_version,
+        }
+        if any(
+            not value
+            or str(getattr(binding, field_name, "") or "") != value
+            for field_name, value in runtime_provider_identity.items()
+        ):
+            raise HostedAgenticLoopError("provider_config_identity_mismatch")
         expected = {
             "harness_recipe_id": recipe.recipe_id,
             "harness_recipe_revision": recipe.revision,
@@ -188,6 +210,8 @@ class HostedProviderRuntimeRegistry:
             or binding.routing_constraint_snapshot.endpoint_id != recipe.endpoint_id
             or tuple(binding.routing_constraint_snapshot.allowed_upstream_ids)
             != recipe.upstream_ids
+            or runtime.endpoint_id != recipe.endpoint_id
+            or runtime.allowed_upstream_ids != recipe.upstream_ids
             or binding.context_policy_snapshot != recipe.context_policy
             or binding.reasoning_effort
             not in recipe.support_flags.reasoning_efforts

@@ -30,6 +30,10 @@ from core.providers.google_agentic_profile import (
     ensure_google_agentic_preview_profile,
 )
 from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
+from core.providers.maverick_agent_builtins import (
+    GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+)
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
@@ -80,7 +84,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "43")
+        self.assertEqual(profile.revision, "44")
         self.assertEqual(profile.adapter_version_constraint, "==35")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
@@ -90,6 +94,28 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertEqual(profile.model_revision, GOOGLE_AGENTIC_MODEL_REVISION)
         self.assertEqual(profile.model_revision_policy, "exact")
         self.assertEqual(profile.provider_api_version, "v1")
+        self.assertEqual(
+            (
+                profile.provider_config_id,
+                profile.provider_config_revision,
+                profile.provider_config_digest,
+            ),
+            (
+                GOOGLE_INTERACTIONS_PROVIDER_CONFIG.config_id,
+                GOOGLE_INTERACTIONS_PROVIDER_CONFIG.revision,
+                GOOGLE_INTERACTIONS_PROVIDER_CONFIG.digest,
+            ),
+        )
+        self.assertEqual(
+            (
+                profile.protocol_adapter_id,
+                profile.protocol_adapter_version,
+            ),
+            (
+                GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.protocol_adapter_id,
+                GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.protocol_adapter_version,
+            ),
+        )
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
         self.assertEqual(production_classification.data_class, "unclassified")
         self.assertIsNone(production_classification.classification_revision)
@@ -208,6 +234,22 @@ class GoogleAgenticProfileTest(unittest.TestCase):
             MAVERICK_AGENT_EXECUTION_FAMILY,
         )
         self.assertEqual(certificate.harness_recipe_digest, profile.harness_recipe_digest)
+        self.assertEqual(
+            (
+                certificate.provider_config_id,
+                certificate.provider_config_revision,
+                certificate.provider_config_digest,
+                certificate.protocol_adapter_id,
+                certificate.protocol_adapter_version,
+            ),
+            (
+                profile.provider_config_id,
+                profile.provider_config_revision,
+                profile.provider_config_digest,
+                profile.protocol_adapter_id,
+                profile.protocol_adapter_version,
+            ),
+        )
         self.assertEqual(
             certificate.context_policy_revision,
             profile.context_policy.revision,

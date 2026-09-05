@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import replace
-import math
 
 import core.providers.openrouter_agentic_models as openrouter_agentic_models_module
 import core.providers.openrouter_agentic_request as openrouter_agentic_request_module
@@ -17,6 +16,8 @@ from core.providers.agentic_protocol import (
     AgenticModelRequest,
     EphemeralCredential,
 )
+from core.providers.agentic_models import RoutingConstraint
+from core.providers.maverick_agent_provider_config import MaverickTokenCostPolicy
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_MODEL_ID,
     OpenRouterAgenticProtocolError,
@@ -38,11 +39,82 @@ class OpenRouterAgenticClient:
         *,
         model_id: str = OPENROUTER_AGENTIC_MODEL_ID,
         transport: OpenRouterAgenticTransport | None = None,
+        token_cost_policy: MaverickTokenCostPolicy | None = None,
+        routing_constraint: RoutingConstraint | None = None,
+        allowed_upstream_ids: tuple[str, ...] | None = None,
+        upstream_provider_names: tuple[str, ...] | None = None,
+        resolved_model_ids: tuple[str, ...] | None = None,
     ) -> None:
         self.model_id = str(model_id or "").strip()
         if not self.model_id:
             raise ValueError("OpenRouter agentic model id is required.")
+        builtin_config = None
+        if self.model_id == OPENROUTER_AGENTIC_MODEL_ID and (
+            token_cost_policy is None
+            or routing_constraint is None
+            or allowed_upstream_ids is None
+            or upstream_provider_names is None
+            or resolved_model_ids is None
+        ):
+            from core.providers.maverick_agent_builtins import (
+                OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+            )
+
+            builtin_config = OPENROUTER_DEEPINFRA_PROVIDER_CONFIG
         self.transport = transport or OpenRouterAgenticHttpTransport()
+        self.token_cost_policy = token_cost_policy or (
+            None if builtin_config is None else builtin_config.token_cost_policy
+        )
+        self.routing_constraint = routing_constraint or (
+            None if builtin_config is None else builtin_config.routing_constraint
+        )
+        self.allowed_upstream_ids = tuple(
+            allowed_upstream_ids
+            if allowed_upstream_ids is not None
+            else (
+                ()
+                if builtin_config is None
+                else builtin_config.routing_constraint.allowed_upstream_ids
+            )
+        )
+        self.upstream_provider_names = tuple(
+            upstream_provider_names
+            if upstream_provider_names is not None
+            else (
+                ()
+                if builtin_config is None
+                else builtin_config.upstream_provider_names
+            )
+        )
+        self.resolved_model_ids = tuple(
+            resolved_model_ids
+            if resolved_model_ids is not None
+            else (
+                () if builtin_config is None else builtin_config.resolved_model_ids
+            )
+        )
+        self._validate_runtime_config()
+
+    @property
+    def endpoint_url(self) -> str:
+        return str(getattr(self.transport, "endpoint", "") or "")
+
+    def _validate_runtime_config(self) -> None:
+        routing = self.routing_constraint
+        if routing is None:
+            return
+        if (
+            self.allowed_upstream_ids != tuple(routing.allowed_upstream_ids)
+            or len(self.allowed_upstream_ids) != 1
+            or len(self.upstream_provider_names) != 1
+            or not self.resolved_model_ids
+            or routing.allow_fallbacks
+            or not routing.require_parameters
+            or routing.data_collection_policy != "deny"
+            or not routing.require_zdr
+            or not routing.allowed_quantizations
+        ):
+            raise ValueError("OpenRouter agentic runtime routing config is unsupported.")
 
     @property
     def artifact_components(self) -> tuple[object, ...]:
@@ -66,6 +138,13 @@ class OpenRouterAgenticClient:
         try:
             if request.model_id != self.model_id:
                 raise OpenRouterAgenticProtocolError("provider_request_rejected")
+            if (
+                self.routing_constraint is not None
+                and request.routing_constraint != self.routing_constraint
+            ):
+                raise OpenRouterAgenticProtocolError(
+                    "provider_routing_not_certified"
+                )
             if credential is None:
                 raise OpenRouterAgenticProtocolError("provider_authentication_failed")
             state = decode_openrouter_chat_state(request.provider_private_state)
@@ -74,7 +153,9 @@ class OpenRouterAgenticClient:
                 request=request,
                 state=state,
                 new_messages=new_messages,
-                usage_cost=openrouter_deepinfra_v4_flash_cost_microusd,
+                usage_cost=self._usage_cost,
+                upstream_provider_names=self.upstream_provider_names,
+                resolved_model_ids=self.resolved_model_ids,
             )
             async for raw_event in self.transport.stream(payload=payload, credential=credential):
                 if failure is not None:
@@ -131,29 +212,8 @@ class OpenRouterAgenticClient:
                 ),
             )
 
-
-def openrouter_deepinfra_v4_flash_cost_microusd(
-    input_tokens: int,
-    output_tokens: int,
-) -> int:
-    """Estimate $0.09 input / $0.18 output per million tokens."""
-    return math.ceil((input_tokens * 90 + output_tokens * 180) / 1_000)
-
-
-def openrouter_deepinfra_v4_flash_request_ceiling_microusd(
-    request: AgenticModelRequest,
-) -> int:
-    """Return a conservative preflight ceiling from bytes and max output."""
-    input_bytes = sum(len(block.content) for block in request.content_blocks)
-    input_bytes += sum(len(result.content) for result in request.tool_results)
-    input_bytes += sum(
-        len(tool.name) + len(tool.description) + len(str(tool.input_schema))
-        for tool in request.tool_definitions
-    )
-    if request.provider_private_state is not None:
-        input_bytes += len(request.provider_private_state.content)
-    estimated_input_tokens = max(1, math.ceil(input_bytes / 3))
-    return openrouter_deepinfra_v4_flash_cost_microusd(
-        estimated_input_tokens,
-        request.max_output_tokens,
-    )
+    def _usage_cost(self, input_tokens: int, output_tokens: int) -> int | None:
+        estimator = getattr(self.token_cost_policy, "usage_cost_microusd", None)
+        if not callable(estimator):
+            return None
+        return estimator(input_tokens, output_tokens)

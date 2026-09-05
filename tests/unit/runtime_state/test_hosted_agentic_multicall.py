@@ -6,7 +6,6 @@ import unittest
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.google_interactions_client import (
     GoogleInteractionsAgenticClient,
-    google_36_flash_request_ceiling_microusd,
 )
 from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CODEC_ID,
@@ -17,7 +16,10 @@ from core.providers.google_interactions_models import (
 from core.providers.google_interactions_state import inspect_google_interaction_state
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
-    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+)
+from core.providers.maverick_agent_builtins import (
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
@@ -32,6 +34,14 @@ from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
+
+
+GOOGLE_REQUEST_COST_ESTIMATOR = (
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+)
+OPENROUTER_REQUEST_COST_ESTIMATOR = (
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+)
 
 
 class _ScriptedTransport:
@@ -74,7 +84,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
                 content,
                 mode="stateful",
             ),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
+            cost_estimator=GOOGLE_REQUEST_COST_ESTIMATOR,
         )
 
         result, _events = _execute(harness, adapter)
@@ -123,7 +133,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
                 content,
                 mode="stateful",
             ),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
+            cost_estimator=GOOGLE_REQUEST_COST_ESTIMATOR,
         )
 
         result, events = _execute(harness, adapter)
@@ -160,7 +170,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
                 OPENROUTER_AGENTIC_CONTENT_TYPE,
             ),
             private_state_inspector=inspect_openrouter_chat_state,
-            cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+            cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
         )
 
         result, events = _execute(harness, adapter)

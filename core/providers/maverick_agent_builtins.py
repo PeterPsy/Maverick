@@ -8,16 +8,23 @@ from core.providers.agentic_models import RoutingConstraint
 from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CODEC_ID,
     GOOGLE_INTERACTIONS_CODEC_VERSION,
+    GOOGLE_INTERACTIONS_ENDPOINT,
 )
 from core.providers.maverick_agent_onboarding import (
     MaverickAgentProfilePublication,
     MaverickProtocolAdapterManifest,
+)
+from core.providers.maverick_agent_provider_config import (
     MaverickProviderConfig,
+    MaverickTokenCostPolicy,
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
     OPENROUTER_AGENTIC_CODEC_VERSION,
+    OPENROUTER_AGENTIC_ENDPOINT,
     OPENROUTER_AGENTIC_ENDPOINT_ID,
+    OPENROUTER_AGENTIC_PROVIDER_NAME,
+    OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
 )
 
@@ -61,7 +68,7 @@ OPENROUTER_CHAT_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
 
 GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
     config_id="google-ai-studio-interactions",
-    revision="1",
+    revision="2",
     model_provider_id="google-ai-studio",
     provider_protocol="google-interactions",
     provider_api_version="v1",
@@ -74,14 +81,21 @@ GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
         require_zdr=False,
         allowed_quantizations=(),
     ),
+    endpoint_url=GOOGLE_INTERACTIONS_ENDPOINT,
     credential_logical_name="google_ai_studio_api_key",
     data_destination="Google AI Studio API",
     retention_policy="provider_contract",
+    token_cost_policy=MaverickTokenCostPolicy(
+        policy_id="google-gemini-3.6-flash-public-list-price",
+        revision="1",
+        input_microusd_per_million_tokens=1_500_000,
+        output_microusd_per_million_tokens=7_500_000,
+    ),
 )
 
 OPENROUTER_DEEPINFRA_PROVIDER_CONFIG = MaverickProviderConfig(
     config_id="openrouter-deepinfra-fp8",
-    revision="1",
+    revision="2",
     model_provider_id="openrouter",
     provider_protocol="openrouter-chat-completions",
     provider_api_version="v1",
@@ -94,9 +108,18 @@ OPENROUTER_DEEPINFRA_PROVIDER_CONFIG = MaverickProviderConfig(
         require_zdr=True,
         allowed_quantizations=("fp8",),
     ),
+    endpoint_url=OPENROUTER_AGENTIC_ENDPOINT,
     credential_logical_name="openrouter_api_key",
     data_destination="OpenRouter via DeepInfra FP8",
     retention_policy="zdr_required",
+    token_cost_policy=MaverickTokenCostPolicy(
+        policy_id="openrouter-deepinfra-deepseek-v4-flash-public-list-price",
+        revision="1",
+        input_microusd_per_million_tokens=90_000,
+        output_microusd_per_million_tokens=180_000,
+    ),
+    upstream_provider_names=(OPENROUTER_AGENTIC_PROVIDER_NAME,),
+    resolved_model_ids=(OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,),
 )
 
 

@@ -13,8 +13,6 @@ from core.providers.agentic_protocol import (
     AgenticUsage,
 )
 from core.providers.openrouter_agentic_models import (
-    OPENROUTER_AGENTIC_PROVIDER_NAME,
-    OPENROUTER_AGENTIC_UPSTREAM_ID,
     OpenRouterAgenticProtocolError,
     OpenRouterChatState,
     OpenRouterPendingToolCall,
@@ -53,11 +51,17 @@ class OpenRouterChatStreamDecoder:
         state: OpenRouterChatState,
         new_messages: tuple[dict[str, object], ...],
         usage_cost: OpenRouterUsageCost,
+        upstream_provider_names: tuple[str, ...] = (),
+        resolved_model_ids: tuple[str, ...] = (),
     ) -> None:
         self.request = request
         self.state = state
         self.new_messages = new_messages
         self.usage_cost = usage_cost
+        self.upstream_provider_names = tuple(upstream_provider_names)
+        self.resolved_model_ids = tuple(resolved_model_ids)
+        self.upstream_id = _single_upstream_id(request)
+        self.provider_name: str | None = None
         self.generation_id: str | None = None
         self.text_chunks: list[str] = []
         self.reasoning_chunks: list[str] = []
@@ -89,7 +93,17 @@ class OpenRouterChatStreamDecoder:
         if metadata is not None:
             if self.saw_router_metadata:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
-            validate_router_metadata(metadata, model_id=self.request.model_id)
+            if self.provider_name is None:
+                raise OpenRouterAgenticProtocolError(
+                    "provider_upstream_not_certified"
+                )
+            validate_router_metadata(
+                metadata,
+                model_id=self.request.model_id,
+                top_level_provider=self.provider_name,
+                upstream_provider_names=self.upstream_provider_names,
+                resolved_model_ids=self.resolved_model_ids,
+            )
             self.saw_router_metadata = True
         if payload.get("usage") is not None:
             if self.usage is not None:
@@ -115,7 +129,8 @@ class OpenRouterChatStreamDecoder:
                 self.generation_id is None
                 or generation_id != self.generation_id
                 or payload.get("model") != self.request.model_id
-                or payload.get("provider") != OPENROUTER_AGENTIC_PROVIDER_NAME
+                or self.provider_name is None
+                or payload.get("provider") != self.provider_name
             ):
                 return []
             raw_usage = payload.get("usage")
@@ -145,16 +160,21 @@ class OpenRouterChatStreamDecoder:
 
     def _identity(self, payload: dict[str, object]) -> list[AgenticModelEvent]:
         generation_id = required_text(payload.get("id"))
-        if (
-            payload.get("model") != self.request.model_id
-            or payload.get("provider") != OPENROUTER_AGENTIC_PROVIDER_NAME
+        provider_name = required_text(payload.get("provider"))
+        if payload.get("model") != self.request.model_id or (
+            self.upstream_provider_names
+            and provider_name not in self.upstream_provider_names
         ):
+            raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+        if self.provider_name is None:
+            self.provider_name = provider_name
+        elif provider_name != self.provider_name:
             raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
         if self.generation_id is None:
             self.generation_id = generation_id
             return [self._event(
                 "accepted",
-                upstream_id=OPENROUTER_AGENTIC_UPSTREAM_ID,
+                upstream_id=self.upstream_id,
                 provider_response_id=generation_id,
             )]
         if generation_id != self.generation_id:
@@ -387,3 +407,10 @@ class OpenRouterChatStreamDecoder:
 
 def _reject_json_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON constant: {value}")
+
+
+def _single_upstream_id(request: AgenticModelRequest) -> str:
+    upstreams = tuple(request.routing_constraint.allowed_upstream_ids)
+    if len(upstreams) != 1 or not str(upstreams[0] or "").strip():
+        raise OpenRouterAgenticProtocolError("provider_routing_not_certified")
+    return upstreams[0]

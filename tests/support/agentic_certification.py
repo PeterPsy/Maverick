@@ -158,6 +158,11 @@ def certified_test_provider_store(
                 else binding.context_policy_snapshot.revision
             ),
             model_revision_policy=binding.model_revision_policy,
+            provider_config_id=binding.provider_config_id,
+            provider_config_revision=binding.provider_config_revision,
+            provider_config_digest=binding.provider_config_digest,
+            protocol_adapter_id=binding.protocol_adapter_id,
+            protocol_adapter_version=binding.protocol_adapter_version,
         ),
     )
     return store

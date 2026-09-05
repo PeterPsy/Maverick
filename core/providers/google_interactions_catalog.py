@@ -7,13 +7,10 @@ from dataclasses import dataclass
 import json
 import socket
 from urllib import error as urllib_error
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from core.providers.agentic_protocol import AgenticModelRequest, EphemeralCredential
-from core.providers.google_interactions_client import (
-    GOOGLE_AGENTIC_MODEL_ID,
-    GOOGLE_AGENTIC_MODEL_REVISION,
-)
 from core.providers.google_interactions_models import GoogleInteractionsProtocolError
 from core.providers.google_interactions_request import google_interaction_payload
 from core.providers.google_interactions_state import decode_google_interaction_state
@@ -66,7 +63,7 @@ def preflight_google_interactions_catalog(
         )
         model_future = executor.submit(
             _fetch_catalog,
-            GOOGLE_INTERACTIONS_MODEL_CATALOG,
+            _model_catalog_url(request.model_id),
             credential,
         )
         endpoint_schema = schema_future.result()
@@ -85,7 +82,7 @@ def validate_google_interactions_catalog(
     model_record: object,
 ) -> GoogleInteractionsCatalogSnapshot:
     """Validate exact request controls against both live authoritative records."""
-    if request.model_id != GOOGLE_AGENTIC_MODEL_ID:
+    if not str(request.model_id or "").strip():
         raise GoogleInteractionsProtocolError("provider_request_invalid")
     root = _mapping(endpoint_schema)
     info = _mapping(root.get("info"))
@@ -192,7 +189,7 @@ def validate_google_interactions_catalog(
         model_name != f"models/{request.model_id}"
         or str(record.get("baseModelId") or "") != request.model_id
         or request.model_revision_policy != "exact"
-        or request.model_revision != GOOGLE_AGENTIC_MODEL_REVISION
+        or not str(request.model_revision or "").strip()
         or model_version != request.model_revision
         or not isinstance(supported_methods, list)
         or not supported_methods
@@ -313,6 +310,13 @@ def _positive_int(value: object) -> int:
             "provider_endpoint_parameters_unsupported"
         )
     return value
+
+
+def _model_catalog_url(model_id: str) -> str:
+    encoded = urllib_parse.quote(str(model_id or "").strip(), safe="")
+    if not encoded:
+        raise GoogleInteractionsProtocolError("provider_request_invalid")
+    return f"https://generativelanguage.googleapis.com/v1/models/{encoded}"
 
 
 __all__ = [

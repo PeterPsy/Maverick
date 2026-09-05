@@ -10,11 +10,18 @@ from core.providers.agentic_models import (
     AgenticProfileDefinition,
     AgenticProfileDefinitionStatus,
     ProfileRolloutStatus,
-    RoutingConstraint,
 )
 from core.providers.errors import AgenticProfileError, ProviderNotFoundError
 from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.providers.models import ProviderDefinition
+from core.providers.maverick_agent_provider_config import (
+    MaverickProviderConfig,
+    MaverickTokenCostPolicy,
+    validate_maverick_provider_config,
+)
+from core.providers.maverick_agent_runtime_contract import (
+    validate_composed_maverick_runtime,
+)
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.full_workspace_contract import (
@@ -53,25 +60,6 @@ class MaverickProtocolAdapterManifest:
     cancellation_id: str
     recovery_id: str
     trusted_distribution: str
-
-
-@dataclass(frozen=True)
-class MaverickProviderConfig:
-    """Endpoint, upstream, credential, and data policy for one provider."""
-
-    config_id: str
-    revision: str
-    model_provider_id: str
-    provider_protocol: str
-    provider_api_version: str | None
-    routing_constraint: RoutingConstraint
-    credential_logical_name: str
-    data_destination: str
-    retention_policy: str
-
-    @property
-    def digest(self) -> str:
-        return canonical_digest(self)
 
 
 @dataclass(frozen=True)
@@ -116,7 +104,9 @@ class MaverickAgentOnboardingCatalog:
         self._runtime_adapters: dict[
             tuple[str, str | None], MaverickProtocolRuntimeRegistration
         ] = {}
-        self._provider_configs: dict[str, MaverickProviderConfig] = {}
+        self._provider_configs: dict[
+            tuple[str, str], MaverickProviderConfig
+        ] = {}
         self._publications: dict[
             tuple[str, str], MaverickAgentProfilePublication
         ] = {}
@@ -135,17 +125,23 @@ class MaverickAgentOnboardingCatalog:
         self._runtime_adapters[key] = registration
 
     def register_provider_config(self, config: MaverickProviderConfig) -> None:
-        _validate_provider_config(config)
-        if config.config_id in self._provider_configs:
+        validate_maverick_provider_config(config)
+        key = (config.config_id, config.revision)
+        if key in self._provider_configs:
             raise AgenticProfileError("maverick_provider_config_duplicate")
-        self._provider_configs[config.config_id] = config
+        self._provider_configs[key] = config
 
     def register_profile(
         self,
         publication: MaverickAgentProfilePublication,
     ) -> None:
         _validate_publication(publication)
-        config = self._provider_configs.get(publication.provider_config.config_id)
+        config = self._provider_configs.get(
+            (
+                publication.provider_config.config_id,
+                publication.provider_config.revision,
+            )
+        )
         if config != publication.provider_config:
             raise AgenticProfileError("maverick_provider_config_unregistered")
         adapter_key = (
@@ -223,8 +219,22 @@ class MaverickAgentOnboardingCatalog:
                 publication.provider_config,
                 publication.recipe,
             )
-            if runtime.recipe != publication.recipe:
-                raise AgenticProfileError("maverick_runtime_recipe_mismatch")
+            runtime = replace(
+                runtime,
+                provider_config_id=publication.provider_config.config_id,
+                provider_config_revision=publication.provider_config.revision,
+                provider_config_digest=publication.provider_config.digest,
+                protocol_adapter_id=publication.adapter.protocol_adapter_id,
+                protocol_adapter_version=(
+                    publication.adapter.protocol_adapter_version
+                ),
+                endpoint_id=publication.provider_config.routing_constraint.endpoint_id,
+                endpoint_url=publication.provider_config.endpoint_url,
+                allowed_upstream_ids=(
+                    publication.provider_config.routing_constraint.allowed_upstream_ids
+                ),
+            )
+            validate_composed_maverick_runtime(publication, runtime)
             registry.register(runtime)
         return registry
 
@@ -253,6 +263,7 @@ class MaverickAgentOnboardingCatalog:
         now: datetime,
     ) -> tuple[AgenticProfileDefinition, ...]:
         """Publish every registered immutable profile through one bootstrap path."""
+        self.build_runtime_registry()
         return tuple(
             publish_maverick_agent_profile(
                 store,
@@ -346,7 +357,7 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
     recipe = publication.recipe
     profile = publication.profile
     _validate_protocol_adapter(adapter)
-    _validate_provider_config(config)
+    validate_maverick_provider_config(config)
     if profile.revision in publication.superseded_profile_revisions:
         raise AgenticProfileError("maverick_profile_supersedes_itself")
     if len(set(publication.superseded_profile_revisions)) != len(
@@ -361,6 +372,10 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
         or profile.model_provider_id != config.model_provider_id
         or profile.provider_protocol != adapter.provider_protocol
         or profile.provider_api_version != adapter.provider_api_version
+        or config.provider_protocol != adapter.provider_protocol
+        or config.provider_api_version != adapter.provider_api_version
+        or recipe.provider_protocol != config.provider_protocol
+        or recipe.provider_api_version != config.provider_api_version
         or profile.routing_constraint != config.routing_constraint
         or profile.model_provider_id != recipe.model_provider_id
         or profile.model_id != recipe.model_id
@@ -376,6 +391,12 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
         or profile.tool_contract_revision != recipe.tool_contract_revision
         or profile.context_policy != recipe.context_policy
         or recipe.endpoint_id != config.routing_constraint.endpoint_id
+        or recipe.upstream_ids != config.routing_constraint.allowed_upstream_ids
+        or profile.provider_config_id != config.config_id
+        or profile.provider_config_revision != config.revision
+        or profile.provider_config_digest != config.digest
+        or profile.protocol_adapter_id != adapter.protocol_adapter_id
+        or profile.protocol_adapter_version != adapter.protocol_adapter_version
     ):
         raise AgenticProfileError("maverick_profile_composition_mismatch")
     _validate_maverick_family(profile, recipe, publication.rollout_status)
@@ -436,23 +457,6 @@ def _validate_protocol_adapter(adapter: MaverickProtocolAdapterManifest) -> None
         raise AgenticProfileError("maverick_protocol_adapter_untrusted")
 
 
-def _validate_provider_config(config: MaverickProviderConfig) -> None:
-    if not all(
-        str(value or "").strip()
-        for value in (
-            config.config_id,
-            config.revision,
-            config.model_provider_id,
-            config.provider_protocol,
-            config.routing_constraint.endpoint_id,
-            config.credential_logical_name,
-            config.data_destination,
-            config.retention_policy,
-        )
-    ):
-        raise AgenticProfileError("maverick_provider_config_incomplete")
-
-
 __all__ = [
     "MaverickAgentOnboardingCatalog",
     "MaverickAgentProfilePublication",
@@ -460,6 +464,7 @@ __all__ = [
     "MaverickProtocolAdapterManifest",
     "MaverickProtocolRuntimeRegistration",
     "MaverickProviderConfig",
+    "MaverickTokenCostPolicy",
     "publish_maverick_agent_profile",
     "validate_maverick_runtime_adapter",
 ]

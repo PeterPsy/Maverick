@@ -123,6 +123,11 @@ class AgenticProfileDefinition:
     context_policy: AgenticContextPolicy | None = None
     model_revision: str | None = None
     model_revision_policy: ModelRevisionPolicy = "provider_alias"
+    provider_config_id: str = ""
+    provider_config_revision: str = ""
+    provider_config_digest: str = ""
+    protocol_adapter_id: str = ""
+    protocol_adapter_version: str = ""
 
 
 @dataclass(frozen=True)

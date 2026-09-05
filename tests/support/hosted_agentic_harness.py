@@ -105,6 +105,24 @@ class HostedAgenticHarness:
         workspace_root.mkdir(parents=True, exist_ok=True)
         self.filesystem_list = filesystem_list
         self.recipe = recipe
+        self.provider_config_id = (
+            "" if recipe is None else f"fixture-config:{recipe.recipe_id}"
+        )
+        self.provider_config_revision = "" if recipe is None else "1"
+        self.provider_config_digest = (
+            ""
+            if recipe is None
+            else canonical_digest(
+                {
+                    "config_id": self.provider_config_id,
+                    "recipe_digest": recipe.recipe_digest,
+                }
+            )
+        )
+        self.protocol_adapter_id = (
+            "" if recipe is None else f"fixture-protocol:{recipe.provider_protocol}"
+        )
+        self.protocol_adapter_version = "" if recipe is None else "1"
         self.filesystem_marker = "hosted-loop-filesystem-marker.txt"
         if filesystem_list:
             (workspace_root / self.filesystem_marker).write_text(
@@ -216,6 +234,11 @@ class HostedAgenticHarness:
                 "" if recipe is None else recipe.tool_contract_revision
             ),
             context_policy=(None if recipe is None else recipe.context_policy),
+            provider_config_id=self.provider_config_id,
+            provider_config_revision=self.provider_config_revision,
+            provider_config_digest=self.provider_config_digest,
+            protocol_adapter_id=self.protocol_adapter_id,
+            protocol_adapter_version=self.protocol_adapter_version,
         )
         self.session = RuntimeSessionRecord(
             session_id="session-hosted",
@@ -351,6 +374,15 @@ class HostedAgenticHarness:
                 recipe=self.recipe,
                 context_compactor=context_compactor,
                 request_preflight=request_preflight,
+                provider_config_id=self.provider_config_id,
+                provider_config_revision=self.provider_config_revision,
+                provider_config_digest=self.provider_config_digest,
+                protocol_adapter_id=self.protocol_adapter_id,
+                protocol_adapter_version=self.protocol_adapter_version,
+                endpoint_id=("" if self.recipe is None else self.recipe.endpoint_id),
+                allowed_upstream_ids=(
+                    () if self.recipe is None else self.recipe.upstream_ids
+                ),
             )
         )
         resolved_authority_refresher = authority_refresher or (

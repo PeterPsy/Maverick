@@ -8,7 +8,9 @@ import unittest
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
-    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+)
+from core.providers.maverick_agent_builtins import (
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
@@ -25,6 +27,11 @@ from tests.unit.providers.test_openrouter_agentic_codec import (
     _ScriptedTransport,
     _text_stream,
     _tool_stream,
+)
+
+
+OPENROUTER_REQUEST_COST_ESTIMATOR = (
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 
 
@@ -55,7 +62,7 @@ class OpenRouterAgenticHostedLoopTest(unittest.TestCase):
                 OPENROUTER_AGENTIC_CONTENT_TYPE,
             ),
             credential=EphemeralCredential("fixture-openrouter-key"),
-            cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+            cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
         )
         public_events = []
 

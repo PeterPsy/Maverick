@@ -338,6 +338,11 @@ def validate_certificate_for_binding_with_revision_fence(
             if binding.context_policy_snapshot is None
             else binding.context_policy_snapshot.revision
         ),
+        "provider_config_id": binding.provider_config_id,
+        "provider_config_revision": binding.provider_config_revision,
+        "provider_config_digest": binding.provider_config_digest,
+        "protocol_adapter_id": binding.protocol_adapter_id,
+        "protocol_adapter_version": binding.protocol_adapter_version,
     }
     for field_name, value in expected.items():
         if getattr(certificate, field_name) != value:
@@ -398,6 +403,21 @@ def validate_profile_certificate_execution_contract(*, profile, certificate) -> 
             ""
             if getattr(profile, "context_policy", None) is None
             else str(profile.context_policy.revision or "")
+        ),
+        "provider_config_id": str(
+            getattr(profile, "provider_config_id", "") or ""
+        ),
+        "provider_config_revision": str(
+            getattr(profile, "provider_config_revision", "") or ""
+        ),
+        "provider_config_digest": str(
+            getattr(profile, "provider_config_digest", "") or ""
+        ),
+        "protocol_adapter_id": str(
+            getattr(profile, "protocol_adapter_id", "") or ""
+        ),
+        "protocol_adapter_version": str(
+            getattr(profile, "protocol_adapter_version", "") or ""
         ),
     }
     for field_name, value in expected.items():
@@ -487,6 +507,26 @@ def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
         _sha256(
             certificate.provider_capability_catalog_digest,
             "certificate_provider_catalog_digest_invalid",
+        )
+    provider_config_identity = (
+        certificate.provider_config_id,
+        certificate.provider_config_revision,
+        certificate.provider_config_digest,
+        certificate.protocol_adapter_id,
+        certificate.protocol_adapter_version,
+    )
+    if certificate.execution_family == "maverick_agent":
+        if not all(str(value or "").strip() for value in provider_config_identity):
+            raise CapabilityCertificateError(
+                "certificate_provider_config_identity_invalid"
+            )
+        _sha256(
+            certificate.provider_config_digest,
+            "certificate_provider_config_digest_invalid",
+        )
+    elif any(provider_config_identity):
+        raise CapabilityCertificateError(
+            "certificate_provider_config_identity_invalid"
         )
     _evidence_refs(certificate.evidence_refs)
 

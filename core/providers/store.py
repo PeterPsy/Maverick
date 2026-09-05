@@ -536,6 +536,11 @@ def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefin
         "provider_capability_catalog_digest",
         "semantic_projection_compiler_revision",
         "tool_contract_revision",
+        "provider_config_id",
+        "provider_config_revision",
+        "provider_config_digest",
+        "protocol_adapter_id",
+        "protocol_adapter_version",
     ):
         payload.setdefault(field_name, "")
     payload["context_policy"] = _agentic_context_policy(
@@ -591,6 +596,11 @@ def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
         "semantic_projection_compiler_revision",
         "tool_contract_revision",
         "context_policy_revision",
+        "provider_config_id",
+        "provider_config_revision",
+        "provider_config_digest",
+        "protocol_adapter_id",
+        "protocol_adapter_version",
     ):
         payload.setdefault(field_name, "")
     return CapabilityCertificate(**payload)

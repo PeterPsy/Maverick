@@ -99,6 +99,11 @@ class CapabilityCertificate:
     tool_contract_revision: str = ""
     context_policy_revision: str = ""
     model_revision_policy: ModelRevisionPolicy = "provider_alias"
+    provider_config_id: str = ""
+    provider_config_revision: str = ""
+    provider_config_digest: str = ""
+    protocol_adapter_id: str = ""
+    protocol_adapter_version: str = ""
 
 
 @dataclass(frozen=True)

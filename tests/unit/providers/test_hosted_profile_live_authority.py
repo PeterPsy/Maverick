@@ -139,6 +139,11 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     ),
                     tool_contract_revision=profile.tool_contract_revision,
                     context_policy=profile.context_policy,
+                    provider_config_id=profile.provider_config_id,
+                    provider_config_revision=profile.provider_config_revision,
+                    provider_config_digest=profile.provider_config_digest,
+                    protocol_adapter_id=profile.protocol_adapter_id,
+                    protocol_adapter_version=profile.protocol_adapter_version,
                 )
                 store = certified_test_provider_store(
                     binding,

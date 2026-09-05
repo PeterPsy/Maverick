@@ -38,12 +38,11 @@ class GoogleInteractionsHttpTransport:
     def __init__(self, *, endpoint: str = GOOGLE_INTERACTIONS_ENDPOINT, timeout_seconds: int = 120) -> None:
         parsed = urllib_parse.urlsplit(endpoint)
         if (
-            parsed.scheme != "https"
+            endpoint != GOOGLE_INTERACTIONS_ENDPOINT
+            or parsed.scheme != "https"
             or parsed.hostname != "generativelanguage.googleapis.com"
-            or parsed.username is not None
-            or parsed.password is not None
         ):
-            raise ValueError("Google Interactions endpoint must use the pinned Google HTTPS host.")
+            raise ValueError("Google Interactions endpoint must use the pinned HTTPS route.")
         self.endpoint = endpoint
         self.timeout_seconds = max(1, min(timeout_seconds, 300))
         self._opener = urllib_request.build_opener(_RejectRedirects())

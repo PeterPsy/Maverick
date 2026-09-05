@@ -70,7 +70,7 @@ def publish_google_preview_certificate(
     )
     certificate = CapabilityCertificate(
         certificate_id=definition.capability_certificate_id,
-        schema_version="5",
+        schema_version="6",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=str(getattr(adapter, "adapter_id", definition.adapter_id)),
         adapter_version=str(getattr(adapter, "adapter_version", "")),
@@ -114,6 +114,11 @@ def publish_google_preview_certificate(
             "" if definition.context_policy is None else definition.context_policy.revision
         ),
         model_revision_policy=definition.model_revision_policy,
+        provider_config_id=definition.provider_config_id,
+        provider_config_revision=definition.provider_config_revision,
+        provider_config_digest=definition.provider_config_digest,
+        protocol_adapter_id=definition.protocol_adapter_id,
+        protocol_adapter_version=definition.protocol_adapter_version,
     )
     validate_full_workspace_contract_claim(
         profile=definition,

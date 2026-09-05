@@ -6,7 +6,6 @@ from datetime import datetime
 
 from core.providers.google_interactions_client import (
     GoogleInteractionsAgenticClient,
-    google_36_flash_request_ceiling_microusd,
 )
 from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CODEC_ID,
@@ -15,13 +14,16 @@ from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_SCHEMA_VERSION,
 )
 from core.providers.google_interactions_state import inspect_google_interaction_state
+from core.providers.google_interactions_transport import (
+    GoogleInteractionsHttpTransport,
+)
 from core.providers.hosted_context_compactors import (
     compact_google_stateless_history,
     compact_openrouter_history,
 )
 from core.providers.hosted_endpoint_preflight import (
+    OpenRouterCompletionRequestPreflight,
     preflight_google_interactions_request,
-    preflight_openrouter_completion_request,
 )
 from core.providers.maverick_agent_builtins import (
     builtin_maverick_agent_publications,
@@ -35,7 +37,6 @@ from core.providers.maverick_agent_onboarding import (
 )
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
-    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
@@ -44,6 +45,9 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_SCHEMA_VERSION,
 )
 from core.providers.openrouter_agentic_state import inspect_openrouter_chat_state
+from core.providers.openrouter_agentic_transport import (
+    OpenRouterAgenticHttpTransport,
+)
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
 from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
 from core.runtime.hosted_provider_runtime import (
@@ -100,6 +104,14 @@ def _google_interactions_runtime(
         client=GoogleInteractionsAgenticClient(
             model_id=recipe.model_id,
             state_mode="stateless",
+            transport=GoogleInteractionsHttpTransport(
+                endpoint=config.endpoint_url,
+            ),
+            token_cost_policy=config.token_cost_policy,
+            routing_constraint=config.routing_constraint,
+            allowed_upstream_ids=config.routing_constraint.allowed_upstream_ids,
+            upstream_provider_names=config.upstream_provider_names,
+            resolved_model_ids=config.resolved_model_ids,
         ),
         private_codec=HostedProviderPrivateCodec(
             codec_id=GOOGLE_INTERACTIONS_CODEC_ID,
@@ -107,7 +119,7 @@ def _google_interactions_runtime(
             schema_version=GOOGLE_INTERACTIONS_SCHEMA_VERSION,
             content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
         ),
-        cost_estimator=google_36_flash_request_ceiling_microusd,
+        cost_estimator=config.token_cost_policy.request_ceiling_microusd,
         finalization_policy=GOOGLE_HOSTED_FINALIZATION_POLICY,
         private_state_inspector=lambda content: inspect_google_interaction_state(
             content,
@@ -127,19 +139,31 @@ def _openrouter_chat_runtime(
         model_provider_id=config.model_provider_id,
         provider_protocol=config.provider_protocol,
         provider_api_version=config.provider_api_version,
-        client=OpenRouterAgenticClient(model_id=recipe.model_id),
+        client=OpenRouterAgenticClient(
+            model_id=recipe.model_id,
+            transport=OpenRouterAgenticHttpTransport(
+                endpoint=config.endpoint_url,
+            ),
+            token_cost_policy=config.token_cost_policy,
+            routing_constraint=config.routing_constraint,
+            allowed_upstream_ids=config.routing_constraint.allowed_upstream_ids,
+            upstream_provider_names=config.upstream_provider_names,
+            resolved_model_ids=config.resolved_model_ids,
+        ),
         private_codec=HostedProviderPrivateCodec(
             codec_id=OPENROUTER_AGENTIC_CODEC_ID,
             codec_version=OPENROUTER_AGENTIC_CODEC_VERSION,
             schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
             content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
         ),
-        cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+        cost_estimator=config.token_cost_policy.request_ceiling_microusd,
         finalization_policy=OPENROUTER_HOSTED_FINALIZATION_POLICY,
         private_state_inspector=inspect_openrouter_chat_state,
         recipe=recipe,
         context_compactor=compact_openrouter_history,
-        request_preflight=preflight_openrouter_completion_request,
+        request_preflight=OpenRouterCompletionRequestPreflight(
+            upstream_provider_names=config.upstream_provider_names,
+        ),
     )
 
 

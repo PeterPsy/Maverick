@@ -86,6 +86,8 @@ def preflight_google_interactions_request(
 def preflight_openrouter_completion_request(
     request: AgenticModelRequest,
     credential: EphemeralCredential | None,
+    *,
+    upstream_provider_names: tuple[str, ...] = (),
 ) -> HostedEndpointRequestSnapshot:
     """Require live catalog support, including the exact `tool_choice: none`."""
     if credential is None:
@@ -105,6 +107,7 @@ def preflight_openrouter_completion_request(
     catalog = preflight_openrouter_agentic_catalog(
         request,
         credential=credential,
+        upstream_provider_names=upstream_provider_names,
     )
     _require_openrouter_none_support(catalog, required=final)
     projection = {
@@ -129,6 +132,24 @@ def preflight_openrouter_completion_request(
     )
 
 
+@dataclass(frozen=True)
+class OpenRouterCompletionRequestPreflight:
+    """Bind configured router provider identities into live preflight."""
+
+    upstream_provider_names: tuple[str, ...]
+
+    def __call__(
+        self,
+        request: AgenticModelRequest,
+        credential: EphemeralCredential | None,
+    ) -> HostedEndpointRequestSnapshot:
+        return preflight_openrouter_completion_request(
+            request,
+            credential,
+            upstream_provider_names=self.upstream_provider_names,
+        )
+
+
 def _require_openrouter_none_support(
     catalog: OpenRouterAgenticCatalogSnapshot,
     *,
@@ -142,6 +163,7 @@ def _require_openrouter_none_support(
 
 __all__ = [
     "HostedEndpointRequestSnapshot",
+    "OpenRouterCompletionRequestPreflight",
     "preflight_google_interactions_request",
     "preflight_openrouter_completion_request",
 ]

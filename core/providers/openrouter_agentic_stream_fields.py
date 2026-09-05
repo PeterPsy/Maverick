@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import json
 
-from core.providers.openrouter_agentic_models import (
-    OPENROUTER_AGENTIC_PROVIDER_NAME,
-    OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
-    OpenRouterAgenticProtocolError,
-)
+from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError
 
 
 def object_field(value: object) -> dict[str, object]:
@@ -39,7 +35,14 @@ def parsed_arguments(value: str) -> dict[str, object]:
     return parsed
 
 
-def validate_router_metadata(payload: object, *, model_id: str) -> None:
+def validate_router_metadata(
+    payload: object,
+    *,
+    model_id: str,
+    top_level_provider: str,
+    upstream_provider_names: tuple[str, ...],
+    resolved_model_ids: tuple[str, ...],
+) -> None:
     metadata = object_field(payload)
     if metadata.get("requested") != model_id or metadata.get("attempt") != 1:
         raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
@@ -48,9 +51,18 @@ def validate_router_metadata(payload: object, *, model_id: str) -> None:
     if not isinstance(available, list):
         raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
     selected = [item for item in available if isinstance(item, dict) and item.get("selected") is True]
-    if len(selected) != 1 or (
-        selected[0].get("provider") != OPENROUTER_AGENTIC_PROVIDER_NAME
-        or selected[0].get("model") not in {model_id, OPENROUTER_AGENTIC_RESOLVED_MODEL_ID}
+    if len(selected) != 1:
+        raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+    selected_provider = required_text(selected[0].get("provider"))
+    selected_model = required_text(selected[0].get("model"))
+    allowed_models = {model_id, *resolved_model_ids}
+    if (
+        selected_provider != top_level_provider
+        or (
+            upstream_provider_names
+            and selected_provider not in upstream_provider_names
+        )
+        or selected_model not in allowed_models
     ):
         raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
     attempts = metadata.get("attempts")
@@ -59,8 +71,8 @@ def validate_router_metadata(payload: object, *, model_id: str) -> None:
             raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
         attempt = object_field(attempts[0])
         if (
-            attempt.get("provider") != OPENROUTER_AGENTIC_PROVIDER_NAME
-            or attempt.get("model") not in {model_id, OPENROUTER_AGENTIC_RESOLVED_MODEL_ID}
+            attempt.get("provider") != selected_provider
+            or attempt.get("model") != selected_model
             or attempt.get("status") != 200
         ):
             raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")

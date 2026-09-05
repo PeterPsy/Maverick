@@ -375,6 +375,19 @@ def build_pinned_execution_binding(
         ),
         tool_contract_revision=getattr(definition, "tool_contract_revision", ""),
         context_policy=getattr(definition, "context_policy", None),
+        provider_config_id=getattr(definition, "provider_config_id", ""),
+        provider_config_revision=getattr(
+            definition,
+            "provider_config_revision",
+            "",
+        ),
+        provider_config_digest=getattr(definition, "provider_config_digest", ""),
+        protocol_adapter_id=getattr(definition, "protocol_adapter_id", ""),
+        protocol_adapter_version=getattr(
+            definition,
+            "protocol_adapter_version",
+            "",
+        ),
     )
     validate_certificate_for_binding(
         store,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import patch
 import unittest
 
@@ -83,6 +84,32 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
                     endpoint_schema=endpoint_schema,
                     model_record=model_record,
                 )
+
+    def test_same_protocol_validates_another_model_from_request_data(self) -> None:
+        request = replace(
+            _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False),
+            model_id="gemini-data-only",
+            model_revision="stable-data-only",
+        )
+        endpoint_schema = _endpoint_schema()
+        endpoint_schema["components"]["schemas"]["ModelOption"]["enum"] = [
+            "gemini-data-only"
+        ]
+        model_record = {
+            **_model_record(),
+            "name": "models/gemini-data-only",
+            "baseModelId": "gemini-data-only",
+            "version": "stable-data-only",
+        }
+
+        snapshot = validate_google_interactions_catalog(
+            request,
+            endpoint_schema=endpoint_schema,
+            model_record=model_record,
+        )
+
+        self.assertEqual(snapshot.model_name, "models/gemini-data-only")
+        self.assertEqual(snapshot.model_version, "stable-data-only")
 
 
 def _endpoint_schema() -> dict[str, object]:

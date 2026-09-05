@@ -714,6 +714,15 @@ def workspace_agentic_profile_status(
                 "provider_api_version": definition.provider_api_version,
                 "adapter_id": definition.adapter_id,
                 "adapter_version_constraint": definition.adapter_version_constraint,
+                "protocol_adapter": {
+                    "id": definition.protocol_adapter_id or None,
+                    "version": definition.protocol_adapter_version or None,
+                },
+                "provider_config": {
+                    "id": definition.provider_config_id or None,
+                    "revision": definition.provider_config_revision or None,
+                    "digest": definition.provider_config_digest or None,
+                },
                 "execution_family": family_readiness.execution_family or None,
                 "family_contract_status": family_readiness.contract_status,
                 "family_contract_reason": family_readiness.reason_code,
@@ -867,6 +876,11 @@ def _profile_effective_capability_snapshot(
             ),
             tool_contract_revision=certificate.tool_contract_revision,
             context_policy=definition.context_policy,
+            provider_config_id=certificate.provider_config_id,
+            provider_config_revision=certificate.provider_config_revision,
+            provider_config_digest=certificate.provider_config_digest,
+            protocol_adapter_id=certificate.protocol_adapter_id,
+            protocol_adapter_version=certificate.protocol_adapter_version,
         )
         health = run_runtime_coroutine(
             adapter.health(RuntimeHealthContext(binding=execution_binding))
@@ -1085,6 +1099,15 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 "provider_api_version": definition.provider_api_version,
                 "adapter_id": definition.adapter_id,
                 "adapter_version_constraint": definition.adapter_version_constraint,
+                "protocol_adapter": {
+                    "id": definition.protocol_adapter_id or None,
+                    "version": definition.protocol_adapter_version or None,
+                },
+                "provider_config": {
+                    "id": definition.provider_config_id or None,
+                    "revision": definition.provider_config_revision or None,
+                    "digest": definition.provider_config_digest or None,
+                },
                 "execution_family": family_readiness.execution_family or None,
                 "family_contract_status": family_readiness.contract_status,
                 "family_contract_reason": family_readiness.reason_code,
@@ -1263,6 +1286,15 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         "model_revision_policy": certificate.model_revision_policy,
         "provider_protocol": certificate.provider_protocol,
         "provider_api_version": certificate.provider_api_version,
+        "protocol_adapter": {
+            "id": certificate.protocol_adapter_id or None,
+            "version": certificate.protocol_adapter_version or None,
+        },
+        "provider_config": {
+            "id": certificate.provider_config_id or None,
+            "revision": certificate.provider_config_revision or None,
+            "digest": certificate.provider_config_digest or None,
+        },
         "certified_upstream_ids": certificate.certified_upstream_ids,
         "routing_constraint_digest": certificate.routing_constraint_digest,
         "certified_capabilities": asdict(certificate.certified_capabilities),
@@ -1499,6 +1531,15 @@ def runtime_session_agentic_governance_payload(
             ),
         },
         "harness_recipe": projected_recipe,
+        "protocol_adapter": {
+            "id": binding.protocol_adapter_id or None,
+            "version": binding.protocol_adapter_version or None,
+        },
+        "provider_config": {
+            "id": binding.provider_config_id or None,
+            "revision": binding.provider_config_revision or None,
+            "digest": binding.provider_config_digest or None,
+        },
         "context_policy": (
             None
             if binding.context_policy_snapshot is None

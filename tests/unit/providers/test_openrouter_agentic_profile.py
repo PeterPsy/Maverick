@@ -29,6 +29,10 @@ from core.providers.openrouter_agentic_profile import (
     ensure_openrouter_agentic_preview_profile,
 )
 from core.providers.openrouter_agentic_models import OPENROUTER_AGENTIC_MODEL_REVISION
+from core.providers.maverick_agent_builtins import (
+    OPENROUTER_CHAT_PROTOCOL_ADAPTER,
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+)
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
@@ -69,7 +73,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "42")
+        self.assertEqual(profile.revision, "43")
         self.assertEqual(profile.adapter_version_constraint, "==35")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
@@ -80,6 +84,28 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(profile.model_revision, OPENROUTER_AGENTIC_MODEL_REVISION)
         self.assertEqual(profile.model_revision_policy, "provider_alias")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
+        self.assertEqual(
+            (
+                profile.provider_config_id,
+                profile.provider_config_revision,
+                profile.provider_config_digest,
+            ),
+            (
+                OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.config_id,
+                OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.revision,
+                OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.digest,
+            ),
+        )
+        self.assertEqual(
+            (
+                profile.protocol_adapter_id,
+                profile.protocol_adapter_version,
+            ),
+            (
+                OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_id,
+                OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_version,
+            ),
+        )
         routing = profile.routing_constraint
         self.assertEqual(routing.allowed_upstream_ids, ("deepinfra/fp8",))
         self.assertFalse(routing.allow_fallbacks)
@@ -203,6 +229,22 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             MAVERICK_AGENT_EXECUTION_FAMILY,
         )
         self.assertEqual(certificate.harness_recipe_digest, profile.harness_recipe_digest)
+        self.assertEqual(
+            (
+                certificate.provider_config_id,
+                certificate.provider_config_revision,
+                certificate.provider_config_digest,
+                certificate.protocol_adapter_id,
+                certificate.protocol_adapter_version,
+            ),
+            (
+                profile.provider_config_id,
+                profile.provider_config_revision,
+                profile.provider_config_digest,
+                profile.protocol_adapter_id,
+                profile.protocol_adapter_version,
+            ),
+        )
         self.assertEqual(
             certificate.context_policy_revision,
             profile.context_policy.revision,

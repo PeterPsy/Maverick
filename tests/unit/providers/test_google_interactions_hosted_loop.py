@@ -11,13 +11,15 @@ from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.google_agentic_profile import google_interactions_routing_constraint
 from core.providers.google_interactions_client import (
     GoogleInteractionsAgenticClient,
-    google_36_flash_request_ceiling_microusd,
 )
 from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CODEC_ID,
     GOOGLE_INTERACTIONS_CODEC_VERSION,
     GOOGLE_INTERACTIONS_CONTENT_TYPE,
     GOOGLE_INTERACTIONS_SCHEMA_VERSION,
+)
+from core.providers.maverick_agent_builtins import (
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
 )
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
@@ -30,6 +32,11 @@ from tests.unit.providers.test_google_interactions_codec import (
     _created,
     _text_stream,
     _tool_stream,
+)
+
+
+GOOGLE_REQUEST_COST_ESTIMATOR = (
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 
 
@@ -74,7 +81,7 @@ class GoogleInteractionsHostedLoopTest(unittest.TestCase):
                         GOOGLE_INTERACTIONS_CONTENT_TYPE,
                     ),
                     credential=EphemeralCredential("fixture-google-key"),
-                    cost_estimator=google_36_flash_request_ceiling_microusd,
+                    cost_estimator=GOOGLE_REQUEST_COST_ESTIMATOR,
                 )
 
                 result = execute_runtime_turn(
@@ -133,7 +140,7 @@ class GoogleInteractionsHostedLoopTest(unittest.TestCase):
                 GOOGLE_INTERACTIONS_CONTENT_TYPE,
             ),
             credential=EphemeralCredential("fixture-google-key"),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
+            cost_estimator=GOOGLE_REQUEST_COST_ESTIMATOR,
         )
         public_events = []
 
@@ -187,7 +194,7 @@ class GoogleInteractionsHostedLoopTest(unittest.TestCase):
             ),
             private_codec=adapter.loop.provider_runtimes.resolve(harness.binding).private_codec,
             credential=EphemeralCredential("fixture-google-key"),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
+            cost_estimator=GOOGLE_REQUEST_COST_ESTIMATOR,
         )
         execute_runtime_turn(
             session=stateless.session,
@@ -254,7 +261,7 @@ class GoogleInteractionsHostedLoopTest(unittest.TestCase):
                 GOOGLE_INTERACTIONS_CONTENT_TYPE,
             ),
             credential=EphemeralCredential("fixture-google-key"),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
+            cost_estimator=GOOGLE_REQUEST_COST_ESTIMATOR,
         )
 
         result = execute_runtime_turn(

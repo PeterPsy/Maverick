@@ -13,9 +13,9 @@ from core.providers.google_agentic_profile import (
     google_agentic_preview_policy,
     google_interactions_routing_constraint,
 )
-from core.providers.google_interactions_client import google_36_flash_request_ceiling_microusd
-from core.providers.openrouter_agentic_client import (
-    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+from core.providers.maverick_agent_builtins import (
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_state import (
     encode_openrouter_chat_state,
@@ -32,6 +32,14 @@ from core.runtime.hosted_provider_runtime import (
     OPENROUTER_HOSTED_FINALIZATION_POLICY,
 )
 from core.runtime.hosted_harness_recipes import hosted_full_context_policy
+
+
+GOOGLE_REQUEST_COST_ESTIMATOR = (
+    GOOGLE_INTERACTIONS_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+)
+OPENROUTER_REQUEST_COST_ESTIMATOR = (
+    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+)
 
 
 class HostedAgenticBudgetTest(unittest.TestCase):
@@ -121,7 +129,7 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 google_agentic_preview_policy(),
                 GOOGLE_HOSTED_FINALIZATION_POLICY,
                 google_interactions_routing_constraint(),
-                google_36_flash_request_ceiling_microusd,
+                GOOGLE_REQUEST_COST_ESTIMATOR,
                 160_000,
                 None,
             ),
@@ -129,7 +137,7 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 openrouter_agentic_preview_policy(),
                 OPENROUTER_HOSTED_FINALIZATION_POLICY,
                 openrouter_agentic_routing_constraint(),
-                openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+                OPENROUTER_REQUEST_COST_ESTIMATOR,
                 250_000,
                 encode_openrouter_chat_state(
                     replace(

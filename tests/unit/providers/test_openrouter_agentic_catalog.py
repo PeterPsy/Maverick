@@ -88,9 +88,9 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
         self.assertEqual(snapshot.max_completion_tokens, 65_536)
         self.assertEqual(len(snapshot.catalog_snapshot_digest), 64)
 
-    def test_catalog_requires_the_certified_alias_policy_revision(self) -> None:
+    def test_catalog_requires_a_pinned_alias_policy_revision(self) -> None:
         for request in (
-            replace(_request(), model_revision="unexpected-alias-policy"),
+            replace(_request(), model_revision=""),
             replace(_request(), model_revision_policy="exact"),
         ):
             with self.subTest(request=request), self.assertRaisesRegex(
@@ -101,6 +101,23 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                     request,
                     model_catalog=_model_catalog(),
                     zdr_catalog=_zdr_catalog(),
+                )
+
+    def test_catalog_url_rejects_noncanonical_model_path_segments(self) -> None:
+        for model_id in (
+            "",
+            "/vendor/model",
+            "vendor//model",
+            "vendor/../model",
+            "vendor/./model",
+        ):
+            with self.subTest(model_id=model_id), self.assertRaisesRegex(
+                OpenRouterAgenticProtocolError,
+                "provider_request_invalid",
+            ):
+                preflight_openrouter_agentic_catalog(
+                    replace(_request(), model_id=model_id),
+                    credential=EphemeralCredential("fixture-openrouter-key"),
                 )
 
     def test_every_routed_parameter_must_exist_in_both_catalogs(self) -> None:
@@ -196,6 +213,47 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                             model_catalog=model_catalog,
                             zdr_catalog=zdr_catalog,
                         )
+
+    def test_model_upstream_and_quantization_are_request_config_data(self) -> None:
+        request = replace(
+            _request(),
+            model_id="vendor/data-only-model",
+            model_revision="catalog-data-only",
+            routing_constraint=replace(
+                _request().routing_constraint,
+                allowed_upstream_ids=("another-provider/fp16",),
+                allowed_quantizations=("fp16",),
+            ),
+        )
+        record = {
+            **_record(),
+            "model_id": "vendor/data-only-model",
+            "provider_name": "Another Provider",
+            "tag": "another-provider/fp16",
+            "quantization": "fp16",
+        }
+        model_record = dict(record)
+        model_record.pop("model_id")
+
+        snapshot = validate_openrouter_agentic_catalog(
+            request,
+            model_catalog={
+                "data": {
+                    "id": "vendor/data-only-model",
+                    "endpoints": [model_record],
+                }
+            },
+            zdr_catalog={"data": [record]},
+            upstream_provider_names=("Another Provider",),
+        )
+
+        self.assertEqual(snapshot.upstream_id, "another-provider/fp16")
+        payload, _messages = openrouter_chat_payload(
+            request,
+            decode_openrouter_chat_state(request.provider_private_state),
+        )
+        self.assertEqual(payload["provider"]["only"], ["another-provider/fp16"])
+        self.assertEqual(payload["provider"]["quantizations"], ["fp16"])
 
 
 def _request() -> AgenticModelRequest:

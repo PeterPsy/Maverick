@@ -36,12 +36,12 @@ from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "42"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "43"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
     "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41",
+    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42",
 )
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 OPENROUTER_DEFAULT_REASONING_EFFORT = "high"
@@ -127,6 +127,13 @@ def openrouter_agentic_preview_publication(
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE.tool_contract_revision
         ),
         context_policy=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.context_policy,
+        provider_config_id=OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.config_id,
+        provider_config_revision=OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.revision,
+        provider_config_digest=OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.digest,
+        protocol_adapter_id=OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_id,
+        protocol_adapter_version=(
+            OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_version
+        ),
     )
     return MaverickAgentProfilePublication(
         adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,

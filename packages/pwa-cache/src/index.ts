@@ -1,4 +1,5 @@
 export { readCacheModelJson, type ReadModelRequest } from "./readModelRetry";
+export { createReadModelRequestExecutor } from "./safeRequestRetry";
 export {
   DEFAULT_PWA_CACHE_APP_BUDGET_BYTES,
   DEFAULT_PWA_CACHE_GLOBAL_BUDGET_BYTES,

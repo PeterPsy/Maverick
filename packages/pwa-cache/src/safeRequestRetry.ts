@@ -61,7 +61,7 @@ export function createSafeRequestRetryExecutor(
   return executor;
 }
 
-/** Issuance is internal to the SDK's reviewed read-model adapter. */
+/** Issue a concrete read only from the SDK's closed, reviewed app/resource descriptors. */
 export function createReadModelRequestExecutor(request: ReadModelRequest): SafeRequestRetryExecutor {
   const descriptor = describeReadModelRequest(request);
   const etag = request.etag;

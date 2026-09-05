@@ -112,6 +112,9 @@ def handle_action(
         return 200, {"state": state}
     if action == "clear_custom_view":
         return 200, {"state": clear_custom_view(data_root)}
+    if action == "pinned_apps.read":
+        # Safe for SDK-owned transport retries: no repair, write, or change event.
+        return 200, {"pinned_apps": pinned_apps(data_root)}
     if action == "pinned_apps.list":
         if launchable_app_ids is None:
             return 200, {"pinned_apps": pinned_apps(data_root)}

@@ -165,15 +165,25 @@ describe("base-shell api normalization", () => {
     }
   });
 
-  it("keeps POST read actions one-shot when they have no mutation deduplication contract", async () => {
+  it("retries a failed initial pin read through the SDK-reviewed non-mutating action", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.spyOn(globalThis, "fetch")
-      .mockRejectedValue(new TypeError("transport interrupted"));
+      .mockRejectedValueOnce(new TypeError("transport interrupted"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ pinned_apps: ["chat", "crm", "mail"] }), {
+        headers: { "Content-Type": "application/json" },
+      }));
 
-    await expect(listPinnedApps()).rejects.toBeInstanceOf(MaverickTransportError);
-    await vi.runAllTimersAsync();
+    const pending = listPinnedApps(new AbortController().signal, "base-shell:test-pins-retry");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(2_000);
 
-    expect(fetchMock).toHaveBeenCalledOnce();
+    await expect(pending).resolves.toEqual({ pinned_apps: ["chat", "crm", "mail"] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [target, init] of fetchMock.mock.calls) {
+      expect(target).toBe("/api/apps/app-store/backend");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ action: "pinned_apps.read" });
+    }
   });
 
   it("does not let delayed authorization cleanup reclassify an HTTP response as a timeout", async () => {
@@ -213,7 +223,8 @@ describe("base-shell api normalization", () => {
       credentials: "same-origin",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       method: "POST",
-      body: JSON.stringify({ action: "pinned_apps.list" }),
+      body: JSON.stringify({ action: "pinned_apps.read" }),
+      redirect: "error",
       signal: expect.any(AbortSignal),
     });
     const saveInit = vi.mocked(fetch).mock.calls[1]?.[1];

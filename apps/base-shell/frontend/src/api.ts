@@ -5,7 +5,9 @@ import {
   SafeRequestRetryTransportError,
   createIdempotencyKey,
   createMutationRetryExecutor,
+  createReadModelRequestExecutor,
   createSafeRequestRetryExecutor,
+  type SafeRequestRetryExecutor,
 } from "@maverick/pwa-cache";
 import { revokeShellAuthorization, shellRetryCoordinator } from "./pwaCacheRuntime";
 
@@ -354,6 +356,14 @@ async function requestJsonWithRetry<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const executor = createSafeRequestRetryExecutor({ endpoint: path, method: "GET" });
+  return requestWithRetry<T>(key, executor, signal);
+}
+
+async function requestWithRetry<T>(
+  key: string,
+  executor: SafeRequestRetryExecutor,
+  signal?: AbortSignal,
+): Promise<T> {
   try {
     const response = await shellRetryCoordinator.runRequest<T>({ executor, key, signal });
     shellRetryCoordinator.confirmUsefulTransport();
@@ -535,13 +545,10 @@ export function listApps(signal?: AbortSignal, retryKey?: string): Promise<AppRe
   return request.then(normalizeAppRegistryPayload);
 }
 
-export function listPinnedApps(signal?: AbortSignal): Promise<PinnedAppsPayload> {
-  return requestJson<unknown>("/api/apps/app-store/backend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "pinned_apps.list" }),
-    signal,
-  }).then(normalizePinnedAppsPayload);
+export function listPinnedApps(signal?: AbortSignal, retryKey?: string): Promise<PinnedAppsPayload> {
+  const executor = createReadModelRequestExecutor({ appId: "app-store", resource: "pinned-apps" });
+  return requestWithRetry<unknown>(retryKey ?? "base-shell:pinned-apps", executor, signal)
+    .then(normalizePinnedAppsPayload);
 }
 
 export function readStorageFileCacheDescriptor(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
-from queue import Empty
+from asyncio import QueueEmpty
 import hashlib
 import json
 import os
@@ -1433,6 +1433,33 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         self.assertIn(b"Local Notes", mount_body)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_pinned_apps_read_is_authenticated_and_does_not_repair_workspace_state(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        body = {"action": "pinned_apps.read"}
+        status, _payload, _headers = self.invoke(app, path="/api/apps/app-store/backend", method="POST", body=body)
+        self.assertEqual(status, 401)
+        cookie = self.login(app)
+        binding = state.app_store.get_workspace_app_binding(workspace_id="default", app_id="app-store")
+        path = Path(binding.data_root) / "state.json"
+        original = json.loads(path.read_text(encoding="utf-8"))
+        original["pinned_apps"] = ["chat", "agents", "orphaned-app"]
+        serialized = json.dumps(original)
+        path.write_text(serialized, encoding="utf-8")
+        events = state.app_event_bus.subscribe()
+        self.addCleanup(lambda: state.app_event_bus.unsubscribe(events))
+
+        status, payload, _headers = self.invoke(
+            app, path="/api/apps/app-store/backend", method="POST", body=body, cookie=cookie,
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {"pinned_apps": original["pinned_apps"]})
+        self.assertEqual(path.read_text(encoding="utf-8"), serialized)
+        self.assertTrue(events.empty())
+
+    @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_app_store_backend_owns_pinned_sidebar_apps(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -1605,7 +1632,7 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         )
         self.assertEqual(status_noop_repair, 200)
         self.assertEqual(noop_repaired["pinned_apps"], ["chat"])
-        with self.assertRaises(Empty):
+        with self.assertRaises(QueueEmpty):
             app_events.get_nowait()
 
         state_payload["pinned_apps"] = ["chat", "base-shell"]

@@ -474,9 +474,7 @@ export function AppShell() {
     const pinnedLoadVersion = ++pinnedAppsLoadVersionRef.current;
     const pinnedStateVersion = pinnedAppsSaveVersionRef.current;
     try {
-      const pinnedApps = signal
-        ? await listPinnedApps(signal)
-        : await listPinnedApps();
+      const pinnedApps = await listPinnedApps(signal, `base-shell:pinned-apps:${pinnedLoadVersion}`);
       if (
         signal?.aborted
         || shellLoadVersionRef.current !== loadVersion

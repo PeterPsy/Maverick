@@ -9,6 +9,10 @@ export function describeReadModelRequest(request: ReadModelRequest): { endpoint:
     case "app-store/catalog":
       if (Object.keys(parameters).length) throw new TypeError("Catalog GET takes no parameters.");
       return { endpoint: "/api/app-store/apps" };
+    case "app-store/pinned-apps":
+      action = "pinned_apps.read";
+      fields = [];
+      break;
     case "chat/projects-and-completed-messages": {
       if (parameters.kind === 'projects') {
         action = 'pwa.read_model';

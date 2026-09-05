@@ -1877,6 +1877,20 @@ If the active workspace has no configured runtime provider, `base-shell` may ope
 
 Pinned app shortcuts are not shell-owned browser preferences. They are App Store app data, exposed through an App Store-owned sidebar widget that `base-shell` mounts through the generic widget registry. Pin mutations require current workspace app registry context so non-launchable supporting apps cannot be newly pinned; stale uninstalled, non-launchable, or orphaned entries may still be removed. If an orphaned pinned app id no longer appears in catalog, server, local, or installed app listings, App Store UI should expose a cleanup row instead of requiring direct API use.
 
+Shell pin discovery uses the authenticated app-owned `pinned_apps.read` action
+on `POST /api/apps/app-store/backend`. This read returns
+stored ordered IDs without registry repair or business-state writes, so the SDK
+can retry transport failures without replaying a loader or a mutation. The
+closed `app-store/pinned-apps` descriptor issues only that concrete action and
+accepts no parameters. The shell uses the SDK-issued read executor with its
+scoped retry coordinator and M6 telemetry; no broader POST retry is granted.
+The current authorized launchable registry remains the icon/launch gate; the
+read does not grant app access. Initial reads and invalidations share cancellation,
+scope, read-generation, and local-save guards. Failed refreshes retain known
+pins, not a synthetic Chat-only replacement. The existing POST list/repair and
+explicit pin mutations retain their separate server-side semantics. Pin orders
+remain network-backed UI state, not persistent browser-cache entries.
+
 Mounted app frontends should be treated as stable app documents after first open.
 
 The shell should not force internal app navigation by mutating iframe `src` with app-owned query parameters.

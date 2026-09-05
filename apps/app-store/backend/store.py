@@ -101,7 +101,7 @@ def remember_install(data_root: Path, *, app_id: str, version: str, workspace_id
 
 
 def pinned_apps(data_root: Path) -> list[str]:
-    pinned = load_state(data_root).get("pinned_apps", [])
+    pinned = read_json_state(data_root, STATE_FILENAME).get("pinned_apps", ["chat"])
     if not isinstance(pinned, list):
         return []
     return [item for item in pinned if isinstance(item, str) and item.strip()]

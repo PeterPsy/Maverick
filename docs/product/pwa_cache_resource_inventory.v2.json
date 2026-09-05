@@ -62,7 +62,7 @@
       ],
       "resource": "pinned-apps",
       "owner": "app-store",
-      "read_surface": "pinned_apps.list",
+      "read_surface": "pinned_apps.read (non-mutating, SDK-reviewed retry); pinned_apps.list remains list/repair",
       "canonical_data_class": "workspace_internal",
       "provenance": "app_reference",
       "local_persistence_policy": "session",

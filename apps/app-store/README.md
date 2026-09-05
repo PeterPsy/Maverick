@@ -12,8 +12,15 @@ The default-off M5 adapter may reuse only the authorized public catalog through 
 - Catalog, carousel, and shortcut surfaces distinguish `workspace`, `supporting`, and `none` frontend roles from app contract presentation metadata. Supporting frontends are shown as platform extensions with inverted glyph colors and cannot be opened or pinned as workspace apps.
 - App-owned `pinned_apps` state is an ordered list. Pin mutations require
   workspace registry context, accept only launchable workspace frontends for
-  new pins, and still allow stale entries to be removed. `pinned_apps.list`
-  repairs the list against the launchable registry. `pinned_apps.set` preserves
+  new pins, and still allow stale entries to be removed. The POST `pinned_apps.list`
+  action repairs the list against the launchable registry. The authenticated
+  `pinned_apps.read` action on the same backend returns the stored
+  ordered IDs without repairing, seeding business state, or emitting change events.
+  This separate non-mutating read is safe for Base Shell's SDK-managed request
+  recovery; the shell still filters every icon through the current authorized
+  launchable registry. Its SDK-issued executor accepts no custom parameters,
+  URLs, actions, or callbacks; it cannot be used to retry a pin mutation.
+  `pinned_apps.set` preserves
   normalized order after filtering; Base Shell uses it for the desktop rail.
   Base Shell also supplies a stable idempotency key and exact SHA-256 request
   fingerprint. App Store atomically records a bounded deduplication result,

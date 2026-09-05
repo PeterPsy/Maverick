@@ -62,6 +62,17 @@ accepted in a physical test. No periodic replication/refresh broker is added.
 If reauthentication is required, fail clearly; never fall back to Ubuntu relay.
 The internal-only `chatgptAuthTokens` mode in Codex 0.153.4 is not used.
 
+The ad-hoc macOS development client stores the import copy in the local login
+Keychain (explicit file-based Keychain, no iCloud synchronization), alongside
+the dedicated private Codex auth cache. It does not claim iOS Data Protection
+or `ThisDeviceOnly` restoration semantics. `kSecAttrAccessible` is not valid for
+this Keychain configuration and must not be supplied. Keychain failures remain
+fail-closed before auth-cache creation; there is no unprotected storage fallback.
+Import diagnostics expose only a fixed MC-AUTH stage code and numeric OSStatus,
+never raw error payloads. Credential storage runs off the main actor and denies
+new local turns until the operation finishes. A request consumed by successful
+decryption is not replayable after a subsequent storage failure.
+
 ## Acceptance evidence
 
 - Test envelope tampering, wrong device/scope, expiry, replay and private output.
@@ -88,3 +99,14 @@ The internal-only `chatgptAuthTokens` mode in Codex 0.153.4 is not used.
   checkpoint. Native UI visibility, permission grants, authenticated model turns,
   screenshot/action correctness and network-path inspection require the user
   handoff and remain unverified. General local file attachments are not in v1.
+
+### Physical import follow-up
+
+The user confirmed the native setup UI on the Mac. The first real import was
+rejected before expiry despite matching request/fingerprint and an intact
+encrypted delivery package. The original message conflated envelope validation
+with Keychain/cache failures, so the precise failed stage was not observable.
+Version 0.1.1 corrects the unsupported Keychain attribute combination, adds
+redacted stage diagnostics and tests actual Python-to-CryptoKit interoperability,
+private cache permissions and a disposable fake Keychain roundtrip on the runner.
+The real account import and subsequent direct-provider turn remain pending.

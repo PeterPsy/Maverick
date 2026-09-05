@@ -219,3 +219,25 @@ eligible Notes windows, a valid window list and no unparsed entries. This is a
 later desktop snapshot, not evidence that the earlier user screenshot lacked a
 visible Notes window. A coordinated visible-window sample is needed before
 inferring which window intercepted the click. The probe did not modify the app.
+
+### Reproduced rectangle false positive and v6 recipient gate
+
+Coordinated probe `33993994855` found the Notes window at (1028,39,1028,1229)
+with the same full-display rectangle (window 23, layer 20, alpha 1) above all
+three sampled points. A properly initialized nonactivating AppKit probe,
+`33994304144`, then returned Notes window 4530 as the actual mouse-down recipient
+at all three points while rectangle scanning still returned 23. No captures or
+input were produced. Notes did not need to be frontmost for the read-only query.
+This establishes the rectangle approximation's false positive on the user's
+desktop, without claiming an exact replay of unavailable original tool arguments.
+
+V6 replaces that approximation with NSWindow.windowNumber(at:belowWindowWithWindowNumber:)
+using search origin 0 (never below an obstruction). Quartz coordinates are
+converted to Cocoa with the first screen's top edge, not the active screen.
+The mouse-down recipient must exactly match the observed SCWindow ID; no result
+or a different window is a denial. AppKit, not an app/layer exception list,
+handles transparent pixels and windows ignoring mouse events. Click and scroll
+retain local confirmation, foreground app, session, window and observation-age
+checks. Tests cover exact recipient/no result and coordinate conversion on
+negative/above/below displays. The installed v5 app is unchanged until the user
+closes it for an explicit v6 installation; physical click/scroll remain pending.

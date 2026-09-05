@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import RLock
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
@@ -112,14 +113,37 @@ class ProviderRegistry:
         self._agentic_runtime_adapters: dict[str, AgenticRuntimeEngineAdapter] = {}
         self._native_agent_installations: dict[str, NativeAgentInstallation] = {}
         self._native_agent_controllers: dict[str, NativeAgentRuntimeController] = {}
+        self.native_catalog_lock = RLock()
+        self._native_agent_catalogs = {}
+        self._native_catalog_reconciliations = {}
+
+    def get_native_agent_catalog(self, runtime_engine_id: str, model_provider_id: str):
+        """Read only snapshots published by the trusted discovery/reconcile path."""
+        with self.native_catalog_lock:
+            return self._native_agent_catalogs.get((runtime_engine_id, model_provider_id))
+
+    def publish_native_agent_catalog(self, snapshot) -> None:
+        with self.native_catalog_lock:
+            installation = self.get_native_agent_installation(snapshot.runtime_engine_id)
+            if not any(connection.model_provider_id == snapshot.model_provider_id
+                       and connection.catalog_provider_id == snapshot.catalog_provider_id
+                       for connection in installation.model_provider_connections):
+                raise ValueError("native_agent_catalog_connection_mismatch")
+            self._native_agent_catalogs[(snapshot.runtime_engine_id, snapshot.model_provider_id)] = snapshot
+
+    def clear_native_agent_catalog(self, runtime_engine_id: str, model_provider_id: str) -> None:
+        with self.native_catalog_lock:
+            self._native_agent_catalogs.pop((runtime_engine_id, model_provider_id), None)
+            self._native_catalog_reconciliations.pop((runtime_engine_id, model_provider_id), None)
 
     def register_provider_definition(self, definition: ProviderDefinition) -> ProviderDefinition:
         """Register one provider definition without a runtime adapter."""
-        installation = self._native_agent_installations.get(definition.provider_id)
-        if installation is not None and not installation.release_eligible:
-            definition = replace(definition, status="disabled")
-        self._definitions[definition.provider_id] = definition
-        return definition
+        with self.native_catalog_lock:
+            installation = self._native_agent_installations.get(definition.provider_id)
+            if installation is not None and not installation.certification_configured:
+                definition = replace(definition, status="disabled")
+            self._definitions[definition.provider_id] = definition
+            return definition
 
     def register_runtime_adapter(self, adapter: RuntimeBackendAdapter) -> ProviderDefinition:
         """Register one runtime backend adapter and its canonical definition."""
@@ -160,7 +184,7 @@ class ProviderRegistry:
                 raise ValueError("native_agent_adapter_identity_mismatch")
             if str(getattr(runtime_adapter, "adapter_version", "")) != manifest.adapter_version:
                 raise ValueError("native_agent_adapter_version_mismatch")
-        elif installation.release_eligible:
+        elif installation.certification_configured:
             raise ValueError("native_agent_certified_adapter_missing")
         self._native_agent_installations[manifest.runtime_engine_id] = installation
         if runtime_adapter is not None:
@@ -195,13 +219,15 @@ class ProviderRegistry:
 
     def list_provider_definitions(self) -> list[ProviderDefinition]:
         """Return all known provider definitions."""
-        return [self._definitions[provider_id] for provider_id in sorted(self._definitions)]
+        with self.native_catalog_lock:
+            return [self._definitions[provider_id] for provider_id in sorted(self._definitions)]
 
     def get_provider_definition(self, provider_id: str) -> ProviderDefinition:
         """Return one provider definition by canonical id."""
-        if provider_id not in self._definitions:
-            raise ProviderNotFoundError(f"Provider `{provider_id}` is not registered.")
-        return self._definitions[provider_id]
+        with self.native_catalog_lock:
+            if provider_id not in self._definitions:
+                raise ProviderNotFoundError(f"Provider `{provider_id}` is not registered.")
+            return self._definitions[provider_id]
 
     def get_runtime_adapter(self, provider_id: str) -> RuntimeBackendAdapter:
         """Return the runtime backend adapter for one provider."""

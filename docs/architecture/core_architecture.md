@@ -559,6 +559,31 @@ advertised by a certified connection inherits the integration certification,
 while its exact model id, revision policy, and reasoning choice remain pinned in
 the immutable profile and session binding. A model absent from the live catalog
 fails closed for new sessions without invalidating the connection certificate.
+Connection certificates are persisted immutable records with
+`certificate_scope=native_connection`, shared evidence, issuance/expiry, an
+adapter/recipe/effect/connection identity digest, and a permanent CAS-governed
+revocation status. Model projections reference that record and reuse its exact
+test run, evidence, issuance, and expiry; discovery never manufactures another
+certification run. Revoking a projection also revokes its connection. The bounded
+Codex migration adopts existing current-bundle evidence and the earliest expiry,
+preserves old immutable pins, and retains pre-migration certificates as permanent
+kill switches. Neither a new slug nor a restart can renew or reactivate a revoked
+or expired connection. Both full and cheap live-authority validation check it.
+
+Native availability comes only from a successful structured response of the
+configured runtime, with a binary/source fingerprint and a bounded freshness
+window. Persisted provider options and fallback metadata never grant availability.
+Each model-provider maps to exactly one runtime catalog; duplicate or ambiguous
+mappings are rejected. Verified exact revisions and explicit alias policies are
+preserved rather than flattened to aliases. Bootstrap and every successful live
+refresh reconcile all model projections before atomically exposing the new
+catalog epoch to admission. A failed refresh or partial reconciliation closes
+that gate; no second restart is needed to expose newly advertised models.
+Workspace-binding writes and session pinning validate current model, revision,
+and reasoning metadata, so API preflight rejects unavailable models before
+claims, prepared locks, threads, or sessions are persisted. Model projection
+revisions are content-addressed independently of the certified adapter revision;
+already matching legacy Codex revision-14 pins are adopted without rewriting them.
 A native integration must expose machine-readable discovery, version,
 health, update status, launch/connect/resume, structured turn events and final
 output, steering, interrupt, recovery, process cleanup, and close operations.

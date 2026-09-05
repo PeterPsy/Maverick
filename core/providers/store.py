@@ -451,7 +451,7 @@ class ProviderDocumentStore:
             {"evidence_digest": record.evidence_digest},
             asdict(record),
         )
-        if not inserted and existing != asdict(record):
+        if not inserted and self.get_capability_evidence(record.evidence_digest) != record:
             raise CapabilityCertificateConflictError("certificate_evidence_immutable_conflict")
         return record
 
@@ -475,7 +475,7 @@ class ProviderDocumentStore:
             {"certificate_id": record.certificate_id},
             asdict(record),
         )
-        if not inserted and existing != asdict(record):
+        if not inserted and _capability_certificate(existing) != record:
             raise CapabilityCertificateConflictError("certificate_immutable_conflict")
         return record
 
@@ -566,6 +566,7 @@ def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
 
 def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
     payload = dict(document)
+    payload["legacy_projection_certificate_ids"] = tuple(payload.get("legacy_projection_certificate_ids", ()))
     payload.setdefault("model_revision_policy", "provider_alias")
     payload["certified_upstream_ids"] = tuple(payload.get("certified_upstream_ids", ()))
     payload["certified_reasoning_efforts"] = tuple(

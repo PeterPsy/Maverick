@@ -128,6 +128,7 @@ class AgenticProfileDefinition:
     provider_config_digest: str = ""
     protocol_adapter_id: str = ""
     protocol_adapter_version: str = ""
+    native_model_catalog_digest: str = ""
 
 
 @dataclass(frozen=True)

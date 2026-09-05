@@ -12,16 +12,13 @@ from core.providers.agentic_models import (
     WorkspaceAgenticProfileBinding,
 )
 from core.providers.agentic_profiles import (
-    CODEX_PROFILE_REVISION,
     build_pinned_execution_binding,
     ensure_codex_workspace_profile,
-    publish_codex_agentic_profile,
 )
 from core.providers.agentic_workspace_admin import (
     save_workspace_agentic_binding,
 )
-from core.providers.builtin_certification import ensure_codex_preview_certificate
-from core.providers.errors import ProviderNotFoundError
+from core.providers.errors import AgenticProfileError, CapabilityCertificateError, ProviderNotFoundError
 from core.providers.models import ProviderSelection
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
@@ -65,6 +62,8 @@ def migrate_agentic_runtime_schema(
     for selection in provider_store.list_provider_selections():
         if selection.provider_id != "codex":
             continue
+        if selection.model_id not in {item.model_id for item in registry.get_provider_definition("codex").model_options}:
+            continue
         ensure_codex_workspace_profile(
             provider_store,
             definition=registry.get_provider_definition("codex"),
@@ -72,7 +71,8 @@ def migrate_agentic_runtime_schema(
             now=timestamp,
         )
 
-    if not provider_store.list_workspace_agentic_profile_bindings("default"):
+    if (not provider_store.list_workspace_agentic_profile_bindings("default")
+        and registry.get_provider_definition("codex").model_options):
         codex = registry.get_provider_definition("codex")
         ensure_codex_workspace_profile(
             provider_store,
@@ -92,35 +92,9 @@ def migrate_agentic_runtime_schema(
             now=timestamp,
         )
 
-    codex = registry.get_provider_definition("codex")
-    codex_adapter = registry.get_agentic_runtime_adapter("codex")
-    for model_option in codex.model_options:
-        profile = publish_codex_agentic_profile(
-            provider_store,
-            definition=codex,
-            model_id=model_option.model_id,
-            now=timestamp,
-        )
-        ensure_codex_preview_certificate(
-            provider_store,
-            definition=profile,
-            provider_definition=codex,
-            adapter=codex_adapter,
-        )
-    live_codex_model_ids = {option.model_id for option in codex.model_options}
-    for definition in provider_store.list_agentic_profile_definitions():
-        if (
-            definition.runtime_engine_id == "codex"
-            and definition.revision == CODEX_PROFILE_REVISION
-            and definition.model_id in live_codex_model_ids
-            and definition.adapter_version_constraint == f"=={codex_adapter.adapter_version}"
-        ):
-            ensure_codex_preview_certificate(
-                provider_store,
-                definition=definition,
-                provider_definition=codex,
-                adapter=codex_adapter,
-            )
+    from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
+
+    refresh_codex_native_catalog(registry, store=provider_store, now=timestamp)
     sessions = [session for session in runtime_store.list_all_sessions() if session.runtime_mode == "agentic"]
     inferred_session_count = 0
     for session in sessions:
@@ -129,16 +103,16 @@ def migrate_agentic_runtime_schema(
             selection = provider_store.get_provider_selection(session.workspace_id)
             if selection is None or selection.provider_id != "codex":
                 continue
-            binding = build_pinned_execution_binding(
-                provider_store,
-                registry,
-                session_id=session.session_id,
-                workspace_id=session.workspace_id,
-                execution_mode=session.effective_mode,
-                reasoning_effort=selection.model_reasoning_effort,
-                legacy_inferred=True,
-                now=timestamp,
-            )
+            try:
+                binding = build_pinned_execution_binding(
+                    provider_store, registry, session_id=session.session_id,
+                    workspace_id=session.workspace_id, execution_mode=session.effective_mode,
+                    reasoning_effort=selection.model_reasoning_effort, legacy_inferred=True, now=timestamp,
+                )
+            except (AgenticProfileError, CapabilityCertificateError):
+                # Unavailable/uncertified legacy sessions must not break host
+                # startup or acquire a substitute model's authority.
+                continue
             runtime_store.save_session(
                 replace(
                     session,
@@ -221,13 +195,30 @@ def _roll_forward_enabled_codex_bindings(
     workspace_ids: set[str],
     now: datetime,
 ) -> None:
+    from core.providers.agentic_profiles import publish_codex_agentic_profile
+    from core.providers.certificate_projection import certificate_profile_status
+
+    provider = registry.get_provider_definition("codex")
+    current_profiles = {}
+    for model in provider.model_options:
+        profile = publish_codex_agentic_profile(provider_store, definition=provider, model_id=model.model_id, now=now)
+        try:
+            certificate = provider_store.get_capability_certificate(profile.capability_certificate_id)
+        except ProviderNotFoundError:
+            continue
+        if certificate_profile_status(
+            certificate, provider_store.get_capability_certificate_status(certificate.certificate_id),
+            definition=profile, adapter=registry.get_agentic_runtime_adapter("codex"), store=provider_store, now=now,
+        ) == "active":
+            current_profiles[profile.definition_id] = profile
     for workspace_id in sorted(workspace_ids):
         bindings = provider_store.list_workspace_agentic_profile_bindings(workspace_id)
         sources_by_authority: dict[
             tuple[str, str], WorkspaceAgenticProfileBinding
         ] = {}
         for source in bindings:
-            if not source.enabled or source.definition_revision == CODEX_PROFILE_REVISION:
+            current = current_profiles.get(source.definition_id)
+            if not source.enabled or current is None or source.definition_revision == current.revision:
                 continue
             try:
                 definition = provider_store.get_agentic_profile_definition(
@@ -255,13 +246,7 @@ def _roll_forward_enabled_codex_bindings(
                 item.binding_id,
             ),
         ):
-            try:
-                current = provider_store.get_agentic_profile_definition(
-                    source.definition_id,
-                    CODEX_PROFILE_REVISION,
-                )
-            except ProviderNotFoundError:
-                continue
+            current = current_profiles[source.definition_id]
             if (
                 source.egress_policy_id != current.egress_policy_id
                 or source.egress_policy_revision != current.egress_policy_revision
@@ -290,7 +275,7 @@ def _roll_forward_enabled_codex_bindings(
                 definition_revision=current.revision,
                 credential_binding_id=source.credential_binding_id,
                 enabled=True,
-                is_default=False,
+                is_default=source.is_default,
                 actor_policy=source.actor_policy,
                 policy_patch={
                     "max_steps_per_turn": policy.max_steps_per_turn,
@@ -327,15 +312,16 @@ def _roll_forward_enabled_codex_bindings(
 
 def _binding_roll_forward_key(
     binding: WorkspaceAgenticProfileBinding,
-) -> tuple[int, int, datetime, str]:
+) -> tuple[int, bool, datetime, int, str]:
     try:
-        definition_revision = int(binding.definition_revision)
+        definition_revision = int(binding.definition_revision.split(".", 1)[0])
     except (TypeError, ValueError):
         definition_revision = -1
     return (
         definition_revision,
-        binding.revision,
+        binding.is_default,
         binding.updated_at,
+        binding.revision,
         binding.binding_id,
     )
 

@@ -5,14 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.providers.certified_execution_tcb import is_exact_codex_identity
-from core.providers.errors import ProviderNotFoundError
+from core.providers.errors import AgenticProfileError, CapabilityCertificateError, ProviderNotFoundError
 from core.providers.execution_families import (
     MAVERICK_AGENT_EXECUTION_FAMILY,
     NATIVE_AGENT_EXECUTION_FAMILY,
     effective_agentic_execution_family,
 )
 from core.providers.native_agent_catalog import (
-    native_agent_model_available,
+    require_native_agent_model_available,
     native_agent_model_provider_connected,
 )
 from core.runtime.full_workspace_contract import (
@@ -46,6 +46,7 @@ def inspect_agentic_family_readiness(
     certificate,
     binding,
     registry,
+    store=None,
 ) -> AgenticFamilyReadiness:
     """Classify one agent only from trusted identities and complete contracts."""
     family = effective_agentic_execution_family(
@@ -61,6 +62,7 @@ def inspect_agentic_family_readiness(
             certificate=certificate,
             binding=binding,
             registry=registry,
+            store=store,
         )
     if family == MAVERICK_AGENT_EXECUTION_FAMILY:
         return _maverick_readiness(
@@ -71,7 +73,7 @@ def inspect_agentic_family_readiness(
     return _incomplete(family, "execution_family_unclassified")
 
 
-def _native_readiness(*, definition, certificate, binding, registry) -> AgenticFamilyReadiness:
+def _native_readiness(*, definition, certificate, binding, registry, store) -> AgenticFamilyReadiness:
     try:
         installation = registry.get_native_agent_installation(
             definition.runtime_engine_id
@@ -85,7 +87,7 @@ def _native_readiness(*, definition, certificate, binding, registry) -> AgenticF
     recipe = installation.recipe
     full_revision = installation.certificate.full_workspace_contract_revision
     identity_matches = (
-        installation.release_eligible
+        installation.certification_configured
         and manifest.runtime_engine_id == definition.runtime_engine_id
         and manifest.adapter_id == definition.adapter_id
         and definition.adapter_version_constraint == f"=={manifest.adapter_version}"
@@ -103,13 +105,15 @@ def _native_readiness(*, definition, certificate, binding, registry) -> AgenticF
     )
     if not identity_matches:
         return _native_result(installation, "native_agent_contract_incomplete")
-    if not native_agent_model_available(
-        registry,
-        installation,
-        model_provider_id=definition.model_provider_id,
-        model_id=definition.model_id,
-    ):
-        return _native_result(installation, "native_agent_model_unavailable")
+    try:
+        require_native_agent_model_available(registry, definition, certificate=certificate)
+        if certificate is None or store is None:
+            return _native_result(installation, "native_agent_connection_certificate_missing")
+        from core.providers.native_agent_certificates import validate_native_connection_certificate
+
+        validate_native_connection_certificate(store, certificate, installation=installation)
+    except (AgenticProfileError, CapabilityCertificateError) as error:
+        return _native_result(installation, str(error))
     legacy_codex = is_exact_codex_identity(
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=definition.adapter_id,

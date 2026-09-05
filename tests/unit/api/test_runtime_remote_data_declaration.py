@@ -21,6 +21,33 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_removed_native_model_is_rejected_before_any_session_persistence(self) -> None:
+        from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
+        from tests.support.native_agent_catalog import codex_snapshot
+
+        with tempfile.TemporaryDirectory() as temp_dir, patch(
+            "core.providers.native_agent_reconciliation.discover_codex_native_catalog",
+            return_value=codex_snapshot("gpt-5.6-sol", "remaining-model"),
+        ) as discovery:
+            state, app, cookie = self._platform(temp_dir)
+            discovery.return_value = codex_snapshot("remaining-model")
+            refresh_codex_native_catalog(state.provider_registry, store=state.provider_store, force=True)
+            before = state.runtime_store.list_all_sessions()
+            with patch("core.api.runtime_api.create_runtime_session") as create, patch(
+                "core.api.runtime_api.acquire_prepared_session"
+            ) as prepare, patch.object(state.runtime_store, "claim_client_message_id") as claim:
+                status, payload, _headers = self._invoke(
+                    app, path="/api/runtime/sessions", method="POST", cookie=cookie,
+                    body={"agent_id": "chat", "source_app_id": "chat", "runtime_mode": "agentic",
+                          "input_text": "must not persist", "client_message_id": "removed-model-message"},
+                )
+            self.assertEqual(status, 409)
+            self.assertEqual(payload["error"], "native_agent_model_unavailable")
+            create.assert_not_called()
+            prepare.assert_not_called()
+            claim.assert_not_called()
+            self.assertEqual(state.runtime_store.list_all_sessions(), before)
+
     def test_authorized_codex_pin_matches_the_preflight_profile_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             state, app, cookie = self._platform(temp_dir)

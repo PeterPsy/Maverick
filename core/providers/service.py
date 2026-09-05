@@ -36,7 +36,7 @@ from core.providers.native_agent_builtins import (
     build_gemini_cli_candidate_definition,
     build_gemini_cli_candidate_installation,
 )
-from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
+from core.providers.provider_codex import CodexProviderAdapter
 from core.providers.provider_codex_reasoning import normalize_codex_model_options
 from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
 from core.providers.provider_credentials import resolve_provider_binding
@@ -97,14 +97,9 @@ def builtin_provider_registry(*, codex_command: str | None = None, refresh_model
     )
     for definition in build_hosted_provider_definitions():
         registry.register_provider_definition(definition)
-    if refresh_model_catalog:
-        options = adapter.model_options(refresh=True)
-        registry.register_provider_definition(
-            build_codex_definition(
-                model_options=options,
-                default_model_id=adapter.default_model_id(options),
-            )
-        )
+    from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
+
+    refresh_codex_native_catalog(registry, force=refresh_model_catalog)
     return registry
 
 
@@ -183,6 +178,7 @@ def effective_provider_registry(
     refresh_model_catalog: bool = False,
 ) -> ProviderRegistry:
     """Return builtin provider metadata overlaid with persisted store definitions."""
+    registry_created = registry is None
     active_registry = registry or builtin_provider_registry(
         codex_command=codex_command,
         refresh_model_catalog=refresh_model_catalog,
@@ -197,6 +193,9 @@ def effective_provider_registry(
         if is_retired_provider_definition(definition):
             continue
         active_registry.register_provider_definition(definition)
+    from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
+
+    refresh_codex_native_catalog(active_registry, store=store, force=refresh_model_catalog and not registry_created)
     return active_registry
 
 
@@ -751,6 +750,7 @@ def configure_workspace_provider(
             definition=profile,
             provider_definition=active_registry.get_provider_definition(provider_id),
             adapter=active_registry.get_agentic_runtime_adapter(provider_id),
+            now=now,
         )
     if observability_store is not None:
         record_platform_audit(

@@ -26,6 +26,7 @@ from core.providers.errors import (
     ProviderNotFoundError,
 )
 from core.providers.models import ProviderSelection
+from core.providers.native_agent_catalog import native_catalog_admission
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
@@ -94,6 +95,7 @@ def configure_workspace_agentic_default(
         definition=profile,
         provider_definition=provider,
         adapter=registry.get_agentic_runtime_adapter(provider_id),
+        now=timestamp,
     )
     bindings = store.list_workspace_agentic_profile_bindings(workspace_id)
     existing = next(
@@ -143,6 +145,7 @@ def configure_workspace_agentic_default(
     return saved_binding
 
 
+@native_catalog_admission
 def save_workspace_agentic_binding(
     store: ProviderStore,
     registry: ProviderRegistry,
@@ -206,6 +209,9 @@ def save_workspace_agentic_binding(
         raise AgenticProfileError("workspace_profile_actor_policy_empty")
     if enabled:
         require_remote_agentic_session_admission(definition)
+        from core.providers.native_agent_catalog import require_native_agent_model_available
+
+        require_native_agent_model_available(registry, definition)
 
     model_provider = registry.get_provider_definition(definition.model_provider_id)
     normalized_credential_id = str(credential_binding_id or "").strip() or None
@@ -294,11 +300,15 @@ def _require_active_certificate(
     definition: AgenticProfileDefinition,
 ) -> None:
     certificate = store.get_capability_certificate(definition.capability_certificate_id)
+    from core.providers.native_agent_catalog import require_native_agent_model_available
+
+    require_native_agent_model_available(registry, definition, certificate=certificate)
     status = store.get_capability_certificate_status(certificate.certificate_id)
     adapter = registry.get_agentic_runtime_adapter(definition.runtime_engine_id)
     effective_status = certificate_profile_status(
         certificate,
         status,
+        store=store,
         definition=definition,
         adapter=adapter,
     )

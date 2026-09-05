@@ -526,7 +526,7 @@ def workspace_provider_status(
         state.provider_store,
         registry=getattr(state, "provider_registry", None),
     )
-    native_items = native_agent_status_items(registry)
+    native_items = native_agent_status_items(registry, store=state.provider_store)
     agentic_profiles = workspace_agentic_profile_status(
         state,
         workspace_id=workspace_id,
@@ -586,7 +586,7 @@ def workspace_agentic_profile_status(
         for item in (
             native_items
             if native_items is not None
-            else native_agent_status_items(registry)
+            else native_agent_status_items(registry, store=state.provider_store)
         )
     }
     for binding in state.provider_store.list_workspace_agentic_profile_bindings(workspace_id):
@@ -626,6 +626,7 @@ def workspace_agentic_profile_status(
                     certificate,
                     certificate_status,
                     definition=definition,
+                    store=state.provider_store,
                     adapter=registry.get_agentic_runtime_adapter(definition.runtime_engine_id),
                 )
             except ProviderNotFoundError:
@@ -639,6 +640,7 @@ def workspace_agentic_profile_status(
         )
         family_readiness = inspect_agentic_family_readiness(
             definition=definition,
+            store=state.provider_store,
             certificate=certificate,
             binding=binding,
             registry=registry,
@@ -979,7 +981,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
     bindings_by_definition = {
         (item.definition_id, item.definition_revision): item for item in bindings
     }
-    native_items = native_agent_status_items(registry)
+    native_items = native_agent_status_items(registry, store=state.provider_store)
     native_by_engine = {
         str(item["runtime_engine_id"]): item for item in native_items
     }
@@ -1004,6 +1006,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 certificate,
                 certificate_status,
                 definition=definition,
+                store=state.provider_store,
                 adapter=registry.get_agentic_runtime_adapter(definition.runtime_engine_id),
             )
         except ProviderNotFoundError:
@@ -1017,6 +1020,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
         ]
         family_readiness = inspect_agentic_family_readiness(
             definition=definition,
+            store=state.provider_store,
             certificate=certificate,
             binding=binding,
             registry=registry,
@@ -1275,6 +1279,10 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         effective_status = "expired"
     return {
         "certificate_id": certificate.certificate_id,
+        "certificate_scope": certificate.certificate_scope,
+        "native_connection_certificate_id": certificate.native_connection_certificate_id or None,
+        "native_connection_identity_digest": certificate.native_connection_identity_digest or None,
+        "native_model_catalog_digest": certificate.native_model_catalog_digest or None,
         "schema_version": certificate.schema_version,
         "runtime_engine_id": certificate.runtime_engine_id,
         "adapter_id": certificate.adapter_id,
@@ -1421,6 +1429,7 @@ def runtime_session_agentic_governance_payload(
                     certificate,
                     certificate_status,
                     definition=definition,
+                    store=state.provider_store,
                     adapter=adapter,
                     adapter_artifact_digest=artifact_digest,
                 )
@@ -1438,6 +1447,7 @@ def runtime_session_agentic_governance_payload(
             )
         family_readiness = inspect_agentic_family_readiness(
             definition=definition,
+            store=state.provider_store,
             certificate=certificate,
             binding=binding,
             registry=registry,

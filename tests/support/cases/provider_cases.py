@@ -103,6 +103,12 @@ class ProvidersTestCase(unittest.TestCase):
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         return repo_root
 
+    def make_catalog_command(self, name):
+        command = self.make_repo_root() / name
+        command.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        command.chmod(0o755)
+        return str(command)
+
     def make_pinned_codex_session(
         self,
         provider_store: ProviderDocumentStore,
@@ -224,7 +230,7 @@ class ProvidersTestCase(unittest.TestCase):
         with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
             providers = list_available_providers(
                 provider_store,
-                codex_command="/tmp/codex-settings",
+                codex_command=self.make_catalog_command("codex-settings"),
                 refresh_model_catalog=True,
             )
 
@@ -258,7 +264,7 @@ class ProvidersTestCase(unittest.TestCase):
         }
         first_result = type("Result", (), {"stdout": json.dumps(first_payload)})()
         refreshed_result = type("Result", (), {"stdout": json.dumps(refreshed_payload)})()
-        command = "/tmp/codex-refresh-bypass"
+        command = self.make_catalog_command("codex-refresh-bypass")
 
         with patch("core.providers.provider_codex_models.subprocess.run", return_value=first_result):
             CodexProviderAdapter(codex_command=command).model_options(refresh=True)
@@ -302,7 +308,7 @@ class ProvidersTestCase(unittest.TestCase):
             ]
         }
         result = type("Result", (), {"stdout": json.dumps(payload)})()
-        command = "/tmp/codex-preserve-refreshed"
+        command = self.make_catalog_command("codex-preserve-refreshed")
 
         with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
             register_builtin_providers(provider_store, codex_command=command, refresh_model_catalog=True)
@@ -330,13 +336,16 @@ class ProvidersTestCase(unittest.TestCase):
 
     def test_non_refresh_registration_updates_stale_codex_fallback_model(self) -> None:
         provider_store = self.make_provider_store()
-        codex = self.provider_by_id(builtin_provider_registry().list_provider_definitions(), "codex")
+        from core.providers.provider_codex_models import build_codex_definition
+
+        codex = build_codex_definition()
         stale_option = replace(codex.model_options[0], model_id="gpt-5.5", label="gpt-5.5")
         provider_store.save_provider_definition(
             replace(codex, default_model_family="gpt-5.5", model_options=[stale_option])
         )
 
-        register_builtin_providers(provider_store)
+        with patch("core.providers.native_agent_reconciliation.discover_codex_native_catalog", return_value=None):
+            register_builtin_providers(provider_store)
 
         refreshed = provider_store.get_provider_definition("codex")
         self.assertEqual(refreshed.default_model_family, "gpt-5.6-sol")
@@ -631,6 +640,12 @@ class ProvidersTestCase(unittest.TestCase):
         runtime_store = self.make_runtime_store()
         repo_root = self.make_repo_root()
         now = datetime.now(tz=UTC)
+        from tests.support.native_agent_catalog import codex_snapshot
+
+        discovery = patch("core.providers.native_agent_reconciliation.discover_codex_native_catalog",
+                          return_value=codex_snapshot("gpt-5.6-sol"))
+        discovery.start()
+        self.addCleanup(discovery.stop)
         session, registry = self.make_pinned_codex_session(
             provider_store,
             runtime_store,

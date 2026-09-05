@@ -84,7 +84,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         controller = registry.get_native_agent_controller("codex")
 
         self.assertEqual(installation.execution_family, NATIVE_AGENT_EXECUTION_FAMILY)
-        self.assertTrue(installation.release_eligible)
+        self.assertTrue(installation.certification_configured)
         self.assertEqual(installation.manifest.protocol_kind, "app_server")
         self.assertEqual(installation.recipe.context_owner, "native_runtime")
         self.assertEqual(
@@ -108,7 +108,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         registry = builtin_provider_registry()
         installation = registry.get_native_agent_installation("gemini-cli")
 
-        self.assertFalse(installation.release_eligible)
+        self.assertFalse(installation.certification_configured)
         self.assertEqual(
             registry.get_provider_definition("gemini-cli").status,
             "disabled",
@@ -182,8 +182,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
             candidate,
             certificate=replace(
                 candidate.certificate,
-                certification_state="certified",
-                certificate_id_template="certificate:{profile_id}",
+                connection_certificate_ids=(("google", "certificate:google-native"),),
                 full_workspace_contract_revision="codex-baseline-v20",
             ),
         )
@@ -201,8 +200,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
             candidate,
             certificate=replace(
                 candidate.certificate,
-                certification_state="certified",
-                certificate_id_template="certificate:{profile_id}",
+                connection_certificate_ids=(("google", "certificate:google-native"),),
                 full_workspace_contract_revision="codex-baseline-v20",
             ),
         )

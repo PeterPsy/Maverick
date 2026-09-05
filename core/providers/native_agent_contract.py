@@ -22,7 +22,6 @@ NativeEffectMode = Literal[
     "sandboxed_native_tools",
     "mapped_hybrid",
 ]
-NativeCertificationState = Literal["candidate", "certified", "legacy_certified"]
 NativeAvailability = Literal["installed", "not_installed", "unknown"]
 NativeHealthState = Literal["healthy", "degraded", "unavailable", "unknown"]
 NativeUpdateState = Literal["current", "update_available", "unknown"]
@@ -125,8 +124,7 @@ class NativeAgentEffectContract:
 class NativeAgentCertificateReference:
     """Connection certificate kept separate from adapter and recipe identities."""
 
-    certification_state: NativeCertificationState
-    certificate_id_template: str | None
+    connection_certificate_ids: tuple[tuple[str, str], ...]
     full_workspace_contract_revision: str | None
 
 
@@ -173,11 +171,9 @@ class NativeAgentInstallation:
         return NATIVE_AGENT_EXECUTION_FAMILY
 
     @property
-    def release_eligible(self) -> bool:
-        return self.certificate.certification_state in {
-            "certified",
-            "legacy_certified",
-        }
+    def certification_configured(self) -> bool:
+        """A reference permits wiring, not release: live store validation grants it."""
+        return bool(self.certificate.connection_certificate_ids)
 
 
 def validate_native_agent_installation(installation: NativeAgentInstallation) -> None:
@@ -211,7 +207,8 @@ def validate_native_agent_installation(installation: NativeAgentInstallation) ->
         raise ValueError("native_agent_recipe_digest_invalid")
     if not installation.model_provider_connections:
         raise ValueError("native_agent_model_provider_connection_missing")
-    connection_ids: set[tuple[str, str]] = set()
+    connection_ids: set[str] = set()
+    catalog_ids: set[str] = set()
     for connection in installation.model_provider_connections:
         identity = (
             connection.model_provider_id.strip(),
@@ -222,13 +219,16 @@ def validate_native_agent_installation(installation: NativeAgentInstallation) ->
             connection.catalog_provider_id,
         ):
             raise ValueError("native_agent_model_provider_connection_invalid")
-        if identity in connection_ids:
+        if identity[0] in connection_ids or identity[1] in catalog_ids:
             raise ValueError("native_agent_model_provider_connection_duplicate")
-        connection_ids.add(identity)
+        connection_ids.add(identity[0])
+        catalog_ids.add(identity[1])
     certificate = installation.certificate
-    if installation.release_eligible and (
-        not certificate.certificate_id_template
-        or not certificate.full_workspace_contract_revision
+    if installation.certification_configured and (
+        not certificate.full_workspace_contract_revision
+        or {item[0] for item in certificate.connection_certificate_ids} != connection_ids
+        or len(certificate.connection_certificate_ids) != len(connection_ids)
+        or any(not item[1].strip() for item in certificate.connection_certificate_ids)
     ):
         raise ValueError("native_agent_certificate_contract_incomplete")
 

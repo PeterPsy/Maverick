@@ -128,6 +128,8 @@ class CommandNativeRuntimeInspector:
 
 def build_codex_native_installation(adapter) -> NativeAgentInstallation:
     """Describe the certified Codex app-server integration and its connection."""
+    from core.providers.agentic_profiles import CODEX_PROFILE_REVISION
+
     recipe_payload = {
         "recipe_id": "codex-native-app-server",
         "revision": NATIVE_AGENT_RECIPE_REVISION,
@@ -172,8 +174,7 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             sandbox_policy_revision=NATIVE_AGENT_SANDBOX_POLICY_REVISION,
         ),
         certificate=NativeAgentCertificateReference(
-            certification_state="legacy_certified",
-            certificate_id_template="capability-certificate:{profile_id}:{profile_revision}",
+            connection_certificate_ids=(("codex", f"native-connection:codex:codex:{CODEX_PROFILE_REVISION}"),),
             full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         ),
         inspector=CommandNativeRuntimeInspector(adapter.codex_command),
@@ -269,8 +270,7 @@ def build_gemini_cli_candidate_installation() -> NativeAgentInstallation:
             sandbox_policy_revision=NATIVE_AGENT_SANDBOX_POLICY_REVISION,
         ),
         certificate=NativeAgentCertificateReference(
-            certification_state="candidate",
-            certificate_id_template=None,
+            connection_certificate_ids=(),
             full_workspace_contract_revision=None,
         ),
         inspector=CommandNativeRuntimeInspector("gemini"),

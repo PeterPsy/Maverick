@@ -29,6 +29,7 @@ from core.providers.certificate_service import (
     validate_profile_certificate_execution_contract,
 )
 from core.providers.models import ProviderDefinition, ProviderSelection
+from core.providers.native_agent_catalog import native_catalog_admission
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
@@ -172,6 +173,9 @@ def publish_codex_agentic_profile(
         model_id=normalized_model_id,
         now=timestamp,
     )
+    from core.providers.native_agent_projection import codex_model_profile_projection
+
+    profile = codex_model_profile_projection(store, profile, definition)
     try:
         profile = store.get_agentic_profile_definition(profile.definition_id, profile.revision)
     except ProviderNotFoundError:
@@ -258,6 +262,7 @@ def resolve_workspace_agentic_profile(
     return definition, binding
 
 
+@native_catalog_admission
 def build_pinned_execution_binding(
     store: ProviderStore,
     registry: ProviderRegistry,
@@ -299,6 +304,9 @@ def build_pinned_execution_binding(
         certificate = store.get_capability_certificate(definition.capability_certificate_id)
     except ProviderNotFoundError as error:
         raise CapabilityCertificateError("certificate_missing") from error
+    from core.providers.native_agent_catalog import require_native_agent_model_available
+
+    require_native_agent_model_available(registry, definition, certificate=certificate)
     validate_full_workspace_contract_claim(
         profile=definition,
         certificate=certificate,

@@ -120,7 +120,7 @@ class AgenticProfilesTest(unittest.TestCase):
         )
         self.assertEqual(binding.reasoning_effort, binding.default_reasoning_effort)
         self.assertIn(binding.reasoning_effort, binding.certified_reasoning_efforts)
-        changed = replace(original, model_id="gpt-5.6-mini", updated_at=replace_time(NOW))
+        changed = replace(original, model_id="gpt-6-astra", updated_at=replace_time(NOW))
         self.provider_store.save_provider_selection(changed)
         ensure_codex_workspace_profile(
             self.provider_store,
@@ -382,7 +382,7 @@ class AgenticProfilesTest(unittest.TestCase):
             selection=selection,
             now=NOW,
         )
-        self.assertEqual(profile.revision, CODEX_PROFILE_REVISION)
+        self.assertTrue(profile.revision.startswith(CODEX_PROFILE_REVISION + "."))
 
         for rev in CODEX_PREVIOUS_PROFILE_REVISIONS:
             self.provider_store.save_agentic_profile_definition_status(
@@ -437,9 +437,9 @@ class AgenticProfilesTest(unittest.TestCase):
                     item
                     for item in self.provider_store.list_agentic_profile_definitions()
                     if item.model_id == model.model_id
-                    and item.revision == CODEX_PROFILE_REVISION
+                    and item.revision.startswith(CODEX_PROFILE_REVISION + ".")
                 )
-                self.assertEqual(profile.revision, CODEX_PROFILE_REVISION)
+                self.assertTrue(profile.revision.startswith(CODEX_PROFILE_REVISION + "."))
                 status = self.provider_store.get_agentic_profile_definition_status(
                     profile.definition_id,
                     profile.revision,
@@ -455,6 +455,7 @@ class AgenticProfilesTest(unittest.TestCase):
                 effective = certificate_profile_status(
                     certificate,
                     cert_status,
+                    store=self.provider_store,
                     definition=profile,
                     adapter=codex_adapter,
                     now=NOW,

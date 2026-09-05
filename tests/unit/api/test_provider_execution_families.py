@@ -152,7 +152,9 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             expected_revision=binding.revision,
         )
 
-        item = workspace_agentic_admin_status(state, workspace_id="default")["items"][0]
+        item = next(item for item in workspace_agentic_admin_status(state, workspace_id="default")["items"]
+                    if item["definition_id"] == binding.definition_id
+                    and item["definition_revision"] == binding.definition_revision)
 
         self.assertFalse(item["selectable"])
         self.assertEqual(item["blocked_reason"], "workspace_binding_disabled")

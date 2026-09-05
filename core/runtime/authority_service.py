@@ -129,6 +129,13 @@ def revalidate_runtime_authority_snapshot(
         raise CapabilityCertificateError("certificate_status_missing")
     if status.status != "active":
         raise CapabilityCertificateError("certificate_revoked")
+    from core.providers.certificate_service import _is_native_certificate
+    from core.providers.native_agent_certificates import validate_native_connection_certificate
+
+    if _is_native_certificate(certificate):
+        validate_native_connection_certificate(
+            active_provider_store, certificate, now=now, installation=getattr(adapter, "installation", None),
+        )
     if not _authority_revision_matches(
         authority,
         f"certificate-status:{certificate.certificate_id}:{status.revision}",

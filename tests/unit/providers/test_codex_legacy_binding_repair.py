@@ -87,6 +87,7 @@ class CodexLegacyBindingRepairTest(unittest.TestCase):
             certificate=certificate,
             binding=repaired,
             registry=self.registry,
+            store=self.store,
         )
         self.assertFalse(readiness.complete)
         self.assertEqual(

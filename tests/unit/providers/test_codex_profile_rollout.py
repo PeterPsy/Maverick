@@ -30,6 +30,7 @@ from core.providers.codex_profile_revision_guard import (
 from core.providers.service import builtin_provider_registry
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from tests.support.collections import FakeCollection
+from tests.support.native_agent_catalog import codex_snapshot
 
 
 NOW = datetime(2026, 8, 16, tzinfo=UTC)
@@ -48,6 +49,10 @@ class CodexProfileRolloutTest(unittest.TestCase):
                 agentic_migrations=FakeCollection(),
             )
         )
+        discovery = patch("core.providers.native_agent_reconciliation.discover_codex_native_catalog",
+                          return_value=codex_snapshot("gpt-5.6-sol", "alternate-history-model", "alternate-authority-model", "orphan-binding-model"))
+        discovery.start()
+        self.addCleanup(discovery.stop)
         self.registry = builtin_provider_registry()
         self.codex = self.registry.get_provider_definition("codex")
 
@@ -247,7 +252,7 @@ class CodexProfileRolloutTest(unittest.TestCase):
                 "default"
             )
             if binding.definition_id == current_profile.definition_id
-            and binding.definition_revision == CODEX_PROFILE_REVISION
+            and binding.definition_revision == current_profile.revision
         ]
         self.assertEqual(len(current_bindings), 1)
         self.assertTrue(current_bindings[0].enabled)
@@ -324,7 +329,7 @@ class CodexProfileRolloutTest(unittest.TestCase):
                 "default"
             )
             if binding.definition_id == current_profile.definition_id
-            and binding.definition_revision == CODEX_PROFILE_REVISION
+            and binding.definition_revision == current_profile.revision
         ]
         self.assertEqual(len(current_bindings), 2)
         self.assertEqual(

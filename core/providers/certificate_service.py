@@ -216,7 +216,7 @@ def revoke_capability_certificate(
     observability_store=None,
 ) -> CapabilityCertificateStatus:
     """Revoke a certificate exactly once through status CAS."""
-    store.get_capability_certificate(certificate_id)
+    certificate = store.get_capability_certificate(certificate_id)
     status = store.get_capability_certificate_status(certificate_id)
     if status is None:
         raise CapabilityCertificateError("certificate_status_missing")
@@ -224,6 +224,27 @@ def revoke_capability_certificate(
         if status.revision != expected_revision:
             raise CapabilityCertificateError("certificate_status_revision_conflict")
         return status
+    if status.revision != expected_revision:
+        raise CapabilityCertificateError("certificate_status_revision_conflict")
+    connection_id = certificate.native_connection_certificate_id
+    if not connection_id and certificate.certificate_scope == "model" and _is_native_certificate(certificate):
+        from core.providers.native_agent_certificates import connection_certificate_for_projection
+
+        try:
+            connection_id = connection_certificate_for_projection(store, certificate).certificate_id
+        except CapabilityCertificateError:
+            # Pre-migration legacy revocations are adopted when the connection
+            # record is created; they never need a replacement model certificate.
+            pass
+    if connection_id:
+        root_status = store.get_capability_certificate_status(connection_id)
+        if root_status is None:
+            raise CapabilityCertificateError("native_agent_connection_certificate_status_missing")
+        revoke_capability_certificate(
+            store, certificate_id=connection_id,
+            expected_revision=root_status.revision, reason=reason, now=now,
+            observability_store=observability_store,
+        )
     timestamp = now or datetime.now(tz=UTC)
     revoked = replace(
         status,
@@ -294,6 +315,14 @@ def validate_certificate_for_binding_with_revision_fence(
         raise CapabilityCertificateError("certificate_status_missing")
     if status.status == "revoked":
         raise CapabilityCertificateError("certificate_revoked")
+    if certificate.certificate_scope != "model":
+        raise CapabilityCertificateError("certificate_scope_invalid")
+    if _is_native_certificate(certificate):
+        from core.providers.native_agent_certificates import validate_native_connection_certificate
+
+        validate_native_connection_certificate(
+            store, certificate, now=now, installation=getattr(adapter, "installation", None),
+        )
     try:
         evidence = store.get_capability_evidence(certificate.evidence_digest)
     except ProviderNotFoundError as error:
@@ -382,6 +411,7 @@ def validate_profile_certificate_execution_contract(*, profile, certificate) -> 
             getattr(profile, "model_revision_policy", "provider_alias")
             or "provider_alias"
         ),
+        "native_model_catalog_digest": str(getattr(profile, "native_model_catalog_digest", "") or ""),
         "execution_family": str(getattr(profile, "execution_family", "") or ""),
         "harness_recipe_id": str(getattr(profile, "harness_recipe_id", "") or ""),
         "harness_recipe_revision": str(
@@ -444,6 +474,16 @@ def _evidence_digest_is_valid(evidence: CapabilityEvidenceRecord) -> bool:
 
 
 def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
+    if certificate.certificate_scope not in {"model", "native_connection"}:
+        raise CapabilityCertificateError("certificate_scope_invalid")
+    if certificate.certificate_scope == "native_connection" and (
+        certificate.model_id != "*" or certificate.model_revision is not None
+        or certificate.certified_reasoning_efforts or certificate.default_reasoning_effort
+        or certificate.native_connection_certificate_id
+        or len(certificate.native_connection_identity_digest) != 64
+        or not _is_native_certificate(certificate)
+    ):
+        raise CapabilityCertificateError("native_agent_connection_certificate_invalid")
     for field_name in (
         "certificate_id",
         "schema_version",
@@ -548,6 +588,13 @@ def _validate_certificate_tcb(certificate: CapabilityCertificate) -> str:
         )
     )
     return revision_fence
+
+
+def _is_native_certificate(certificate: CapabilityCertificate) -> bool:
+    return certificate.execution_family == "native_agent" or is_exact_codex_identity(
+        runtime_engine_id=certificate.runtime_engine_id, adapter_id=certificate.adapter_id,
+        model_provider_id=certificate.model_provider_id, provider_protocol=certificate.provider_protocol,
+    )
 
 
 def _validate_binding_tcb(

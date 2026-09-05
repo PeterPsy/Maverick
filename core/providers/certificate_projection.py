@@ -27,6 +27,7 @@ def certificate_profile_status(
     adapter: object,
     now: datetime | None = None,
     adapter_artifact_digest: str | None = None,
+    store=None,
 ) -> str:
     """Derive active/blocked state without trusting an editable certified flag."""
     if status is None:
@@ -35,6 +36,18 @@ def certificate_profile_status(
         return "revoked"
     if (now or datetime.now(tz=UTC)) >= certificate.expires_at:
         return "expired"
+    from core.providers.certificate_service import _is_native_certificate
+    from core.providers.native_agent_certificates import validate_native_connection_certificate
+
+    if _is_native_certificate(certificate):
+        if store is None:
+            return "native_agent_connection_certificate_missing"
+        try:
+            validate_native_connection_certificate(
+                store, certificate, now=now, installation=getattr(adapter, "installation", None),
+            )
+        except CapabilityCertificateError as error:
+            return error.reason_code
     expected = {
         "certificate_id": definition.capability_certificate_id,
         "runtime_engine_id": definition.runtime_engine_id,

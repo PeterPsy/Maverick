@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.providers.errors import ProviderNotFoundError
+from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
+from core.providers.native_agent_certificates import native_connection_reference, validate_native_connection_certificate
 from core.providers.execution_families import NATIVE_AGENT_EXECUTION_FAMILY
 from core.providers.native_agent_catalog import native_agent_catalog_models
 from core.providers.native_agent_contract import NativeRuntimeStatus
 from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
 
 
-def native_agent_status_items(registry) -> list[dict[str, object]]:
+def native_agent_status_items(registry, *, store=None) -> list[dict[str, object]]:
     """Inspect every native registration without exposing host paths or secrets."""
     items = [
-        _native_agent_status_item(registry, installation)
+        _native_agent_status_item(registry, installation, store=store)
         for installation in registry.list_native_agent_installations()
     ]
     items.sort(
@@ -26,7 +27,7 @@ def native_agent_status_items(registry) -> list[dict[str, object]]:
     return items
 
 
-def _native_agent_status_item(registry, installation) -> dict[str, object]:
+def _native_agent_status_item(registry, installation, *, store) -> dict[str, object]:
     manifest = installation.manifest
     try:
         definition = registry.get_provider_definition(manifest.runtime_engine_id)
@@ -44,13 +45,27 @@ def _native_agent_status_item(registry, installation) -> dict[str, object]:
             update_status="unknown",
         )
     contract_complete = bool(
-        installation.release_eligible
+        installation.certification_configured
         and installation.certificate.full_workspace_contract_revision
         == FULL_WORKSPACE_CONTRACT_REVISION
         and installation.effects.workspace_confined
         and installation.effects.process_tree_supervised
         and installation.effects.structured_effect_events
     )
+    connection_reason = None
+    certificates = []
+    if contract_complete:
+        for connection in installation.model_provider_connections:
+            try:
+                if store is None:
+                    raise CapabilityCertificateError("native_agent_connection_certificate_missing")
+                certificate = store.get_capability_certificate(native_connection_reference(installation, connection.model_provider_id))
+                validate_native_connection_certificate(store, certificate, installation=installation)
+                certificates.append({"certificate_id": certificate.certificate_id, "evidence_digest": certificate.evidence_digest,
+                                     "issued_at": certificate.issued_at, "expires_at": certificate.expires_at, "status": "active"})
+            except (ProviderNotFoundError, CapabilityCertificateError) as error:
+                connection_reason = getattr(error, "reason_code", "native_agent_connection_certificate_missing")
+                contract_complete = False
     runtime_ready = status.availability == "installed" and status.health == "healthy"
     enabled = bool(definition is not None and definition.status == "active")
     selectable = contract_complete and runtime_ready and enabled
@@ -61,6 +76,8 @@ def _native_agent_status_item(registry, installation) -> dict[str, object]:
         status=status,
     )
     catalog_models = native_agent_catalog_models(registry, installation)
+    selectable = selectable and bool(catalog_models)
+    unavailable_reason = connection_reason or unavailable_reason or (None if catalog_models else "native_agent_model_unavailable")
     return {
         "runtime_engine_id": manifest.runtime_engine_id,
         "label": manifest.runtime_engine_id if definition is None else definition.label,
@@ -100,7 +117,7 @@ def _native_agent_status_item(registry, installation) -> dict[str, object]:
         },
         "authentication_status": (
             "runtime_managed"
-            if installation.release_eligible
+            if installation.certification_configured
             else "not_configured"
         ),
         "models": [
@@ -120,7 +137,8 @@ def _native_agent_status_item(registry, installation) -> dict[str, object]:
             "sandbox_policy_revision": installation.effects.sandbox_policy_revision,
             "approval_policy": installation.effects.approval_policy,
         },
-        "certification_state": installation.certificate.certification_state,
+        "certification_state": "certified" if contract_complete else "unavailable",
+        "connection_certificates": certificates,
         "full_workspace_status": "certified" if contract_complete else "unavailable",
         "full_workspace_contract_revision": (
             installation.certificate.full_workspace_contract_revision

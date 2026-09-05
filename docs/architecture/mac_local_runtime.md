@@ -164,3 +164,29 @@ V4 native commit `32046d2` passed all 19 Swift tests, the release build and
 credential-free Codex checks in [run 33989065896](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/33989065896).
 The push workflow built an artifact only; installation is pending the user's
 confirmation that MaverickMac is closed. The Python unused-import check passed.
+
+### Physical v4 acceptance and pointer follow-up
+
+Install run `33989302707` passed 19 tests and installed `32046d2` with desktop
+launch requested at 20:13:13 UTC. User screenshots confirm approved text input,
+explicit rejection without a second insertion, stop during confirmation with
+idle/no inserted stop-marker, and a successful fresh text-only session afterward.
+The earlier failed v3 write was explicitly approved, as later clarified by the
+user. Full computer-use acceptance and packet-level verification remain open.
+
+The physical search-field click test subsequently failed: first an image-reading
+report, then MC-TOOL-13 with Notes manually activated. Do not attribute that error
+to focus without evidence. V5 waits for actual target-PID focus after approval
+(up to one second, stop-fenced), without retrying the action. Observation itself
+continues to allow a visible non-frontmost selected app.
+
+The native click contract now uses last-screenshot pixels, top-left origin;
+native code converts to window/desktop points rather than asking the model to
+perform Retina/downscale/desktop-offset arithmetic. Shadowless window capture,
+actual returned image dimensions and unchanged window/observation checks bind
+that conversion. Invalid coordinates are rejected, never clamped. Static
+MC-TOOL-23..27 distinguish coordinate/geometry and z-order hit-test failures,
+without publishing titles, raw tool payloads or images to Ubuntu. Other windows
+at the click point remain a denial, not a reason to disable the safety check.
+Synthetic mapping/occlusion tests supplement the existing suite; physical click,
+scroll, lock/sleep, token refresh and network-path tests remain pending.

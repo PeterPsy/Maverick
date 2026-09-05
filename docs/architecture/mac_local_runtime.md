@@ -241,3 +241,9 @@ retain local confirmation, foreground app, session, window and observation-age
 checks. Tests cover exact recipient/no result and coordinate conversion on
 negative/above/below displays. The installed v5 app is unchanged until the user
 closes it for an explicit v6 installation; physical click/scroll remain pending.
+
+V6 install run `33994482830` passed 26 Swift tests, release and credential-free
+Codex checks; it installed `355adfa` and requested desktop launch at 21:59:38 UTC
+on 2026-09-05 following user-confirmed exit. The unused-import check passed.
+Credentials were not reimported or removed. Physical click/scroll remains the
+next user-assisted acceptance test; no outcome is inferred from CI alone.

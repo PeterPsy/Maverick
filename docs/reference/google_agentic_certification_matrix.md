@@ -1,6 +1,6 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-09-04
+Status date: 2026-09-05
 Matrix revision: `2026-09-04-r39-p4-typed-result-classification-tcb29`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
@@ -13,12 +13,15 @@ Adapter: `maverick-hosted-tool-loop==35`
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `43` (revision `42` suspended) |
+| Immutable profile revision | `44` (revision `43` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
-| Endpoint | `https://generativelanguage.googleapis.com/v1/interactions` |
+| Protocol adapter | `google-interactions-protocol@3` |
+| Provider config | `google-ai-studio-interactions@2`; digest `550a9888fc2c22a110e6e386ecc778ac60c0473cb5c69d8c83571873879e696e` |
+| Endpoint | `https://generativelanguage.googleapis.com/v1/interactions?alt=sse` |
+| Accounting policy | `google-gemini-3.6-flash-public-list-price@1`; 1,500,000 / 7,500,000 micro-USD per million input/output tokens |
 | Continuation | exact Core-managed stateless history; deterministic bounded compaction |
 | Tool calls | all calls retained in codec/journal; execution remains sequential, so a multi-call response is denied and paired in full |
 | Private codec | `google-gemini-interactions@3`, schema `3`; no silent migration |
@@ -32,6 +35,12 @@ Adapter: `maverick-hosted-tool-loop==35`
 | Policy surfaces | exact `cli`, `mcp`, `app-interface`, and `core-capability` set plus every Full Workspace wrapper handle; the public resolver must produce complete live authority |
 | Tool handles | Full Workspace `codex-baseline-v20` surface: all 24 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result projection; only complete probe evidence is cached, while transient/partial results remain retryable; app reads require a Core-audited descriptor plus executable closure and are rechecked at dispatch, inter-agent CLI/MCP operations have exact effects and content-dropping projections, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates authority plus the freshly read nonnumeric policy before every stream advance, and shell/process effects remain rollbackable over an immutable `.git`-excluding snapshot in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 45 days |
+
+Revision 44 and provider-config revision 2 add the exact executable
+config/protocol-adapter identity and one config-owned endpoint/accounting source
+for both reservation and decoded usage. They have no signed suite-39 result;
+the unchanged matrix revision describes the required rerun, not certification
+evidence. The preview remains contained and unavailable.
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
 input limit, 65,536-token output limit and function calling support. The
@@ -95,8 +104,9 @@ The executable signing and publication workflow is defined in
 
 ## Fail-closed conditions
 
-- Any model, exact catalog revision, revision policy, protocol, API-version or
-  adapter mismatch is rejected.
+- Any model, exact catalog revision, revision policy, protocol, API-version,
+  protocol-adapter, provider-config, endpoint, or accounting-policy mismatch is
+  rejected.
 - A missing, expired or revoked certificate prevents authority creation.
 - Missing or disabled credential bindings prevent session pinning.
 - Unknown data classification is denied before transport.
@@ -435,3 +445,13 @@ paths, content, shell output, discovery descriptions, and arbitrary tool values
 remain conservatively scanned. The immutable definition remains uncertified,
 unbound, contained, and unavailable; no live probe, signed run, provider
 completion, certificate, canary, or remote activation has been performed.
+
+Revision 44 retains adapter 35, governed recipe 22, semantic compiler 10, suite
+39, matrix `2026-09-04-r39-p4-typed-result-classification-tcb29`, and TCB
+manifest v29. It additionally binds provider config
+`google-ai-studio-interactions@2` and protocol adapter
+`google-interactions-protocol@3` in the profile, future certificate, execution
+binding, actual transport endpoint, and config-owned price policy. The immutable
+definition remains uncertified, unbound, contained, and unavailable; no live
+probe, signed run, provider completion, certificate, canary, or remote
+activation has been performed.

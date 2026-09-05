@@ -75,15 +75,21 @@ artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
 Hosted adapter 35 and the Full Workspace result contract
-`codex-baseline-v20` are bound by TCB manifest v29. Google revision 43 and
-OpenRouter revision 42 atomically claim that contract and the `maverick_agent`
-family because the executable result gate reports all 24 required behaviors:
+`codex-baseline-v20` are bound by TCB manifest v29. Google revision 44 and
+OpenRouter revision 43 bind provider-config revision 2 and atomically claim that
+contract and the `maverick_agent` family because the executable result gate
+reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes. Their exact profile policies
 retain the required `cli`, `mcp`, `app-interface`, and `core-capability`
 surfaces, and a public-resolver fixture proves complete live authority. The gate
 caches only the complete successful result; transient, empty, and partial probe
 evidence remains fail-closed and retryable.
+Their profile, certificate, and execution-binding contract also fixes the exact
+provider-config id/revision/digest and protocol-adapter id/version. Runtime
+composition rejects endpoint, route/upstream/model, or config-owned accounting
+drift before publication or dispatch. These revisions remain uncertified,
+unbound, contained, and unavailable pending a fresh signed provider run.
 Opaque Core filesystem, instruction, process, discovery, artifact, certified
 inter-agent, and compactor identities are excluded from marker scanning only by
 typed projections bound to the full result payload. Every path, content/output,

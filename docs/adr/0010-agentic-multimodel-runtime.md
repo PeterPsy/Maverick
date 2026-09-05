@@ -676,12 +676,23 @@ parameters, denies data collection, and enforces ZDR when the egress policy
 requires it. No eligible upstream means no request. Effective upstream drift is
 verified against the certificate.
 
+Maverick Agent composition also binds its executable data records. Provider
+config protocol/API, exact endpoint URL, route/upstreams, effective provider and
+resolved-model identities, and versioned token-cost policy must agree with the
+protocol adapter and harness recipe. The profile, certificate, and execution
+binding carry the exact provider-config id/revision/digest plus protocol-adapter
+id/version. Production registry construction rejects a factory whose client
+uses another endpoint, route, model identity, or accounting policy; both budget
+reservation and decoded usage use the policy from that config. Consequently a
+second model on an existing adapter is a config/recipe/profile registration,
+not a model-specific factory, decoder, or router-code change.
+
 The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 43
-and OpenRouter revision 42, both bound to
+accepted as complete. The current contained definitions are Google revision 44
+and OpenRouter revision 43, both bound to provider-config revision 2 and
 `maverick-hosted-tool-loop==35`; older revisions are suspended rather than
 overwritten. Their suite-39 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by

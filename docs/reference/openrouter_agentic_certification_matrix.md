@@ -1,6 +1,6 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-09-04
+Status date: 2026-09-05
 Matrix revision: `2026-09-04-r39-p4-typed-result-classification-tcb29`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
@@ -13,10 +13,12 @@ Adapter: `maverick-hosted-tool-loop==35`
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-08-17`, with exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `42` (revision `41` suspended) |
+| Immutable profile revision | `43` (revision `42` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
+| Protocol adapter | `openrouter-chat-completions-protocol@2` |
+| Provider config | `openrouter-deepinfra-fp8@2`; digest `5ed02612baa9f19b1af3f361ff7fbf4d9f943fe1d03a32a23c210935dc92c66e` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 | Upstream endpoint tag | `deepinfra/fp8` |
 | Effective provider identity | `DeepInfra` |
@@ -28,6 +30,7 @@ Adapter: `maverick-hosted-tool-loop==35`
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
+| Accounting policy | `openrouter-deepinfra-deepseek-v4-flash-public-list-price@1`; 90,000 / 180,000 micro-USD per million input/output tokens |
 | Finalization reserve | one 2,048-token / 35,000-micro-USD / 20-second final request plus one equal recovery |
 | Turn cost ceiling | 250,000 micro-USD; 70,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
@@ -35,6 +38,12 @@ Adapter: `maverick-hosted-tool-loop==35`
 | Policy surfaces | exact `cli`, `mcp`, `app-interface`, and `core-capability` set plus every Full Workspace wrapper handle; the public resolver must produce complete live authority |
 | Tool handles | Full Workspace `codex-baseline-v20` surface: all 24 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result projection; only complete probe evidence is cached, while transient/partial results remain retryable; app reads require a Core-audited descriptor plus executable closure and are rechecked at dispatch, inter-agent CLI/MCP operations have exact effects and content-dropping projections, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates authority plus the freshly read nonnumeric policy before every stream advance, and shell/process effects remain rollbackable over an immutable `.git`-excluding snapshot in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 30 days |
+
+Revision 43 and provider-config revision 2 add the exact executable
+config/protocol-adapter identity and config-owned endpoint, upstream/provider/
+resolved-model, quantization, and accounting data. They have no signed suite-39
+result; the unchanged matrix revision describes the required rerun, not
+certification evidence. The preview remains contained and unavailable.
 
 The current OpenRouter model catalog lists `deepinfra/fp8` as active for
 DeepSeek V4 Flash, with `tools`, `tool_choice`, `reasoning`, `max_tokens`, and
@@ -462,10 +471,22 @@ remain conservatively scanned. The immutable definition remains uncertified,
 unbound, contained, and unavailable; no live probe, signed run, provider
 completion, certificate, canary, or remote activation has been performed.
 
+Revision 43 retains adapter 35, governed recipe 22, semantic compiler 10, suite
+39, matrix `2026-09-04-r39-p4-typed-result-classification-tcb29`, and TCB
+manifest v29. It additionally binds provider config
+`openrouter-deepinfra-fp8@2` and protocol adapter
+`openrouter-chat-completions-protocol@2` in the profile, future certificate,
+execution binding, actual transport route, upstream/provider/resolved-model
+checks, and config-owned price policy. The immutable definition remains
+uncertified, unbound, contained, and unavailable; no live probe, signed run,
+provider completion, certificate, canary, or remote activation has been
+performed.
+
 ## Fail-closed conditions
 
-- Any model, provider-alias revision policy, protocol, API-version, adapter,
-  endpoint, quantization, or upstream mismatch is rejected.
+- Any model, provider-alias revision policy, protocol, API-version,
+  protocol-adapter, provider-config, endpoint, accounting policy, effective
+  provider/resolved model, quantization, or upstream mismatch is rejected.
 - `allow_fallbacks=true`, missing parameter enforcement, collection other than
   `deny`, or missing ZDR enforcement is rejected before transport.
 - Sending `parallel_tool_calls` while the pinned endpoint does not declare it is

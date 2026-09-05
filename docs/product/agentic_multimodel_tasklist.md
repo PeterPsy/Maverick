@@ -555,10 +555,11 @@ completion claim.
   frozen no-growth ceilings.
 - [x] Adapter 35, semantic compiler revision 10, Full Workspace result contract
   `codex-baseline-v20`, context-compaction schema 3, TCB manifest v29, suite 39,
-  and matrix `2026-09-04-r39-p4-typed-result-classification-tcb29` create
-  immutable Google revision 43 and OpenRouter revision 42 previews. Historical
-  revisions 42/41
-  are suspended, never promoted in place. The new definitions
+  and matrix `2026-09-04-r39-p4-typed-result-classification-tcb29` created
+  immutable Google revision 43 and OpenRouter revision 42 previews. Those
+  definitions, and historical revisions 42/41, are now suspended rather than
+  promoted in place; Phase 5 publishes the separate config-bound revisions
+  44/43. The definitions
   atomically use `execution_family=maverick_agent` and
   `full_workspace_contract_revision=codex-baseline-v20`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
@@ -606,8 +607,10 @@ completion claim.
   update status, launch, connect, resume, event stream/final output, steering,
   interrupt, recovery, cleanup, and close boundaries over the generic agentic
   engine contract.
-- [x] Registry admission verifies that the inspector and executable backend
-  primitives behind that declaration are callable; production adapter lookup
+- [x] Registry admission verifies that the inspector and the exact executable
+  backend primitive behind every declared operation are callable. Recovery and
+  resume validate and execute the supervised `prewarm_runtime` lifecycle rather
+  than certifying an unused recovery-command builder. Production adapter lookup
   returns the native controller rather than bypassing it through the legacy
   bridge. Blank successful output fails closed.
 - [x] Human-terminal/ANSI/free-text scraping, incomplete lifecycle contracts,
@@ -623,18 +626,25 @@ completion claim.
 ### 5B — Maverick Agent framework
 
 - [x] Trusted protocol adapter, provider config, immutable model profile, and
-  harness recipe are distinct records whose exact identities must agree.
+  harness recipe are distinct records whose protocol/API, endpoint, and
+  upstream identities must agree. Profile, certificate, and execution binding
+  persist the exact config id/revision/digest and protocol-adapter id/version.
 - [x] The onboarding catalog registers protocol runtime factories and composes
   the existing provider-neutral hosted runtime registry without adding a branch
-  to the Core loop. A second compatible model is admitted through data-only
-  recipe/profile registration in the conformance test.
+  to the Core loop. Before registry use or profile publication it proves the
+  client model, actual transport endpoint, routing/upstream/provider/resolved
+  model identities, and shared config-owned accounting policy. Production
+  conformance admits second Google and OpenRouter models through config/recipe/
+  profile data, proving Google endpoint/pricing binding and distinct OpenRouter
+  upstream/provider/resolved-model/pricing data.
 - [x] Candidate discovery hashes observed model metadata but always emits no
   execution family and `authority_granted=false`; vendor capability flags are
   never translated into tool or workspace authority.
 - [x] Profile publication is insert-once, detects immutable tuple conflicts,
   and keeps rollout status in its independent CAS record. Google/OpenRouter
-  preview publication now uses this common path without changing their profile,
-  recipe, adapter, or certification revisions.
+  preview publication now uses this common path. Immutable profile revisions
+  44/43 and provider-config revision 2 add the exact executable identities;
+  recipe, runtime-adapter, and certification-suite revisions remain unchanged.
 - [x] Production bootstrap builds and retains one onboarding catalog, derives
   its hosted runtime registry from that catalog, validates the composed engine,
   and publishes every builtin profile through the generic publication path.
@@ -703,7 +713,9 @@ server execution contract, partial agents are unavailable rather than degraded,
 no cross-family fallback is introduced, and native effect confinement remains
 registry-validated. The 2026-09-05 review remediation also closes the disabled
 provider credential bypass, text-pin live-drift bypass, native-controller path
-bypass, production onboarding disconnect, and non-Codex re-enable deadlock.
+bypass, executable-recovery mismatch, production onboarding disconnect,
+provider-config/transport identity drift, model-specific accounting/routing,
+and non-Codex re-enable deadlock.
 This does not issue or promote a remote certificate and does not change the
 release decision below.
 

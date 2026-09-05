@@ -562,8 +562,10 @@ uncertified native installation is always clamped to `disabled`, including
 when stale persisted provider metadata says otherwise. Codex is registered
 through this generic contract without changing its existing app-server adapter
 or certified artifact digest. Registration verifies the callable inspector and
-backend primitives behind the declared lifecycle before granting an executable
-controller, and `get_agentic_runtime_adapter()` returns that controller on the
+the exact backend primitive used by each declared lifecycle operation before
+granting an executable controller; recovery is validated and executed through
+the supervised lifecycle `prewarm` primitive rather than a declarative command
+builder. `get_agentic_runtime_adapter()` returns that controller on the
 production path. The controller delegates the supervised local-process
 lifecycle, validates structured final events, and the provider-neutral executor
 turns a nominally successful blank result into `agent_final_output_empty`. The
@@ -573,16 +575,24 @@ execution controller or release authority.
 Maverick Agent onboarding is likewise composition-driven. A trusted protocol
 adapter manifest owns transport, request/response codec, private state, usage,
 cancellation, and recovery identities; a provider config separately owns the
-endpoint, upstream/routing, credential logical name, retention, and data
-destination; an immutable model profile references those records and one
-versioned harness recipe. Registering a new trusted protocol factory composes a
-`HostedProviderRuntimeRegistry` without a branch in the Core-owned execution
-loop, while another model compatible with that protocol requires only a new
-recipe/profile record. Discovery snapshots vendor model metadata into a digest
-but always return `authority_granted=false` and no execution family. Publication
-classifies a profile as `maverick_agent` only after the complete Full Workspace
-contract, context, tool, streaming, usage, cancellation, and policy prerequisites
-are present; otherwise it cannot be published under that family.
+exact HTTPS endpoint URL, upstream tags and effective provider/model identities,
+routing, credential logical name, retention, data destination, and a versioned
+token-cost policy used for both reservation and reported usage. Config,
+adapter, recipe, and profile protocol/API identities must agree, and recipe
+upstreams must equal the config route. The immutable profile, capability
+certificate, and runtime execution binding retain the provider-config
+id/revision/digest and protocol-adapter id/version. Registering a new trusted
+protocol factory composes a `HostedProviderRuntimeRegistry` without a branch in
+the Core-owned execution loop. Composition verifies that the client exposes the
+configured model, actual transport endpoint, routing/upstream/provider/model
+identity and the same cost-policy object used by the runtime estimator before a
+profile can be published. Another model compatible with that protocol therefore
+requires only new config/recipe/profile data, including its own route and price.
+Discovery snapshots vendor model metadata into a digest but always returns
+`authority_granted=false` and no execution family. Publication classifies a
+profile as `maverick_agent` only after the complete Full Workspace contract,
+context, tool, streaming, usage, cancellation, and policy prerequisites are
+present; otherwise it cannot be published under that family.
 Production bootstrap assembles one builtin onboarding catalog, builds the
 hosted runtime registry from it, validates the composed engine, and publishes
 all registered profiles through the same catalog. Adding another model for an
@@ -906,9 +916,10 @@ partial result is fail-closed for that evaluation and must remain retryable.
 Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 43 and OpenRouter
-revision 42 definitions make that atomic claim only because the executable
-gate returns all 24 required result behaviors, including the concrete
+complete atomic contract. The current Google revision 44 and OpenRouter
+revision 43 definitions bind provider-config revision 2 and make that atomic
+claim only because the executable gate returns all 24 required result
+behaviors, including the concrete
 `shell.run` and `process.start/status/input/interrupt` handlers, real app-owned
 CLI/MCP reads with Core-audited conservative effect metadata and executable
 closure bytes, a real inter-agent CLI-create/MCP-wait workflow with bounded

@@ -30,8 +30,10 @@ Agentic sessions no longer resolve their runtime from the mutable workspace
 `ProviderSelection` after creation. The Core resolves a selectable
 `WorkspaceAgenticProfileBinding`, snapshots its immutable installation-level
 `AgenticProfileDefinition`, adapter artifact, exact model, routing constraint,
-credential reference, execution mode, and policy ceilings into the nested
-`RuntimeExecutionBinding`, and inserts that binding with the session aggregate.
+credential reference, execution mode, policy ceilings, and—for Maverick
+Agents—the exact provider-config id/revision/digest and protocol-adapter
+id/version into the nested `RuntimeExecutionBinding`, and inserts that binding
+with the session aggregate.
 Changing the Settings default therefore affects only later sessions.
 
 Session creation uses that aggregate as a persisted publication barrier. A new
@@ -89,7 +91,9 @@ Agentic execution is fail-closed behind an immutable
 id/version/source digest, model provider, model, model revision and revision
 policy, protocol, routing digest,
 certified upstream set, capability set, evidence suite, certified-execution TCB
-manifest/digest, and expiry. Evidence
+manifest/digest, and expiry. A Maverick Agent certificate additionally carries
+the provider-config id/revision/digest and protocol-adapter id/version; missing
+or mismatched fields fail closed. Evidence
 metadata and optional content-addressed blobs are installation-owned; neither
 workspace Storage nor an adapter controls their locators. Revocation lives in a
 separate revisioned status record and therefore takes effect without rewriting
@@ -184,8 +188,10 @@ and a certificate reference. `ProviderRegistry` validates this composition and
 the callable inspector/backend implementation, then exposes that controller as
 the production agentic adapter for discovery/version/health/update status,
 launch, connect, resume, event streaming/final output, steering, interrupt,
-recovery, cleanup, and close. Nominally successful execution with a blank final
-result fails as `agent_final_output_empty`. A candidate cannot acquire an
+recovery, cleanup, and close. The recovery declaration validates the actual
+`prewarm_runtime` primitive used by controller recovery/resume, not an unused
+command-builder method. Nominally successful execution with a blank final result
+fails as `agent_final_output_empty`. A candidate cannot acquire an
 executable controller or become active merely from provider capability
 metadata. Exact legacy Codex identity is the sole safe family inference for
 profiles created before the family field; arbitrary vendor labels and flags are
@@ -196,18 +202,22 @@ full certification.
 For the Maverick-owned API loop, onboarding records are data rather than Core
 loop branches. `MaverickProtocolAdapterManifest` identifies the trusted
 transport/codecs/private-state/usage/cancellation/recovery implementation;
-`MaverickProviderConfig` pins endpoint, upstream, routing, credential, retention,
-and destination policy; `HostedHarnessRecipeManifest` owns the semantic/tool and
+`MaverickProviderConfig` pins the exact HTTPS endpoint, upstream/effective
+provider/resolved-model route, credential, retention, destination, and versioned
+token-cost policy; `HostedHarnessRecipeManifest` owns the semantic/tool and
 context recipe; and `AgenticProfileDefinition` is the exact immutable model
-profile. The onboarding catalog can build the existing provider runtime registry
-from trusted factories and these records. Candidate discovery records vendor
+profile. Config, adapter, recipe, profile, certificate, binding, actual client
+endpoint, and reservation/usage estimator identities are compared before
+publication or dispatch. The onboarding catalog can build the existing provider
+runtime registry from trusted factories and these records. Candidate discovery records vendor
 metadata only as an observation digest with no family or authority. Immutable
 publication rejects in-place tuple drift and refuses `maverick_agent`
 classification until the Full Workspace revision, complete tool set, context
 contract, streaming, usage accounting, tool calling, and cancellation contract
 all match. Production bootstrap consumes this catalog for both runtime-registry
 composition and profile publication; Google/OpenRouter are no longer manually
-branched in bootstrap or instantiated directly by the registry builder.
+branched in bootstrap, and adding a compatible model—including different route
+or price data—does not require a model-specific factory or decoder branch.
 
 `hosted_text` is not an incomplete agent profile. Its immutable
 `HostedTextProfileDefinition`, separate `HostedTextProfileStatus`, and

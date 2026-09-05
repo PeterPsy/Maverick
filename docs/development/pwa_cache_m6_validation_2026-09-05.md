@@ -1,7 +1,74 @@
 # PWA Cache M6 Validation — 2026-09-05
 
-Status: M6 review findings remediated and M6 automated gates green;
-physical-device and resource-specific rollout gates remain pending.
+Status: five follow-up review findings corrected in `233f5f85` and `2efa105d`;
+automated corrective validation is recorded below. M5 completion, physical-device
+evidence and private rollout remain open. This is not closure of the whole plan.
+
+## Follow-up review: corrective validation
+
+| Finding | Correction and regression evidence |
+|---|---|
+| P1 late structured writer | Retained cleanup and maintenance generations; the admission ticket spans initialization, cache lookup, loader and quota waits. Publication and cleanup share a cross-client lock. Cancellation/dispose and lease are rechecked before publishing; cleanup drains an already-entered put. Tests cover clear through a separate lifecycle wrapper, no cancellation, deferred initialization, quota, active put, invalidation, dispose and lease expiry. |
+| P1 lost broker retry | Structured pilot adapters replay only SDK-owned, allowlisted, immutable HTTP reads; their arbitrary loader and sanitizer run once. The shell retains the one-shot cancellation envelope, including Settings clear. File reads use a nominal host-issued SDK file executor. Real broker tests prove pending → transport recovery and cleanup cancellation, with no loader replay. |
+| P2 body disconnect | JSON-body transport TypeError is retryable; malformed JSON SyntaxError, terminal HTTP and external abort remain terminal/cancelled. |
+| P2 Retry-After hints | Hints and visibility resume cannot precede the server deadline. Numeric and HTTP-date delays, including delays beyond the backoff cap, are covered. Long timers are chunked without overflowing browser timer limits. |
+| P2 warm config wait | After a positive session decision, config refresh is background work. A deferred-config test receives the warm value before resolving config; explicit denial cancels revalidation and remains latched. |
+
+Corrective automated checks:
+
+- SDK: **16 files / 161 tests**, TypeScript check passed.
+- Base Shell: **34 files / 191 tests** passed.
+- Storage: **28 files / 134 tests** passed.
+- Fitness Coach: **14 files / 85 tests** passed.
+- Worker/build/cross-origin broker suite: **16 tests** passed.
+- App Store catalog/content-hash suite: **5 tests** passed.
+- Focused PWA API, flags/cohorts, inventory, audit and physical-evidence-policy
+  Python suite: **37 tests** passed.
+- Total: **629 automated tests**; PWA operational audit and unused-import
+  checker passed. The full suite also caught a clock-capture issue in the
+  deadline guard; the default coordinator clock now resolves Date.now at use
+  time, with its own regression test.
+- Final official builds for **all five apps** passed and published scoped
+  refresh events. An unrelated shared-tree `localRuntimeBroker.test.ts:31`
+  TS4104 error temporarily blocked the shell build. Its owning agent corrected
+  and committed that work; no Mac runtime source was changed here. During the
+  blocker, the exact committed PWA shell source at `2efa105d` was also built and
+  tested in a temporary tree: TypeScript, Vite and **34 files / 191 tests**
+  passed. The final shared-tree suite passed **35 files / 194 tests** including
+  three concurrent tests not counted in the 629 above. The final shell assets
+  include the separately committed Mac bridge integration and are already
+  versioned by that owner's frontend build commit.
+- Authenticated Chromium smoke on final shell build
+  `e03421fd2ec0491c0d4cec64323133b77b4056b975906b94626b363be6af7ed4`
+  passed with **16 verified precache assets**, isolated Settings refresh/clear,
+  normal mounted UI during transport loss, standard-shell restart and recovery.
+  It ran with `.venv/bin/python scripts/pwa_shell_cache_smoke.py`; the system
+  interpreter lacks uvicorn. This is automated Chromium evidence, not PWA-098.
+- No shared backend restart or feature-flag change was needed.
+
+### Corrective build identities
+
+| App | Build id |
+|---|---|
+| base-shell | `e03421fd2ec0491c0d4cec64323133b77b4056b975906b94626b363be6af7ed4` |
+| storage | `94f2ce84ee803581e9692a2a50c6414dce4b204d922846cba000444c27bd5814` |
+| fitness-coach | `ae3959b8f4a4605c4c1efbda5da50e18fbae89e7b7578f60c0dcc5f0ae2d8ccc` |
+| website-studio | `336a49a8749d58a82268a5428bded523733390dcd3e43c678fd9bb17cd7f8e35` |
+| app-store | `7c398b6953347ed76401d27400e9e65e98a3d65d55748d5d5f2cf9158c6f2dc7` |
+
+The plan at `storage/generated/development/maverick-pwa-cache-development-plan.md`
+was updated and reread through Storage's guarded Markdown surface. Its current
+SHA-256 is `a58a397488a371da8913f28f0f54518d746ac609981c522c6ee44b68cf73f9e0`.
+Section 7.8 distinguishes implemented code from validation and actual rollout;
+PWA-098, M5 Calendar/Chat, CRM/Mail privacy approval and release-owner cohort
+activation are explicitly assigned as open gates, not silently marked done.
+
+Concurrent Core/provider/local-runtime work was left untouched. The browser
+publication fence is deliberately conservative (backend-wide generation,
+filter-scoped physical deletion) and stores only opaque nonces. Schema
+maintenance has a separate epoch so it cannot overwrite an explicit cleanup's
+admission boundary. Browser persistence fails closed without shared generation
+storage/Web Locks; local memory caching keeps a local fence.
 
 ## Implemented scope
 
@@ -55,7 +122,7 @@ The existing service-worker default is unchanged.
   promotion workflow gates an existing prerelease before publishing the same
   tag.
 
-## Automated results
+## Earlier M6 automated results (historical checkpoint)
 
 - `packages/pwa-cache`: TypeScript check passed; **15 files / 136 tests** passed.
 - Base Shell: **34 files / 187 tests** passed.

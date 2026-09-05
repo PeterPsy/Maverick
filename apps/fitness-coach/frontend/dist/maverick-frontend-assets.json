@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "c97d0013b545d4c9b08a5af9a250b1e7bcf0459a4cdb504d2849fc0748338016",
+  "build_id": "ae3959b8f4a4605c4c1efbda5da50e18fbae89e7b7578f60c0dcc5f0ae2d8ccc",
   "entrypoints": [
     "index.html",
     "widgets/fitness-coach-sidebar/index.html",
@@ -13,9 +13,9 @@
       "size_bytes": 7278
     },
     {
-      "path": "assets/app-C6Lb4Lxf.js",
-      "sha256": "3350189622527b51ab30bc3efe6e2612baa1b09400f69df085fca032c8a2d53a",
-      "size_bytes": 86202
+      "path": "assets/app-BzUj2DjE.js",
+      "sha256": "1616e384f2f5ec06b55a7e3f463ccdf5c52a78b80ad4bc8e256683fe881713c6",
+      "size_bytes": 102548
     },
     {
       "path": "assets/app-CJl-fSM1.css",
@@ -66,7 +66,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "fae4ab84854b34fc2335f610c81280bbf34e95e388c188b72257b5962d906eea",
+      "sha256": "d64e43bf4a576ea6d4566d122adaf918c21d42631bc127149aafa94b90699abc",
       "size_bytes": 717
     },
     {

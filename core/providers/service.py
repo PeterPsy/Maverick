@@ -85,6 +85,7 @@ def utcnow() -> datetime:
 def builtin_provider_registry(*, codex_command: str | None = None, refresh_model_catalog: bool = False) -> ProviderRegistry:
     """Build the builtin provider registry shipped by the core."""
     registry = ProviderRegistry()
+    from core.providers.gemini_cli_native import GeminiCliNativeAdapter
     adapter = CodexProviderAdapter(codex_command=codex_command)
     registry.register_native_agent_installation(
         build_codex_native_installation(adapter),
@@ -94,6 +95,7 @@ def builtin_provider_registry(*, codex_command: str | None = None, refresh_model
     registry.register_native_agent_installation(
         build_gemini_cli_candidate_installation(),
         definition=build_gemini_cli_candidate_definition(),
+        engine_adapter=GeminiCliNativeAdapter(),
     )
     for definition in build_hosted_provider_definitions():
         registry.register_provider_definition(definition)

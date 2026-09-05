@@ -160,6 +160,7 @@ class ProviderRegistry:
         *,
         definition: ProviderDefinition,
         runtime_adapter: RuntimeBackendAdapter | None = None,
+        engine_adapter: AgenticRuntimeEngineAdapter | None = None,
     ) -> ProviderDefinition:
         """Register a validated native adapter/recipe/connection certificate.
 
@@ -175,6 +176,19 @@ class ProviderRegistry:
         manifest = installation.manifest
         if definition.provider_id != manifest.runtime_engine_id:
             raise ValueError("native_agent_provider_identity_mismatch")
+        if runtime_adapter is not None and engine_adapter is not None:
+            raise ValueError("native_agent_adapter_ambiguous")
+        if engine_adapter is not None:
+            from core.providers.native_agent_contract import validate_native_engine_adapter
+            from core.providers.native_agent_runtime import NativeAgentRuntimeController
+
+            validate_native_engine_adapter(installation, engine_adapter)
+            self._native_agent_installations[manifest.runtime_engine_id] = installation
+            definition = self.register_provider_definition(definition)
+            controller = NativeAgentRuntimeController(installation=installation, engine_adapter=engine_adapter)
+            self._native_agent_controllers[manifest.runtime_engine_id] = controller
+            self._agentic_runtime_adapters[manifest.runtime_engine_id] = controller
+            return definition
         if runtime_adapter is not None:
             validate_native_runtime_adapter(installation, runtime_adapter)
             adapter_definition = runtime_adapter.provider_definition()

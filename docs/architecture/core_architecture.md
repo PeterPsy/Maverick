@@ -605,8 +605,10 @@ builder. `get_agentic_runtime_adapter()` returns that controller on the
 production path. The controller delegates the supervised local-process
 lifecycle, validates structured final events, and the provider-neutral executor
 turns a nominally successful blank result into `agent_final_output_empty`. The
-Gemini CLI registration is a discovery-only second candidate and has no
-execution controller or release authority.
+Gemini CLI registration now owns an executable ACP v1 controller and supervised
+NDJSON transport rather than using the Codex bridge. Its lifecycle proof and
+candidate limitations are specified in `docs/architecture/gemini_cli_native.md`.
+It remains disabled without any release authority or connection certificate.
 
 Maverick Agent onboarding is likewise composition-driven. A trusted protocol
 adapter manifest owns transport, request/response codec, private state, usage,

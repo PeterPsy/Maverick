@@ -195,21 +195,21 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
 def build_gemini_cli_candidate_definition(
     now: datetime | None = None,
 ) -> ProviderDefinition:
-    """Publish a discovery-only second native adapter; execution stays disabled."""
+    """Publish the executable ACP candidate; certification still gates execution."""
     timestamp = now or datetime.now(tz=UTC)
     return ProviderDefinition(
         provider_id=GEMINI_CLI_CANDIDATE_PROVIDER_ID,
         label="Gemini CLI",
         description=(
-            "Discovery-only native-agent candidate. Execution remains disabled "
+            "Structured ACP native-agent candidate. Execution remains disabled "
             "until an exact adapter, recipe, model, and certificate are approved."
         ),
         kind="runtime_backend",
         provider_role="runtime_engine",
         status="disabled",
         capabilities=ProviderCapabilitySet(
-            supports_interactive_runtime=False,
-            supports_streaming=False,
+            supports_interactive_runtime=True,
+            supports_streaming=True,
             supports_tools=False,
             supports_mcp=False,
             supports_skills=False,
@@ -241,19 +241,19 @@ def build_gemini_cli_candidate_installation() -> NativeAgentInstallation:
     recipe_payload = {
         "recipe_id": "gemini-cli-native-candidate",
         "revision": NATIVE_AGENT_RECIPE_REVISION,
-        "protocol": "structured-cli-unverified",
+        "protocol": "acp-ndjson-v1",
         "context_owner": "native_runtime",
         "prompt_contract_revision": "candidate",
     }
     return NativeAgentInstallation(
         manifest=NativeAgentAdapterManifest(
             runtime_engine_id=GEMINI_CLI_CANDIDATE_PROVIDER_ID,
-            adapter_id="gemini-cli-structured-candidate",
-            adapter_version="0",
-            protocol_kind="structured_cli",
-            protocol_id="gemini-cli-structured-candidate",
-            protocol_version=None,
-            structured_event_schema="candidate.unverified",
+            adapter_id="gemini-cli-acp",
+            adapter_version="1",
+            protocol_kind="json_rpc",
+            protocol_id="acp-ndjson",
+            protocol_version="1",
+            structured_event_schema="acp.session.update.v1",
             lifecycle_operations=tuple(sorted(REQUIRED_NATIVE_OPERATIONS)),
             machine_readable=True,
             human_terminal_scraping=False,

@@ -255,3 +255,16 @@ def validate_native_runtime_adapter(
     )
     if missing:
         raise ValueError("native_agent_runtime_adapter_incomplete")
+
+
+def validate_native_engine_adapter(installation, adapter) -> None:
+    """A structured native engine may own its process instead of using the bridge."""
+    manifest = installation.manifest
+    if any(getattr(adapter, key, None) != getattr(manifest, key) for key in (
+        "runtime_engine_id", "adapter_id", "adapter_version",
+    )):
+        raise ValueError("native_agent_adapter_identity_mismatch")
+    if not all(callable(getattr(adapter, method, None)) for method in (
+        "validate", "build_launch_spec", "prepare", "execute", "steer", "cancel", "recover", "close", "health",
+    )):
+        raise ValueError("native_agent_runtime_adapter_incomplete")

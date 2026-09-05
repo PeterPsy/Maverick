@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, patch
 
 from core.providers.agentic_profiles import CODEX_PROFILE_ARTIFACT_DIGEST
 from core.providers.certificate_service import runtime_adapter_artifact_digest
-from core.providers.errors import ProviderNotFoundError
 from core.providers.execution_families import (
     HOSTED_TEXT_EXECUTION_FAMILY,
     MAVERICK_AGENT_EXECUTION_FAMILY,
@@ -113,8 +112,9 @@ class NativeAgentFrameworkTest(unittest.TestCase):
             registry.get_provider_definition("gemini-cli").status,
             "disabled",
         )
-        with self.assertRaises(ProviderNotFoundError):
-            registry.get_native_agent_controller("gemini-cli")
+        controller = registry.get_native_agent_controller("gemini-cli")
+        self.assertEqual(controller.adapter_id, "gemini-cli-acp")
+        self.assertIsNone(controller.legacy_adapter)
 
         persisted_activation = replace(
             registry.get_provider_definition("gemini-cli"),

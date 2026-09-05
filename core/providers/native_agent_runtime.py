@@ -140,6 +140,9 @@ class NativeAgentRuntimeController:
 
     async def steer(self, context: NativeSteerContext) -> RuntimeSteerResult:
         if self.legacy_adapter is None:
+            steer = getattr(self.engine_adapter, "steer", None)
+            if callable(steer):
+                return await steer(context)
             return RuntimeSteerResult(status="not_supported", reason="native_steer_unavailable")
         return await asyncio.to_thread(
             self.legacy_adapter.steer_turn,
@@ -201,6 +204,8 @@ class NativeAgentRuntimeController:
         context: LocalLaunchContext,
     ) -> RuntimeBackendLaunchSpec:
         self._validate_execution_identity(context.binding)
+        if self.engine_adapter.local_process_lifecycle is None:
+            return await self.engine_adapter.build_launch_spec(context)
         lifecycle = self._local_lifecycle()
         return await lifecycle.build_launch_spec(context)
 

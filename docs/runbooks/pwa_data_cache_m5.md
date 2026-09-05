@@ -246,3 +246,9 @@ seeds real isolated-frame reads, blocks their display HTTP transport, reloads,
 and requires a host-broker warm result before transport recovery. Recorded
 metadata contains no app payloads or principal identifiers. This remains
 automated Chromium evidence, not PWA-098 physical acceptance.
+
+Populated-model regressions include CRM's structured tag records (not a string
+array) and its `results` search envelope, plus consulted Mail bodies and
+provider-header changes that must not affect the display revision. The browser
+preflight additionally requires a real IndexedDB entry before testing warm paint;
+an in-document RAM hit is not accepted as persistence evidence.

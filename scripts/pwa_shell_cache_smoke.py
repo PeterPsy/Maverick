@@ -97,6 +97,8 @@ def _run_browser(base_url: str, username: str, password: str, env: dict[str, str
         "--username",
         username,
     ]
+    if env.get("MAVERICK_PWA_SMOKE_APP_READ_MODELS") == "1":
+        command.append("--app-read-models")
     return subprocess.run(command, cwd=ROOT, env=env, check=False).returncode
 
 
@@ -106,7 +108,10 @@ def main() -> int:
     parser.add_argument("--password", default="maverick", help="test login password")
     parser.add_argument("--port", type=int, help="local server port")
     parser.add_argument("--username", default="admin", help="test login username")
+    parser.add_argument("--app-read-models", action="store_true", help="test approved display adapters on a disposable host only")
     args = parser.parse_args()
+    if args.app_read_models and args.base_url:
+        parser.error("--app-read-models requires a disposable host; live rollout flags are not modified")
     if args.base_url:
         return _run_browser(args.base_url.rstrip("/"), args.username, args.password, os.environ.copy())
 
@@ -114,6 +119,11 @@ def main() -> int:
         temporary_root = Path(temporary)
         repository_root = _create_disposable_repository(temporary_root)
         env = _local_environment(temporary_root, args.username, args.password)
+        if args.app_read_models:
+            env["MAVERICK_PWA_SMOKE_APP_READ_MODELS"] = "1"
+            env["MAVERICK_FEATURE_PWA_DATA_CACHE"] = "1"
+            for app in ("CALENDAR", "CHAT", "CRM", "MAIL", "FITNESS_COACH"):
+                env[f"MAVERICK_FEATURE_PWA_APP_CACHE_{app}"] = "1"
         port = args.port or _free_port()
         log_path = temporary_root / "host.stderr.log"
         with log_path.open("wb") as host_log:

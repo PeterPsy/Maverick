@@ -45,13 +45,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "accounts": {
@@ -95,13 +109,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "contacts": {
@@ -145,13 +173,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "deals": {
@@ -195,13 +237,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "tasks": {
@@ -245,13 +301,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "notes": {
@@ -295,13 +365,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "activities": {
@@ -345,13 +429,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       },
       "pipelines": {
@@ -414,13 +512,27 @@
               "probability": "number",
               "age_days": "number",
               "stuck_days": "number",
-              "tags": "strings"
+              "entity_type": "string"
             },
             "required": [
               "id"
             ],
             "maps": {
               "custom_fields": "scalar"
+            },
+            "lists": {
+              "tags": {
+                "fields": {
+                  "id": "string",
+                  "name": "string",
+                  "color": "string",
+                  "created_at": "string"
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
             }
           }
         },
@@ -509,13 +621,27 @@
                   "probability": "number",
                   "age_days": "number",
                   "stuck_days": "number",
-                  "tags": "strings"
+                  "entity_type": "string"
                 },
                 "required": [
                   "id"
                 ],
                 "maps": {
                   "custom_fields": "scalar"
+                },
+                "lists": {
+                  "tags": {
+                    "fields": {
+                      "id": "string",
+                      "name": "string",
+                      "color": "string",
+                      "created_at": "string"
+                    },
+                    "required": [
+                      "id",
+                      "name"
+                    ]
+                  }
                 }
               }
             },
@@ -595,13 +721,27 @@
               "probability": "number",
               "age_days": "number",
               "stuck_days": "number",
-              "tags": "strings"
+              "entity_type": "string"
             },
             "required": [
               "id"
             ],
             "maps": {
               "custom_fields": "scalar"
+            },
+            "lists": {
+              "tags": {
+                "fields": {
+                  "id": "string",
+                  "name": "string",
+                  "color": "string",
+                  "created_at": "string"
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
             }
           },
           "computed": {
@@ -700,13 +840,27 @@
           "probability": "number",
           "age_days": "number",
           "stuck_days": "number",
-          "tags": "strings"
+          "entity_type": "string"
         },
         "required": [
           "id"
         ],
         "maps": {
           "custom_fields": "scalar"
+        },
+        "lists": {
+          "tags": {
+            "fields": {
+              "id": "string",
+              "name": "string",
+              "color": "string",
+              "created_at": "string"
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
         }
       }
     }
@@ -789,13 +943,27 @@
               "probability": "number",
               "age_days": "number",
               "stuck_days": "number",
-              "tags": "strings"
+              "entity_type": "string"
             },
             "required": [
               "id"
             ],
             "maps": {
               "custom_fields": "scalar"
+            },
+            "lists": {
+              "tags": {
+                "fields": {
+                  "id": "string",
+                  "name": "string",
+                  "color": "string",
+                  "created_at": "string"
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
             }
           }
         },
@@ -884,13 +1052,27 @@
               "probability": "number",
               "age_days": "number",
               "stuck_days": "number",
-              "tags": "strings"
+              "entity_type": "string"
             },
             "required": [
               "id"
             ],
             "maps": {
               "custom_fields": "scalar"
+            },
+            "lists": {
+              "tags": {
+                "fields": {
+                  "id": "string",
+                  "name": "string",
+                  "color": "string",
+                  "created_at": "string"
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
             }
           }
         },
@@ -902,15 +1084,16 @@
     }
   },
   "search": {
-    "fields": {
-      "ok": "boolean"
-    },
+    "required": [
+      "results"
+    ],
     "lists": {
-      "items": {
+      "results": {
         "fields": {
           "entity_type": "string",
-          "id": "string",
-          "title": "string"
+          "entity_id": "string",
+          "title": "string",
+          "body": "string"
         },
         "objects": {
           "record": {
@@ -954,95 +1137,33 @@
               "probability": "number",
               "age_days": "number",
               "stuck_days": "number",
-              "tags": "strings"
+              "entity_type": "string"
             },
             "required": [
               "id"
             ],
             "maps": {
               "custom_fields": "scalar"
-            }
-          },
-          "computed": {
-            "fields": {
-              "last_activity_at": "string",
-              "next_action": "string",
-              "open_task_count": "number",
-              "open_deal_value": "number",
-              "contact_count": "number",
-              "weighted_value": "number",
-              "deal_age_days": "number"
-            }
-          },
-          "display": {
-            "fields": {
-              "account": "string",
-              "contact": "string"
-            }
-          },
-          "ref": {
-            "fields": {
-              "entity_type": "string",
-              "entity_id": "string",
-              "app_page": "string"
+            },
+            "lists": {
+              "tags": {
+                "fields": {
+                  "id": "string",
+                  "name": "string",
+                  "color": "string",
+                  "created_at": "string"
+                },
+                "required": [
+                  "id",
+                  "name"
+                ]
+              }
             }
           }
         },
         "required": [
-          "entity_type",
-          "id",
-          "title"
+          "entity_type"
         ]
-      },
-      "records": {
-        "fields": {
-          "id": "string",
-          "name": "string",
-          "display_name": "string",
-          "email": "string",
-          "domain": "string",
-          "phone": "string",
-          "company": "string",
-          "industry": "string",
-          "role": "string",
-          "source": "string",
-          "owner_id": "string",
-          "account_id": "string",
-          "contact_id": "string",
-          "deal_id": "string",
-          "stage_id": "string",
-          "stage": "string",
-          "pipeline_id": "string",
-          "currency": "string",
-          "close_date": "string",
-          "subject": "string",
-          "title": "string",
-          "body": "string",
-          "activity_type": "string",
-          "status": "string",
-          "priority": "string",
-          "summary": "string",
-          "occurred_at": "string",
-          "due_at": "string",
-          "completed_at": "string",
-          "created_at": "string",
-          "updated_at": "string",
-          "archived_at": "string",
-          "deleted_at": "string",
-          "account_label": "string",
-          "contact_label": "string",
-          "value": "number",
-          "probability": "number",
-          "age_days": "number",
-          "stuck_days": "number",
-          "tags": "strings"
-        },
-        "required": [
-          "id"
-        ],
-        "maps": {
-          "custom_fields": "scalar"
-        }
       }
     }
   }

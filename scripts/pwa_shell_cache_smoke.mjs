@@ -47,6 +47,8 @@ try {
   if (username && password) {
     await authenticate(firstContext, username, password);
   }
+  const appReadModels = args['app-read-models']
+    ? await (await import('./pwa_app_read_models_smoke.mjs')).exerciseAppReadModels(firstContext, baseUrl) : [];
   const firstPage = firstContext.pages()[0] || await firstContext.newPage();
   await firstPage.goto(`${baseUrl}${username ? "/app/chat" : "/"}`, {
     waitUntil: "domcontentloaded",
@@ -184,6 +186,7 @@ try {
     real_safari_and_home_screen_required_for_release_gate: true,
     build_id: install.build_id,
     precache_count: install.precache_count,
+    app_read_models: appReadModels,
     first_online_install: "passed",
     mounted_tree_preserved_during_transport_loss: "passed",
     standard_shell_restart_without_network: "passed",

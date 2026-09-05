@@ -83,15 +83,3 @@ export function shellCachePrincipal(
       : {}),
   };
 }
-
-export function runShellOperation<T>(
-  key: string,
-  operation: (signal: AbortSignal) => Promise<T>,
-  signal: AbortSignal,
-): Promise<T> {
-  return shellRetryCoordinator.runOpaque({
-    key,
-    operation: ({ signal: retrySignal }) => operation(retrySignal),
-    signal,
-  });
-}

@@ -1,3 +1,4 @@
+import { publicationGeneration, withPublicationLock } from "./publicationBarrier";
 import { enforceCacheBudgets, type CacheBudgets } from "./budget";
 import { cacheEntryKey, validateEntityId, validateScope } from "./scope";
 import { runSingleFlight } from "./singleFlight";
@@ -51,6 +52,12 @@ export class PwaCacheResource<T> {
   private readonly policy: ResourceCachePolicy<T>;
   private readonly quotaAdapter: StorageQuotaAdapter;
   private readonly telemetry: CacheTelemetry;
+  private generation = 0;
+
+  cancelPendingPublications(): void {
+    this.generation += 1;
+  }
+
   private initialized: Promise<void> | null = null;
 
   constructor(options: ResourceOptions<T>) {
@@ -79,20 +86,28 @@ export class PwaCacheResource<T> {
   }
 
   async readThrough(entityId: string, loader: CacheLoader<T>, signal?: AbortSignal): Promise<CacheReadResult<T>> {
+    const generation = this.generation;
+    // Schema maintenance precedes admission; the ticket then spans every read,
+    // single-flight wait, loader, quota wait and the final publication lock.
+    if (this.enabled) await this.initialize().catch(() => undefined);
+    const shared = this.persistencePolicy === "cache" && this.persistentBackend.mode() === "indexeddb";
+    const publication = publicationGeneration(this.persistentBackend.durabilityKey(), shared);
+    const canPublish = () => !signal?.aborted && generation === this.generation
+      && publication !== null && publication === publicationGeneration(this.persistentBackend.durabilityKey(), shared);
     const normalizedEntityId = validateEntityId(entityId);
     const hit = await this.cacheHit(normalizedEntityId);
     if (hit && (hit.freshness === "fresh" || this.policy.allowStale === true)) {
       const shouldRevalidate = this.revalidationMode() === "always"
         || (this.revalidationMode() === "stale" && hit.freshness === "stale");
       const revalidation = shouldRevalidate
-        ? this.revalidate(normalizedEntityId, loader, hit, signal)
+        ? this.revalidate(normalizedEntityId, loader, hit, canPublish, signal)
         : undefined;
       if (revalidation) {
         void revalidation.catch(() => undefined);
       }
       return { ...resultFromCacheHit(hit), ...(revalidation ? { revalidation } : {}) };
     }
-    const network = await this.revalidate(normalizedEntityId, loader, hit, signal);
+    const network = await this.revalidate(normalizedEntityId, loader, hit, canPublish, signal);
     return {
       freshness: "fresh",
       payload: network.payload,
@@ -102,6 +117,7 @@ export class PwaCacheResource<T> {
   }
 
   async invalidate(entityId?: string): Promise<number> {
+    this.cancelPendingPublications();
     if (!this.enabled) {
       return 0;
     }
@@ -188,6 +204,7 @@ export class PwaCacheResource<T> {
     entityId: string,
     loader: CacheLoader<T>,
     observed: CacheHit<T> | null,
+    canPublish: () => boolean,
     signal?: AbortSignal,
   ): Promise<CacheRevalidationResult<T>> {
     const key = cacheEntryKey(this.scope, entityId);
@@ -218,14 +235,16 @@ export class PwaCacheResource<T> {
         if (!current) {
           throw new Error("A not_modified response requires a cached value.");
         }
-        await this.refreshMetadata(current.metadata, response.revision, response.etag);
+        await withPublicationLock(this.persistentBackend.durabilityKey(), async () => {
+          if (canPublish()) await this.refreshMetadata(current.metadata, response.revision, response.etag);
+        });
         this.telemetry({ kind: "not_modified" });
         return { changed: false, payload: current.payload, revision: response.revision?.trim() || current.metadata.revision };
       }
       const revision = String(response.revision || "").trim();
       const sanitized = safeSanitize(this.policy.sanitize, response.payload);
       if (sanitized !== null && revision) {
-        await this.storeValue(entityId, sanitized, revision, response.etag, Boolean(current));
+        await this.storeValue(entityId, sanitized, revision, response.etag, Boolean(current), canPublish);
       }
       return { changed: !current || current.metadata.revision !== revision, payload: sanitized ?? response.payload, revision };
     });
@@ -237,6 +256,7 @@ export class PwaCacheResource<T> {
     revision: string,
     etag: string | undefined,
     revalidation: boolean,
+    canPublish: () => boolean,
   ): Promise<void> {
     const backend = this.backend();
     if (!backend) {
@@ -248,22 +268,26 @@ export class PwaCacheResource<T> {
         this.telemetry({ bytes: sizeBytes, kind: "error", reason: "budget-or-quota" });
         return;
       }
-      const now = this.now();
-      const lease = this.getAccessLease();
-      const metadata = createEntryMetadata({
-        accessLease: lease,
-        entityId,
-        etag,
-        now,
-        persistencePolicy: this.persistencePolicy,
-        policy: this.policy,
-        revision,
-        scope: this.scope,
-        sizeBytes,
+      await withPublicationLock(this.persistentBackend.durabilityKey(), async () => {
+        // Quota, cleanup, cancellation and lease expiry can all race the loader.
+        if (!canPublish() || this.backend() !== backend) return;
+        const now = this.now();
+        const lease = this.getAccessLease();
+        const metadata = createEntryMetadata({
+          accessLease: lease,
+          entityId,
+          etag,
+          now,
+          persistencePolicy: this.persistencePolicy,
+          policy: this.policy,
+          revision,
+          scope: this.scope,
+          sizeBytes,
+        });
+        await backend.put({ metadata, payload });
+        this.telemetry({ bytes: sizeBytes, kind: "write", revalidation });
+        await enforceCacheBudgets(backend, this.scope, this.budgets, now, this.telemetry);
       });
-      await backend.put({ metadata, payload });
-      this.telemetry({ bytes: sizeBytes, kind: "write", revalidation });
-      await enforceCacheBudgets(backend, this.scope, this.budgets, now, this.telemetry);
     } catch (error) {
       this.telemetry({ kind: "error", reason: errorName(error) });
     }

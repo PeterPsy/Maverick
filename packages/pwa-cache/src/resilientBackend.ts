@@ -1,3 +1,4 @@
+import { advancePublicationGeneration, withPublicationLock } from "./publicationBarrier";
 import { IndexedDbCacheBackend } from "./indexedDbBackend";
 import { MemoryCacheBackend } from "./memoryBackend";
 import { markCleanupPending, pendingCleanupFilters, resolveCoveredCleanups } from "./cleanupBarrier";
@@ -85,10 +86,12 @@ export class ResilientCacheBackend implements CacheBackend {
   }
 
   async clear(filter: CacheFilter = {}, options: { durable?: boolean } = {}): Promise<number> {
-    if (options.durable) {
-      return this.clearDurably(filter);
-    }
-    return this.invoke((backend) => backend.clear(filter, options));
+    return withPublicationLock(this.primaryDurabilityKey, async () => {
+      if (options.durable) markCleanupPending(this.primaryDurabilityKey, filter);
+      advancePublicationGeneration(this.primaryDurabilityKey, this.primary.mode() === "indexeddb");
+      if (options.durable) return this.clearDurably(filter);
+      return this.invoke((backend) => backend.clear(filter, options));
+    });
   }
 
   async pendingCleanupCount(): Promise<number> {

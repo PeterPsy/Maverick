@@ -27,7 +27,7 @@ import {
   type MaverickFrameScope,
 } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
-import { revokeShellAuthorization, runShellOperation, shellCacheLifecycle } from "./pwaCacheRuntime";
+import { revokeShellAuthorization, shellCacheLifecycle, shellRetryCoordinator } from "./pwaCacheRuntime";
 import {
   RESOURCE_DECLARATIONS,
   type ResourceDeclaration,
@@ -241,26 +241,17 @@ export class PwaDataCacheBroker {
   private async process(active: ActiveRead): Promise<void> {
     const { request, resource } = active;
     try {
-      const featureDecision = this.featureWasExplicitlyDisabled
-        ? false
-        : await this.featureEnabled(active.controller.signal).catch(() => null);
-      if (active.controller.signal.aborted) return;
-      if (featureDecision === true) this.featureWasConfirmedEnabled = true;
-      else if (featureDecision === false) {
-        this.featureWasExplicitlyDisabled = true;
-        this.featureWasConfirmedEnabled = false;
-        for (const pending of [...this.active.values()]) {
-          this.terminateActive(
-            pending,
-            pending.initialDelivered ? "error" : "unavailable",
-            new DOMException("PWA data-cache rollout was disabled.", "AbortError"),
-          );
-        }
+      if (this.featureWasExplicitlyDisabled) {
+        this.reply(active, { phase: "initial", status: "unavailable" }, true);
         return;
       }
-      const enabled = featureDecision === true
-        || (featureDecision === null && this.featureWasConfirmedEnabled);
-      if (!enabled) {
+      // A confirmed session paints from cache without waiting for config I/O.
+      // Refresh remains live: an explicit denial cancels every active read.
+      const decision = this.refreshFeatureDecision(active.controller.signal);
+      if (!this.featureWasConfirmedEnabled) await decision;
+      else void decision;
+      if (active.controller.signal.aborted) return;
+      if (!this.featureWasConfirmedEnabled) {
         this.reply(active, { phase: "initial", status: "unavailable" }, true);
         return;
       }
@@ -269,11 +260,13 @@ export class PwaDataCacheBroker {
       if (active.controller.signal.aborted) return;
       const result = await resource.readThrough(
         request.entity_id,
-        (context) => runShellOperation(
-          `data-cache:${request.app_id}:${request.resource}:${request.entity_id}`,
-          (retrySignal) => this.requestNetwork(active, context, retrySignal),
-          active.controller.signal,
-        ),
+        // The shell owns cancellation; this callback remains strictly one-shot.
+        // The app adapter retries only its SDK-described HTTP read internally.
+        (context) => shellRetryCoordinator.runOpaque({
+          key: `data-cache:${request.app_id}:${request.resource}:${request.entity_id}`,
+          operation: ({ signal }) => this.requestNetwork(active, context, signal),
+          signal: active.controller.signal,
+        }),
         active.controller.signal,
       );
       if (active.controller.signal.aborted) return;
@@ -311,6 +304,22 @@ export class PwaDataCacheBroker {
       }
     } finally {
       if (active.controller.signal.aborted) this.finish(active);
+    }
+  }
+
+  private async refreshFeatureDecision(signal: AbortSignal): Promise<void> {
+    const decision = await this.featureEnabled(signal).catch(() => null);
+    if (this.disposed || signal.aborted || this.featureWasExplicitlyDisabled) return;
+    if (decision === true) this.featureWasConfirmedEnabled = true;
+    if (decision !== false) return;
+    this.featureWasExplicitlyDisabled = true;
+    this.featureWasConfirmedEnabled = false;
+    for (const pending of [...this.active.values()]) {
+      this.terminateActive(
+        pending,
+        pending.initialDelivered ? "error" : "unavailable",
+        new DOMException("PWA data-cache rollout was disabled.", "AbortError"),
+      );
     }
   }
 

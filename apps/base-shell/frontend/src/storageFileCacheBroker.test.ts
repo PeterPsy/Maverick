@@ -67,6 +67,31 @@ function nextPortMessage(port: MessagePort): Promise<Record<string, unknown>> {
 }
 
 describe("Base Shell Storage file-cache broker", () => {
+  it("retries the real SDK-owned file read after transport loss", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("connection lost"))
+      .mockResolvedValueOnce(new Response("cached"));
+    const broker = new StorageFileCacheBroker({
+      featureEnabled: async () => true,
+      hostOrigin: "https://maverick.test",
+      principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
+      resolveDescriptor: async () => approvedDescriptor(),
+    });
+    const channel = new MessageChannel();
+    const accepted = nextPortMessage(channel.port1);
+    broker.handleWindowMessage(requestEvent(channel), storageFrame);
+    await accepted;
+    let settled = false;
+    const result = nextPortMessage(channel.port1).then((value) => { settled = true; return value; });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(settled).toBe(false);
+    await expect(result).resolves.toMatchObject({ source: "network", status: "ok" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    broker.dispose();
+    fetch.mockRestore();
+  });
+
   it("accepts only the mounted Storage frame and returns normal file bytes", async () => {
     const openFile = vi.fn(async () => ({
       blob: new Blob(["cached"]),

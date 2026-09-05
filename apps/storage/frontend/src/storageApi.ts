@@ -1,5 +1,5 @@
 import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveLocalizePayload, DrivePreviewPayload, DriveStartOAuthPayload, DriveWritePayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
-import { createRequestFingerprint, readThroughParentDataCache } from '@maverick/pwa-cache';
+import { createRequestFingerprint, readCacheModelJson, readThroughParentDataCache } from '@maverick/pwa-cache';
 import { stableStorageFileSourceVersion } from './storageFileCacheClient';
 
 const DEFAULT_APP_ID = 'storage';
@@ -246,6 +246,7 @@ export async function loadCatalog(params: CatalogRequest = {}, options: CatalogR
   }
   const canonical = canonicalCatalogRequest(params);
   const appId = currentStorageAppId();
+  if (appId !== 'storage') return callBackend<CatalogPayload>({ action: 'catalog', ...canonical }, { appId, signal: options.signal });
   let entityId: string;
   try {
     entityId = await createRequestFingerprint(JSON.stringify(canonical));
@@ -258,11 +259,10 @@ export async function loadCatalog(params: CatalogRequest = {}, options: CatalogR
     resource: 'file-catalog',
     schemaRevision: 'storage.file-catalog.v1'
   }, async ({ knownRevision, signal }) => {
-    const payload = await callBackend<CatalogPayload>({
-      action: 'catalog',
-      ...canonical,
-      known_revision: knownRevision
-    }, { appId, signal });
+    const payload = await readCacheModelJson<CatalogPayload>({
+      appId, resource: 'file-catalog',
+      parameters: { ...canonical, known_revision: knownRevision }
+    }, signal);
     if (payload.not_modified) {
       if (!knownRevision || payload.revision !== knownRevision) {
         throw new TypeError('Storage returned not_modified without the requested revision.');

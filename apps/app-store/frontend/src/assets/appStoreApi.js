@@ -1,4 +1,4 @@
-import { readThroughParentDataCache } from '@maverick/pwa-cache';
+import { readCacheModelJson, readThroughParentDataCache } from '@maverick/pwa-cache';
 import { sanitizeCatalog } from './catalogReadModel.js';
 
 export async function requestJson(url, options = {}) {
@@ -35,45 +35,15 @@ export async function loadCachedCatalog() {
     resource: 'catalog',
     schemaRevision: 'app-store.catalog.v1'
   }, async ({ etag, signal }) => {
-    let response;
-    try {
-      response = await fetch('/api/app-store/apps', {
-        credentials: 'same-origin',
-        headers: {
-          Accept: 'application/json',
-          ...(etag ? { 'If-None-Match': etag } : {})
-        },
-        signal
-      });
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      const transport = new Error('App Store catalog transport failed.', { cause: error });
-      transport.name = 'MaverickTransportError';
-      throw transport;
-    }
-    const responseEtag = response.headers.get('etag') || etag || undefined;
-    if (response.status === 304) {
-      if (!etag || responseEtag !== etag) {
-        throw new TypeError('App Store returned 304 without the requested validator.');
-      }
-      return { kind: 'not_modified', etag: responseEtag };
-    }
-    let payload = {};
-    try {
-      payload = await response.json();
-    } catch (error) {
-      if (response.ok) throw new TypeError('App Store returned an invalid catalog response.', { cause: error });
-    }
-    if (!response.ok) {
-      throw new AppStoreHttpError(payload.detail || payload.error || `HTTP ${response.status}`, response);
-    }
+    const payload = await readCacheModelJson({ appId: 'app-store', resource: 'catalog', etag }, signal);
+    if (payload.not_modified) return { kind: 'not_modified', etag: payload.etag };
     const sanitized = sanitizeCatalog(payload);
     if (!sanitized) throw new TypeError('App Store returned an invalid catalog read model.');
     return {
       kind: 'value',
       payload: sanitized,
       revision: sanitized.revision,
-      ...(responseEtag ? { etag: responseEtag } : {})
+      etag: `"${sanitized.revision}"`
     };
   }, { sanitize: sanitizeCatalog });
 }

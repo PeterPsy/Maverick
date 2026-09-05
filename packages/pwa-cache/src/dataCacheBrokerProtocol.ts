@@ -264,6 +264,7 @@ async function requestBrokeredRead<T>(
       globalThis.clearTimeout(timeout);
       options.signal?.removeEventListener("abort", relayAbort);
       localController.signal.removeEventListener("abort", cancelBroker);
+      localController.abort(new DOMException("Broker read closed.", "AbortError"));
       channel.port1.close();
     }
 

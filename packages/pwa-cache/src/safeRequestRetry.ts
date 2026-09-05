@@ -1,3 +1,5 @@
+import { describeReadModelRequest } from "./readModelRequest";
+import type { ReadModelRequest } from "./readModelRetry";
 import { executeRetryJsonRequest, retryAfterMilliseconds } from "./retryJsonRequest";
 
 const SAFE_REQUEST_RETRY_EXECUTOR_BRAND: unique symbol = Symbol("maverick.safe-request-retry-executor");
@@ -12,6 +14,8 @@ export type SafeRequestRetryExecutorInput = Readonly<{
 
 export type SafeRequestRetryExecutor = Readonly<{
   [SAFE_REQUEST_RETRY_EXECUTOR_BRAND]: true;
+  body?: string;
+  etag?: string;
   endpoint: string;
   method: string;
 }>;
@@ -57,13 +61,30 @@ export function createSafeRequestRetryExecutor(
   return executor;
 }
 
+/** Issuance is internal to the SDK's reviewed read-model adapter. */
+export function createReadModelRequestExecutor(request: ReadModelRequest): SafeRequestRetryExecutor {
+  const descriptor = describeReadModelRequest(request);
+  const etag = request.etag;
+  if (etag !== undefined && (typeof etag !== "string" || etag.length > 512 || /[\r\n]/u.test(etag))) {
+    throw new TypeError("Invalid read-model validator.");
+  }
+  const executor: SafeRequestRetryExecutor = Object.freeze({
+    [SAFE_REQUEST_RETRY_EXECUTOR_BRAND]: true as const,
+    ...descriptor,
+    ...(etag ? { etag } : {}),
+    method: descriptor.body === undefined ? "GET" : "POST",
+  });
+  ISSUED_SAFE_REQUEST_RETRY_EXECUTORS.add(executor);
+  return executor;
+}
+
 export function validateSafeRequestRetryExecutor(executor: SafeRequestRetryExecutor): void {
   if (!executor
       || typeof executor !== "object"
       || !ISSUED_SAFE_REQUEST_RETRY_EXECUTORS.has(executor)
       || executor[SAFE_REQUEST_RETRY_EXECUTOR_BRAND] !== true
       || !SAFE_ENDPOINT_PATTERN.test(executor.endpoint)
-      || !SAFE_METHODS.has(executor.method)) {
+      || (!SAFE_METHODS.has(executor.method) && !(executor.method === "POST" && executor.body !== undefined))) {
     throw new TypeError(
       "Safe request retry executor must be factory-issued by createSafeRequestRetryExecutor().",
     );
@@ -76,8 +97,10 @@ export async function executeSafeRequestRetryExecutor(
 ): Promise<unknown> {
   validateSafeRequestRetryExecutor(executor);
   return executeRetryJsonRequest({
+    body: executor.body,
     endpoint: executor.endpoint,
-    headers: { Accept: "application/json" },
+    etag: executor.etag,
+    headers: { Accept: "application/json", ...(executor.body ? { "Content-Type": "application/json" } : {}), ...(executor.etag ? { "If-None-Match": executor.etag } : {}) },
     httpError: SafeRequestRetryHttpError,
     label: "Safe",
     method: executor.method,

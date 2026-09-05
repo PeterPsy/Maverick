@@ -89,7 +89,17 @@ CI runs the
 complete SDK/chaos and protocol suites plus a DOM test and authenticated
 isolated-frame smoke for Settings → Cache.
 
-No new high-severity issue was found within the reviewed M6 boundary. Remaining
+The subsequent M6 review reproduced two P1 regressions (late structured writes
+and lost broker-read retry) plus body-disconnect, Retry-After hint, and warm
+config-latency defects. The corrective implementation adds a retained
+publication generation and publication/cleanup lock, SDK-owned reviewed read
+transport and file executors, body-transport classification, server-deadline
+fencing, and non-blocking confirmed-session config refresh. Regression tests
+cover these interleavings; arbitrary broker loaders themselves are not retried.
+The new structured generation marker contains only an opaque nonce, not a
+principal, payload, URL, or resource id. A missing/unwritable marker or missing
+Web Locks fails closed for browser persistence. This corrective verification
+does not constitute physical-device evidence or privacy approval. Remaining
 release conditions are explicit rather than waived: private per-resource
 privacy approval, current physical Safari/Home Screen/Dock evidence, and
 Maverick's wider production-readiness blockers. The implementation must be

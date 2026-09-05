@@ -6,6 +6,7 @@ type TransportErrorConstructor = new (message: string, options?: ErrorOptions) =
 export type RetryJsonRequest = Readonly<{
   body?: string;
   endpoint: string;
+  etag?: string;
   headers: Readonly<Record<string, string>>;
   httpError: HttpErrorConstructor;
   label: string;
@@ -52,6 +53,12 @@ export async function executeRetryJsonRequest(
       : `${request.label} request transport failed.`;
     throw new request.transportError(message, { cause: error });
   }
+  if (response.status === 304 && request.etag) {
+    cleanup();
+    const etag = response.headers.get("etag") || request.etag;
+    if (etag !== request.etag) throw new TypeError("Read-model validator mismatch.");
+    return { not_modified: true, etag };
+  }
   if (!response.ok) {
     cleanup();
     throw new request.httpError(response);
@@ -63,9 +70,11 @@ export async function executeRetryJsonRequest(
   try {
     return await response.json() as unknown;
   } catch (error) {
-    if (didTimeout && !signal.aborted) {
+    if (!signal.aborted && (didTimeout || error instanceof TypeError)) {
       throw new request.transportError(
-        `${request.label} response timed out after ${RETRY_REQUEST_TIMEOUT_MS} ms.`,
+        didTimeout
+          ? `${request.label} response timed out after ${RETRY_REQUEST_TIMEOUT_MS} ms.`
+          : `${request.label} response transport failed.`,
         { cause: error },
       );
     }
@@ -79,10 +88,10 @@ export function retryAfterMilliseconds(value: string | null): number | undefined
   if (!value) return undefined;
   const seconds = Number(value);
   if (Number.isFinite(seconds) && seconds >= 0) {
-    return Math.min(seconds * 1_000, 60_000);
+    return Math.min(seconds * 1_000, Number.MAX_SAFE_INTEGER);
   }
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp)
-    ? Math.max(0, Math.min(timestamp - Date.now(), 60_000))
+    ? Math.max(0, timestamp - Date.now())
     : undefined;
 }

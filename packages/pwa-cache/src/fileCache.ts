@@ -1,3 +1,4 @@
+import { issueFileReadRetryExecutor, type FileReadRetryExecutor } from "./fileReadRetry";
 import { withCrossClientLock } from "./cacheBus";
 import { enforceFileCacheBudget } from "./fileCacheBudget";
 import {
@@ -47,6 +48,7 @@ import {
 } from "./fileCacheTypes";
 import type { AccessLease, CachePrincipal, StorageQuotaAdapter } from "./types";
 
+const TRUSTED_FILE_CACHES = new WeakSet<PwaFileCache>();
 const TRUSTED_FILE_CACHE_HOSTS = new WeakMap<PwaFileCacheHost, CachePrincipal>();
 export class PwaFileCacheHost {
   constructor(principal: CachePrincipal) {
@@ -84,6 +86,7 @@ export class PwaFileCache {
   constructor(options: PwaFileCacheOptions, host: PwaFileCacheHost) {
     const principal = TRUSTED_FILE_CACHE_HOSTS.get(host);
     if (!principal) throw new TypeError("PWA file-cache clients require a host-attested scope.");
+    TRUSTED_FILE_CACHES.add(this);
     this.principal = principal;
     this.userId = principal.userId;
     this.workspaceId = principal.workspaceId;
@@ -135,6 +138,19 @@ export class PwaFileCache {
     );
     this.inFlight.set(key, promise);
     return promise;
+  }
+
+  retryableRead(request: Omit<FileCacheOpenRequest, "signal">): FileReadRetryExecutor {
+    if (!TRUSTED_FILE_CACHES.has(this)) throw new TypeError("File retries require a host-attested cache.");
+    const descriptor = validateFileCacheDescriptor(structuredClone(request.descriptor));
+    const url = request.url;
+    if (!/^\/api\/apps\/storage\/media\?/u.test(url) || /[\s#]/u.test(url)) {
+      throw new TypeError("Retryable file reads require the Storage media endpoint.");
+    }
+    return issueFileReadRetryExecutor(
+      JSON.stringify([fileCacheKey(this.principal, descriptor), url]),
+      (signal) => PwaFileCache.prototype.open.call(this, { descriptor, url, signal }),
+    );
   }
 
   updateAccessLease(lease: AccessLease | undefined): void {

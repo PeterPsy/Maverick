@@ -16,7 +16,7 @@ import type {
 export const DEFAULT_PWA_CACHE_GLOBAL_BUDGET_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_PWA_CACHE_APP_BUDGET_BYTES = 32 * 1024 * 1024;
 
-type InvalidatableResource = { invalidate(entityId?: string): Promise<number> };
+type InvalidatableResource = { cancelPendingPublications(): void; invalidate(entityId?: string): Promise<number> };
 const TRUSTED_CACHE_HOSTS = new WeakMap<PwaCacheHost, CachePrincipal>();
 
 export class PwaCacheHost {
@@ -123,6 +123,7 @@ export class PwaCacheClient {
   }
 
   async clear(): Promise<CacheCleanupResult> {
+    this.cancelPendingPublications();
     const filter = { userId: this.userId, workspaceId: this.workspaceId, appId: this.appId };
     const session = await this.memoryBackend.clear(filter);
     let persistent = 0;
@@ -141,7 +142,12 @@ export class PwaCacheClient {
     };
   }
 
+  private cancelPendingPublications(): void {
+    for (const resource of this.resources.values()) resource.cancelPendingPublications();
+  }
+
   dispose(): void {
+    this.cancelPendingPublications();
     this.unsubscribeBus();
     this.bus.close();
   }
@@ -164,6 +170,7 @@ export class PwaCacheClient {
 
   private handleBusMessage(message: CacheBusMessage): void {
     if (message.type === "all-cleared") {
+      this.cancelPendingPublications();
       void this.memoryBackend.clear();
       return;
     }
@@ -177,6 +184,7 @@ export class PwaCacheClient {
         && message.userId === this.userId
         && (!message.workspaceId || message.workspaceId === this.workspaceId)
         && (!message.appId || message.appId === this.appId)) {
+      this.cancelPendingPublications();
       void this.memoryBackend.clear({ userId: this.userId, workspaceId: this.workspaceId, appId: this.appId });
     }
   }

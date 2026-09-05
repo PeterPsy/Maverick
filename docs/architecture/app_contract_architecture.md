@@ -1768,6 +1768,44 @@ Security-sensitive deletion cannot use the RAM performance fallback as
 success: an incomplete durable clear is pending and blocks persistent cache
 access until the primary store confirms deletion.
 
+Structured publication and cleanup share a per-backend cross-client lock. A
+read captures a generation before cache lookup and retains it through loader
+and quota waits; publication checks that generation, cancellation/disposal,
+and the current lease again under the lock. Cleanup rotates a retained opaque
+generation, drains publication already inside the lock, and then clears. The
+fence survives successful deletion, so earlier writers cannot recreate data.
+Generation invalidation is conservatively backend-wide; physical deletion
+remains filter-scoped. Browser persistence requires Web Locks and readable
+shared generation storage; unavailable coordination never converts an unsafe
+persistent write into success. Session-memory caching keeps its local fence.
+
+After the first positive configuration decision for a broker/session, config
+refresh runs alongside cache reads rather than ahead of warm paint. An
+explicit false decision is latched and cancels all active reads; an unknown
+transport result never enables a new session. Authorization revocation still
+wins over both cache and background configuration.
+
+Structured broker loaders are invoked once per read/revalidation. The four
+pilot adapters use `readCacheModelJson`: its SDK-owned descriptor binds the
+reviewed app/resource to the exact endpoint, HTTP verb, fixed read action and
+allowed parameters. Only that frozen HTTP request is replayed, not sanitation
+or an arbitrary app callback. The reviewed POST actions are Storage `catalog`
+(without sync), Website Studio `workspace_snapshot`, and Fitness Coach
+`app.bootstrap`; this is not general POST or mutation retry authority. App
+Store remains a conditional GET. Closing the private broker channel cancels
+its read transport; the shell retains a one-shot cancellation envelope so
+Settings clear also cancels the delegated transport. Unreviewed forks retain
+one-shot reads.
+Storage file retry uses a host-issued `PwaFileCache.retryableRead` executor for
+the SDK-owned GET/cache pipeline, not a caller-supplied operation. Ordinary
+callbacks remain one-shot; nominal executor validation and mutation
+idempotency requirements are unchanged.
+
+Interrupted JSON body transport is retryable, while JSON syntax/schema errors
+and caller cancellation are not. Retry hints may shorten exponential backoff
+but never the server's Retry-After deadline, including HTTP-date delays beyond
+the normal backoff cap.
+
 The SDK's retry coordinator is RAM-only. It automatically pauses for document
 visibility and `maverick.app.visibility-changed`, treats browser `online`,
 focus, and successful Maverick responses only as early retry hints, and

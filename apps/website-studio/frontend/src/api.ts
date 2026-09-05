@@ -1,6 +1,7 @@
 import {
   createRequestFingerprint,
   readThroughParentDataCache,
+  readCacheModelJson,
   type ParentDataCacheReadResult
 } from '@maverick/pwa-cache';
 
@@ -267,11 +268,12 @@ export function cachedWorkspaceSnapshot(
   void revalidated.catch(() => undefined);
   let fresh: Promise<WorkspaceSnapshot>;
   const loader = async ({ knownRevision, signal }: { knownRevision?: string; signal?: AbortSignal }) => {
-    const payload = await callBackend<WorkspaceSnapshot>({
-      action: 'workspace_snapshot',
-      site_id: siteId || undefined,
-      route: route || undefined,
-      known_revision: options.revalidate === false ? undefined : knownRevision
+    const payload = await readCacheModelJson<WorkspaceSnapshot>({
+      appId: 'website-studio', resource: 'site-snapshots',
+      parameters: {
+        site_id: siteId || undefined, route: route || undefined,
+        known_revision: options.revalidate === false ? undefined : knownRevision
+      }
     }, signal);
     if (payload.not_modified) {
       if (!knownRevision) throw new TypeError('Website Studio returned not_modified without a known revision.');

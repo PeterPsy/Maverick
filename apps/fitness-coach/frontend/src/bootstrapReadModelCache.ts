@@ -1,6 +1,7 @@
 import {
   readMaverickAppFrameContext,
   readThroughParentDataCache,
+  readCacheModelJson,
   type ParentDataCacheReadResult
 } from '@maverick/pwa-cache';
 import { callBackend, currentStorageAppId, mountedAppIdFromPath } from './api';
@@ -46,13 +47,15 @@ export async function readCachedBootstrap(
     resource: 'sanitized-bootstrap-and-thumbnails',
     schemaRevision: 'fitness-coach.sanitized-bootstrap-and-thumbnails.v1'
   }, async ({ knownRevision, signal }) => {
-    const payload = await callBackend<AppBootstrapPayload>({
-      action: 'app.bootstrap',
-      include_runs: includeRuns,
-      selected_workout_id: options.selectedWorkoutId || '',
-      storage_app_id: storageAppId,
-      known_revision: knownRevision
-    }, { signal });
+    const parameters = {
+      include_runs: includeRuns, selected_workout_id: options.selectedWorkoutId || '',
+      storage_app_id: storageAppId, known_revision: knownRevision
+    };
+    const payload = appId === 'fitness-coach'
+      ? await readCacheModelJson<AppBootstrapPayload>({
+          appId, resource: 'sanitized-bootstrap-and-thumbnails', parameters
+        }, signal)
+      : await callBackend<AppBootstrapPayload>({ action: 'app.bootstrap', ...parameters }, { signal });
     if (payload.not_modified) {
       if (!knownRevision || payload.state_version !== knownRevision) {
         throw new TypeError('Fitness Coach returned not_modified without the requested revision.');

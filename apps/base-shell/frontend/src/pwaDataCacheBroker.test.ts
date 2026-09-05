@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  readCacheModelJson,
+  readThroughParentDataCache,
   PWA_DATA_CACHE_BROKER_ACCEPTED,
   PWA_DATA_CACHE_BROKER_NETWORK_REQUEST,
   PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
@@ -7,7 +9,7 @@ import {
   PWA_DATA_CACHE_BROKER_RESULT,
 } from "@maverick/pwa-cache";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
-import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
+import { shellCacheLifecycle, shellRetryCoordinator, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
 import { setMaverickFrameOrigin, type MaverickFrameScope } from "./iframePolicy";
 
 type PortMessage = Record<string, unknown>;
@@ -114,11 +116,54 @@ describe("Base Shell structured data-cache broker", () => {
     vi.restoreAllMocks();
   });
 
+  it.each(["recovery", "cleanup"])("keeps brokered retry cancellation scoped to the shell: %s", async (outcome) => {
+    const subject = broker();
+    brokers.push(subject);
+    const fetch = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("link down"))
+      .mockResolvedValueOnce(Response.json({ revision: "recovered", items: [] }));
+    const loader = vi.fn(async ({ signal }: { signal?: AbortSignal }) => {
+      const payload = await readCacheModelJson<{ revision: string; items: unknown[] }>({ appId: "app-store", resource: "catalog" }, signal);
+      return { kind: "value" as const, payload, revision: payload.revision };
+    });
+    const result = readThroughParentDataCache({
+      appId: "app-store", entityId: "retry-miss", resource: "catalog", schemaRevision: "app-store.catalog.v1",
+    }, loader, {
+      parentOrigin: "https://maverick.test",
+      parentWindow: {
+        postMessage(data: unknown, _origin: string, transfer?: Transferable[]) {
+          subject.handleWindowMessage({ data, ports: transfer, origin: appOrigin, source: appWindow } as unknown as MessageEvent, new Set(["app-store"]));
+        },
+      } as Pick<Window, "postMessage">,
+      sanitize: (payload) => payload as { revision: string; items: unknown[] },
+    });
+    let settled = false;
+    void result.then(() => { settled = true; }, () => { settled = true; });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(settled).toBe(false);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(shellRetryCoordinator.pendingCount()).toBeGreaterThan(0);
+    if (outcome === "cleanup") {
+      const rejected = expect(result).rejects.toBeInstanceOf(Error);
+      shellRetryCoordinator.cancelAll("PWA cache was cleared.");
+      await rejected;
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(shellRetryCoordinator.pendingCount()).toBe(0);
+    } else {
+      await expect(result).resolves.toMatchObject({ brokered: true, source: "network", revision: "recovered" });
+      expect(fetch).toHaveBeenCalledTimes(2);
+    }
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
   it("mediates a network miss and then returns a warm hit with conditional revalidation", async () => {
     vi.stubGlobal("navigator", {
       storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) },
     });
-    const subject = broker();
+    let finishConfig!: (enabled: boolean | null) => void;
+    const slowConfig = new Promise<boolean | null>((resolve) => { finishConfig = resolve; });
+    const feature = vi.fn<() => Promise<boolean | null>>().mockResolvedValueOnce(true).mockReturnValue(slowConfig);
+    const subject = broker(feature);
     brokers.push(subject);
     const enabled = new Set(["app-store"]);
 
@@ -157,6 +202,8 @@ describe("Base Shell structured data-cache broker", () => {
       source: "cache",
       status: "ok",
     });
+    expect(feature).toHaveBeenCalledTimes(2);
+    finishConfig(null); // Cache paint above did not await this config refresh.
     const revalidation = await nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
     expect(revalidation.known_revision).toBe("revision-one");
     warmChannel.port1.postMessage({
@@ -174,6 +221,35 @@ describe("Base Shell structured data-cache broker", () => {
       revision: "revision-one",
       status: "ok",
     });
+  });
+
+  it("applies a background rollout denial after a warm paint and never re-enables that broker", async () => {
+    vi.stubGlobal("navigator", { storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) } });
+    let deny!: (value: boolean) => void;
+    const refresh = new Promise<boolean>((resolve) => { deny = resolve; });
+    const feature = vi.fn<() => Promise<boolean | null>>().mockResolvedValueOnce(true).mockReturnValue(refresh);
+    const subject = broker(feature);
+    brokers.push(subject);
+    const enabled = new Set(["app-store"]);
+    const seed = new MessageChannel();
+    const seedMessages = portMessages(seed.port1);
+    subject.handleWindowMessage(requestEvent(seed, {
+      entity_id: "background-denial", request_id: "denial-seed",
+      migration_seed: { payload: { revision: "one" }, revision: "one" },
+    }), enabled);
+    await nextOfType(seedMessages, PWA_DATA_CACHE_BROKER_RESULT);
+    // A second warm request must not wait for the still-pending config refresh.
+    const warm = new MessageChannel();
+    const messages = portMessages(warm.port1);
+    subject.handleWindowMessage(requestEvent(warm, { entity_id: "background-denial", request_id: "denial-warm" }), enabled);
+    await expect(nextOfType(messages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({ source: "cache", status: "ok" });
+    deny(false);
+    await expect(nextOfType(messages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({ phase: "revalidation", status: "error" });
+    const denied = new MessageChannel();
+    const deniedMessages = portMessages(denied.port1);
+    subject.handleWindowMessage(requestEvent(denied, { request_id: "denial-final" }), enabled);
+    await expect(nextOfType(deniedMessages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({ status: "unavailable" });
+    expect(feature).toHaveBeenCalledTimes(2);
   });
 
   it("never serves a new-workspace warm value to a frame from the previous workspace scope", async () => {

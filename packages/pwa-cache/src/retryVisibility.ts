@@ -1,3 +1,5 @@
+import { isExactMaverickParentMessage } from "./dataCacheBrokerProtocol";
+
 export class RetryVisibilityMonitor {
   private clientVisible = true;
   private started = false;
@@ -26,7 +28,7 @@ export class RetryVisibilityMonitor {
     window.addEventListener("online", this.onHint);
     window.addEventListener("focus", this.onHint);
     window.addEventListener("message", this.handleMaverickVisibility);
-    document.addEventListener("visibilitychange", this.handleDocumentVisibility);
+    globalThis.document?.addEventListener("visibilitychange", this.handleDocumentVisibility);
   }
 
   dispose(): void {
@@ -34,7 +36,7 @@ export class RetryVisibilityMonitor {
       window.removeEventListener("online", this.onHint);
       window.removeEventListener("focus", this.onHint);
       window.removeEventListener("message", this.handleMaverickVisibility);
-      document.removeEventListener("visibilitychange", this.handleDocumentVisibility);
+      globalThis.document?.removeEventListener("visibilitychange", this.handleDocumentVisibility);
     }
     this.started = false;
   }
@@ -46,7 +48,7 @@ export class RetryVisibilityMonitor {
   };
 
   private readonly handleMaverickVisibility = (event: MessageEvent<unknown>) => {
-    if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+    if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") {
       return;
     }
     const payload = event.data as { type?: unknown; visible?: unknown };

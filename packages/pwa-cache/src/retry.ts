@@ -1,3 +1,5 @@
+import { executeFileReadRetryExecutor, validateFileReadRetryExecutor, type FileReadRetryExecutor } from "./fileReadRetry";
+import type { FileCacheOpenResult } from "./fileCacheTypes";
 import {
   RetryCancelledError,
   SAFE_METHODS,
@@ -86,6 +88,7 @@ type CoordinatedOperation<T> = {
   operation: (context: { attempt: number; signal: AbortSignal }) => Promise<T>;
   operationKey: string;
   safeRequest?: SafeRequestRetryExecutor;
+  fileRead?: FileReadRetryExecutor;
   signal?: AbortSignal;
 };
 
@@ -111,7 +114,7 @@ export class RetryCoordinator {
     this.capDelayMs = positive(options.capDelayMs, 30_000);
     this.minRetryIntervalMs = positive(options.minRetryIntervalMs, 250);
     this.maxMutationAttempts = Math.max(1, Math.floor(positive(options.maxMutationAttempts, 3)));
-    this.now = options.now ?? Date.now;
+    this.now = options.now ?? (() => Date.now());
     this.random = options.random ?? Math.random;
     this.setTimer = options.setTimer ?? ((callback, delay) => globalThis.setTimeout(callback, delay));
     this.clearTimer = options.clearTimer ?? ((timer) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>));
@@ -155,6 +158,20 @@ export class RetryCoordinator {
     });
   }
 
+  runFileRead(options: { executor: FileReadRetryExecutor; key: string; signal?: AbortSignal }): Promise<FileCacheOpenResult> {
+    rejectOpaqueFieldsOnSafeRequestOperation(options);
+    validateFileReadRetryExecutor(options.executor);
+    this.start();
+    return this.#coordinate({
+      classify: classifyRetryError,
+      fileRead: options.executor,
+      method: "GET",
+      operation: ({ signal }) => executeFileReadRetryExecutor(options.executor, signal),
+      operationKey: validateOperationKey(options.key),
+      signal: options.signal,
+    });
+  }
+
   runMutation<T = unknown>(options: MutationRetryOperationOptions): Promise<T> {
     rejectOpaqueFieldsOnMutationOperation(options);
     this.start();
@@ -177,6 +194,7 @@ export class RetryCoordinator {
       options.operationKey,
       options.mutation,
       options.safeRequest,
+      options.fileRead,
     );
     const existing = this.flights.get(flightKey)?.promise as Promise<T> | undefined;
     if (existing) {
@@ -287,7 +305,7 @@ export class RetryCoordinator {
             throw new RetryCancelledError();
           }
           const canRetry = classification.disposition === "retryable"
-            && (SAFE_METHODS.has(options.method) || Boolean(options.mutation));
+            && (Boolean(options.safeRequest) || Boolean(options.fileRead) || Boolean(options.mutation));
           if (!canRetry || (options.mutation && attempt + 1 >= this.maxMutationAttempts)) {
             throw error;
           }
@@ -296,7 +314,7 @@ export class RetryCoordinator {
             flight.waitStartedAt = this.now();
             this.telemetry({ attempt, keyHash: flight.keyHash, kind: "wait_started", waitMs: delay });
           }
-          await this.waitForRetry(flight, Math.max(delay, this.minRetryIntervalMs - (this.now() - lastAttemptAt)));
+          await this.waitForRetry(flight, Math.max(delay, this.minRetryIntervalMs - (this.now() - lastAttemptAt)), classification.retryAfterMs);
           attempt += 1;
         }
       }
@@ -331,11 +349,11 @@ export class RetryCoordinator {
     return Math.max(Math.round(exponential * jitter), retryAfter);
   }
 
-  private waitForRetry(flight: PendingFlight, delayMs: number): Promise<void> {
+  private waitForRetry(flight: PendingFlight, delayMs: number, retryAfterMs = 0): Promise<void> {
     return new Promise((resolve, reject) => {
       let timer: unknown;
       let settled = false;
-      const notBefore = this.now() + this.minRetryIntervalMs;
+      const notBefore = this.now() + Math.max(this.minRetryIntervalMs, Number.isFinite(retryAfterMs) ? retryAfterMs : 0);
       const finish = () => {
         if (settled) {
           return;
@@ -353,6 +371,11 @@ export class RetryCoordinator {
         if (!this.visibility.visible()) {
           return;
         }
+        const remaining = notBefore - this.now();
+        if (remaining > 0) {
+          timer = this.setTimer(scheduledWake, Math.min(remaining, 2_147_483_647));
+          return;
+        }
         finish();
       };
       const hintedWake = () => {
@@ -364,7 +387,7 @@ export class RetryCoordinator {
         if (timer !== undefined) {
           this.clearTimer(timer);
         }
-        timer = this.setTimer(scheduledWake, remaining);
+        timer = this.setTimer(scheduledWake, Math.min(remaining, 2_147_483_647));
       };
       const abort = () => {
         if (settled) {
@@ -380,7 +403,7 @@ export class RetryCoordinator {
       flight.wake = hintedWake;
       flight.controller.signal.addEventListener("abort", abort, { once: true });
       if (this.visibility.visible()) {
-        timer = this.setTimer(scheduledWake, Math.max(0, delayMs));
+        timer = this.setTimer(scheduledWake, Math.min(Math.max(0, delayMs), 2_147_483_647));
       }
     });
   }
@@ -390,7 +413,9 @@ export class RetryCoordinator {
     operationKey: string,
     mutation: MutationRetryExecutor | undefined,
     safeRequest: SafeRequestRetryExecutor | undefined,
+    fileRead: FileReadRetryExecutor | undefined,
   ): string {
+    if (fileRead) return JSON.stringify([this.scopeKey, "file-read", fileRead.identity, operationKey]);
     if (mutation) {
       const idempotencyScope = JSON.stringify([
         this.scopeKey,
@@ -423,6 +448,8 @@ export class RetryCoordinator {
         "read",
         method,
         safeRequest.endpoint,
+        safeRequest.body ?? "",
+        safeRequest.etag ?? "",
         operationKey,
       ]);
     }
@@ -448,7 +475,7 @@ function rejectRetryFieldsOnOpaqueOperation(options: OpaqueRetryOperationOptions
   }
 }
 
-function rejectOpaqueFieldsOnSafeRequestOperation(options: SafeRequestRetryOperationOptions): void {
+function rejectOpaqueFieldsOnSafeRequestOperation(options: { executor: unknown; key: string; signal?: AbortSignal }): void {
   const record = options as unknown as Record<string, unknown>;
   if (["action", "classify", "endpoint", "method", "mutation", "operation"]
     .some((field) => Object.hasOwn(record, field))) {

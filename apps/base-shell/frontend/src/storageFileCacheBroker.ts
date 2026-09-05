@@ -23,7 +23,7 @@ import {
   type StorageQuotaAdapter,
 } from "@maverick/pwa-cache";
 import { MaverickHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
-import { revokeShellAuthorization, runShellOperation } from "./pwaCacheRuntime";
+import { revokeShellAuthorization, shellRetryCoordinator } from "./pwaCacheRuntime";
 import { storageFileCacheFeatureEnabled } from "./pwa";
 import { isMaverickFrameMessage } from "./iframePolicy";
 
@@ -84,11 +84,11 @@ export class StorageFileCacheBroker {
         quotaAdapter: options.quotaAdapter,
         telemetry: options.telemetry,
       });
-      this.openFile = (request, signal) => runShellOperation(
-        `storage:file:${request.descriptor.fileId}:${request.descriptor.sourceVersion}`,
-        (retrySignal) => this.cache!.open({ ...request, signal: retrySignal }),
+      this.openFile = (request, signal) => shellRetryCoordinator.runFileRead({
+        executor: this.cache!.retryableRead(request),
+        key: `storage:file:${request.descriptor.fileId}:${request.descriptor.sourceVersion}`,
         signal,
-      );
+      });
     }
   }
 

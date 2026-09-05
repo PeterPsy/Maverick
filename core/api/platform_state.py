@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 import os
 from pathlib import Path
 import shutil
+from typing import TYPE_CHECKING
 
 from core.api.app_events import AppEventBus
 from core.api.application import create_application
@@ -25,8 +26,6 @@ from core.jobs.store import JobDocumentStore
 from core.observability.store import ObservabilityDocumentStore, ObservabilityCollections
 from core.providers.provider_codex import refresh_workspace_maverick_wrappers
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
-from core.providers.google_agentic_profile import ensure_google_agentic_preview_profile
-from core.providers.openrouter_agentic_profile import ensure_openrouter_agentic_preview_profile
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import builtin_provider_registry, effective_provider_registry
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
@@ -39,6 +38,9 @@ from core.runtime.app_reference_classification import (
 from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.hosted_agentic_factory import build_hosted_agentic_engine_adapter
+from core.runtime.hosted_runtime_registry_builder import (
+    build_builtin_maverick_agent_onboarding_catalog,
+)
 from core.runtime.thread_event_bus import RuntimeThreadEventBus
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
@@ -60,6 +62,9 @@ from core.shared.in_memory_collection import InMemoryCollection
 from core.shared.repository import discover_repository_root
 from core.usage.store import UsageDocumentStore
 from core.workspaces.store import WorkspaceDocumentStore
+
+if TYPE_CHECKING:
+    from core.providers.maverick_agent_onboarding import MaverickAgentOnboardingCatalog
 
 
 @dataclass(frozen=True)
@@ -96,6 +101,9 @@ class PlatformState:
     ) = None
     runtime_app_reference_classification_resolver: (
         RuntimeAppReferenceClassificationResolver | None
+    ) = None
+    maverick_agent_onboarding_catalog: (
+        MaverickAgentOnboardingCatalog | None
     ) = None
 
 
@@ -256,6 +264,10 @@ def bootstrap_platform_state(
             password=admin_password,
             now=now,
         )
+    onboarding_now = now or datetime.now(tz=UTC)
+    onboarding_catalog = build_builtin_maverick_agent_onboarding_catalog(
+        now=onboarding_now,
+    )
     state = PlatformState(
         repository_root=repository_root,
         control_store_settings=control_settings,
@@ -296,22 +308,16 @@ def bootstrap_platform_state(
                 workspace_store
             )
         ),
+        maverick_agent_onboarding_catalog=onboarding_catalog,
     )
     hosted_adapter = build_hosted_agentic_engine_adapter(
         state,
         provider_registry=provider_registry,
+        onboarding_catalog=onboarding_catalog,
     )
     if register_builtin_provider_definitions:
-        ensure_google_agentic_preview_profile(
-            provider_store,
-            adapter=hosted_adapter,
-            now=now,
-        )
-        ensure_openrouter_agentic_preview_profile(
-            provider_store,
-            adapter=hosted_adapter,
-            now=now,
-        )
+        onboarding_catalog.validate_runtime_adapter(hosted_adapter)
+        onboarding_catalog.publish_profiles(provider_store, now=onboarding_now)
     if recover_backend_restart:
         recover_interrupted_runtime_turns_after_backend_restart(state)
         job_service.recover_expired_jobs()

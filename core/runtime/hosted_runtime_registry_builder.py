@@ -1,6 +1,8 @@
-"""Trusted composition of data-driven hosted harness recipe runtimes."""
+"""Trusted production composition for data-driven Maverick Agent runtimes."""
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from core.providers.google_interactions_client import (
     GoogleInteractionsAgenticClient,
@@ -21,6 +23,16 @@ from core.providers.hosted_endpoint_preflight import (
     preflight_google_interactions_request,
     preflight_openrouter_completion_request,
 )
+from core.providers.maverick_agent_builtins import (
+    builtin_maverick_agent_publications,
+    builtin_maverick_protocol_adapters,
+    builtin_maverick_provider_configs,
+)
+from core.providers.maverick_agent_onboarding import (
+    MaverickAgentOnboardingCatalog,
+    MaverickProtocolRuntimeRegistration,
+    MaverickProviderConfig,
+)
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
     openrouter_deepinfra_v4_flash_request_ceiling_microusd,
@@ -33,10 +45,7 @@ from core.providers.openrouter_agentic_models import (
 )
 from core.providers.openrouter_agentic_state import inspect_openrouter_chat_state
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
-from core.runtime.hosted_harness_recipes import (
-    GOOGLE_GOVERNED_WORKSPACE_RECIPE,
-    OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
-)
+from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
 from core.runtime.hosted_provider_runtime import (
     GOOGLE_HOSTED_FINALIZATION_POLICY,
     OPENROUTER_HOSTED_FINALIZATION_POLICY,
@@ -45,62 +54,102 @@ from core.runtime.hosted_provider_runtime import (
 )
 
 
-def build_hosted_provider_runtime_registry() -> HostedProviderRuntimeRegistry:
-    """Build runtimes entirely from exact registered recipe identities."""
-    registry = HostedProviderRuntimeRegistry()
-    registry.register(
-        HostedProviderRuntime(
-            model_provider_id=GOOGLE_GOVERNED_WORKSPACE_RECIPE.model_provider_id,
-            provider_protocol=GOOGLE_GOVERNED_WORKSPACE_RECIPE.provider_protocol,
-            provider_api_version=GOOGLE_GOVERNED_WORKSPACE_RECIPE.provider_api_version,
-            client=GoogleInteractionsAgenticClient(
-                model_id=GOOGLE_GOVERNED_WORKSPACE_RECIPE.model_id,
-                state_mode="stateless",
-            ),
-            private_codec=HostedProviderPrivateCodec(
-                codec_id=GOOGLE_INTERACTIONS_CODEC_ID,
-                codec_version=GOOGLE_INTERACTIONS_CODEC_VERSION,
-                schema_version=GOOGLE_INTERACTIONS_SCHEMA_VERSION,
-                content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
-            ),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
-            finalization_policy=GOOGLE_HOSTED_FINALIZATION_POLICY,
-            private_state_inspector=lambda content: inspect_google_interaction_state(
-                content,
-                mode="stateless",
-            ),
-            recipe=GOOGLE_GOVERNED_WORKSPACE_RECIPE,
-            context_compactor=compact_google_stateless_history,
-            request_preflight=preflight_google_interactions_request,
+def build_builtin_maverick_agent_onboarding_catalog(
+    *,
+    now: datetime | None = None,
+) -> MaverickAgentOnboardingCatalog:
+    """Assemble the production catalog from trusted adapters and data records."""
+    catalog = MaverickAgentOnboardingCatalog()
+    for manifest in builtin_maverick_protocol_adapters():
+        try:
+            runtime_factory = _PROTOCOL_RUNTIME_FACTORIES[
+                manifest.protocol_adapter_id
+            ]
+        except KeyError as error:
+            raise RuntimeError("maverick_protocol_factory_missing") from error
+        catalog.register_protocol_adapter(
+            MaverickProtocolRuntimeRegistration(
+                manifest=manifest,
+                runtime_factory=runtime_factory,
+            )
         )
-    )
-    registry.register(
-        HostedProviderRuntime(
-            model_provider_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.model_provider_id,
-            provider_protocol=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.provider_protocol,
-            provider_api_version=(
-                OPENROUTER_GOVERNED_WORKSPACE_RECIPE.provider_api_version
-            ),
-            client=OpenRouterAgenticClient(
-                model_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.model_id,
-            ),
-            private_codec=HostedProviderPrivateCodec(
-                codec_id=OPENROUTER_AGENTIC_CODEC_ID,
-                codec_version=OPENROUTER_AGENTIC_CODEC_VERSION,
-                schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
-                content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
-            ),
-            cost_estimator=(
-                openrouter_deepinfra_v4_flash_request_ceiling_microusd
-            ),
-            finalization_policy=OPENROUTER_HOSTED_FINALIZATION_POLICY,
-            private_state_inspector=inspect_openrouter_chat_state,
-            recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
-            context_compactor=compact_openrouter_history,
-            request_preflight=preflight_openrouter_completion_request,
-        )
-    )
-    return registry
+    for config in builtin_maverick_provider_configs():
+        catalog.register_provider_config(config)
+    for publication in builtin_maverick_agent_publications(now=now):
+        catalog.register_profile(publication)
+    return catalog
 
 
-__all__ = ["build_hosted_provider_runtime_registry"]
+def build_hosted_provider_runtime_registry(
+    *,
+    onboarding_catalog: MaverickAgentOnboardingCatalog | None = None,
+) -> HostedProviderRuntimeRegistry:
+    """Build the runtime registry exclusively through production onboarding."""
+    catalog = onboarding_catalog or build_builtin_maverick_agent_onboarding_catalog()
+    return catalog.build_runtime_registry()
+
+
+def _google_interactions_runtime(
+    config: MaverickProviderConfig,
+    recipe: HostedHarnessRecipeManifest,
+) -> HostedProviderRuntime:
+    return HostedProviderRuntime(
+        model_provider_id=config.model_provider_id,
+        provider_protocol=config.provider_protocol,
+        provider_api_version=config.provider_api_version,
+        client=GoogleInteractionsAgenticClient(
+            model_id=recipe.model_id,
+            state_mode="stateless",
+        ),
+        private_codec=HostedProviderPrivateCodec(
+            codec_id=GOOGLE_INTERACTIONS_CODEC_ID,
+            codec_version=GOOGLE_INTERACTIONS_CODEC_VERSION,
+            schema_version=GOOGLE_INTERACTIONS_SCHEMA_VERSION,
+            content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
+        ),
+        cost_estimator=google_36_flash_request_ceiling_microusd,
+        finalization_policy=GOOGLE_HOSTED_FINALIZATION_POLICY,
+        private_state_inspector=lambda content: inspect_google_interaction_state(
+            content,
+            mode="stateless",
+        ),
+        recipe=recipe,
+        context_compactor=compact_google_stateless_history,
+        request_preflight=preflight_google_interactions_request,
+    )
+
+
+def _openrouter_chat_runtime(
+    config: MaverickProviderConfig,
+    recipe: HostedHarnessRecipeManifest,
+) -> HostedProviderRuntime:
+    return HostedProviderRuntime(
+        model_provider_id=config.model_provider_id,
+        provider_protocol=config.provider_protocol,
+        provider_api_version=config.provider_api_version,
+        client=OpenRouterAgenticClient(model_id=recipe.model_id),
+        private_codec=HostedProviderPrivateCodec(
+            codec_id=OPENROUTER_AGENTIC_CODEC_ID,
+            codec_version=OPENROUTER_AGENTIC_CODEC_VERSION,
+            schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
+            content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
+        ),
+        cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+        finalization_policy=OPENROUTER_HOSTED_FINALIZATION_POLICY,
+        private_state_inspector=inspect_openrouter_chat_state,
+        recipe=recipe,
+        context_compactor=compact_openrouter_history,
+        request_preflight=preflight_openrouter_completion_request,
+    )
+
+
+_PROTOCOL_RUNTIME_FACTORIES = {
+    "google-interactions-protocol": _google_interactions_runtime,
+    "openrouter-chat-completions-protocol": _openrouter_chat_runtime,
+}
+
+
+__all__ = [
+    "build_builtin_maverick_agent_onboarding_catalog",
+    "build_hosted_provider_runtime_registry",
+]

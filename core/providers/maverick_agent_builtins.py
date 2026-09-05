@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from core.providers.agentic_models import RoutingConstraint
 from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CODEC_ID,
     GOOGLE_INTERACTIONS_CODEC_VERSION,
 )
 from core.providers.maverick_agent_onboarding import (
+    MaverickAgentProfilePublication,
     MaverickProtocolAdapterManifest,
     MaverickProviderConfig,
 )
@@ -97,6 +100,43 @@ OPENROUTER_DEEPINFRA_PROVIDER_CONFIG = MaverickProviderConfig(
 )
 
 
+def builtin_maverick_protocol_adapters() -> tuple[
+    MaverickProtocolAdapterManifest,
+    ...,
+]:
+    """Return trusted protocol records without model-specific branching."""
+    return (
+        GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
+        OPENROUTER_CHAT_PROTOCOL_ADAPTER,
+    )
+
+
+def builtin_maverick_provider_configs() -> tuple[MaverickProviderConfig, ...]:
+    """Return provider endpoint/policy records in deterministic order."""
+    return (
+        GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
+        OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+    )
+
+
+def builtin_maverick_agent_publications(
+    *,
+    now: datetime | None = None,
+) -> tuple[MaverickAgentProfilePublication, ...]:
+    """Return model publications consumed by production onboarding."""
+    from core.providers.google_agentic_profile import (
+        google_agentic_preview_publication,
+    )
+    from core.providers.openrouter_agentic_profile import (
+        openrouter_agentic_preview_publication,
+    )
+
+    return (
+        google_agentic_preview_publication(now=now),
+        openrouter_agentic_preview_publication(now=now),
+    )
+
+
 __all__ = [
     "GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER",
     "GOOGLE_INTERACTIONS_PROVIDER_CONFIG",
@@ -104,4 +144,7 @@ __all__ = [
     "HOSTED_TOOL_LOOP_ADAPTER_VERSION",
     "OPENROUTER_CHAT_PROTOCOL_ADAPTER",
     "OPENROUTER_DEEPINFRA_PROVIDER_CONFIG",
+    "builtin_maverick_agent_publications",
+    "builtin_maverick_protocol_adapters",
+    "builtin_maverick_provider_configs",
 ]

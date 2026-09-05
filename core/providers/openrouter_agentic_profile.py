@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
 
 from core.providers.agentic_models import (
@@ -86,15 +85,12 @@ def openrouter_agentic_routing_constraint() -> RoutingConstraint:
     return OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.routing_constraint
 
 
-def ensure_openrouter_agentic_preview_profile(
-    store: ProviderStore,
+def openrouter_agentic_preview_publication(
     *,
-    adapter: object,
     now: datetime | None = None,
-) -> AgenticProfileDefinition:
-    """Publish an uncertified Full Workspace preview without enabling a binding."""
+) -> MaverickAgentProfilePublication:
+    """Build the immutable OpenRouter publication record used by onboarding."""
     timestamp = now or datetime.now(tz=UTC)
-    validate_maverick_runtime_adapter(OPENROUTER_CHAT_PROTOCOL_ADAPTER, adapter)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
@@ -132,36 +128,27 @@ def ensure_openrouter_agentic_preview_profile(
         ),
         context_policy=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.context_policy,
     )
-    stored = publish_maverick_agent_profile(
+    return MaverickAgentProfilePublication(
+        adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
+        provider_config=OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+        recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
+        profile=definition,
+        rollout_status="preview",
+        superseded_profile_revisions=OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
+    )
+
+
+def ensure_openrouter_agentic_preview_profile(
+    store: ProviderStore,
+    *,
+    adapter: object,
+    now: datetime | None = None,
+) -> AgenticProfileDefinition:
+    """Publish an uncertified Full Workspace preview without enabling a binding."""
+    timestamp = now or datetime.now(tz=UTC)
+    validate_maverick_runtime_adapter(OPENROUTER_CHAT_PROTOCOL_ADAPTER, adapter)
+    return publish_maverick_agent_profile(
         store,
-        publication=MaverickAgentProfilePublication(
-            adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-            provider_config=OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
-            recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
-            profile=definition,
-            rollout_status="preview",
-        ),
+        publication=openrouter_agentic_preview_publication(now=timestamp),
         now=timestamp,
     )
-    _suspend_previous_revisions(store, now=timestamp)
-    return stored
-
-
-def _suspend_previous_revisions(store: ProviderStore, *, now: datetime) -> None:
-    """Suspend preview definitions certified against earlier adapter bytes."""
-    for revision in OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS:
-        status = store.get_agentic_profile_definition_status(
-            OPENROUTER_AGENTIC_PROFILE_ID,
-            revision,
-        )
-        if status is None or status.rollout_status in {"disabled", "suspended"}:
-            continue
-        store.save_agentic_profile_definition_status(
-            replace(
-                status,
-                rollout_status="suspended",
-                revision=status.revision + 1,
-                updated_at=now,
-            ),
-            expected_revision=status.revision,
-        )

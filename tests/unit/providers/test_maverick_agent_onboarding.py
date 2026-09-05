@@ -31,6 +31,10 @@ from core.runtime.full_workspace_contract import (
 )
 from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 from core.runtime.hosted_provider_runtime import HostedProviderRuntime
+from core.runtime.hosted_runtime_registry_builder import (
+    build_builtin_maverick_agent_onboarding_catalog,
+    build_hosted_provider_runtime_registry,
+)
 from tests.support.collections import FakeCollection
 
 
@@ -106,6 +110,40 @@ def _publication(
 
 
 class MaverickAgentOnboardingTest(unittest.TestCase):
+    def test_production_registry_is_composed_by_the_onboarding_catalog(self) -> None:
+        catalog = build_builtin_maverick_agent_onboarding_catalog(now=NOW)
+        publications = catalog.publications()
+
+        registry = build_hosted_provider_runtime_registry(
+            onboarding_catalog=catalog,
+        )
+
+        self.assertEqual(len(publications), 2)
+        self.assertEqual(
+            {publication.profile.model_id for publication in publications},
+            {"gemini-3.6-flash", "deepseek/deepseek-v4-flash"},
+        )
+        for publication in publications:
+            with self.subTest(profile=publication.profile.definition_id):
+                runtime = registry._recipes[
+                    (publication.recipe.recipe_id, publication.recipe.revision)
+                ]
+                self.assertEqual(runtime.recipe, publication.recipe)
+
+    def test_catalog_publishes_all_registered_profiles_through_one_path(self) -> None:
+        store = _provider_store()
+        catalog = build_builtin_maverick_agent_onboarding_catalog(now=NOW)
+
+        published = catalog.publish_profiles(store, now=NOW)
+
+        self.assertEqual(
+            {(item.definition_id, item.revision) for item in published},
+            {
+                (publication.profile.definition_id, publication.profile.revision)
+                for publication in catalog.publications()
+            },
+        )
+
     def test_same_adapter_accepts_another_model_as_data_only(self) -> None:
         built: list[str] = []
 

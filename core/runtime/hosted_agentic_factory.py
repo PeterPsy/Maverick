@@ -11,6 +11,7 @@ from core.egress.agentic_transforms import canonical_egress_content
 from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import CapabilityCertificateError, ProviderError
+from core.providers.maverick_agent_onboarding import MaverickAgentOnboardingCatalog
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.runtime.authority import (
@@ -76,6 +77,7 @@ def build_hosted_agentic_engine_adapter(
     *,
     provider_registry: ProviderRegistry,
     classifier: HostedContentClassifier | None = None,
+    onboarding_catalog: MaverickAgentOnboardingCatalog | None = None,
 ) -> HostedAgenticEngineAdapter:
     """Compose the hosted loop from live Core-owned policy and storage surfaces."""
     if (
@@ -84,7 +86,9 @@ def build_hosted_agentic_engine_adapter(
         or state.agentic_egress_evaluator is None
     ):
         raise RuntimeError("Hosted agentic runtime dependencies are unavailable.")
-    provider_runtimes = build_hosted_provider_runtime_registry()
+    provider_runtimes = build_hosted_provider_runtime_registry(
+        onboarding_catalog=onboarding_catalog,
+    )
     process_registry = HostedToolProcessRegistry(store=state.runtime_store)
     adapter_holder: dict[str, HostedAgenticEngineAdapter] = {}
 

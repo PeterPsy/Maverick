@@ -83,6 +83,7 @@ class MaverickAgentProfilePublication:
     recipe: HostedHarnessRecipeManifest
     profile: AgenticProfileDefinition
     rollout_status: ProfileRolloutStatus
+    superseded_profile_revisions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -227,6 +228,40 @@ class MaverickAgentOnboardingCatalog:
             registry.register(runtime)
         return registry
 
+    def publications(self) -> tuple[MaverickAgentProfilePublication, ...]:
+        """Return immutable publications in deterministic profile order."""
+        return tuple(self._publications[key] for key in sorted(self._publications))
+
+    def validate_runtime_adapter(self, adapter: object) -> None:
+        """Validate the production engine against every registered protocol."""
+        checked: set[tuple[str, str]] = set()
+        for registration in self._runtime_adapters.values():
+            manifest = registration.manifest
+            identity = (
+                manifest.runtime_adapter_id,
+                manifest.runtime_adapter_version,
+            )
+            if identity in checked:
+                continue
+            validate_maverick_runtime_adapter(manifest, adapter)
+            checked.add(identity)
+
+    def publish_profiles(
+        self,
+        store: ProviderStore,
+        *,
+        now: datetime,
+    ) -> tuple[AgenticProfileDefinition, ...]:
+        """Publish every registered immutable profile through one bootstrap path."""
+        return tuple(
+            publish_maverick_agent_profile(
+                store,
+                publication=publication,
+                now=now,
+            )
+            for publication in self.publications()
+        )
+
 
 def publish_maverick_agent_profile(
     store: ProviderStore,
@@ -262,7 +297,32 @@ def publish_maverick_agent_profile(
             ),
             expected_revision=None,
         )
+    _suspend_superseded_profile_revisions(store, publication=publication, now=now)
     return stored
+
+
+def _suspend_superseded_profile_revisions(
+    store: ProviderStore,
+    *,
+    publication: MaverickAgentProfilePublication,
+    now: datetime,
+) -> None:
+    for revision in publication.superseded_profile_revisions:
+        status = store.get_agentic_profile_definition_status(
+            publication.profile.definition_id,
+            revision,
+        )
+        if status is None or status.rollout_status in {"disabled", "suspended"}:
+            continue
+        store.save_agentic_profile_definition_status(
+            replace(
+                status,
+                rollout_status="suspended",
+                revision=status.revision + 1,
+                updated_at=now,
+            ),
+            expected_revision=status.revision,
+        )
 
 
 def validate_maverick_runtime_adapter(
@@ -287,6 +347,12 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
     profile = publication.profile
     _validate_protocol_adapter(adapter)
     _validate_provider_config(config)
+    if profile.revision in publication.superseded_profile_revisions:
+        raise AgenticProfileError("maverick_profile_supersedes_itself")
+    if len(set(publication.superseded_profile_revisions)) != len(
+        publication.superseded_profile_revisions
+    ):
+        raise AgenticProfileError("maverick_profile_superseded_revision_duplicate")
     if (
         profile.runtime_engine_id != "maverick-tool-loop"
         or profile.adapter_id != adapter.runtime_adapter_id
@@ -309,6 +375,7 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
         != recipe.semantic_projection_compiler_revision
         or profile.tool_contract_revision != recipe.tool_contract_revision
         or profile.context_policy != recipe.context_policy
+        or recipe.endpoint_id != config.routing_constraint.endpoint_id
     ):
         raise AgenticProfileError("maverick_profile_composition_mismatch")
     _validate_maverick_family(profile, recipe, publication.rollout_status)

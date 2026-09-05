@@ -292,13 +292,6 @@ Recommended split:
 
 ### 4. Runtime orchestration
 
-The first macOS direct-provider client is described in
-`docs/architecture/mac_local_runtime.md`. It hosts a separate local Codex
-conversation and native tool executor; Ubuntu does not relay its images or
-claim ownership of its local thread as a server runtime session. Credential
-provisioning is an explicit operator-only encrypted export, not a browser or
-ordinary agent-facing secret delivery surface.
-
 The core owns the generic runtime model for agent execution.
 
 This includes:

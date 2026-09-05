@@ -140,3 +140,22 @@ protocol checks in [run 33987768597](https://github.com/giuntiocram/maverick-gla
 After the user confirmed app exit, installation succeeded and desktop launch
 was requested at 19:42:18 UTC on 2026-09-05. Notes capture remains a physical
 retest, not an outcome established by those synthetic tests.
+
+### Physical Notes read and text-input boundary (v4)
+
+The user confirmed successful Notes window reading on `fd8074f` after regranting
+both permissions to the installed app and placing both windows on the same
+desktop. Capture includes the selected window's sidebar, not just the note.
+The subsequent write attempt returned MC-TOOL-13 with a native popup observed;
+that does not establish its approval or the exact failed safety check.
+
+V4 separates confirmation/focus/AX-field/role/subrole/editability/secure-input/
+event-allocation diagnostics (MC-TOOL-15 through 22). A writable standard
+AXTextArea may omit its optional subrole; only unsupported/no-value responses
+are accepted, not AX communication failures or unidentified controls. Text input
+checks element type/PID, editable text role and secure-input state, then rechecks
+focus/session/observation before submitting the prepared keyboard-event pair.
+No field contents are read and no alternate clipboard or AX-value write path is
+introduced. Synthetic tests cover metadata policy, rejected confirmation and
+stop invalidating an eventual approval. Physical typing and stop tests remain
+pending; ad-hoc build updates can still require fresh app-specific TCC grants.

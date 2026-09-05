@@ -14,6 +14,7 @@ class NativeAcpConnection:
     def __init__(self, process):
         self.process = process
         self.session_id = None
+        self.update_generation = 0
         self.updates = asyncio.Queue(maxsize=256)
         self._pending = {}
         self._next_id = 0
@@ -103,7 +104,7 @@ class NativeAcpConnection:
                     update = params.get("update")
                     if not isinstance(update, dict):
                         raise NativeAcpError("native_acp_update_invalid")
-                    self.updates.put_nowait(update)
+                    self.updates.put_nowait((self.update_generation, update))
         except (ValueError, OSError, asyncio.QueueFull, NativeAcpError) as error:
             failure = NativeAcpError(str(error) if isinstance(error, NativeAcpError) else "native_acp_stream_invalid")
         finally:

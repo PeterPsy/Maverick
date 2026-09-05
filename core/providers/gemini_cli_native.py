@@ -9,6 +9,7 @@ from core.providers.agentic_adapter import (
     RuntimePrepareContext, RuntimePrepareResult, RuntimeProviderEvent, RuntimeRecoveryResult,
 )
 from core.providers.gemini_cli_sandbox import gemini_acp_launch_spec
+from core.providers.gemini_cli_event_projection import project_acp_update
 from core.providers.models import RuntimeSteerResult
 from core.providers.native_acp_transport import NativeAcpConnection, NativeAcpError
 
@@ -17,6 +18,7 @@ from core.providers.native_acp_transport import NativeAcpConnection, NativeAcpEr
 class _Turn:
     future: asyncio.Future
     correlation_id: str
+    generation: int
     answer: list[str] = field(default_factory=list)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -128,15 +130,20 @@ class GeminiCliNativeAdapter:
                 session=context.session, binding=context.binding, provider_state=context.provider_state,
             ))
         client = self._clients[sid]
+        client.update_generation += 1
         future = await client.begin("session/prompt", {
             "sessionId": client.session_id,
             "prompt": [{"type": "text", "text": context.input_text}],
         })
-        turn = _Turn(future, context.correlation_id)
+        turn = _Turn(future, context.correlation_id, client.update_generation)
         self._turns[sid] = turn
-        ordinal = 0
+        ordinal = 1
+        accepted = False
         queued = None
         try:
+            yield RuntimeProviderEvent("provider.request.sent", context.correlation_id, ordinal, "1",
+                                       {"provider_thread_id": client.session_id})
+            ordinal += 1
             while True:
                 async with turn.lock:
                     if turn.future.done() and client.updates.empty():
@@ -147,6 +154,8 @@ class GeminiCliNativeAdapter:
                         if not answer.strip():
                             raise NativeAcpError("agent_final_output_empty")
                         yield RuntimeProviderEvent("runtime.output.final", context.correlation_id, ordinal, "1", {"text": answer})
+                        yield RuntimeProviderEvent("provider.execution.completed", context.correlation_id, ordinal + 1, "1",
+                                                   {"output_text": answer, "exit_code": 0})
                         break
                 queued = asyncio.create_task(client.updates.get())
                 awaited = turn.future
@@ -155,8 +164,17 @@ class GeminiCliNativeAdapter:
                     queued.cancel()
                     await asyncio.gather(queued, return_exceptions=True)
                     continue
-                update = queued.result()
-                event_type, payload = _project_update(update, context.session.workspace_root)
+                generation, update = queued.result()
+                if generation != turn.generation:
+                    continue
+                if not accepted:
+                    yield RuntimeProviderEvent("provider.accepted", context.correlation_id, ordinal, "1",
+                                               {"provider_thread_id": client.session_id})
+                    ordinal += 1
+                    accepted = True
+                if generation != turn.generation:
+                    continue  # Steering may occur while the accepted event is yielded.
+                event_type, payload = project_acp_update(update, context.session.workspace_root)
                 if event_type == "runtime.output.delta":
                     turn.answer.append(payload["text"])
                 yield RuntimeProviderEvent(event_type, context.correlation_id, ordinal, "1", payload)
@@ -177,8 +195,19 @@ class GeminiCliNativeAdapter:
             if self._turns.get(context.session_id) is not turn or turn.future.done():
                 return RuntimeSteerResult(status="not_active")
             client = self._clients[context.session_id]
-            # Gemini ACP prompt() explicitly aborts the pending prompt and
-            # replaces it in the same session, retaining one terminal result.
+            # ACP updates have no prompt id. Establish the cancellation response
+            # boundary before replacement, and fence already-dequeued old chunks.
+            try:
+                await client.notify("session/cancel", {"sessionId": client.session_id})
+                await asyncio.wait_for(asyncio.shield(turn.future), 3)
+            except (OSError, TimeoutError, NativeAcpError):
+                await client.close()
+                self._clients.pop(context.session_id, None)
+                return RuntimeSteerResult(status="failed", reason="native_acp_steer_cancel_failed")
+            while not client.updates.empty():
+                client.updates.get_nowait()
+            client.update_generation += 1
+            turn.generation = client.update_generation
             turn.future = await client.begin("session/prompt", {
                 "sessionId": client.session_id, "prompt": [{"type": "text", "text": context.input_text}],
             })
@@ -214,28 +243,6 @@ class GeminiCliNativeAdapter:
         if client is not None:
             await client.close()
         return RuntimeCloseResult(closed=True, terminated_processes=int(client is not None))
-
-
-def _project_update(update, workspace_root):
-    kind = update.get("sessionUpdate")
-    if kind == "agent_message_chunk":
-        content = update.get("content", {})
-        if not isinstance(content, dict) or content.get("type") != "text" or not isinstance(content.get("text"), str):
-            raise NativeAcpError("native_acp_output_invalid")
-        return "runtime.output.delta", {"text": content["text"]}
-    if kind in {"tool_call", "tool_call_update"}:
-        locations = update.get("locations", [])
-        if not isinstance(locations, list):
-            raise NativeAcpError("native_acp_effect_invalid")
-        for location in locations:
-            if not isinstance(location, dict) or not isinstance(location.get("path"), str) or not location["path"]:
-                raise NativeAcpError("native_acp_effect_invalid")
-            path = Path(location["path"])
-            resolved = (Path(workspace_root) / path).resolve()
-            if not resolved.is_relative_to(Path(workspace_root).resolve()):
-                raise NativeAcpError("native_acp_effect_outside_workspace")
-        return "provider.lifecycle", {"phase": "native_tool_effect", "update": update}
-    return "provider.lifecycle", {"phase": "native_session_update", "update": update}
 
 
 __all__ = ["GeminiCliNativeAdapter"]

@@ -13,7 +13,9 @@ The implementation targets Gemini CLI's
 before resuming; unsupported recovery never silently creates another session.
 See [ACP session setup](https://agentclientprotocol.com/protocol/v1/session-setup).
 Gemini's ACP `prompt()` replaces the pending prompt in the same session;
-steering uses this behavior and retains one Maverick terminal result. See the
+Maverick first waits for a structured cancellation response, then starts the
+replacement with an update-generation fence. This prevents old queued chunks
+from contaminating the replacement final and retains one terminal result. See the
 [Gemini session implementation](https://github.com/google-gemini/gemini-cli/blob/main/packages/cli/src/acp/acpSession.ts).
 
 ## Containment and lifecycle
@@ -42,6 +44,13 @@ output, replacement steering, interrupt, load/resume, denied permissions,
 observed tool effects, malformed/empty/out-of-bound output, concurrent connect,
 startup interruption, and timeout cleanup of a process tree. The fixture replaces the OS sandbox
 wrapper only; it does not mock RPC calls or the engine lifecycle.
+
+The fixture also executes a successful turn and a loaded continuation through
+the real Core `execute_agentic_runtime_turn`, with explicitly synthetic test
+authority (not an installed certificate). Events start at ordinal 1 and increase
+strictly per turn. Request-sent and accepted callbacks precede output; exactly
+one nonblank final is followed by `provider.execution.completed` with exit code
+0. A final text delta alone is never treated as successful execution.
 
 This is a framework/lifecycle proof, **not live Gemini certification**. No Gemini
 CLI executable, remote credentials, provider requests, runtime-artifact approval,

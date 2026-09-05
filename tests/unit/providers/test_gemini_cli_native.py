@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import replace
+from datetime import UTC, datetime
 import json
 from pathlib import Path
 import sys
@@ -15,6 +16,10 @@ from core.providers.native_acp_transport import NativeAcpError
 from core.providers.native_agent_builtins import build_gemini_cli_candidate_installation, build_gemini_cli_candidate_definition
 from core.providers.native_agent_runtime import NativeSteerContext
 from core.providers.provider_registry import ProviderRegistry
+from core.providers.capability_models import RuntimeCapabilitySet
+from core.runtime.agentic_execution import execute_agentic_runtime_turn
+from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.execution_binding import canonical_digest
 
 
 class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
@@ -71,18 +76,92 @@ class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
     def messages(self):
         return [json.loads(line) for line in self.trace.read_text().splitlines()]
 
+    def final_text(self, events):
+        finals = [event for event in events if event.event_type == "runtime.output.final"]
+        self.assertEqual(len(finals), 1)
+        self.assertEqual([event.ordinal for event in events], list(range(1, len(events) + 1)))
+        self.assertEqual(events[-1].event_type, "provider.execution.completed")
+        self.assertEqual(events[-1].payload["exit_code"], 0)
+        return finals[0].payload["text"]
+
+    def core_authority(self):
+        # Explicit local fixture authority is not an installed Gemini certificate.
+        self.binding.execution_binding_id = "fixture-binding"
+        self.session.execution_binding = self.binding
+        authority = EffectiveRuntimeAuthority(
+            execution_binding_id="fixture-binding", turn_id="turn", certificate_id="fixture-only",
+            allowed_capabilities=RuntimeCapabilitySet(
+                streaming=True, tool_orchestration=False, cli=False, mcp=False, skill_catalog=False,
+                filesystem_list=False, filesystem_read=False, filesystem_write=False, shell=False,
+                interrupt=True, same_turn_steering=True, recovery=True, confirmation_resume=False,
+                provider_private_state=False, attachment_modalities=(),
+            ), allowed_tool_handles=(), execution_mode="sandbox",
+            egress_policy_id="fixture-only", policy_revision_set=(), health_revision="fixture",
+            authority_digest="", computed_at=datetime.now(tz=UTC),
+        )
+        return replace(authority, authority_digest=canonical_digest(authority))
+
+    async def test_successful_turn_and_resume_through_the_real_core_executor(self):
+        authority = self.core_authority()
+        for prompt in ("first", "second"):
+            events, accepted, sent, threads = [], [], [], []
+            result = await execute_agentic_runtime_turn(
+                session=self.session, provider_state=self.state, adapter=self.controller,
+                input_text=prompt, correlation_id="turn", effective_authority=authority,
+                local_launch_spec=self.spec, event_sink=events.append,
+                on_provider_accepted=accepted.append, on_provider_turn_start_sent=sent.append,
+                on_provider_thread_id=threads.append,
+            )
+            self.assertEqual(result.exit_code, 0)
+            self.assertIsNone(result.failure_reason_code)
+            self.assertEqual(result.output_text, "answer:" + prompt)
+            self.assertEqual(sum(event.event_type == "runtime.output.final" for event in events), 1)
+            self.assertEqual(len(accepted), 1)
+            self.assertEqual(len(sent), 1)
+            self.assertEqual(threads, ["fixture-session"])
+            self.state.provider_thread_id = threads[0]
+            await self.controller.close(self.context)
+        self.assertEqual(sum(m.get("method") == "session/load" for m in self.messages()), 1)
+
+    async def test_invalid_streams_never_complete_successfully_through_core(self):
+        authority = self.core_authority()
+        for prompt in ("empty", "malformed", "escape"):
+            with self.subTest(prompt=prompt):
+                prepared = await self.controller.connect(self.context)
+                events = []
+                with self.assertRaises(NativeAcpError):
+                    await execute_agentic_runtime_turn(
+                        session=self.session, provider_state=self.state, adapter=self.controller,
+                        input_text=prompt, correlation_id="turn", effective_authority=authority,
+                        local_launch_spec=self.spec, event_sink=events.append,
+                    )
+                self.assertIsNotNone(prepared.prepared_handle.process.returncode)
+                self.assertFalse(any(event.event_type == "runtime.output.final" for event in events))
+
+    async def test_steering_at_acceptance_discards_the_already_dequeued_old_chunk(self):
+        await self.controller.connect(self.context)
+        context = SimpleNamespace(session=self.session, binding=self.binding, provider_state=self.state,
+                                  input_text="hold", correlation_id="turn", timeout_seconds=3)
+        events = []
+        async for event in self.controller.execute(context):
+            events.append(event)
+            if event.event_type == "provider.accepted":
+                result = await self.controller.steer(NativeSteerContext("test", "changed"))
+                self.assertEqual(result.status, "steered")
+        self.assertEqual(self.final_text(events), "answer:changed")
+
     async def test_connect_stream_final_load_resume_and_close(self):
         prepared = await self.controller.connect(self.context)
         self.state.provider_thread_id = prepared.provider_state_updates["provider_thread_id"]
         client = prepared.prepared_handle
         events = await self.collect("first")
-        self.assertEqual(events[-1].payload["text"], "answer:first")
+        self.assertEqual(self.final_text(events), "answer:first")
         self.assertEqual(sum(e.event_type == "runtime.output.final" for e in events), 1)
         recovered = await self.controller.resume(self.context)
         self.assertTrue(recovered.recovered)
         self.assertEqual(recovered.provider_state_updates["provider_thread_id"], self.state.provider_thread_id)
         self.assertIsNotNone(client.process.returncode)
-        self.assertEqual((await self.collect("second"))[-1].payload["text"], "answer:second")
+        self.assertEqual(self.final_text(await self.collect("second")), "answer:second")
         self.assertEqual([m["method"] for m in self.messages() if m.get("method", "").startswith("session/")],
                          ["session/new", "session/prompt", "session/load", "session/prompt"])
         self.assertTrue((await self.controller.cleanup(self.context)).closed)
@@ -136,7 +215,7 @@ class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
         steered = await self.controller.steer(NativeSteerContext("test", "changed", expected_provider_turn_id="turn"))
         self.assertEqual(steered.status, "steered")
         events = await asyncio.wait_for(task, 2)
-        self.assertEqual(events[-1].payload["text"], "answer:changed")
+        self.assertEqual(self.final_text(events), "answer:changed")
         self.assertEqual(sum(e.event_type == "runtime.output.final" for e in events), 1)
 
     async def test_interrupt_reaps_the_process_and_recovery_uses_the_same_session(self):
@@ -153,7 +232,7 @@ class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
     async def test_permission_requests_are_denied_and_native_effects_are_observed(self):
         await self.controller.connect(self.context)
         events = await self.collect("permission")
-        self.assertEqual(events[-1].payload["text"], "Permission denied")
+        self.assertEqual(self.final_text(events), "Permission denied")
         effects = [e for e in events if e.payload.get("phase") == "native_tool_effect"]
         self.assertEqual(len(effects), 2)
         response = next(m for m in self.messages() if m.get("id") == "permission")

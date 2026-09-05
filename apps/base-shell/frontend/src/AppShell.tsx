@@ -119,6 +119,7 @@ export function AppShell() {
   const sidebarCloseTimerRef = useRef<number | null>(null);
   const mobileChatCloseTimerRef = useRef<number | null>(null);
   const pinnedAppIdsRef = useRef(pinnedAppIds);
+  const pinnedAppsLoadVersionRef = useRef(0);
   const pinnedAppsSaveVersionRef = useRef(0);
   const persistedPinnedAppIdsRef = useRef(pinnedAppIds);
   const persistedPinnedAppsVersionRef = useRef(0);
@@ -470,6 +471,7 @@ export function AppShell() {
 
   async function loadPinnedAppsState(loadVersion: number, signal?: AbortSignal) {
     const deferredStartedAt = performance.now();
+    const pinnedLoadVersion = ++pinnedAppsLoadVersionRef.current;
     const pinnedStateVersion = pinnedAppsSaveVersionRef.current;
     try {
       const pinnedApps = signal
@@ -478,6 +480,7 @@ export function AppShell() {
       if (
         signal?.aborted
         || shellLoadVersionRef.current !== loadVersion
+        || pinnedAppsLoadVersionRef.current !== pinnedLoadVersion
         || pinnedAppsSaveVersionRef.current !== pinnedStateVersion
       ) {
         return;
@@ -558,6 +561,8 @@ export function AppShell() {
   }, [isChatAppActive]);
 
   useEffect(() => {
+    let refreshController: AbortController | null = null;
+
     function handleAppDataChanged(event: MessageEvent) {
       if (!event.data || typeof event.data !== "object") {
         return;
@@ -574,13 +579,17 @@ export function AppShell() {
           || (payload.resource !== "pinned-apps" && payload.resource !== "state")) {
         return;
       }
-      listPinnedApps()
-        .then((pinnedApps) => applyPersistedPinnedApps(pinnedApps.pinned_apps))
-        .catch(() => applyPersistedPinnedApps(["chat"]));
+      refreshController?.abort();
+      refreshController = new AbortController();
+      // Reuse bootstrap scope/save guards and retain known pins on transport errors.
+      void loadPinnedAppsState(shellLoadVersionRef.current, refreshController.signal);
     }
 
     window.addEventListener("message", handleAppDataChanged);
-    return () => window.removeEventListener("message", handleAppDataChanged);
+    return () => {
+      refreshController?.abort();
+      window.removeEventListener("message", handleAppDataChanged);
+    };
   }, [frameScope]);
 
   useEffect(() => {

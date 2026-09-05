@@ -67,20 +67,26 @@ vi.mock("../src/components/Sidebar", () => ({
   Sidebar: ({
     isLoading,
     isWorkspacesLoading,
+    onReorderPinnedApps,
     onWorkspaceChange,
+    pinnedAppIds,
     workspaces,
   }: {
     isLoading: boolean;
     isWorkspacesLoading: boolean;
+    onReorderPinnedApps: (appIds: string[]) => Promise<void>;
     onWorkspaceChange: (workspaceId: string) => Promise<void>;
+    pinnedAppIds: string[];
     workspaces: WorkspaceItem[];
   }) => (
     <aside
       data-apps-loading={String(isLoading)}
+      data-pinned-apps={JSON.stringify(pinnedAppIds)}
       data-testid="sidebar"
       data-workspace-count={String(workspaces.length)}
       data-workspaces-loading={String(isWorkspacesLoading)}
     >
+      <button data-testid="reorder-pins" onClick={() => void onReorderPinnedApps(["mail", "crm", "chat"])} type="button" />
       <button data-testid="switch-workspace" onClick={() => void onWorkspaceChange("other")} type="button" />
     </aside>
   ),
@@ -329,6 +335,103 @@ describe("AppShell bootstrap", () => {
     expect(api.getSession).toHaveBeenCalledOnce();
     expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+  });
+
+  it("preserves loaded rail pins when an App Store refresh fails and accepts the next update", async () => {
+    const pins = ["chat", "storage", "crm", "mail"];
+    api.listPinnedApps.mockResolvedValue({ pinned_apps: pins });
+    await renderShell();
+
+    api.listPinnedApps.mockRejectedValueOnce(new Error("Backend restarting"));
+    await act(async () => dispatchPinnedAppsChanged());
+
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-pinned-apps"))
+      .toBe(JSON.stringify(pins));
+    expect(api.savePinnedApps).not.toHaveBeenCalled();
+
+    api.listPinnedApps.mockResolvedValueOnce({ pinned_apps: [...pins, "calendar"] });
+    await act(async () => dispatchPinnedAppsChanged());
+
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-pinned-apps"))
+      .toBe(JSON.stringify([...pins, "calendar"]));
+    expect(api.getSession).toHaveBeenCalledOnce();
+  });
+
+  it("does not let a delayed pin refresh replace a newer invalidation result", async () => {
+    await renderShell();
+    const oldRead = deferred<{ pinned_apps: string[] }>();
+    api.listPinnedApps.mockReturnValueOnce(oldRead.promise);
+    await act(async () => dispatchPinnedAppsChanged());
+    const oldSignal = api.listPinnedApps.mock.calls[1][0] as AbortSignal | undefined;
+
+    api.listPinnedApps.mockResolvedValueOnce({ pinned_apps: ["chat", "crm", "mail"] });
+    await act(async () => dispatchPinnedAppsChanged());
+    await act(async () => oldRead.resolve({ pinned_apps: ["chat"] }));
+
+    expect(oldSignal?.aborted).toBe(true);
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-pinned-apps"))
+      .toBe(JSON.stringify(["chat", "crm", "mail"]));
+  });
+
+  it("does not let a delayed bootstrap pin read replace an App Store update", async () => {
+    const bootstrapRead = deferred<{ pinned_apps: string[] }>();
+    api.listPinnedApps.mockReturnValueOnce(bootstrapRead.promise);
+    await renderShell();
+    api.listPinnedApps.mockResolvedValueOnce({ pinned_apps: ["chat", "storage"] });
+    await act(async () => dispatchPinnedAppsChanged());
+    await act(async () => bootstrapRead.resolve({ pinned_apps: ["chat"] }));
+
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-pinned-apps"))
+      .toBe(JSON.stringify(["chat", "storage"]));
+  });
+
+  it("does not overwrite an optimistic reorder or its rollback pins with an older read", async () => {
+    const pins = ["chat", "crm", "mail"];
+    api.listPinnedApps.mockResolvedValue({ pinned_apps: pins });
+    await renderShell();
+    const oldRead = deferred<{ pinned_apps: string[] }>();
+    const save = deferred<{ pinned_apps: string[] }>();
+    api.listPinnedApps.mockReturnValueOnce(oldRead.promise);
+    api.savePinnedApps.mockReturnValueOnce(save.promise);
+    await act(async () => dispatchPinnedAppsChanged());
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='reorder-pins']")?.click());
+    await act(async () => oldRead.resolve({ pinned_apps: ["chat"] }));
+
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-pinned-apps"))
+      .toBe(JSON.stringify(["mail", "crm", "chat"]));
+    await act(async () => save.reject(new Error("Save failed")));
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-pinned-apps"))
+      .toBe(JSON.stringify(pins));
+  });
+
+  it("discards and aborts a pending pin refresh when the workspace changes", async () => {
+    await renderShell();
+    const oldRead = deferred<{ pinned_apps: string[] }>();
+    api.listPinnedApps.mockReturnValueOnce(oldRead.promise);
+    await act(async () => dispatchPinnedAppsChanged());
+    const oldSignal = api.listPinnedApps.mock.calls[1][0] as AbortSignal | undefined;
+
+    api.getSession.mockResolvedValue(sessionPayload("other"));
+    api.listPinnedApps.mockResolvedValue({ pinned_apps: ["chat", "calendar"] });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[data-testid='switch-workspace']")?.click();
+    });
+    await act(async () => oldRead.resolve({ pinned_apps: ["chat", "crm", "mail"] }));
+
+    expect(oldSignal?.aborted).toBe(true);
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-pinned-apps"))
+      .toBe(JSON.stringify(["chat", "calendar"]));
+  });
+
+  it.each([401, 403])("revokes the shell instead of retaining rail pins after refresh HTTP %i", async (status) => {
+    await renderShell();
+    api.listPinnedApps.mockRejectedValueOnce(
+      new MaverickHttpError("/api/apps/app-store/backend", new Response(null, { status })),
+    );
+    await act(async () => dispatchPinnedAppsChanged());
+
+    expect(container.querySelector("[data-testid='sidebar']")).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
   });
 
   it("ends mounted shell loading when workspace reload returns an authorization response", async () => {
@@ -580,6 +683,14 @@ function jsonResponse(value: unknown): Response {
 function dispatchShellLogout() {
   window.dispatchEvent(new MessageEvent("message", {
     data: { type: "maverick.shell.logout" },
+    origin: window.location.origin,
+    source: window,
+  }));
+}
+
+function dispatchPinnedAppsChanged() {
+  window.dispatchEvent(new MessageEvent("message", {
+    data: { type: "maverick.app.data-changed", owner_app_id: "app-store", resource: "pinned-apps" },
     origin: window.location.origin,
     source: window,
   }));

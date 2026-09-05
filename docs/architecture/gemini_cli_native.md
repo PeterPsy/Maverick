@@ -36,6 +36,32 @@ from contaminating the replacement final and retains one terminal result. See th
   of a late connection and reaps an unfinished handshake. A second turn cannot
   enter during connection setup. Steering and terminal publication are serialized.
 
+## Event-loop ownership at Core entrypoints
+
+The synchronous Core bridge intentionally runs short-lived caller loops. Gemini
+does not attach a persistent ACP connection to those loops. Each active session
+has one supervised `NativeAcpRuntime` thread/loop; its `GeminiAcpSession` owns
+the process, reader, pending RPC futures, queues, and locks on that loop only.
+Preparation, consecutive turns, steering, interrupt and recovery marshal onto
+that owner from either synchronous workers or asynchronous callers. Registration
+and health checks do not start a session worker, and prepared handles are opaque
+outside the adapter.
+
+Streaming uses a bounded, pull-driven handoff. One task advances the generator
+for the whole turn, and the next event is not requested until the consumer resumes.
+This preserves task-local timeout scopes and the steering fence at yielded events,
+without moving asyncio queues or futures between loops. Core and the native
+controller explicitly close owned event iterators on consumer failure/cancellation;
+cleanup cannot be deferred to caller-loop shutdown or generator garbage collection.
+
+Close/interrupt fence new operations, reap the process group, cancel and drain
+pending tasks/generators, close the owner loop and join its thread before returning.
+Cleanup is idempotent and remains fenced even if the cleanup caller is cancelled
+repeatedly. Other sessions retain their independent loops. Only the provider
+session id survives retirement, so subsequent recovery loads the same session on
+a fresh owner rather than reusing dead asyncio objects or silently creating a
+different upstream conversation.
+
 ## Proof boundary and NO-GO
 
 `tests/unit/providers/test_gemini_cli_native.py` runs an actual local ACP fixture
@@ -51,6 +77,15 @@ authority (not an installed certificate). Events start at ordinal 1 and increase
 strictly per turn. Request-sent and accepted callbacks precede output; exactly
 one nonblank final is followed by `provider.execution.completed` with exit code
 0. A final text delta alone is never treated as successful execution.
+
+`test_gemini_cli_sync_runtime.py` additionally crosses the real synchronous
+`prepare_agentic_runtime`, `execute_runtime_turn`, `cancel_agentic_runtime` and
+`close_agentic_runtime` boundaries on the same controller. It verifies two turns
+without reconnecting, explicit preparation, interrupt during preparation and an
+active turn, recovery/load, steering, idle/active cleanup, and a failing Core
+consumer callback. Both a caller with no loop and one already running a loop are
+covered. Process reaping, reader completion, owner-loop closure and joined worker
+threads are asserted, not inferred from a successful adapter return alone.
 
 This is a framework/lifecycle proof, **not live Gemini certification**. No Gemini
 CLI executable, remote credentials, provider requests, runtime-artifact approval,

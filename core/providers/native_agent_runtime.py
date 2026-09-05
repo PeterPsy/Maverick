@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
 
+from core.providers.agentic_event_stream import closing_runtime_events
 from core.providers.agentic_adapter import (
     AgenticRuntimeEngineAdapter,
     LocalLaunchContext,
@@ -112,20 +113,22 @@ class NativeAgentRuntimeController:
         context: RuntimeTurnContext,
     ) -> AsyncIterator[RuntimeProviderEvent]:
         final_count = 0
-        async for event in self.start_turn(context):
-            if event.event_type == "runtime.output.final":
-                final_count += 1
-                self.final_output((event,))
-                if final_count > 1:
-                    raise RuntimeError("native_agent_final_output_invalid")
-            yield event
+        async with closing_runtime_events(self.start_turn(context)) as events:
+            async for event in events:
+                if event.event_type == "runtime.output.final":
+                    final_count += 1
+                    self.final_output((event,))
+                    if final_count > 1:
+                        raise RuntimeError("native_agent_final_output_invalid")
+                yield event
 
     async def stream_events(
         self,
         context: RuntimeTurnContext,
     ) -> AsyncIterator[RuntimeProviderEvent]:
-        async for event in self.start_turn(context):
-            yield event
+        async with closing_runtime_events(self.start_turn(context)) as events:
+            async for event in events:
+                yield event
 
     @staticmethod
     def final_output(events: Iterable[RuntimeProviderEvent]) -> RuntimeProviderEvent:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Callable
 
+from core.providers.agentic_event_stream import closing_runtime_events
 from core.providers.agentic_adapter import (
     AgenticRuntimeEngineAdapter,
     RuntimePrepareContext,
@@ -147,84 +148,85 @@ async def execute_agentic_runtime_turn(
     exit_code: int | None = None
     failure_reason_code: str | None = None
     last_ordinal = 0
-    async for event in adapter.execute(context):
-        _validate_event(event, correlation_id=correlation_id, last_ordinal=last_ordinal)
-        last_ordinal = event.ordinal
-        if event.event_type == "provider.state.update":
-            _apply_provider_state_update(
-                event.payload,
-                on_provider_thread_id,
-                on_provider_state_update,
-            )
-            continue
-        if event.event_type == "provider.accepted":
-            upstream_id = str(
-                event.payload.get("upstream_id")
-                or event.payload.get("provider_upstream_id")
-                or ""
-            ).strip()
-            if upstream_id and on_provider_upstream_observed is not None:
-                on_provider_upstream_observed(upstream_id)
-            if on_provider_accepted is not None:
-                on_provider_accepted(event.payload)
-            continue
-        if event.event_type == "provider.request.sent":
-            if on_provider_turn_start_sent is not None:
-                on_provider_turn_start_sent(event.payload)
-            continue
-        if event.event_type == "provider.lifecycle":
-            phase = str(event.payload.get("phase") or "").strip()
-            if phase and on_provider_startup_event is not None:
-                on_provider_startup_event(
-                    phase,
-                    {key: value for key, value in event.payload.items() if key != "phase"},
+    async with closing_runtime_events(adapter.execute(context)) as events:
+        async for event in events:
+            _validate_event(event, correlation_id=correlation_id, last_ordinal=last_ordinal)
+            last_ordinal = event.ordinal
+            if event.event_type == "provider.state.update":
+                _apply_provider_state_update(
+                    event.payload,
+                    on_provider_thread_id,
+                    on_provider_state_update,
                 )
-            continue
-        if event.event_type == "provider.execution.completed":
-            output_text = str(event.payload.get("output_text") or output_text)
-            exit_code = int(event.payload.get("exit_code") or 0)
-            if exit_code != 0:
+                continue
+            if event.event_type == "provider.accepted":
+                upstream_id = str(
+                    event.payload.get("upstream_id")
+                    or event.payload.get("provider_upstream_id")
+                    or ""
+                ).strip()
+                if upstream_id and on_provider_upstream_observed is not None:
+                    on_provider_upstream_observed(upstream_id)
+                if on_provider_accepted is not None:
+                    on_provider_accepted(event.payload)
+                continue
+            if event.event_type == "provider.request.sent":
+                if on_provider_turn_start_sent is not None:
+                    on_provider_turn_start_sent(event.payload)
+                continue
+            if event.event_type == "provider.lifecycle":
+                phase = str(event.payload.get("phase") or "").strip()
+                if phase and on_provider_startup_event is not None:
+                    on_provider_startup_event(
+                        phase,
+                        {key: value for key, value in event.payload.items() if key != "phase"},
+                    )
+                continue
+            if event.event_type == "provider.execution.completed":
+                output_text = str(event.payload.get("output_text") or output_text)
+                exit_code = int(event.payload.get("exit_code") or 0)
+                if exit_code != 0:
+                    failure_reason_code = normalized_failure_reason_code(
+                        event.payload.get("reason_code") or failure_reason_code,
+                        fallback="provider_execution_failed",
+                    )
+                delivery_id = event.payload.get("delivery_id")
+                if (
+                    event_sink is not None
+                    and isinstance(delivery_id, str)
+                    and 0 < len(delivery_id) <= 128
+                ):
+                    event_sink(
+                        RuntimeExecutionEvent(
+                            event_type=event.event_type,
+                            payload=dict(event.payload),
+                        )
+                    )
+                continue
+            if event.event_type == "runtime.output.final":
+                output_text = str(event.payload.get("text") or output_text)
+            elif event.event_type == "runtime.output.delta":
+                delta_output += str(event.payload.get("text") or "")
+            elif event.event_type == "runtime.error":
+                exit_code = 1
                 failure_reason_code = normalized_failure_reason_code(
-                    event.payload.get("reason_code") or failure_reason_code,
+                    event.payload.get("reason_code"),
                     fallback="provider_execution_failed",
                 )
-            delivery_id = event.payload.get("delivery_id")
-            if (
-                event_sink is not None
-                and isinstance(delivery_id, str)
-                and 0 < len(delivery_id) <= 128
-            ):
-                event_sink(
-                    RuntimeExecutionEvent(
-                        event_type=event.event_type,
-                        payload=dict(event.payload),
+            if event_sink is not None:
+                public_payload = dict(event.payload)
+                if event.event_type == "provider.usage":
+                    public_payload.update(
+                        {
+                            "provider_id": binding.model_provider_id,
+                            "model_id": binding.model_id,
+                            "source": "hosted_agentic",
+                            "semantics": "incremental",
+                            "token_accuracy": "exact",
+                            "context_accuracy": "estimated",
+                        }
                     )
-                )
-            continue
-        if event.event_type == "runtime.output.final":
-            output_text = str(event.payload.get("text") or output_text)
-        elif event.event_type == "runtime.output.delta":
-            delta_output += str(event.payload.get("text") or "")
-        elif event.event_type == "runtime.error":
-            exit_code = 1
-            failure_reason_code = normalized_failure_reason_code(
-                event.payload.get("reason_code"),
-                fallback="provider_execution_failed",
-            )
-        if event_sink is not None:
-            public_payload = dict(event.payload)
-            if event.event_type == "provider.usage":
-                public_payload.update(
-                    {
-                        "provider_id": binding.model_provider_id,
-                        "model_id": binding.model_id,
-                        "source": "hosted_agentic",
-                        "semantics": "incremental",
-                        "token_accuracy": "exact",
-                        "context_accuracy": "estimated",
-                    }
-                )
-            event_sink(RuntimeExecutionEvent(event_type=event.event_type, payload=public_payload))
+                event_sink(RuntimeExecutionEvent(event_type=event.event_type, payload=public_payload))
     final_output = output_text or delta_output
     final_exit_code = exit_code if exit_code is not None else 1
     if final_exit_code == 0 and not final_output.strip():

@@ -2,63 +2,22 @@
 
 import asyncio
 from dataclasses import replace
-from datetime import UTC, datetime
-import json
 from pathlib import Path
-import sys
-import tempfile
+from threading import Event
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from core.providers.gemini_cli_native import GeminiCliNativeAdapter
 from core.providers.native_acp_transport import NativeAcpError
-from core.providers.native_agent_builtins import build_gemini_cli_candidate_installation, build_gemini_cli_candidate_definition
+from core.providers.gemini_cli_session import GeminiAcpSession
 from core.providers.native_agent_runtime import NativeSteerContext
-from core.providers.provider_registry import ProviderRegistry
-from core.providers.capability_models import RuntimeCapabilitySet
 from core.runtime.agentic_execution import execute_agentic_runtime_turn
-from core.runtime.authority import EffectiveRuntimeAuthority
-from core.runtime.execution_binding import canonical_digest
+from tests.unit.providers.gemini_cli_fixture import GeminiCliFixture
 
 
-class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
+class GeminiCliNativeTest(GeminiCliFixture, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        self.root = Path(folder.name)
-        workspace = self.root / "workspace"
-        workspace.mkdir()
-        self.trace = self.root / "trace.jsonl"
-        command = self.root / "gemini-fixture"
-        fixture = Path(__file__).resolve().parents[2] / "fixtures/native_acp_peer.py"
-        command.write_text(f"#!{sys.executable}\n" + fixture.read_text())
-        command.chmod(0o755)
-        self.engine = GeminiCliNativeAdapter(command=str(command))
-        registry = ProviderRegistry()
-        registry.register_native_agent_installation(
-            build_gemini_cli_candidate_installation(), definition=build_gemini_cli_candidate_definition(),
-            engine_adapter=self.engine,
-        )
-        self.controller = registry.get_native_agent_controller("gemini-cli")
-        self.assertIsNone(self.controller.legacy_adapter)
-        self.session = SimpleNamespace(
-            session_id="test", workspace_root=str(workspace), workdir=str(workspace),
-            runtime_root=str(self.root / "runtime"), effective_mode="sandbox",
-        )
-        self.binding = SimpleNamespace(model_id="gemini-fixture", credential_binding_id=None, model_revision_policy="provider_alias")
-        self.state = SimpleNamespace(provider_thread_id=None)
-        # The fixture process replaces only the OS sandbox wrapper. Production
-        # launch still uses the real, fail-closed workspace sandbox builder.
-        with patch("core.providers.gemini_cli_sandbox.build_bwrap_command", side_effect=lambda **kwargs: kwargs["command"]) as sandbox:
-            spec = await self.controller.launch(SimpleNamespace(session=self.session, binding=self.binding, secret_env={}))
-            self.assertEqual(sandbox.call_args.kwargs["workspace_root"], workspace)
-        self.spec = replace(spec, env_overrides={**spec.env_overrides, "ACP_FIXTURE_TRACE": str(self.trace)})
-        self.context = SimpleNamespace(session=self.session, binding=self.binding, provider_state=self.state,
-                                       local_launch_spec=self.spec)
-        self.launch_patch = patch.object(self.engine, "build_launch_spec", return_value=self.spec)
-        self.launch_patch.start()
-        self.addCleanup(self.launch_patch.stop)
+        await self.setup_fixture()
 
     async def asyncTearDown(self):
         await self.controller.close(self.context)
@@ -73,9 +32,6 @@ class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
                 started.set()
         return events
 
-    def messages(self):
-        return [json.loads(line) for line in self.trace.read_text().splitlines()]
-
     def final_text(self, events):
         finals = [event for event in events if event.event_type == "runtime.output.final"]
         self.assertEqual(len(finals), 1)
@@ -83,23 +39,6 @@ class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events[-1].event_type, "provider.execution.completed")
         self.assertEqual(events[-1].payload["exit_code"], 0)
         return finals[0].payload["text"]
-
-    def core_authority(self):
-        # Explicit local fixture authority is not an installed Gemini certificate.
-        self.binding.execution_binding_id = "fixture-binding"
-        self.session.execution_binding = self.binding
-        authority = EffectiveRuntimeAuthority(
-            execution_binding_id="fixture-binding", turn_id="turn", certificate_id="fixture-only",
-            allowed_capabilities=RuntimeCapabilitySet(
-                streaming=True, tool_orchestration=False, cli=False, mcp=False, skill_catalog=False,
-                filesystem_list=False, filesystem_read=False, filesystem_write=False, shell=False,
-                interrupt=True, same_turn_steering=True, recovery=True, confirmation_resume=False,
-                provider_private_state=False, attachment_modalities=(),
-            ), allowed_tool_handles=(), execution_mode="sandbox",
-            egress_policy_id="fixture-only", policy_revision_set=(), health_revision="fixture",
-            authority_digest="", computed_at=datetime.now(tz=UTC),
-        )
-        return replace(authority, authority_digest=canonical_digest(authority))
 
     async def test_successful_turn_and_resume_through_the_real_core_executor(self):
         authority = self.core_authority()
@@ -181,28 +120,31 @@ class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
         async with asyncio.timeout(2):
             while not self.trace.exists():
                 await asyncio.sleep(0.01)
-        client = self.engine._connecting["test"]
+        owner = self.engine._owners["test"]
+        client = owner.engine.connecting
         result = await self.controller.interrupt(self.context)
         await asyncio.wait_for(asyncio.gather(connecting, return_exceptions=True), 2)
         self.assertTrue(result.cancelled)
         self.assertIsNotNone(client.process.returncode)
-        self.assertNotIn("test", self.engine._clients)
+        self.assertNotIn("test", self.engine._owners)
+        self.assertFalse(owner.thread.is_alive())
 
     async def test_a_second_turn_cannot_enter_while_the_first_is_connecting(self):
-        entered, release = asyncio.Event(), asyncio.Event()
-        prepare = self.engine.prepare
+        entered, release = Event(), Event()
+        prepare = GeminiAcpSession.prepare
 
-        async def delayed_prepare(context):
+        async def delayed_prepare(engine, context):
             entered.set()
-            await release.wait()
-            return await prepare(context)
+            await asyncio.to_thread(release.wait, 3)
+            return await prepare(engine, context)
 
-        with patch.object(self.engine, "prepare", side_effect=delayed_prepare):
+        with patch.object(GeminiAcpSession, "prepare", delayed_prepare):
             first = asyncio.create_task(self.collect("first"))
-            await asyncio.wait_for(entered.wait(), 2)
             try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 2))
                 with self.assertRaisesRegex(NativeAcpError, "turn_already_active"):
                     await asyncio.wait_for(self.collect("second"), 0.2)
+                self.assertFalse(first.done())
             finally:
                 release.set()
                 await asyncio.wait_for(first, 2)
@@ -228,6 +170,67 @@ class GeminiCliNativeTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.gather(task, return_exceptions=True)
         self.assertIsNotNone(prepared.prepared_handle.process.returncode)
         self.assertTrue((await self.controller.recover(self.context)).recovered)
+
+    async def test_cancelled_caller_drains_its_session_worker_before_returning(self):
+        prepared = await self.controller.connect(self.context)
+        owner = self.engine._owners["test"]
+        started = asyncio.Event()
+        task = asyncio.create_task(self.collect("hold", started=started))
+        await asyncio.wait_for(started.wait(), 2)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        self.assertIsNotNone(prepared.prepared_handle.process.returncode)
+        self.assertFalse(owner.thread.is_alive())
+        self.assertTrue(owner.loop.is_closed())
+        self.assertEqual(self.engine._owners, {})
+
+    async def test_repeated_close_cancellation_keeps_the_session_fenced_until_join(self):
+        prepared = await self.controller.connect(self.context)
+        owner = self.engine._owners["test"]
+        entered, release = Event(), Event()
+        close = owner.engine.close
+
+        async def delayed_close(context):
+            entered.set()
+            await asyncio.to_thread(release.wait, 3)
+            return await close(context)
+
+        with patch.object(owner.engine, "close", delayed_close):
+            closing = asyncio.create_task(self.controller.close(self.context))
+            try:
+                self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+                for _ in range(2):
+                    closing.cancel()
+                    await asyncio.sleep(0)
+                self.assertFalse(closing.done())
+                self.assertIs(self.engine._owners["test"], owner)
+                with self.assertRaisesRegex(NativeAcpError, "session_closing"):
+                    await self.controller.connect(self.context)
+            finally:
+                release.set()
+                with self.assertRaises(asyncio.CancelledError):
+                    await closing
+        self.assertIsNotNone(prepared.prepared_handle.process.returncode)
+        self.assertFalse(owner.thread.is_alive())
+        self.assertTrue(owner.loop.is_closed())
+
+    async def test_closing_one_session_does_not_cancel_another_sessions_loop(self):
+        first = await self.controller.connect(self.context)
+        other_session = SimpleNamespace(**{**vars(self.session), "session_id": "other"})
+        other_context = SimpleNamespace(**{**vars(self.context), "session": other_session})
+        second = await self.controller.connect(other_context)
+        second_owner = self.engine._owners["other"]
+        try:
+            await self.controller.close(self.context)
+            self.assertIsNotNone(first.prepared_handle.process.returncode)
+            self.assertIsNone(second.prepared_handle.process.returncode)
+            self.assertTrue(second_owner.thread.is_alive())
+            turn = SimpleNamespace(**vars(other_context), input_text="other", correlation_id="turn", timeout_seconds=3)
+            self.assertEqual(self.final_text([e async for e in self.controller.execute(turn)]), "answer:other")
+        finally:
+            await self.controller.close(other_context)
+        self.assertFalse(second_owner.thread.is_alive())
 
     async def test_permission_requests_are_denied_and_native_effects_are_observed(self):
         await self.controller.connect(self.context)

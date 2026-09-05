@@ -1,26 +1,16 @@
-"""Executable Gemini CLI ACP lifecycle; candidate, not release authority."""
+"""Gemini's disabled Native candidate, with session-owned ACP loop lifetimes."""
 
 import asyncio
-from dataclasses import dataclass, field
+from contextlib import aclosing
 from pathlib import Path
+from threading import Lock
 
-from core.providers.agentic_adapter import (
-    LocalLaunchContext, RuntimeCancelResult, RuntimeCloseResult, RuntimeHealth,
-    RuntimePrepareContext, RuntimePrepareResult, RuntimeProviderEvent, RuntimeRecoveryResult,
-)
+from core.providers.agentic_adapter import RuntimeCancelResult, RuntimeCloseResult, RuntimeHealth
 from core.providers.gemini_cli_sandbox import gemini_acp_launch_spec
-from core.providers.gemini_cli_event_projection import project_acp_update
+from core.providers.gemini_cli_session import GeminiAcpSession
 from core.providers.models import RuntimeSteerResult
-from core.providers.native_acp_transport import NativeAcpConnection, NativeAcpError
-
-
-@dataclass
-class _Turn:
-    future: asyncio.Future
-    correlation_id: str
-    generation: int
-    answer: list[str] = field(default_factory=list)
-    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+from core.providers.native_acp_runtime import NativeAcpRuntime
+from core.providers.native_acp_transport import NativeAcpError
 
 
 class GeminiCliNativeAdapter:
@@ -34,13 +24,9 @@ class GeminiCliNativeAdapter:
         self.dependency_roots = tuple(dependency_roots) if dependency_roots is not None else tuple(
             Path(path) for path in ("/usr/bin", "/usr/lib", "/lib", "/lib64", "/usr/local/lib/node_modules")
         )
-        self._clients = {}
+        self._owners = {}
         self._session_ids = {}
-        self._turns = {}
-        self._executing = set()
-        self._prepare_locks = {}
-        self._connecting = {}
-        self._generation = {}
+        self._lock = Lock()
 
     async def build_launch_spec(self, context):
         return gemini_acp_launch_spec(context, command=self.command, dependency_roots=self.dependency_roots)
@@ -54,195 +40,82 @@ class GeminiCliNativeAdapter:
         status = await asyncio.to_thread(CommandNativeRuntimeInspector(self.command).inspect)
         return RuntimeHealth(status=status.health, reason_codes=status.reason_codes)
 
-    async def prepare(self, context):
-        lock = self._prepare_locks.setdefault(context.session.session_id, asyncio.Lock())
-        async with lock:
-            return await self._connect(context)
+    def _owner(self, session_id, *, create=True):
+        with self._lock:
+            owner = self._owners.get(session_id)
+            if owner is None and create:
+                engine = GeminiAcpSession(self.build_launch_spec, provider_thread_id=self._session_ids.get(session_id))
+                owner = self._owners[session_id] = NativeAcpRuntime(session_id, engine)
+            if owner is not None and owner.closing:
+                raise NativeAcpError("native_acp_session_closing")
+            return owner
 
-    async def _connect(self, context):
+    async def _retire(self, context, owner, *, interrupt=False):
         sid = context.session.session_id
-        if sid in self._clients:
-            client = self._clients[sid]
-            if client.process.returncode is None and not client._reader.done():
-                return RuntimePrepareResult(ready=True, prepared_handle=client)
-            await self.close(context)
-        spec = context.local_launch_spec or await self.build_launch_spec(LocalLaunchContext(
-            session=context.session, binding=context.binding,
-        ))
-        generation = self._generation.get(sid, 0)
-        client = await NativeAcpConnection.start(spec)
+        operation = owner.engine.cancel if interrupt else owner.engine.close
         try:
-            if self._generation.get(sid, 0) != generation:
-                raise NativeAcpError("native_acp_start_cancelled")
-            self._connecting[sid] = client
-            initialized = await client.request("initialize", {
-                "protocolVersion": 1, "clientInfo": {"name": "maverick", "version": "1"},
-                "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False},
-            })
-            if not isinstance(initialized, dict) or initialized.get("protocolVersion") != 1:
-                raise NativeAcpError("native_acp_protocol_mismatch")
-            params = {"cwd": context.session.workdir, "mcpServers": []}
-            previous = getattr(context.provider_state, "provider_thread_id", None) or self._session_ids.get(sid)
-            if previous:
-                if not initialized.get("agentCapabilities", {}).get("loadSession"):
-                    raise NativeAcpError("native_acp_resume_unsupported")
-                client.session_id = previous
-                await client.request("session/load", {**params, "sessionId": previous})
-            else:
-                created = await client.request("session/new", params)
-                client.session_id = created.get("sessionId") if isinstance(created, dict) else None
-                if not isinstance(client.session_id, str) or not client.session_id:
-                    raise NativeAcpError("native_acp_session_invalid")
-            while not client.updates.empty():
-                client.updates.get_nowait()  # Load replay is not a new turn's output.
-            if self._generation.get(sid, 0) != generation:
-                raise NativeAcpError("native_acp_start_cancelled")
-            self._clients[sid] = client
-            self._session_ids[sid] = client.session_id
-            return RuntimePrepareResult(ready=True, prepared_handle=client, provider_state_updates={
-                "provider_thread_id": client.session_id, "continuation_id": client.session_id,
-            })
-        except BaseException:
-            await client.close()
-            raise
+            return await owner.shutdown(operation(context))
         finally:
-            self._connecting.pop(sid, None)
+            with self._lock:
+                if self._owners.get(sid) is owner:
+                    if owner.engine.provider_thread_id is not None:
+                        self._session_ids[sid] = owner.engine.provider_thread_id
+                    self._owners.pop(sid)
+
+    async def prepare(self, context):
+        owner = self._owner(context.session.session_id)
+        try:
+            return await owner.call(owner.engine.prepare(context))
+        except BaseException:
+            await self._retire(context, owner)
+            raise
 
     async def execute(self, context):
-        sid = context.session.session_id
-        if sid in self._executing:
-            raise NativeAcpError("native_acp_turn_already_active")
-        self._executing.add(sid)
+        owner = self._owner(context.session.session_id)
         try:
-            async with asyncio.timeout(context.timeout_seconds or 120):
-                async for event in self._execute_turn(context):
+            async with aclosing(owner.stream(owner.engine.execute(context))) as events:
+                async for event in events:
                     yield event
-        except BaseException:
-            await self.close(context)
+        except BaseException as error:
+            if isinstance(error, NativeAcpError) and str(error) == "native_acp_turn_already_active":
+                raise  # A rejected competitor must not terminate the active turn.
+            await self._retire(context, owner)
             raise
-        finally:
-            self._executing.discard(sid)
-
-    async def _execute_turn(self, context):
-        sid = context.session.session_id
-        if sid not in self._clients:
-            await self.prepare(RuntimePrepareContext(
-                session=context.session, binding=context.binding, provider_state=context.provider_state,
-            ))
-        client = self._clients[sid]
-        client.update_generation += 1
-        future = await client.begin("session/prompt", {
-            "sessionId": client.session_id,
-            "prompt": [{"type": "text", "text": context.input_text}],
-        })
-        turn = _Turn(future, context.correlation_id, client.update_generation)
-        self._turns[sid] = turn
-        ordinal = 1
-        accepted = False
-        queued = None
-        try:
-            yield RuntimeProviderEvent("provider.request.sent", context.correlation_id, ordinal, "1",
-                                       {"provider_thread_id": client.session_id})
-            ordinal += 1
-            while True:
-                async with turn.lock:
-                    if turn.future.done() and client.updates.empty():
-                        result = turn.future.result()
-                        if not isinstance(result, dict) or result.get("stopReason") != "end_turn":
-                            raise NativeAcpError("native_acp_turn_not_completed")
-                        answer = "".join(turn.answer)
-                        if not answer.strip():
-                            raise NativeAcpError("agent_final_output_empty")
-                        yield RuntimeProviderEvent("runtime.output.final", context.correlation_id, ordinal, "1", {"text": answer})
-                        yield RuntimeProviderEvent("provider.execution.completed", context.correlation_id, ordinal + 1, "1",
-                                                   {"output_text": answer, "exit_code": 0})
-                        break
-                queued = asyncio.create_task(client.updates.get())
-                awaited = turn.future
-                done, _pending = await asyncio.wait((queued, awaited), return_when=asyncio.FIRST_COMPLETED)
-                if queued not in done:
-                    queued.cancel()
-                    await asyncio.gather(queued, return_exceptions=True)
-                    continue
-                generation, update = queued.result()
-                if generation != turn.generation:
-                    continue
-                if not accepted:
-                    yield RuntimeProviderEvent("provider.accepted", context.correlation_id, ordinal, "1",
-                                               {"provider_thread_id": client.session_id})
-                    ordinal += 1
-                    accepted = True
-                if generation != turn.generation:
-                    continue  # Steering may occur while the accepted event is yielded.
-                event_type, payload = project_acp_update(update, context.session.workspace_root)
-                if event_type == "runtime.output.delta":
-                    turn.answer.append(payload["text"])
-                yield RuntimeProviderEvent(event_type, context.correlation_id, ordinal, "1", payload)
-                ordinal += 1
-        finally:
-            if queued is not None and not queued.done():
-                queued.cancel()
-                await asyncio.gather(queued, return_exceptions=True)
-            self._turns.pop(sid, None)
 
     async def steer(self, context):
-        turn = self._turns.get(context.session_id)
-        if turn is None:
+        owner = self._owner(context.session_id, create=False)
+        if owner is None:
             return RuntimeSteerResult(status="not_active")
-        if context.expected_provider_turn_id not in {None, turn.correlation_id}:
-            return RuntimeSteerResult(status="failed", reason="native_acp_stale_turn")
-        async with turn.lock:
-            if self._turns.get(context.session_id) is not turn or turn.future.done():
-                return RuntimeSteerResult(status="not_active")
-            client = self._clients[context.session_id]
-            # ACP updates have no prompt id. Establish the cancellation response
-            # boundary before replacement, and fence already-dequeued old chunks.
-            try:
-                await client.notify("session/cancel", {"sessionId": client.session_id})
-                await asyncio.wait_for(asyncio.shield(turn.future), 3)
-            except (OSError, TimeoutError, NativeAcpError):
-                await client.close()
-                self._clients.pop(context.session_id, None)
-                return RuntimeSteerResult(status="failed", reason="native_acp_steer_cancel_failed")
-            while not client.updates.empty():
-                client.updates.get_nowait()
-            client.update_generation += 1
-            turn.generation = client.update_generation
-            turn.future = await client.begin("session/prompt", {
-                "sessionId": client.session_id, "prompt": [{"type": "text", "text": context.input_text}],
-            })
-            turn.answer.clear()
-            return RuntimeSteerResult(status="steered", provider_turn_id=turn.correlation_id)
+        return await owner.call(owner.engine.steer(context))
 
     async def cancel(self, context):
-        sid = context.session.session_id
-        client = self._clients.get(sid) or self._connecting.get(sid)
-        preparing = self._prepare_locks.get(sid)
-        active = client is not None or (preparing is not None and preparing.locked())
-        try:
-            if client is not None and client.session_id is not None:
-                await client.notify("session/cancel", {"sessionId": client.session_id})
-        except (OSError, TimeoutError):
-            pass  # A broken or blocked protocol cannot prevent hard cleanup.
-        finally:
-            await self.close(context)
-        return RuntimeCancelResult(cancelled=active, reason_code="cancelled" if active else "not_active")
+        with self._lock:
+            owner = self._owners.get(context.session.session_id)
+        if owner is None:
+            return RuntimeCancelResult(cancelled=False, reason_code="not_active")
+        result = await self._retire(context, owner, interrupt=True)
+        if isinstance(result, RuntimeCancelResult):
+            return result
+        return RuntimeCancelResult(cancelled=True, reason_code="cancelled")
 
     async def recover(self, context):
         await self.close(context)
-        prepared = await self.prepare(RuntimePrepareContext(
-            session=context.session, binding=context.binding, provider_state=context.provider_state,
-        ))
-        return RuntimeRecoveryResult(recovered=prepared.ready, reason_code="recovered",
-                                     provider_state_updates=prepared.provider_state_updates)
+        owner = self._owner(context.session.session_id)
+        try:
+            return await owner.call(owner.engine.recover(context))
+        except BaseException:
+            await self._retire(context, owner)
+            raise
 
     async def close(self, context):
-        sid = context.session.session_id
-        self._generation[sid] = self._generation.get(sid, 0) + 1
-        client = self._clients.pop(sid, None) or self._connecting.pop(sid, None)
-        if client is not None:
-            await client.close()
-        return RuntimeCloseResult(closed=True, terminated_processes=int(client is not None))
+        with self._lock:
+            owner = self._owners.get(context.session.session_id)
+        if owner is None:
+            return RuntimeCloseResult(closed=True)
+        result = await self._retire(context, owner)
+        if isinstance(result, RuntimeCloseResult):
+            return result
+        return RuntimeCloseResult(closed=True, terminated_processes=int(result.cancelled))
 
 
 __all__ = ["GeminiCliNativeAdapter"]

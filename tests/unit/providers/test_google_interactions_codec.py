@@ -21,6 +21,17 @@ THOUGHT_SIGNATURE = "opaque-google-thought-signature"
 
 
 class GoogleInteractionsCodecTest(unittest.TestCase):
+    def test_unconfigured_client_rejects_request_level_zdr_claims_before_transport(self) -> None:
+        transport = _ScriptedTransport([_text_stream("not-sent", "done")])
+        client = GoogleInteractionsAgenticClient(transport=transport)
+        request = _request("zdr-denied")
+        request = replace(request, routing_constraint=replace(
+            request.routing_constraint, data_collection_policy="deny", require_zdr=True,
+        ))
+        events = asyncio.run(_events(client, request))
+        self.assertEqual(events[-1].error_code, "provider_routing_not_certified")
+        self.assertEqual(transport.payloads, [])
+
     def test_distinct_json_sources_are_encoded_as_text_without_losing_block_boundaries(self) -> None:
         transport = _ScriptedTransport([_text_stream("interaction-json", "done")])
         client = GoogleInteractionsAgenticClient(state_mode="stateful", transport=transport)

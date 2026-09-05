@@ -107,6 +107,9 @@ class GoogleInteractionsAgenticClient:
         routing = self.routing_constraint
         if routing is None:
             return
+        self._validate_routing_constraint(routing)
+
+    def _validate_routing_constraint(self, routing: RoutingConstraint) -> None:
         if (
             self.allowed_upstream_ids != tuple(routing.allowed_upstream_ids)
             or self.allowed_upstream_ids
@@ -150,6 +153,10 @@ class GoogleInteractionsAgenticClient:
                 raise GoogleInteractionsProtocolError("provider_routing_not_certified")
             if credential is None:
                 raise GoogleInteractionsProtocolError("provider_authentication_failed")
+            try:
+                self._validate_routing_constraint(request.routing_constraint)
+            except ValueError as error:
+                raise GoogleInteractionsProtocolError("provider_routing_not_certified") from error
             state = decode_google_interaction_state(
                 request.provider_private_state,
                 default_mode=self.state_mode,

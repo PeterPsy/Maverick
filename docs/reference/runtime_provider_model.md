@@ -199,6 +199,14 @@ never used for that inference. The discovery-only Gemini CLI candidate
 demonstrates a second native registration while remaining hard-disabled until
 full certification.
 
+Legacy Codex default bindings created before the explicit filesystem-list
+policy bit are repaired during normal profile bootstrap only when they still
+carry the original `all_currently_authorized` tool mode plus read, write, and
+shell authority. Numeric limits and confirmations remain unchanged, while an
+explicitly tool-disabled or surface-narrowed binding is never widened. This
+keeps the existing local Codex profile selectable without
+treating a generic fail-closed policy record as new authority.
+
 For the Maverick-owned API loop, onboarding records are data rather than Core
 loop branches. `MaverickProtocolAdapterManifest` identifies the trusted
 transport/codecs/private-state/usage/cancellation/recovery implementation;

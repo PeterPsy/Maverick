@@ -2854,3 +2854,27 @@ The standard Maverick app contract should require:
 - explicit lifecycle declaration
 - no direct access to other apps' internal storage
 - no direct coupling to core database internals as the default app data model
+
+
+### Approved PWA app display adapters — completion implementation
+
+The 2026-09-05 product decision includes persistent, bounded Calendar, Chat,
+CRM, Mail and Fitness Coach display models. `readAppCacheModel` binds a fixed
+SDK-reviewed read descriptor to an opaque query digest and the host's exact
+app/resource scope. Its conditional envelope is `{revision, payload}` or
+`{revision, not_modified: true}`; UI consumers receive warm data and changed
+revalidation independently of unrelated network dependencies. Only the frozen
+HTTP read is retried. Mutations, credentials and runtime authority are not
+part of this API. Resource byte ceilings remain enforced at host publication,
+not by silently truncating successful UI responses.
+
+Calendar's `pwa.read_model` reads timezone-aware event windows of at most
+93 days in pages of 500, or a consulted event, with display-only calendar
+metadata and SHA-256 content revisions. The ordinary calendar UI requests
+visible windows and independently loads connections/view preferences. Its
+host sanitizer projects the same explicit display fields. Fitness Coach's
+approved bootstrap projection excludes arbitrary nested backend fields and
+media capabilities; unscoped legacy bootstrap/thumbnail storage is deleted,
+never imported into a newly attested user scope. App inclusion does not change
+the default-off rollout gates. Remaining app integration and final candidate
+validation are tracked in the completion plan, not inferred from these APIs.

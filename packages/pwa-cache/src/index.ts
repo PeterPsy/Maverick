@@ -191,3 +191,8 @@ export {
   isParentDataCacheRetryMessage,
   type ParentDataCacheRetryMessage,
 } from "./readModelRetryTelemetry";
+
+export { readAppCacheModel, type AppReadModelOptions } from "./appReadModel";
+export { displayRecord, displayFields, displayList, displayStrings } from "./readModelProjection";
+
+export { projectDisplayModel, type DisplayModelSchema } from "./displayModelSchema";

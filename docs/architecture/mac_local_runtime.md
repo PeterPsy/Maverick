@@ -134,3 +134,9 @@ case but is not a proven cause of the observed failure. Synthetic metadata/polic
 tests do not capture the user's desktop. Physical screenshot/action tests and
 network-path verification remain pending; no Ubuntu relay or permission bypass
 has been introduced.
+
+Native v3 build `fd8074f` passed 14 Swift tests, release and credential-free
+protocol checks in [run 33987768597](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/33987768597).
+After the user confirmed app exit, installation succeeded and desktop launch
+was requested at 19:42:18 UTC on 2026-09-05. Notes capture remains a physical
+retest, not an outcome established by those synthetic tests.

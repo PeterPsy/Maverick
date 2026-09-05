@@ -26,4 +26,3 @@ or storage belonging to other sites.
 After clearing, features fetch required data again through their normal loading
 flow. If cleanup reports that work is still pending, retry the action; Maverick
 does not treat an incomplete durable deletion as success.
-

@@ -88,7 +88,7 @@ export class PwaCacheResource<T> {
   async readThrough(entityId: string, loader: CacheLoader<T>, signal?: AbortSignal): Promise<CacheReadResult<T>> {
     const normalizedEntityId = validateEntityId(entityId);
     const generation = this.generation;
-    const shared = this.persistencePolicy === "cache" && this.persistentBackend.mode() === "indexeddb";
+    const shared = this.persistencePolicy === "cache" && this.persistentBackend.durabilityMode() === "indexeddb";
     const backendKey = this.persistentBackend.durabilityKey();
     // Cleanup admission spans initialization too; our own schema maintenance
     // has a separate epoch so it cannot erase an intervening explicit clear.

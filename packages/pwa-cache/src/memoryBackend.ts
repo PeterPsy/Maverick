@@ -19,6 +19,10 @@ export class MemoryCacheBackend implements CacheBackend {
     return "memory";
   }
 
+  durabilityMode(): "indexeddb" | "memory" {
+    return "memory";
+  }
+
   durabilityKey(): string {
     return `memory:${this.instanceId}`;
   }

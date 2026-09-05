@@ -32,6 +32,10 @@ export class ResilientCacheBackend implements CacheBackend {
     return this.active.mode();
   }
 
+  durabilityMode(): "indexeddb" | "memory" {
+    return this.primary.durabilityMode();
+  }
+
   durabilityKey(): string {
     return this.primaryDurabilityKey;
   }
@@ -96,7 +100,7 @@ export class ResilientCacheBackend implements CacheBackend {
   private async clearWithPublication(filter: CacheFilter, options: { durable?: boolean }, maintenance: boolean): Promise<number> {
     return withPublicationLock(this.primaryDurabilityKey, async () => {
       if (options.durable) markCleanupPending(this.primaryDurabilityKey, filter);
-      advancePublicationGeneration(this.primaryDurabilityKey, this.primary.mode() === "indexeddb", maintenance);
+      advancePublicationGeneration(this.primaryDurabilityKey, this.durabilityMode() === "indexeddb", maintenance);
       if (options.durable) return this.clearDurably(filter);
       return this.invoke((backend) => backend.clear(filter, options));
     });

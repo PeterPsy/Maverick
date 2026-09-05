@@ -114,6 +114,8 @@ export interface CacheBackend {
   clear(filter?: CacheFilter, options?: { durable?: boolean }): Promise<number>;
   delete(key: string): Promise<boolean>;
   durabilityKey(): string;
+  /** Stable publication authority; unlike mode(), must not follow transient fallback. */
+  durabilityMode(): BackendMode;
   get<T>(key: string): Promise<StoredCacheEntry<T> | null>;
   initialize(): Promise<void>;
   list(filter?: CacheFilter): Promise<CacheEntryMetadata[]>;

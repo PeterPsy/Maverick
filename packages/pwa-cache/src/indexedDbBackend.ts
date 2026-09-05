@@ -48,6 +48,10 @@ export class IndexedDbCacheBackend implements CacheBackend {
     return "indexeddb";
   }
 
+  durabilityMode(): "indexeddb" | "memory" {
+    return "indexeddb";
+  }
+
   durabilityKey(): string {
     return `indexeddb:${this.databaseName}`;
   }

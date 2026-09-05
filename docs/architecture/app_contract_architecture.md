@@ -1779,7 +1779,11 @@ fence survives successful deletion, so earlier writers cannot recreate data.
 Generation invalidation is conservatively backend-wide; physical deletion
 remains filter-scoped. Browser persistence requires Web Locks and readable
 shared generation storage; unavailable coordination never converts an unsafe
-persistent write into success. Session-memory caching keeps its local fence.
+persistent write into success. The backend's stable `durabilityMode()` selects
+this authority before initialization, not its transient active `mode()`:
+a durable backend in RAM fallback retains the shared admission ticket even
+when initialization or later maintenance restores IndexedDB. Pure memory
+backends and session-memory caching keep their local fence.
 
 After the first positive configuration decision for a broker/session, config
 refresh runs alongside cache reads rather than ahead of warm paint. An

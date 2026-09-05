@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "44baf5c1f4f6fe427c3e6b584dd9451b35eb5dab4031efa9f861072b75bb1ef7",
+  "build_id": "8fb798937b4eb902d292cd58aed30f690741ed4afd958b2744da55ac7fe37e77",
   "entrypoints": [
     "index.html",
     "widgets/chat-floating/index.html",
@@ -16,8 +16,8 @@
       "size_bytes": 3708
     },
     {
-      "path": "assets/InterAgentGraphView-B-TnyOkD.js",
-      "sha256": "9bda99039bcb6b31544305c7813eab1e4ddd987a3f4aeb771b53c14f268a9b8b",
+      "path": "assets/InterAgentGraphView-Bfre0Fze.js",
+      "sha256": "2c71c00f9cb0a323786e94751a975d6613b8d859048a0abc8ec436c23a56ee68",
       "size_bytes": 204306
     },
     {
@@ -26,13 +26,13 @@
       "size_bytes": 15869
     },
     {
-      "path": "assets/MarkdownMessage-C9p9Ed5v.js",
-      "sha256": "d24a0404ed69fd2cb1dc1589cb6eb802a6ef7ab2818d023f70da52df817d6a8f",
+      "path": "assets/MarkdownMessage-C1UrpjHp.js",
+      "sha256": "b640da53bfd5cd40eca020389583550fd691663cf0b87fbbf13125825943e803",
       "size_bytes": 163296
     },
     {
-      "path": "assets/app-BnwU0LC4.js",
-      "sha256": "32d39391c93d3265b0ed5ed14ff900202b19d6f11c112212af32a8ecc06b1cd5",
+      "path": "assets/app-C9W96nMa.js",
+      "sha256": "6fa13754cdb704b7e773b93760126025c4880820d23efd225be5e0ee0ca3d128",
       "size_bytes": 374
     },
     {
@@ -41,8 +41,8 @@
       "size_bytes": 1829
     },
     {
-      "path": "assets/floatingWidgetRuntime-C1GDmke_.js",
-      "sha256": "b50b17311417934cca5527a608e015a62edced95ad2a05fb2a44fc8ad788b731",
+      "path": "assets/floatingWidgetRuntime-CfoSP-bA.js",
+      "sha256": "581188bb4141ad909ae3fadcc35f88b60efd77c1604d7aef24ccf27d84dbda4f",
       "size_bytes": 14672
     },
     {
@@ -61,9 +61,9 @@
       "size_bytes": 5257
     },
     {
-      "path": "assets/main-D_Y4MrZ1.js",
-      "sha256": "b3ba8407c7aa4f6d9acaebbb87cd848dbfdbb998f65197566cef51edfa9b4ece",
-      "size_bytes": 380209
+      "path": "assets/main-C33HxSfh.js",
+      "sha256": "8805d5767fdc1ca4b929e05d7e62c91c91030619c697ee7e4f0732520291c017",
+      "size_bytes": 384173
     },
     {
       "path": "assets/shellTheme-Dcz5tAkJ.js",
@@ -91,13 +91,13 @@
       "size_bytes": 13878
     },
     {
-      "path": "assets/widgets/chat-floating/index-xakp9Dhe.js",
-      "sha256": "99a4afadf26b5d1ba90898ac608e493a8442395b4877e8ab31b15f6f1d0c67ef",
+      "path": "assets/widgets/chat-floating/index-gitZJz7b.js",
+      "sha256": "ce4cea304d7d3bcadf25f74f1154adf289c515ec7c5325a539b4997e0625bec2",
       "size_bytes": 6891
     },
     {
-      "path": "assets/widgets/chat-floating-dock/index-KRww0HqX.js",
-      "sha256": "75386458290e79991054f2eb1fcca81622a8bad01b7ed64e0657cdeb648f0104",
+      "path": "assets/widgets/chat-floating-dock/index-Dis-mlsi.js",
+      "sha256": "e8a7b0e00fd36af96486123bdf825686f1b073930c0898af812513656d8b6f54",
       "size_bytes": 3655
     },
     {
@@ -123,23 +123,23 @@
       "size_bytes": 28007
     },
     {
-      "path": "assets/main-Cm1jw2R_.css",
-      "sha256": "dbc93a03f02b425e3f4f7d498beec35da9bd12ad523c786386287524471c0bf2",
-      "size_bytes": 202330
+      "path": "assets/main-DMhYIT7W.css",
+      "sha256": "749861f0197ae8b90b6d5b7bc4138a46ea087d0f8a1338c9c2a04bd1ab4da690",
+      "size_bytes": 203633
     },
     {
       "path": "index.html",
-      "sha256": "d0ef8bb34c969608854e18162f6a77800c08bce867fb72cf0667b61aa313afe7",
+      "sha256": "36142d65d22a05260b78319b0457ab28f03bef9f79aac0b224806da9a4163ca1",
       "size_bytes": 1763
     },
     {
       "path": "widgets/chat-floating/index.html",
-      "sha256": "5234d8eec41fb84aaa76fb8900952c1a81e4df40fd28c55901ca7ce447c8c19d",
+      "sha256": "368d8fa3c3664caef0b2c8b79c4df68df947b4fd29fe032bc920aef92dfe42fe",
       "size_bytes": 2071
     },
     {
       "path": "widgets/chat-floating-dock/index.html",
-      "sha256": "e27ea6a3640809cbaed88185a8bbec5480b500f47aae65a99ce29db7a483090c",
+      "sha256": "bda61f9ce21a63bd2892e0b4a4aa406600891030514b71ce02158ca085f009f4",
       "size_bytes": 2081
     },
     {

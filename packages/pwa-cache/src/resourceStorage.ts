@@ -1,3 +1,4 @@
+import { ResilientCacheBackend } from "./resilientBackend";
 import type {
   CacheBackend,
   CacheFilter,
@@ -27,6 +28,7 @@ export async function initializeResourceBackends(options: {
       { ...resourceFilter, excludePolicyRevision: scope.policyRevision },
       telemetry,
       true,
+      true,
     );
     await clearResourceBackend(
       persistentBackend,
@@ -37,9 +39,10 @@ export async function initializeResourceBackends(options: {
       },
       telemetry,
       true,
+      true,
     );
   } else {
-    await clearResourceBackend(persistentBackend, resourceFilter, telemetry, true);
+    await clearResourceBackend(persistentBackend, resourceFilter, telemetry, true, true);
   }
   if (persistencePolicy === "deny") {
     await clearResourceBackend(memoryBackend, resourceFilter, telemetry);
@@ -66,9 +69,13 @@ export async function clearResourceBackend(
   filter: CacheFilter,
   telemetry: CacheTelemetry,
   durable = false,
+  maintenance = false,
 ): Promise<number> {
   try {
-    return await backend.clear(filter, durable ? { durable: true } : undefined);
+    const options = { durable };
+    return maintenance && backend instanceof ResilientCacheBackend
+      ? await backend.clearForMaintenance(filter, options)
+      : await backend.clear(filter, options);
   } catch (error) {
     telemetry({ kind: "error", reason: error instanceof Error ? error.name : "unknown" });
     if (durable) {

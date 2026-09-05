@@ -1769,10 +1769,12 @@ success: an incomplete durable clear is pending and blocks persistent cache
 access until the primary store confirms deletion.
 
 Structured publication and cleanup share a per-backend cross-client lock. A
-read captures a generation before cache lookup and retains it through loader
-and quota waits; publication checks that generation, cancellation/disposal,
+read captures its cleanup generation before initialization and retains it
+through cache lookup, loader and quota waits; publication checks that generation, cancellation/disposal,
 and the current lease again under the lock. Cleanup rotates a retained opaque
-generation, drains publication already inside the lock, and then clears. The
+generation, drains publication already inside the lock, and then clears.
+Schema maintenance has a separate generation: initialization cannot replace
+the admission ticket and erase an intervening explicit cleanup. The
 fence survives successful deletion, so earlier writers cannot recreate data.
 Generation invalidation is conservatively backend-wide; physical deletion
 remains filter-scoped. Browser persistence requires Web Locks and readable

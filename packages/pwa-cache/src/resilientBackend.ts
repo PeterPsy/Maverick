@@ -86,9 +86,17 @@ export class ResilientCacheBackend implements CacheBackend {
   }
 
   async clear(filter: CacheFilter = {}, options: { durable?: boolean } = {}): Promise<number> {
+    return this.clearWithPublication(filter, options, false);
+  }
+
+  async clearForMaintenance(filter: CacheFilter, options: { durable?: boolean }): Promise<number> {
+    return this.clearWithPublication(filter, options, true);
+  }
+
+  private async clearWithPublication(filter: CacheFilter, options: { durable?: boolean }, maintenance: boolean): Promise<number> {
     return withPublicationLock(this.primaryDurabilityKey, async () => {
       if (options.durable) markCleanupPending(this.primaryDurabilityKey, filter);
-      advancePublicationGeneration(this.primaryDurabilityKey, this.primary.mode() === "indexeddb");
+      advancePublicationGeneration(this.primaryDurabilityKey, this.primary.mode() === "indexeddb", maintenance);
       if (options.durable) return this.clearDurably(filter);
       return this.invoke((backend) => backend.clear(filter, options));
     });

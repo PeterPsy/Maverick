@@ -97,8 +97,9 @@ transport and file executors, body-transport classification, server-deadline
 fencing, and non-blocking confirmed-session config refresh. Regression tests
 cover these interleavings; arbitrary broker loaders themselves are not retried.
 The new structured generation marker contains only an opaque nonce, not a
-principal, payload, URL, or resource id. A missing/unwritable marker or missing
-Web Locks fails closed for browser persistence. This corrective verification
+principal, payload, URL, or resource id. A removed marker gets a fresh nonce rather than resurrecting an older
+generation; unwritable shared generation storage or missing Web Locks fails
+closed for browser persistence. This corrective verification
 does not constitute physical-device evidence or privacy approval. Remaining
 release conditions are explicit rather than waived: private per-resource
 privacy approval, current physical Safari/Home Screen/Dock evidence, and

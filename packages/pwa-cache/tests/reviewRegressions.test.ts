@@ -52,6 +52,29 @@ describe("M6 review regressions", () => {
     client.dispose();
   });
 
+  it("does not let initialization maintenance erase an intervening cleanup fence", async () => {
+    const backend = new MemoryCacheBackend();
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    vi.spyOn(backend, "initialize").mockImplementation(async () => { entered.resolve(); await release.promise; });
+    const client = createPwaCacheHost({ appId: "docs", userId: "user", workspaceId: "workspace" }).createClient({
+      backend, enabled: true, accessLease: { issuedAt: 0, expiresAt: 1_000 }, now: () => 100,
+      quotaAdapter: { canWrite: async () => true, estimate: async () => ({ supported: true, quota: 100_000, usage: 0 }) },
+    }, new CacheBus(null));
+    const resource = client.resource("review", policy);
+    const read = resource.readThrough("one", async () => ({ kind: "value", payload: { value: "private" }, revision: "one" }));
+    await entered.promise;
+    const lifecycle = new CacheLifecycleController({ backend, bus: new CacheBus(null) });
+    expect((await lifecycle.clearAll()).status).toBe("complete");
+    release.resolve();
+    await read;
+    expect(await backend.list()).toHaveLength(0);
+    await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "current" }, revision: "two" }));
+    expect(await resource.get("one")).toMatchObject({ revision: "two" });
+    client.dispose();
+    lifecycle.dispose();
+  });
+
   it("drains publication already inside put before reporting cleanup complete", async () => {
     const backend = new MemoryCacheBackend();
     const entered = deferred<void>();

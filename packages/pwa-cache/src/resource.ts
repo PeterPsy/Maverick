@@ -86,15 +86,18 @@ export class PwaCacheResource<T> {
   }
 
   async readThrough(entityId: string, loader: CacheLoader<T>, signal?: AbortSignal): Promise<CacheReadResult<T>> {
-    const generation = this.generation;
-    // Schema maintenance precedes admission; the ticket then spans every read,
-    // single-flight wait, loader, quota wait and the final publication lock.
-    if (this.enabled) await this.initialize().catch(() => undefined);
-    const shared = this.persistencePolicy === "cache" && this.persistentBackend.mode() === "indexeddb";
-    const publication = publicationGeneration(this.persistentBackend.durabilityKey(), shared);
-    const canPublish = () => !signal?.aborted && generation === this.generation
-      && publication !== null && publication === publicationGeneration(this.persistentBackend.durabilityKey(), shared);
     const normalizedEntityId = validateEntityId(entityId);
+    const generation = this.generation;
+    const shared = this.persistencePolicy === "cache" && this.persistentBackend.mode() === "indexeddb";
+    const backendKey = this.persistentBackend.durabilityKey();
+    // Cleanup admission spans initialization too; our own schema maintenance
+    // has a separate epoch so it cannot erase an intervening explicit clear.
+    const cleanup = publicationGeneration(backendKey, shared);
+    if (this.enabled) await this.initialize().catch(() => undefined);
+    const maintenance = publicationGeneration(backendKey, shared, true);
+    const canPublish = () => !signal?.aborted && generation === this.generation
+      && cleanup !== null && cleanup === publicationGeneration(backendKey, shared)
+      && maintenance !== null && maintenance === publicationGeneration(backendKey, shared, true);
     const hit = await this.cacheHit(normalizedEntityId);
     if (hit && (hit.freshness === "fresh" || this.policy.allowStale === true)) {
       const shouldRevalidate = this.revalidationMode() === "always"

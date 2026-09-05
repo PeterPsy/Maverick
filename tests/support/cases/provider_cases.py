@@ -234,7 +234,7 @@ class ProvidersTestCase(unittest.TestCase):
                 refresh_model_catalog=True,
             )
 
-        self.assertEqual(run.call_count, 1)
+        self.assertEqual(sum(call.args[0][1:] == ["debug", "models"] for call in run.call_args_list), 1)
         self.assertEqual(self.provider_by_id(providers, "codex").model_options[0].model_id, "gpt-settings")
         self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-settings")
 
@@ -275,7 +275,7 @@ class ProvidersTestCase(unittest.TestCase):
                 refresh_model_catalog=True,
             )
 
-        self.assertEqual(run.call_count, 1)
+        self.assertEqual(sum(call.args[0][1:] == ["debug", "models"] for call in run.call_args_list), 1)
         self.assertEqual(self.provider_by_id(providers, "codex").model_options[0].model_id, "gpt-refreshed")
         self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-refreshed")
 
@@ -641,6 +641,17 @@ class ProvidersTestCase(unittest.TestCase):
         repo_root = self.make_repo_root()
         now = datetime.now(tz=UTC)
         from tests.support.native_agent_catalog import codex_snapshot
+        from core.providers.native_runtime_artifact import inspect_native_runtime_artifact
+
+        # This launch-shape fixture intentionally substitutes an executable;
+        # approve only that test artifact, never weaken production validation.
+        command = repo_root / "codex-launch-fixture"
+        command.write_text("#!/bin/sh\necho codex-launch-fixture-1\n")
+        command.chmod(0o755)
+        approval = patch("core.providers.native_agent_builtins.CODEX_PACKAGED_RUNTIME_ARTIFACT",
+                         inspect_native_runtime_artifact(str(command)))
+        approval.start()
+        self.addCleanup(approval.stop)
 
         discovery = patch("core.providers.native_agent_reconciliation.discover_codex_native_catalog",
                           return_value=codex_snapshot("gpt-5.6-sol"))
@@ -653,14 +664,14 @@ class ProvidersTestCase(unittest.TestCase):
             session_id="sess-1",
             workspace_id="acme",
             now=now,
-            codex_command="/bin/echo",
+            codex_command=str(command),
         )
 
         launch_spec = build_runtime_backend_launch_spec(
             provider_store,
             session=session,
             registry=registry,
-            codex_command="/bin/echo",
+            codex_command=str(command),
         )
 
         self.assertEqual(launch_spec.provider_id, "codex")
@@ -672,7 +683,7 @@ class ProvidersTestCase(unittest.TestCase):
         separator_index = launch_spec.command.index("--")
         self.assertEqual(
             launch_spec.command[separator_index + 1 : separator_index + 6],
-            ["/bin/echo", "--disable", "apps", "--disable", "plugins"],
+            [str(command), "--disable", "apps", "--disable", "plugins"],
         )
         self.assertEqual(launch_spec.command[separator_index + 6], "app-server")
         self.assertNotIn("use_legacy_landlock", launch_spec.command)

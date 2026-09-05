@@ -289,6 +289,10 @@ class AgenticProfilesTest(unittest.TestCase):
                 return_value=None,
             ),
             patch("core.providers.agentic_profiles.validate_certificate_for_binding"),
+            patch(
+                "core.providers.execution_family_readiness.inspect_agentic_family_readiness",
+                return_value=SimpleNamespace(complete=True),
+            ),
         ):
             resolved = build_pinned_execution_binding(
                 self.provider_store,

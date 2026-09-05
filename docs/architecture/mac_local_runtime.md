@@ -190,3 +190,9 @@ without publishing titles, raw tool payloads or images to Ubuntu. Other windows
 at the click point remain a denial, not a reason to disable the safety check.
 Synthetic mapping/occlusion tests supplement the existing suite; physical click,
 scroll, lock/sleep, token refresh and network-path tests remain pending.
+
+V5 native commit `2507558` passed all 25 Swift tests, release compilation and
+credential-free Codex checks in [run 33990520048](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/33990520048).
+This was a push build, not a desktop installation. Installation awaits the user's
+app-exit confirmation; physical click correctness is not established by CI.
+The Python unused-import check also passed.

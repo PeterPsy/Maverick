@@ -10,6 +10,7 @@
     "cache"
   ],
   "approved_at": "2026-09-03",
+  "completion_decision": "docs/product/pwa_cache_completion_decision_2026-09-05.md",
   "unknown_classification_policy": "deny",
   "resources": [
     {
@@ -225,7 +226,7 @@
       "provenance": "user_input",
       "local_persistence_policy": "session",
       "policy_prerequisites": [
-        "privacy-approved resource rule before widening beyond session"
+        "bounded persistent adapter and sanitizer verification under the 2026-09-05 product approval"
       ],
       "fresh_ttl_seconds": 30,
       "expiry_ttl_seconds": 21600,
@@ -234,7 +235,7 @@
       "max_scope_bytes": 33554432,
       "invalidation": "projects data event, runtime cursor, reconnect, 401/403",
       "data_event": "projects",
-      "rollout": "M5 backlog after pilot stability and privacy review"
+      "rollout": "M5 persistence approved on 2026-09-05; adapter and resource enforcement pending; default-off"
     },
     {
       "app_ids": [
@@ -247,7 +248,7 @@
       "provenance": "app_reference",
       "local_persistence_policy": "session",
       "policy_prerequisites": [
-        "approved resource rule before widening beyond session"
+        "bounded persistent adapter and sanitizer verification under the 2026-09-05 product approval"
       ],
       "fresh_ttl_seconds": 60,
       "expiry_ttl_seconds": 21600,
@@ -256,7 +257,7 @@
       "max_scope_bytes": 16777216,
       "invalidation": "overlapping events data event or transport recovery",
       "data_event": "events",
-      "rollout": "M5 backlog after pilot stability and privacy review"
+      "rollout": "M5 persistence approved on 2026-09-05; adapter and resource enforcement pending; default-off"
     },
     {
       "app_ids": [
@@ -288,8 +289,8 @@
       "provenance": "app_reference",
       "local_persistence_policy": "deny",
       "policy_prerequisites": [
-        "reviewed resource allowlist",
-        "privacy approval"
+        "implement and verify the resource allowlist approved on 2026-09-05",
+        "strict app-owned sanitizer and revision contract"
       ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
@@ -298,7 +299,7 @@
       "max_scope_bytes": 0,
       "invalidation": "records data event, reconnect, access denial",
       "data_event": "records",
-      "rollout": "M5 after privacy gate"
+      "rollout": "M5 customer-data scope approved on 2026-09-05; adapter and resource enforcement pending; default-off"
     },
     {
       "app_ids": [
@@ -311,8 +312,8 @@
       "provenance": "app_reference",
       "local_persistence_policy": "deny",
       "policy_prerequisites": [
-        "reviewed resource allowlist",
-        "privacy approval"
+        "implement and verify the resource allowlist approved on 2026-09-05",
+        "strict app-owned sanitizer and revision contract"
       ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
@@ -321,7 +322,7 @@
       "max_scope_bytes": 0,
       "invalidation": "threads data event, reconnect, access denial",
       "data_event": "threads",
-      "rollout": "M5 after privacy gate"
+      "rollout": "M5 customer-data scope approved on 2026-09-05; adapter and resource enforcement pending; default-off"
     },
     {
       "app_ids": [
@@ -360,7 +361,7 @@
         "view-state"
       ],
       "policy_prerequisites": [
-        "approved resource rule before widening beyond session"
+        "verify persistent resource enforcement under the 2026-09-05 product approval"
       ],
       "fresh_ttl_seconds": 300,
       "expiry_ttl_seconds": 86400,
@@ -369,7 +370,7 @@
       "max_scope_bytes": 16777216,
       "invalidation": "workouts, exercises, runs, or view-state data event; storage app id and media source version are part of entity identity",
       "data_event": "workouts, exercises, runs, view-state",
-      "rollout": "M5 session-only pilot implemented behind global and per-app default-off gates"
+      "rollout": "M5 session-only pilot implemented; persistent scope approved on 2026-09-05, resource enforcement pending; global and per-app default-off gates unchanged"
     },
     {
       "app_ids": [

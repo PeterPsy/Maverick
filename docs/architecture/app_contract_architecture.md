@@ -1,5 +1,14 @@
 # App Contract Architecture
 
+> PWA completion scope (2026-09-05): the product owner approved bounded
+> persistent Calendar, Chat, CRM, Mail and Fitness Coach read models, in addition
+> to the existing pilots. The normative resource scope and limits are recorded
+> in `docs/product/pwa_cache_completion_decision_2026-09-05.md`. This supersedes
+> earlier pending-privacy or RAM-only product decisions, not implementation
+> status: adapters, sanitizer/authority boundaries and release gates must still
+> pass before those resources are enabled. Credentials, control-plane authority,
+> unclassified files and persistent mutation queues remain excluded.
+
 Date: 2026-04-17
 
 ## Purpose

@@ -5,6 +5,13 @@ the normative product and UI contract for browser caching and transport
 resilience. It replaces the M0-M2 network-absence product contract without
 rewriting that checkpoint history.
 
+The 2026-09-05 completion decision in
+`docs/product/pwa_cache_completion_decision_2026-09-05.md` approves the full
+planned app scope, including persistent bounded Calendar, Chat, CRM, Mail and
+Fitness Coach read models. The reduced RAM-only/excluded-app proposal is not
+the product target. Approval does not replace adapter verification or the
+physical-device and controlled-rollout gates below.
+
 ## Product invariant
 
 Maverick is an online application with transparent, best-effort caches. Cache

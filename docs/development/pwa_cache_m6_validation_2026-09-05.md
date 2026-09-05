@@ -5,6 +5,13 @@ Status: the two remaining review findings are corrected in `e729902b` and
 physical-device evidence and private rollout remain open. This is not closure
 of the whole plan.
 
+Subsequent product decision: the owner explicitly approved the complete app
+scope, including persistent bounded Calendar, Chat, CRM, Mail and Fitness Coach
+read models. See `docs/product/pwa_cache_completion_decision_2026-09-05.md`.
+The reduced release proposal is rejected. This closes the pending product
+decision, not the missing adapters, technical privacy enforcement or release
+evidence; runtime policy and rollout flags have not been widened by the record.
+
 ## Second review: durable recovery and broker metrics
 
 - **P1 — memory → IndexedDB:** `durabilityMode()` describes the stable primary
@@ -116,8 +123,8 @@ Corrective automated checks:
 | app-store | `7c398b6953347ed76401d27400e9e65e98a3d65d55748d5d5f2cf9158c6f2dc7` |
 
 The plan at `storage/generated/development/maverick-pwa-cache-development-plan.md`
-was updated and reread through Storage's guarded Markdown surface. Its current
-SHA-256 is `a58a397488a371da8913f28f0f54518d746ac609981c522c6ee44b68cf73f9e0`.
+was updated and reread through Storage's guarded Markdown surface. At that
+historical checkpoint its SHA-256 was `a58a397488a371da8913f28f0f54518d746ac609981c522c6ee44b68cf73f9e0`.
 Section 7.8 distinguishes implemented code from validation and actual rollout;
 PWA-098, M5 Calendar/Chat, CRM/Mail privacy approval and release-owner cohort
 activation are explicitly assigned as open gates, not silently marked done.
@@ -219,7 +226,10 @@ scheduled and release-event executions continuously detect missing/stale or
 candidate-mismatched evidence; emulation and the authenticated Chromium CI
 smoke cannot satisfy this gate.
 
-M5 is also intentionally not relabeled complete: Calendar and Chat remain the
-second tranche, and CRM/Mail remain denied pending their explicit privacy
-approvals. Those product/privacy decisions are not inferred by this M6
-hardening change. All related flags therefore remain fail-closed.
+M5 is also intentionally not relabeled complete. The owner has now explicitly
+approved the Calendar/Chat/CRM/Mail persistent read-model scope and the existing
+Fitness Coach projection. Calendar/Chat/CRM/Mail adapters and resource-level
+enforcement still need implementation and validation; the existing runtime
+`session`/`deny` policies are not silently changed by product approval. All
+related rollout flags remain fail-closed until the implementation and release
+gates pass.

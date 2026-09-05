@@ -358,6 +358,9 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
     profile = publication.profile
     _validate_protocol_adapter(adapter)
     validate_maverick_provider_config(config)
+    from core.runtime.hosted_finalization_policy import provider_finalization_policy, validate_finalization_resources
+
+    validate_finalization_resources(profile.policy_ceiling, provider_finalization_policy(config, recipe))
     if profile.revision in publication.superseded_profile_revisions:
         raise AgenticProfileError("maverick_profile_supersedes_itself")
     if len(set(publication.superseded_profile_revisions)) != len(

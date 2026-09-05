@@ -9,6 +9,7 @@ from core.providers.errors import AgenticProfileError
 from core.providers.maverick_agent_provider_config import MaverickTokenCostPolicy
 from core.runtime.hosted_agentic_models import HostedFinalizationPolicy, HostedProviderPrivateCodec
 from core.runtime.hosted_provider_runtime import HostedProviderRuntime
+from core.runtime.hosted_finalization_policy import provider_finalization_policy
 
 if TYPE_CHECKING:
     from core.providers.maverick_agent_onboarding import (
@@ -86,6 +87,8 @@ def validate_composed_maverick_runtime(
         raise AgenticProfileError("maverick_runtime_recovery_incomplete")
     if not isinstance(runtime.finalization_policy, HostedFinalizationPolicy):
         raise AgenticProfileError("maverick_runtime_finalization_incomplete")
+    if runtime.finalization_policy != provider_finalization_policy(config, recipe):
+        raise AgenticProfileError("maverick_runtime_finalization_policy_mismatch")
 
 
 __all__ = ["validate_composed_maverick_runtime"]

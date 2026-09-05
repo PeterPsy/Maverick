@@ -292,6 +292,13 @@ Recommended split:
 
 ### 4. Runtime orchestration
 
+The first macOS direct-provider client is described in
+`docs/architecture/mac_local_runtime.md`. It hosts a separate local Codex
+conversation and native tool executor; Ubuntu does not relay its images or
+claim ownership of its local thread as a server runtime session. Credential
+provisioning is an explicit operator-only encrypted export, not a browser or
+ordinary agent-facing secret delivery surface.
+
 The core owns the generic runtime model for agent execution.
 
 This includes:
@@ -603,6 +610,12 @@ a callable request client, private-state inspection, compaction, and preflight,
 and the exact request-ceiling estimator (not the usage-pricing method). Google
 Interactions rejects ZDR and data-collection-denial claims: its current transport
 does not implement or attest those guarantees.
+Finalization reserves are derived from the versioned token-cost policy and the
+recipe's input/output bounds, including the conversion between Core's input-byte
+admission estimate and the provider's request estimator. Onboarding rejects a
+profile whose cost, output, step, or time ceiling cannot fund finalization plus
+its recovery reserve. Adding a more expensive model therefore requires adequate
+profile budget data, not a provider-specific fixed reserve or a Core-loop branch.
 Discovery snapshots vendor model metadata into a digest but always returns
 `authority_granted=false` and no execution family. Publication classifies a
 profile as `maverick_agent` only after the complete Full Workspace contract,

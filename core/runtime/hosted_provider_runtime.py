@@ -22,24 +22,6 @@ if TYPE_CHECKING:
     from core.providers.maverick_agent_onboarding import MaverickProtocolAdapterManifest
 
 
-# These reserves exceed each pinned estimator for every terminal request whose
-# complete byte projection remains within the 262,144-token input ceiling.
-GOOGLE_HOSTED_FINALIZATION_POLICY = HostedFinalizationPolicy(
-    exploration_max_output_tokens=2_048,
-    finalization_max_output_tokens=2_048,
-    finalization_cost_reserve_microusd_per_attempt=550_000,
-    finalization_time_reserve_seconds_per_attempt=20.0,
-    max_recovery_attempts=1,
-)
-OPENROUTER_HOSTED_FINALIZATION_POLICY = HostedFinalizationPolicy(
-    exploration_max_output_tokens=2_048,
-    finalization_max_output_tokens=2_048,
-    finalization_cost_reserve_microusd_per_attempt=35_000,
-    finalization_time_reserve_seconds_per_attempt=20.0,
-    max_recovery_attempts=1,
-)
-
-
 @dataclass(frozen=True)
 class HostedProviderRuntime:
     """One certified model-provider protocol implementation."""

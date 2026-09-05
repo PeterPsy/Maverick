@@ -27,11 +27,13 @@ from core.providers.openrouter_agentic_profile import (
 )
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget, estimate_hosted_request_tokens
 from core.runtime.hosted_agentic_models import HostedFinalizationPolicy
-from core.runtime.hosted_provider_runtime import (
-    GOOGLE_HOSTED_FINALIZATION_POLICY,
-    OPENROUTER_HOSTED_FINALIZATION_POLICY,
+from core.runtime.hosted_finalization_policy import provider_finalization_policy
+from core.runtime.hosted_harness_recipes import (
+    GOOGLE_GOVERNED_WORKSPACE_RECIPE, OPENROUTER_GOVERNED_WORKSPACE_RECIPE, hosted_full_context_policy,
 )
-from core.runtime.hosted_harness_recipes import hosted_full_context_policy
+
+GOOGLE_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(GOOGLE_INTERACTIONS_PROVIDER_CONFIG, GOOGLE_GOVERNED_WORKSPACE_RECIPE)
+OPENROUTER_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(OPENROUTER_DEEPINFRA_PROVIDER_CONFIG, OPENROUTER_GOVERNED_WORKSPACE_RECIPE)
 
 
 GOOGLE_REQUEST_COST_ESTIMATOR = (
@@ -260,6 +262,35 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                     finalization.reserved_cost_microusd,
                     policy.max_estimated_cost_microusd,
                 )
+
+    def test_data_driven_pricing_can_finalize_above_the_old_fixed_reserve(self) -> None:
+        config = replace(OPENROUTER_DEEPINFRA_PROVIDER_CONFIG, token_cost_policy=replace(
+            OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy,
+            input_microusd_per_million_tokens=3_000_000,
+            output_microusd_per_million_tokens=5_000_000,
+        ))
+        reserve = provider_finalization_policy(config, OPENROUTER_GOVERNED_WORKSPACE_RECIPE)
+        policy = replace(openrouter_agentic_preview_policy(), max_estimated_cost_microusd=3_000_000)
+        request = replace(self.request, request_phase="finalization", max_output_tokens=reserve.finalization_max_output_tokens,
+                          content_blocks=(replace(self.request.content_blocks[0], content=b"x" * 100_002),))
+        cost = config.token_cost_policy.request_ceiling_microusd(request)
+        self.assertEqual(cost, 110_242)
+        self.assertGreater(cost, 35_000)
+        budget = HostedAgenticBudget(policy, reserve, monotonic=_Clock())
+        budget.begin_step(request, cost, phase="finalization")
+        self.assertEqual(budget.estimated_cost_microusd, cost)
+
+    def test_onboarding_rejects_a_profile_that_cannot_fund_its_price_derived_reserve(self) -> None:
+        from core.providers.errors import AgenticProfileError
+        from core.runtime.hosted_finalization_policy import validate_finalization_resources
+
+        config = replace(OPENROUTER_DEEPINFRA_PROVIDER_CONFIG, token_cost_policy=replace(
+            OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy,
+            input_microusd_per_million_tokens=3_000_000,
+        ))
+        with self.assertRaisesRegex(AgenticProfileError, "finalization_budget_insufficient"):
+            validate_finalization_resources(openrouter_agentic_preview_policy(),
+                                            provider_finalization_policy(config, OPENROUTER_GOVERNED_WORKSPACE_RECIPE))
 
 
 class _Clock:

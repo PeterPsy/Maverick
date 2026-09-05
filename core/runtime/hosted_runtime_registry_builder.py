@@ -53,11 +53,10 @@ from core.providers.openrouter_agentic_transport import (
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
 from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
 from core.runtime.hosted_provider_runtime import (
-    GOOGLE_HOSTED_FINALIZATION_POLICY,
-    OPENROUTER_HOSTED_FINALIZATION_POLICY,
     HostedProviderRuntime,
     HostedProviderRuntimeRegistry,
 )
+from core.runtime.hosted_finalization_policy import provider_finalization_policy
 
 
 def build_builtin_maverick_agent_onboarding_catalog(
@@ -122,7 +121,7 @@ def _google_interactions_runtime(
             content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
         ),
         cost_estimator=config.token_cost_policy.request_ceiling_microusd,
-        finalization_policy=GOOGLE_HOSTED_FINALIZATION_POLICY,
+        finalization_policy=provider_finalization_policy(config, recipe),
         private_state_inspector=lambda content: inspect_google_interaction_state(
             content,
             mode="stateless",
@@ -160,7 +159,7 @@ def _openrouter_chat_runtime(
             content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
         ),
         cost_estimator=config.token_cost_policy.request_ceiling_microusd,
-        finalization_policy=OPENROUTER_HOSTED_FINALIZATION_POLICY,
+        finalization_policy=provider_finalization_policy(config, recipe),
         private_state_inspector=inspect_openrouter_chat_state,
         recipe=recipe,
         context_compactor=compact_openrouter_history,

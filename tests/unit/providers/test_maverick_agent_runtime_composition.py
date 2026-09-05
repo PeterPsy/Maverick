@@ -21,7 +21,8 @@ from core.providers.openrouter_agentic_profile import (
     openrouter_agentic_preview_publication,
 )
 from core.runtime.hosted_provider_runtime import HostedProviderRuntime
-from core.runtime.hosted_agentic_models import HostedFinalizationPolicy, HostedProviderPrivateCodec
+from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
+from core.runtime.hosted_finalization_policy import provider_finalization_policy
 from core.runtime.hosted_runtime_registry_builder import (
     build_builtin_maverick_agent_onboarding_catalog,
     build_hosted_provider_runtime_registry,
@@ -50,7 +51,7 @@ def _runtime(config, recipe, *, client=None, cost_estimator=None, manifest=GOOGL
             cost_estimator
             or config.token_cost_policy.request_ceiling_microusd
         ),
-        finalization_policy=HostedFinalizationPolicy(2048, 2048, 0, 20.0),
+        finalization_policy=provider_finalization_policy(config, recipe),
         private_state_inspector=lambda content: None,
         context_compactor=lambda state, policy, summary: None,
         request_preflight=lambda request, credential: None,
@@ -427,6 +428,7 @@ class MaverickAgentRuntimeCompositionTest(unittest.TestCase):
         profile = replace(
             base.profile,
             definition_id="agentic-profile-openrouter-data-only-model",
+            policy_ceiling=replace(base.profile.policy_ceiling, max_estimated_cost_microusd=3_000_000),
             revision="data-2",
             model_id=recipe.model_id,
             model_revision=recipe.model_revision,

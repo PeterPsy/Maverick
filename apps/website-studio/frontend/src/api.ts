@@ -1,3 +1,4 @@
+import { purgeLegacyWorkspaceSnapshots } from './legacySnapshotCleanup';
 import {
   createRequestFingerprint,
   readThroughParentDataCache,
@@ -246,19 +247,11 @@ export function cachedWorkspaceSnapshot(
   options: { revalidate?: boolean; signal?: AbortSignal } = {}
 ): { fresh: Promise<WorkspaceSnapshot>; revalidated: Promise<WorkspaceSnapshot | null> } {
   const key = `${siteId || 'active'}::${route || '/'}`;
-  const legacyStorageKey = `website-studio:snapshot:${key}`;
-  let migrationPayload: WorkspaceSnapshot | null = null;
-  try {
-    const value = sessionStorage.getItem(legacyStorageKey);
-    migrationPayload = value ? sanitizeLegacyWorkspaceSnapshot(JSON.parse(value)) : null;
-  } catch { /* storage can be unavailable in sandboxed widgets */ }
+  purgeLegacyWorkspaceSnapshots();
   const existing = snapshotRequests.get(key);
   if (existing && ((!options.signal && !existing.signal) || existing.signal === options.signal)) {
     return { fresh: existing.promise, revalidated: existing.revalidated };
   }
-  const migrationSeed = migrationPayload
-    ? { payload: migrationPayload, revision: migrationPayload.revision }
-    : undefined;
   let resolveRevalidated!: (value: WorkspaceSnapshot | null) => void;
   let rejectRevalidated!: (error: unknown) => void;
   const revalidated = new Promise<WorkspaceSnapshot | null>((resolve, reject) => {
@@ -288,7 +281,6 @@ export function cachedWorkspaceSnapshot(
     .then((entityId) => readThroughParentDataCache<WorkspaceSnapshot>({
       appId: 'website-studio',
       entityId,
-      migrationSeed,
       resource: 'site-snapshots',
       schemaRevision: 'website-studio.site-snapshots.v2'
     }, loader, {
@@ -311,9 +303,6 @@ export function cachedWorkspaceSnapshot(
       throw error;
     })
     .then((result) => {
-    if (migrationSeed && result.brokered && result.migrationCommitted) {
-      try { sessionStorage.removeItem(legacyStorageKey); } catch { /* best effort */ }
-    }
     if (result.revalidation) {
       void result.revalidation.then((next) => {
         resolveRevalidated(next.changed ? next.payload : null);
@@ -337,12 +326,7 @@ export function invalidateWorkspaceSnapshots(resources: string[] = []) {
     'records', 'source', 'working-state', 'navigation', 'preview', 'activity', 'settings', 'view-selection'
   ].includes(resource))) {
     snapshotRequests.clear();
-    try {
-      for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
-        const key = sessionStorage.key(index);
-        if (key?.startsWith('website-studio:snapshot:')) sessionStorage.removeItem(key);
-      }
-    } catch { /* storage can be unavailable in sandboxed widgets */ }
+    purgeLegacyWorkspaceSnapshots();
   }
 }
 
@@ -406,40 +390,15 @@ function isSnapshotRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function sanitizeLegacyWorkspaceSnapshot(value: unknown): WorkspaceSnapshot | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const payload = value as Partial<WorkspaceSnapshot>;
-  if (!payload.versions || typeof payload.versions !== 'object'
-      || !SNAPSHOT_VERSION_KEYS.every((key) => typeof payload.versions?.[key] === 'string')) return null;
-  return sanitizeWorkspaceSnapshot({
-    ...payload,
-    revision: validSnapshotRevision(payload.revision)
-      ? payload.revision
-      : legacySnapshotRevision(payload.versions as SnapshotVersions)
-  });
-}
-
 function validSnapshotRevision(value: unknown): value is string {
   return typeof value === 'string'
-    && (/^[a-f0-9]{64}$/u.test(value) || /^legacy:[a-f0-9]{16}$/u.test(value));
+    && /^[a-f0-9]{64}$/u.test(value);
 }
 
 const SNAPSHOT_VERSION_KEYS: Array<keyof SnapshotVersions> = [
   'workspace_version', 'project_version', 'source_version', 'navigation_version',
   'working_state_version', 'preview_version', 'activity_version', 'settings_version'
 ];
-
-function legacySnapshotRevision(versions: SnapshotVersions): string {
-  const serialized = SNAPSHOT_VERSION_KEYS.map((key) => `${key}:${versions[key]}`).join('|');
-  let first = 0x811c9dc5;
-  let second = 0x9e3779b9;
-  for (let index = 0; index < serialized.length; index += 1) {
-    const code = serialized.charCodeAt(index);
-    first = Math.imul(first ^ code, 0x01000193);
-    second = Math.imul(second ^ code, 0x85ebca6b);
-  }
-  return `legacy:${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
-}
 
 function parseRetryAfter(value: string | null): number | null {
   if (!value) return null;

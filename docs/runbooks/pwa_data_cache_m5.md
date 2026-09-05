@@ -104,9 +104,9 @@ through the same normal view used for a server result.
 
 `workspace_snapshot` returns the existing segmented version map plus a stable
 SHA-256 revision. The app and sitemap widget hash the requested site/route into
-an opaque entity id. Old `sessionStorage` snapshots are sanitized and supplied
-only as migration seeds; they are never painted directly and are deleted only
-after the parent verifies the scoped commit. Snapshot values reject malformed
+an opaque entity id. Old `sessionStorage` snapshots lack a verifiable user/workspace scope and are
+deleted without reading or importing them. Only the current scoped broker or
+server result can supply display data. Snapshot values reject malformed
 project/navigation shapes, credentials, signed URLs, object URLs, and local or
 streaming paths.
 

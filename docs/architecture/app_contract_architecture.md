@@ -1698,9 +1698,9 @@ The app performs
 its conditional backend read when requested over the private channel and
 returns an app-sanitized model; it never receives the host principal, access
 lease, IndexedDB backend, or another resource namespace. A rejected or absent
-broker invokes the same server read directly. Sanitized legacy state is a
-migration seed, never an independently renderable value, and may be removed
-only after the parent verifies the scoped commit.
+broker invokes the same server read directly. Unscoped legacy browser state is deleted without reading or importing it;
+sanitizing fields cannot establish its user/workspace provenance. A migration
+protocol is not permission to adopt an unverified legacy payload.
 
 Structured invalidation messages follow that same owner registration:
 neither an app nor one of its widgets may claim another app's owner id. Declared
@@ -1743,12 +1743,14 @@ Their schemas, classifications, validators, TTLs, byte budgets, event aliases,
 and persistence outcomes are normative in
 `docs/product/pwa_cache_resource_inventory.v2.json`. App Store catalog data
 cannot enable an install, launch, workspace assignment, pin, or publication
-control before fresh server authority loads. Fitness Coach obtains the exact
-workspace/app scope for legacy bootstrap migration from Core's immutable frame
-context and never from the launch URL query. Its personal data is session-only
-until a separate privacy decision changes the resource policy;
-feature flags cannot make that promotion. Calendar, Chat, CRM, and Mail are not
-implicitly enabled by the existence of the broker.
+control before fresh server authority loads. Fitness Coach obtains its exact
+workspace/app scope from Core's immutable frame context, never the launch URL
+query, and deletes legacy bootstrap/thumbnail storage without migration. The
+2026-09-05 product decision explicitly approves the bounded sanitized Fitness,
+Calendar, Chat, CRM and Mail display resources now declared in the inventory.
+Their adapters enforce that allowlist independently of rollout gates. No app
+is implicitly enabled by the existence of the broker; default-off flags remain
+unchanged.
 
 The M3 shared implementation is `packages/pwa-cache/`. The top-level host must
 create an app-bound capability with explicit non-empty user id, workspace id,

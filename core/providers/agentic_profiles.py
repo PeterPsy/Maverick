@@ -12,7 +12,6 @@ from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
     AgenticProfileDefinition,
     AgenticProfileDefinitionStatus,
-    AgenticRuntimePolicy,
     WorkspaceAgenticProfileBinding,
     codex_routing_constraint,
     codex_runtime_policy,
@@ -146,36 +145,12 @@ def ensure_codex_workspace_profile(
         credential_binding_id=selection.binding_id,
         enabled=True,
         is_default=True,
-        workspace_policy_ceiling=_migrate_pre_listing_codex_policy(
-            existing.workspace_policy_ceiling,
-            profile.policy_ceiling,
-        ),
     )
     if desired == existing:
         return profile, existing
     binding = replace(desired, revision=existing.revision + 1, updated_at=timestamp)
     store.save_workspace_agentic_profile_binding(binding, expected_revision=existing.revision)
     return profile, binding
-
-
-def _migrate_pre_listing_codex_policy(
-    policy: AgenticRuntimePolicy,
-    profile_policy: AgenticRuntimePolicy,
-) -> AgenticRuntimePolicy:
-    """Restore the list bit absent from pre-listing default Codex bindings."""
-    if (
-        profile_policy.allow_filesystem_list
-        and not policy.allow_filesystem_list
-        and policy.allowed_surface_kinds == profile_policy.allowed_surface_kinds
-        and policy.tool_handle_mode == profile_policy.tool_handle_mode
-        and policy.tool_handle_mode == "all_currently_authorized"
-        and policy.allowed_tool_handles == profile_policy.allowed_tool_handles
-        and policy.allow_filesystem_read == profile_policy.allow_filesystem_read
-        and policy.allow_filesystem_write == profile_policy.allow_filesystem_write
-        and policy.allow_shell == profile_policy.allow_shell
-    ):
-        return replace(policy, allow_filesystem_list=True)
-    return policy
 
 
 def publish_codex_agentic_profile(

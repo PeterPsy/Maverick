@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING
 
 from core.providers.errors import AgenticProfileError
+from core.providers.maverick_agent_provider_config import MaverickTokenCostPolicy
+from core.runtime.hosted_agentic_models import HostedFinalizationPolicy, HostedProviderPrivateCodec
 from core.runtime.hosted_provider_runtime import HostedProviderRuntime
 
 if TYPE_CHECKING:
@@ -57,8 +60,32 @@ def validate_composed_maverick_runtime(
         getattr(client, "token_cost_policy", None) is not config.token_cost_policy
         or getattr(runtime.cost_estimator, "__self__", None)
         is not config.token_cost_policy
+        or getattr(runtime.cost_estimator, "__func__", None)
+        is not MaverickTokenCostPolicy.request_ceiling_microusd
     ):
         raise AgenticProfileError("maverick_runtime_accounting_identity_mismatch")
+    if runtime.implementation_manifest != adapter:
+        raise AgenticProfileError("maverick_runtime_implementation_mismatch")
+    create_response = getattr(client, "create_response", None)
+    if not callable(create_response):
+        raise AgenticProfileError("maverick_runtime_client_incomplete")
+    try:
+        inspect.signature(create_response).bind(object(), credential=None)
+    except (TypeError, ValueError) as error:
+        raise AgenticProfileError("maverick_runtime_client_incomplete") from error
+    if not isinstance(runtime.private_codec, HostedProviderPrivateCodec) or (
+        f"{runtime.private_codec.codec_id}@{runtime.private_codec.codec_version}"
+        != adapter.private_state_codec_id
+    ):
+        raise AgenticProfileError("maverick_runtime_private_codec_mismatch")
+    if not all(callable(component) for component in (
+        runtime.private_state_inspector,
+        runtime.context_compactor,
+        runtime.request_preflight,
+    )):
+        raise AgenticProfileError("maverick_runtime_recovery_incomplete")
+    if not isinstance(runtime.finalization_policy, HostedFinalizationPolicy):
+        raise AgenticProfileError("maverick_runtime_finalization_incomplete")
 
 
 __all__ = ["validate_composed_maverick_runtime"]

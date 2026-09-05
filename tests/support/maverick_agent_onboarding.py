@@ -120,5 +120,10 @@ class RuntimeClient:
         self.resolved_model_ids = config.resolved_model_ids
         self.token_cost_policy = config.token_cost_policy
 
+    async def create_response(self, request, *, credential):
+        from core.providers.agentic_protocol import AgenticModelEvent
+
+        yield AgenticModelEvent(event_type="completed", request_id=request.request_id, ordinal=1)
+
 
 __all__ = ["NOW", "RuntimeClient", "google_publication", "provider_store"]

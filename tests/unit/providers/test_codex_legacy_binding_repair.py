@@ -46,7 +46,7 @@ class CodexLegacyBindingRepairTest(unittest.TestCase):
             model_reasoning_effort=None,
         )
 
-    def test_default_binding_repairs_only_the_pre_listing_policy_gap(self) -> None:
+    def test_default_binding_preserves_an_explicit_listing_restriction(self) -> None:
         _profile, original = ensure_codex_workspace_profile(
             self.store,
             definition=self.codex,
@@ -73,9 +73,9 @@ class CodexLegacyBindingRepairTest(unittest.TestCase):
             now=NOW,
         )
 
-        self.assertTrue(repaired.workspace_policy_ceiling.allow_filesystem_list)
+        self.assertFalse(repaired.workspace_policy_ceiling.allow_filesystem_list)
         self.assertEqual(repaired.workspace_policy_ceiling.max_steps_per_turn, 32)
-        self.assertEqual(repaired.revision, persisted.revision + 1)
+        self.assertEqual(repaired.revision, persisted.revision)
         certificate = ensure_codex_preview_certificate(
             self.store,
             definition=profile,
@@ -88,7 +88,7 @@ class CodexLegacyBindingRepairTest(unittest.TestCase):
             binding=repaired,
             registry=self.registry,
         )
-        self.assertTrue(readiness.complete)
+        self.assertFalse(readiness.complete)
         self.assertEqual(
             certificate.certified_capabilities.attachment_modalities,
             ("file",),

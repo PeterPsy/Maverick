@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 
 from core.providers.agentic_protocol import AgenticModelProviderClient
 from core.runtime.hosted_agentic_models import (
@@ -17,6 +17,9 @@ from core.runtime.hosted_context_management import HostedProviderStateCompactor
 from core.runtime.full_workspace_contract import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
 from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
+
+if TYPE_CHECKING:
+    from core.providers.maverick_agent_onboarding import MaverickProtocolAdapterManifest
 
 
 # These reserves exceed each pinned estimator for every terminal request whose
@@ -61,6 +64,8 @@ class HostedProviderRuntime:
     endpoint_id: str = ""
     endpoint_url: str = ""
     allowed_upstream_ids: tuple[str, ...] = ()
+    # Supplied by the executable factory, never copied from publication data.
+    implementation_manifest: MaverickProtocolAdapterManifest | None = None
 
 
 class HostedProviderRuntimeRegistry:

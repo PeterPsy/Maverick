@@ -596,6 +596,13 @@ configured model, actual transport endpoint, routing/upstream/provider/model
 identity and the same cost-policy object used by the runtime estimator before a
 profile can be published. Another model compatible with that protocol therefore
 requires only new config/recipe/profile data, including its own route and price.
+The executable factory also supplies its independent implementation manifest;
+transport, request/response/private codecs, accounting, cancellation, and recovery
+must match the publication, rather than being copied from it. Composition requires
+a callable request client, private-state inspection, compaction, and preflight,
+and the exact request-ceiling estimator (not the usage-pricing method). Google
+Interactions rejects ZDR and data-collection-denial claims: its current transport
+does not implement or attest those guarantees.
 Discovery snapshots vendor model metadata into a digest but always returns
 `authority_granted=false` and no execution family. Publication classifies a
 profile as `maverick_agent` only after the complete Full Workspace contract,
@@ -2523,7 +2530,7 @@ The sanitized runtime config must remove inherited MCP server and plugin section
 
 The Codex adapter owns Maverick's managed Codex model selection for runtime agents. It should discover the visible Codex model catalog through the configured Codex binary, expose the viable model and reasoning-effort options through generic provider settings, and write the workspace-selected `model` plus the session-selected `model_reasoning_effort` into each runtime-scoped Codex config instead of inheriting those values from the operator home. Reasoning is not workspace-default authority. The fallback model is `gpt-5.6-sol`. New sessions default to the deepest supported single-agent reasoning effort: `max` when the model exposes it, otherwise the next deepest advertised effort. Codex `ultra` is a multi-agent execution mode rather than a reasoning effort and must not appear in the reasoning selector. Persisted model catalogs are normalized to this contract without requiring code changes when Codex adds or removes visible models. Codex certification belongs to this runtime/model-provider connection, so a newly advertised Codex model is immediately eligible under the same certified adapter and harness. The Core still creates a model-bound immutable profile and capability-certificate projection to pin catalog metadata, reasoning choices, and session identity; that projection does not represent a second independent certification run for the model.
 
-Persisted execution-binding digest compatibility remains fail closed. A newly materialized default may be excluded from legacy digest validation only as part of an explicit atomic schema-extension group; validation checks the bounded combinations of those groups rather than the power set of individual fields.
+Persisted execution-binding digest compatibility remains fail closed. A newly materialized default may be excluded from legacy digest validation only as part of an explicit atomic schema-extension group; validation checks the bounded combinations of those groups rather than the power set of individual fields. Codex workspace-binding migration preserves every existing policy restriction, including an explicit false filesystem-list bit. It must not infer missing legacy-field provenance from a hydrated policy or broaden permissions automatically.
 
 Every agentic model identity carries a revision policy in addition to provider
 and model id. `exact` requires a non-empty revision copied unchanged through

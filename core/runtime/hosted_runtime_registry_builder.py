@@ -26,6 +26,8 @@ from core.providers.hosted_endpoint_preflight import (
     preflight_google_interactions_request,
 )
 from core.providers.maverick_agent_builtins import (
+    GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
+    OPENROUTER_CHAT_PROTOCOL_ADAPTER,
     builtin_maverick_agent_publications,
     builtin_maverick_protocol_adapters,
     builtin_maverick_provider_configs,
@@ -128,6 +130,7 @@ def _google_interactions_runtime(
         recipe=recipe,
         context_compactor=compact_google_stateless_history,
         request_preflight=preflight_google_interactions_request,
+        implementation_manifest=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
     )
 
 
@@ -164,6 +167,7 @@ def _openrouter_chat_runtime(
         request_preflight=OpenRouterCompletionRequestPreflight(
             upstream_provider_names=config.upstream_provider_names,
         ),
+        implementation_manifest=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
     )
 
 

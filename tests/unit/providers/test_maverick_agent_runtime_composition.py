@@ -21,6 +21,7 @@ from core.providers.openrouter_agentic_profile import (
     openrouter_agentic_preview_publication,
 )
 from core.runtime.hosted_provider_runtime import HostedProviderRuntime
+from core.runtime.hosted_agentic_models import HostedFinalizationPolicy, HostedProviderPrivateCodec
 from core.runtime.hosted_runtime_registry_builder import (
     build_builtin_maverick_agent_onboarding_catalog,
     build_hosted_provider_runtime_registry,
@@ -33,18 +34,27 @@ from tests.support.maverick_agent_onboarding import (
 )
 
 
-def _runtime(config, recipe, *, client=None, cost_estimator=None):
+def _runtime(config, recipe, *, client=None, cost_estimator=None, manifest=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER):
     return HostedProviderRuntime(
         model_provider_id=config.model_provider_id,
         provider_protocol=config.provider_protocol,
         provider_api_version=config.provider_api_version,
         client=client or RuntimeClient(config, recipe),
-        private_codec=object(),
+        private_codec=HostedProviderPrivateCodec(
+            codec_id=manifest.private_state_codec_id.split("@")[0],
+            codec_version=manifest.private_state_codec_id.split("@")[1],
+            schema_version="1",
+            content_type="application/json",
+        ),
         cost_estimator=(
             cost_estimator
             or config.token_cost_policy.request_ceiling_microusd
         ),
-        finalization_policy=object(),
+        finalization_policy=HostedFinalizationPolicy(2048, 2048, 0, 20.0),
+        private_state_inspector=lambda content: None,
+        context_compactor=lambda state, policy, summary: None,
+        request_preflight=lambda request, credential: None,
+        implementation_manifest=manifest,
         recipe=recipe,
     )
 
@@ -203,7 +213,7 @@ class MaverickAgentRuntimeCompositionTest(unittest.TestCase):
             publication,
             lambda provider, harness: (
                 built.append(manifest.protocol_adapter_id)
-                or _runtime(provider, harness)
+                or _runtime(provider, harness, manifest=manifest)
             ),
         )
         catalog.build_runtime_registry()

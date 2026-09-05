@@ -114,6 +114,8 @@ class GoogleInteractionsAgenticClient:
             or self.resolved_model_ids
             or routing.allow_fallbacks
             or routing.allowed_quantizations
+            or routing.data_collection_policy != "provider_contract"
+            or routing.require_zdr
         ):
             raise ValueError(
                 "Google Interactions runtime routing config is unsupported."

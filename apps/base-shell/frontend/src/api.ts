@@ -1,8 +1,11 @@
 import {
+  MutationRetryHttpError,
+  MutationRetryTransportError,
+  SafeRequestRetryHttpError,
+  SafeRequestRetryTransportError,
   createIdempotencyKey,
-  createMutationRetryContract,
-  createRequestFingerprint,
-  idempotencyHeaders,
+  createMutationRetryExecutor,
+  createSafeRequestRetryExecutor,
 } from "@maverick/pwa-cache";
 import { revokeShellAuthorization, shellRetryCoordinator } from "./pwaCacheRuntime";
 
@@ -345,6 +348,31 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   }
 }
 
+async function requestJsonWithRetry<T>(
+  key: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const executor = createSafeRequestRetryExecutor({ endpoint: path, method: "GET" });
+  try {
+    const response = await shellRetryCoordinator.runRequest<T>({ executor, key, signal });
+    shellRetryCoordinator.confirmUsefulTransport();
+    return response;
+  } catch (error) {
+    if (error instanceof SafeRequestRetryHttpError) {
+      const responseError = new MaverickHttpError(executor.endpoint, error.response);
+      if (responseError.status === 401 || responseError.status === 403) {
+        void revokeShellAuthorization(responseError.status);
+      }
+      throw responseError;
+    }
+    if (error instanceof SafeRequestRetryTransportError) {
+      throw new MaverickTransportError(error.message, { cause: error });
+    }
+    throw error;
+  }
+}
+
 function parseRetryAfter(value: string | null): number | null {
   if (!value) {
     return null;
@@ -500,8 +528,11 @@ export function normalizeAppRegistryPayload(value: unknown): AppRegistryPayload 
   return { items };
 }
 
-export function listApps(signal?: AbortSignal): Promise<AppRegistryPayload> {
-  return requestJson<unknown>("/api/apps", { signal }).then(normalizeAppRegistryPayload);
+export function listApps(signal?: AbortSignal, retryKey?: string): Promise<AppRegistryPayload> {
+  const request = retryKey
+    ? requestJsonWithRetry<unknown>(retryKey, "/api/apps", signal)
+    : requestJson<unknown>("/api/apps", { signal });
+  return request.then(normalizeAppRegistryPayload);
 }
 
 export function listPinnedApps(signal?: AbortSignal): Promise<PinnedAppsPayload> {
@@ -536,33 +567,34 @@ export async function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayloa
     action: "pinned_apps.set",
     app_ids: appIds.map((appId) => appId.trim()).filter(Boolean),
   } as const;
-  const serializedSemantics = JSON.stringify(semantics);
-  const mutation = createMutationRetryContract({
+  const executor = await createMutationRetryExecutor({
     action: "pinned_apps.set",
     auditId: "base-shell.pinned-apps.set.v1",
     endpoint: "/api/apps/app-store/backend",
     idempotencyKey: createIdempotencyKey("pinned-apps"),
     method: "POST",
-    requestFingerprint: await createRequestFingerprint(serializedSemantics),
+    request: semantics,
   });
-  const body = JSON.stringify({
-    ...semantics,
-    idempotency_key: mutation.idempotencyKey,
-    request_fingerprint: mutation.requestFingerprint,
-  });
-  return shellRetryCoordinator.run({
-    action: mutation.action,
-    endpoint: mutation.endpoint,
-    key: "base-shell:pinned-apps.set",
-    method: mutation.method,
-    mutation,
-    operation: ({ signal }) => requestJson<unknown>(mutation.endpoint, {
-      method: mutation.method,
-      headers: { "Content-Type": "application/json", ...idempotencyHeaders(mutation) },
-      body,
-      signal,
-    }),
-  }).then(normalizePinnedAppsPayload);
+  try {
+    const response = await shellRetryCoordinator.runMutation<unknown>({
+      executor,
+      key: "base-shell:pinned-apps.set",
+    });
+    shellRetryCoordinator.confirmUsefulTransport();
+    return normalizePinnedAppsPayload(response);
+  } catch (error) {
+    if (error instanceof MutationRetryHttpError) {
+      const responseError = new MaverickHttpError(executor.endpoint, error.response);
+      if (responseError.status === 401 || responseError.status === 403) {
+        void revokeShellAuthorization(responseError.status);
+      }
+      throw responseError;
+    }
+    if (error instanceof MutationRetryTransportError) {
+      throw new MaverickTransportError(error.message, { cause: error });
+    }
+    throw error;
+  }
 }
 
 export function getPlatformStatus(): Promise<PlatformStatus> {
@@ -576,8 +608,10 @@ export function getPlatformStatus(): Promise<PlatformStatus> {
   });
 }
 
-export function getSession(signal?: AbortSignal): Promise<SessionPayload> {
-  return requestJson<SessionPayload>("/api/session", { signal });
+export function getSession(signal?: AbortSignal, retryKey?: string): Promise<SessionPayload> {
+  return retryKey
+    ? requestJsonWithRetry<SessionPayload>(retryKey, "/api/session", signal)
+    : requestJson<SessionPayload>("/api/session", { signal });
 }
 
 export function login(username: string, password: string): Promise<SessionPayload> {
@@ -592,8 +626,10 @@ export function logout(): Promise<SessionPayload> {
   return requestJson<SessionPayload>("/api/auth/logout", { method: "POST" });
 }
 
-export function listWorkspaces(signal?: AbortSignal): Promise<WorkspacesPayload> {
-  return requestJson<WorkspacesPayload>("/api/workspaces", { signal });
+export function listWorkspaces(signal?: AbortSignal, retryKey?: string): Promise<WorkspacesPayload> {
+  return retryKey
+    ? requestJsonWithRetry<WorkspacesPayload>(retryKey, "/api/workspaces", signal)
+    : requestJson<WorkspacesPayload>("/api/workspaces", { signal });
 }
 
 export function createWorkspace(name: string): Promise<WorkspaceItem> {
@@ -636,8 +672,13 @@ export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>("/api/settings/platform");
 }
 
-export function getProviderSetupSettings(signal?: AbortSignal): Promise<ProviderSetupSettings> {
-  return requestJson<ProviderSetupSettings>("/api/settings/provider-setup", { signal });
+export function getProviderSetupSettings(
+  signal?: AbortSignal,
+  retryKey?: string,
+): Promise<ProviderSetupSettings> {
+  return retryKey
+    ? requestJsonWithRetry<ProviderSetupSettings>(retryKey, "/api/settings/provider-setup", signal)
+    : requestJson<ProviderSetupSettings>("/api/settings/provider-setup", { signal });
 }
 
 export function runtimeThreadWebSocketUrl(): string {

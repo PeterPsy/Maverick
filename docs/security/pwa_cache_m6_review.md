@@ -78,9 +78,14 @@ error taxonomy, cleanup-cancels-retry, cross-scope lifecycle, corrupt payload
 removal, quota denial, eviction, intermittent-network single-flight,
 OPFS/IndexedDB failure, and worker namespace recovery. The operational audit
 compares the canonical data-class policy, product inventory (including exact
-invalidation aliases), runtime resource manifest, typed mutation-factory
+invalidation aliases), runtime resource manifest, SDK mutation-executor
 sources, and the non-overridable full-target retry registry. Runtime rejects
-non-factory contracts and any method/endpoint/action mismatch. CI runs the
+non-factory executors and any method/endpoint/action or JSON-action mismatch.
+The executor owns the concrete `fetch`; the mutation retry API exposes no
+application callback or custom classifier that could issue a different
+request. Arbitrary callbacks are one-shot and cannot claim a safe method;
+retryable GET/HEAD/OPTIONS reads also use a factory-issued SDK request executor.
+CI runs the
 complete SDK/chaos and protocol suites plus a DOM test and authenticated
 isolated-frame smoke for Settings → Cache.
 

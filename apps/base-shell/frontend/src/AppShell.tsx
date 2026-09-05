@@ -40,7 +40,6 @@ import { markStartupMetric, measureStartupMetric } from "./startupMetrics";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
 import {
   revokeShellAuthorization,
-  runShellRead,
   shellCacheLifecycle,
   shellCachePrincipal,
   shellRetryCoordinator,
@@ -331,11 +330,7 @@ export function AppShell() {
     setIsWorkspacesLoading(true);
     try {
       const sessionStartedAt = performance.now();
-      const currentSession = await runShellRead(
-        "base-shell:session",
-        (signal) => getSession(signal),
-        controller.signal,
-      );
+      const currentSession = await getSession(controller.signal, "base-shell:session");
       measureStartupMetric("shell.bootstrap.session", sessionStartedAt, { authenticated: currentSession.authenticated });
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
@@ -350,11 +345,7 @@ export function AppShell() {
         return;
       }
       const blockingStartedAt = performance.now();
-      const registry = await runShellRead(
-        "base-shell:app-registry",
-        (signal) => listApps(signal),
-        controller.signal,
-      );
+      const registry = await listApps(controller.signal, "base-shell:app-registry");
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
@@ -418,7 +409,7 @@ export function AppShell() {
     const deferredStartedAt = performance.now();
     try {
       const workspacePayload = signal
-        ? await runShellRead("base-shell:workspaces", (retrySignal) => listWorkspaces(retrySignal), signal)
+        ? await listWorkspaces(signal, "base-shell:workspaces")
         : await listWorkspaces();
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
@@ -451,7 +442,7 @@ export function AppShell() {
     const deferredStartedAt = performance.now();
     try {
       const providerSetupSettings = signal
-        ? await runShellRead("base-shell:provider-setup", (retrySignal) => getProviderSetupSettings(retrySignal), signal)
+        ? await getProviderSetupSettings(signal, "base-shell:provider-setup")
         : await getProviderSetupSettings();
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
@@ -480,7 +471,7 @@ export function AppShell() {
     const pinnedStateVersion = pinnedAppsSaveVersionRef.current;
     try {
       const pinnedApps = signal
-        ? await runShellRead("base-shell:pinned-apps", (retrySignal) => listPinnedApps(retrySignal), signal)
+        ? await listPinnedApps(signal)
         : await listPinnedApps();
       if (
         signal?.aborted

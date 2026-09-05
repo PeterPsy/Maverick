@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CacheLifecycleController,
   DurableCacheCleanupError,
   LOCAL_PERSISTENCE_POLICY_REVISION,
   PWA_CACHE_ENTRY_SCHEMA_VERSION,
   RetryCoordinator,
+  createSafeRequestRetryExecutor,
   type CacheEntryMetadata,
   type FileCacheMaintenance,
 } from "../src";
@@ -40,6 +41,11 @@ function entry(overrides: Partial<CacheEntryMetadata> = {}): CacheEntryMetadata 
 }
 
 describe("cache lifecycle", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("renews private leases after fresh authentication and clears the previous workspace", async () => {
     const backend = new MemoryCacheBackend();
     await backend.put({ metadata: entry(), payload: { value: "one" } });
@@ -65,7 +71,11 @@ describe("cache lifecycle", () => {
     const retry = new RetryCoordinator();
     const controller = new CacheLifecycleController({ backend, bus: new CacheBus(null), retryCoordinator: retry });
     await controller.transition({ appId: "base-shell", userId: "user-a", workspaceId: "default" });
-    const pending = retry.run({ key: "read:pending", operation: async () => { throw Object.assign(new Error(), { name: "MaverickTransportError" }); } });
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("link down"));
+    const pending = retry.runRequest({
+      executor: createSafeRequestRetryExecutor({ endpoint: "/api/test/pending" }),
+      key: "read:pending",
+    });
     void pending.catch(() => undefined);
     await controller.endSession();
     expect(await backend.list({ userId: "user-a" })).toEqual([]);
@@ -81,9 +91,10 @@ describe("cache lifecycle", () => {
       bus: new CacheBus(null),
       retryCoordinator: retry,
     });
-    const pending = retry.run({
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("link down"));
+    const pending = retry.runRequest({
+      executor: createSafeRequestRetryExecutor({ endpoint: "/api/test/clear-cache" }),
       key: "read:clear-cache",
-      operation: async () => { throw Object.assign(new Error(), { name: "MaverickTransportError" }); },
     });
     void pending.catch(() => undefined);
 

@@ -4,6 +4,7 @@ import {
   RetryCoordinator,
   createPwaCacheHost,
   createPwaCacheMetricsCollector,
+  createSafeRequestRetryExecutor,
   type ResourceCachePolicy,
   type StorageQuotaAdapter,
 } from "../src";
@@ -98,24 +99,28 @@ describe("PWA cache hardening chaos matrix", () => {
       random: () => 0.5,
       telemetry: (event) => metrics.recordRetry(event),
     });
-    const operation = vi.fn()
-      .mockRejectedValueOnce(Object.assign(new Error("link down"), { name: "MaverickTransportError" }))
-      .mockRejectedValueOnce(Object.assign(new Error("link flapped"), { name: "MaverickTransportError" }))
-      .mockResolvedValueOnce("ready");
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("link down"))
+      .mockRejectedValueOnce(new TypeError("link flapped"))
+      .mockResolvedValueOnce(new Response(JSON.stringify("ready"), {
+        headers: { "Content-Type": "application/json" },
+      }));
+    const executor = createSafeRequestRetryExecutor({ endpoint: "/api/test/intermittent-read" });
 
-    const first = coordinator.run({ key: "intermittent-read", operation });
-    const second = coordinator.run({ key: "intermittent-read", operation });
+    const first = coordinator.runRequest<string>({ executor, key: "intermittent-read" });
+    const second = coordinator.runRequest<string>({ executor, key: "intermittent-read" });
     expect(second).toBe(first);
     await vi.advanceTimersByTimeAsync(1_000);
     await vi.advanceTimersByTimeAsync(2_000);
 
     await expect(first).resolves.toBe("ready");
-    expect(operation).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(metrics.snapshot().counters).toMatchObject({
       pwa_request_retry_attempt: 2,
       pwa_request_wait_resolved: 1,
       pwa_request_wait_started: 1,
     });
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 });

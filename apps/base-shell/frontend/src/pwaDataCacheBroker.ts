@@ -27,7 +27,7 @@ import {
   type MaverickFrameScope,
 } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
-import { revokeShellAuthorization, runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
+import { revokeShellAuthorization, runShellOperation, shellCacheLifecycle } from "./pwaCacheRuntime";
 import {
   RESOURCE_DECLARATIONS,
   type ResourceDeclaration,
@@ -269,7 +269,7 @@ export class PwaDataCacheBroker {
       if (active.controller.signal.aborted) return;
       const result = await resource.readThrough(
         request.entity_id,
-        (context) => runShellRead(
+        (context) => runShellOperation(
           `data-cache:${request.app_id}:${request.resource}:${request.entity_id}`,
           (retrySignal) => this.requestNetwork(active, context, retrySignal),
           active.controller.signal,

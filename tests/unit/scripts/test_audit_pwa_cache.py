@@ -14,6 +14,7 @@ from scripts.audit_pwa_cache import (
     RUNTIME_RESOURCE_DECLARATIONS_PATH,
     REPOSITORY_ROOT,
     audit_ci_hardening,
+    audit_device_regression_policy,
     audit_frontend_manifests,
     audit_mutation_retry_registry,
     audit_repository,
@@ -26,6 +27,15 @@ from scripts.audit_pwa_cache import (
 class PwaCacheAuditTests(unittest.TestCase):
     def test_repository_operational_policy_is_self_consistent(self) -> None:
         self.assertEqual(audit_repository(REPOSITORY_ROOT), [])
+
+    def test_device_policy_requires_exact_release_candidate_binding(self) -> None:
+        policy = json.loads((REPOSITORY_ROOT / POLICY_PATH).read_text(encoding="utf-8"))
+        policy["device_regression"]["release_candidate_binding"] = "any-current-evidence"
+        errors: list[str] = []
+
+        audit_device_regression_policy(policy, errors)
+
+        self.assertTrue(any("exact release_id candidate" in error for error in errors), errors)
 
     def test_frontend_asset_budget_rejects_an_oversized_new_asset(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -192,13 +202,13 @@ class PwaCacheAuditTests(unittest.TestCase):
             package_source = root / "packages" / "shared-client" / "src" / "retry.js"
             package_source.parent.mkdir(parents=True)
             package_source.write_text(
-                """export const mutation = createMutationRetryContract({
+                """export const mutation = createMutationRetryExecutor({
   auditId: 'shared-client.retry-write.v1',
   method: 'POST',
   endpoint: '/api/shared/write',
   action: 'shared.write',
   idempotencyKey,
-  requestFingerprint,
+  request: { action: 'shared.write' },
 });
 """,
                 encoding="utf-8",
@@ -206,13 +216,13 @@ class PwaCacheAuditTests(unittest.TestCase):
             storage_source = root / "apps" / "storage" / "frontend" / "src" / "retry.ts"
             storage_source.parent.mkdir(parents=True)
             storage_source.write_text(
-                """export const mutation = createMutationRetryContract({
+                """export const mutation = createMutationRetryExecutor({
   auditId: 'storage.retry-write.v1',
   method: 'PATCH',
   endpoint: '/api/storage/write',
   action: 'storage.write',
   idempotencyKey,
-  requestFingerprint,
+  request: { action: 'storage.write' },
 });
 """,
                 encoding="utf-8",
@@ -252,13 +262,13 @@ class PwaCacheAuditTests(unittest.TestCase):
             source = root / "apps" / "example" / "frontend" / "src" / "retry.ts"
             source.parent.mkdir(parents=True)
             source.write_text(
-                """export const mutation = createMutationRetryContract({
+                """export const mutation = createMutationRetryExecutor({
   auditId: 'example.retry-write.v1',
   method: 'PATCH',
   endpoint: '/api/example/write',
   action: 'example.write',
   idempotencyKey,
-  requestFingerprint,
+  request: { action: 'example.write' },
 });
 """,
                 encoding="utf-8",
@@ -273,7 +283,7 @@ class PwaCacheAuditTests(unittest.TestCase):
             self.assertEqual(discovered, {"example.retry-write.v1"})
             self.assertTrue(any("differs from the operational policy" in error for error in errors), errors)
 
-    def test_retry_source_discovery_rejects_raw_or_computed_contracts(self) -> None:
+    def test_retry_source_discovery_rejects_raw_or_computed_executors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "apps" / "example" / "client" / "retry.mjs"
@@ -292,13 +302,13 @@ export const mutation = { auditId, serverDeduplicates };
 
             source.write_text(
                 """const auditId = 'example.retry-write.v1';
-export const mutation = createMutationRetryContract({
+export const mutation = createMutationRetryExecutor({
   auditId,
   method: 'POST',
   endpoint: '/api/example/write',
   action: 'example.write',
   idempotencyKey,
-  requestFingerprint,
+  request: { action: 'example.write' },
 });
 """,
                 encoding="utf-8",
@@ -307,6 +317,42 @@ export const mutation = createMutationRetryContract({
 
             self.assertEqual(production_retry_audit_ids(root, errors), set())
             self.assertTrue(any("literal auditId" in error for error in errors), errors)
+
+    def test_retry_source_discovery_rejects_an_opaque_mutation_callback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "apps" / "example" / "frontend" / "src" / "retry.ts"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                """const executor = await createMutationRetryExecutor({
+  auditId: 'example.retry-write.v1',
+  method: 'POST',
+  endpoint: '/api/example/write',
+  action: 'example.write',
+  idempotencyKey,
+  request: { action: 'example.write' },
+});
+coordinator.runMutation({
+  executor,
+  operation: () => fetch('/api/unsafe/non-deduplicated', { method: 'DELETE' }),
+});
+coordinator.run({
+  action: 'example.write',
+  endpoint: '/api/example/write',
+  method: 'POST',
+  mutation: executor,
+  operation: () => fetch('/api/unsafe/non-deduplicated', { method: 'DELETE' }),
+});
+""",
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+
+            discovered = production_retry_audit_ids(root, errors)
+
+            self.assertEqual(discovered, {"example.retry-write.v1"})
+            self.assertTrue(any("operation/classifier callback" in error for error in errors), errors)
+            self.assertTrue(any("legacy callback retry API" in error for error in errors), errors)
 
     def test_ci_hardening_requires_sdk_settings_smoke_and_physical_verifier(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -324,6 +370,8 @@ export const mutation = createMutationRetryContract({
             self.assertTrue(any("physical-device workflow" in error for error in errors), errors)
             self.assertTrue(any("scheduled" in error for error in errors), errors)
             self.assertTrue(any("release" in error for error in errors), errors)
+            self.assertTrue(any("release candidate" in error for error in errors), errors)
+            self.assertTrue(any("promotion" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

@@ -184,19 +184,33 @@ hints. The coordinator never reads `navigator.onLine` as authority. `401`,
 Automatic HTTP retries are limited to transport/timeouts and
 `429/502/503/504`.
 
+No arbitrary application callback is automatically replayed. `runOpaque()`
+tracks cancellation but is one-shot and accepts no declared HTTP method.
+Retryable GET/HEAD/OPTIONS calls use `createSafeRequestRetryExecutor()` plus
+`runRequest()`, so the SDK—not callback metadata—owns the concrete request.
+POST-based read actions and other opaque cache loaders remain one-shot unless a
+separate reviewed idempotent mutation executor applies.
+
 If a `401` or `403` triggers lifecycle cleanup while its request is still the
 active retry flight, the original `MaverickHttpError` remains the terminal
 result. Scope cancellation must not replace it with `RetryCancelledError`, so
 Base Shell can always enter its normal authentication teardown.
 
-Unsafe requests are attempted once unless the caller supplies all of:
+Unsafe requests submitted through the ordinary callback API are always
+attempted once. A mutation is eligible for retry only through the separate
+SDK-owned executor, which supplies all of:
 
 - a stable `Idempotency-Key` sent to the server;
 - a canonical `sha256:<64 lowercase hex>` fingerprint of the exact request
   body/semantics; and
-- a nominal `createMutationRetryContract()` result whose versioned audit id,
+- a nominal `createMutationRetryExecutor()` result whose versioned audit id,
   HTTP method, API endpoint, and backend action exactly match the immutable v2
   runtime registry and its reviewed server-deduplication evidence.
+
+The executor snapshots the JSON semantics, derives and injects the fingerprint,
+and alone constructs and issues the request. `runMutation()` accepts no caller
+operation callback or custom classifier, so approved metadata cannot authorize
+retry of a different endpoint, method, or action.
 
 Eligible mutations have at most three attempts in the current RAM session.
 Concurrent callers with the same idempotency key and fingerprint share one

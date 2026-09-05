@@ -1,0 +1,55 @@
+name: Promote PWA Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Exact existing GitHub prerelease tag to promote
+        required: true
+        type: string
+      evidence_json:
+        description: Redaction-reviewed physical-device evidence for this exact tag
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pwa-release-promotion-${{ inputs.release_id }}
+  cancel-in-progress: false
+
+jobs:
+  physical-device-gate:
+    uses: ./.github/workflows/pwa-physical-device-gate.yml
+    with:
+      release_id: ${{ inputs.release_id }}
+      evidence_json: ${{ inputs.evidence_json || vars.PWA_DEVICE_EVIDENCE_JSON }}
+
+  promote-release:
+    needs: physical-device-gate
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote the exact gated prerelease
+        uses: actions/github-script@v7
+        env:
+          PWA_RELEASE_ID: ${{ inputs.release_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = process.env.PWA_RELEASE_ID;
+            const { owner, repo } = context.repo;
+            const { data: release } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            if (release.draft || !release.prerelease || release.tag_name !== tag) {
+              core.setFailed(`Refusing to promote ${tag}: it is not the exact existing prerelease candidate.`);
+              return;
+            }
+            await github.rest.repos.updateRelease({
+              owner,
+              repo,
+              release_id: release.id,
+              draft: false,
+              prerelease: false,
+            });

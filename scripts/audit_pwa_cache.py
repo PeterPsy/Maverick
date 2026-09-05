@@ -64,9 +64,16 @@ def audit_repository(root: Path) -> list[str]:
     else:
         errors.append(f"{RUNTIME_RESOURCE_DECLARATIONS_PATH}: expected an object")
     audit_retry_policy(root, policy, retry_registry, errors)
+    audit_device_regression_policy(policy, errors)
     audit_ci_hardening(root, errors)
     audit_rollout_contract(policy, errors)
     return errors
+
+
+def audit_device_regression_policy(policy: dict[str, Any], errors: list[str]) -> None:
+    device = object_field(policy, "device_regression", errors)
+    if device.get("release_candidate_binding") != "exact_release_id":
+        errors.append("device_regression must bind evidence to the exact release_id candidate")
 
 
 def audit_frontend_manifests(root: Path, policy: dict[str, Any], errors: list[str]) -> None:
@@ -163,10 +170,20 @@ def audit_retry_policy(
     attempts = retry.get("max_mutation_attempts")
     source_path = root / "packages/pwa-cache/src/retryPolicy.ts"
     retry_source = read_text(source_path, errors)
+    retry_request_runtime = read_text(root / "packages/pwa-cache/src/retryJsonRequest.ts", errors)
+    mutation_runtime = "\n".join((
+        read_text(root / "packages/pwa-cache/src/mutationRetry.ts", errors),
+        read_text(root / "packages/pwa-cache/src/mutationRetryRequest.ts", errors),
+        retry_request_runtime,
+    ))
+    safe_request_runtime = "\n".join((
+        read_text(root / "packages/pwa-cache/src/safeRequestRetry.ts", errors),
+        retry_request_runtime,
+    ))
     retry_runtime = read_text(root / "packages/pwa-cache/src/retry.ts", errors)
     if isinstance(safe_methods, list):
         literal = "new Set([" + ", ".join(json.dumps(item) for item in safe_methods) + "])"
-        if literal not in retry_source:
+        if literal not in retry_source or literal not in safe_request_runtime:
             errors.append("retryPolicy.ts safe methods differ from operational policy")
     else:
         errors.append("retry_policy.safe_methods must be an array")
@@ -179,16 +196,29 @@ def audit_retry_policy(
     if not positive_integer(attempts) or f"positive(options.maxMutationAttempts, {attempts})" not in retry_runtime:
         errors.append("retry runtime mutation attempt cap differs from operational policy")
     if (
-        "createMutationRetryContract(" not in retry_source
-        or "ISSUED_MUTATION_RETRY_CONTRACTS.has(contract)" not in retry_source
-        or "mutationRetryRegistry as unknown" not in retry_source
-        or "registry.contracts" not in retry_source
-        or "operationMethod !== contract.method" not in retry_source
-        or "textValue(endpoint) !== contract.endpoint" not in retry_source
-        or "textValue(action) !== contract.action" not in retry_source
-        or "validateMutationContract(method, options.endpoint, options.action, options.mutation)" not in retry_runtime
+        "createMutationRetryExecutor(" not in mutation_runtime
+        or "ISSUED_MUTATION_RETRY_EXECUTORS.get(executor)" not in mutation_runtime
+        or "mutationRetryRegistry as unknown" not in mutation_runtime
+        or "registry.contracts" not in mutation_runtime
+        or "request.action !== approvedAction" not in mutation_runtime
+        or "globalThis.fetch(request.endpoint" not in mutation_runtime
+        or "endpoint: executor.endpoint" not in mutation_runtime
+        or "method: executor.method" not in mutation_runtime
+        or '"Idempotency-Key": executor.idempotencyKey' not in mutation_runtime
+        or "executeMutationRetryExecutor(executor, signal)" not in retry_runtime
+        or "rejectOpaqueFieldsOnMutationOperation(options)" not in retry_runtime
     ):
-        errors.append("mutation retry runtime does not enforce a factory-issued registered target")
+        errors.append("mutation retry runtime does not own and enforce the registered HTTP request")
+    if (
+        "runOpaque<T>(" not in retry_runtime
+        or 'method: "OPAQUE"' not in retry_runtime
+        or "runRequest<T = unknown>(" not in retry_runtime
+        or "executeSafeRequestRetryExecutor(executor, signal)" not in retry_runtime
+        or "rejectOpaqueFieldsOnSafeRequestOperation(options)" not in retry_runtime
+        or "globalThis.fetch(request.endpoint" not in safe_request_runtime
+        or "endpoint: executor.endpoint" not in safe_request_runtime
+    ):
+        errors.append("retry runtime permits an opaque callback to enter an automatic retry loop")
 
     contracts = retry.get("mutation_contracts")
     if not isinstance(contracts, list):
@@ -236,12 +266,10 @@ def audit_retry_contract_sources(root: Path, contract: dict[str, Any], label: st
         audit_id,
         action,
         endpoint,
-        "createMutationRetryContract",
-        "idempotencyHeaders",
-        "requestFingerprint",
-        "mutation.action",
-        "mutation.endpoint",
-        "mutation.method",
+        "createMutationRetryExecutor",
+        "runMutation",
+        "request: semantics",
+        "executor",
     ):
         if needle not in client:
             errors.append(f"{client_path}: missing audited retry evidence `{needle}`")
@@ -268,8 +296,11 @@ def audit_ci_hardening(root: Path, errors: list[str]) -> None:
         if command not in ci_source:
             errors.append(f".github/workflows/ci.yml: missing PWA hardening command `{command}`")
     physical_source = read_text(root / ".github/workflows/pwa-physical-device-gate.yml", errors)
-    verifier = "python scripts/pwa_device_regression.py verify --input pwa-device-evidence.json"
-    if verifier not in physical_source:
+    if (
+        "python scripts/pwa_device_regression.py verify" not in physical_source
+        or "--input pwa-device-evidence.json" not in physical_source
+        or '--expected-release-id "$PWA_EXPECTED_RELEASE_ID"' not in physical_source
+    ):
         errors.append("physical-device workflow does not execute the release evidence verifier")
     if 'cron: "17 4 1 * *"' not in physical_source or "\n  schedule:" not in physical_source:
         errors.append("physical-device workflow is not scheduled monthly below the 90-day evidence TTL")
@@ -277,6 +308,26 @@ def audit_ci_hardening(root: Path, errors: list[str]) -> None:
         errors.append("physical-device workflow is not linked to reusable and release gates")
     if "inputs.evidence_json || vars.PWA_DEVICE_EVIDENCE_JSON" not in physical_source:
         errors.append("physical-device workflow lacks persistent scheduled/release evidence input")
+    if (
+        "PWA_EXPECTED_RELEASE_ID:" not in physical_source
+        or "inputs.release_id || github.event.release.tag_name || vars.PWA_DEVICE_RELEASE_ID"
+        not in physical_source
+    ):
+        errors.append("physical-device workflow is not bound to the exact release candidate")
+
+    promotion_source = read_text(root / ".github/workflows/pwa-release-promotion.yml", errors)
+    if (
+        "uses: ./.github/workflows/pwa-physical-device-gate.yml" not in promotion_source
+        or "release_id: ${{ inputs.release_id }}" not in promotion_source
+        or "needs: physical-device-gate" not in promotion_source
+        or "PWA_RELEASE_ID: ${{ inputs.release_id }}" not in promotion_source
+        or "github.rest.repos.getReleaseByTag({ owner, repo, tag })" not in promotion_source
+        or "release.tag_name !== tag" not in promotion_source
+        or "github.rest.repos.updateRelease" not in promotion_source
+        or "release_id: release.id" not in promotion_source
+    ):
+        errors.append("PWA release promotion is not preventively blocked by the candidate-bound device gate")
+
 
 def audit_rollout_contract(policy: dict[str, Any], errors: list[str]) -> None:
     rollout = object_field(policy, "rollout", errors)

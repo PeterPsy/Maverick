@@ -73,15 +73,20 @@ data-class policy, and a bidirectional match—including the complete ordered
 invalidation-alias list—between the product inventory and the JSON manifest
 consumed by Base Shell's `RESOURCE_DECLARATIONS`. It also scans production
 JavaScript, TypeScript, Vue, and Svelte sources across apps, shared packages,
-Core, and scripts. Raw retry-contract objects are forbidden: each use must call
-the typed factory with a literal audit id, method, endpoint, and action, and the
-operational policy, runtime JSON registry, client/server evidence, and replay
-test must agree exactly. CI runs the same audit and the
+Core, and scripts. Raw or legacy retry-contract objects are forbidden: each use
+must call the SDK executor factory with a literal audit id, method, endpoint,
+and action, and the operational policy, runtime JSON registry, client/server
+evidence, and replay test must agree exactly. CI runs the same audit and the
 complete SDK/chaos, broker, worker, Settings DOM, and authenticated
-isolated-frame smoke suites. An unsafe request cannot use `RetryCoordinator`
-without a nominal factory-issued contract in the non-overridable runtime
-registry, an exact method/endpoint/action match, stable idempotency key,
-canonical SHA-256 request fingerprint, and audited server deduplication.
+isolated-frame smoke suites. An arbitrary callback passed to
+`RetryCoordinator.runOpaque()` remains one-shot and cannot provide method or
+retry metadata. Automatic safe HTTP reads use `runRequest()` with a nominal
+SDK executor that alone issues GET/HEAD/OPTIONS. A retried mutation can only use
+`runMutation()` with a nominal `createMutationRetryExecutor()` result from the
+non-overridable registry. The SDK snapshots exact JSON semantics, derives the
+fingerprint, injects a stable idempotency key, and owns `fetch`, method,
+endpoint, headers, body, timeout, redirects, and decoding. `runMutation()`
+accepts neither an operation callback nor a custom classifier.
 
 The `hardeningChaos.test.ts` suite injects uncertain quota, LRU pressure,
 corrupt persisted payloads, and intermittent transport. A valid server response
@@ -182,6 +187,7 @@ canonical matrix template:
 
 ```bash
 python3 scripts/pwa_device_regression.py template \
+  --release-id "$RELEASE_TAG" \
   --output /secure/release-evidence/pwa-device-regression.json
 ```
 
@@ -194,22 +200,31 @@ completeness, and redaction:
 
 ```bash
 python3 scripts/pwa_device_regression.py verify \
-  --input /secure/release-evidence/pwa-device-regression.json
+  --input /secure/release-evidence/pwa-device-regression.json \
+  --expected-release-id "$RELEASE_TAG"
 ```
 
-The verifier rejects missing/failing scenarios, duplicate or missing profiles,
-stale evidence, every undeclared diagnostic field, URLs, user/record ids, file
-names, serials, email, tokens, and content. A release stays blocked when the
-physical lab has not produced a current passing record; an emulated run must
-never be relabeled physical.
+The verifier first requires the evidence `release_id` to equal the exact
+candidate tag/build passed on the command line. It also rejects missing/failing
+scenarios, duplicate or missing profiles, stale evidence, every undeclared
+diagnostic field, URLs, user/record ids, file names, serials, email, tokens, and
+content. Evidence for an older or unrelated build cannot unlock a candidate. A
+release stays blocked when the physical lab has not produced a current passing
+record; an emulated run must never be relabeled physical.
 
 Store the current redaction-reviewed JSON in the repository variable
-`PWA_DEVICE_EVIDENCE_JSON`, or pass it explicitly when manually dispatching or
-calling **PWA Physical Device Release Gate**. The workflow runs monthly (well
-inside the 90-day TTL), on prerelease/publication events, and as a reusable
-`workflow_call` that the release publisher must require before artifact
-promotion. Each path invokes the same verifier and fails closed when the
-evidence is absent, stale, incomplete, failing, or non-redacted. Configure the
-reusable job as a required release/deployment check; the event-triggered runs
-also surface any out-of-band publication that bypassed that pipeline. A green
-emulated/browser smoke never substitutes for physical evidence.
+`PWA_DEVICE_EVIDENCE_JSON` and its exact candidate identity in
+`PWA_DEVICE_RELEASE_ID` for scheduled verification, or pass both explicitly to
+**PWA Physical Device Release Gate**. Release events derive the expected
+identity directly from `github.event.release.tag_name`; reusable and manual
+runs require `release_id`. Every path invokes the same exact-match verifier and
+fails closed when identity or evidence is absent, stale, incomplete, failing,
+or non-redacted.
+
+Promote an existing GitHub prerelease only through **Promote PWA Release
+Candidate**. Its `physical-device-gate` reusable job receives the exact tag,
+and `promote-release` has a hard `needs` dependency before it can change that
+same tag from prerelease to release. The release-event runs remain independent
+detection for an out-of-band publication; they are not represented as the
+preventive gate. A green emulated/browser smoke never substitutes for physical
+evidence.

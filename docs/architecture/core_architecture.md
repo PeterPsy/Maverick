@@ -1664,26 +1664,35 @@ the complete canonical data-class mapping, the retry classifier, and the
 reviewed mutation registry. Base Shell constructs `RESOURCE_DECLARATIONS` from
 an audited JSON manifest; CI compares it bidirectionally with the product
 inventory including exact invalidation aliases, scans production
-JS/TS/component sources across apps and shared packages, rejects raw mutation
-retry objects, and requires every typed-factory use to match the
+JS/TS/component sources across apps and shared packages, rejects raw/legacy
+mutation retry objects and callback-bearing mutation runs, and requires every
+SDK-executor factory use to match the
 non-overridable runtime registry's audit-id/method/endpoint/action tuple plus
 client, server-deduplication, and replay-test evidence. CI also executes
 the complete SDK/chaos, worker/broker, Settings DOM, and authenticated
 isolated-frame smoke suites. The physical-device verifier runs monthly, on
-release events, by manual dispatch, and as a reusable pre-promotion workflow;
-it consumes redaction-safe repository evidence and fails closed past the
-90-day limit. Current physical evidence remains mandatory at the release gate;
-emulation cannot satisfy it.
+release events, by manual dispatch, and as a reusable pre-promotion workflow.
+It requires evidence to name the exact candidate tag/build in addition to being
+redaction-safe and within the 90-day limit. The promotion workflow gates that
+exact existing prerelease before publishing it; event runs detect bypasses
+after the fact. Current physical evidence remains mandatory at the release
+gate; emulation cannot satisfy it.
 
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
 for early hints. Only transport/timeouts and `429/502/503/504` are retryable by
-the standard classifier. An unsafe request remains one-shot unless it carries
-a stable `Idempotency-Key`, exact request fingerprint, and a declared server
-deduplication contract issued by the SDK factory. The registry binds its audit
-id to one exact HTTP method, API endpoint, and backend action; the coordinator
-revalidates that complete tuple before starting the operation, and rejects a
-structurally forged object even in untyped JavaScript. Eligible mutations are capped at three attempts and
+the standard classifier. Arbitrary callbacks enter only the tracked one-shot
+`runOpaque()` path and cannot declare a safe method. Retryable API reads use a
+nominal SDK executor that owns the concrete GET/HEAD/OPTIONS request. Retrying
+mutations use a separate nominal SDK executor with a stable
+`Idempotency-Key`, exact request fingerprint, and declared server
+deduplication. The registry binds its audit id to one exact HTTP method, API
+endpoint, and backend action. The factory snapshots and fingerprints the JSON
+semantics, while the executor alone owns the actual `fetch` target, method,
+headers, body, timeout, redirect policy, and decoding. The coordinator accepts
+no application callback or custom classifier on that path and rejects
+structurally forged executors even in untyped JavaScript. Eligible mutations
+are capped at three attempts and
 still cross current server authorization and admission. `401` and `403` remain
 the terminal request errors even when their cleanup changes retry scope; they
 cannot be masked as cancellation. Base Shell's `pinned_apps.set` mutation is

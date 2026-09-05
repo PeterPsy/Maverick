@@ -110,20 +110,28 @@ export { BrowserStorageQuotaAdapter } from "./quota";
 export { IncrementalSha256, sha256Blob } from "./sha256";
 export { DurableCacheCleanupError } from "./resilientBackend";
 export {
+  MutationRetryHttpError,
+  MutationRetryTransportError,
   RetryCancelledError,
   RetryCoordinator,
+  SafeRequestRetryHttpError,
+  SafeRequestRetryTransportError,
   classifyRetryError,
   createIdempotencyKey,
-  createMutationRetryContract,
+  createMutationRetryExecutor,
   createRequestFingerprint,
-  idempotencyHeaders,
-  type MutationRetryContract,
-  type MutationRetryContractInput,
+  createSafeRequestRetryExecutor,
+  type MutationRetryExecutor,
+  type MutationRetryExecutorInput,
+  type MutationRetryOperationOptions,
   type MutationRetryTarget,
+  type OpaqueRetryOperationOptions,
   type RetryClassification,
   type RetryCoordinatorOptions,
   type RetryDisposition,
-  type RetryOperationOptions,
+  type SafeRequestRetryExecutor,
+  type SafeRequestRetryExecutorInput,
+  type SafeRequestRetryOperationOptions,
   type RetryTelemetryEvent,
 } from "./retry";
 export {

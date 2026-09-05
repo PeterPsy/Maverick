@@ -13,6 +13,7 @@ from typing import Any
 
 
 EVIDENCE_SCHEMA = "maverick.pwa-cache-device-regression.v1"
+RELEASE_CANDIDATE_BINDING = "exact_release_id"
 POLICY_PATH = Path("docs/product/pwa_cache_operational_policy.v1.json")
 PASS = "pass"
 PROHIBITED_KEYS = re.compile(
@@ -20,16 +21,19 @@ PROHIBITED_KEYS = re.compile(
     re.IGNORECASE,
 )
 HTTP_VALUE = re.compile(r"https?://", re.IGNORECASE)
+RELEASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/+@:-]{0,127}$")
 
 
-def evidence_template(policy: dict[str, Any]) -> dict[str, Any]:
+def evidence_template(policy: dict[str, Any], release_id: str) -> dict[str, Any]:
+    if not valid_release_id(release_id):
+        raise ValueError("release_id must identify one bounded release candidate")
     profiles = policy["device_regression"]["required_profiles"]
     return {
         "schema": EVIDENCE_SCHEMA,
         "captured_at": None,
         "environment": "physical-device",
         "redaction_reviewed": False,
-        "release_id": "replace-with-non-sensitive-release-id",
+        "release_id": release_id,
         "runs": [
             {
                 "profile": profile,
@@ -46,6 +50,7 @@ def validate_evidence(
     payload: Any,
     policy: dict[str, Any],
     *,
+    expected_release_id: str,
     now: datetime | None = None,
 ) -> list[str]:
     errors: list[str] = []
@@ -65,8 +70,12 @@ def validate_evidence(
     if payload.get("redaction_reviewed") is not True:
         errors.append("redaction_reviewed must be true")
     release_id = payload.get("release_id")
-    if not bounded_text(release_id, 128):
-        errors.append("release_id must be a non-sensitive bounded string")
+    if not valid_release_id(expected_release_id):
+        errors.append("expected_release_id must identify one bounded release candidate")
+    if not valid_release_id(release_id):
+        errors.append("release_id must identify one bounded release candidate")
+    elif valid_release_id(expected_release_id) and release_id != expected_release_id:
+        errors.append("release_id does not match the expected release candidate")
     captured_at = parse_timestamp(payload.get("captured_at"))
     if captured_at is None:
         errors.append("captured_at must be an ISO-8601 timestamp with timezone")
@@ -158,6 +167,8 @@ def load_policy(root: Path) -> dict[str, Any]:
         raise ValueError("operational policy has no device_regression contract")
     if not positive_integer(device.get("max_evidence_age_days")):
         raise ValueError("device regression max evidence age is invalid")
+    if device.get("release_candidate_binding") != RELEASE_CANDIDATE_BINDING:
+        raise ValueError("device regression must require exact release_id candidate binding")
     for field in ("required_profiles", "required_scenarios"):
         values = device.get(field)
         if (not isinstance(values, list) or not values or not all(bounded_text(item, 128) for item in values)
@@ -195,6 +206,10 @@ def bounded_text(value: Any, limit: int) -> bool:
     return isinstance(value, str) and value.strip() == value and 0 < len(value) <= limit
 
 
+def valid_release_id(value: Any) -> bool:
+    return isinstance(value, str) and RELEASE_ID.fullmatch(value) is not None
+
+
 def positive_integer(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
@@ -204,8 +219,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
     template = subparsers.add_parser("template", help="write a matrix template")
     template.add_argument("--output", required=True, type=Path)
+    template.add_argument("--release-id", required=True)
     verify = subparsers.add_parser("verify", help="enforce the physical-device release gate")
     verify.add_argument("--input", required=True, type=Path)
+    verify.add_argument("--expected-release-id", required=True)
     return parser.parse_args(argv)
 
 
@@ -216,11 +233,18 @@ def main(argv: list[str] | None = None) -> int:
         policy = load_policy(root)
         if args.command == "template":
             args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(json.dumps(evidence_template(policy), indent=2) + "\n", encoding="utf-8")
+            args.output.write_text(
+                json.dumps(evidence_template(policy, args.release_id), indent=2) + "\n",
+                encoding="utf-8",
+            )
             print(f"Wrote physical-device matrix template to {args.output}")
             return 0
         payload = json.loads(args.input.read_text(encoding="utf-8"))
-        errors = validate_evidence(payload, policy)
+        errors = validate_evidence(
+            payload,
+            policy,
+            expected_release_id=args.expected_release_id,
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         print(f"PWA device regression: {error}", file=sys.stderr)
         return 1
@@ -228,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         for error in errors:
             print(f"PWA device regression: {error}", file=sys.stderr)
         return 1
-    print("PWA physical-device regression evidence is current and complete.")
+    print("PWA physical-device regression evidence matches the release candidate and is current and complete.")
     return 0
 
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getActiveProvider, getPlatformStatus, getSession, isRetryableReadError, listApps, listPinnedApps, MaverickHttpError, MaverickTransportError, normalizeAppRegistryPayload, retryAfterMs, savePinnedApps } from "../src/api";
 import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
-import { runShellRead, shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
+import { shellCacheLifecycle, subscribeShellAuthorizationRevocation } from "../src/pwaCacheRuntime";
 
 describe("base-shell api normalization", () => {
   afterEach(() => {
@@ -132,14 +132,48 @@ describe("base-shell api normalization", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status }));
     const controller = new AbortController();
 
-    const pending = runShellRead(
-      "base-shell:test-auth-terminal",
-      (signal) => getSession(signal),
-      controller.signal,
-    );
+    const pending = getSession(controller.signal, "base-shell:test-auth-terminal");
 
     await expect(pending).rejects.toBeInstanceOf(MaverickHttpError);
     await expect(pending).rejects.toMatchObject({ status });
+  });
+
+  it("retries shell GETs only through the SDK-owned concrete request", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("transport interrupted"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: false }), {
+        headers: { "Content-Type": "application/json" },
+      }));
+
+    const pending = getSession(new AbortController().signal, "base-shell:test-session-retry");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await expect(pending).resolves.toEqual({ authenticated: false });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [target, init] of fetchMock.mock.calls) {
+      expect(target).toBe("/api/session");
+      expect(init).toMatchObject({
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+        method: "GET",
+        redirect: "error",
+        signal: expect.any(AbortSignal),
+      });
+      expect(init?.body).toBeUndefined();
+    }
+  });
+
+  it("keeps POST read actions one-shot when they have no mutation deduplication contract", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValue(new TypeError("transport interrupted"));
+
+    await expect(listPinnedApps()).rejects.toBeInstanceOf(MaverickTransportError);
+    await vi.runAllTimersAsync();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("does not let delayed authorization cleanup reclassify an HTTP response as a timeout", async () => {

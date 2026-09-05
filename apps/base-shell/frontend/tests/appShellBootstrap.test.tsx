@@ -3,7 +3,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MaverickHttpError, MaverickTransportError } from "../src/api";
+import { createSafeRequestRetryExecutor } from "@maverick/pwa-cache";
+import { MaverickHttpError } from "../src/api";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
 import { revokeShellAuthorization, shellCacheLifecycle, shellRetryCoordinator } from "../src/pwaCacheRuntime";
@@ -197,7 +198,16 @@ describe("AppShell bootstrap", () => {
 
   it("bootstraps authenticated shell state after confirmed transport recovery", async () => {
     vi.useFakeTimers();
-    api.getSession.mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/session"));
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("transport interrupted"))
+      .mockResolvedValueOnce(jsonResponse(sessionPayload()));
+    api.getSession.mockImplementation((signal: AbortSignal, retryKey: string) => (
+      shellRetryCoordinator.runRequest({
+        executor: createSafeRequestRetryExecutor({ endpoint: "/api/session" }),
+        key: retryKey,
+        signal,
+      })
+    ));
 
     await act(async () => {
       root.render(<AppShell />);
@@ -215,16 +225,24 @@ describe("AppShell bootstrap", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
 
-    expect(api.getSession).toHaveBeenCalledTimes(2);
+    expect(api.getSession).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 
   it("keeps deferred workspace state loading and retries it after transport recovery", async () => {
     vi.useFakeTimers();
-    api.listWorkspaces
-      .mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/workspaces"))
-      .mockResolvedValueOnce({ items: [workspace("recovered")] });
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("transport interrupted"))
+      .mockResolvedValueOnce(jsonResponse({ items: [workspace("recovered")] }));
+    api.listWorkspaces.mockImplementation((signal: AbortSignal, retryKey: string) => (
+      shellRetryCoordinator.runRequest({
+        executor: createSafeRequestRetryExecutor({ endpoint: "/api/workspaces" }),
+        key: retryKey,
+        signal,
+      })
+    ));
 
     await act(async () => {
       root.render(<AppShell />);
@@ -241,14 +259,24 @@ describe("AppShell bootstrap", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
 
-    expect(api.listWorkspaces).toHaveBeenCalledTimes(2);
+    expect(api.listWorkspaces).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-workspaces-loading")).toBe("false");
     expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-workspace-count")).toBe("1");
   });
 
   it("revalidates shell state when transport recovery signals are coalesced", async () => {
     vi.useFakeTimers();
-    api.getSession.mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/session"));
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("transport interrupted"))
+      .mockResolvedValueOnce(jsonResponse(sessionPayload()));
+    api.getSession.mockImplementation((signal: AbortSignal, retryKey: string) => (
+      shellRetryCoordinator.runRequest({
+        executor: createSafeRequestRetryExecutor({ endpoint: "/api/session" }),
+        key: retryKey,
+        signal,
+      })
+    ));
 
     await act(async () => {
       root.render(<AppShell />);
@@ -265,7 +293,8 @@ describe("AppShell bootstrap", () => {
       await vi.advanceTimersByTimeAsync(250);
     });
 
-    expect(api.getSession).toHaveBeenCalledTimes(2);
+    expect(api.getSession).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
@@ -540,6 +569,12 @@ function sessionPayload(workspaceId = "default"): Extract<SessionPayload, { auth
 
 function completeCleanup() {
   return { pendingCleanupCount: 0, removed: 0, status: "complete" as const };
+}
+
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 function dispatchShellLogout() {

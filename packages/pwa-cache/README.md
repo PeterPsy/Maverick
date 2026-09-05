@@ -86,9 +86,11 @@ an app-declared resource budget, and a maximum 15-minute private access lease
 that fresh server authentication may renew independently of the original cache
 timestamp. An unavailable quota estimate skips the cache write without
 affecting the network result. The RAM retry coordinator pauses for document and
-Maverick frame visibility, uses a 1–30 second jittered backoff, and never
-replays an unsafe request without the explicit idempotency contract, including
-a canonical `sha256:<64 lowercase hex>` request fingerprint.
+Maverick frame visibility and uses a 1–30 second jittered backoff. Application
+callbacks enter only `runOpaque()` and are one-shot. Safe API reads use a
+factory-issued `createSafeRequestRetryExecutor()` whose GET/HEAD/OPTIONS request
+is issued by the SDK through `runRequest()`; retrying mutations use the separate
+audited executor and a canonical `sha256:<64 lowercase hex>` fingerprint.
 
 Conservative M4 file-cache defaults are 64 MiB per entry, 128 MiB per
 authenticated Storage scope, and 256 MiB across the origin, all subordinate to
@@ -118,17 +120,19 @@ accepts the operations protocol only from the exact registered Settings frame
 and wires data, file, quota, retry, and worker telemetry. An explicit clear
 cancels pending retry before the durable structured/file cleanup.
 
-Unsafe retry contracts now require a versioned `auditId` bound to one exact
-HTTP method, API endpoint, and backend action. Production contracts and their
+Unsafe retry executors now require a versioned `auditId` bound to one exact
+HTTP method, API endpoint, and backend action. Production executors and their
 client/server/replay evidence are registered in
 `docs/product/pwa_cache_operational_policy.v1.json`; the exact runtime allowlist
 is loaded from `src/mutationRetryRegistry.v2.json` and cannot be replaced by a
-consumer. Only nominal contracts issued by `createMutationRetryContract()` are
-accepted; `RetryCoordinator` revalidates the method, endpoint, and action at
-use time, and Base Shell derives both the request target and retry metadata from
-that frozen contract. `scripts/audit_pwa_cache.py` scans production JavaScript,
-TypeScript, Vue, and Svelte sources across apps and shared packages, rejects raw
-or computed contract declarations, and requires factory source, policy, runtime
-registry, server deduplication, and replay evidence to agree. The runtime still
-requires idempotency, fingerprinting, server deduplication, and the
+consumer. `createMutationRetryExecutor()` validates and snapshots the exact JSON
+semantics, derives their SHA-256 fingerprint, and owns the target, method,
+headers, body, timeout, redirect policy, `fetch`, and JSON decoding for every
+attempt. `RetryCoordinator.runMutation()` accepts only that nominal executor;
+it has no application callback or custom classifier, so reviewed metadata
+cannot be paired with a different request. `scripts/audit_pwa_cache.py` scans
+production JavaScript, TypeScript, Vue, and Svelte sources across apps and
+shared packages, rejects legacy/raw/computed declarations and mutation
+callbacks, and requires factory source, policy, runtime registry, server
+deduplication, and replay evidence to agree. The runtime also enforces the
 three-attempt cap.

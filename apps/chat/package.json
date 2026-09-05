@@ -15,6 +15,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
     "@xyflow/react": "^12.11.1",
     "lucide-react": "^1.14.0",
     "motion": "^12.41.0",

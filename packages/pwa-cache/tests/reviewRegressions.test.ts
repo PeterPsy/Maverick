@@ -219,3 +219,22 @@ describe("SDK-owned read-model transport", () => {
     coordinator.dispose();
   });
 });
+
+it.each(['unrelated', 'same-scope'])('schema maintenance publication is resource scoped: %s', async (target) => {
+  const backend = new MemoryCacheBackend();
+  const entered = deferred<void>();
+  const release = deferred<boolean>();
+  const principal = { appId: 'calendar', userId: 'u', workspaceId: 'w' };
+  const first = createPwaCacheHost(principal).createClient({
+    backend, enabled: true, now: () => 100, accessLease: { issuedAt: 0, expiresAt: 1000 },
+    quotaAdapter: { canWrite: () => { entered.resolve(); return release.promise; }, estimate: async () => ({ supported: true, quota: 100000, usage: 0 }) },
+  }, new CacheBus(null));
+  const resource = first.resource('events', policy);
+  const pending = resource.readThrough('e', async () => ({ kind: 'value', revision: 'one', payload: { value: 'display' } }));
+  await entered.promise;
+  const second = createPwaCacheHost({ ...principal, appId: target === 'unrelated' ? 'chat' : 'calendar' }).createClient({ backend, enabled:true }, new CacheBus(null));
+  await second.resource(target === 'unrelated' ? 'projects' : 'events', { ...policy, schemaRevision: 'new-schema' }).get('e');
+  release.resolve(true); await pending;
+  expect(await resource.get('e')).toEqual(target === 'unrelated' ? expect.objectContaining({revision:'one'}) : null);
+  first.dispose(); second.dispose();
+});

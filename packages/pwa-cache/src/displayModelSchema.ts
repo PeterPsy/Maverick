@@ -14,6 +14,7 @@ const forbiddenKey = /password|secret|token|credential|authorization|authority|c
 export function projectDisplayModel(value: unknown, schema: DisplayModelSchema, depth = 0): Record<string, unknown> | null {
   const raw = displayRecord(value);
   if (!raw || depth > 16) return null;
+  if (schema.required?.some((key) => raw[key] === undefined || raw[key] === null)) return null;
   const result: Record<string, unknown> = {};
   for (const [field, kind] of Object.entries(schema.fields ?? {})) {
     const item = raw[field];

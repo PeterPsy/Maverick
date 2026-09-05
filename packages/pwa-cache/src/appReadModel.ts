@@ -16,7 +16,8 @@ export async function readAppCacheModel<T>(
   const parameters = JSON.parse(JSON.stringify(request.parameters)) as Record<string, unknown>;
   // Hash the full query: no user data in broker entity ids; canonical order avoids
   // duplicate entries for equivalent query objects. Scope still belongs to host.
-  const bytes = new TextEncoder().encode(JSON.stringify(Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b))));
+  const bytes = new TextEncoder().encode(JSON.stringify(parameters, (_key, value: unknown) => value && typeof value === "object" && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value));
   const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
   const entityId = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   const result = await readThroughParentDataCache<T>({ ...request, entityId }, async ({ knownRevision, signal }) => {
@@ -33,7 +34,7 @@ export async function readAppCacheModel<T>(
   }, { sanitize, signal: options.signal });
   void result.revalidation?.then((next) => {
     if (next.changed && !options.signal?.aborted) options.onRevalidated?.(next.payload);
-  }, (error: unknown) => {
+  }).catch((error: unknown) => {
     if (!options.signal?.aborted) options.onRevalidationError?.(error);
   });
   return result;

@@ -38,7 +38,7 @@ import {
 } from "../lib/messageState";
 import { mergeRuntimeEvents } from "../lib/runtimeEvents";
 import { loadDefaultSystemPrompt } from "../lib/activeAppContext";
-import { migratePersistedQueuedMessages } from "../lib/queuedMessages";
+import { transferQueuedMessages } from "../lib/queuedMessages";
 import { openChatThreadRouteInShell } from "../lib/shellNavigation";
 import { upsertOrderedThread } from "../lib/threadNavigation";
 
@@ -933,7 +933,7 @@ export function useMessageSubmission({
       return;
     }
     conversationKeyAliasesRef.current[fromConversationKey] = toConversationKey;
-    migratePersistedQueuedMessages(navigationScope, fromConversationKey, toConversationKey);
+    transferQueuedMessages(navigationScope, fromConversationKey, toConversationKey);
     setPendingUserMessagesByConversationKey((current) => {
       const items = current[fromConversationKey] || [];
       if (!items.length) {

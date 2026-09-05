@@ -22,6 +22,6 @@ it.each(['action', 'token', '_app_secret_request'])('does not grant extra reques
 it('issues only the fixed Calendar read action', () => {
   const result = describeReadModelRequest(request);
   expect(result.endpoint).toBe('/api/apps/calendar/backend');
-  expect(JSON.parse(result.body!)).toEqual({ kind: 'window', offset: 0, action: 'pwa.read_model' });
+  expect(JSON.parse(result.body!)).toEqual({ kind: 'window', offset: 0, action: 'pwa.read_model', _app_secret_request: { logical_names: [], required: false } });
   expect(() => describeReadModelRequest({ ...request, parameters: { kind: 'delete' } })).toThrow();
 });

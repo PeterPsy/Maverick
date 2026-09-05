@@ -224,18 +224,29 @@
       "read_surface": "Chat project actions and runtime thread projection",
       "canonical_data_class": "personal_data",
       "provenance": "user_input",
-      "local_persistence_policy": "session",
+      "local_persistence_policy": "cache",
       "policy_prerequisites": [
-        "bounded persistent adapter and sanitizer verification under the 2026-09-05 product approval"
+        "closed completed-message and project/thread display projections approved 2026-09-05"
       ],
       "fresh_ttl_seconds": 30,
       "expiry_ttl_seconds": 21600,
-      "revision": "project revision plus runtime thread cursor required",
+      "revision": "SHA-256 of bounded closed display projection; known_revision/not_modified",
       "max_entry_bytes": 1048576,
       "max_scope_bytes": 33554432,
       "invalidation": "projects data event, runtime cursor, reconnect, 401/403",
       "data_event": "projects",
-      "rollout": "M5 persistence approved on 2026-09-05; adapter and resource enforcement pending; default-off"
+      "rollout": "M5 adapter implemented; release validation required; default-off",
+      "cache_approved": true,
+      "privacy_approved": true,
+      "regulated_allowlisted": false,
+      "runtime_schema_revision": "chat.projects-and-completed-messages.v1",
+      "invalidation_aliases": [
+        "projects",
+        "threads",
+        "runtime-threads",
+        "messages",
+        "view-state"
+      ]
     },
     {
       "app_ids": [

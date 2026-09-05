@@ -17,7 +17,7 @@ class CompletionReadModelsTest(unittest.TestCase):
         })
 
     def test_mounted_crm_and_mail_conditional_reads(self):
-        for app, kinds in [('crm', ['bootstrap', 'schema', 'records_table', 'pipeline_board']), ('mail', ['mailboxes', 'threads'])]:
+        for app, kinds in [('crm', ['bootstrap', 'schema', 'records_table', 'pipeline_board']), ('mail', ['mailboxes', 'threads']), ('chat', ['projects'])]:
             with self.subTest(app=app), tempfile.TemporaryDirectory() as directory:
                 for kind in kinds:
                     first = self.call(app, directory, {'action': 'pwa.read_model', 'kind': kind})

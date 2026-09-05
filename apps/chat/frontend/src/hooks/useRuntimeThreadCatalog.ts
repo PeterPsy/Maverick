@@ -29,6 +29,7 @@ export function useRuntimeThreadCatalog({
   useRuntimeThreads({
     enabled: !hasExternalRuntimeThreads,
     onSnapshot: () => setThreadsLoaded(true),
+    onDisplayReady: () => setThreadsLoaded(true),
     setError,
     setThreads,
   });

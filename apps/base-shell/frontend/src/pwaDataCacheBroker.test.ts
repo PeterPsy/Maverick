@@ -91,6 +91,7 @@ function broker(
 ): PwaDataCacheBroker {
   return new PwaDataCacheBroker({
     featureEnabled,
+    accessLease: { issuedAt: Date.now(), expiresAt: Date.now() + 600000 },
     frameScope,
     principal: { userId: "user-one", workspaceId: frameScope.workspaceId },
   });
@@ -114,6 +115,43 @@ describe("Base Shell structured data-cache broker", () => {
     registeredFrames.splice(0).forEach((frame) => setMaverickFrameOrigin(frame, null, "cleanup", FRAME_SCOPE));
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['calendar', 'bounded-event-window', { events: [], calendars: [], has_more: false }],
+    ['chat', 'projects-and-completed-messages', { kind: 'projects', data: { projects: [], has_more: false } }],
+    ['crm', 'lists-and-recent-records', { kind: 'get', data: { record: { id: 'r', name: 'Customer' } } }],
+    ['mail', 'thread-headers-snippets-and-bodies', { kind: 'mailboxes', data: { items: [], folders: [] } }],
+    ['fitness-coach', 'sanitized-bootstrap-and-thumbnails', { schema: 'fitness-coach.bootstrap.v1', workspace_id: 'default', app_id: 'fitness-coach', state_version: 'one', workouts: [], workout_summaries: [], exercises: [], tags: [], runs: [], selected_workout: null, view_state: { selected_workout_id: null, setup_tab: 'workout-settings', sidebar_query: '' } }],
+  ] as const)('persists the approved %s projection and delivers warm paint before conditional network', async (appId, resource, payload) => {
+    vi.stubGlobal('navigator', { storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) } });
+    const hostWindow = Object.assign(new EventTarget(), { location: { origin: 'https://maverick.test' } });
+    Object.assign(hostWindow, { top: hostWindow });
+    vi.stubGlobal('window', hostWindow);
+    registerFrame(appFrame, appOrigin, appId);
+    vi.stubGlobal('window', undefined);
+    const subject = broker(); brokers.push(subject);
+    const entityId = crypto.randomUUID();
+    const open = (id: string) => {
+      const channel = new MessageChannel();
+      const messages = portMessages(channel.port1);
+      subject.handleWindowMessage(requestEvent(channel, { app_id: appId, resource, schema_revision: `${appId}.${resource}.v1`, entity_id: entityId, request_id: id }), new Set([appId]));
+      return { channel, messages };
+    };
+    const first = open('approved-first');
+    await nextOfType(first.messages, PWA_DATA_CACHE_BROKER_ACCEPTED);
+    const network = await nextOfType(first.messages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
+    first.channel.port1.postMessage({ app_id: appId, kind: 'value', payload: { ...payload, provider_secret: 'must-not-persist' }, revision: 'one', request_id: 'approved-first', network_request_id: network.network_request_id, status: 'ok', type: PWA_DATA_CACHE_BROKER_NETWORK_RESULT });
+    expect(await nextOfType(first.messages, PWA_DATA_CACHE_BROKER_RESULT)).toMatchObject({ source: 'network', status: 'ok' });
+    const warm = open('approved-warm');
+    await nextOfType(warm.messages, PWA_DATA_CACHE_BROKER_ACCEPTED);
+    const cached = await nextOfType(warm.messages, PWA_DATA_CACHE_BROKER_RESULT);
+    expect(cached).toMatchObject({ source: 'cache', status: 'ok', payload });
+    expect(JSON.stringify(cached)).not.toContain('must-not-persist');
+    const conditional = await nextOfType(warm.messages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
+    expect(conditional.known_revision).toBe('one');
+    warm.channel.port1.postMessage({ app_id: appId, kind: 'not_modified', revision: 'one', request_id: 'approved-warm', network_request_id: conditional.network_request_id, status: 'ok', type: PWA_DATA_CACHE_BROKER_NETWORK_RESULT });
+    expect(await nextOfType(warm.messages, PWA_DATA_CACHE_BROKER_RESULT)).toMatchObject({ phase: 'revalidation', status: 'ok', changed: false });
   });
 
   it.each(["recovery", "cleanup", "dispose", "terminal"])("keeps brokered retry cancellation scoped to the shell: %s", async (outcome) => {

@@ -1,3 +1,4 @@
+import { readChatDisplay, displayThread, invalidateChatDisplay } from '../pwaCache';
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { orderChatThreads } from "../api/client";
@@ -8,6 +9,7 @@ type RuntimeThreadSnapshotFrame = Extract<RuntimeThreadWebSocketFrame, { type: "
 
 type RuntimeThreadsArgs = {
   enabled?: boolean;
+  onDisplayReady?: (() => void) | null;
   onSnapshot?: ((frame: RuntimeThreadSnapshotFrame) => void) | null;
   setError: Dispatch<SetStateAction<string | null>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
@@ -17,7 +19,9 @@ function isRuntimeThreadStreamError(message: string): boolean {
   return message.startsWith("Runtime thread ");
 }
 
-export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThreads }: RuntimeThreadsArgs) {
+export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, setError, setThreads }: RuntimeThreadsArgs) {
+  const onDisplayReadyRef = useRef(onDisplayReady);
+  onDisplayReadyRef.current = onDisplayReady;
   const onSnapshotRef = useRef<typeof onSnapshot>(onSnapshot);
   useEffect(() => {
     onSnapshotRef.current = onSnapshot;
@@ -32,8 +36,19 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
     }
 
     let hasLoadedSnapshot = false;
+    const displayController = new AbortController();
+    const paintDisplay = (data: { threads: Record<string, unknown>[] }) => {
+      if (displayController.signal.aborted || hasLoadedSnapshot) return;
+      applyThreads(data.threads.map(displayThread));
+      onDisplayReadyRef.current?.();
+    };
+    void readChatDisplay<{ threads: Record<string, unknown>[] }>({ kind: 'threads', limit: 100 }, {
+      signal: displayController.signal, onRevalidated: paintDisplay,
+    }).then(paintDisplay).catch(() => { /* The live stream owns terminal UI errors. */ });
+
 
     function applyThreadSnapshot(frame: RuntimeThreadSnapshotFrame) {
+      if (hasLoadedSnapshot) invalidateChatDisplay('runtime-threads');
       hasLoadedSnapshot = true;
       applyThreads(frame.threads);
       onSnapshotRef.current?.(frame);
@@ -48,6 +63,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
     }
 
     function applyThreadDelta(frame: Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.changed" }>) {
+      invalidateChatDisplay('runtime-threads');
       if (Array.isArray(frame.threads)) {
         applyThreads(frame.threads);
         return;
@@ -80,6 +96,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
       },
     });
     return () => {
+      displayController.abort();
       unsubscribe();
     };
   }, [enabled, setError, setThreads]);

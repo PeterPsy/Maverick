@@ -10,6 +10,7 @@ import time
 from urllib.parse import parse_qs
 from uuid import uuid4
 
+from core.runtime.display_models import completed_message_display, thread_display_page
 from core.api.app_reference_payloads import (
     RuntimeAppReferenceRequestContext,
     materialize_runtime_app_references_with_metrics,
@@ -1406,17 +1407,14 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
         limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=RUNTIME_THREAD_PAGE_MAX_LIMIT)
         search_query = str(query.get("query", query.get("q", [""]))[0] or "").strip()
         cursor = str(query.get("cursor", [""])[0] or "").strip()
-        return json_response(
-            start_response,
-            _runtime_thread_page(
-                state,
-                workspace_id=context.workspace_id,
-                viewer_user_id=context.user.user_id,
-                limit=limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT,
-                query=search_query or None,
-                cursor=cursor or None,
-            ),
+        page = _runtime_thread_page(
+            state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id,
+            limit=limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT,
+            query=search_query or None, cursor=cursor or None,
         )
+        if query.get("projection") == ["display"]:
+            page = thread_display_page(page, query.get("known_revision", [None])[0])
+        return json_response(start_response, page)
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     runtime_session_id = str(body.get("runtime_session_id") or "").strip()
@@ -1742,6 +1740,11 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
     session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
+    query = parse_qs(query_string, keep_blank_values=False)
+    if query.get("projection") == ["display"]:
+        return json_response(start_response, completed_message_display(
+            state.runtime_store, session.session_id, query.get("known_revision", [None])[0],
+        ))
     _reconciled_session(state, session, start_path=start_path)
     query = parse_qs(query_string, keep_blank_values=False)
     limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=5000)

@@ -1,4 +1,4 @@
-import { publicationGeneration, withPublicationLock } from "./publicationBarrier";
+import { maintenancePublicationKey, publicationGeneration, withPublicationLock } from "./publicationBarrier";
 import { enforceCacheBudgets, type CacheBudgets } from "./budget";
 import { cacheEntryKey, validateEntityId, validateScope } from "./scope";
 import { runSingleFlight } from "./singleFlight";
@@ -94,10 +94,13 @@ export class PwaCacheResource<T> {
     // has a separate epoch so it cannot erase an intervening explicit clear.
     const cleanup = publicationGeneration(backendKey, shared);
     if (this.enabled) await this.initialize().catch(() => undefined);
-    const maintenance = publicationGeneration(backendKey, shared, true);
+    const maintenanceKey = await maintenancePublicationKey(backendKey, this.scope);
+    const maintenance = publicationGeneration(maintenanceKey, shared, true);
+    const broadMaintenance = publicationGeneration(backendKey, shared, true);
     const canPublish = () => !signal?.aborted && generation === this.generation
       && cleanup !== null && cleanup === publicationGeneration(backendKey, shared)
-      && maintenance !== null && maintenance === publicationGeneration(backendKey, shared, true);
+      && maintenance !== null && maintenance === publicationGeneration(maintenanceKey, shared, true)
+      && broadMaintenance !== null && broadMaintenance === publicationGeneration(backendKey, shared, true);
     const hit = await this.cacheHit(normalizedEntityId);
     if (hit && (hit.freshness === "fresh" || this.policy.allowStale === true)) {
       const shouldRevalidate = this.revalidationMode() === "always"

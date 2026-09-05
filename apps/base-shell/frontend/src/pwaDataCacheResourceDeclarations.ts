@@ -1,3 +1,4 @@
+import { sanitizeChatReadModel } from '../../../chat/frontend/src/pwaReadModel';
 import { sanitizeCrmReadModel } from '../../../crm/frontend/src/pwaReadModel';
 import { sanitizeMailReadModel } from '../../../mail/frontend/src/pwaReadModel';
 import { sanitizeBootstrapReadModel } from '../../../fitness-coach/frontend/src/bootstrapCache';
@@ -75,6 +76,7 @@ function buildResourceDeclarations(): Readonly<Record<string, Readonly<Record<st
       revalidateOnRead: "always",
       sanitize: record.app_id === 'calendar' ? sanitizeCalendarReadModel
         : record.app_id === 'fitness-coach' ? (value) => sanitizeBootstrapReadModel(value) ?? sanitizeThumbPreviewEntry(value)
+        : record.app_id === 'chat' ? sanitizeChatReadModel
         : record.app_id === 'crm' ? sanitizeCrmReadModel
         : record.app_id === 'mail' ? sanitizeMailReadModel
         : sanitizeStructuredReadModel,

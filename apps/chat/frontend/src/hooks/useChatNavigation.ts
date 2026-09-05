@@ -14,11 +14,11 @@ import {
 import { ActiveAppContext, loadDefaultSystemPrompt } from "../lib/activeAppContext";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
 import {
-  migratePersistedQueuedMessages,
-  queueStorageKey,
-  readPersistedPendingMessages,
-  readPersistedQueuedMessages,
-  readPersistedRecoverableQueuedMessages,
+  transferQueuedMessages,
+  queueMemoryKey,
+  readPendingMessages,
+  readQueuedMessages,
+  readRecoverableQueuedMessages,
 } from "../lib/queuedMessages";
 import {
   chatNavigationRequestKey,
@@ -279,8 +279,8 @@ export function useChatNavigation({
       return;
     }
     const threadConversationKey = conversationKeyFor(activeThread, null);
-    const draftStorageKey = queueStorageKey(navigationScope, ACTIVE_DRAFT_CONVERSATION_KEY);
-    const recoverableDraftMessages = readPersistedRecoverableQueuedMessages(draftStorageKey);
+    const draftStorageKey = queueMemoryKey(navigationScope, ACTIVE_DRAFT_CONVERSATION_KEY);
+    const recoverableDraftMessages = readRecoverableQueuedMessages(draftStorageKey);
     if (!recoverableDraftMessages.length) {
       return;
     }
@@ -289,16 +289,16 @@ export function useChatNavigation({
     if (!hasMatchingRuntimeTurn) {
       return;
     }
-    migratePersistedQueuedMessages(navigationScope, ACTIVE_DRAFT_CONVERSATION_KEY, threadConversationKey);
-    const storageKey = queueStorageKey(navigationScope, threadConversationKey);
+    transferQueuedMessages(navigationScope, ACTIVE_DRAFT_CONVERSATION_KEY, threadConversationKey);
+    const storageKey = queueMemoryKey(navigationScope, threadConversationKey);
     const terminalClientMessageIds = terminalClientMessageIdsForEvents(events);
     setPendingUserMessagesForConversation(
       threadConversationKey,
-      messagesWithoutClientMessageIds(readPersistedPendingMessages(storageKey), terminalClientMessageIds),
+      messagesWithoutClientMessageIds(readPendingMessages(storageKey), terminalClientMessageIds),
     );
     setQueuedMessagesForConversation(
       threadConversationKey,
-      messagesWithoutClientMessageIds(readPersistedQueuedMessages(storageKey), terminalClientMessageIds),
+      messagesWithoutClientMessageIds(readQueuedMessages(storageKey), terminalClientMessageIds),
     );
   }, [activeThread, events, navigationScope, setPendingUserMessagesForConversation, setQueuedMessagesForConversation]);
 
@@ -385,7 +385,7 @@ export function useChatNavigation({
     setDraftChat(draft);
     setTargetConversationResolved(true);
     setPendingUserMessagesForConversation(conversationKey, []);
-    setQueuedMessagesForConversation(conversationKey, readPersistedRecoverableQueuedMessages(queueStorageKey(navigationScope, conversationKey)));
+    setQueuedMessagesForConversation(conversationKey, readRecoverableQueuedMessages(queueMemoryKey(navigationScope, conversationKey)));
     setActiveInterAgentGraphRunId(null);
     setActiveSession(null);
     setEvents([]);
@@ -416,9 +416,9 @@ export function useChatNavigation({
     setIsOlderHistoryLoading(false);
     if (thread) {
       const conversationKey = conversationKeyFor(thread, null);
-      const storageKey = queueStorageKey(navigationScope, conversationKey);
-      setPendingUserMessagesForConversation(conversationKey, readPersistedPendingMessages(storageKey));
-      setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(storageKey));
+      const storageKey = queueMemoryKey(navigationScope, conversationKey);
+      setPendingUserMessagesForConversation(conversationKey, readPendingMessages(storageKey));
+      setQueuedMessagesForConversation(conversationKey, readQueuedMessages(storageKey));
     }
     setActiveTurn(cachedActiveTurnForThread(thread, cachedTranscript));
     setTargetConversationResolved(Boolean(thread));

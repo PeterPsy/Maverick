@@ -2878,3 +2878,36 @@ media capabilities; unscoped legacy bootstrap/thumbnail storage is deleted,
 never imported into a newly attested user scope. App inclusion does not change
 the default-off rollout gates. Remaining app integration and final candidate
 validation are tracked in the completion plan, not inferred from these APIs.
+
+The second tranche also mounts CRM and Mail's app-owned JSON display schemas in
+both their read backend and the trusted shell sanitizer. CRM customer records,
+custom scalar fields, schemas and pipelines exclude workflow authority. Mail
+persists mailbox/folder display, recent headers/snippets and consulted plain-text
+bodies; rich HTML and attachment fetches remain live rendering enhancements, never
+credentials or deferred sends. Warm list paint does not wait for mailbox counts,
+provider connection authority or view preferences. CRM and Mail use the standard
+immutable-asset and isolated-frame Vite plugins, not fallback asset classification.
+
+Chat's project display action and existing authenticated runtime GETs with
+`projection=display` expose stable conditional envelopes. Runtime reads remain
+Core-owned and app-agnostic: workspace/visibility checks precede projection, and
+no provider reconciliation occurs on this read path. A bounded scan of the last
+50 turns / 5,000 events projects only completed user input and final assistant
+text, never raw technical events, admission, session authority or tools. Cached
+messages hydrate rendering-only events that are replaced by the first live
+snapshot; composer admission still comes from live dependencies and Core.
+Catalog changes, terminal events and reconnect invalidate the approved resource.
+The existing local/session-storage projects, raw transcripts and send queues are
+deleted without migration. Pending/queued UI messages survive navigation only in
+RAM within the current document and are cleared at controller teardown; reload
+cannot replay a deferred send. Calendar/project pagination follows revalidation
+growth and shrink without silently dropping newly available pages.
+
+Schema-maintenance publication epochs are scoped to the resource principal,
+using a SHA-256 marker key rather than plaintext principal identifiers. A Chat
+resource initialization must not discard Calendar's already-started valid
+writer. Same-resource schema maintenance and broad maintenance still fence
+older writers; explicit cleanup retains the database-wide durable epoch,
+including RAM-to-IndexedDB recovery across distinct documents. SDK-owned
+`pwa.read_model` POSTs always inject an empty, optional app-secret selector:
+a display request must not initiate credential resolution or OAuth prompting.

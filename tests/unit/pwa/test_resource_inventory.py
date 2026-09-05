@@ -140,9 +140,16 @@ class PwaResourceInventoryTests(unittest.TestCase):
             ("storage", "file-catalog"): ("cache", 30, 86_400, 262_144, 16_777_216),
             ("app-store", "catalog"): ("cache", 300, 86_400, 1_048_576, 4_194_304),
             ("fitness-coach", "sanitized-bootstrap-and-thumbnails"): (
-                "session", 300, 86_400, 524_288, 16_777_216
+                "cache", 300, 86_400, 524_288, 16_777_216
             ),
         }
+
+        expected.update({
+            ("calendar", "bounded-event-window"): ("cache", 60, 21600, 1048576, 16777216),
+            ("chat", "projects-and-completed-messages"): ("cache", 30, 21600, 1048576, 33554432),
+            ("crm", "lists-and-recent-records"): ("cache", 30, 21600, 2097152, 16777216),
+            ("mail", "thread-headers-snippets-and-bodies"): ("cache", 30, 3600, 1048576, 16777216),
+        })
 
         for identity, contract in expected.items():
             resource = resources[identity]

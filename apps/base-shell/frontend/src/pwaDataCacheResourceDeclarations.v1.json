@@ -161,6 +161,28 @@
       "max_entry_bytes": 1048576,
       "max_scope_bytes": 16777216,
       "schema_revision": "mail.thread-headers-snippets-and-bodies.v1"
+    },
+    {
+      "app_id": "chat",
+      "resource": "projects-and-completed-messages",
+      "aliases": [
+        "projects",
+        "threads",
+        "runtime-threads",
+        "messages",
+        "view-state"
+      ],
+      "canonical_data_class": "personal_data",
+      "provenance": "user_input",
+      "local_persistence_policy": "cache",
+      "cache_approved": true,
+      "privacy_approved": true,
+      "regulated_allowlisted": false,
+      "fresh_ttl_ms": 30000,
+      "expiry_ttl_ms": 21600000,
+      "max_entry_bytes": 1048576,
+      "max_scope_bytes": 33554432,
+      "schema_revision": "chat.projects-and-completed-messages.v1"
     }
   ]
 }

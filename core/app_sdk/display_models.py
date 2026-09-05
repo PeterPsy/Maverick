@@ -13,6 +13,8 @@ _UNSAFE_URL = re.compile(r'^blob\s*:|[?&](?:sig|signature|x-amz-signature|x-goog
 def project_display_model(value: object, shape: dict, *, depth: int = 0) -> dict:
     if not isinstance(value, dict) or depth > 16:
         raise ValueError('Invalid display model object.')
+    if any(value.get(key) is None for key in shape.get("required", [])):
+        raise ValueError("Missing required display value.")
     result = {}
     for key, kind in shape.get('fields', {}).items():
         if key not in value:

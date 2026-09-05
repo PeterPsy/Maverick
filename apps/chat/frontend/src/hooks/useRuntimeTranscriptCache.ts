@@ -2,10 +2,7 @@ import { Dispatch, SetStateAction, useEffect, useRef } from "react";
 import type { ChatThread, RuntimeEvent, RuntimeSession, RuntimeTurn } from "../api/client";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
 import {
-  deleteStoredRuntimeTranscript,
-  readStoredRuntimeTranscript,
   type RuntimeTranscriptCacheEntry,
-  writeStoredRuntimeTranscript,
 } from "../lib/runtimeTranscriptCache";
 
 type UseRuntimeTranscriptCacheParams = {
@@ -84,7 +81,6 @@ export function useRuntimeTranscriptCache({
       hasMoreHistory,
     };
     runtimeTranscriptCacheRef.current.set(runtimeSessionId, cacheEntry);
-    writeStoredRuntimeTranscript(runtimeSessionId, cacheEntry);
   }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory, hasMoreHistory]);
 
   function cachedTranscriptForThread(thread: ChatThread | null) {
@@ -95,11 +91,7 @@ export function useRuntimeTranscriptCache({
     if (cachedTranscript) {
       return cachedTranscript;
     }
-    const storedTranscript = readStoredRuntimeTranscript(thread.runtime_session_id);
-    if (storedTranscript) {
-      runtimeTranscriptCacheRef.current.set(thread.runtime_session_id, storedTranscript);
-    }
-    return storedTranscript;
+    return null;
   }
 
   function cachedActiveTurnForThread(thread: ChatThread | null, cachedTranscript: RuntimeTranscriptCacheEntry | null) {
@@ -115,7 +107,6 @@ export function useRuntimeTranscriptCache({
       return;
     }
     runtimeTranscriptCacheRef.current.delete(runtimeSessionId);
-    deleteStoredRuntimeTranscript(runtimeSessionId);
     if (activeRuntimeSessionIdRef.current === runtimeSessionId) {
       activeRuntimeSessionIdRef.current = null;
       setActiveSession(null);

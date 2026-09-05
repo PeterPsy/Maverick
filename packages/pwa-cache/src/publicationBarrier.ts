@@ -38,3 +38,15 @@ export function advancePublicationGeneration(backendKey: string, shared = true, 
     }
   }
 }
+
+/** Schema maintenance fences its resource, not unrelated app publications. Broad
+ * maintenance retains the database-wide epoch checked by every resource. */
+export async function maintenancePublicationKey(backendKey: string, scope: {
+  userId?: string; workspaceId?: string; appId?: string; resource?: string;
+}): Promise<string> {
+  const identity = [scope.userId, scope.workspaceId, scope.appId, scope.resource];
+  if (!identity.every((part) => typeof part === 'string' && part.length > 0)) return backendKey;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(identity)));
+  const opaque = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${backendKey}:resource:${opaque}`;
+}

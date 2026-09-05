@@ -1,3 +1,5 @@
+import { readAppCachePages, isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { readChatDisplay } from '../../pwaCache';
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import {
@@ -8,13 +10,11 @@ import {
   listInterAgentRuns,
   listRuntimeSessionEvents,
   listRuntimeThreads,
-  listChatProjects,
   markThreadRead,
   setChatViewFilter,
   updateThread,
 } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
-import { readStoredChatProjects, writeStoredChatProjects } from "../../lib/chatProjectCache";
 import { useShellSidebarCloseSwipe } from "../../hooks/useShellSidebarCloseSwipe";
 import {
   isMobileLayoutContext,
@@ -62,7 +62,6 @@ export function useChatSidebarState() {
   const [transcriptSearchTextByThreadId, setTranscriptSearchTextByThreadId] = useState<TranscriptSearchTextByThreadId>({});
   const [isTranscriptSearchLoading, setIsTranscriptSearchLoading] = useState(false);
   const [workspaceId, setWorkspaceId] = useState("");
-  const [hasLoadedProjectCatalog, setHasLoadedProjectCatalog] = useState(false);
   const [threadPageCursor, setThreadPageCursor] = useState<string | null>(null);
   const [hasMoreThreadPages, setHasMoreThreadPages] = useState(false);
   const [isThreadBackfillLoading, setIsThreadBackfillLoading] = useState(false);
@@ -133,7 +132,6 @@ export function useChatSidebarState() {
   );
   function applyProjects(nextProjects: ChatProject[]) {
     setProjects(nextProjects);
-    setHasLoadedProjectCatalog(true);
   }
 
   const projectActions = useSidebarProjectActions({
@@ -151,26 +149,31 @@ export function useChatSidebarState() {
 
   useShellSidebarCloseSwipe(isShellMobileLayout);
   useRuntimeThreads({
+    onDisplayReady: () => setIsInitialLoading(false),
     onSnapshot: (frame) => {
       setWorkspaceId(frame.workspace_id);
       setThreadPageCursor(frame.threads_page?.cursor || null);
       setHasMoreThreadPages(Boolean(frame.threads_page?.has_more && frame.threads_page.cursor));
-      if (!hasLoadedProjectCatalog) {
-        const cachedProjects = readStoredChatProjects(frame.workspace_id);
-        if (cachedProjects.length) {
-          setProjects(cachedProjects);
-        }
-      }
       setIsInitialLoading(false);
     },
     setError,
     setThreads,
   });
 
+  const projectReadRef = useRef<AbortController | null>(null);
+  useEffect(() => () => projectReadRef.current?.abort(), []);
+
   async function refreshProjects() {
     try {
-      const payload = await listChatProjects();
-      applyProjects(payload.projects || []);
+      projectReadRef.current?.abort();
+      const controller = new AbortController();
+      projectReadRef.current = controller;
+      await readAppCachePages<{ projects: ChatProject[]; has_more: boolean }>({
+        signal: controller.signal, pageSize: 200, hasMore: (page) => page.has_more,
+        onUpdate: (pages) => applyProjects(pages.flatMap((page) => page.projects)),
+        onError: (error) => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Unable to update projects.'); },
+        readPage: (offset, onRevalidated) => readChatDisplay({ kind: 'projects', offset }, { signal: controller.signal, onRevalidated }),
+      });
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chat projects.");
@@ -210,11 +213,6 @@ export function useChatSidebarState() {
     setThreadFilter(nextFilter);
   }
 
-  useEffect(() => {
-    if (workspaceId && hasLoadedProjectCatalog) {
-      writeStoredChatProjects(workspaceId, projects);
-    }
-  }, [hasLoadedProjectCatalog, projects, workspaceId]);
 
   useEffect(() => {
     selectedThreadIdsRef.current = selectedThreadIds;
@@ -443,7 +441,7 @@ export function useChatSidebarState() {
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") {
         return;
       }
       const payload = event.data as {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from core.app_sdk.display_models import conditional_display_response
 
 from chat_state import (
     clear_custom_view,
@@ -88,6 +89,17 @@ def handle_action(data_root: Path, body: dict, *, invocation_surface: str = "") 
         path.parent.mkdir(parents=True, exist_ok=True)
         return 200, {"status": "ok", "data_root": str(data_root)}
 
+    if action == "pwa.read_model":
+        if body.get("kind") != "projects":
+            return 400, {"error": "invalid_read_kind"}
+        offset = body.get("offset", 0)
+        if not isinstance(offset, int) or isinstance(offset, bool):
+            return 400, {"error": "invalid_offset"}
+        if offset < 0 or offset > 100000:
+            return 400, {"error": "invalid_offset"}
+        projects = _project_catalog_payload(read_state(path))["projects"]
+        items = [{key: item[key] for key in ("project_id", "name", "created_at", "updated_at") if key in item} for item in projects[offset:offset + 200]]
+        return 200, conditional_display_response({"kind": "projects", "data": {"projects": items, "has_more": len(projects) > offset + 200}}, body.get("known_revision"))
     if action == "projects.list":
         state = read_state(path)
         return 200, _project_catalog_payload(state)

@@ -29,7 +29,7 @@ import { useChatReadReceipts } from "./useChatReadReceipts";
 import { useChatRuntimeControls } from "./useChatRuntimeControls";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { DraftChat, conversationKeyFor, useMessageSubmission } from "./useMessageSubmission";
-import { useQueuedMessagePersistence } from "./useQueuedMessagePersistence";
+import { useQueuedMessageMemory } from "./useQueuedMessageMemory";
 
 type UseChatAppControllerParams = {
   enablePageCapture: boolean;
@@ -659,7 +659,7 @@ export function useChatAppController({
 
   const composerReady = initialDependenciesReady && targetConversationResolved;
 
-  useQueuedMessagePersistence({
+  useQueuedMessageMemory({
     activeConversationKey,
     isBootstrapping: isBootstrapping || !composerReady,
     navigationScope,

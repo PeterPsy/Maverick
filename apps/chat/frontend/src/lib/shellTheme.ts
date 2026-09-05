@@ -1,3 +1,4 @@
+import { purgeLegacyChatCaches } from './legacyCacheCleanup';
 export type MaverickEffectiveTheme = "dark" | "light";
 export type MaverickThemeMode = MaverickEffectiveTheme | "system";
 
@@ -14,6 +15,7 @@ const DEFAULT_THEME: MaverickShellTheme = {
 };
 
 export function applyInitialMaverickTheme(): MaverickShellTheme {
+  purgeLegacyChatCaches();
   const theme = themeFromLocation();
   applyMaverickTheme(theme);
   return theme;

@@ -54,11 +54,11 @@ vi.mock("../lib/activeAppContext", () => ({
 }));
 
 vi.mock("../lib/queuedMessages", () => ({
-  migratePersistedQueuedMessages: vi.fn(),
-  queueStorageKey: (navigationScope: string, conversationKey: string) => `${navigationScope}:${conversationKey}`,
-  readPersistedPendingMessages: vi.fn(() => []),
-  readPersistedQueuedMessages: vi.fn(() => []),
-  readPersistedRecoverableQueuedMessages: vi.fn(() => []),
+  transferQueuedMessages: vi.fn(),
+  queueMemoryKey: (navigationScope: string, conversationKey: string) => `${navigationScope}:${conversationKey}`,
+  readPendingMessages: vi.fn(() => []),
+  readQueuedMessages: vi.fn(() => []),
+  readRecoverableQueuedMessages: vi.fn(() => []),
 }));
 
 vi.mock("../lib/shellNavigation", () => ({

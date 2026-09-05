@@ -124,7 +124,7 @@ describe("useRuntimeThreads", () => {
     });
 
     expect(MockWebSocket.instances).toHaveLength(1);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => !String(url).includes('projection=display'))).toHaveLength(1);
     expect(onSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: "runtime.thread.snapshot",
@@ -160,7 +160,7 @@ describe("useRuntimeThreads", () => {
       await Promise.resolve();
     });
 
-    expect(fetch).not.toHaveBeenCalled();
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => !String(url).includes('projection=display'))).toHaveLength(0);
     expect(onThreads).toHaveBeenLastCalledWith([firstThread]);
   });
 

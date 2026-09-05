@@ -9,6 +9,25 @@ export function describeReadModelRequest(request: ReadModelRequest): { endpoint:
     case "app-store/catalog":
       if (Object.keys(parameters).length) throw new TypeError("Catalog GET takes no parameters.");
       return { endpoint: "/api/app-store/apps" };
+    case "chat/projects-and-completed-messages": {
+      if (parameters.kind === 'projects') {
+        action = 'pwa.read_model';
+        fields = ['kind', 'offset', 'known_revision'];
+        break;
+      }
+      const allowed = parameters.kind === 'threads' ? ['kind', 'limit', 'query', 'cursor', 'known_revision']
+        : parameters.kind === 'messages' ? ['kind', 'session_id', 'known_revision'] : [];
+      if (!allowed.length || Object.keys(parameters).some((key) => !allowed.includes(key))) throw new TypeError('Invalid Chat display read.');
+      const query = new URLSearchParams({ projection: 'display' });
+      for (const key of allowed.filter((key) => key !== 'kind' && key !== 'session_id')) {
+        if (parameters[key] !== undefined) {
+          if (!['string', 'number'].includes(typeof parameters[key]) || String(parameters[key]).length > 2048) throw new TypeError('Invalid display query.');
+          query.set(key, String(parameters[key]));
+        }
+      }
+      if (parameters.kind === 'messages' && (typeof parameters.session_id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(parameters.session_id))) throw new TypeError('Invalid session display locator.');
+      return { endpoint: parameters.kind === 'threads' ? `/api/runtime/threads?${query}` : `/api/runtime/sessions/${parameters.session_id}/events?${query}` };
+    }
     case "calendar/bounded-event-window":
       action = "pwa.read_model";
       fields = ["kind", "start_after", "end_before", "offset", "event_id", "known_revision"];
@@ -45,7 +64,7 @@ export function describeReadModelRequest(request: ReadModelRequest): { endpoint:
   }
   const body = JSON.stringify({
     ...parameters, action,
-    ...(request.appId === "storage" ? { _app_secret_request: { logical_names: [], required: false } } : {}),
+    ...((request.appId === "storage" || action === "pwa.read_model") ? { _app_secret_request: { logical_names: [], required: false } } : {}),
   });
   if (body.length > 16_384) throw new TypeError("Read-model retry request exceeds its budget.");
   return { endpoint: `/api/apps/${request.appId}/backend`, body };

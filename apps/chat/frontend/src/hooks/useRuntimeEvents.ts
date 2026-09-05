@@ -1,3 +1,4 @@
+import { readChatDisplay, displayMessageEvents, invalidateChatDisplay, type CompletedDisplayMessage } from '../pwaCache';
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
@@ -133,6 +134,19 @@ export function useRuntimeEvents({
     let heartbeatTimer: number | null = null;
     let lastEventId: string | null = null;
     let receivedInitialSnapshot = false;
+    const displayController = new AbortController();
+    let paintedDisplay = false;
+    const paintDisplay = (data: { messages: CompletedDisplayMessage[] }) => {
+      if (cancelled || receivedInitialSnapshot) return;
+      paintedDisplay = true;
+      setEvents(displayMessageEvents(currentSessionId, data.messages));
+      setHasMoreHistory?.(data.messages.length > 0);
+      onRuntimeSnapshotRef.current?.();
+    };
+    void readChatDisplay<{ messages: CompletedDisplayMessage[] }>({ kind: 'messages', session_id: currentSessionId }, {
+      signal: displayController.signal, onRevalidated: paintDisplay,
+    }).then(paintDisplay).catch(() => { /* The authenticated stream still determines availability. */ });
+
     let unavailableReported = false;
     let lastFrameAt = Date.now();
     let activeRuntimeSessionId = currentSessionId;
@@ -223,7 +237,7 @@ export function useRuntimeEvents({
 
     if (typeof WebSocket === "undefined") {
       setError("Runtime WebSocket is unavailable.");
-      return;
+      return () => { cancelled = true; displayController.abort(); };
     }
 
     setEvents((current) => {
@@ -276,7 +290,10 @@ export function useRuntimeEvents({
             }
             declaredLineage.forEach((sessionId) => lineageSessionIds.add(sessionId));
             activeRuntimeSessionId = frame.session.session_id;
+            if (receivedInitialSnapshot) invalidateChatDisplay('messages');
             receivedInitialSnapshot = true;
+            if (paintedDisplay) { setEvents([]); oldestEventIdRef.current = null; }
+
             setActiveSession({
               ...frame.session,
               runtime_admission: frame.runtime_admission ?? frame.session.runtime_admission ?? null,
@@ -301,6 +318,12 @@ export function useRuntimeEvents({
           }
           const runtimeEvent = runtimeEventFromWebSocketFrame(frame);
           if (runtimeEvent) {
+            if (terminalStatus(runtimeEvent)) {
+              invalidateChatDisplay('messages');
+              // Refill only through the fixed authenticated read, never replay a
+              // WebSocket loader or persist its operational payload.
+              void readChatDisplay({ kind: 'messages', session_id: currentSessionId }, { signal: displayController.signal }).catch(() => undefined);
+            }
             applyIncomingEvents([runtimeEvent]);
           }
         } catch (parseError) {
@@ -357,6 +380,7 @@ export function useRuntimeEvents({
 
     return () => {
       cancelled = true;
+      displayController.abort();
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
       }

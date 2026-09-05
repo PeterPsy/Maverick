@@ -21,6 +21,42 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_disabled_native_lineage_blocks_rollback_before_session_persistence(self) -> None:
+        from core.providers.agentic_profiles import build_pinned_execution_binding
+        from core.providers.certificate_service import validate_certificate_for_binding
+        from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
+        from tests.support.native_agent_catalog import codex_snapshot
+
+        original_catalog = codex_snapshot("gpt-5.6-sol")
+        with tempfile.TemporaryDirectory() as temp_dir, patch(
+            "core.providers.native_agent_reconciliation.discover_codex_native_catalog",
+            return_value=original_catalog,
+        ) as discovery:
+            state, app, cookie = self._platform(temp_dir)
+            _profile, original = resolve_workspace_agentic_profile(state.provider_store, workspace_id="default")
+            pin = build_pinned_execution_binding(state.provider_store, state.provider_registry,
+                session_id="existing", workspace_id="default", execution_mode="sandbox")
+            discovery.return_value = codex_snapshot("gpt-5.6-sol", reasoning=("low", "high"))
+            refresh_codex_native_catalog(state.provider_registry, store=state.provider_store, force=True)
+            successor = next(b for b in state.provider_store.list_workspace_agentic_profile_bindings("default")
+                             if b.binding_id != original.binding_id and b.definition_id == original.definition_id)
+            state.provider_store.save_workspace_agentic_profile_binding(replace(
+                successor, enabled=False, is_default=False, revision=successor.revision + 1,
+                updated_at=datetime.now(tz=UTC),
+            ), expected_revision=successor.revision)
+            discovery.return_value = original_catalog
+            refresh_codex_native_catalog(state.provider_registry, store=state.provider_store, force=True)
+            before = state.runtime_store.list_all_sessions()
+            with patch("core.api.runtime_api._prewarm_new_runtime_session", return_value=None):
+                status, payload, _headers = self._invoke(app, path="/api/runtime/sessions", method="POST", cookie=cookie,
+                    body={"agent_id": "chat", "source_app_id": "chat", "runtime_mode": "agentic",
+                          "workspace_profile_binding_id": original.binding_id})
+            self.assertEqual(status, 409)
+            self.assertEqual(payload["error"], "workspace_profile_lineage_disabled")
+            self.assertEqual(state.runtime_store.list_all_sessions(), before)
+            validate_certificate_for_binding(state.provider_store, binding=pin,
+                                              adapter=state.provider_registry.get_agentic_runtime_adapter("codex"))
+
     def test_partial_native_policy_is_rejected_without_rewriting_restrictions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             state, app, cookie = self._platform(temp_dir)

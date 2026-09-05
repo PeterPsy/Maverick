@@ -609,6 +609,7 @@ def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
 
 def _workspace_agentic_profile_binding(document: dict[str, Any]) -> WorkspaceAgenticProfileBinding:
     payload = dict(document)
+    payload["lineage_binding_ids"] = tuple(payload.get("lineage_binding_ids", ()))
     payload["actor_policy"] = _actor_selection_policy(payload["actor_policy"])
     payload["workspace_policy_ceiling"] = _agentic_runtime_policy(payload["workspace_policy_ceiling"])
     return WorkspaceAgenticProfileBinding(**payload)

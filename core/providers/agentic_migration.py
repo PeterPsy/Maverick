@@ -7,6 +7,12 @@ from datetime import UTC, datetime
 import hashlib
 import json
 
+from core.providers.agentic_lineage_admission import (
+    binding_authority_digest as _binding_authority_digest,
+    rolled_binding_id as _rolled_binding_id,
+    lineage_admission_disabled,
+)
+
 from core.providers.agentic_models import (
     AgenticMigrationRecord,
     WorkspaceAgenticProfileBinding,
@@ -215,18 +221,7 @@ def _roll_forward_enabled_codex_bindings(
             ),
         ):
             current = current_profiles[source.definition_id]
-            if any(
-                not item.enabled
-                and item.definition_id == source.definition_id
-                and item.updated_at >= source.updated_at
-                and (
-                    item.binding_id == _rolled_binding_id(source, item.definition_revision)
-                    or _binding_authority_digest(item) == _binding_authority_digest(source)
-                )
-                for item in bindings
-            ):
-                # A later operator disable is a tombstone for this lineage,
-                # even after another catalog epoch or a policy edit on it.
+            if lineage_admission_disabled(source, bindings):
                 continue
             if (
                 source.egress_policy_id != current.egress_policy_id
@@ -274,6 +269,7 @@ def _roll_forward_enabled_codex_bindings(
                     None if existing is None else existing.revision
                 ),
                 now=now,
+                record_operator_decision=False,
             )
             if saved.workspace_policy_ceiling != policy:
                 saved = provider_store.save_workspace_agentic_profile_binding(
@@ -307,18 +303,6 @@ def _binding_roll_forward_key(
     )
 
 
-def _binding_authority_digest(binding: WorkspaceAgenticProfileBinding) -> str:
-    return canonical_digest(
-        {
-            "credential_binding_id": binding.credential_binding_id,
-            "actor_policy": binding.actor_policy,
-            "workspace_policy_ceiling": binding.workspace_policy_ceiling,
-            "egress_policy_id": binding.egress_policy_id,
-            "egress_policy_revision": binding.egress_policy_revision,
-        }
-    )
-
-
 def _binding_matches_current_source(
     binding: WorkspaceAgenticProfileBinding,
     current,
@@ -329,16 +313,3 @@ def _binding_matches_current_source(
         and binding.definition_revision == current.revision
         and _binding_authority_digest(binding) == _binding_authority_digest(source)
     )
-
-
-def _rolled_binding_id(
-    source: WorkspaceAgenticProfileBinding,
-    target_revision: str,
-) -> str:
-    digest = hashlib.sha256(
-        (
-            f"{source.workspace_id}\0{source.definition_id}\0{target_revision}\0"
-            f"{_binding_authority_digest(source)}"
-        ).encode("utf-8")
-    ).hexdigest()[:20]
-    return f"workspace-agentic-rollforward-{digest}"

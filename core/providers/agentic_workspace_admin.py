@@ -162,6 +162,7 @@ def save_workspace_agentic_binding(
     expected_revision: int | None = None,
     observability_store=None,
     now: datetime | None = None,
+    record_operator_decision: bool = True,
 ) -> WorkspaceAgenticProfileBinding:
     """Create or update one binding while proving every policy change is restrictive."""
     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
@@ -253,6 +254,12 @@ def save_workspace_agentic_binding(
         revision=revision,
         created_at=created_at,
         updated_at=timestamp,
+    )
+    from core.providers.agentic_lineage_admission import record_lineage_decision
+
+    desired = record_lineage_decision(
+        desired, existing, store.list_workspace_agentic_profile_bindings(workspace_id),
+        operator_decision=record_operator_decision, now=timestamp,
     )
     if existing is not None and replace(desired, revision=existing.revision, updated_at=existing.updated_at) == existing:
         return existing

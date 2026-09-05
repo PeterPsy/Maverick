@@ -107,7 +107,10 @@ def _native_readiness(*, definition, certificate, binding, registry, store) -> A
         return _native_result(installation, "native_agent_contract_incomplete")
     try:
         from core.providers.native_model_revision import require_native_model_revision_transport
+        from core.providers.agentic_lineage_admission import require_lineage_admission
 
+        if store is not None and getattr(binding, "enabled", False):
+            require_lineage_admission(store, binding)
         require_native_model_revision_transport(definition)
         require_native_agent_model_available(registry, definition, certificate=certificate)
         if certificate is None or store is None:

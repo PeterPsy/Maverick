@@ -286,6 +286,9 @@ def build_pinned_execution_binding(
         workspace_id=workspace_id,
         binding_id=workspace_binding_id,
     )
+    from core.providers.agentic_lineage_admission import require_lineage_admission
+
+    require_lineage_admission(store, binding)
     _require_authorized_profile_snapshot(
         definition=definition,
         binding=binding,

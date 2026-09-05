@@ -160,6 +160,9 @@ class WorkspaceAgenticProfileBinding:
     revision: int
     created_at: datetime
     updated_at: datetime
+    lineage_binding_ids: tuple[str, ...] = ()
+    admission_enabled_at: datetime | None = None
+    admission_disabled_at: datetime | None = None
 
 
 @dataclass(frozen=True)

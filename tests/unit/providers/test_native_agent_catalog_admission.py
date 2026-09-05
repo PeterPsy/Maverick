@@ -103,6 +103,54 @@ class NativeAgentCatalogAdmissionTest(unittest.TestCase):
                       if item.definition_revision == current.revision)
         self.assertEqual(self.pin(rolled).certified_reasoning_efforts, ("low", "high"))
 
+    def test_disabled_lineage_rejects_catalog_rollback_but_preserves_existing_pin(self):
+        original_catalog = codex_snapshot("gpt-5.6-sol", "second-model")
+        original = self.bind("second-model")
+        pin = self.pin(original)
+        self.refresh(codex_snapshot("gpt-5.6-sol", "second-model", reasoning=("low", "high")))
+        successor = next(item for item in self.store.list_workspace_agentic_profile_bindings("default")
+                         if item.definition_id == original.definition_id and item.binding_id != original.binding_id)
+        disabled = save_workspace_agentic_binding(
+            self.store, self.registry, workspace_id="default", definition_id=successor.definition_id,
+            definition_revision=successor.definition_revision, credential_binding_id=None,
+            binding_id=successor.binding_id, expected_revision=successor.revision,
+            enabled=False, is_default=False, actor_policy=successor.actor_policy, policy_patch={},
+        )
+        self.refresh(original_catalog)
+        with self.assertRaisesRegex(AgenticProfileError, "workspace_profile_lineage_disabled"):
+            self.pin(original)
+        # Automated default demotion/revision updates cannot count as reenable.
+        touched = replace(original, updated_at=disabled.updated_at + timedelta(seconds=1), revision=original.revision + 1)
+        self.store.save_workspace_agentic_profile_binding(touched, expected_revision=original.revision)
+        with self.assertRaisesRegex(AgenticProfileError, "workspace_profile_lineage_disabled"):
+            self.pin(touched)
+        validate_certificate_for_binding(self.store, binding=pin,
+                                         adapter=self.registry.get_agentic_runtime_adapter("codex"))
+        from core.providers.execution_family_readiness import inspect_agentic_family_readiness
+
+        readiness = inspect_agentic_family_readiness(
+            definition=self.store.get_agentic_profile_definition(pin.profile_definition_id, pin.profile_definition_revision),
+            certificate=self.store.get_capability_certificate(pin.capability_certificate_id), binding=pin,
+            registry=self.registry, store=self.store,
+        )
+        self.assertTrue(readiness.complete)
+
+    def test_explicit_reenable_restores_lineage_admission_without_enabling_other_members(self):
+        catalog = codex_snapshot("gpt-5.6-sol", "second-model")
+        original = self.bind("second-model")
+        self.refresh(codex_snapshot("gpt-5.6-sol", "second-model", reasoning=("low", "high")))
+        successor = next(item for item in self.store.list_workspace_agentic_profile_bindings("default")
+                         if item.definition_id == original.definition_id and item.binding_id != original.binding_id)
+        for enabled in (False, True):
+            successor = save_workspace_agentic_binding(
+                self.store, self.registry, workspace_id="default", definition_id=successor.definition_id,
+                definition_revision=successor.definition_revision, credential_binding_id=None,
+                binding_id=successor.binding_id, expected_revision=successor.revision,
+                enabled=enabled, is_default=False, actor_policy=successor.actor_policy, policy_patch={},
+            )
+        self.refresh(catalog)
+        self.assertEqual(self.pin(original).model_id, "second-model")
+
     def test_exact_revision_is_pinned_and_drift_blocks_admission(self):
         self.refresh(codex_snapshot("gpt-5.6-sol", "revisioned-model", revision="revision-one"))
         binding = self.bind("revisioned-model")

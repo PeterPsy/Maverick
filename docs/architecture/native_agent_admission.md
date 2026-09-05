@@ -12,6 +12,20 @@ edited or the catalog subsequently advertises another revision. Independent
 bindings with different authority remain independent. Only an explicit operator
 reenable can supersede the disabled decision.
 
+The same lineage gate is enforced for new pins and native UI readiness, not
+only when generating successors. A catalog rollback cannot restore admission
+through an enabled predecessor. Ancestry is inferred for old records from the
+shared authority and deterministic roll-forward ids; subsequent writes retain
+`lineage_binding_ids` so policy/credential edits cannot sever those links.
+Bindings record separate `admission_enabled_at`/`admission_disabled_at` decision
+timestamps. Only an explicit enable/disable transition (or explicit binding
+creation) advances them; reconciliation and default demotion never count as an
+operator reenable. Legacy disabled records are conservative tombstones until a
+new explicit enable supersedes them; disable wins equal timestamps. This gate
+does not change certificates or existing immutable pins: already pinned sessions
+retain their separate live binding/policy/certificate checks, without inheriting
+another lineage member's admission-only disable.
+
 Cold bootstrap follows the same rule: a legacy `ProviderSelection` is adopted
 only if that workspace has no agentic bindings. It never reenables a disabled
 binding or repromotes a demoted legacy default. For stores already affected by

@@ -13,13 +13,12 @@ from core.providers.agentic_models import (
 )
 from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
-    ensure_codex_workspace_profile,
 )
+from core.providers.agentic_default_migration import migrate_legacy_codex_defaults
 from core.providers.agentic_workspace_admin import (
     save_workspace_agentic_binding,
 )
 from core.providers.errors import AgenticProfileError, CapabilityCertificateError, ProviderNotFoundError
-from core.providers.models import ProviderSelection
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.errors import RuntimeProviderStateError
@@ -59,38 +58,7 @@ def migrate_agentic_runtime_schema(
         )
     )
 
-    for selection in provider_store.list_provider_selections():
-        if selection.provider_id != "codex":
-            continue
-        if selection.model_id not in {item.model_id for item in registry.get_provider_definition("codex").model_options}:
-            continue
-        ensure_codex_workspace_profile(
-            provider_store,
-            definition=registry.get_provider_definition("codex"),
-            selection=selection,
-            now=timestamp,
-        )
-
-    if (not provider_store.list_workspace_agentic_profile_bindings("default")
-        and registry.get_provider_definition("codex").model_options):
-        codex = registry.get_provider_definition("codex")
-        ensure_codex_workspace_profile(
-            provider_store,
-            definition=codex,
-            selection=ProviderSelection(
-                selection_id="agentic-bootstrap:default:codex",
-                workspace_id="default",
-                provider_id="codex",
-                binding_id=None,
-                selection_scope="workspace_default",
-                selection_reason="agentic schema bootstrap default",
-                created_at=timestamp,
-                updated_at=timestamp,
-                model_id=codex.default_model_family,
-                model_reasoning_effort=None,
-            ),
-            now=timestamp,
-        )
+    migrate_legacy_codex_defaults(provider_store, registry, now=timestamp)
 
     from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
 

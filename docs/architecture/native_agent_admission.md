@@ -12,6 +12,15 @@ edited or the catalog subsequently advertises another revision. Independent
 bindings with different authority remain independent. Only an explicit operator
 reenable can supersede the disabled decision.
 
+Cold bootstrap follows the same rule: a legacy `ProviderSelection` is adopted
+only if that workspace has no agentic bindings. It never reenables a disabled
+binding or repromotes a demoted legacy default. For stores already affected by
+the former bootstrap replay, migration clears only the deterministic legacy
+binding's duplicate default flag when an explicit default is also present. It
+retains that binding's enabled state, policies, credentials, and existing pins;
+the explicit default is unchanged. Multiple explicit defaults remain ambiguous
+and fail closed rather than being resolved by timestamp or list order.
+
 Historical `plain_hosted_chat` sessions without `hosted_text_binding` remain
 readable but fail dispatch with `hosted_text_legacy_binding_required`, before
 routing, credential access, or transport. Users must explicitly create a new

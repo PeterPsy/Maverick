@@ -72,3 +72,19 @@ The internal-only `chatgptAuthTokens` mode in Codex 0.153.4 is not used.
 - Inspect network traffic to confirm image bytes never reach Ubuntu.
 - Keep signing/notarization and physical acceptance explicit; a CI build is not
   proof of computer-use availability or end-to-end safety.
+
+### Development checkpoint — 2026-09-05
+
+- Provisioning unit tests: 4 passed. Chat protocol/UI/regression tests: 34 passed.
+  Shell bridge tests: 3 passed. Python unused-import check passed.
+- Official `chat` and `base-shell` frontend rebuilds passed and emitted refresh
+  events. Server code is published on `feat/mac-direct-runtime`; only explicit
+  task paths were committed, preserving unrelated concurrent working changes.
+- Native commit `bd05566`: 3 Swift tests, release build, ad-hoc signature
+  verification and credential-free Codex protocol smoke checks passed on the Mac
+  runner. [Run 33981239569](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/33981239569)
+  installed `~/Applications/MaverickMac.app` and successfully requested launch.
+- No real credentials have been provisioned to the Mac by this implementation
+  checkpoint. Native UI visibility, permission grants, authenticated model turns,
+  screenshot/action correctness and network-path inspection require the user
+  handoff and remain unverified. General local file attachments are not in v1.

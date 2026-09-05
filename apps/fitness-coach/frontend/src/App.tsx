@@ -42,7 +42,7 @@ import {
   storageMediaSelectionFromPickerParams,
   updateViewState
 } from './api';
-import { readBootstrapCache, removeBootstrapCache } from './bootstrapCache';
+import { purgeLegacyBootstrapCache } from './bootstrapCache';
 import { readCachedBootstrap } from './bootstrapReadModelCache';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
 import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, preloadMediaPlayback, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
@@ -143,11 +143,10 @@ export function App() {
   useEffect(() => {
     let isCurrent = true;
     const controller = new AbortController();
-    const migrationSeed = readBootstrapCache();
-    readCachedBootstrap({ includeRuns: false, migrationSeed, signal: controller.signal })
+    purgeLegacyBootstrapCache();
+    readCachedBootstrap({ includeRuns: false, signal: controller.signal })
       .then((result) => {
         if (!isCurrent) return;
-        if (result.brokered && result.migrationCommitted) removeBootstrapCache(result.payload);
         applyBootstrapPayload(result.payload);
         if (result.revalidation) {
           void result.revalidation.then((next) => {

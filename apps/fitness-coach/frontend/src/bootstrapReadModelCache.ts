@@ -10,7 +10,6 @@ import type { AppBootstrapPayload } from './types';
 
 export type CachedBootstrapOptions = {
   includeRuns?: boolean;
-  migrationSeed?: AppBootstrapPayload | null;
   selectedWorkoutId?: string | null;
   signal?: AbortSignal;
 };
@@ -35,15 +34,9 @@ export async function readCachedBootstrap(
         || (frameContext && payload.workspace_id !== frameContext.workspaceId)) return null;
     return payload;
   };
-  const migrationSeed = options.migrationSeed
-    ? sanitize(options.migrationSeed)
-    : null;
   return readThroughParentDataCache<AppBootstrapPayload>({
     appId,
     entityId: `bootstrap:${storageAppId}:${includeRuns ? 'runs' : 'no-runs'}:${selectedWorkoutId}`,
-    ...(migrationSeed ? {
-      migrationSeed: { payload: migrationSeed, revision: migrationSeed.state_version }
-    } : {}),
     resource: 'sanitized-bootstrap-and-thumbnails',
     schemaRevision: 'fitness-coach.sanitized-bootstrap-and-thumbnails.v1'
   }, async ({ knownRevision, signal }) => {

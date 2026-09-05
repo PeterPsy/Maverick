@@ -697,22 +697,26 @@ function MailMessageBody({
     setExpandedBodyError('');
   }, [message.id]);
 
+  const bodyReadRef = useRef<AbortController | null>(null);
+  useEffect(() => () => bodyReadRef.current?.abort(), [message.id]);
+
   const loadTrimmedContent = useCallback(async () => {
+    bodyReadRef.current?.abort();
+    const controller = new AbortController();
+    bodyReadRef.current = controller;
     setLoadingExpandedBody(true);
     setExpandedBodyError('');
     try {
-      const payload = await callBackend<{ message: MailMessage }>({
-        action: MAIL_BACKEND_ACTIONS.messagesGet,
+      const payload = await readMailDisplay<{ message: MailMessage }>({
+        kind: 'message',
         message_id: message.id,
         max_body_chars: READER_FULL_TEXT_BODY_CHARS,
-        max_body_html_chars: READER_HTML_BODY_CHARS,
-        ...noSecretRequest()
-      });
-      setExpandedMessage(payload.message);
+      }, { signal: controller.signal, onRevalidated: (next) => setExpandedMessage(next.message) });
+      if (!controller.signal.aborted) setExpandedMessage(payload.message);
     } catch (error) {
-      setExpandedBodyError((error as Error).message);
+      if (!controller.signal.aborted) setExpandedBodyError((error as Error).message);
     } finally {
-      setLoadingExpandedBody(false);
+      if (!controller.signal.aborted) setLoadingExpandedBody(false);
     }
   }, [message.id]);
 
@@ -940,7 +944,7 @@ export function App() {
         connection_id: payload.thread.connection_id
       });
     } catch (error) {
-      if (threadOpenRequestRef.current === requestId) {
+      if (!controller.signal.aborted && threadOpenRequestRef.current === requestId) {
         setNotice(error instanceof Error ? error.message : 'Unable to open mail thread.');
       }
     } finally {
@@ -958,16 +962,12 @@ export function App() {
     setThreadListLoading(true);
     const offset = (page - 1) * THREADS_PAGE_SIZE;
     try {
-      const connectionPayload = await readMailDisplay<ConnectionPayload>({ kind: 'mailboxes' }, {
+      const metadata = readMailDisplay<ConnectionPayload>({ kind: 'mailboxes' }, {
         signal: controller.signal,
         onRevalidated: (next) => { if (!controller.signal.aborted) setConnections(next.items); },
-        onRevalidationError: (error) => { if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Mail display failed.'); },
       });
-      if (threadListRequestRef.current !== requestId) {
-        return;
-      }
-      const nextConnections = connectionPayload.items;
-      const nextMailboxScopeIds = mailboxScopeIdsForConnections(mailboxScopeIds, nextConnections);
+      void metadata.then((next) => { if (!controller.signal.aborted) setConnections(next.items); }).catch(() => undefined);
+      const nextMailboxScopeIds = mailboxScopeIds;
       const nextSerializedMailboxScopes = serializeMailboxScopeIds(nextMailboxScopeIds);
       const nextPrimaryScope = primaryMailboxScope(nextMailboxScopeIds);
       const threadPayload = await readMailDisplay<ThreadListPayload>({
@@ -988,7 +988,6 @@ export function App() {
       if (threadListRequestRef.current !== requestId) {
         return;
       }
-      setConnections(nextConnections);
       void callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() })
         .then((next) => { if (!controller.signal.aborted) setConnections(next.items); }).catch(() => undefined);
       if (nextSerializedMailboxScopes !== serializedMailboxScopes) {
@@ -1004,16 +1003,11 @@ export function App() {
       }
       setThreads(threadPayload.items);
       setTotalThreads(threadPayload.total_count ?? threadPayload.items.length);
-      const selected = selectedThreadRef.current;
-      if (selected && !nextConnections.some((item) => item.id === selected.connection_id)) {
-        setSelectedThread(null);
-        notifySelection({
-          mailbox: nextPrimaryScope.mailbox,
-          mailbox_scopes: nextSerializedMailboxScopes,
-          thread: null,
-          connection_id: nextPrimaryScope.connectionId
-        });
-      }
+      void metadata.then((next) => {
+        if (controller.signal.aborted) return;
+        const validScopes = mailboxScopeIdsForConnections(mailboxScopeIds, next.items);
+        if (serializeMailboxScopeIds(validScopes) !== serializedMailboxScopes) setMailboxScopeIds(validScopes);
+      }).catch(() => undefined);
     } catch (error) {
       if (threadListRequestRef.current !== requestId) {
         return;

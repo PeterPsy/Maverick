@@ -60,13 +60,16 @@ export function useCrmDataController() {
         if (!controller.signal.aborted) setData(value);
       }).catch(() => undefined);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load CRM data.');
+      if (!(loadError instanceof Error && loadError.name === 'AbortError')) setError(loadError instanceof Error ? loadError.message : 'Unable to load CRM data.');
     } finally {
       setIsLoading(false);
     }
   }
 
+  const recordsGeneration = useRef(0);
+  const refreshRecordsRef = useRef<() => Promise<void>>(async () => undefined);
   async function refreshRecords(cursor = recordsCursor) {
+    const generation = ++recordsGeneration.current;
     setError('');
     try {
       setRecordsLoading(true);
@@ -77,8 +80,10 @@ export function useCrmDataController() {
       }, setRecordsData);
     } catch (recordsError) {
       if (!(recordsError instanceof Error && recordsError.name === 'AbortError')) setError(recordsError instanceof Error ? recordsError.message : 'Unable to load CRM records.');
-    } finally { setRecordsLoading(false); }
+    } finally { if (generation === recordsGeneration.current) setRecordsLoading(false); }
   }
+
+  refreshRecordsRef.current = refreshRecords;
 
   async function refreshReports() {
     setError('');
@@ -103,7 +108,7 @@ export function useCrmDataController() {
       if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.data-changed' && event.data?.owner_app_id === 'crm') {
         void refresh();
         void refreshPipelineBoard();
-        void refreshRecords();
+        void refreshRecordsRef.current();
       }
       if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.navigate') {
         const params = event.data.params && typeof event.data.params === 'object' ? event.data.params : {};

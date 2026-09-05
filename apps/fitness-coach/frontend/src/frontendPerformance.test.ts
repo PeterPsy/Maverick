@@ -8,7 +8,7 @@ describe('frontend performance guardrails', () => {
   const packageJson = readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
 
   it('uses bootstrap for initial app data without fetching runs in the first Promise.all', () => {
-    expect(appSource).toContain('readCachedBootstrap({ includeRuns: false, migrationSeed, signal: controller.signal })');
+    expect(appSource).toContain('readCachedBootstrap({ includeRuns: false, signal: controller.signal })');
     expect(appSource).not.toContain('writeBootstrapCache');
     expect(appSource).not.toContain('applyBootstrapPayload(cached)');
     expect(appSource).not.toContain('Promise.all([listWorkouts(), listExercises(libraryQuery, libraryTag), listRuns');
@@ -37,8 +37,10 @@ describe('frontend performance guardrails', () => {
   });
 
   it('requires host-attested app and workspace scope for bootstrap cache reads', () => {
-    expect(bootstrapCacheSource).toContain('readMaverickAppFrameContext');
-    expect(bootstrapCacheSource).toContain('context.appId !== mountedAppId');
+    const readModelSource = readFileSync(new URL('./bootstrapReadModelCache.ts', import.meta.url), 'utf8');
+    expect(readModelSource).toContain('readMaverickAppFrameContext');
+    expect(readModelSource).toContain('frameContext.appId === appId');
+    expect(readModelSource).toContain('payload.workspace_id !== frameContext.workspaceId');
     expect(bootstrapCacheSource).toContain('payload.workspace_id');
     expect(bootstrapCacheSource).not.toContain('readBootstrapCacheScopeIndex');
     expect(bootstrapCacheSource).not.toContain('bootstrap-scope');
@@ -64,7 +66,8 @@ describe('frontend performance guardrails', () => {
     expect(appSource).toContain('captureMediaThumbVideoFrame(event.currentTarget, previewFrameKey)');
     expect(thumbCacheSource).toContain("const THUMB_PREVIEW_STORAGE_KEY = 'fitness-coach:media-thumb-preview:v1';");
     expect(thumbCacheSource).toContain('globalThis.sessionStorage');
-    expect(thumbCacheSource).toContain('legacySeeds');
+    expect(thumbCacheSource).toContain('purgeLegacyThumbPreviews');
+    expect(thumbCacheSource).not.toContain('legacySeeds');
     expect(thumbCacheSource).not.toContain('sessionStorage.setItem');
   });
 });

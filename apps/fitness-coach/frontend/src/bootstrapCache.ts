@@ -1,51 +1,13 @@
 import { projectBootstrapReadModel } from './bootstrapProjection';
-import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
-import { currentStorageAppId, mountedAppIdFromPath } from './api';
 import type { AppBootstrapPayload } from './types';
 
-
-type BootstrapCacheScope = {
-  workspaceId: string;
-  appId: string;
-  storageAppId: string;
-};
-
-function bootstrapCacheKey(scope: BootstrapCacheScope) {
-  return `fitness-coach:bootstrap:${scope.workspaceId}:${scope.appId}:${scope.storageAppId}`;
-}
-
-export function bootstrapCacheScopeFromFrameContext(): BootstrapCacheScope | null {
-  if (typeof window === 'undefined') return null;
-  const context = readMaverickAppFrameContext();
-  const mountedAppId = mountedAppIdFromPath(window.location.pathname, 'fitness-coach');
-  if (!context || context.appId !== mountedAppId) return null;
-  return {
-    workspaceId: context.workspaceId,
-    appId: context.appId,
-    storageAppId: currentStorageAppId()
-  };
-}
-
-export function readBootstrapCache(): AppBootstrapPayload | null {
-  // Older keys attest only workspace/app, not the user. Delete, never migrate.
+export function purgeLegacyBootstrapCache(): void {
+  // These keys never attested user scope. Delete the namespace, never import it.
   try {
-    for (const key of Object.keys(window.sessionStorage)) {
-      if (key.startsWith('fitness-coach:bootstrap:')) window.sessionStorage.removeItem(key);
-    }
-  } catch { /* Optional legacy cleanup cannot block current reads. */ }
-  return null;
-}
-
-export function removeBootstrapCache(payload: AppBootstrapPayload) {
-  const scope = bootstrapCacheScopeFromFrameContext();
-  if (!scope
-      || payload.workspace_id !== scope.workspaceId
-      || payload.app_id !== scope.appId) return;
-  try {
-    window.sessionStorage.removeItem(bootstrapCacheKey(scope));
-  } catch {
-    // A verified parent migration remains valid if legacy cleanup is blocked.
-  }
+    const storage = window.sessionStorage;
+    const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index));
+    for (const key of keys) if (key?.startsWith('fitness-coach:bootstrap:')) storage.removeItem(key);
+  } catch { /* Optional cleanup cannot block current authenticated reads. */ }
 }
 
 export function sanitizeBootstrapReadModel(value: unknown): AppBootstrapPayload | null {

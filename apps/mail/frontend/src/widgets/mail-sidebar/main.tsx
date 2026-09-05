@@ -1,3 +1,4 @@
+import { readMailDisplay } from '../../pwaCache';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LogOut, Mail, RefreshCw, Square, SquareCheck, Trash2 } from 'lucide-react';
@@ -173,21 +174,28 @@ function MailSidebarWidget() {
   const [activeOperation, setActiveOperation] = useState('');
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const refreshRequestRef = useRef(0);
+  const displayControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => displayControllerRef.current?.abort(), []);
 
   const refresh = useCallback(async (options: { preserveNotice?: boolean } = {}) => {
     const requestId = refreshRequestRef.current + 1;
     refreshRequestRef.current = requestId;
     setLoading(true);
     try {
-      const [connectionPayload, countPayload] = await Promise.all([
-        callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() }),
-        callBackend<MailboxCountPayload>({ action: MAIL_BACKEND_ACTIONS.mailboxesCounts, ...noSecretRequest() })
-      ]);
-      if (refreshRequestRef.current !== requestId) {
-        return false;
-      }
-      setConnections(connectionPayload.items);
-      setMailboxCounts(countPayload.counts || {});
+      displayControllerRef.current?.abort();
+      const controller = new AbortController();
+      displayControllerRef.current = controller;
+      const update = (next: ConnectionPayload) => { if (!controller.signal.aborted) setConnections(next.items); };
+      const connectionPayload = await readMailDisplay<ConnectionPayload>({ kind: 'mailboxes' }, {
+        signal: controller.signal, onRevalidated: update,
+      });
+      if (refreshRequestRef.current !== requestId) return false;
+      update(connectionPayload);
+      // Operational counts and connection authority do not gate mailbox paint.
+      void callBackend<MailboxCountPayload>({ action: MAIL_BACKEND_ACTIONS.mailboxesCounts, ...noSecretRequest() })
+        .then((next) => { if (!controller.signal.aborted) setMailboxCounts(next.counts || {}); }).catch(() => undefined);
+      void callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() })
+        .then(update).catch(() => undefined);
       if (!options.preserveNotice) {
         setNotice('');
       }

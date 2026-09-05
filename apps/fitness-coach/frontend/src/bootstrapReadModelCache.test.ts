@@ -60,14 +60,13 @@ function accept(message: Record<string, unknown>, port: MessagePort) {
 describe('Fitness Coach parent-cached bootstrap adapter', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('uses a normal server read and never prepaints the migration seed when the broker is disabled', async () => {
-    const legacy = payload('legacy');
+  it('uses a normal server read without any unscoped migration seed when the broker is disabled', async () => {
     const server = payload('server');
     stubFrame({
       postMessage(message: unknown, _origin: string, transfer?: Transferable[]) {
         const request = message as Record<string, unknown>;
         const port = transfer?.[0] as MessagePort;
-        expect(request.migration_seed).toMatchObject({ payload: legacy, revision: 'legacy' });
+        expect(request).not.toHaveProperty('migration_seed');
         accept(request, port);
         port.postMessage({
           app_id: request.app_id,
@@ -87,7 +86,7 @@ describe('Fitness Coach parent-cached bootstrap adapter', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await readCachedBootstrap({ includeRuns: false, migrationSeed: legacy });
+    const result = await readCachedBootstrap({ includeRuns: false });
 
     expect(result).toMatchObject({ brokered: false, payload: server, source: 'network' });
     expect(fetchMock).toHaveBeenCalledOnce();

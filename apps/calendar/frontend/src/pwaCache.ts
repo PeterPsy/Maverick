@@ -1,4 +1,4 @@
-import { readAppCacheModel } from '@maverick/pwa-cache';
+import { readAppCacheModel, readAppCachePages } from '@maverick/pwa-cache';
 import { sanitizeCalendarReadModel, type CalendarReadModel } from './pwaReadModel';
 import type { CalendarEvent } from './types';
 
@@ -16,30 +16,14 @@ export async function readCalendarWindow(
   onUpdate: (model: CalendarReadModel) => void,
   onRevalidationError: (error: unknown) => void,
 ): Promise<void> {
-  const pages = new Map<number, CalendarReadModel>();
-  const publish = () => {
-    if (signal.aborted) return;
-    const ordered = [...pages.entries()].sort(([a], [b]) => a - b).map(([, value]) => value);
-    onUpdate({ events: ordered.flatMap((page) => page.events), calendars: ordered[0]?.calendars ?? [], has_more: ordered.at(-1)?.has_more ?? false });
-  };
-  for (let offset = 0; !signal.aborted; offset += 500) {
-    const pageOffset = offset;
-    const result = await readAppCacheModel({
+  await readAppCachePages<CalendarReadModel>({
+    signal, pageSize: 500, hasMore: (page) => page.has_more, onError: onRevalidationError,
+    onUpdate: (pages) => onUpdate({ events: pages.flatMap((page) => page.events), calendars: pages[0]?.calendars ?? [], has_more: pages.at(-1)?.has_more ?? false }),
+    readPage: async (offset, onRevalidated) => (await readAppCacheModel({
       appId: 'calendar', resource: 'bounded-event-window', schemaRevision: 'calendar.bounded-event-window.v1',
       parameters: { kind: 'window', ...interval, offset },
-    }, sanitizeCalendarReadModel, {
-      signal,
-      onRevalidated: (model) => {
-        pages.set(pageOffset, model);
-        if (!model.has_more) for (const key of pages.keys()) if (key > pageOffset) pages.delete(key);
-        publish();
-      },
-      onRevalidationError,
-    });
-    pages.set(offset, result.payload);
-    publish();
-    if (!result.payload.has_more) return;
-  }
+    }, sanitizeCalendarReadModel, { signal, onRevalidated, onRevalidationError })).payload,
+  });
 }
 
 export async function readCalendarEvent(eventId: string, signal: AbortSignal, onUpdate: (event: CalendarEvent) => void, onError: (error: unknown) => void): Promise<void> {

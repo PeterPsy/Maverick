@@ -1,10 +1,12 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { maverickFrontendAssets } from '../../scripts/vite-frontend-assets.mjs';
+import { maverickIsolatedFrameAssetUrls } from '../../scripts/vite-isolated-frame-assets.mjs';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), stripGeneratedTrailingWhitespace()],
+  plugins: [react(), tailwindcss(), stripGeneratedTrailingWhitespace(), maverickIsolatedFrameAssetUrls(), maverickFrontendAssets()],
   root: 'frontend',
   base: '/apps/calendar/',
   resolve: {

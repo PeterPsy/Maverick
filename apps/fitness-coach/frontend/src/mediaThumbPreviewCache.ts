@@ -21,10 +21,8 @@ type PendingBrokerRead = {
 };
 
 // Only parent-broker results and frames captured in this page are renderable.
-// Old sessionStorage values remain quarantined as migration seeds until the
-// parent confirms that they were committed into its authenticated scope.
+// Unscoped legacy browser storage is deleted, never imported.
 const memoryCache = new Map<string, ThumbPreviewEntry>();
-const legacySeeds = new Map<string, ThumbPreviewEntry>();
 const pendingBrokerReads = new Map<string, PendingBrokerRead>();
 let hydrated = false;
 let generation = 0;
@@ -34,9 +32,9 @@ export function mediaThumbPreviewFrameKey(media: ExerciseMediaRef, storageAppId 
 }
 
 export function readMediaThumbPreviewFrame(key: string): string {
-  hydrateLegacyThumbPreviewSeeds();
+  purgeLegacyThumbPreviews();
   if (hasStableThumbIdentity(key) && !memoryCache.has(key)) {
-    void brokerThumb(key, legacySeeds.get(key) || null);
+    void brokerThumb(key, null);
   }
   return memoryCache.get(key)?.dataUrl || '';
 }
@@ -44,10 +42,9 @@ export function readMediaThumbPreviewFrame(key: string): string {
 export function writeMediaThumbPreviewFrame(key: string, dataUrl: string) {
   const entry = sanitizeThumbPreviewEntry({ key, dataUrl, updatedAt: Date.now() });
   if (!entry) return;
-  hydrateLegacyThumbPreviewSeeds();
+  purgeLegacyThumbPreviews();
   memoryCache.set(key, entry);
   trimMemoryCache();
-  if (legacySeeds.delete(key)) persistLegacyThumbPreviewSeeds();
   if (hasStableThumbIdentity(key)) void brokerThumb(key, entry, true);
 }
 
@@ -79,40 +76,20 @@ export function clearMediaThumbPreviewFrameCache(options: { storage?: boolean } 
   pendingBrokerReads.forEach(({ controller }) => controller.abort());
   pendingBrokerReads.clear();
   memoryCache.clear();
-  legacySeeds.clear();
   hydrated = false;
   if (options.storage === false) return;
   storage()?.removeItem(THUMB_PREVIEW_STORAGE_KEY);
 }
 
-function hydrateLegacyThumbPreviewSeeds() {
+function purgeLegacyThumbPreviews() {
   if (hydrated) return;
   hydrated = true;
   // This legacy namespace has no user/workspace attestation.
   try { storage()?.removeItem(THUMB_PREVIEW_STORAGE_KEY); } catch { /* best effort */ }
 }
 
-function persistLegacyThumbPreviewSeeds() {
-  const target = storage();
-  if (!target) return;
-  try {
-    if (!legacySeeds.size) {
-      target.removeItem(THUMB_PREVIEW_STORAGE_KEY);
-      return;
-    }
-    target.setItem(THUMB_PREVIEW_STORAGE_KEY, JSON.stringify({ entries: orderedEntries(legacySeeds) }));
-  } catch {
-    // Migration cleanup is best-effort; legacy values are never rendered here.
-  }
-}
-
 function trimMemoryCache() {
   trimEntries(memoryCache);
-}
-
-function trimLegacySeeds() {
-  trimEntries(legacySeeds);
-  persistLegacyThumbPreviewSeeds();
 }
 
 function trimEntries(entries: Map<string, ThumbPreviewEntry>) {
@@ -137,7 +114,7 @@ function hasStableThumbIdentity(key: string): boolean {
 
 function brokerThumb(
   key: string,
-  migrationEntry: ThumbPreviewEntry | null,
+  capturedEntry: ThumbPreviewEntry | null,
   supersede = false
 ): Promise<void> {
   const existing = pendingBrokerReads.get(key);
@@ -149,7 +126,7 @@ function brokerThumb(
   const controller = new AbortController();
   const startedGeneration = generation;
   let promise!: Promise<void>;
-  promise = runBrokeredThumb(key, migrationEntry, controller.signal, startedGeneration)
+  promise = runBrokeredThumb(key, capturedEntry, controller.signal, startedGeneration)
     .catch(() => undefined)
     .finally(() => {
       if (pendingBrokerReads.get(key)?.promise === promise) pendingBrokerReads.delete(key);
@@ -160,30 +137,29 @@ function brokerThumb(
 
 async function runBrokeredThumb(
   key: string,
-  migrationEntry: ThumbPreviewEntry | null,
+  capturedEntry: ThumbPreviewEntry | null,
   signal: AbortSignal,
   startedGeneration: number
 ) {
-  const revision = migrationEntry ? await createRequestFingerprint(migrationEntry.dataUrl) : '';
+  const revision = capturedEntry ? await createRequestFingerprint(capturedEntry.dataUrl) : '';
   const result = await readThroughParentDataCache<ThumbPreviewEntry>({
     appId: mountedAppIdFromPath(typeof window === 'undefined' ? '' : window.location.pathname, 'fitness-coach'),
     entityId: `thumbnail:${key}`,
-    ...(migrationEntry ? {
-      migrationSeed: { payload: migrationEntry, revision }
+    ...(capturedEntry ? {
+      migrationSeed: { payload: capturedEntry, revision }
     } : {}),
     resource: 'sanitized-bootstrap-and-thumbnails',
     schemaRevision: 'fitness-coach.sanitized-bootstrap-and-thumbnails.v1'
   }, async ({ knownRevision }) => {
-    // A broker first persists the migration seed, then revalidates it with the
-    // known revision. Direct fallback has no revision and therefore cannot
-    // render untrusted legacy storage while the feature is disabled.
+    // Only a freshly captured frame can seed persistence. The broker verifies
+    // scope and lease before committing; old browser storage is never a seed.
     // Existing thumbnails are current because their cache identity already
     // includes the immutable media source version.
-    if (knownRevision && (!migrationEntry || knownRevision === revision)) {
+    if (knownRevision && (!capturedEntry || knownRevision === revision)) {
       return { kind: 'not_modified', revision: knownRevision } as const;
     }
-    if (migrationEntry && knownRevision) {
-      return { kind: 'value', payload: migrationEntry, revision } as const;
+    if (capturedEntry && knownRevision) {
+      return { kind: 'value', payload: capturedEntry, revision } as const;
     }
     const error = new Error('Thumbnail source requires normal media loading.');
     error.name = 'TerminalError';
@@ -192,10 +168,6 @@ async function runBrokeredThumb(
 
   if (signal.aborted || startedGeneration !== generation) return;
   applyBrokeredThumb(key, result.payload);
-  if (result.brokered && migrationEntry && result.migrationCommitted) {
-    legacySeeds.delete(key);
-    persistLegacyThumbPreviewSeeds();
-  }
   if (result.revalidation) {
     const next = await result.revalidation;
     if (!signal.aborted && startedGeneration === generation && next.changed) {

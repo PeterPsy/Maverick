@@ -26,5 +26,11 @@ def read_model(data_root, body):
             source = {'thread': get_thread(data_root, str(body.get('thread_id') or ''), limit, 0)}
         else:
             source = {'message': get_message(data_root, str(body.get('message_id') or ''), limit, 0)}
+    # This projection serves text, not deliberately zero-length rich HTML.
+    messages = (source.get('thread') or {}).get('messages', []) if kind == 'thread' else [source.get('message')] if kind == 'message' else []
+    for message in messages:
+        if message:
+            message['body_truncated'] = bool(message.get('body_source_truncated') or message.get('body_text_truncated'))
+            message['body_html_truncated'] = False
     payload = {'kind': kind, 'data': project_display_model(source, SCHEMAS[kind])}
     return conditional_display_response(payload, body.get('known_revision'))

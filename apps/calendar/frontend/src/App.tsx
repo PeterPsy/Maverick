@@ -82,11 +82,13 @@ export function App() {
       // Display reads must not wait for provider connections or UI preferences.
       void readViewFilter(appId).then((value) => { if (current()) setViewState(value); }, reportError);
       void listConnections(appId).then((value) => { if (current()) setConnections(value); }, reportError);
+      let liveCalendars = false;
+      void listCalendars(appId).then((value) => { if (current()) { liveCalendars = true; setCalendars(value); } }, reportError);
       if (appId === 'calendar') {
         await readCalendarWindow(interval.current, controller.signal, (model) => {
           if (!current()) return;
           setEvents(calendarEvents(model));
-          setCalendars(model.calendars);
+          if (!liveCalendars) setCalendars(model.calendars);
           setIsLoading(false);
         }, reportError);
       } else {

@@ -1,10 +1,12 @@
 # PWA read-model cache M5 pilot operations and acceptance
 
-This runbook covers the first M5 app-owned read-model adapters: Website Studio,
-Storage catalog, App Store catalog, and Fitness Coach. It does not enable a
-network-absence product mode, cache a mutation or authority decision, or opt in
-Calendar, Chat, CRM, or Mail. The global gate and every app gate remain off by
-default; Safari, Dock, and iPhone/Home Screen evidence remains a release gate.
+This runbook covers all eight approved M5 apps: Website Studio, Storage, App
+Store, Fitness Coach, Calendar, Chat, CRM and Mail. Product/privacy approval is
+recorded in `docs/product/pwa_cache_completion_decision_2026-09-05.md`; the
+resource-specific adapters implement its limits. Approval does not enable a
+network-absence mode, mutations, or authority from cache. Global and app gates
+remain off by default; physical-device evidence and controlled rollout remain
+release gates.
 
 The normative resource inventory is
 `docs/product/pwa_cache_resource_inventory.v2.json`. Base Shell consumes the
@@ -35,8 +37,9 @@ or policy capability. The shell asks the accepted frame to perform the
 app-specific conditional server read, and the frame returns only an
 app-sanitized read model or redaction-safe error classification over the
 private port. Base Shell applies policy v2, byte limits, TTL, quota, lifecycle,
-and a second plain-JSON validation before storage. A missing or disabled broker
-falls back to one normal server read.
+and an app-specific closed display sanitizer before storage. A missing or
+disabled broker falls back to the same validated server read; only its fixed
+idempotent HTTP request may retry, never the arbitrary app loader.
 
 `maverick.app.data-changed` is accepted only from the shell or an exact app or
 widget frame whose registered owner matches the declared owner app. Resource
@@ -85,9 +88,13 @@ write, publish, provider, capability, or confirmation actions.
 | Website Studio `site-snapshots` / schema `website-studio.site-snapshots.v2` | `workspace_internal`, `app_reference`, reviewed `cache` | 60 s / 24 h | 2 MiB / 16 MiB | SHA-256 of the complete version map; `known_revision/not_modified` | source, working-state, navigation, preview, activity, settings, view-selection |
 | Storage `file-catalog` / schema `storage.file-catalog.v1` | `workspace_internal`, `attachment`, reviewed `cache` | 30 s / 24 h | 256 KiB / 16 MiB | SHA-256 canonical catalog revision; `known_revision/not_modified` | files, drive-connections, view-state |
 | App Store `catalog` / schema `app-store.catalog.v1` | `public`, `app_reference`, `cache` | 300 s / 24 h | 1 MiB / 4 MiB | authorized catalog SHA-256 plus strong `ETag` / `If-None-Match` | conditional revalidation on every read |
-| Fitness Coach `sanitized-bootstrap-and-thumbnails` / schema `fitness-coach.sanitized-bootstrap-and-thumbnails.v1` | `personal_data`, `app_reference`, `session` | 300 s / 24 h | 512 KiB / 16 MiB | bootstrap `state_version`; thumbnail SHA-256 | workouts, exercises, runs, view-state; media identity includes Storage app and source version |
+| Fitness Coach `sanitized-bootstrap-and-thumbnails` / schema `fitness-coach.sanitized-bootstrap-and-thumbnails.v1` | `personal_data`, `app_reference`, approved `cache` | 300 s / 24 h | 512 KiB / 16 MiB | bootstrap `state_version`; thumbnail SHA-256 | workouts, exercises, runs, view-state; media identity includes Storage app and source version |
+| Calendar `bounded-event-window` | approved personal `cache` | 60 s / 6 h | 1 MiB / 16 MiB | bounded interval/page SHA-256 | events, calendars, connections, view-state |
+| Chat `projects-and-completed-messages` | approved personal `cache` | 30 s / 6 h | 1 MiB / 32 MiB | completed display/project/page SHA-256 | projects, threads, runtime-threads, messages, view-state; reconnect |
+| CRM `lists-and-recent-records` | approved customer allowlist `cache` | 30 s / 6 h | 2 MiB / 16 MiB | closed display SHA-256 | records, schema, pipelines, view-state |
+| Mail `thread-headers-snippets-and-bodies` | approved customer allowlist `cache` | 30 s / 1 h | 1 MiB / 16 MiB | closed display SHA-256 | threads, messages, connections, folders, labels, view-state |
 
-All four resources explicitly allow stale-but-unexpired rendering and select
+All eight resources explicitly allow stale-but-unexpired rendering and select
 revalidation on every warm read. Expired entries are misses and keep the
 existing app loading component visible. An unchanged response refreshes only
 metadata; it does not rewrite the payload. A changed response is applied
@@ -126,16 +133,30 @@ state. Cached rows are read-only until those authority inputs complete.
 ### Fitness Coach
 
 `app.bootstrap` accepts `known_revision` and returns a minimal `not_modified`
-response. The existing scoped bootstrap `sessionStorage` entry and legacy
-thumbnail store are quarantined as migration inputs; neither can paint before
-parent confirmation. The bootstrap migration key and payload workspace are
-validated against Core's frozen `__MAVERICK_APP_FRAME_CONTEXT__` (authenticated
-workspace plus mounted app), not against URL query parameters; a missing or
-mismatched context disables legacy migration. A newly captured thumbnail may
-render in the current page while it is offered to the broker, but no second
-local cache is written.
-Personal data remains `session` policy until a separate privacy approval
-explicitly permits persistence.
+response. Closed projections exclude media capabilities and unknown nested
+fields. Legacy bootstrap/thumbnail browser storage is deleted without migration:
+workspace/app keys did not attest user scope. New reads validate Core's frozen
+frame context and the exact mounted app. A freshly captured bounded thumbnail
+may render in the current page and seed the authenticated broker; there is no
+parallel app-local persistent writer.
+
+### Calendar, Chat, CRM and Mail
+
+All four use SDK-owned fixed display reads and conditional SHA-256 revisions.
+Calendar caches 500-event pages in a maximum 93-day interval and consulted event
+details. Projects use 200-item pages; runtime thread pages and the last 50 turns
+(up to 5,000 scanned events) yield only completed user/assistant text. The first
+live snapshot replaces Chat's rendering-only cached events. Raw transcripts,
+provider state and local send queues are never persisted; legacy namespaces are
+purged without import. Live send state exists only until document teardown.
+
+CRM caches recent records/lists, pipeline display and schema, but not workflow
+proposals or authority. Mail caches mailbox/folder display, recent headers and
+consulted message text. Rich HTML, attachment bytes and provider inputs are
+live-only enhancements under their existing policy, not dependencies of warm
+paint. All byte ceilings skip persistence for oversized otherwise valid results;
+they do not silently truncate normal UI. Calendar/project pagination follows
+conditional growth and shrink.
 
 ## Feature flags and rollout
 
@@ -155,7 +176,7 @@ cohorts only narrow an enabled flag; they never widen resource policy. Use the
 sequence and fail-closed rules in `docs/runbooks/pwa_cache_operations_m6.md`.
 
 Do not enable all app flags at once. Recommended order is Website Studio,
-Storage, App Store, then Fitness Coach. For each app:
+Storage, App Store, Fitness Coach, Calendar, Chat, CRM, then Mail. For each app:
 
 1. deploy code with both gates off and verify the server-first path;
 2. enable the global gate and only that app gate in a test workspace;
@@ -172,8 +193,9 @@ Storage, App Store, then Fitness Coach. For each app:
 6. record aggregate request/byte/time results and required physical-device
    evidence without record ids, URLs, payloads, or principal identifiers.
 
-Calendar and Chat remain the next M5 tranche after pilot stability and privacy
-review. CRM and Mail remain denied pending their explicit privacy gates.
+Calendar, Chat, CRM and Mail have approved resource-specific policies. No
+further generic CRM/Mail privacy decision is pending. Technical regressions,
+physical-device acceptance and cohort observation remain distinct release gates.
 
 ## Automated preflight
 
@@ -182,7 +204,7 @@ Run bounded workers where supported:
 ```bash
 npm --prefix packages/pwa-cache run typecheck
 npm --prefix packages/pwa-cache test -- --maxWorkers=1
-npx --prefix apps/base-shell/frontend vitest run src/pwaDataCacheBroker.test.ts --maxWorkers=1
+npm --prefix apps/base-shell test -- src/pwaDataCacheBroker.test.ts --maxWorkers=1
 npm --prefix apps/base-shell run build
 npm --prefix apps/website-studio run build
 npm --prefix apps/storage test -- --maxWorkers=1
@@ -193,9 +215,10 @@ npm --prefix apps/fitness-coach test -- --maxWorkers=1
 npm --prefix apps/fitness-coach run build
 python3 scripts/test_suite.py --level fast
 python3 scripts/audit_pwa_cache.py
+.venv/bin/python scripts/pwa_shell_cache_smoke.py --app-read-models
 ```
 
-Also run the focused backend tests for the four validator contracts and use the
+Also run the focused backend tests for all app validator contracts and use the
 official `maverick app <app-id> frontend build --json` command for every changed
 frontend before a mounted acceptance pass.
 
@@ -215,3 +238,11 @@ without parent confirmation, a cached value enables an authoritative action,
 `401/403` does not block and clean the applicable copy, a signed URL or secret
 appears in persisted data, an expired entry renders, or cache failure prevents
 a successful server response.
+
+The optional `--app-read-models` smoke creates its own disposable Core repository
+and browser profile. Only that child process enables the five second-tranche
+app flags. It never accepts a live `--base-url` or changes deployment flags. It
+seeds real isolated-frame reads, blocks their display HTTP transport, reloads,
+and requires a host-broker warm result before transport recovery. Recorded
+metadata contains no app payloads or principal identifiers. This remains
+automated Chromium evidence, not PWA-098 physical acceptance.

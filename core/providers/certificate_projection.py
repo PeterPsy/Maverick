@@ -37,14 +37,14 @@ def certificate_profile_status(
     if (now or datetime.now(tz=UTC)) >= certificate.expires_at:
         return "expired"
     from core.providers.certificate_service import _is_native_certificate
-    from core.providers.native_agent_certificates import validate_native_connection_certificate
+    from core.providers.native_agent_certificates import native_installation_for_adapter, validate_native_connection_certificate
 
     if _is_native_certificate(certificate):
         if store is None:
             return "native_agent_connection_certificate_missing"
         try:
             validate_native_connection_certificate(
-                store, certificate, now=now, installation=getattr(adapter, "installation", None),
+                store, certificate, now=now, installation=native_installation_for_adapter(adapter),
             )
         except CapabilityCertificateError as error:
             return error.reason_code

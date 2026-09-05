@@ -19,6 +19,7 @@ from core.providers.models import ProviderDefinition
 from core.providers.native_agent_certificates import (
     native_connection_identity_digest,
     native_connection_reference,
+    native_installation_for_adapter,
     validate_native_connection_certificate,
 )
 from core.providers.store import ProviderStore
@@ -80,7 +81,9 @@ def ensure_codex_preview_certificate(
         ):
             raise CapabilityCertificateError("profile_revision_artifact_mismatch")
         return existing
-    validate_native_connection_certificate(store, connection, now=now)
+    validate_native_connection_certificate(
+        store, connection, now=now, installation=native_installation_for_adapter(adapter),
+    )
     evidence = store.get_capability_evidence(connection.evidence_digest)
     certificate = replace(
         connection,
@@ -106,6 +109,7 @@ def ensure_codex_connection_certificate(
 ) -> CapabilityCertificate:
     """Adopt the existing Codex release once; catalog changes never renew it."""
     from core.providers.native_agent_builtins import build_codex_native_installation
+    from core.providers.native_runtime_certificates import ensure_native_runtime_certificate
 
     installation = getattr(adapter, "installation", None) or build_codex_native_installation(adapter)
     artifact_digest = runtime_adapter_artifact_digest(adapter)
@@ -125,6 +129,7 @@ def ensure_codex_connection_certificate(
             or existing.native_connection_identity_digest != identity_digest
         ):
             raise CapabilityCertificateError("native_agent_connection_identity_mismatch")
+        ensure_native_runtime_certificate(store, existing, installation)
         return existing
     legacy = sorted(
         (item for item in store.list_capability_certificates()
@@ -158,6 +163,7 @@ def ensure_codex_connection_certificate(
                 store, certificate_id=stored.certificate_id,
                 expected_revision=status.revision, reason="legacy_projection_revoked",
             )
+        ensure_native_runtime_certificate(store, stored, installation)
         return stored
     test_run_id = (
         f"packaged:{certificate_id}:"
@@ -230,4 +236,6 @@ def ensure_codex_connection_certificate(
         issued_at=evidence.recorded_at,
         expires_at=evidence.recorded_at + timedelta(days=CODEX_CERTIFICATION_VALIDITY_DAYS),
     )
-    return publish_capability_certificate(store, certificate=certificate, evidence=evidence)
+    stored = publish_capability_certificate(store, certificate=certificate, evidence=evidence)
+    ensure_native_runtime_certificate(store, stored, installation)
+    return stored

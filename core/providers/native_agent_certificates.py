@@ -14,6 +14,15 @@ if TYPE_CHECKING:
     from core.providers.store import ProviderStore
 
 
+def native_installation_for_adapter(adapter):
+    installation = getattr(adapter, "installation", None)
+    if installation is None and getattr(adapter, "adapter_id", None) == "codex-app-server":
+        from core.providers.native_agent_builtins import build_codex_native_installation
+
+        installation = build_codex_native_installation(getattr(adapter, "legacy_adapter", adapter))
+    return installation
+
+
 def native_connection_identity_digest(
     installation: NativeAgentInstallation, *, model_provider_id: str, artifact_digest: str,
 ) -> str:
@@ -93,6 +102,9 @@ def validate_native_connection_certificate(
         )
     if timestamp >= root.expires_at:
         raise CapabilityCertificateError("native_agent_connection_certificate_expired")
+    from core.providers.native_runtime_certificates import validate_native_runtime_certificate
+
+    validate_native_runtime_certificate(store, root, installation, now=timestamp)
     try:
         evidence = store.get_capability_evidence(root.evidence_digest)
     except ProviderNotFoundError as error:
@@ -126,5 +138,6 @@ __all__ = [
     "connection_certificate_for_projection",
     "native_connection_identity_digest",
     "native_connection_reference",
+    "native_installation_for_adapter",
     "validate_native_connection_certificate",
 ]

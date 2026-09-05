@@ -7,6 +7,7 @@ import re
 from typing import Literal, Protocol
 
 from core.providers.execution_families import NATIVE_AGENT_EXECUTION_FAMILY
+from core.providers.native_runtime_artifact import NativeRuntimeArtifact
 
 
 NativeProtocolKind = Literal[
@@ -165,6 +166,7 @@ class NativeAgentInstallation:
     effects: NativeAgentEffectContract
     certificate: NativeAgentCertificateReference
     inspector: NativeRuntimeInspector
+    runtime_artifact: NativeRuntimeArtifact | None = None
 
     @property
     def execution_family(self) -> str:

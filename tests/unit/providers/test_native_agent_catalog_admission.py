@@ -106,8 +106,10 @@ class NativeAgentCatalogAdmissionTest(unittest.TestCase):
     def test_exact_revision_is_pinned_and_drift_blocks_admission(self):
         self.refresh(codex_snapshot("gpt-5.6-sol", "revisioned-model", revision="revision-one"))
         binding = self.bind("revisioned-model")
-        pin = self.pin(binding)
-        self.assertEqual((pin.model_revision, pin.model_revision_policy), ("revision-one", "exact"))
+        profile = self.profile("revisioned-model")
+        self.assertEqual((profile.model_revision, profile.model_revision_policy), ("revision-one", "exact"))
+        with self.assertRaisesRegex(AgenticProfileError, "native_agent_exact_revision_unsupported"):
+            self.pin(binding)
         self.refresh(codex_snapshot("gpt-5.6-sol", "revisioned-model", revision="revision-two"))
         with self.assertRaisesRegex(AgenticProfileError, "native_agent_model_catalog_mismatch"):
             self.pin(binding)

@@ -104,11 +104,12 @@ class CapabilityCertificate:
     provider_config_digest: str = ""
     protocol_adapter_id: str = ""
     protocol_adapter_version: str = ""
-    certificate_scope: Literal["model", "native_connection"] = "model"
+    certificate_scope: Literal["model", "native_connection", "native_runtime_artifact"] = "model"
     native_connection_certificate_id: str = ""
     native_connection_identity_digest: str = ""
     native_model_catalog_digest: str = ""
     legacy_projection_certificate_ids: tuple[str, ...] = ()
+    native_runtime_artifact_digest: str = ""
 
 
 @dataclass(frozen=True)

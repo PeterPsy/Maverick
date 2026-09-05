@@ -8,7 +8,9 @@ import shlex
 import shutil
 import subprocess
 from threading import Lock
+from typing import Callable
 from time import monotonic
+from core.providers.native_runtime_artifact import CODEX_PACKAGED_RUNTIME_ARTIFACT, inspect_native_runtime_artifact
 
 from core.providers.models import (
     ProviderCapabilitySet,
@@ -49,10 +51,16 @@ class CommandNativeRuntimeInspector:
         *,
         version_args: tuple[str, ...] = ("--version",),
         timeout_seconds: float = 2.0,
+        artifact_command: Callable[[], str] | None = None,
     ) -> None:
         self._command = command
         self._version_args = version_args
         self._timeout_seconds = timeout_seconds
+        self._artifact_command = artifact_command
+
+    def artifact(self):
+        command = self._artifact_command() if self._artifact_command else self.discover()[1]
+        return inspect_native_runtime_artifact(command or "")
 
     def discover(self) -> tuple[NativeAvailability, str | None]:
         argv = shlex.split(self._command)
@@ -177,7 +185,10 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             connection_certificate_ids=(("codex", f"native-connection:codex:codex:{CODEX_PROFILE_REVISION}"),),
             full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         ),
-        inspector=CommandNativeRuntimeInspector(adapter.codex_command),
+        inspector=CommandNativeRuntimeInspector(
+            adapter.codex_command, artifact_command=lambda: adapter._runtime_command(adapter.codex_command),
+        ),
+        runtime_artifact=CODEX_PACKAGED_RUNTIME_ARTIFACT,
     )
 
 

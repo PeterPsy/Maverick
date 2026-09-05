@@ -318,10 +318,12 @@ def validate_certificate_for_binding_with_revision_fence(
     if certificate.certificate_scope != "model":
         raise CapabilityCertificateError("certificate_scope_invalid")
     if _is_native_certificate(certificate):
-        from core.providers.native_agent_certificates import validate_native_connection_certificate
+        from core.providers.native_agent_certificates import native_installation_for_adapter, validate_native_connection_certificate
+        from core.providers.native_model_revision import require_native_model_revision_transport
 
+        require_native_model_revision_transport(binding)
         validate_native_connection_certificate(
-            store, certificate, now=now, installation=getattr(adapter, "installation", None),
+            store, certificate, now=now, installation=native_installation_for_adapter(adapter),
         )
     try:
         evidence = store.get_capability_evidence(certificate.evidence_digest)
@@ -474,8 +476,13 @@ def _evidence_digest_is_valid(evidence: CapabilityEvidenceRecord) -> bool:
 
 
 def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
-    if certificate.certificate_scope not in {"model", "native_connection"}:
+    if certificate.certificate_scope not in {"model", "native_connection", "native_runtime_artifact"}:
         raise CapabilityCertificateError("certificate_scope_invalid")
+    if certificate.certificate_scope == "native_runtime_artifact" and (
+        certificate.model_id != "*" or not certificate.native_connection_certificate_id
+        or len(certificate.native_runtime_artifact_digest) != 64 or not _is_native_certificate(certificate)
+    ):
+        raise CapabilityCertificateError("native_runtime_certificate_identity_mismatch")
     if certificate.certificate_scope == "native_connection" and (
         certificate.model_id != "*" or certificate.model_revision is not None
         or certificate.certified_reasoning_efforts or certificate.default_reasoning_effort

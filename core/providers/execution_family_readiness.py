@@ -106,6 +106,9 @@ def _native_readiness(*, definition, certificate, binding, registry, store) -> A
     if not identity_matches:
         return _native_result(installation, "native_agent_contract_incomplete")
     try:
+        from core.providers.native_model_revision import require_native_model_revision_transport
+
+        require_native_model_revision_transport(definition)
         require_native_agent_model_available(registry, definition, certificate=certificate)
         if certificate is None or store is None:
             return _native_result(installation, "native_agent_connection_certificate_missing")

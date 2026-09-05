@@ -33,6 +33,8 @@ from core.providers.native_agent_contract import (
     NativeRuntimeStatus,
 )
 from core.providers.provider_registry import RuntimeBackendAdapter
+from core.providers.native_model_revision import require_native_model_revision_transport
+from core.providers.errors import CapabilityCertificateError
 
 
 @dataclass(frozen=True)
@@ -85,15 +87,14 @@ class NativeAgentRuntimeController:
         return self.installation.inspector.inspect()
 
     async def validate(self, context: RuntimeValidationContext) -> RuntimeHealth:
+        self._validate_execution_identity(context.binding)
         return await self.engine_adapter.validate(context)
 
     async def launch(self, context: LocalLaunchContext) -> RuntimeBackendLaunchSpec:
-        lifecycle = self.engine_adapter.local_process_lifecycle
-        if lifecycle is None:
-            raise RuntimeError("native_agent_launch_not_supported")
-        return await lifecycle.build_launch_spec(context)
+        return await self.build_launch_spec(context)
 
     async def connect(self, context: RuntimePrepareContext) -> RuntimePrepareResult:
+        self._validate_execution_identity(context.binding)
         return await self.engine_adapter.prepare(context)
 
     async def prepare(self, context: RuntimePrepareContext) -> RuntimePrepareResult:
@@ -103,6 +104,7 @@ class NativeAgentRuntimeController:
         return await self.recover(context)
 
     def start_turn(self, context: RuntimeTurnContext) -> AsyncIterator[RuntimeProviderEvent]:
+        self._validate_execution_identity(context.binding)
         return self.engine_adapter.execute(context)
 
     async def execute(
@@ -156,11 +158,12 @@ class NativeAgentRuntimeController:
         return await self.interrupt(context)
 
     async def recover(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
+        self._validate_execution_identity(context.binding)
         lifecycle = self.engine_adapter.local_process_lifecycle
         if lifecycle is None:
             return await self.engine_adapter.recover(context)
         try:
-            launch_spec = await lifecycle.build_launch_spec(
+            launch_spec = await self.build_launch_spec(
                 LocalLaunchContext(
                     session=context.session,
                     binding=context.binding,
@@ -197,6 +200,7 @@ class NativeAgentRuntimeController:
         self,
         context: LocalLaunchContext,
     ) -> RuntimeBackendLaunchSpec:
+        self._validate_execution_identity(context.binding)
         lifecycle = self._local_lifecycle()
         return await lifecycle.build_launch_spec(context)
 
@@ -213,7 +217,14 @@ class NativeAgentRuntimeController:
         await self._local_lifecycle().close_process(handle)
 
     async def prewarm(self, context: LocalPrewarmContext) -> LocalPrewarmResult:
+        self._validate_execution_identity(context.binding)
         return await self._local_lifecycle().prewarm(context)
+
+    def _validate_execution_identity(self, binding) -> None:
+        require_native_model_revision_transport(binding)
+        approved = self.installation.runtime_artifact
+        if approved is not None and self.installation.inspector.artifact() != approved:
+            raise CapabilityCertificateError("native_runtime_artifact_mismatch")
 
     def _local_lifecycle(self) -> LocalProcessRuntimeLifecycle:
         lifecycle = self.engine_adapter.local_process_lifecycle

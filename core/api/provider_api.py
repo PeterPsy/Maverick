@@ -1283,6 +1283,7 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         "native_connection_certificate_id": certificate.native_connection_certificate_id or None,
         "native_connection_identity_digest": certificate.native_connection_identity_digest or None,
         "native_model_catalog_digest": certificate.native_model_catalog_digest or None,
+        "native_runtime_artifact_digest": certificate.native_runtime_artifact_digest or None,
         "schema_version": certificate.schema_version,
         "runtime_engine_id": certificate.runtime_engine_id,
         "adapter_id": certificate.adapter_id,

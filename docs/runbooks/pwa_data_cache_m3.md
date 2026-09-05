@@ -194,7 +194,9 @@ Unsafe requests are attempted once unless the caller supplies all of:
 - a stable `Idempotency-Key` sent to the server;
 - a canonical `sha256:<64 lowercase hex>` fingerprint of the exact request
   body/semantics; and
-- `serverDeduplicates: true` backed by a real server contract.
+- a nominal `createMutationRetryContract()` result whose versioned audit id,
+  HTTP method, API endpoint, and backend action exactly match the immutable v2
+  runtime registry and its reviewed server-deduplication evidence.
 
 Eligible mutations have at most three attempts in the current RAM session.
 Concurrent callers with the same idempotency key and fingerprint share one

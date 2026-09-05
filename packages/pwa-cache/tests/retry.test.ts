@@ -3,8 +3,10 @@ import {
   RetryCancelledError,
   RetryCoordinator,
   createIdempotencyKey,
+  createMutationRetryContract,
   createRequestFingerprint,
   idempotencyHeaders,
+  type MutationRetryContract,
 } from "../src";
 
 function transportError(): Error {
@@ -16,6 +18,23 @@ function fingerprint(hexDigit = "a"): string {
 }
 
 const TEST_RETRY_AUDIT_ID = "base-shell.pinned-apps.set.v1";
+const TEST_MUTATION_TARGET = {
+  action: "pinned_apps.set",
+  endpoint: "/api/apps/app-store/backend",
+  method: "POST",
+} as const;
+
+function approvedMutation(
+  idempotencyKey = createIdempotencyKey(),
+  requestFingerprint = fingerprint(),
+): MutationRetryContract {
+  return createMutationRetryContract({
+    auditId: TEST_RETRY_AUDIT_ID,
+    ...TEST_MUTATION_TARGET,
+    idempotencyKey,
+    requestFingerprint,
+  });
+}
 
 describe("RAM retry coordinator", () => {
   afterEach(() => {
@@ -112,15 +131,15 @@ describe("RAM retry coordinator", () => {
   it("retries a mutation only with a stable key, fingerprint, and server deduplication", async () => {
     vi.useFakeTimers();
     const coordinator = new RetryCoordinator({ random: () => 0.5 });
-    const contract = {
-      auditId: TEST_RETRY_AUDIT_ID,
-      idempotencyKey: createIdempotencyKey(),
-      requestFingerprint: fingerprint(),
-      serverDeduplicates: true as const,
-    };
+    const contract = approvedMutation();
     expect(idempotencyHeaders(contract)).toEqual({ "Idempotency-Key": contract.idempotencyKey });
     const operation = vi.fn().mockRejectedValueOnce(transportError()).mockResolvedValueOnce("created");
-    const pending = coordinator.run({ key: "mutation:create", method: "POST", mutation: contract, operation });
+    const pending = coordinator.run({
+      key: "mutation:create",
+      ...TEST_MUTATION_TARGET,
+      mutation: contract,
+      operation,
+    });
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(pending).resolves.toBe("created");
     expect(operation).toHaveBeenCalledTimes(2);
@@ -139,16 +158,11 @@ describe("RAM retry coordinator", () => {
   it("single-flights an idempotent mutation by server key, not caller label", async () => {
     let resolve!: (value: string) => void;
     const operation = vi.fn(() => new Promise<string>((done) => { resolve = done; }));
-    const mutation = {
-      auditId: TEST_RETRY_AUDIT_ID,
-      idempotencyKey: createIdempotencyKey(),
-      requestFingerprint: fingerprint(),
-      serverDeduplicates: true as const,
-    };
+    const mutation = approvedMutation();
     const coordinator = new RetryCoordinator();
 
-    const first = coordinator.run({ key: "button-a", method: "POST", mutation, operation });
-    const second = coordinator.run({ key: "button-b", method: "POST", mutation, operation });
+    const first = coordinator.run({ key: "button-a", ...TEST_MUTATION_TARGET, mutation, operation });
+    const second = coordinator.run({ key: "button-b", ...TEST_MUTATION_TARGET, mutation, operation });
     expect(second).toBe(first);
     resolve("created");
     await expect(first).resolves.toBe("created");
@@ -160,15 +174,15 @@ describe("RAM retry coordinator", () => {
     const idempotencyKey = createIdempotencyKey();
     await coordinator.run({
       key: "first",
-      method: "POST",
-      mutation: { auditId: TEST_RETRY_AUDIT_ID, idempotencyKey, requestFingerprint: fingerprint("a"), serverDeduplicates: true },
+      ...TEST_MUTATION_TARGET,
+      mutation: approvedMutation(idempotencyKey, fingerprint("a")),
       operation: async () => "created",
     });
 
     expect(() => coordinator.run({
       key: "second",
-      method: "POST",
-      mutation: { auditId: TEST_RETRY_AUDIT_ID, idempotencyKey, requestFingerprint: fingerprint("b"), serverDeduplicates: true },
+      ...TEST_MUTATION_TARGET,
+      mutation: approvedMutation(idempotencyKey, fingerprint("b")),
       operation: async () => "created-again",
     })).toThrow(/different request fingerprint/);
   });
@@ -182,13 +196,8 @@ describe("RAM retry coordinator", () => {
     const error = transportError();
     const pending = coordinator.run({
       key: "mutation:update",
-      method: "PATCH",
-      mutation: {
-        auditId: TEST_RETRY_AUDIT_ID,
-        idempotencyKey: createIdempotencyKey(),
-        requestFingerprint: fingerprint(),
-        serverDeduplicates: true,
-      },
+      ...TEST_MUTATION_TARGET,
+      mutation: approvedMutation(),
       operation: async () => { throw error; },
     });
     void pending.catch(() => undefined);
@@ -198,64 +207,90 @@ describe("RAM retry coordinator", () => {
   });
 
   it("rejects mutation retry fingerprints that are not canonical SHA-256 digests", () => {
-    const coordinator = new RetryCoordinator();
-    const operation = vi.fn(async () => "created");
-
     for (const requestFingerprint of [
       "sha256:body",
       `sha256:${"g".repeat(64)}`,
       `sha512:${"a".repeat(64)}`,
       `sha256:${"a".repeat(63)}`,
     ]) {
-      expect(() => coordinator.run({
-        key: "mutation:invalid-fingerprint",
-        method: "POST",
-        mutation: {
-          auditId: TEST_RETRY_AUDIT_ID,
-          idempotencyKey: createIdempotencyKey(),
-          requestFingerprint,
-          serverDeduplicates: true,
-        },
-        operation,
-      })).toThrow(/SHA-256/i);
+      expect(() => approvedMutation(createIdempotencyKey(), requestFingerprint)).toThrow(/SHA-256/i);
     }
-    expect(operation).not.toHaveBeenCalled();
   });
 
   it("rejects mutation retry without a versioned registered audit identity", () => {
-    const coordinator = new RetryCoordinator();
-    const operation = vi.fn(async () => "created");
-
-    expect(() => coordinator.run({
-      key: "mutation:unaudited",
-      method: "POST",
-      mutation: {
-        auditId: "unregistered contract",
-        idempotencyKey: createIdempotencyKey(),
-        requestFingerprint: fingerprint(),
-        serverDeduplicates: true,
-      },
-      operation,
+    expect(() => createMutationRetryContract({
+      ...TEST_MUTATION_TARGET,
+      auditId: "unregistered contract",
+      idempotencyKey: createIdempotencyKey(),
+      requestFingerprint: fingerprint(),
     })).toThrow(/audit id/i);
-    expect(operation).not.toHaveBeenCalled();
   });
 
   it("rejects a well-formed mutation audit id that is absent from the approved registry", () => {
-    const coordinator = new RetryCoordinator();
-    const operation = vi.fn(async () => "created");
+    expect(() => createMutationRetryContract({
+      ...TEST_MUTATION_TARGET,
+      auditId: "unknown.retry-contract.v1",
+      idempotencyKey: createIdempotencyKey(),
+      requestFingerprint: fingerprint(),
+    })).toThrow(/approved audit registry/i);
+  });
 
-    expect(() => coordinator.run({
-      key: "mutation:unregistered",
-      method: "POST",
-      mutation: {
-        auditId: "unknown.retry-contract.v1",
+  it("binds each approved audit identity to its exact method, endpoint, and action", () => {
+    for (const target of [
+      { ...TEST_MUTATION_TARGET, method: "PATCH" },
+      { ...TEST_MUTATION_TARGET, endpoint: "/api/apps/storage/backend" },
+      { ...TEST_MUTATION_TARGET, action: "pinned_apps.delete" },
+    ]) {
+      expect(() => createMutationRetryContract({
+        ...target,
+        auditId: TEST_RETRY_AUDIT_ID,
         idempotencyKey: createIdempotencyKey(),
         requestFingerprint: fingerprint(),
-        serverDeduplicates: true,
-      },
-      operation,
-    })).toThrow(/approved audit registry/i);
-    expect(operation).not.toHaveBeenCalled();
+      })).toThrow(/approved mutation target/i);
+    }
+
+    const coordinator = new RetryCoordinator();
+    const mutation = approvedMutation();
+    expect(() => coordinator.run({
+      key: "mutation:wrong-method",
+      ...TEST_MUTATION_TARGET,
+      method: "PATCH",
+      mutation,
+      operation: async () => "created",
+    })).toThrow(/method/i);
+    expect(() => coordinator.run({
+      key: "mutation:wrong-endpoint",
+      ...TEST_MUTATION_TARGET,
+      endpoint: "/api/apps/storage/backend",
+      mutation,
+      operation: async () => "created",
+    })).toThrow(/endpoint/i);
+    expect(() => coordinator.run({
+      key: "mutation:wrong-action",
+      ...TEST_MUTATION_TARGET,
+      action: "pinned_apps.delete",
+      mutation,
+      operation: async () => "created",
+    })).toThrow(/action/i);
+  });
+
+  it("rejects a structurally forged retry contract that did not come from the factory", () => {
+    const coordinator = new RetryCoordinator();
+    const forged = {
+      ...TEST_MUTATION_TARGET,
+      auditId: TEST_RETRY_AUDIT_ID,
+      idempotencyKey: createIdempotencyKey(),
+      requestFingerprint: fingerprint(),
+      serverDeduplicates: true,
+    } as unknown as MutationRetryContract;
+
+    expect(() => coordinator.run({
+      key: "mutation:forged",
+      ...TEST_MUTATION_TARGET,
+      mutation: forged,
+      operation: async () => "created",
+    })).toThrow(/factory/i);
+    expect(() => idempotencyHeaders(forged)).toThrow(/factory/i);
   });
 
   it("pauses scheduled retries while hidden and resumes on a visibility hint", async () => {

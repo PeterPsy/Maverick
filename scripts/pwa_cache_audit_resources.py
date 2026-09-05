@@ -64,8 +64,20 @@ def audit_resource_inventory(
         for approval in ("cache_approved", "privacy_approved", "regulated_allowlisted"):
             if approval in resource and not isinstance(resource[approval], bool):
                 errors.append(f"{label}.{approval} must be a boolean")
-        if "runtime_schema_revision" in resource and not _bounded_text(resource["runtime_schema_revision"]):
-            errors.append(f"{label}.runtime_schema_revision must be bounded text")
+        if "runtime_schema_revision" in resource:
+            if not _bounded_text(resource["runtime_schema_revision"]):
+                errors.append(f"{label}.runtime_schema_revision must be bounded text")
+        if "runtime_schema_revision" in resource or "invalidation_aliases" in resource:
+            aliases = resource.get("invalidation_aliases")
+            if (
+                not isinstance(aliases, list)
+                or not aliases
+                or not all(_bounded_text(alias) for alias in aliases)
+                or len(aliases) != len(set(aliases))
+            ):
+                errors.append(
+                    f"{label}.invalidation_aliases must contain unique bounded resource aliases"
+                )
 
         limits = (entry_bytes, scope_bytes, fresh_ttl, expiry_ttl)
         if not all(positive_or_zero_integer(value) for value in limits):
@@ -243,8 +255,15 @@ def _compare_runtime_record(
     if runtime.get("schema_revision") != inventory.get("runtime_schema_revision"):
         errors.append(f"{label}.schema_revision differs from inventory runtime_schema_revision")
     aliases = runtime.get("aliases")
-    if not isinstance(aliases, list) or not aliases or not all(_bounded_text(alias) for alias in aliases):
+    if (
+        not isinstance(aliases, list)
+        or not aliases
+        or not all(_bounded_text(alias) for alias in aliases)
+        or len(aliases) != len(set(aliases))
+    ):
         errors.append(f"{label}.aliases must contain bounded resource aliases")
+    elif aliases != inventory.get("invalidation_aliases"):
+        errors.append(f"{label}.aliases differs from inventory invalidation_aliases")
 
 
 def _bounded_text(value: object) -> bool:

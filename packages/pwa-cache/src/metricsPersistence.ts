@@ -34,7 +34,6 @@ export class MetricsShardPersistence {
   private readonly resetKey: string;
   private readonly storage: PwaCacheMetricsStorage;
   private readonly storageKey: string;
-  private readonly writerKey: string;
   private readonly writerPrefix: string;
 
   constructor(storage: PwaCacheMetricsStorage, storageKey: string, collectorId?: string) {
@@ -43,30 +42,23 @@ export class MetricsShardPersistence {
     this.collectorId = normalizeCollectorId(collectorId);
     this.resetKey = `${storageKey}:reset`;
     this.writerPrefix = `${storageKey}:writer:`;
-    this.writerKey = `${this.writerPrefix}${this.collectorId}`;
   }
 
   currentReset(): MetricsResetMarker {
-    try {
-      const raw = this.storage.getItem(this.resetKey);
-      const marker = raw ? parseResetMarker(raw) : null;
-      if (marker) return marker;
-      if (raw) this.storage.removeItem(this.resetKey);
-    } catch {
-      // Denied diagnostics storage behaves like an empty best-effort store.
-    }
-    return { resetAt: 0, resetId: INITIAL_RESET_ID, schema: RESET_SCHEMA };
+    return this.readResetMarker()
+      ?? { resetAt: 0, resetId: INITIAL_RESET_ID, schema: RESET_SCHEMA };
   }
 
   loadOwn(now: number, retentionMs: number, resetId: string): PersistedMetricsShard | null {
+    const writerKey = this.writerKey(resetId);
     try {
-      const raw = this.storage.getItem(this.writerKey);
+      const raw = this.storage.getItem(writerKey);
       const shard = raw ? parsePersistedMetricsShard(raw) : null;
       if (shard && shard.collectorId === this.collectorId && shard.resetId === resetId
           && persistedMetricsAreCurrent(shard, now, retentionMs)) {
         return shard;
       }
-      if (raw) this.storage.removeItem(this.writerKey);
+      if (raw) this.storage.removeItem(writerKey);
     } catch {
       // A denied or corrupt diagnostics store never affects cache behavior.
     }
@@ -75,13 +67,13 @@ export class MetricsShardPersistence {
 
   readPeers(now: number, retentionMs: number, resetId: string): PersistedMetricsShard[] {
     const peers: PersistedMetricsShard[] = [];
+    const ownWriterKey = this.writerKey(resetId);
     try {
       for (const key of this.keys()) {
-        if (!key.startsWith(this.writerPrefix) || key === this.writerKey) continue;
+        if (!key.startsWith(this.writerPrefix) || key === ownWriterKey) continue;
         const raw = this.storage.getItem(key);
         const shard = raw ? parsePersistedMetricsShard(raw) : null;
         if (!shard || shard.resetId !== resetId || !persistedMetricsAreCurrent(shard, now, retentionMs)) {
-          this.storage.removeItem(key);
           continue;
         }
         peers.push(shard);
@@ -95,15 +87,15 @@ export class MetricsShardPersistence {
 
   persist(shard: PersistedMetricsShard): void {
     try {
-      this.storage.setItem(this.writerKey, JSON.stringify(shard));
+      this.storage.setItem(this.writerKey(shard.resetId), JSON.stringify(shard));
     } catch {
       // Metrics are best-effort and never participate in the cache path.
     }
   }
 
-  removeOwn(): void {
+  removeOwn(resetId: string): void {
     try {
-      this.storage.removeItem(this.writerKey);
+      this.storage.removeItem(this.writerKey(resetId));
     } catch {
       // Retention is still enforced in RAM when storage is denied.
     }
@@ -120,11 +112,21 @@ export class MetricsShardPersistence {
       // prior generation even if a stale writer publishes after this write.
       this.storage.setItem(this.resetKey, JSON.stringify(marker));
     } catch {
-      this.removeOwn();
       return null;
     }
+
+    let keys: string[] = [];
     try {
-      for (const key of this.keys()) {
+      keys = this.keys();
+    } catch {
+      // A denied enumeration still leaves old generations logically hidden.
+    }
+    const winner = this.readResetMarker();
+    if (!winner || winner.resetId !== marker.resetId) {
+      return winner;
+    }
+    try {
+      for (const key of keys) {
         if (key === this.storageKey) {
           this.storage.removeItem(key);
           continue;
@@ -134,12 +136,29 @@ export class MetricsShardPersistence {
         const shard = raw ? parsePersistedMetricsShard(raw) : null;
         // A peer can observe the marker and publish a new-generation event
         // while cleanup runs. Preserve that causally newer write.
-        if (!shard || shard.resetId !== marker.resetId) this.storage.removeItem(key);
+        if (!shard || shard.resetId !== winner.resetId) this.storage.removeItem(key);
       }
     } catch {
       // Prior-generation shards remain invisible even if pruning is denied.
     }
-    return marker;
+    // Another reset can win while cleanup is in progress. Generation-qualified
+    // writer keys make the captured cleanup set safe, and the final reread makes
+    // the caller commit its empty local shard into the actual winning window.
+    return this.readResetMarker() ?? winner;
+  }
+
+  private readResetMarker(): MetricsResetMarker | null {
+    try {
+      const raw = this.storage.getItem(this.resetKey);
+      return raw ? parseResetMarker(raw) : null;
+    } catch {
+      // Denied diagnostics storage behaves like an empty best-effort store.
+      return null;
+    }
+  }
+
+  private writerKey(resetId: string): string {
+    return `${this.writerPrefix}${this.collectorId}:${resetId}`;
   }
 
   private keys(): string[] {

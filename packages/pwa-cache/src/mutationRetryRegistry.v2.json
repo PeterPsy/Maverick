@@ -1,0 +1,11 @@
+{
+  "schema": "maverick.pwa-mutation-retry-registry.v2",
+  "contracts": [
+    {
+      "audit_id": "base-shell.pinned-apps.set.v1",
+      "method": "POST",
+      "endpoint": "/api/apps/app-store/backend",
+      "action": "pinned_apps.set"
+    }
+  ]
+}

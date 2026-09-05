@@ -132,9 +132,11 @@ export class PwaCacheMetricsCollector {
 
   reset(): void {
     const timestamp = finiteTimestamp(this.now(), Date.now());
+    const previousResetId = this.resetId;
     const marker = this.persistence?.reset(timestamp);
     if (marker) this.resetId = marker.resetId;
     this.resetState(timestamp);
+    this.persistence?.removeOwn(previousResetId);
     this.persist();
   }
 
@@ -150,7 +152,7 @@ export class PwaCacheMetricsCollector {
     this.synchronizeReset(timestamp);
     if (timestamp < this.windowStartedAt || timestamp - this.windowStartedAt > this.retentionMs) {
       this.resetState(timestamp);
-      this.persistence?.removeOwn();
+      this.persistence?.removeOwn(this.resetId);
     }
     return timestamp;
   }
@@ -226,9 +228,10 @@ export class PwaCacheMetricsCollector {
   private synchronizeReset(timestamp: number): void {
     const marker = this.persistence?.currentReset();
     if (!marker || marker.resetId === this.resetId) return;
+    const previousResetId = this.resetId;
     this.resetId = marker.resetId;
     this.resetState(marker.resetAt <= timestamp ? marker.resetAt : timestamp);
-    this.persistence?.removeOwn();
+    this.persistence?.removeOwn(previousResetId);
   }
 }
 

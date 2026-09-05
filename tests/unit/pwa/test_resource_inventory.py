@@ -31,6 +31,7 @@ REQUIRED_FIELDS = {
 }
 OPTIONAL_FIELDS = {
     "cache_approved",
+    "invalidation_aliases",
     "policy_prerequisites",
     "privacy_approved",
     "regulated_allowlisted",
@@ -76,6 +77,13 @@ class PwaResourceInventoryTests(unittest.TestCase):
             if "runtime_schema_revision" in resource:
                 self.assertIsInstance(resource["runtime_schema_revision"], str)
                 self.assertTrue(resource["runtime_schema_revision"].strip())
+                aliases = resource.get("invalidation_aliases")
+                self.assertIsInstance(aliases, list)
+                self.assertTrue(aliases)
+                self.assertEqual(len(aliases), len(set(aliases)))
+                self.assertTrue(
+                    all(isinstance(alias, str) and alias == alias.strip() and alias for alias in aliases)
+                )
             for field in ("fresh_ttl_seconds", "expiry_ttl_seconds", "max_entry_bytes", "max_scope_bytes"):
                 self.assertIsInstance(resource[field], int)
                 self.assertGreaterEqual(resource[field], 0)

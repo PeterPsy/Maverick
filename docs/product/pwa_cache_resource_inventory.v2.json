@@ -42,6 +42,10 @@
       "provenance": "app_reference",
       "local_persistence_policy": "cache",
       "runtime_schema_revision": "app-store.catalog.v1",
+      "invalidation_aliases": [
+        "records",
+        "catalog"
+      ],
       "fresh_ttl_seconds": 300,
       "expiry_ttl_seconds": 86400,
       "revision": "SHA-256 of the authorized visible catalog plus strong ETag/If-None-Match",
@@ -82,6 +86,16 @@
       "local_persistence_policy": "cache",
       "cache_approved": true,
       "runtime_schema_revision": "website-studio.site-snapshots.v2",
+      "invalidation_aliases": [
+        "records",
+        "source",
+        "working-state",
+        "navigation",
+        "preview",
+        "activity",
+        "settings",
+        "view-selection"
+      ],
       "fresh_ttl_seconds": 60,
       "expiry_ttl_seconds": 86400,
       "revision": "SHA-256 of the complete snapshot version map; known_revision/not_modified",
@@ -103,6 +117,11 @@
       "local_persistence_policy": "cache",
       "cache_approved": true,
       "runtime_schema_revision": "storage.file-catalog.v1",
+      "invalidation_aliases": [
+        "files",
+        "drive-connections",
+        "view-state"
+      ],
       "fresh_ttl_seconds": 30,
       "expiry_ttl_seconds": 86400,
       "revision": "SHA-256 of the canonical catalog response excluding volatile inventory timestamp; known_revision/not_modified",
@@ -334,6 +353,12 @@
       "provenance": "app_reference",
       "local_persistence_policy": "session",
       "runtime_schema_revision": "fitness-coach.sanitized-bootstrap-and-thumbnails.v1",
+      "invalidation_aliases": [
+        "workouts",
+        "exercises",
+        "runs",
+        "view-state"
+      ],
       "policy_prerequisites": [
         "approved resource rule before widening beyond session"
       ],

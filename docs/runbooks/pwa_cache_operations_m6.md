@@ -25,13 +25,18 @@ The dashboard reports only aggregate counters:
 
 Counters contain no URL, file name, subject, record id, cache key, principal,
 payload, token, or content. Each shell tab writes an opaque, independent metric
-shard; dashboard reads merge all current shards, so concurrent tabs never
-overwrite one another. A shared reset-generation marker is the linearization
-point for **Clear cache**: stale writers are ignored, while an event observed
-after the marker is retained. The service worker sends each fixed metric to one
-window client rather than broadcasting it to every tab, preventing duplicate
-counts. Aggregate counters and pending-count/oldest-time summaries are retained
-best-effort for at most seven days in the shell origin. Active wait keys are
+shard qualified by reset generation; dashboard reads merge all current shards,
+so concurrent tabs never overwrite one another. A shared reset-generation
+marker is the linearization point for **Clear cache**. Cleanup rereads the
+winning marker before pruning, and only touches keys captured before that
+decision. A losing concurrent reset therefore cannot remove a shard written in
+the winning generation; stale writers remain ignored. The service worker sends
+each fixed metric to one window client rather than broadcasting it to every tab,
+preventing duplicate counts. Aggregate counters and pending-count/oldest-time
+summaries remain
+eligible for aggregation for at most seven days in the shell origin; expired
+or superseded shards are ignored and winning reset cleanup prunes captured old
+generations best-effort. Active wait keys are
 salted hashes held in RAM and are never persisted.
 
 `pwa_revalidate_error` counts only a conditional loader failure; cancellation
@@ -64,16 +69,19 @@ python3 scripts/pwa_shell_cache_smoke.py
 
 The policy audit verifies every committed frontend manifest and file digest,
 per-asset/total/precache budgets, SDK default budgets, the complete canonical
-data-class policy, and a bidirectional match between the product inventory and
-the JSON manifest consumed by Base Shell's `RESOURCE_DECLARATIONS`. It also
-scans production JavaScript, TypeScript, Vue, and Svelte sources across apps,
-shared packages, Core, and scripts and requires the operational-policy
-registry, runtime JSON registry, client/server evidence, and replay test to
-agree for every mutation that can retry. CI runs the same audit and the
+data-class policy, and a bidirectional match—including the complete ordered
+invalidation-alias list—between the product inventory and the JSON manifest
+consumed by Base Shell's `RESOURCE_DECLARATIONS`. It also scans production
+JavaScript, TypeScript, Vue, and Svelte sources across apps, shared packages,
+Core, and scripts. Raw retry-contract objects are forbidden: each use must call
+the typed factory with a literal audit id, method, endpoint, and action, and the
+operational policy, runtime JSON registry, client/server evidence, and replay
+test must agree exactly. CI runs the same audit and the
 complete SDK/chaos, broker, worker, Settings DOM, and authenticated
 isolated-frame smoke suites. An unsafe request cannot use `RetryCoordinator`
-without an audit id in the non-overridable runtime registry, stable idempotency
-key, canonical SHA-256 request fingerprint, and declared server deduplication.
+without a nominal factory-issued contract in the non-overridable runtime
+registry, an exact method/endpoint/action match, stable idempotency key,
+canonical SHA-256 request fingerprint, and audited server deduplication.
 
 The `hardeningChaos.test.ts` suite injects uncertain quota, LRU pressure,
 corrupt persisted payloads, and intermittent transport. A valid server response
@@ -195,7 +203,13 @@ names, serials, email, tokens, and content. A release stays blocked when the
 physical lab has not produced a current passing record; an emulated run must
 never be relabeled physical.
 
-For a release candidate, dispatch the **PWA Physical Device Release Gate**
-workflow and paste only the redaction-reviewed JSON produced by the matrix.
-That workflow runs the same verifier directly; a green emulated/browser smoke
-does not substitute for this manually supplied physical evidence.
+Store the current redaction-reviewed JSON in the repository variable
+`PWA_DEVICE_EVIDENCE_JSON`, or pass it explicitly when manually dispatching or
+calling **PWA Physical Device Release Gate**. The workflow runs monthly (well
+inside the 90-day TTL), on prerelease/publication events, and as a reusable
+`workflow_call` that the release publisher must require before artifact
+promotion. Each path invokes the same verifier and fails closed when the
+evidence is absent, stale, incomplete, failing, or non-redacted. Configure the
+reusable job as a required release/deployment check; the event-triggered runs
+also surface any out-of-band publication that bypassed that pipeline. A green
+emulated/browser smoke never substitutes for physical evidence.

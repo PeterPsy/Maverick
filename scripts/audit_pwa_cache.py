@@ -32,6 +32,7 @@ from scripts.pwa_cache_audit_retry import (
     AUDIT_ID_PATTERN,
     MUTATION_RETRY_REGISTRY_PATH,
     audit_mutation_retry_registry,
+    mutation_target,
     production_retry_audit_ids,
 )
 
@@ -178,20 +179,22 @@ def audit_retry_policy(
     if not positive_integer(attempts) or f"positive(options.maxMutationAttempts, {attempts})" not in retry_runtime:
         errors.append("retry runtime mutation attempt cap differs from operational policy")
     if (
-        "auditId: string;" not in retry_source
-        or "RETRY_AUDIT_ID_PATTERN.test(contract.auditId)" not in retry_source
-        or "APPROVED_MUTATION_RETRY_AUDIT_ID_SET.has(contract.auditId)" not in retry_source
-        or "mutationRetryRegistry.audit_ids" not in retry_source
-        or "validateMutationContract(method, options.mutation)" not in retry_runtime
-        or "approvedMutationAuditIds?:" in retry_source
+        "createMutationRetryContract(" not in retry_source
+        or "ISSUED_MUTATION_RETRY_CONTRACTS.has(contract)" not in retry_source
+        or "mutationRetryRegistry as unknown" not in retry_source
+        or "registry.contracts" not in retry_source
+        or "operationMethod !== contract.method" not in retry_source
+        or "textValue(endpoint) !== contract.endpoint" not in retry_source
+        or "textValue(action) !== contract.action" not in retry_source
+        or "validateMutationContract(method, options.endpoint, options.action, options.mutation)" not in retry_runtime
     ):
-        errors.append("mutation retry runtime does not require a validated audit id")
+        errors.append("mutation retry runtime does not enforce a factory-issued registered target")
 
     contracts = retry.get("mutation_contracts")
     if not isinstance(contracts, list):
         errors.append("retry_policy.mutation_contracts must be an array")
         contracts = []
-    approved: set[str] = set()
+    approved: dict[str, tuple[str, str, str]] = {}
     for index, contract in enumerate(contracts):
         label = f"retry_policy.mutation_contracts[{index}]"
         if not isinstance(contract, dict):
@@ -201,15 +204,21 @@ def audit_retry_policy(
         if not isinstance(audit_id, str) or not AUDIT_ID_PATTERN.fullmatch(audit_id) or audit_id in approved:
             errors.append(f"{label}.audit_id is invalid or duplicated")
             continue
-        approved.add(audit_id)
+        target = mutation_target(contract)
+        if target is None:
+            errors.append(f"{label} must bind a valid mutation method, API endpoint, and action")
+            continue
+        approved[audit_id] = target
         audit_retry_contract_sources(root, contract, label, errors)
     if isinstance(registry, dict):
         audit_mutation_retry_registry(registry, approved, errors)
     else:
         errors.append(f"{MUTATION_RETRY_REGISTRY_PATH}: expected an object")
-    discovered = production_retry_audit_ids(root, errors)
-    if discovered != approved:
-        errors.append(f"retry audit registry mismatch: source={sorted(discovered)}, policy={sorted(approved)}")
+    discovered = production_retry_audit_ids(root, errors, approved)
+    if discovered != set(approved):
+        errors.append(
+            f"retry audit registry mismatch: source={sorted(discovered)}, policy={sorted(approved)}"
+        )
 
 
 def audit_retry_contract_sources(root: Path, contract: dict[str, Any], label: str, errors: list[str]) -> None:
@@ -219,13 +228,21 @@ def audit_retry_contract_sources(root: Path, contract: dict[str, Any], label: st
     client_path = contract.get("client_source")
     server_paths = contract.get("server_sources")
     test_path = contract.get("test_source")
-    if contract.get("method") not in {"POST", "PUT", "PATCH", "DELETE"}:
-        errors.append(f"{label}.method must be a mutation method")
     if not isinstance(client_path, str) or not isinstance(server_paths, list) or not isinstance(test_path, str):
         errors.append(f"{label}: client/server/test evidence paths are required")
         return
     client = read_text(root / client_path, errors)
-    for needle in (audit_id, action, endpoint, "idempotencyHeaders", "requestFingerprint"):
+    for needle in (
+        audit_id,
+        action,
+        endpoint,
+        "createMutationRetryContract",
+        "idempotencyHeaders",
+        "requestFingerprint",
+        "mutation.action",
+        "mutation.endpoint",
+        "mutation.method",
+    ):
         if needle not in client:
             errors.append(f"{client_path}: missing audited retry evidence `{needle}`")
     server = "\n".join(read_text(root / str(path), errors) for path in server_paths)
@@ -254,6 +271,12 @@ def audit_ci_hardening(root: Path, errors: list[str]) -> None:
     verifier = "python scripts/pwa_device_regression.py verify --input pwa-device-evidence.json"
     if verifier not in physical_source:
         errors.append("physical-device workflow does not execute the release evidence verifier")
+    if 'cron: "17 4 1 * *"' not in physical_source or "\n  schedule:" not in physical_source:
+        errors.append("physical-device workflow is not scheduled monthly below the 90-day evidence TTL")
+    if "\n  workflow_call:" not in physical_source or "\n  release:" not in physical_source:
+        errors.append("physical-device workflow is not linked to reusable and release gates")
+    if "inputs.evidence_json || vars.PWA_DEVICE_EVIDENCE_JSON" not in physical_source:
+        errors.append("physical-device workflow lacks persistent scheduled/release evidence input")
 
 def audit_rollout_contract(policy: dict[str, Any], errors: list[str]) -> None:
     rollout = object_field(policy, "rollout", errors)

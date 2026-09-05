@@ -1625,9 +1625,12 @@ in the active workspace/session generation. The response contains aggregate
 byte/entry/quota gauges and fixed cache, revalidation, eviction, retry/wait,
 and worker counters. It contains no resource key, principal, URL, file name,
 record id, payload, token, or content. Each top-level tab owns an opaque
-localStorage writer shard and dashboard reads merge only shards in the current
-reset generation. The generation marker linearizes clear across tabs: an old
-writer cannot resurrect counters, while a peer event after reset is retained.
+localStorage writer shard qualified by reset generation, and dashboard reads
+merge only shards in the current generation. The generation marker linearizes
+clear across tabs. A reset rereads the winning marker before cleanup and only
+prunes its captured older-generation keys; generation-qualified writer keys
+therefore prevent a losing concurrent clear from deleting an event committed
+after the winning reset. An old writer cannot resurrect counters.
 The root worker sends a metric to exactly one window client so a shared worker
 event is not multiplied by the number of tabs. Active wait identities are
 salted and RAM-only; the persisted seven-day metrics window contains only
@@ -1649,22 +1652,27 @@ The source-controlled operational policy fixes frontend/runtime byte budgets,
 the complete canonical data-class mapping, the retry classifier, and the
 reviewed mutation registry. Base Shell constructs `RESOURCE_DECLARATIONS` from
 an audited JSON manifest; CI compares it bidirectionally with the product
-inventory, scans production JS/TS/component sources across apps and shared
-packages, and requires every retrying mutation to match the non-overridable
-runtime audit-id registry plus client, server-deduplication, and replay-test
-evidence. CI also executes
+inventory including exact invalidation aliases, scans production
+JS/TS/component sources across apps and shared packages, rejects raw mutation
+retry objects, and requires every typed-factory use to match the
+non-overridable runtime registry's audit-id/method/endpoint/action tuple plus
+client, server-deduplication, and replay-test evidence. CI also executes
 the complete SDK/chaos, worker/broker, Settings DOM, and authenticated
-isolated-frame smoke suites. Physical-device evidence has a separately
-dispatchable complete/fresh/redaction-safe verifier and remains mandatory at
-the release gate; emulation cannot satisfy it.
+isolated-frame smoke suites. The physical-device verifier runs monthly, on
+release events, by manual dispatch, and as a reusable pre-promotion workflow;
+it consumes redaction-safe repository evidence and fails closed past the
+90-day limit. Current physical evidence remains mandatory at the release gate;
+emulation cannot satisfy it.
 
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
 for early hints. Only transport/timeouts and `429/502/503/504` are retryable by
 the standard classifier. An unsafe request remains one-shot unless it carries
 a stable `Idempotency-Key`, exact request fingerprint, and a declared server
-deduplication contract whose audit id is present in the exact runtime registry;
-eligible mutations are capped at three attempts and
+deduplication contract issued by the SDK factory. The registry binds its audit
+id to one exact HTTP method, API endpoint, and backend action; the coordinator
+revalidates that complete tuple before starting the operation, and rejects a
+structurally forged object even in untyped JavaScript. Eligible mutations are capped at three attempts and
 still cross current server authorization and admission. `401` and `403` remain
 the terminal request errors even when their cleanup changes retry scope; they
 cannot be masked as cancellation. Base Shell's `pinned_apps.set` mutation is

@@ -1,6 +1,0 @@
-{
-  "schema": "maverick.pwa-mutation-retry-registry.v1",
-  "audit_ids": [
-    "base-shell.pinned-apps.set.v1"
-  ]
-}

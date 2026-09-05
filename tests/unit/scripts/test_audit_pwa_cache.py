@@ -9,11 +9,13 @@ import unittest
 
 from scripts.audit_pwa_cache import (
     INVENTORY_PATH,
+    MUTATION_RETRY_REGISTRY_PATH,
     POLICY_PATH,
     RUNTIME_RESOURCE_DECLARATIONS_PATH,
     REPOSITORY_ROOT,
     audit_ci_hardening,
     audit_frontend_manifests,
+    audit_mutation_retry_registry,
     audit_repository,
     audit_resource_inventory,
     audit_runtime_resource_declarations,
@@ -158,6 +160,20 @@ class PwaCacheAuditTests(unittest.TestCase):
 
         self.assertTrue(any("max_entry_bytes" in error and "inventory" in error for error in errors), errors)
 
+    def test_runtime_resource_aliases_must_match_inventory_invalidation_aliases(self) -> None:
+        inventory = json.loads((REPOSITORY_ROOT / INVENTORY_PATH).read_text(encoding="utf-8"))
+        declarations = json.loads(
+            (REPOSITORY_ROOT / RUNTIME_RESOURCE_DECLARATIONS_PATH).read_text(encoding="utf-8")
+        )
+        candidate = deepcopy(declarations)
+        storage = next(record for record in candidate["resources"] if record["app_id"] == "storage")
+        storage["aliases"] = ["arbitrary-alias"]
+        errors: list[str] = []
+
+        audit_runtime_resource_declarations(inventory, candidate, errors)
+
+        self.assertTrue(any("aliases" in error and "inventory" in error for error in errors), errors)
+
     def test_runtime_resource_declarations_enumerate_every_canonical_class(self) -> None:
         inventory = json.loads((REPOSITORY_ROOT / INVENTORY_PATH).read_text(encoding="utf-8"))
         declarations = json.loads(
@@ -170,26 +186,34 @@ class PwaCacheAuditTests(unittest.TestCase):
 
         self.assertTrue(any("canonical_data_classes" in error for error in errors), errors)
 
-    def test_retry_source_discovery_covers_javascript_and_shared_packages(self) -> None:
+    def test_retry_factory_discovery_covers_javascript_and_shared_packages(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             package_source = root / "packages" / "shared-client" / "src" / "retry.js"
             package_source.parent.mkdir(parents=True)
             package_source.write_text(
-                """export const mutation = {
+                """export const mutation = createMutationRetryContract({
   auditId: 'shared-client.retry-write.v1',
-  serverDeduplicates: true,
-};
+  method: 'POST',
+  endpoint: '/api/shared/write',
+  action: 'shared.write',
+  idempotencyKey,
+  requestFingerprint,
+});
 """,
                 encoding="utf-8",
             )
             storage_source = root / "apps" / "storage" / "frontend" / "src" / "retry.ts"
             storage_source.parent.mkdir(parents=True)
             storage_source.write_text(
-                """export const mutation = {
+                """export const mutation = createMutationRetryContract({
   auditId: 'storage.retry-write.v1',
-  serverDeduplicates: true,
-};
+  method: 'PATCH',
+  endpoint: '/api/storage/write',
+  action: 'storage.write',
+  idempotencyKey,
+  requestFingerprint,
+});
 """,
                 encoding="utf-8",
             )
@@ -203,16 +227,86 @@ class PwaCacheAuditTests(unittest.TestCase):
             )
             self.assertEqual(errors, [])
 
-    def test_retry_source_discovery_rejects_javascript_contract_without_audit_id(self) -> None:
+    def test_mutation_retry_registry_binds_the_complete_approved_target(self) -> None:
+        registry = json.loads(
+            (REPOSITORY_ROOT / MUTATION_RETRY_REGISTRY_PATH).read_text(encoding="utf-8")
+        )
+        candidate = deepcopy(registry)
+        candidate["contracts"][0]["method"] = "PATCH"
+        approved = {
+            "base-shell.pinned-apps.set.v1": (
+                "POST",
+                "/api/apps/app-store/backend",
+                "pinned_apps.set",
+            )
+        }
+        errors: list[str] = []
+
+        audit_mutation_retry_registry(candidate, approved, errors)
+
+        self.assertTrue(any("target mismatch" in error for error in errors), errors)
+
+    def test_retry_factory_target_must_match_the_operational_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "apps" / "example" / "frontend" / "src" / "retry.ts"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                """export const mutation = createMutationRetryContract({
+  auditId: 'example.retry-write.v1',
+  method: 'PATCH',
+  endpoint: '/api/example/write',
+  action: 'example.write',
+  idempotencyKey,
+  requestFingerprint,
+});
+""",
+                encoding="utf-8",
+            )
+            approved = {
+                "example.retry-write.v1": ("POST", "/api/example/write", "example.write")
+            }
+            errors: list[str] = []
+
+            discovered = production_retry_audit_ids(root, errors, approved)
+
+            self.assertEqual(discovered, {"example.retry-write.v1"})
+            self.assertTrue(any("differs from the operational policy" in error for error in errors), errors)
+
+    def test_retry_source_discovery_rejects_raw_or_computed_contracts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "apps" / "example" / "client" / "retry.mjs"
             source.parent.mkdir(parents=True)
-            source.write_text("export const mutation = { serverDeduplicates: true };\n", encoding="utf-8")
+            source.write_text(
+                """const auditId = 'example.retry-write.v1';
+const serverDeduplicates = true;
+export const mutation = { auditId, serverDeduplicates };
+""",
+                encoding="utf-8",
+            )
             errors: list[str] = []
 
             self.assertEqual(production_retry_audit_ids(root, errors), set())
-            self.assertTrue(any("requires one literal auditId" in error for error in errors), errors)
+            self.assertTrue(any("factory" in error for error in errors), errors)
+
+            source.write_text(
+                """const auditId = 'example.retry-write.v1';
+export const mutation = createMutationRetryContract({
+  auditId,
+  method: 'POST',
+  endpoint: '/api/example/write',
+  action: 'example.write',
+  idempotencyKey,
+  requestFingerprint,
+});
+""",
+                encoding="utf-8",
+            )
+            errors = []
+
+            self.assertEqual(production_retry_audit_ids(root, errors), set())
+            self.assertTrue(any("literal auditId" in error for error in errors), errors)
 
     def test_ci_hardening_requires_sdk_settings_smoke_and_physical_verifier(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -228,6 +322,8 @@ class PwaCacheAuditTests(unittest.TestCase):
             self.assertTrue(any("pwa-cache run typecheck" in error for error in errors), errors)
             self.assertTrue(any("apps/settings test" in error for error in errors), errors)
             self.assertTrue(any("physical-device workflow" in error for error in errors), errors)
+            self.assertTrue(any("scheduled" in error for error in errors), errors)
+            self.assertTrue(any("release" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

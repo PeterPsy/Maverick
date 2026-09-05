@@ -1,8 +1,8 @@
 import {
   createIdempotencyKey,
+  createMutationRetryContract,
   createRequestFingerprint,
   idempotencyHeaders,
-  type MutationRetryContract,
 } from "@maverick/pwa-cache";
 import { revokeShellAuthorization, shellRetryCoordinator } from "./pwaCacheRuntime";
 
@@ -537,23 +537,27 @@ export async function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayloa
     app_ids: appIds.map((appId) => appId.trim()).filter(Boolean),
   } as const;
   const serializedSemantics = JSON.stringify(semantics);
-  const mutation: MutationRetryContract = {
+  const mutation = createMutationRetryContract({
+    action: "pinned_apps.set",
     auditId: "base-shell.pinned-apps.set.v1",
+    endpoint: "/api/apps/app-store/backend",
     idempotencyKey: createIdempotencyKey("pinned-apps"),
+    method: "POST",
     requestFingerprint: await createRequestFingerprint(serializedSemantics),
-    serverDeduplicates: true,
-  };
+  });
   const body = JSON.stringify({
     ...semantics,
     idempotency_key: mutation.idempotencyKey,
     request_fingerprint: mutation.requestFingerprint,
   });
   return shellRetryCoordinator.run({
+    action: mutation.action,
+    endpoint: mutation.endpoint,
     key: "base-shell:pinned-apps.set",
-    method: "POST",
+    method: mutation.method,
     mutation,
-    operation: ({ signal }) => requestJson<unknown>("/api/apps/app-store/backend", {
-      method: "POST",
+    operation: ({ signal }) => requestJson<unknown>(mutation.endpoint, {
+      method: mutation.method,
       headers: { "Content-Type": "application/json", ...idempotencyHeaders(mutation) },
       body,
       signal,

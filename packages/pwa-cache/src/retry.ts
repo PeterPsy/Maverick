@@ -21,11 +21,14 @@ export {
   RetryCancelledError,
   classifyRetryError,
   createIdempotencyKey,
+  createMutationRetryContract,
   createRequestFingerprint,
   idempotencyHeaders,
 } from "./retryPolicy";
 export type {
   MutationRetryContract,
+  MutationRetryContractInput,
+  MutationRetryTarget,
   RetryClassification,
   RetryCoordinatorOptions,
   RetryDisposition,
@@ -84,7 +87,7 @@ export class RetryCoordinator {
     this.start();
     const method = (options.method ?? "GET").trim().toUpperCase();
     const operationKey = validateOperationKey(options.key);
-    validateMutationContract(method, options.mutation);
+    validateMutationContract(method, options.endpoint, options.action, options.mutation);
     const flightKey = this.flightKey(method, operationKey, options.mutation);
     const existing = this.flights.get(flightKey)?.promise as Promise<T> | undefined;
     if (existing) {
@@ -304,6 +307,8 @@ export class RetryCoordinator {
         this.scopeKey,
         mutation.auditId,
         method,
+        mutation.endpoint,
+        mutation.action,
         mutation.idempotencyKey,
       ]);
       const knownFingerprint = this.mutationFingerprints.get(idempotencyScope);
@@ -317,6 +322,8 @@ export class RetryCoordinator {
         "idempotent-mutation",
         mutation.auditId,
         method,
+        mutation.endpoint,
+        mutation.action,
         mutation.idempotencyKey,
         mutation.requestFingerprint,
       ]);

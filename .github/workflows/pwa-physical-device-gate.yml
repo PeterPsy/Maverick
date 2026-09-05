@@ -1,11 +1,22 @@
 name: PWA Physical Device Release Gate
 
 on:
+  schedule:
+    # Monthly verification leaves substantial margin below the 90-day evidence TTL.
+    - cron: "17 4 1 * *"
+  release:
+    types: [prereleased, published]
+  workflow_call:
+    inputs:
+      evidence_json:
+        description: Redaction-reviewed maverick.pwa-cache-device-regression.v1 JSON
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       evidence_json:
         description: Redaction-reviewed maverick.pwa-cache-device-regression.v1 JSON
-        required: true
+        required: false
         type: string
 
 permissions:
@@ -21,14 +32,20 @@ jobs:
           python-version: "3.12"
       - name: Materialize redaction-safe evidence
         env:
-          PWA_DEVICE_EVIDENCE_JSON: ${{ inputs.evidence_json }}
+          PWA_DEVICE_EVIDENCE_JSON: ${{ inputs.evidence_json || vars.PWA_DEVICE_EVIDENCE_JSON }}
         run: |
           python - <<'PY'
           import json
           import os
           from pathlib import Path
 
-          payload = json.loads(os.environ["PWA_DEVICE_EVIDENCE_JSON"])
+          raw = os.environ.get("PWA_DEVICE_EVIDENCE_JSON", "").strip()
+          if not raw:
+              raise SystemExit(
+                  "PWA device evidence is required: pass evidence_json or configure "
+                  "the PWA_DEVICE_EVIDENCE_JSON repository variable."
+              )
+          payload = json.loads(raw)
           Path("pwa-device-evidence.json").write_text(
               json.dumps(payload, indent=2) + "\n",
               encoding="utf-8",

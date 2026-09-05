@@ -945,14 +945,15 @@ assert.equal(hostedProviderRoutingDraft(state, 'nvidia/nemotron-3-ultra-550b-a55
             )
         self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
 
-    def test_effective_snapshot_does_not_reclassify_exact_codex_as_remote(self) -> None:
+    def test_enable_gate_is_family_neutral_and_uses_enable_eligibility(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         controller_source = (
             app_root / "frontend" / "src" / "agenticBindingController.ts"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("item.runtime_engine_id !== 'codex'", controller_source)
-        self.assertIn("item.effective_capabilities?.status !== 'active'", controller_source)
+        self.assertNotIn("item.runtime_engine_id !== 'codex'", controller_source)
+        self.assertNotIn("item.effective_capabilities?.status !== 'active'", controller_source)
+        self.assertIn("item.enable_eligible !== true", controller_source)
         self.assertIn("item.containment_status === 'NO-GO'", controller_source)
 
     def test_persistence_migration_requires_dry_run_and_explicit_cleanup(self) -> None:

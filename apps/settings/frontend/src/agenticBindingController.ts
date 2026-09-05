@@ -55,15 +55,6 @@ export function createAgenticBindingController(context: AgenticBindingController
         context.render();
         return;
       }
-      if (
-        item.runtime_engine_id !== 'codex'
-        && item.effective_capabilities?.status !== 'active'
-        && requestedEnabled
-      ) {
-        context.state.agenticBindingErrors[key] = `Effective capability snapshot blocks this control: ${item.effective_capabilities?.reason_code || 'runtime authority unavailable'}.`;
-        context.render();
-        return;
-      }
       const costValue = field<HTMLInputElement>('max_estimated_cost_usd')?.value.trim() || '';
       const parsedCostMicrousd = Math.round(Number(costValue) * 1_000_000);
       if (costValue && (!Number.isFinite(parsedCostMicrousd) || parsedCostMicrousd < 0)) {

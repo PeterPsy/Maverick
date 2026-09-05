@@ -196,3 +196,26 @@ credential-free Codex checks in [run 33990520048](https://github.com/giuntiocram
 This was a push build, not a desktop installation. Installation awaits the user's
 app-exit confirmation; physical click correctness is not established by CI.
 The Python unused-import check also passed.
+
+### V5 point-ownership investigation
+
+The v5 install run `33992303089` passed 25 tests and installed `2507558` with
+launch requested at 21:14:13 UTC. The user's later screenshot showed v5 with
+both TCC permissions granted. The search-field click still failed, now with
+MC-TOOL-25 after manual Notes activation: the failure is point/window ownership,
+not the focus gate. The actual failed coordinates and intercepting window are
+not yet established; no z-order protection is removed.
+
+Apple-repo workflow `macos-pointer-diagnostics.yml` runs only on explicit dispatch.
+Its bounded Swift probe reports geometry, IDs, layers, alpha and coarse ownership
+categories for three sample points of visible Notes windows, without capturing
+screens, reading AX/document contents or credentials, activating apps, posting
+input, installing or signing. Technical metadata is returned in CI logs; pixels
+remain on the native direct-provider path. The geometric samples are not claimed
+to equal the failed model coordinates.
+
+Probe run `33993771193` succeeded at 21:41:41 UTC with Notes running, no visible
+eligible Notes windows, a valid window list and no unparsed entries. This is a
+later desktop snapshot, not evidence that the earlier user screenshot lacked a
+visible Notes window. A coordinated visible-window sample is needed before
+inferring which window intercepted the click. The probe did not modify the app.

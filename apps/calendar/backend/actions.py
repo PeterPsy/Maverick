@@ -52,6 +52,7 @@ from surface_contract import (
 )
 from view_state import clear_custom_view, read_view_filter, set_custom_view, set_view_filter
 from store import read_state
+from pwa_read_model import read_model
 
 
 def handle_action(
@@ -119,6 +120,8 @@ def handle_action(
                 transport=oauth_transport,
                 now=oauth_now,
             )
+        if action == "pwa.read_model":
+            return 200, read_model(data_root, body)
         if action == "list":
             return 200, list_payload(data_root, body)
         if action == "create":

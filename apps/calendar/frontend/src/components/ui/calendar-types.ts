@@ -59,6 +59,7 @@ export interface CalendarRemoteCalendar {
 }
 
 export interface EventManagerProps {
+  onVisibleDateChange?: (date: Date) => void
   events?: Event[]
   onEventCreate?: (event: Omit<Event, "id">) => void | Promise<void>
   onEventUpdate?: (id: string, event: Partial<Event>) => void | Promise<void>

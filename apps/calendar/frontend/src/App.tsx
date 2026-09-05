@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { calendarEvents, calendarWindow, readCalendarWindow, readCalendarEvent } from './pwaCache';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarApiError,
   completeGoogleOAuth,
@@ -41,6 +43,17 @@ export function App() {
   const [focusEventId, setFocusEventId] = useState('');
   const [focusVersion, setFocusVersion] = useState(0);
   const reloadTimer = useRef(0);
+  const readController = useRef<AbortController | null>(null);
+  const detailController = useRef<AbortController | null>(null);
+  const interval = useRef(calendarWindow(new Date()));
+  const [isLoading, setIsLoading] = useState(true);
+  const handleVisibleDate = useCallback((date: Date) => {
+    const next = calendarWindow(date);
+    if (next.start_after === interval.current.start_after) return;
+    interval.current = next;
+    setEvents([]);
+    void load();
+  }, []);
   const pendingReloadMode = useRef<ReloadMode>('view');
 
   function adoptRuntimeAppId(appId: unknown) {
@@ -60,18 +73,29 @@ export function App() {
         setViewState(await readViewFilter(appId));
         return;
       }
-      const [nextEvents, nextViewState, nextConnections, nextCalendars] = await Promise.all([
-        listEvents(appId),
-        readViewFilter(appId),
-        listConnections(appId),
-        listCalendars(appId),
-      ]);
-      setEvents(nextEvents);
-      setViewState(nextViewState);
-      setConnections(nextConnections);
-      setCalendars(nextCalendars);
+      readController.current?.abort();
+      const controller = new AbortController();
+      readController.current = controller;
+      setIsLoading(true);
+      const current = () => !controller.signal.aborted && appId === runtimeAppIdRef.current;
+      const reportError = (err: unknown) => { if (current()) setError(err instanceof Error ? err.message : 'Calendar load failed.'); };
+      // Display reads must not wait for provider connections or UI preferences.
+      void readViewFilter(appId).then((value) => { if (current()) setViewState(value); }, reportError);
+      void listConnections(appId).then((value) => { if (current()) setConnections(value); }, reportError);
+      if (appId === 'calendar') {
+        await readCalendarWindow(interval.current, controller.signal, (model) => {
+          if (!current()) return;
+          setEvents(calendarEvents(model));
+          setCalendars(model.calendars);
+          setIsLoading(false);
+        }, reportError);
+      } else {
+        const nextEvents = await listEvents(appId);
+        if (current()) { setEvents(nextEvents); setIsLoading(false); }
+        void listCalendars(appId).then((value) => { if (current()) setCalendars(value); }, reportError);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Calendar load failed.');
+      if (!(err instanceof Error && err.name === 'AbortError')) { setError(err instanceof Error ? err.message : 'Calendar load failed.'); setIsLoading(false); }
     }
   }
 
@@ -99,12 +123,12 @@ export function App() {
       void load();
     }
     window.parent?.postMessage({ type: 'maverick.app.ready', app_id: runtimeAppIdRef.current }, "*");
-    return () => window.clearTimeout(reloadTimer.current);
+    return () => { window.clearTimeout(reloadTimer.current); readController.current?.abort(); detailController.current?.abort(); };
   }, []);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as {
@@ -121,6 +145,13 @@ export function App() {
         adoptRuntimeAppId(payload.app_id);
         const eventId = eventIdFromParams(payload.params || {});
         if (eventId) {
+          if (runtimeAppIdRef.current === 'calendar') {
+            detailController.current?.abort();
+            const controller = new AbortController();
+            detailController.current = controller;
+            const report = (error: unknown) => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Calendar detail failed.'); };
+            void readCalendarEvent(eventId, controller.signal, (item) => setEvents((current) => [...current.filter((event) => event.id !== item.id), item]), report).catch(report);
+          }
           setFocusEventId(eventId);
           setFocusVersion((current) => current + 1);
         }
@@ -301,7 +332,9 @@ export function App() {
   return (
     <main className="calendar-app relative">
       {error ? <div className="calendar-error">{error}</div> : null}
+      {isLoading && events.length === 0 ? <div role="status">Loading calendar…</div> : null}
       <EventManager
+        onVisibleDateChange={handleVisibleDate}
         className="calendar-board"
         events={visibleEvents}
         onEventCreate={handleCreate}

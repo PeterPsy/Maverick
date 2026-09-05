@@ -121,11 +121,11 @@ describe('media thumb preview cache', () => {
     } as Pick<Window, 'postMessage'>);
 
     expect(readMediaThumbPreviewFrame(key)).toBe('');
-    await vi.waitFor(() => expect(values.has(storageKey)).toBe(true));
+    await vi.waitFor(() => expect(values.has(storageKey)).toBe(false));
     expect(readMediaThumbPreviewFrame(key)).toBe('');
   });
 
-  it('renders a parent-confirmed migration and removes its legacy source', async () => {
+  it('persists a newly captured frame but discards its unscoped legacy source', async () => {
     const key = mediaThumbPreviewFrameKey(videoMedia, 'storage');
     const entry = { key, dataUrl: frame, updatedAt: 10 };
     const { storage, values } = storageMock({
@@ -136,7 +136,7 @@ describe('media thumb preview cache', () => {
       postMessage(message: unknown, _origin: string, transfer?: Transferable[]) {
         const payload = message as Record<string, unknown>;
         const port = transfer?.[0] as MessagePort;
-        expect(payload.migration_seed).toMatchObject({ payload: entry });
+        expect(payload.migration_seed).toMatchObject({ payload: { key, dataUrl: frame } });
         postAccepted(payload, port);
         port.postMessage({
           app_id: payload.app_id,
@@ -156,7 +156,7 @@ describe('media thumb preview cache', () => {
       frameWindow.addEventListener(THUMB_PREVIEW_CACHE_CHANGED_EVENT, () => resolve(), { once: true });
     });
 
-    expect(readMediaThumbPreviewFrame(key)).toBe('');
+    writeMediaThumbPreviewFrame(key, frame);
     await changed;
     expect(readMediaThumbPreviewFrame(key)).toBe(frame);
     expect(values.has(storageKey)).toBe(false);

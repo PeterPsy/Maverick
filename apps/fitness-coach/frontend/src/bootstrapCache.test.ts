@@ -66,7 +66,7 @@ describe('bootstrap cache', () => {
     expect(readBootstrapCache()).toBeNull();
   });
 
-  it('removes normalized credentials and signed URLs from a legacy migration seed', () => {
+  it('rejects unknown nested fields as well as credentials and signed URLs', () => {
     const sanitized = sanitizeBootstrapReadModel({
       ...bootstrapPayload(),
       nested: {
@@ -79,14 +79,14 @@ describe('bootstrap cache', () => {
     const serialized = JSON.stringify(sanitized);
     expect(serialized).not.toContain('secret-token');
     expect(serialized).not.toContain('X-Amz-Signature');
-    expect(serialized).toContain('Workout A');
+    expect(serialized).not.toContain('Workout A');
   });
 
-  it('reads cached data with no query scope when the host context matches the stored payload', () => {
+  it('does not migrate legacy data without user scope even when workspace and app match', () => {
     const { values } = stubWindow({ app_id: 'fitness-coach', workspace_id: 'default' });
     seedLegacyBootstrap(values, bootstrapPayload());
 
-    expect(readBootstrapCache()).toEqual(bootstrapPayload());
+    expect(readBootstrapCache()).toBeNull();
   });
 
   it('does not read cached data when the host workspace differs from the payload scope', () => {

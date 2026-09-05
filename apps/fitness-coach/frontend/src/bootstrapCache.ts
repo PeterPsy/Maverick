@@ -1,20 +1,8 @@
+import { projectBootstrapReadModel } from './bootstrapProjection';
 import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
 import { currentStorageAppId, mountedAppIdFromPath } from './api';
 import type { AppBootstrapPayload } from './types';
 
-const BOOTSTRAP_CACHE_VERSION = 1;
-const FORBIDDEN_SESSION_STORAGE_KEYS = new Set([
-  'appsecretrequest',
-  'authorization',
-  'credential',
-  'credentials',
-  'downloadurl',
-  'localpath',
-  'password',
-  'path',
-  'signedurl',
-  'streamurl'
-]);
 
 type BootstrapCacheScope = {
   workspaceId: string;
@@ -39,26 +27,13 @@ export function bootstrapCacheScopeFromFrameContext(): BootstrapCacheScope | nul
 }
 
 export function readBootstrapCache(): AppBootstrapPayload | null {
-  if (typeof window === 'undefined') return null;
-  const scope = bootstrapCacheScopeFromFrameContext();
-  if (!scope) return null;
-  const key = bootstrapCacheKey(scope);
+  // Older keys attest only workspace/app, not the user. Delete, never migrate.
   try {
-    const raw = window.sessionStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { version?: number; payload?: unknown };
-    if (parsed.version !== BOOTSTRAP_CACHE_VERSION || !parsed.payload || typeof parsed.payload !== 'object') {
-      return null;
+    for (const key of Object.keys(window.sessionStorage)) {
+      if (key.startsWith('fitness-coach:bootstrap:')) window.sessionStorage.removeItem(key);
     }
-    const payload = sanitizeLegacyBootstrapReadModel(parsed.payload);
-    if (!payload) return null;
-    if (payload.workspace_id !== scope.workspaceId || (payload.app_id || 'fitness-coach') !== scope.appId) {
-      return null;
-    }
-    return payload;
-  } catch {
-    return null;
-  }
+  } catch { /* Optional legacy cleanup cannot block current reads. */ }
+  return null;
 }
 
 export function removeBootstrapCache(payload: AppBootstrapPayload) {
@@ -73,36 +48,14 @@ export function removeBootstrapCache(payload: AppBootstrapPayload) {
   }
 }
 
-function sanitizeBootstrapForSessionStorage(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => sanitizeBootstrapForSessionStorage(item));
-  if (!value || typeof value !== 'object') return value;
-  const next: Record<string, unknown> = {};
-  Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
-    const normalized = key.replace(/[^A-Za-z0-9]/gu, '').toLowerCase();
-    if (FORBIDDEN_SESSION_STORAGE_KEYS.has(normalized)
-        || normalized.endsWith('token')
-        || normalized.endsWith('secret')) return;
-    if (typeof item === 'string'
-        && (/^blob\s*:/iu.test(item)
-          || /[?&](?:sig|signature|x-amz-signature|x-goog-signature)=/iu.test(item))) return;
-    next[key] = sanitizeBootstrapForSessionStorage(item);
-  });
-  return next;
-}
-
 export function sanitizeBootstrapReadModel(value: unknown): AppBootstrapPayload | null {
-  return sanitizeBootstrap(value, false);
+  return sanitizeBootstrap(value);
 }
 
-function sanitizeLegacyBootstrapReadModel(value: unknown): AppBootstrapPayload | null {
-  return sanitizeBootstrap(value, true);
-}
-
-function sanitizeBootstrap(value: unknown, allowMissingSchema: boolean): AppBootstrapPayload | null {
+function sanitizeBootstrap(value: unknown): AppBootstrapPayload | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const payload = value as Partial<AppBootstrapPayload>;
-  if ((payload.schema !== 'fitness-coach.bootstrap.v1'
-        && !(allowMissingSchema && payload.schema === undefined))
+  if (payload.schema !== 'fitness-coach.bootstrap.v1'
       || typeof payload.workspace_id !== 'string'
       || payload.workspace_id.length > 256
       || typeof payload.app_id !== 'string'
@@ -124,7 +77,8 @@ function sanitizeBootstrap(value: unknown, allowMissingSchema: boolean): AppBoot
       || (payload.selected_workout !== null && !hasBoundedId(payload.selected_workout))
       || !validViewState(payload.view_state)) return null;
   try {
-    const sanitized = sanitizeBootstrapForSessionStorage(payload) as AppBootstrapPayload;
+    const sanitized = projectBootstrapReadModel(payload as AppBootstrapPayload);
+    if (!sanitized) return null;
     sanitized.schema = 'fitness-coach.bootstrap.v1';
     delete sanitized.not_modified;
     return sanitized;

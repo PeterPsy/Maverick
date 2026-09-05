@@ -1,0 +1,67 @@
+{
+  "build_id": "711a02485baffdd4a6dd0b46949a2f29f1c73946d95e5ab44851eb213acea5d8",
+  "entrypoints": [
+    "index.html",
+    "widgets/calendar-sidebar/index.html",
+    "widgets/calendar-sidebar-footer/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-5hktiT_n.js",
+      "sha256": "b410362177bb138e74af2c76fe1471376c5967d11aacc95ad213f04411eb0c9c",
+      "size_bytes": 2671
+    },
+    {
+      "path": "assets/app-B0-8NOfx.css",
+      "sha256": "9afdc3c4d1f0af7b2551e2640e255df8dc852c15396db17b1975e744e2815a70",
+      "size_bytes": 40261
+    },
+    {
+      "path": "assets/app-CcsWMKkI.js",
+      "sha256": "fcd3323d8542b4bb4a6aab4b1e24d46f06ac27c1ef7c4c5c23fed7342aba15cd",
+      "size_bytes": 180721
+    },
+    {
+      "path": "assets/app-CnYbNVml.js",
+      "sha256": "591046a67c7bdab1bfc31d202d1c0e9797c43f71af54eb28c117a07cff3d5fd5",
+      "size_bytes": 137984
+    },
+    {
+      "path": "assets/index-BkWb-iKo.css",
+      "sha256": "6843641853683b06f02904d8a241232163451b72cfdf1a1364ccaf2a5a65cdca",
+      "size_bytes": 2248
+    },
+    {
+      "path": "assets/index-ClSpQzZx.css",
+      "sha256": "92f5b1aa4598f169ff7033534a1a7948a5bb7785cea6acf9c848f353b94b5dbb",
+      "size_bytes": 8242
+    },
+    {
+      "path": "assets/runtime-C-SObY5p.js",
+      "sha256": "90d8b8e8f8022496490f9c5b3f305bfbb412f2d91024ab9b59d1cc6168288fb6",
+      "size_bytes": 203277
+    },
+    {
+      "path": "assets/utils-CQRvbCAy.js",
+      "sha256": "37295cde3d43d38cf4883e7eb214d56074e2dd05c8ae80e1cc734401897c8cb7",
+      "size_bytes": 10874
+    },
+    {
+      "path": "index.html",
+      "sha256": "a77d4a05584d392aba8c42d2d260a9849043d4f72050406b12af56bad480ec7a",
+      "size_bytes": 599
+    },
+    {
+      "path": "widgets/calendar-sidebar/index.html",
+      "sha256": "bbcb72d0c625844e55ac3ded4d350aab8e8bd931d4403fd42d71a6e4748525fa",
+      "size_bytes": 618
+    },
+    {
+      "path": "widgets/calendar-sidebar-footer/index.html",
+      "sha256": "eccf4c9c9f6dd7111b300a4270cdfc5cf6479b5a0ee9225155a9e5ba9f55c99a",
+      "size_bytes": 575
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

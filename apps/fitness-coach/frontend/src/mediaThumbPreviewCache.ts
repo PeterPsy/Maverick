@@ -88,19 +88,8 @@ export function clearMediaThumbPreviewFrameCache(options: { storage?: boolean } 
 function hydrateLegacyThumbPreviewSeeds() {
   if (hydrated) return;
   hydrated = true;
-  const payload = storage()?.getItem(THUMB_PREVIEW_STORAGE_KEY);
-  if (!payload) return;
-  try {
-    const parsed = JSON.parse(payload) as { entries?: unknown[] };
-    parsed.entries?.forEach((value) => {
-      const entry = sanitizeThumbPreviewEntry(value);
-      if (entry && hasStableThumbIdentity(entry.key)) legacySeeds.set(entry.key, entry);
-    });
-    trimLegacySeeds();
-  } catch {
-    legacySeeds.clear();
-    storage()?.removeItem(THUMB_PREVIEW_STORAGE_KEY);
-  }
+  // This legacy namespace has no user/workspace attestation.
+  try { storage()?.removeItem(THUMB_PREVIEW_STORAGE_KEY); } catch { /* best effort */ }
 }
 
 function persistLegacyThumbPreviewSeeds() {

@@ -13,6 +13,7 @@ export type { Event, EventManagerProps } from "./calendar-types"
 
 export function EventManager({
   events: initialEvents = [],
+  onVisibleDateChange,
   onEventUpdate,
   colors = defaultColors,
   categories = [],
@@ -32,6 +33,7 @@ export function EventManager({
   const initialUiState = readCalendarUiState(runtimeAppId)
   const [events, setEvents] = useState<Event[]>(initialEvents)
   const [currentDate, setCurrentDate] = useState(new Date())
+  useEffect(() => { onVisibleDateChange?.(currentDate) }, [currentDate, onVisibleDateChange])
   const [view, setView] = useState<CalendarView>(defaultView)
   const [draggedEvent, setDraggedEvent] = useState<Event | null>(null)
   const [searchQuery, setSearchQueryState] = useState(initialUiState.searchQuery)

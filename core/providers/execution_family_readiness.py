@@ -11,6 +11,10 @@ from core.providers.execution_families import (
     NATIVE_AGENT_EXECUTION_FAMILY,
     effective_agentic_execution_family,
 )
+from core.providers.native_agent_catalog import (
+    native_agent_model_available,
+    native_agent_model_provider_connected,
+)
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
@@ -86,10 +90,9 @@ def _native_readiness(*, definition, certificate, binding, registry) -> AgenticF
         and manifest.adapter_id == definition.adapter_id
         and definition.adapter_version_constraint == f"=={manifest.adapter_version}"
         and manifest.protocol_id == definition.provider_protocol
-        and any(
-            selection.model_provider_id == definition.model_provider_id
-            and selection.model_id == definition.model_id
-            for selection in installation.model_selections
+        and native_agent_model_provider_connected(
+            installation,
+            model_provider_id=definition.model_provider_id,
         )
         and installation.effects.workspace_confined
         and installation.effects.process_tree_supervised
@@ -100,6 +103,13 @@ def _native_readiness(*, definition, certificate, binding, registry) -> AgenticF
     )
     if not identity_matches:
         return _native_result(installation, "native_agent_contract_incomplete")
+    if not native_agent_model_available(
+        registry,
+        installation,
+        model_provider_id=definition.model_provider_id,
+        model_id=definition.model_id,
+    ):
+        return _native_result(installation, "native_agent_model_unavailable")
     legacy_codex = is_exact_codex_identity(
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=definition.adapter_id,

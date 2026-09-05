@@ -11,6 +11,9 @@ from core.api.provider_api import (
     workspace_agentic_admin_status,
     workspace_provider_status,
 )
+from core.providers.agentic_workspace_admin import (
+    configure_workspace_agentic_default,
+)
 from core.providers.native_agent_contract import NativeRuntimeStatus
 from core.providers.service import (
     builtin_provider_registry,
@@ -94,6 +97,45 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertEqual(admin["native_runtime"]["health"], "healthy")
         self.assertTrue(admin["enable_eligible"])
         self.assertIsNone(admin["enable_blocked_reason"])
+
+    def test_new_codex_catalog_model_inherits_connection_certification(self) -> None:
+        state = self.make_state()
+        codex = state.provider_registry.get_provider_definition("codex")
+        astra = replace(
+            codex.model_options[0],
+            model_id="gpt-6-astra",
+            label="GPT-6 Astra",
+        )
+        expanded = replace(
+            codex,
+            default_model_family=astra.model_id,
+            model_options=[astra, *codex.model_options],
+        )
+        state.provider_registry.register_provider_definition(expanded)
+        state.provider_store.save_provider_definition(expanded)
+        binding = configure_workspace_agentic_default(
+            state.provider_store,
+            state.provider_registry,
+            workspace_id="default",
+            provider_id="codex",
+            model_id=astra.model_id,
+            model_reasoning_effort="max",
+        )
+
+        payload = workspace_provider_status(state, workspace_id="default")
+        profile = next(
+            item
+            for item in payload["agentic_profiles"]["items"]
+            if item["model_id"] == astra.model_id
+        )
+
+        self.assertEqual(
+            payload["agentic_profiles"]["default_binding_id"],
+            binding.binding_id,
+        )
+        self.assertTrue(profile["certified"])
+        self.assertTrue(profile["selectable"])
+        self.assertIsNone(profile["unavailable_reason"])
 
     def test_disabled_complete_profile_remains_eligible_for_reenable(self) -> None:
         state = self.make_state()

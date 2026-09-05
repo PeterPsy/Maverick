@@ -87,6 +87,13 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         self.assertTrue(installation.release_eligible)
         self.assertEqual(installation.manifest.protocol_kind, "app_server")
         self.assertEqual(installation.recipe.context_owner, "native_runtime")
+        self.assertEqual(
+            [
+                (connection.model_provider_id, connection.catalog_provider_id)
+                for connection in installation.model_provider_connections
+            ],
+            [("codex", "codex")],
+        )
         self.assertTrue(installation.effects.workspace_confined)
         self.assertTrue(installation.effects.structured_effect_events)
         self.assertIs(controller.installation, installation)
@@ -144,6 +151,27 @@ class NativeAgentFrameworkTest(unittest.TestCase):
                 replace(
                     candidate,
                     manifest=replace(candidate.manifest, lifecycle_operations=("discover",)),
+                )
+            )
+        with self.assertRaisesRegex(ValueError, "model_provider_connection_missing"):
+            validate_native_agent_installation(
+                replace(candidate, model_provider_connections=())
+            )
+        connection = candidate.model_provider_connections[0]
+        with self.assertRaisesRegex(ValueError, "model_provider_connection_invalid"):
+            validate_native_agent_installation(
+                replace(
+                    candidate,
+                    model_provider_connections=(
+                        replace(connection, model_provider_id=" google"),
+                    ),
+                )
+            )
+        with self.assertRaisesRegex(ValueError, "model_provider_connection_duplicate"):
+            validate_native_agent_installation(
+                replace(
+                    candidate,
+                    model_provider_connections=(connection, connection),
                 )
             )
 

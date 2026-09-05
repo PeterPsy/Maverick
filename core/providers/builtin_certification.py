@@ -33,7 +33,7 @@ def ensure_codex_preview_certificate(
     provider_definition: ProviderDefinition,
     adapter: object,
 ) -> CapabilityCertificate:
-    """Publish an expiring certificate backed by the packaged Codex contract suite."""
+    """Project the certified Codex connection onto one immutable model profile."""
     artifact_digest = runtime_adapter_artifact_digest(adapter)
     if (
         definition.revision == CODEX_PROFILE_REVISION

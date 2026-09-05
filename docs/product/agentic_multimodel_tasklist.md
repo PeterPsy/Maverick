@@ -600,9 +600,11 @@ completion claim.
 - [x] A Core-owned execution-family catalog defines the normative ordering and
   copy independently of provider capability flags. Exact legacy Codex identity
   is the only permitted inference for a pre-family agentic profile.
-- [x] Native adapter manifest, harness recipe, model selection,
-  sandbox/effect-observation contract, and certificate reference are separate
-  immutable records validated during registry installation.
+- [x] Native adapter manifest, harness recipe, model-provider connection,
+  sandbox/effect-observation contract, and connection certificate reference are
+  separate immutable records validated during registry installation. Models
+  advertised by the connected runtime catalog inherit that certification while
+  exact profile/session model identity remains pinned.
 - [x] The native controller exposes structured discovery, version, health,
   update status, launch, connect, resume, event stream/final output, steering,
   interrupt, recovery, cleanup, and close boundaries over the generic agentic

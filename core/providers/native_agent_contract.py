@@ -102,13 +102,11 @@ class NativeAgentHarnessRecipe:
 
 
 @dataclass(frozen=True)
-class NativeAgentModelSelection:
-    """One adapter-independent model selection policy."""
+class NativeAgentModelProviderConnection:
+    """One runtime-to-model-provider connection covered by the integration."""
 
     model_provider_id: str
-    model_id: str
-    model_revision: str | None
-    revision_policy: Literal["exact", "provider_alias"]
+    catalog_provider_id: str
 
 
 @dataclass(frozen=True)
@@ -125,7 +123,7 @@ class NativeAgentEffectContract:
 
 @dataclass(frozen=True)
 class NativeAgentCertificateReference:
-    """Certificate linkage kept separate from adapter and recipe identities."""
+    """Connection certificate kept separate from adapter and recipe identities."""
 
     certification_state: NativeCertificationState
     certificate_id_template: str | None
@@ -165,7 +163,7 @@ class NativeAgentInstallation:
 
     manifest: NativeAgentAdapterManifest
     recipe: NativeAgentHarnessRecipe
-    model_selections: tuple[NativeAgentModelSelection, ...]
+    model_provider_connections: tuple[NativeAgentModelProviderConnection, ...]
     effects: NativeAgentEffectContract
     certificate: NativeAgentCertificateReference
     inspector: NativeRuntimeInspector
@@ -211,13 +209,22 @@ def validate_native_agent_installation(installation: NativeAgentInstallation) ->
         raise ValueError("native_agent_sandbox_policy_missing")
     if not _SHA256.fullmatch(installation.recipe.digest):
         raise ValueError("native_agent_recipe_digest_invalid")
-    if not installation.model_selections:
-        raise ValueError("native_agent_model_selection_missing")
-    for selection in installation.model_selections:
-        if not selection.model_provider_id.strip() or not selection.model_id.strip():
-            raise ValueError("native_agent_model_selection_invalid")
-        if selection.revision_policy == "exact" and not selection.model_revision:
-            raise ValueError("native_agent_exact_model_revision_missing")
+    if not installation.model_provider_connections:
+        raise ValueError("native_agent_model_provider_connection_missing")
+    connection_ids: set[tuple[str, str]] = set()
+    for connection in installation.model_provider_connections:
+        identity = (
+            connection.model_provider_id.strip(),
+            connection.catalog_provider_id.strip(),
+        )
+        if not all(identity) or identity != (
+            connection.model_provider_id,
+            connection.catalog_provider_id,
+        ):
+            raise ValueError("native_agent_model_provider_connection_invalid")
+        if identity in connection_ids:
+            raise ValueError("native_agent_model_provider_connection_duplicate")
+        connection_ids.add(identity)
     certificate = installation.certificate
     if installation.release_eligible and (
         not certificate.certificate_id_template

@@ -137,7 +137,7 @@ class ProviderRegistry:
         definition: ProviderDefinition,
         runtime_adapter: RuntimeBackendAdapter | None = None,
     ) -> ProviderDefinition:
-        """Register a validated native adapter/recipe/model/certificate tuple.
+        """Register a validated native adapter/recipe/connection certificate.
 
         Candidate registrations are clamped to disabled even if persisted
         provider metadata later attempts to activate them.

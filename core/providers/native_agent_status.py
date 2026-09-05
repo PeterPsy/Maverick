@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.providers.errors import ProviderNotFoundError
 from core.providers.execution_families import NATIVE_AGENT_EXECUTION_FAMILY
+from core.providers.native_agent_catalog import native_agent_catalog_models
 from core.providers.native_agent_contract import NativeRuntimeStatus
 from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
 
@@ -59,6 +60,7 @@ def _native_agent_status_item(registry, installation) -> dict[str, object]:
         enabled=enabled,
         status=status,
     )
+    catalog_models = native_agent_catalog_models(registry, installation)
     return {
         "runtime_engine_id": manifest.runtime_engine_id,
         "label": manifest.runtime_engine_id if definition is None else definition.label,
@@ -108,7 +110,7 @@ def _native_agent_status_item(registry, installation) -> dict[str, object]:
                 "model_revision": model.model_revision,
                 "model_revision_policy": model.revision_policy,
             }
-            for model in installation.model_selections
+            for model in catalog_models
         ],
         "effects": {
             "mode": installation.effects.mode,

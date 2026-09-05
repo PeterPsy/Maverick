@@ -183,8 +183,14 @@ metadata, classification, credential, policy, and deadline fence.
 The product execution-family catalog is Core-owned and ordered as
 `native_agent`, `maverick_agent`, then `hosted_text`. Native installations bind
 five independent records: a structured adapter manifest, an immutable harness
-recipe, one or more model selections, a sandbox/effect-observation contract,
-and a certificate reference. `ProviderRegistry` validates this composition and
+recipe, one or more model-provider connections, a sandbox/effect-observation
+contract, and a certificate reference. The certificate belongs to each trusted
+runtime/provider connection rather than to individual model slugs. Selectable
+models are resolved from the connected runtime's authoritative provider catalog;
+newly advertised models inherit the connection certification and receive
+model-bound immutable profile/certificate projections for pinning without a
+second certification run. A model not present in that catalog fails closed for
+new sessions. `ProviderRegistry` validates this composition and
 the callable inspector/backend implementation, then exposes that controller as
 the production agentic adapter for discovery/version/health/update status,
 launch, connect, resume, event streaming/final output, steering, interrupt,

@@ -22,7 +22,7 @@ from core.providers.native_agent_contract import (
     NativeAgentEffectContract,
     NativeAgentHarnessRecipe,
     NativeAgentInstallation,
-    NativeAgentModelSelection,
+    NativeAgentModelProviderConnection,
     NativeAvailability,
     NativeHealthState,
     NativeRuntimeStatus,
@@ -127,8 +127,7 @@ class CommandNativeRuntimeInspector:
 
 
 def build_codex_native_installation(adapter) -> NativeAgentInstallation:
-    """Describe the existing Codex app-server integration without changing it."""
-    definition = adapter.provider_definition()
+    """Describe the certified Codex app-server integration and its connection."""
     recipe_payload = {
         "recipe_id": "codex-native-app-server",
         "revision": NATIVE_AGENT_RECIPE_REVISION,
@@ -136,14 +135,11 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
         "context_owner": "native_runtime",
         "prompt_contract_revision": "codex-native-prompt-v1",
     }
-    selections = tuple(
-        NativeAgentModelSelection(
+    connections = (
+        NativeAgentModelProviderConnection(
             model_provider_id="codex",
-            model_id=option.model_id,
-            model_revision=None,
-            revision_policy="provider_alias",
-        )
-        for option in definition.model_options
+            catalog_provider_id="codex",
+        ),
     )
     return NativeAgentInstallation(
         manifest=NativeAgentAdapterManifest(
@@ -166,7 +162,7 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             prompt_contract_revision=str(recipe_payload["prompt_contract_revision"]),
             context_owner="native_runtime",
         ),
-        model_selections=selections,
+        model_provider_connections=connections,
         effects=NativeAgentEffectContract(
             mode="mapped_hybrid",
             workspace_confined=True,
@@ -258,12 +254,10 @@ def build_gemini_cli_candidate_installation() -> NativeAgentInstallation:
             prompt_contract_revision="candidate",
             context_owner="native_runtime",
         ),
-        model_selections=(
-            NativeAgentModelSelection(
+        model_provider_connections=(
+            NativeAgentModelProviderConnection(
                 model_provider_id="google",
-                model_id="provider-default",
-                model_revision=None,
-                revision_policy="provider_alias",
+                catalog_provider_id=GEMINI_CLI_CANDIDATE_PROVIDER_ID,
             ),
         ),
         effects=NativeAgentEffectContract(

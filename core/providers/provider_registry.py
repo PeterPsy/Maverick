@@ -142,13 +142,17 @@ class ProviderRegistry:
         Candidate registrations are clamped to disabled even if persisted
         provider metadata later attempts to activate them.
         """
-        from core.providers.native_agent_contract import validate_native_agent_installation
+        from core.providers.native_agent_contract import (
+            validate_native_agent_installation,
+            validate_native_runtime_adapter,
+        )
 
         validate_native_agent_installation(installation)
         manifest = installation.manifest
         if definition.provider_id != manifest.runtime_engine_id:
             raise ValueError("native_agent_provider_identity_mismatch")
         if runtime_adapter is not None:
+            validate_native_runtime_adapter(installation, runtime_adapter)
             adapter_definition = runtime_adapter.provider_definition()
             if adapter_definition.provider_id != manifest.runtime_engine_id:
                 raise ValueError("native_agent_adapter_identity_mismatch")
@@ -163,15 +167,15 @@ class ProviderRegistry:
             definition = self.register_runtime_adapter(runtime_adapter)
             from core.providers.native_agent_runtime import NativeAgentRuntimeController
 
-            self._native_agent_controllers[manifest.runtime_engine_id] = (
-                NativeAgentRuntimeController(
-                    installation=installation,
-                    engine_adapter=self._agentic_runtime_adapters[
-                        manifest.runtime_engine_id
-                    ],
-                    legacy_adapter=runtime_adapter,
-                )
+            controller = NativeAgentRuntimeController(
+                installation=installation,
+                engine_adapter=self._agentic_runtime_adapters[
+                    manifest.runtime_engine_id
+                ],
+                legacy_adapter=runtime_adapter,
             )
+            self._native_agent_controllers[manifest.runtime_engine_id] = controller
+            self._agentic_runtime_adapters[manifest.runtime_engine_id] = controller
             return definition
         return self.register_provider_definition(definition)
 

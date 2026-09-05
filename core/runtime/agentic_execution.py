@@ -225,11 +225,16 @@ async def execute_agentic_runtime_turn(
                     }
                 )
             event_sink(RuntimeExecutionEvent(event_type=event.event_type, payload=public_payload))
+    final_output = output_text or delta_output
     final_exit_code = exit_code if exit_code is not None else 1
+    if final_exit_code == 0 and not final_output.strip():
+        final_output = ""
+        final_exit_code = 1
+        failure_reason_code = "agent_final_output_empty"
     if final_exit_code != 0 and failure_reason_code is None:
         failure_reason_code = "provider_execution_failed"
     return RuntimeExecutionResult(
-        output_text=output_text or delta_output,
+        output_text=final_output,
         exit_code=final_exit_code,
         failure_reason_code=failure_reason_code,
         public_error_message=(

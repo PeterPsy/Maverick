@@ -146,6 +146,29 @@ class AgenticAdapterContractTest(unittest.TestCase):
         with self.assertRaises(ProviderNotFoundError):
             self.registry.get_runtime_adapter(self.adapter.runtime_engine_id)
 
+    def test_successful_completion_with_empty_final_output_fails_closed(self) -> None:
+        self.adapter.output_text = ""
+
+        result = execute_runtime_turn(
+            session=self.session,
+            provider=self.definition,
+            input_text="hello",
+            agentic_adapter=self.adapter,
+            provider_state=self.provider_state,
+            correlation_id="turn-empty-final",
+            effective_authority=certified_test_authority(
+                self.provider_store,
+                self.binding,
+                self.adapter,
+                turn_id="turn-empty-final",
+                now=NOW,
+            ),
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.output_text, "")
+        self.assertEqual(result.failure_reason_code, "agent_final_output_empty")
+
     def test_pinned_agentic_execution_requires_effective_authority(self) -> None:
         with self.assertRaisesRegex(ValueError, "effective runtime authority"):
             execute_runtime_turn(

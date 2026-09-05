@@ -46,6 +46,27 @@ REQUIRED_NATIVE_OPERATIONS = frozenset(
         "close",
     }
 )
+_NATIVE_OPERATION_ADAPTER_METHODS = {
+    "launch": "build_launch_spec",
+    "start_turn": "execute_turn",
+    "steer": "steer_turn",
+    "interrupt": "interrupt_turn",
+    "recover": "build_recovery_command",
+    "cleanup": "close_runtime",
+    "close": "close_runtime",
+}
+_REQUIRED_NATIVE_RUNTIME_ADAPTER_METHODS = (
+    "provider_definition",
+    "validate_backend",
+    "prepare_runtime_skills",
+)
+REQUIRED_NATIVE_INSPECTOR_METHODS = (
+    "discover",
+    "version",
+    "health",
+    "update_status",
+    "inspect",
+)
 _STRUCTURED_PROTOCOLS = frozenset(
     {"app_server", "sdk", "api", "json_rpc", "jsonl", "structured_cli"}
 )
@@ -164,6 +185,11 @@ class NativeAgentInstallation:
 def validate_native_agent_installation(installation: NativeAgentInstallation) -> None:
     """Fail closed on unstructured lifecycle or unobservable native effects."""
     manifest = installation.manifest
+    if not all(
+        callable(getattr(installation.inspector, method_name, None))
+        for method_name in REQUIRED_NATIVE_INSPECTOR_METHODS
+    ):
+        raise ValueError("native_agent_inspector_incomplete")
     if manifest.protocol_kind not in _STRUCTURED_PROTOCOLS:
         raise ValueError("native_agent_protocol_unstructured")
     if not manifest.machine_readable or manifest.human_terminal_scraping:
@@ -198,3 +224,25 @@ def validate_native_agent_installation(installation: NativeAgentInstallation) ->
         or not certificate.full_workspace_contract_revision
     ):
         raise ValueError("native_agent_certificate_contract_incomplete")
+
+
+def validate_native_runtime_adapter(
+    installation: NativeAgentInstallation,
+    adapter: object,
+) -> None:
+    """Require executable methods behind every certified native lifecycle."""
+    required_methods = {
+        *_REQUIRED_NATIVE_RUNTIME_ADAPTER_METHODS,
+        *(
+            method_name
+            for operation, method_name in _NATIVE_OPERATION_ADAPTER_METHODS.items()
+            if operation in installation.manifest.lifecycle_operations
+        ),
+    }
+    missing = tuple(
+        method_name
+        for method_name in sorted(required_methods)
+        if not callable(getattr(adapter, method_name, None))
+    )
+    if missing:
+        raise ValueError("native_agent_runtime_adapter_incomplete")

@@ -20,6 +20,7 @@ from core.providers.native_agent_builtins import (
     build_gemini_cli_candidate_installation,
 )
 from core.providers.native_agent_contract import validate_native_agent_installation
+from core.providers.agentic_adapter import RuntimeProviderEvent
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import builtin_provider_registry
 
@@ -78,6 +79,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         self.assertTrue(installation.effects.workspace_confined)
         self.assertTrue(installation.effects.structured_effect_events)
         self.assertIs(controller.installation, installation)
+        self.assertIs(registry.get_agentic_runtime_adapter("codex"), controller)
         self.assertEqual(
             runtime_adapter_artifact_digest(registry.get_runtime_adapter("codex")),
             CODEX_PROFILE_ARTIFACT_DIGEST,
@@ -152,6 +154,47 @@ class NativeAgentFrameworkTest(unittest.TestCase):
                 certified,
                 definition=build_gemini_cli_candidate_definition(NOW),
             )
+
+    def test_registry_rejects_present_but_incomplete_native_adapter(self) -> None:
+        registry = ProviderRegistry()
+        candidate = build_gemini_cli_candidate_installation()
+        certified = replace(
+            candidate,
+            certificate=replace(
+                candidate.certificate,
+                certification_state="certified",
+                certificate_id_template="certificate:{profile_id}",
+                full_workspace_contract_revision="codex-baseline-v20",
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "runtime_adapter_incomplete"):
+            registry.register_native_agent_installation(
+                certified,
+                definition=build_gemini_cli_candidate_definition(NOW),
+                runtime_adapter=_IncompleteNativeAdapter(),
+            )
+
+    def test_native_final_output_must_contain_non_empty_text(self) -> None:
+        controller = builtin_provider_registry().get_native_agent_controller("codex")
+        empty = RuntimeProviderEvent(
+            event_type="runtime.output.final",
+            correlation_id="turn-empty",
+            ordinal=1,
+            schema_version="1",
+            payload={"text": "  "},
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "agent_final_output_empty"):
+            controller.final_output([empty])
+
+
+class _IncompleteNativeAdapter:
+    adapter_id = "gemini-cli-structured-candidate"
+    adapter_version = "0"
+
+    def provider_definition(self):
+        return build_gemini_cli_candidate_definition(NOW)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from core.providers.agentic_adapter import (
     AgenticRuntimeEngineAdapter,
     LocalLaunchContext,
+    LocalPrewarmContext,
+    LocalPrewarmResult,
+    LocalProcessHandle,
+    LocalProcessRuntimeLifecycle,
     RuntimeCancelContext,
     RuntimeCancelResult,
     RuntimeCloseContext,
@@ -56,6 +60,14 @@ class NativeAgentRuntimeController:
         self.installation = installation
         self.engine_adapter = engine_adapter
         self.legacy_adapter = legacy_adapter
+        self.runtime_engine_id = installation.manifest.runtime_engine_id
+        self.adapter_id = installation.manifest.adapter_id
+        self.adapter_version = installation.manifest.adapter_version
+        self.local_process_lifecycle = (
+            self
+            if engine_adapter.local_process_lifecycle is not None
+            else None
+        )
 
     def discover(self) -> tuple[str, str | None]:
         return self.installation.inspector.discover()
@@ -84,11 +96,27 @@ class NativeAgentRuntimeController:
     async def connect(self, context: RuntimePrepareContext) -> RuntimePrepareResult:
         return await self.engine_adapter.prepare(context)
 
+    async def prepare(self, context: RuntimePrepareContext) -> RuntimePrepareResult:
+        return await self.connect(context)
+
     async def resume(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
         return await self.engine_adapter.recover(context)
 
     def start_turn(self, context: RuntimeTurnContext) -> AsyncIterator[RuntimeProviderEvent]:
         return self.engine_adapter.execute(context)
+
+    async def execute(
+        self,
+        context: RuntimeTurnContext,
+    ) -> AsyncIterator[RuntimeProviderEvent]:
+        final_count = 0
+        async for event in self.start_turn(context):
+            if event.event_type == "runtime.output.final":
+                final_count += 1
+                self.final_output((event,))
+                if final_count > 1:
+                    raise RuntimeError("native_agent_final_output_invalid")
+            yield event
 
     async def stream_events(
         self,
@@ -103,6 +131,9 @@ class NativeAgentRuntimeController:
         finals = [event for event in events if event.event_type == "runtime.output.final"]
         if len(finals) != 1:
             raise RuntimeError("native_agent_final_output_invalid")
+        text = finals[0].payload.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise RuntimeError("agent_final_output_empty")
         return finals[0]
 
     async def steer(self, context: NativeSteerContext) -> RuntimeSteerResult:
@@ -121,6 +152,9 @@ class NativeAgentRuntimeController:
     async def interrupt(self, context: RuntimeCancelContext) -> RuntimeCancelResult:
         return await self.engine_adapter.cancel(context)
 
+    async def cancel(self, context: RuntimeCancelContext) -> RuntimeCancelResult:
+        return await self.interrupt(context)
+
     async def recover(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
         return await self.engine_adapter.recover(context)
 
@@ -132,3 +166,31 @@ class NativeAgentRuntimeController:
 
     async def health(self, context: RuntimeHealthContext) -> RuntimeHealth:
         return await self.engine_adapter.health(context)
+
+    async def build_launch_spec(
+        self,
+        context: LocalLaunchContext,
+    ) -> RuntimeBackendLaunchSpec:
+        lifecycle = self._local_lifecycle()
+        return await lifecycle.build_launch_spec(context)
+
+    async def start_process(
+        self,
+        spec: RuntimeBackendLaunchSpec,
+    ) -> LocalProcessHandle:
+        return await self._local_lifecycle().start_process(spec)
+
+    async def interrupt_process(self, handle: LocalProcessHandle) -> None:
+        await self._local_lifecycle().interrupt_process(handle)
+
+    async def close_process(self, handle: LocalProcessHandle) -> None:
+        await self._local_lifecycle().close_process(handle)
+
+    async def prewarm(self, context: LocalPrewarmContext) -> LocalPrewarmResult:
+        return await self._local_lifecycle().prewarm(context)
+
+    def _local_lifecycle(self) -> LocalProcessRuntimeLifecycle:
+        lifecycle = self.engine_adapter.local_process_lifecycle
+        if lifecycle is None:
+            raise RuntimeError("native_agent_launch_not_supported")
+        return lifecycle

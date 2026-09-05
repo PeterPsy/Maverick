@@ -7,9 +7,13 @@ Calendar, Chat, CRM, or Mail. The global gate and every app gate remain off by
 default; Safari, Dock, and iPhone/Home Screen evidence remains a release gate.
 
 The normative resource inventory is
-`docs/product/pwa_cache_resource_inventory.v2.json`. Shared store, lifecycle,
-retry, quota, and cleanup mechanics remain owned by `@maverick/pwa-cache` and
-are operated with `docs/runbooks/pwa_data_cache_m3.md`.
+`docs/product/pwa_cache_resource_inventory.v2.json`. Base Shell consumes the
+machine-readable runtime subset in
+`apps/base-shell/frontend/src/pwaDataCacheResourceDeclarations.v1.json`; the
+operational audit requires an exact bidirectional match for every row carrying
+a runtime schema revision. Shared store, lifecycle, retry, quota, and cleanup
+mechanics remain owned by `@maverick/pwa-cache` and are operated with
+`docs/runbooks/pwa_data_cache_m3.md`.
 
 ## Parent-mediated boundary
 

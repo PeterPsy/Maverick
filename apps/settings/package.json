@@ -8,7 +8,9 @@
     "prebuild": "node ../../scripts/check-node-runtime.mjs",
     "build": "tsc --noEmit && vite build",
     "predev": "node ../../scripts/check-node-runtime.mjs",
-    "dev": "vite --host 0.0.0.0"
+    "dev": "vite --host 0.0.0.0",
+    "pretest": "node ../../scripts/check-node-runtime.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@maverick/pwa-cache": "file:../../packages/pwa-cache",
@@ -26,6 +28,8 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4"
+    "@types/react-dom": "^19.2.4",
+    "happy-dom": "^20.14.0",
+    "vitest": "^4.1.11"
   }
 }

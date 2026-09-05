@@ -1,0 +1,38 @@
+name: PWA Physical Device Release Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      evidence_json:
+        description: Redaction-reviewed maverick.pwa-cache-device-regression.v1 JSON
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-physical-device-matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Materialize redaction-safe evidence
+        env:
+          PWA_DEVICE_EVIDENCE_JSON: ${{ inputs.evidence_json }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(os.environ["PWA_DEVICE_EVIDENCE_JSON"])
+          Path("pwa-device-evidence.json").write_text(
+              json.dumps(payload, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+      - name: Enforce current and complete physical-device matrix
+        run: python scripts/pwa_device_regression.py verify --input pwa-device-evidence.json

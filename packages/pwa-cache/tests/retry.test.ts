@@ -15,6 +15,8 @@ function fingerprint(hexDigit = "a"): string {
   return `sha256:${hexDigit.repeat(64)}`;
 }
 
+const TEST_RETRY_AUDIT_ID = "base-shell.pinned-apps.set.v1";
+
 describe("RAM retry coordinator", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -111,7 +113,7 @@ describe("RAM retry coordinator", () => {
     vi.useFakeTimers();
     const coordinator = new RetryCoordinator({ random: () => 0.5 });
     const contract = {
-      auditId: "test.retry-contract.v1",
+      auditId: TEST_RETRY_AUDIT_ID,
       idempotencyKey: createIdempotencyKey(),
       requestFingerprint: fingerprint(),
       serverDeduplicates: true as const,
@@ -138,7 +140,7 @@ describe("RAM retry coordinator", () => {
     let resolve!: (value: string) => void;
     const operation = vi.fn(() => new Promise<string>((done) => { resolve = done; }));
     const mutation = {
-      auditId: "test.retry-contract.v1",
+      auditId: TEST_RETRY_AUDIT_ID,
       idempotencyKey: createIdempotencyKey(),
       requestFingerprint: fingerprint(),
       serverDeduplicates: true as const,
@@ -159,27 +161,30 @@ describe("RAM retry coordinator", () => {
     await coordinator.run({
       key: "first",
       method: "POST",
-      mutation: { auditId: "test.retry-contract.v1", idempotencyKey, requestFingerprint: fingerprint("a"), serverDeduplicates: true },
+      mutation: { auditId: TEST_RETRY_AUDIT_ID, idempotencyKey, requestFingerprint: fingerprint("a"), serverDeduplicates: true },
       operation: async () => "created",
     });
 
     expect(() => coordinator.run({
       key: "second",
       method: "POST",
-      mutation: { auditId: "test.retry-contract.v1", idempotencyKey, requestFingerprint: fingerprint("b"), serverDeduplicates: true },
+      mutation: { auditId: TEST_RETRY_AUDIT_ID, idempotencyKey, requestFingerprint: fingerprint("b"), serverDeduplicates: true },
       operation: async () => "created-again",
     })).toThrow(/different request fingerprint/);
   });
 
   it("caps mutation attempts even with deduplication", async () => {
     vi.useFakeTimers();
-    const coordinator = new RetryCoordinator({ maxMutationAttempts: 3, random: () => 0.5 });
+    const coordinator = new RetryCoordinator({
+      maxMutationAttempts: 3,
+      random: () => 0.5,
+    });
     const error = transportError();
     const pending = coordinator.run({
       key: "mutation:update",
       method: "PATCH",
       mutation: {
-        auditId: "test.retry-contract.v1",
+        auditId: TEST_RETRY_AUDIT_ID,
         idempotencyKey: createIdempotencyKey(),
         requestFingerprint: fingerprint(),
         serverDeduplicates: true,
@@ -206,7 +211,7 @@ describe("RAM retry coordinator", () => {
         key: "mutation:invalid-fingerprint",
         method: "POST",
         mutation: {
-          auditId: "test.retry-contract.v1",
+          auditId: TEST_RETRY_AUDIT_ID,
           idempotencyKey: createIdempotencyKey(),
           requestFingerprint,
           serverDeduplicates: true,
@@ -232,6 +237,24 @@ describe("RAM retry coordinator", () => {
       },
       operation,
     })).toThrow(/audit id/i);
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it("rejects a well-formed mutation audit id that is absent from the approved registry", () => {
+    const coordinator = new RetryCoordinator();
+    const operation = vi.fn(async () => "created");
+
+    expect(() => coordinator.run({
+      key: "mutation:unregistered",
+      method: "POST",
+      mutation: {
+        auditId: "unknown.retry-contract.v1",
+        idempotencyKey: createIdempotencyKey(),
+        requestFingerprint: fingerprint(),
+        serverDeduplicates: true,
+      },
+      operation,
+    })).toThrow(/approved audit registry/i);
     expect(operation).not.toHaveBeenCalled();
   });
 

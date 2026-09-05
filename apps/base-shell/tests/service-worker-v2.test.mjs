@@ -185,7 +185,7 @@ test("activation cleans obsolete shell and app-static caches without touching un
 });
 
 test("worker observability emits only closed redaction-safe metric names", async () => {
-  const harness = workerHarness();
+  const harness = workerHarness({ clientCount: 2 });
   harness.fetchImpl = async (input) => responseFor(requestPath(input));
   await harness.dispatchExtendable("install");
   const record = records.find(({ url }) => url.includes("index-testhash.js"));
@@ -199,15 +199,21 @@ test("worker observability emits only closed redaction-safe metric names", async
     assert.deepEqual(Object.keys(message).sort(), ["metric", "type"]);
     assert.doesNotMatch(JSON.stringify(message), /index-testhash|https?:|favicon|build/i);
   }
+  assert.equal(
+    harness.clientMessagesByClient.filter((messages) => messages.some((message) => message.type === "MAVERICK_PWA_METRIC")).length,
+    1,
+    "one worker event must be delivered to exactly one metrics collector",
+  );
 });
 
-function workerHarness({ activeWorker = null } = {}) {
+function workerHarness({ activeWorker = null, clientCount = 1 } = {}) {
   const listeners = new Map();
   const caches = new MemoryCacheStorage();
   const harness = {
     caches,
     claimCalls: 0,
     clientMessages: [],
+    clientMessagesByClient: Array.from({ length: clientCount }, () => []),
     fetchImpl: async (input) => responseFor(requestPath(input)),
     skipWaitingCalls: 0,
     unregisterCalls: 0,
@@ -216,7 +222,14 @@ function workerHarness({ activeWorker = null } = {}) {
     addEventListener(type, listener) { listeners.set(type, listener); },
     clients: {
       async claim() { harness.claimCalls += 1; },
-      async matchAll() { return [{ postMessage(message) { harness.clientMessages.push(message); } }]; },
+      async matchAll() {
+        return harness.clientMessagesByClient.map((messages) => ({
+          postMessage(message) {
+            messages.push(message);
+            harness.clientMessages.push(message);
+          },
+        }));
+      },
     },
     location: { origin: "https://maverick.test" },
     registration: {

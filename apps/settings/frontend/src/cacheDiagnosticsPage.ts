@@ -69,6 +69,7 @@ function activityHtml(metrics: PwaCacheMetricsSnapshot): string {
     <div class="settings-cache-diagnostics__grid">
       ${metricHtml('Static hit / miss', ratio(counters.pwa_static_cache_hit, counters.pwa_static_cache_miss))}
       ${metricHtml('Data hit / miss', ratio(counters.pwa_data_cache_hit, counters.pwa_data_cache_miss))}
+      ${metricHtml('Data cache errors', formatCount(counters.pwa_data_cache_error))}
       ${metricHtml('Stale / expired', ratio(counters.pwa_data_cache_stale, counters.pwa_data_cache_expired))}
       ${metricHtml('Revalidated unchanged', formatCount(counters.pwa_revalidate_not_modified))}
       ${metricHtml('Revalidated changed', formatCount(counters.pwa_revalidate_modified))}

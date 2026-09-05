@@ -50,8 +50,13 @@ No M6 metric, cohort decision, or cached derivative may become authorization.
   structured/file data. It resets aggregate M6 metrics only after cleanup is
   complete, preserving incident evidence when deletion remains pending.
 - Metrics persist only fixed aggregate counters/gauges for at most seven days.
-  Pending hashed operation keys stay in RAM and are not serialized. Reasons,
-  URLs, names, ids, payloads, and content are discarded at collection time.
+  Each tab owns an opaque writer shard; reads merge current-generation shards,
+  and a reset marker prevents stale writers from republishing earlier values.
+  A concurrent event ordered after that marker is preserved. Worker metrics go
+  to one window client rather than every tab. Pending hashed operation keys stay
+  in RAM and are not serialized; only pending count and oldest-time aggregates
+  cross a reload. Reasons, URLs, names, ids, payloads, and content are discarded
+  at collection time.
 - The worker stores public, manifest-verified static bytes in named namespaces.
   Its kill switch deletes only those known names. Settings clear intentionally
   does not claim to remove static assets or unrelated origin storage.
@@ -63,11 +68,15 @@ not as durable or securely encrypted storage.
 
 ## Verification and findings
 
-Automated tests cover exact-frame protocol rejection, metric redaction,
-cleanup-cancels-retry, cross-scope lifecycle, corrupt payload removal, quota
-denial, eviction, intermittent-network single-flight, OPFS/IndexedDB failure,
-and worker namespace recovery. `scripts/audit_pwa_cache.py` enforces resource
-and retry review contracts in CI.
+Automated tests cover exact-frame protocol rejection, multi-tab merge/reset
+interleavings, single-recipient worker metrics, metric redaction, revalidation
+error taxonomy, cleanup-cancels-retry, cross-scope lifecycle, corrupt payload
+removal, quota denial, eviction, intermittent-network single-flight,
+OPFS/IndexedDB failure, and worker namespace recovery. The operational audit
+compares the canonical data-class policy, product inventory, runtime resource
+manifest, production mutation sources, and non-overridable runtime retry
+registry. CI runs the complete SDK/chaos and protocol suites plus a DOM test and
+authenticated isolated-frame smoke for Settings → Cache.
 
 No new high-severity issue was found within the reviewed M6 boundary. Remaining
 release conditions are explicit rather than waived: private per-resource

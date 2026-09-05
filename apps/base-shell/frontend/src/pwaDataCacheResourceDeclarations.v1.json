@@ -1,0 +1,89 @@
+{
+  "schema": "maverick.pwa-data-cache-runtime-resources.v1",
+  "policy_revision": "maverick.local-persistence-policy.v2",
+  "canonical_data_classes": [
+    "public",
+    "workspace_internal_fake",
+    "workspace_internal",
+    "personal_data",
+    "credential_or_secret",
+    "regulated_or_customer_data",
+    "host_operational_metadata",
+    "unclassified"
+  ],
+  "resources": [
+    {
+      "app_id": "app-store",
+      "resource": "catalog",
+      "aliases": ["records", "catalog"],
+      "canonical_data_class": "public",
+      "provenance": "app_reference",
+      "local_persistence_policy": "cache",
+      "cache_approved": false,
+      "privacy_approved": false,
+      "regulated_allowlisted": false,
+      "fresh_ttl_ms": 300000,
+      "expiry_ttl_ms": 86400000,
+      "max_entry_bytes": 1048576,
+      "max_scope_bytes": 4194304,
+      "schema_revision": "app-store.catalog.v1"
+    },
+    {
+      "app_id": "fitness-coach",
+      "resource": "sanitized-bootstrap-and-thumbnails",
+      "aliases": ["workouts", "exercises", "runs", "view-state"],
+      "canonical_data_class": "personal_data",
+      "provenance": "app_reference",
+      "local_persistence_policy": "session",
+      "cache_approved": false,
+      "privacy_approved": false,
+      "regulated_allowlisted": false,
+      "fresh_ttl_ms": 300000,
+      "expiry_ttl_ms": 86400000,
+      "max_entry_bytes": 524288,
+      "max_scope_bytes": 16777216,
+      "schema_revision": "fitness-coach.sanitized-bootstrap-and-thumbnails.v1"
+    },
+    {
+      "app_id": "storage",
+      "resource": "file-catalog",
+      "aliases": ["files", "drive-connections", "view-state"],
+      "canonical_data_class": "workspace_internal",
+      "provenance": "attachment",
+      "local_persistence_policy": "cache",
+      "cache_approved": true,
+      "privacy_approved": false,
+      "regulated_allowlisted": false,
+      "fresh_ttl_ms": 30000,
+      "expiry_ttl_ms": 86400000,
+      "max_entry_bytes": 262144,
+      "max_scope_bytes": 16777216,
+      "schema_revision": "storage.file-catalog.v1"
+    },
+    {
+      "app_id": "website-studio",
+      "resource": "site-snapshots",
+      "aliases": [
+        "records",
+        "source",
+        "working-state",
+        "navigation",
+        "preview",
+        "activity",
+        "settings",
+        "view-selection"
+      ],
+      "canonical_data_class": "workspace_internal",
+      "provenance": "app_reference",
+      "local_persistence_policy": "cache",
+      "cache_approved": true,
+      "privacy_approved": false,
+      "regulated_allowlisted": false,
+      "fresh_ttl_ms": 60000,
+      "expiry_ttl_ms": 86400000,
+      "max_entry_bytes": 2097152,
+      "max_scope_bytes": 16777216,
+      "schema_revision": "website-studio.site-snapshots.v2"
+    }
+  ]
+}

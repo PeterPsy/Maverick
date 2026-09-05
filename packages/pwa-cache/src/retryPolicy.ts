@@ -1,3 +1,5 @@
+import mutationRetryRegistry from "./mutationRetryRegistry.v1.json";
+
 export type RetryDisposition = "retryable" | "terminal" | "cancelled";
 
 export type RetryClassification = {
@@ -47,6 +49,9 @@ const RETRYABLE_HTTP_STATUSES = new Set([429, 502, 503, 504]);
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,199}$/u;
 const SHA256_FINGERPRINT_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 const RETRY_AUDIT_ID_PATTERN = /^[a-z0-9][a-z0-9.-]{4,126}\.v[1-9][0-9]*$/u;
+const MUTATION_RETRY_REGISTRY_SCHEMA = "maverick.pwa-mutation-retry-registry.v1";
+export const APPROVED_MUTATION_RETRY_AUDIT_IDS = approvedMutationRetryAuditIds();
+const APPROVED_MUTATION_RETRY_AUDIT_ID_SET = new Set(APPROVED_MUTATION_RETRY_AUDIT_IDS);
 
 export class RetryCancelledError extends Error {
   constructor(message = "Retry operation was cancelled.") {
@@ -94,7 +99,10 @@ export function idempotencyHeaders(contract: MutationRetryContract): Record<stri
   return { "Idempotency-Key": contract.idempotencyKey };
 }
 
-export function validateMutationContract(method: string, contract: MutationRetryContract | undefined): void {
+export function validateMutationContract(
+  method: string,
+  contract: MutationRetryContract | undefined,
+): void {
   if (SAFE_METHODS.has(method) || !contract) {
     return;
   }
@@ -103,6 +111,9 @@ export function validateMutationContract(method: string, contract: MutationRetry
       || !IDEMPOTENCY_KEY_PATTERN.test(contract.idempotencyKey)
       || !SHA256_FINGERPRINT_PATTERN.test(contract.requestFingerprint)) {
     throw new TypeError("Mutation retry requires a registered audit id, stable Idempotency-Key, canonical SHA-256 request fingerprint, and server deduplication.");
+  }
+  if (!APPROVED_MUTATION_RETRY_AUDIT_ID_SET.has(contract.auditId)) {
+    throw new TypeError("Mutation retry audit id is absent from the approved audit registry.");
   }
 }
 
@@ -151,6 +162,20 @@ export function trimOldestStringMap(map: Map<string, string>, limit: number): vo
     if (typeof oldest !== "string") return;
     map.delete(oldest);
   }
+}
+
+function approvedMutationRetryAuditIds(): readonly string[] {
+  const values: unknown = mutationRetryRegistry.audit_ids;
+  if (mutationRetryRegistry.schema !== MUTATION_RETRY_REGISTRY_SCHEMA || !Array.isArray(values)) {
+    return Object.freeze([]);
+  }
+  const ids = values.filter((value): value is string => typeof value === "string");
+  if (ids.length !== values.length
+      || new Set(ids).size !== ids.length
+      || ids.some((auditId) => !RETRY_AUDIT_ID_PATTERN.test(auditId))) {
+    return Object.freeze([]);
+  }
+  return Object.freeze([...ids]);
 }
 
 function isAbortError(error: unknown): boolean {

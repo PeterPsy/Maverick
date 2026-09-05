@@ -14,6 +14,40 @@
     "inventory_max_entry_bytes": 67108864,
     "inventory_max_scope_bytes": 268435456
   },
+  "data_class_persistence": {
+    "public": {
+      "allowed": ["cache"],
+      "cache_requires": []
+    },
+    "workspace_internal_fake": {
+      "allowed": ["deny", "session", "cache"],
+      "cache_requires": ["cache_approved"]
+    },
+    "workspace_internal": {
+      "allowed": ["deny", "session", "cache"],
+      "cache_requires": ["cache_approved"]
+    },
+    "personal_data": {
+      "allowed": ["deny", "session", "cache"],
+      "cache_requires": ["cache_approved", "privacy_approved"]
+    },
+    "regulated_or_customer_data": {
+      "allowed": ["deny", "cache"],
+      "cache_requires": ["cache_approved", "privacy_approved", "regulated_allowlisted"]
+    },
+    "credential_or_secret": {
+      "allowed": ["deny"],
+      "cache_requires": []
+    },
+    "host_operational_metadata": {
+      "allowed": ["deny"],
+      "cache_requires": []
+    },
+    "unclassified": {
+      "allowed": ["deny"],
+      "cache_requires": []
+    }
+  },
   "retry_policy": {
     "safe_methods": [
       "GET",

@@ -105,13 +105,23 @@ local-persistence policy.
 M6 adds a closed, redaction-safe metrics collector and the cross-origin Settings
 operations protocol. The collector stores only aggregate counters, quota
 gauges, and wait-duration summaries; pending salted keys remain in RAM and event
-reasons are discarded. Base Shell is responsible for accepting the protocol
-only from the exact registered Settings frame and for wiring data, file, quota,
-retry, and worker telemetry. An explicit clear cancels pending retry before the
-durable structured/file cleanup.
+reasons are discarded. Tabs persist separate opaque writer shards and merge
+them on read. A shared reset generation prevents a stale tab from resurrecting
+pre-clear counters, and preserves peer events ordered after reset. The service
+worker delivers each metric to one window client, avoiding broadcast
+multiplication. Conditional loader failures explicitly carry the revalidation
+marker; initial-load and local structured-cache failures use
+`pwa_data_cache_error` instead. Base Shell
+accepts the operations protocol only from the exact registered Settings frame
+and wires data, file, quota, retry, and worker telemetry. An explicit clear
+cancels pending retry before the durable structured/file cleanup.
 
 Unsafe retry contracts now also require a versioned `auditId`. Production audit
 ids and their client/server/replay evidence are registered in
-`docs/product/pwa_cache_operational_policy.v1.json` and checked by
-`scripts/audit_pwa_cache.py`; the runtime still requires idempotency,
-fingerprinting, server deduplication, and the three-attempt cap.
+`docs/product/pwa_cache_operational_policy.v1.json`; the exact runtime allowlist
+is loaded from `src/mutationRetryRegistry.v1.json` and cannot be replaced by a
+consumer. `scripts/audit_pwa_cache.py` scans production JavaScript, TypeScript,
+Vue, and Svelte sources across apps and shared packages and requires source,
+policy, runtime registry, server deduplication, and replay evidence to agree.
+The runtime still requires
+idempotency, fingerprinting, server deduplication, and the three-attempt cap.

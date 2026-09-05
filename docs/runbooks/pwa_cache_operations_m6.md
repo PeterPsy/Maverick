@@ -24,12 +24,23 @@ The dashboard reports only aggregate counters:
 - worker install, update, recovery, and error counts.
 
 Counters contain no URL, file name, subject, record id, cache key, principal,
-payload, token, or content. Aggregate counters are retained best-effort for at
-most seven days in the shell origin. Active wait keys are salted hashes held in
-RAM and are never persisted. **Clear cache** cancels pending RAM retry, clears
+payload, token, or content. Each shell tab writes an opaque, independent metric
+shard; dashboard reads merge all current shards, so concurrent tabs never
+overwrite one another. A shared reset-generation marker is the linearization
+point for **Clear cache**: stale writers are ignored, while an event observed
+after the marker is retained. The service worker sends each fixed metric to one
+window client rather than broadcasting it to every tab, preventing duplicate
+counts. Aggregate counters and pending-count/oldest-time summaries are retained
+best-effort for at most seven days in the shell origin. Active wait keys are
+salted hashes held in RAM and are never persisted.
+
+`pwa_revalidate_error` counts only a conditional loader failure; cancellation
+does not count. Local cache, quota, and cache-write failures use the separate
+`pwa_data_cache_error`/quota dimensions and never masquerade as a network
+revalidation failure. **Clear cache** cancels pending RAM retry, clears
 the owned structured and file stores through the durable lifecycle barrier,
-and, only after complete cleanup, resets the aggregate counters. It does not delete server files, static
-shell assets, or unrelated origin storage.
+and, only after complete cleanup, resets the aggregate counters. It does not
+delete server files, static shell assets, or unrelated origin storage.
 
 Treat `pending` cleanup as a failure to complete, not success. Persistent reads
 stay blocked by the cleanup marker until a later clear confirms deletion.
@@ -47,15 +58,22 @@ npm --prefix packages/pwa-cache run typecheck
 npm --prefix packages/pwa-cache test -- --maxWorkers=1
 npm --prefix apps/base-shell test -- --maxWorkers=1
 npm --prefix apps/base-shell run test:service-worker
+npm --prefix apps/settings test -- --maxWorkers=1
+python3 scripts/pwa_shell_cache_smoke.py
 ```
 
 The policy audit verifies every committed frontend manifest and file digest,
-per-asset/total/precache budgets, SDK default budgets, deny-by-default resource
-inventory rules, retryable methods/statuses/attempt cap, and the complete
-client/server/test evidence for every mutation that can retry. CI runs the same
-audit. An unsafe request cannot use `RetryCoordinator` without a valid,
-source-registered `auditId`, stable idempotency key, canonical SHA-256 request
-fingerprint, and declared server deduplication.
+per-asset/total/precache budgets, SDK default budgets, the complete canonical
+data-class policy, and a bidirectional match between the product inventory and
+the JSON manifest consumed by Base Shell's `RESOURCE_DECLARATIONS`. It also
+scans production JavaScript, TypeScript, Vue, and Svelte sources across apps,
+shared packages, Core, and scripts and requires the operational-policy
+registry, runtime JSON registry, client/server evidence, and replay test to
+agree for every mutation that can retry. CI runs the same audit and the
+complete SDK/chaos, broker, worker, Settings DOM, and authenticated
+isolated-frame smoke suites. An unsafe request cannot use `RetryCoordinator`
+without an audit id in the non-overridable runtime registry, stable idempotency
+key, canonical SHA-256 request fingerprint, and declared server deduplication.
 
 The `hardeningChaos.test.ts` suite injects uncertain quota, LRU pressure,
 corrupt persisted payloads, and intermittent transport. A valid server response
@@ -176,3 +194,8 @@ stale evidence, every undeclared diagnostic field, URLs, user/record ids, file
 names, serials, email, tokens, and content. A release stays blocked when the
 physical lab has not produced a current passing record; an emulated run must
 never be relabeled physical.
+
+For a release candidate, dispatch the **PWA Physical Device Release Gate**
+workflow and paste only the redaction-reviewed JSON produced by the matrix.
+That workflow runs the same verifier directly; a green emulated/browser smoke
+does not substitute for this manually supplied physical evidence.

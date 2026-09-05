@@ -98,7 +98,7 @@ export function bindSettingsEvents(context: {
   });
 }
 
-function bindCacheDiagnosticsEvents(context: {
+export function bindCacheDiagnosticsEvents(context: {
   cacheDiagnosticsController: CacheDiagnosticsController;
   showError: (error: unknown) => void;
 }) {

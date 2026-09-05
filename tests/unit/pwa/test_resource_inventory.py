@@ -29,7 +29,13 @@ REQUIRED_FIELDS = {
     "data_event",
     "rollout",
 }
-OPTIONAL_FIELDS = {"policy_prerequisites"}
+OPTIONAL_FIELDS = {
+    "cache_approved",
+    "policy_prerequisites",
+    "privacy_approved",
+    "regulated_allowlisted",
+    "runtime_schema_revision",
+}
 
 
 class PwaResourceInventoryTests(unittest.TestCase):
@@ -64,6 +70,12 @@ class PwaResourceInventoryTests(unittest.TestCase):
             prerequisites = resource.get("policy_prerequisites", [])
             self.assertIsInstance(prerequisites, list)
             self.assertTrue(all(isinstance(value, str) and value.strip() for value in prerequisites))
+            for field in ("cache_approved", "privacy_approved", "regulated_allowlisted"):
+                if field in resource:
+                    self.assertIsInstance(resource[field], bool)
+            if "runtime_schema_revision" in resource:
+                self.assertIsInstance(resource["runtime_schema_revision"], str)
+                self.assertTrue(resource["runtime_schema_revision"].strip())
             for field in ("fresh_ttl_seconds", "expiry_ttl_seconds", "max_entry_bytes", "max_scope_bytes"):
                 self.assertIsInstance(resource[field], int)
                 self.assertGreaterEqual(resource[field], 0)

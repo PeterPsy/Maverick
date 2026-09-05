@@ -1,5 +1,4 @@
 import {
-  LOCAL_PERSISTENCE_POLICY_REVISION,
   PWA_DATA_CACHE_BROKER_ACCEPTED,
   PWA_DATA_CACHE_BROKER_NETWORK_REQUEST,
   PWA_DATA_CACHE_BROKER_RESULT,
@@ -18,7 +17,6 @@ import {
   type ParentDataCacheOpenMessage,
   type ParentDataCacheResultMessage,
   type ParentDataCacheSerializedError,
-  type ResourceCachePolicy,
   type CacheTelemetry,
   type StorageQuotaAdapter,
 } from "@maverick/pwa-cache";
@@ -30,11 +28,10 @@ import {
 } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
 import { revokeShellAuthorization, runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
-
-type ResourceDeclaration = {
-  aliases: readonly string[];
-  policy: ResourceCachePolicy<unknown>;
-};
+import {
+  RESOURCE_DECLARATIONS,
+  type ResourceDeclaration,
+} from "./pwaDataCacheResourceDeclarations";
 
 type BrokerResource = {
   get(entityId: string): Promise<CacheReadResult<unknown> | null>;
@@ -63,68 +60,6 @@ type PwaDataCacheBrokerOptions = {
   principal: Omit<CachePrincipal, "appId">;
   quotaAdapter?: StorageQuotaAdapter;
   telemetry?: CacheTelemetry;
-};
-
-const RESOURCE_DECLARATIONS: Readonly<Record<string, Readonly<Record<string, ResourceDeclaration>>>> = {
-  "app-store": {
-    catalog: declaration({
-      aliases: ["records", "catalog"],
-      dataClass: "public",
-      expiryTtlMs: 86_400_000,
-      freshTtlMs: 300_000,
-      maxEntryBytes: 1_048_576,
-      maxScopeBytes: 4_194_304,
-      provenance: "app_reference",
-      schemaRevision: "app-store.catalog.v1",
-    }),
-  },
-  "fitness-coach": {
-    "sanitized-bootstrap-and-thumbnails": declaration({
-      aliases: ["workouts", "exercises", "runs", "view-state"],
-      dataClass: "personal_data",
-      expiryTtlMs: 86_400_000,
-      freshTtlMs: 300_000,
-      maxEntryBytes: 524_288,
-      maxScopeBytes: 16_777_216,
-      provenance: "app_reference",
-      schemaRevision: "fitness-coach.sanitized-bootstrap-and-thumbnails.v1",
-    }),
-  },
-  "storage": {
-    "file-catalog": declaration({
-      aliases: ["files", "drive-connections", "view-state"],
-      cacheApproved: true,
-      dataClass: "workspace_internal",
-      expiryTtlMs: 86_400_000,
-      freshTtlMs: 30_000,
-      maxEntryBytes: 262_144,
-      maxScopeBytes: 16_777_216,
-      provenance: "attachment",
-      schemaRevision: "storage.file-catalog.v1",
-    }),
-  },
-  "website-studio": {
-    "site-snapshots": declaration({
-      aliases: [
-        "records",
-        "source",
-        "working-state",
-        "navigation",
-        "preview",
-        "activity",
-        "settings",
-        "view-selection",
-      ],
-      cacheApproved: true,
-      dataClass: "workspace_internal",
-      expiryTtlMs: 86_400_000,
-      freshTtlMs: 60_000,
-      maxEntryBytes: 2_097_152,
-      maxScopeBytes: 16_777_216,
-      provenance: "app_reference",
-      schemaRevision: "website-studio.site-snapshots.v2",
-    }),
-  },
 };
 
 export class PwaDataCacheBroker {
@@ -490,53 +425,6 @@ export class PwaDataCacheBroker {
     active.network = null;
     active.port.close();
   }
-}
-
-function declaration(options: {
-  aliases: readonly string[];
-  cacheApproved?: boolean;
-  dataClass: ResourceCachePolicy<unknown>["dataClass"];
-  expiryTtlMs: number;
-  freshTtlMs: number;
-  maxEntryBytes: number;
-  maxScopeBytes: number;
-  provenance: ResourceCachePolicy<unknown>["provenance"];
-  schemaRevision: string;
-}): ResourceDeclaration {
-  return {
-    aliases: options.aliases,
-    policy: {
-      allowStale: true,
-      cacheApproved: options.cacheApproved,
-      dataClass: options.dataClass,
-      expiryTtlMs: options.expiryTtlMs,
-      freshTtlMs: options.freshTtlMs,
-      maxEntryBytes: options.maxEntryBytes,
-      maxScopeBytes: options.maxScopeBytes,
-      policyRevision: LOCAL_PERSISTENCE_POLICY_REVISION,
-      provenance: options.provenance,
-      revalidateOnRead: "always",
-      sanitize: sanitizeStructuredReadModel,
-      schemaRevision: options.schemaRevision,
-    },
-  };
-}
-
-function sanitizeStructuredReadModel(payload: unknown): unknown | null {
-  if (!payload || typeof payload !== "object" || (!Array.isArray(payload) && Object.getPrototypeOf(payload) !== Object.prototype)) {
-    return null;
-  }
-  return isStructuredJson(payload, 0, new Set()) ? payload : null;
-}
-
-function isStructuredJson(value: unknown, depth: number, ancestors: Set<object>): boolean {
-  if (depth > 32) return false;
-  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
-  if (typeof value === "number") return Number.isFinite(value);
-  if (!value || typeof value !== "object" || ancestors.has(value)) return false;
-  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return false;
-  const next = new Set(ancestors).add(value);
-  return (Array.isArray(value) ? value : Object.values(value)).every((item) => isStructuredJson(item, depth + 1, next));
 }
 
 function errorFromMessage(error: ParentDataCacheSerializedError | undefined): Error {

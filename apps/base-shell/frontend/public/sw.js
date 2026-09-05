@@ -215,8 +215,15 @@ async function broadcast(message) {
   clients.forEach((client) => client.postMessage(message));
 }
 
+async function sendMetricToOneClient(metric) {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  clients[0]?.postMessage({ type: "MAVERICK_PWA_METRIC", metric });
+}
+
 function emitMetric(metric) {
-  void broadcast({ type: "MAVERICK_PWA_METRIC", metric }).catch(() => undefined);
+  // Metrics are origin aggregates. Broadcasting would make every open tab
+  // count the same worker operation, so exactly one collector receives it.
+  void sendMetricToOneClient(metric).catch(() => undefined);
 }
 
 self.addEventListener("install", (event) => {
@@ -224,10 +231,7 @@ self.addEventListener("install", (event) => {
     (async () => {
       try {
         await installPrecache();
-        await broadcast({
-          type: "MAVERICK_PWA_METRIC",
-          metric: self.registration.active ? "pwa_sw_update" : "pwa_sw_install",
-        });
+        await sendMetricToOneClient(self.registration.active ? "pwa_sw_update" : "pwa_sw_install");
       } catch (error) {
         emitMetric("pwa_sw_error");
         throw error;
@@ -305,7 +309,7 @@ self.addEventListener("message", (event) => {
           // Repair in place so a failed fetch never discards the already
           // verified entries that still make the active shell usable.
           await recoverPrecache();
-          await broadcast({ type: "MAVERICK_PWA_METRIC", metric: "pwa_sw_recovery" });
+          await sendMetricToOneClient("pwa_sw_recovery");
           await broadcast({ type: "MAVERICK_SW_RECOVERED", build_id: BUILD_ID });
         } catch {
           emitMetric("pwa_sw_error");

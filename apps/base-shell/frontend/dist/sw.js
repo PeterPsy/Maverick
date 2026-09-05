@@ -1,8 +1,8 @@
 "use strict";
 
-const BUILD_ID = "80df47c6e487a26435c86d678035bdcd1d2f0a67da7c068d883db080afa25bb0";
-const PRECACHE = [{"url":"/","path":"index.html","sha256":"861fb2fd39e5b3d8186a7c2340feaf445bf6e39f0547a6821c99469d03a4702c","size_bytes":1977},{"url":"/apps/base-shell/app-icon-lightcolor.png","path":"app-icon-lightcolor.png","sha256":"5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0","size_bytes":95846},{"url":"/apps/base-shell/assets/index-8bLPTgc8.css","path":"assets/index-8bLPTgc8.css","sha256":"0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3","size_bytes":70405},{"url":"/apps/base-shell/assets/index-BGhTykcm.js","path":"assets/index-BGhTykcm.js","sha256":"445bf01d8972c77047ae6176dd3571ad531b10e64ce7b150d261773ef99ceef4","size_bytes":402828},{"url":"/apps/base-shell/assets/LoginPaperBackground-P8uA31dA.js","path":"assets/LoginPaperBackground-P8uA31dA.js","sha256":"713a6a59bb1b31266b80c3e6dbf76a8e647fbc15af6e35173d9027720e3e3e06","size_bytes":25087},{"url":"/apps/base-shell/maverick-logotype.svg","path":"maverick-logotype.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/apps/base-shell/maverick-mark.svg","path":"maverick-mark.svg","sha256":"443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983","size_bytes":17902},{"url":"/apps/base-shell/pwa-apple-touch-icon.png","path":"pwa-apple-touch-icon.png","sha256":"13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb","size_bytes":4075},{"url":"/apps/base-shell/pwa-logo-192.png","path":"pwa-logo-192.png","sha256":"d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24","size_bytes":4429},{"url":"/apps/base-shell/pwa-logo.png","path":"pwa-logo.png","sha256":"1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10","size_bytes":16936},{"url":"/apps/base-shell/pwa-maskable-logo.png","path":"pwa-maskable-logo.png","sha256":"5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031","size_bytes":17394},{"url":"/apps/base-shell/sidebar-logo-black.svg","path":"sidebar-logo-black.svg","sha256":"e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f","size_bytes":6750},{"url":"/apps/base-shell/sidebar-logo.svg","path":"sidebar-logo.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/favicon.ico","path":"favicon.ico","sha256":"fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912","size_bytes":270622},{"url":"/manifest.webmanifest","path":"manifest.webmanifest","sha256":"68094b835f2838d27849bd900f816e09370984de8c3646619c0b10ee3d5f5695","size_bytes":627},{"url":"/material-symbols-rounded.woff2","path":"material-symbols-rounded.woff2","sha256":"aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97","size_bytes":414656}];
-const IMMUTABLE_SHELL_ASSETS = [{"url":"/apps/base-shell/assets/LoginPaperBackground-P8uA31dA.js","sha256":"713a6a59bb1b31266b80c3e6dbf76a8e647fbc15af6e35173d9027720e3e3e06","size_bytes":25087},{"url":"/apps/base-shell/assets/index-8bLPTgc8.css","sha256":"0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3","size_bytes":70405},{"url":"/apps/base-shell/assets/index-BGhTykcm.js","sha256":"445bf01d8972c77047ae6176dd3571ad531b10e64ce7b150d261773ef99ceef4","size_bytes":402828}];
+const BUILD_ID = "41c05100ee3cbeb274460548bad57f2d30bb0208934a10747e503c66b081213b";
+const PRECACHE = [{"url":"/","path":"index.html","sha256":"dc6837ced9665df0d59ecfe6d8c051d148a5f33c5ebf3861ad2cf49af6715422","size_bytes":1977},{"url":"/apps/base-shell/app-icon-lightcolor.png","path":"app-icon-lightcolor.png","sha256":"5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0","size_bytes":95846},{"url":"/apps/base-shell/assets/index-8bLPTgc8.css","path":"assets/index-8bLPTgc8.css","sha256":"0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3","size_bytes":70405},{"url":"/apps/base-shell/assets/index-CJHKCMqE.js","path":"assets/index-CJHKCMqE.js","sha256":"1cbe8aeac8b18cc6bd7b87b5493c904db7274ff4cb91597d2ecd65e4ae532bd3","size_bytes":410201},{"url":"/apps/base-shell/assets/LoginPaperBackground-D20c0gRf.js","path":"assets/LoginPaperBackground-D20c0gRf.js","sha256":"e592b2f00888ee2a58eb04865fc91d30856f382d10ae34dba6d12cb14a22be9c","size_bytes":25087},{"url":"/apps/base-shell/maverick-logotype.svg","path":"maverick-logotype.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/apps/base-shell/maverick-mark.svg","path":"maverick-mark.svg","sha256":"443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983","size_bytes":17902},{"url":"/apps/base-shell/pwa-apple-touch-icon.png","path":"pwa-apple-touch-icon.png","sha256":"13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb","size_bytes":4075},{"url":"/apps/base-shell/pwa-logo-192.png","path":"pwa-logo-192.png","sha256":"d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24","size_bytes":4429},{"url":"/apps/base-shell/pwa-logo.png","path":"pwa-logo.png","sha256":"1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10","size_bytes":16936},{"url":"/apps/base-shell/pwa-maskable-logo.png","path":"pwa-maskable-logo.png","sha256":"5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031","size_bytes":17394},{"url":"/apps/base-shell/sidebar-logo-black.svg","path":"sidebar-logo-black.svg","sha256":"e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f","size_bytes":6750},{"url":"/apps/base-shell/sidebar-logo.svg","path":"sidebar-logo.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/favicon.ico","path":"favicon.ico","sha256":"fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912","size_bytes":270622},{"url":"/manifest.webmanifest","path":"manifest.webmanifest","sha256":"68094b835f2838d27849bd900f816e09370984de8c3646619c0b10ee3d5f5695","size_bytes":627},{"url":"/material-symbols-rounded.woff2","path":"material-symbols-rounded.woff2","sha256":"aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97","size_bytes":414656}];
+const IMMUTABLE_SHELL_ASSETS = [{"url":"/apps/base-shell/assets/LoginPaperBackground-D20c0gRf.js","sha256":"e592b2f00888ee2a58eb04865fc91d30856f382d10ae34dba6d12cb14a22be9c","size_bytes":25087},{"url":"/apps/base-shell/assets/index-8bLPTgc8.css","sha256":"0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3","size_bytes":70405},{"url":"/apps/base-shell/assets/index-CJHKCMqE.js","sha256":"1cbe8aeac8b18cc6bd7b87b5493c904db7274ff4cb91597d2ecd65e4ae532bd3","size_bytes":410201}];
 const STATIC_CACHE_PREFIX = "maverick-static-v2:";
 const STATIC_CACHE_NAME = `${STATIC_CACHE_PREFIX}${BUILD_ID}`;
 const LEGACY_STATIC_CACHE_NAMES = new Set(["maverick-app-static-v2", "maverick-base-shell-v3"]);
@@ -215,8 +215,15 @@ async function broadcast(message) {
   clients.forEach((client) => client.postMessage(message));
 }
 
+async function sendMetricToOneClient(metric) {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  clients[0]?.postMessage({ type: "MAVERICK_PWA_METRIC", metric });
+}
+
 function emitMetric(metric) {
-  void broadcast({ type: "MAVERICK_PWA_METRIC", metric }).catch(() => undefined);
+  // Metrics are origin aggregates. Broadcasting would make every open tab
+  // count the same worker operation, so exactly one collector receives it.
+  void sendMetricToOneClient(metric).catch(() => undefined);
 }
 
 self.addEventListener("install", (event) => {
@@ -224,10 +231,7 @@ self.addEventListener("install", (event) => {
     (async () => {
       try {
         await installPrecache();
-        await broadcast({
-          type: "MAVERICK_PWA_METRIC",
-          metric: self.registration.active ? "pwa_sw_update" : "pwa_sw_install",
-        });
+        await sendMetricToOneClient(self.registration.active ? "pwa_sw_update" : "pwa_sw_install");
       } catch (error) {
         emitMetric("pwa_sw_error");
         throw error;
@@ -305,7 +309,7 @@ self.addEventListener("message", (event) => {
           // Repair in place so a failed fetch never discards the already
           // verified entries that still make the active shell usable.
           await recoverPrecache();
-          await broadcast({ type: "MAVERICK_PWA_METRIC", metric: "pwa_sw_recovery" });
+          await sendMetricToOneClient("pwa_sw_recovery");
           await broadcast({ type: "MAVERICK_SW_RECOVERED", build_id: BUILD_ID });
         } catch {
           emitMetric("pwa_sw_error");

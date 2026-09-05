@@ -7,12 +7,12 @@ import {
   type PwaCacheCounterMetric,
   type PwaCacheMetricsCollectorOptions,
   type PwaCacheMetricsSnapshot,
-  type PwaCacheMetricsStorage,
   type PwaServiceWorkerMetric,
   type RetryTelemetryEvent,
   type StorageQuotaTelemetryEvent,
 } from "./metricsTypes";
 import {
+  MetricsShardPersistence,
   browserStorage,
   emptyCounters,
   emptyQuota,
@@ -20,11 +20,11 @@ import {
   finiteBytes,
   finiteInteger,
   finiteTimestamp,
-  parsePersistedMetrics,
   positive,
   positiveInteger,
-  type PersistedMetrics,
+  type PersistedMetricsShard,
 } from "./metricsPersistence";
+import { aggregateMetricsShards } from "./metricsAggregation";
 
 const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 const MAX_PENDING_KEYS = 4_096;
@@ -37,8 +37,8 @@ export class PwaCacheMetricsCollector {
   private readonly pendingWaits = new Map<string, number>();
   private quota: PwaCacheMetricsSnapshot["quota"] = emptyQuota();
   private readonly retentionMs: number;
-  private readonly storage: PwaCacheMetricsStorage | null;
-  private readonly storageKey: string;
+  private readonly persistence: MetricsShardPersistence | null;
+  private resetId = "initial";
   private updatedAt: number;
   private waitDurations = emptyWaitDurations();
   private windowStartedAt: number;
@@ -46,12 +46,20 @@ export class PwaCacheMetricsCollector {
   constructor(options: PwaCacheMetricsCollectorOptions = {}) {
     this.now = options.now ?? Date.now;
     this.retentionMs = positive(options.retentionMs, DEFAULT_RETENTION_MS);
-    this.storage = options.storage === undefined ? browserStorage() : options.storage;
-    this.storageKey = options.storageKey?.trim() || PWA_CACHE_METRICS_STORAGE_KEY;
+    const storageKey = options.storageKey?.trim() || PWA_CACHE_METRICS_STORAGE_KEY;
+    const storage = options.storage === undefined ? browserStorage() : options.storage;
+    this.persistence = storage
+      ? new MetricsShardPersistence(storage, storageKey, options.collectorId)
+      : null;
     const timestamp = finiteTimestamp(this.now(), Date.now());
-    this.windowStartedAt = timestamp;
+    const reset = this.persistence?.currentReset();
+    this.resetId = reset?.resetId ?? this.resetId;
+    this.windowStartedAt = reset && reset.resetAt <= timestamp && reset.resetAt > 0
+      ? reset.resetAt
+      : timestamp;
     this.updatedAt = timestamp;
-    this.restore(timestamp);
+    const restored = this.persistence?.loadOwn(timestamp, this.retentionMs, this.resetId);
+    if (restored) this.restoreOwn(restored);
   }
 
   recordDataCache(event: CacheTelemetryEvent): void {
@@ -117,34 +125,17 @@ export class PwaCacheMetricsCollector {
 
   snapshot(): PwaCacheMetricsSnapshot {
     const timestamp = this.ensureCurrentWindow();
-    const pendingStarts = [...this.pendingWaits.values()];
-    return {
-      schema: PWA_CACHE_METRICS_SCHEMA,
-      counters: { ...this.counters },
-      quota: { ...this.quota },
-      requestWait: {
-        ...this.waitDurations,
-        averageDurationMs: this.waitDurations.durationObservations > 0
-          ? Math.round(this.waitDurations.totalDurationMs / this.waitDurations.durationObservations)
-          : 0,
-        oldestPendingMs: pendingStarts.length
-          ? Math.max(0, timestamp - Math.min(...pendingStarts))
-          : null,
-        pendingCount: pendingStarts.length,
-      },
-      updatedAt: this.updatedAt,
-      windowStartedAt: this.windowStartedAt,
-    };
+    const own = this.persistedShard();
+    const peers = this.persistence?.readPeers(timestamp, this.retentionMs, this.resetId) ?? [];
+    return aggregateMetricsShards([own, ...peers], timestamp);
   }
 
   reset(): void {
     const timestamp = finiteTimestamp(this.now(), Date.now());
+    const marker = this.persistence?.reset(timestamp);
+    if (marker) this.resetId = marker.resetId;
     this.resetState(timestamp);
-    try {
-      this.storage?.removeItem(this.storageKey);
-    } catch {
-      return;
-    }
+    this.persist();
   }
 
   private increment(metric: PwaCacheCounterMetric, amount?: number): void {
@@ -156,13 +147,10 @@ export class PwaCacheMetricsCollector {
 
   private ensureCurrentWindow(): number {
     const timestamp = finiteTimestamp(this.now(), this.updatedAt);
+    this.synchronizeReset(timestamp);
     if (timestamp < this.windowStartedAt || timestamp - this.windowStartedAt > this.retentionMs) {
       this.resetState(timestamp);
-      try {
-        this.storage?.removeItem(this.storageKey);
-      } catch {
-        // Metrics retention is enforced in RAM even when storage is denied.
-      }
+      this.persistence?.removeOwn();
     }
     return timestamp;
   }
@@ -203,49 +191,44 @@ export class PwaCacheMetricsCollector {
   }
 
   private persist(): void {
-    if (!this.storage) return;
-    const snapshot = this.snapshot();
-    const persisted: PersistedMetrics = {
-      ...snapshot,
-      requestWait: {
-        averageDurationMs: snapshot.requestWait.averageDurationMs,
-        durationObservations: snapshot.requestWait.durationObservations,
-        maxDurationMs: snapshot.requestWait.maxDurationMs,
-        totalDurationMs: snapshot.requestWait.totalDurationMs,
-      },
-    };
-    try {
-      this.storage.setItem(this.storageKey, JSON.stringify(persisted));
-    } catch {
-      // Metrics are best-effort and never participate in the cache path.
-    }
+    this.persistence?.persist(this.persistedShard());
   }
 
-  private restore(now: number): void {
-    if (!this.storage) return;
-    try {
-      const raw = this.storage.getItem(this.storageKey);
-      const restored = raw ? parsePersistedMetrics(raw) : null;
-      if (!restored
-          || now - restored.windowStartedAt > this.retentionMs
-          || restored.windowStartedAt > now
-          || restored.updatedAt < restored.windowStartedAt
-          || restored.updatedAt > now) {
-        if (raw) this.storage.removeItem(this.storageKey);
-        return;
-      }
-      this.counters = restored.counters;
-      this.quota = restored.quota;
-      this.updatedAt = restored.updatedAt;
-      this.waitDurations = restored.requestWait;
-      this.windowStartedAt = restored.windowStartedAt;
-    } catch {
-      try {
-        this.storage.removeItem(this.storageKey);
-      } catch {
-        // A denied diagnostics store must not affect cache behavior.
-      }
-    }
+  private persistedShard(): PersistedMetricsShard {
+    const pendingStarts = [...this.pendingWaits.values()];
+    return {
+      schema: PWA_CACHE_METRICS_SCHEMA,
+      collectorId: this.persistence?.collectorId ?? "memory",
+      counters: { ...this.counters },
+      quota: { ...this.quota },
+      requestWait: {
+        ...this.waitDurations,
+        averageDurationMs: this.waitDurations.durationObservations > 0
+          ? Math.round(this.waitDurations.totalDurationMs / this.waitDurations.durationObservations)
+          : 0,
+        oldestPendingStartedAt: pendingStarts.length ? Math.min(...pendingStarts) : null,
+        pendingCount: pendingStarts.length,
+      },
+      resetId: this.resetId,
+      updatedAt: this.updatedAt,
+      windowStartedAt: this.windowStartedAt,
+    };
+  }
+
+  private restoreOwn(restored: PersistedMetricsShard): void {
+    this.counters = restored.counters;
+    this.quota = restored.quota;
+    this.updatedAt = restored.updatedAt;
+    this.waitDurations = restored.requestWait;
+    this.windowStartedAt = restored.windowStartedAt;
+  }
+
+  private synchronizeReset(timestamp: number): void {
+    const marker = this.persistence?.currentReset();
+    if (!marker || marker.resetId === this.resetId) return;
+    this.resetId = marker.resetId;
+    this.resetState(marker.resetAt <= timestamp ? marker.resetAt : timestamp);
+    this.persistence?.removeOwn();
   }
 }
 
@@ -262,7 +245,9 @@ function dataCacheMetric(event: CacheTelemetryEvent): PwaCacheCounterMetric | nu
   if (event.kind === "expired") return "pwa_data_cache_expired";
   if (event.kind === "not_modified") return "pwa_revalidate_not_modified";
   if (event.kind === "write" && event.revalidation === true) return "pwa_revalidate_modified";
-  if (event.kind === "error") return "pwa_revalidate_error";
+  if (event.kind === "error") return event.revalidation === true
+    ? "pwa_revalidate_error"
+    : "pwa_data_cache_error";
   return null;
 }
 

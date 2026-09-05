@@ -1624,8 +1624,16 @@ isolation. Settings requests diagnostics or a bounded clear over a private
 in the active workspace/session generation. The response contains aggregate
 byte/entry/quota gauges and fixed cache, revalidation, eviction, retry/wait,
 and worker counters. It contains no resource key, principal, URL, file name,
-record id, payload, token, or content. Active wait identities are salted and
-RAM-only; the persisted seven-day metrics window contains only aggregates.
+record id, payload, token, or content. Each top-level tab owns an opaque
+localStorage writer shard and dashboard reads merge only shards in the current
+reset generation. The generation marker linearizes clear across tabs: an old
+writer cannot resurrect counters, while a peer event after reset is retained.
+The root worker sends a metric to exactly one window client so a shared worker
+event is not multiplied by the number of tabs. Active wait identities are
+salted and RAM-only; the persisted seven-day metrics window contains only
+aggregate counters, wait counts, and timestamps. Conditional loader failures
+explicitly mark revalidation telemetry; initial-load and local cache failures
+use the separate data-cache error dimension.
 Explicit clear cancels pending retry, runs the existing durable structured/file
 cleanup barrier, and resets metrics only after complete deletion. It neither enumerates cached content nor
 deletes shell static assets or unrelated origin storage.
@@ -1638,19 +1646,24 @@ buckets are feature- and dimension-specific, monotonic as percentages rise,
 and never projected to clients. Core applies the same resolved-session cohort
 to `/api/pwa/config` and per-app registry gates without exposing its inputs.
 The source-controlled operational policy fixes frontend/runtime byte budgets,
-the retry classifier, and the reviewed mutation registry. CI verifies every
-committed frontend manifest, the deny-by-default resource inventory, and that
-each retrying mutation has a runtime-validated audit id plus client, server
-deduplication, and replay-test evidence. Physical-device evidence has a
-separate complete/fresh/redaction-safe verifier and remains mandatory at the
-release gate; emulation cannot satisfy it.
+the complete canonical data-class mapping, the retry classifier, and the
+reviewed mutation registry. Base Shell constructs `RESOURCE_DECLARATIONS` from
+an audited JSON manifest; CI compares it bidirectionally with the product
+inventory, scans production JS/TS/component sources across apps and shared
+packages, and requires every retrying mutation to match the non-overridable
+runtime audit-id registry plus client, server-deduplication, and replay-test
+evidence. CI also executes
+the complete SDK/chaos, worker/broker, Settings DOM, and authenticated
+isolated-frame smoke suites. Physical-device evidence has a separately
+dispatchable complete/fresh/redaction-safe verifier and remains mandatory at
+the release gate; emulation cannot satisfy it.
 
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
 for early hints. Only transport/timeouts and `429/502/503/504` are retryable by
 the standard classifier. An unsafe request remains one-shot unless it carries
 a stable `Idempotency-Key`, exact request fingerprint, and a declared server
-deduplication contract whose audit id is registered in the operational policy;
+deduplication contract whose audit id is present in the exact runtime registry;
 eligible mutations are capped at three attempts and
 still cross current server authorization and admission. `401` and `403` remain
 the terminal request errors even when their cleanup changes retry scope; they

@@ -116,7 +116,7 @@ describe("Base Shell PWA cache operations broker", () => {
 
   it("retains incident metrics when durable cleanup remains pending", async () => {
     const metrics = createPwaCacheMetricsCollector({ now: () => 1_000, storage: null });
-    metrics.recordDataCache({ kind: "error", reason: "redacted" });
+    metrics.recordDataCache({ kind: "error", reason: "redacted", revalidation: true });
     const lifecycle = {
       clearAll: vi.fn(async () => ({ pendingCleanupCount: 1, removed: 0, status: "pending" as const })),
       diagnostics: vi.fn(async () => diagnostics()),

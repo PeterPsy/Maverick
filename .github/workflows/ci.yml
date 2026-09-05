@@ -92,6 +92,45 @@ jobs:
         working-directory: ${{ matrix.app }}
         run: npm run test:e2e
 
+  pwa-cache-hardening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: npm
+          cache-dependency-path: |
+            apps/base-shell/package-lock.json
+            apps/chat/package-lock.json
+            apps/settings/package-lock.json
+            packages/pwa-cache/package-lock.json
+      - name: Install Core and PWA frontend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          npm --prefix packages/pwa-cache ci
+          npm --prefix apps/base-shell ci
+          npm --prefix apps/chat ci
+          npm --prefix apps/settings ci
+      - name: Typecheck PWA SDK
+        run: npm --prefix packages/pwa-cache run typecheck
+      - name: Run complete PWA SDK hardening suite
+        run: npm --prefix packages/pwa-cache test -- --maxWorkers=1
+      - name: Run worker, build, and broker protocol tests
+        run: npm --prefix apps/base-shell run test:service-worker
+      - name: Run Settings cache interaction tests
+        run: npm --prefix apps/settings test -- --maxWorkers=1
+      - name: Install Chromium for authenticated isolated-frame smoke
+        working-directory: apps/chat
+        run: npx playwright install --with-deps chromium
+      - name: Authenticated Settings cache and shell recovery smoke
+        run: python scripts/pwa_shell_cache_smoke.py
+
   committed-dist:
     runs-on: ubuntu-latest
     needs:

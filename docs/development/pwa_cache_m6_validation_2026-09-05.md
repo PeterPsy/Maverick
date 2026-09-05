@@ -1,75 +1,85 @@
 # PWA Cache M6 Validation — 2026-09-05
 
-Status: automated M6 gate complete; physical-device release evidence pending.
+Status: M6 review findings remediated and M6 automated gates green;
+physical-device and resource-specific rollout gates remain pending.
 
 ## Implemented scope
 
 | Plan item | Evidence |
 |---|---|
-| PWA-090/091 | Closed aggregate metric schema, seven-day bounded persistence, Base Shell operations broker, and Settings cache/space dashboard |
-| PWA-092 | `docs/security/pwa_cache_m6_review.md` plus exact-frame, redaction, corruption, and cleanup tests |
+| PWA-090/091 | Closed aggregate metric schema, per-tab writer shards, generation-linearized reset, single-recipient worker events, Base Shell operations broker, and Settings cache/space dashboard |
+| PWA-092 | `docs/security/pwa_cache_m6_review.md` plus exact-frame, redaction, corruption, multi-tab, and cleanup tests |
 | PWA-093 | `packages/pwa-cache/tests/hardeningChaos.test.ts` covers quota failure, LRU pressure, corrupt payload, and intermittent single-flight transport |
 | PWA-094 | Deterministic, monotonic workspace/user cohort gates in `core/pwa/rollout.py` |
 | PWA-095 | Rollback and namespace-bounded worker recovery in `docs/runbooks/pwa_cache_operations_m6.md` |
 | PWA-096 | Cache/space-only user guidance in `docs/product/pwa_cache_user_guide.md` |
-| PWA-097 | CI audit of every frontend build's asset/total budget and every declared manifest digest/output |
-| PWA-098 | Policy-derived physical matrix template/verifier with a 90-day freshness and redaction gate |
-| PWA-099 | Runtime-required mutation `auditId` and source/policy/client/server/replay audit |
+| PWA-097 | CI audit of every frontend build plus canonical class rules and exact inventory/runtime declaration parity |
+| PWA-098 | Policy-derived physical matrix/verifier and a dispatchable CI release-gate workflow; no physical evidence is claimed here |
+| PWA-099 | Non-overridable runtime mutation registry and repository-wide production JS/TS/component source/policy/client/server/replay audit |
 
 No data-cache, file-cache, or per-app rollout flag was enabled by this work.
 The existing service-worker default is unchanged.
 
-## Final automated results
+## Review remediation
 
-- `packages/pwa-cache`: TypeScript check passed; **15 files / 122 tests** passed.
+- Metrics no longer use a last-writer-wins shared document. Each tab writes an
+  opaque shard; snapshots merge current shards and ignore stale generations.
+  Reset uses one shared generation marker and preserves events ordered after
+  that marker, including a tested reset/write interleaving.
+- The service worker sends each metric to one window client, preventing one
+  worker operation from being counted once per open tab.
+- `pwa_revalidate_error` is emitted only when the conditional loader fails.
+  Local persistence failures use `pwa_data_cache_error` and quota metrics.
+- Base Shell builds `RESOURCE_DECLARATIONS` directly from
+  `pwaDataCacheResourceDeclarations.v1.json`. The audit compares that manifest
+  bidirectionally with the product inventory and validates the complete
+  `RuntimeDataClass` set and every class-specific approval gate.
+- Mutation discovery covers JavaScript, TypeScript, Vue, and Svelte production
+  sources under apps (including Storage), shared packages, Core, and scripts.
+  Operational evidence and the JSON registry imported by the runtime must
+  match exactly; callers cannot replace the approved registry.
+- CI explicitly runs the PWA SDK typecheck and complete suite (including chaos,
+  metrics, and protocols), Base Shell worker/broker tests, Settings DOM
+  interactions, and the authenticated isolated-frame shell smoke. A separate
+  workflow directly invokes the physical-evidence verifier.
+
+## Automated results
+
+- `packages/pwa-cache`: TypeScript check passed; **15 files / 128 tests** passed.
 - Base Shell: **34 files / 185 tests** passed.
 - Service-worker/build/broker suite: **16 tests** passed.
-- Focused Python M6/API/rollout suite: **17 tests** passed.
-- Settings app shard in the repository fast suite: **23 tests**, **9 skipped**, no failure.
-- `python3 scripts/audit_pwa_cache.py`: passed against the final generated assets.
-- Targeted Python compilation and `git diff --check`: passed.
-- Final manifest ids:
-  - Base Shell: `80df47c6e487a26435c86d678035bdcd1d2f0a67da7c068d883db080afa25bb0`
-  - Settings: `58f785c9fdeec337e96f80fd4109ae16b7af5fe9e3b76e6b24ae7ee143eb6787`
+- Settings frontend: TypeScript/build passed; **1 file / 2 DOM tests** passed.
+- Focused PWA API, rollout, audit, inventory, and device-policy Python suite:
+  **30 tests** passed.
+- `python3 scripts/audit_pwa_cache.py`: passed against the generated assets.
+- JavaScript/Python syntax checks and `git diff --check`: passed.
+- Authenticated Chromium shell/Settings smoke: passed with **16** verified
+  precache records, isolated-origin refresh/clear, transport loss, restart, and
+  recovery.
+- Official frontend build ids:
+  - Base Shell: `41c05100ee3cbeb274460548bad57f2d30bb0208934a10747e503c66b081213b`
+  - Settings: `cd88915b042c82cbe578c3dc08f4d30ae6985823d54c10e631d632133bcf23c4`
 
-The final Settings artifact was produced through the official app frontend
-build. The official Base Shell build succeeded earlier in the validation, but
-the final refresh attempt was rejected with `authentication_required` after
-the shared CLI session changed. The final Base Shell artifact was therefore
-rebuilt with its app-owned `npm run build`; TypeScript, manifest digest, asset
-budget, worker, and full frontend tests all passed afterward.
+The repository-wide unused-import checker still reports only the unrelated
+pre-existing import in `core/runtime/lifecycle_service_sessions.py`; that
+concurrently owned file is not changed by this remediation.
 
-## Repository-wide baseline findings
+The authenticated Settings → Cache smoke is now a required CI command and
+fails rather than skipping when Chromium is unavailable. It verifies the real
+login, isolated Settings frame, dashboard refresh, two-step clear, shell
+precache, transport loss, restart, and recovery. The DOM-level test separately
+forces a durable `pending` cleanup result and proves that confirmation remains
+available with an error rather than reporting success.
 
-`python3 scripts/test_suite.py --level fast` ran all configured shards. M6 and
-the app shards passed, while the aggregate command remained non-zero for
-unrelated repository/environment findings already present at `HEAD`:
-
-- the Codex artifact-history test invoked plain Git, which rejected repository
-  ownership; the test passed when rerun with the repository supplied as Git's
-  safe directory;
-- one runtime process-control assertion was transient and passed immediately
-  when rerun alone;
-- repository convention checks report
-  `tests/unit/api/test_app_mounts.py:1451>1436` and
-  `core/runtime/lifecycle_service_sessions.py:332>300`; both files and line
-  counts are unchanged from `HEAD`; and
-- `scripts/check_unused_imports.py` reports the pre-existing unused
-  `fork_hosted_text_execution_binding` import in the same unchanged lifecycle
-  module.
-
-These unrelated files were not modified.
-
-## Open physical gate
+## Open release gates
 
 No physical Safari, iPhone Home Screen, macOS Dock, or Chrome/Edge device run
-was available in this environment, so none is claimed. Before a private cache
-rollout or the policy freshness deadline, generate the matrix with
-`scripts/pwa_device_regression.py template`, execute it on the required
-physical containers, and require `verify` to pass. Emulation cannot satisfy
-this gate.
+was available in this environment, so none is claimed. A release owner must run
+the complete generated matrix and dispatch **PWA Physical Device Release Gate**
+with the current redaction-reviewed evidence. Emulation and the authenticated
+Chromium CI smoke cannot satisfy this gate.
 
-Core was not restarted because no live rollout was activated and a restart
-would disrupt concurrent repository work. A deployment must restart its Core
-process after installing this code or changing environment-backed cohort
-values, then verify health and the authenticated `/api/pwa/config` projection.
+M5 is also intentionally not relabeled complete: Calendar and Chat remain the
+second tranche, and CRM/Mail remain denied pending their explicit privacy
+approvals. Those product/privacy decisions are not inferred by this M6
+hardening change. All related flags therefore remain fail-closed.

@@ -12,6 +12,20 @@ class MemoryStorage implements Storage {
   key(index: number): string | null { return [...this.values.keys()][index] ?? null; }
   removeItem(key: string): void { this.values.delete(key); }
   setItem(key: string, value: string): void { this.values.set(key, value); }
+  serializedValues(): string { return [...this.values.values()].join("\n"); }
+  writerKeys(): string[] { return [...this.values.keys()].filter((key) => key.includes(":writer:")); }
+}
+
+class ResetInterleavingStorage extends MemoryStorage {
+  afterResetMarker: (() => void) | null = null;
+
+  override setItem(key: string, value: string): void {
+    super.setItem(key, value);
+    if (!key.endsWith(":reset") || !this.afterResetMarker) return;
+    const callback = this.afterResetMarker;
+    this.afterResetMarker = null;
+    callback();
+  }
 }
 
 describe("redaction-safe PWA cache metrics", () => {
@@ -35,7 +49,7 @@ describe("redaction-safe PWA cache metrics", () => {
       pwa_quota_estimate: 1,
     });
     expect(snapshot.quota).toMatchObject({ quotaBytes: 1_000, supported: true, usageBytes: 250 });
-    const persisted = storage.getItem(PWA_CACHE_METRICS_STORAGE_KEY) ?? "";
+    const persisted = storage.serializedValues();
     expect(persisted).not.toContain("secret.test");
     expect(persisted).not.toContain("customer-record-id");
     expect(persisted).not.toContain("signed-url");
@@ -71,7 +85,7 @@ describe("redaction-safe PWA cache metrics", () => {
       pendingCount: 0,
       totalDurationMs: 2_000,
     });
-    expect(storage.getItem(PWA_CACHE_METRICS_STORAGE_KEY)).not.toContain("opaque-");
+    expect(storage.serializedValues()).not.toContain("opaque-");
   });
 
   it("restores valid aggregates but discards stale or malformed documents", () => {
@@ -89,9 +103,10 @@ describe("redaction-safe PWA cache metrics", () => {
 
     const future = createPwaCacheMetricsCollector({ now: () => 4_000, storage });
     future.recordServiceWorker("pwa_static_cache_hit");
-    const corrupted = JSON.parse(storage.getItem(PWA_CACHE_METRICS_STORAGE_KEY) ?? "{}") as { updatedAt: number };
+    const writerKey = storage.writerKeys().at(-1) as string;
+    const corrupted = JSON.parse(storage.getItem(writerKey) ?? "{}") as { updatedAt: number };
     corrupted.updatedAt = 5_000;
-    storage.setItem(PWA_CACHE_METRICS_STORAGE_KEY, JSON.stringify(corrupted));
+    storage.setItem(writerKey, JSON.stringify(corrupted));
     expect(createPwaCacheMetricsCollector({ now: () => 4_500, storage })
       .snapshot().counters.pwa_static_cache_hit).toBe(0);
   });
@@ -116,5 +131,70 @@ describe("redaction-safe PWA cache metrics", () => {
     expect(collector.recordServiceWorker("pwa_static_cache_hit")).toBe(true);
     expect(collector.recordServiceWorker("pwa_static_cache_hit:https://secret.test")).toBe(false);
     expect(collector.snapshot().counters.pwa_static_cache_hit).toBe(1);
+  });
+
+  it("merges independent tab writers without losing either tab's counters", () => {
+    const storage = new MemoryStorage();
+    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
+    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
+
+    tabA.recordDataCache({ kind: "hit" });
+    tabB.recordFileCache({ kind: "hit" });
+
+    expect(tabA.snapshot().counters).toMatchObject({
+      pwa_data_cache_hit: 1,
+      pwa_file_cache_hit: 1,
+    });
+    expect(tabB.snapshot().counters).toMatchObject({
+      pwa_data_cache_hit: 1,
+      pwa_file_cache_hit: 1,
+    });
+  });
+
+  it("uses a reset generation so a stale tab cannot resurrect cleared metrics", () => {
+    const storage = new MemoryStorage();
+    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
+    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
+    tabA.recordDataCache({ kind: "hit" });
+    tabB.recordFileCache({ kind: "hit" });
+
+    tabA.reset();
+    tabB.recordFileCache({ kind: "miss" });
+
+    expect(tabA.snapshot().counters).toMatchObject({
+      pwa_data_cache_hit: 0,
+      pwa_file_cache_hit: 0,
+      pwa_file_cache_miss: 1,
+    });
+    expect(tabB.snapshot().counters).toMatchObject({
+      pwa_data_cache_hit: 0,
+      pwa_file_cache_hit: 0,
+      pwa_file_cache_miss: 1,
+    });
+  });
+
+  it("does not prune a peer event that is causally newer than the reset marker", () => {
+    const storage = new ResetInterleavingStorage();
+    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
+    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
+    tabB.recordFileCache({ kind: "hit" });
+    storage.afterResetMarker = () => tabB.recordFileCache({ kind: "miss" });
+
+    tabA.reset();
+
+    expect(tabA.snapshot().counters).toMatchObject({
+      pwa_file_cache_hit: 0,
+      pwa_file_cache_miss: 1,
+    });
+  });
+
+  it("separates local cache failures from explicit revalidation loader errors", () => {
+    const collector = createPwaCacheMetricsCollector({ storage: null });
+
+    collector.recordDataCache({ kind: "error", reason: "budget-or-quota" });
+    collector.recordDataCache({ kind: "error", reason: "MaverickTransportError", revalidation: true });
+
+    expect(collector.snapshot().counters.pwa_data_cache_error).toBe(1);
+    expect(collector.snapshot().counters.pwa_revalidate_error).toBe(1);
   });
 });

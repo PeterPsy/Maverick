@@ -16,6 +16,7 @@ export const PWA_CACHE_COUNTER_METRICS = [
   "pwa_data_cache_miss",
   "pwa_data_cache_stale",
   "pwa_data_cache_expired",
+  "pwa_data_cache_error",
   "pwa_revalidate_not_modified",
   "pwa_revalidate_modified",
   "pwa_revalidate_error",
@@ -74,9 +75,10 @@ export type PwaCacheMetricsSnapshot = {
   windowStartedAt: number;
 };
 
-export type PwaCacheMetricsStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
+export type PwaCacheMetricsStorage = Pick<Storage, "getItem" | "key" | "length" | "removeItem" | "setItem">;
 
 export type PwaCacheMetricsCollectorOptions = {
+  collectorId?: string;
   now?: () => number;
   retentionMs?: number;
   storage?: PwaCacheMetricsStorage | null;

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import re
 import sys
 from typing import Any
 
@@ -20,18 +19,26 @@ from scripts.pwa_cache_audit_io import (
     load_json,
     object_field,
     positive_integer,
-    positive_or_zero_integer,
     read_text,
     typescript_integer_constant,
+)
+from scripts.pwa_cache_audit_resources import (
+    INVENTORY_PATH,
+    RUNTIME_RESOURCE_DECLARATIONS_PATH,
+    audit_resource_inventory,
+    audit_runtime_resource_declarations,
+)
+from scripts.pwa_cache_audit_retry import (
+    AUDIT_ID_PATTERN,
+    MUTATION_RETRY_REGISTRY_PATH,
+    audit_mutation_retry_registry,
+    production_retry_audit_ids,
 )
 
 
 POLICY_PATH = Path("docs/product/pwa_cache_operational_policy.v1.json")
-INVENTORY_PATH = Path("docs/product/pwa_cache_resource_inventory.v2.json")
 POLICY_SCHEMA = "maverick.pwa-cache-operational-policy.v1"
 INVENTORY_SCHEMA = "maverick.pwa-cache-resource-inventory.v2"
-AUDIT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{4,126}\.v[1-9][0-9]*$")
-PRODUCTION_AUDIT_LITERAL = re.compile(r"\bauditId\s*:\s*[\"']([^\"']+)[\"']")
 
 
 def audit_repository(root: Path) -> list[str]:
@@ -39,6 +46,8 @@ def audit_repository(root: Path) -> list[str]:
     errors: list[str] = []
     policy = load_json(root / POLICY_PATH, errors)
     inventory = load_json(root / INVENTORY_PATH, errors)
+    declarations = load_json(root / RUNTIME_RESOURCE_DECLARATIONS_PATH, errors)
+    retry_registry = load_json(root / MUTATION_RETRY_REGISTRY_PATH, errors)
     if not isinstance(policy, dict) or not isinstance(inventory, dict):
         return errors
     if policy.get("schema") != POLICY_SCHEMA:
@@ -48,7 +57,13 @@ def audit_repository(root: Path) -> list[str]:
     audit_runtime_budgets(root, policy, errors)
     audit_frontend_manifests(root, policy, errors)
     audit_resource_inventory(inventory, policy, errors)
-    audit_retry_policy(root, policy, errors)
+    if isinstance(declarations, dict):
+        audit_runtime_resource_declarations(inventory, declarations, errors)
+        audit_runtime_resource_wiring(root, errors)
+    else:
+        errors.append(f"{RUNTIME_RESOURCE_DECLARATIONS_PATH}: expected an object")
+    audit_retry_policy(root, policy, retry_registry, errors)
+    audit_ci_hardening(root, errors)
     audit_rollout_contract(policy, errors)
     return errors
 
@@ -121,55 +136,26 @@ def audit_runtime_budgets(root: Path, policy: dict[str, Any], errors: list[str])
             errors.append(f"{source_path}: {constant}={actual_value}, policy requires {expected_value}")
 
 
-def audit_resource_inventory(inventory: dict[str, Any], policy: dict[str, Any], errors: list[str]) -> None:
-    budgets = object_field(policy, "runtime_budgets", errors)
-    max_entry = integer_field(budgets, "inventory_max_entry_bytes", errors)
-    max_scope = integer_field(budgets, "inventory_max_scope_bytes", errors)
-    resources = inventory.get("resources")
-    if not isinstance(resources, list) or not resources:
-        errors.append(f"{INVENTORY_PATH}: resources must be a non-empty array")
-        return
-    seen: set[tuple[str, str]] = set()
-    for index, resource in enumerate(resources):
-        label = f"{INVENTORY_PATH}: resources[{index}]"
-        if not isinstance(resource, dict):
-            errors.append(f"{label} must be an object")
-            continue
-        app_ids = resource.get("app_ids")
-        name = resource.get("resource")
-        persistence = resource.get("local_persistence_policy")
-        data_class = resource.get("canonical_data_class")
-        entry_bytes = resource.get("max_entry_bytes")
-        scope_bytes = resource.get("max_scope_bytes")
-        if not isinstance(app_ids, list) or not app_ids or not all(isinstance(item, str) and item for item in app_ids):
-            errors.append(f"{label}.app_ids must contain bounded app ids")
-            continue
-        if not isinstance(name, str) or not name:
-            errors.append(f"{label}.resource is required")
-            continue
-        for app_id in app_ids:
-            identity = (app_id, name)
-            if identity in seen:
-                errors.append(f"{label}: duplicate resource {app_id}/{name}")
-            seen.add(identity)
-        if persistence not in {"deny", "session", "cache"}:
-            errors.append(f"{label}: invalid local persistence policy")
-        if not positive_or_zero_integer(entry_bytes) or not positive_or_zero_integer(scope_bytes):
-            errors.append(f"{label}: cache byte limits must be non-negative integers")
-            continue
-        if persistence == "deny" and (entry_bytes != 0 or scope_bytes != 0):
-            errors.append(f"{label}: deny resources must have zero byte budgets")
-        if persistence != "deny" and (entry_bytes <= 0 or scope_bytes < entry_bytes):
-            errors.append(f"{label}: persisted resources require a positive bounded scope")
-        if data_class in {"credential_or_secret", "unclassified"} and persistence != "deny":
-            errors.append(f"{label}: {data_class} must fail closed to deny")
-        if max_entry is not None and entry_bytes > max_entry:
-            errors.append(f"{label}: entry budget {entry_bytes} exceeds {max_entry}")
-        if max_scope is not None and scope_bytes > max_scope:
-            errors.append(f"{label}: scope budget {scope_bytes} exceeds {max_scope}")
+def audit_runtime_resource_wiring(root: Path, errors: list[str]) -> None:
+    declaration_source = read_text(
+        root / "apps/base-shell/frontend/src/pwaDataCacheResourceDeclarations.ts",
+        errors,
+    )
+    broker_source = read_text(root / "apps/base-shell/frontend/src/pwaDataCacheBroker.ts", errors)
+    if 'from "./pwaDataCacheResourceDeclarations.v1.json"' not in declaration_source:
+        errors.append("runtime RESOURCE_DECLARATIONS are not sourced from the audited manifest")
+    if "RESOURCE_DECLARATIONS = buildResourceDeclarations()" not in declaration_source:
+        errors.append("runtime resource manifest is not compiled into RESOURCE_DECLARATIONS")
+    if 'from "./pwaDataCacheResourceDeclarations"' not in broker_source:
+        errors.append("PWA data-cache broker is not wired to the audited RESOURCE_DECLARATIONS")
 
 
-def audit_retry_policy(root: Path, policy: dict[str, Any], errors: list[str]) -> None:
+def audit_retry_policy(
+    root: Path,
+    policy: dict[str, Any],
+    registry: Any,
+    errors: list[str],
+) -> None:
     retry = object_field(policy, "retry_policy", errors)
     safe_methods = retry.get("safe_methods")
     statuses = retry.get("retryable_http_statuses")
@@ -191,13 +177,20 @@ def audit_retry_policy(root: Path, policy: dict[str, Any], errors: list[str]) ->
         errors.append("retry_policy.retryable_http_statuses must be an array")
     if not positive_integer(attempts) or f"positive(options.maxMutationAttempts, {attempts})" not in retry_runtime:
         errors.append("retry runtime mutation attempt cap differs from operational policy")
-    if "auditId: string;" not in retry_source or "RETRY_AUDIT_ID_PATTERN.test(contract.auditId)" not in retry_source:
+    if (
+        "auditId: string;" not in retry_source
+        or "RETRY_AUDIT_ID_PATTERN.test(contract.auditId)" not in retry_source
+        or "APPROVED_MUTATION_RETRY_AUDIT_ID_SET.has(contract.auditId)" not in retry_source
+        or "mutationRetryRegistry.audit_ids" not in retry_source
+        or "validateMutationContract(method, options.mutation)" not in retry_runtime
+        or "approvedMutationAuditIds?:" in retry_source
+    ):
         errors.append("mutation retry runtime does not require a validated audit id")
 
     contracts = retry.get("mutation_contracts")
     if not isinstance(contracts, list):
         errors.append("retry_policy.mutation_contracts must be an array")
-        return
+        contracts = []
     approved: set[str] = set()
     for index, contract in enumerate(contracts):
         label = f"retry_policy.mutation_contracts[{index}]"
@@ -210,6 +203,10 @@ def audit_retry_policy(root: Path, policy: dict[str, Any], errors: list[str]) ->
             continue
         approved.add(audit_id)
         audit_retry_contract_sources(root, contract, label, errors)
+    if isinstance(registry, dict):
+        audit_mutation_retry_registry(registry, approved, errors)
+    else:
+        errors.append(f"{MUTATION_RETRY_REGISTRY_PATH}: expected an object")
     discovered = production_retry_audit_ids(root, errors)
     if discovered != approved:
         errors.append(f"retry audit registry mismatch: source={sorted(discovered)}, policy={sorted(approved)}")
@@ -241,20 +238,22 @@ def audit_retry_contract_sources(root: Path, contract: dict[str, Any], label: st
             errors.append(f"{test_path}: retry regression evidence `{needle}` is missing")
 
 
-def production_retry_audit_ids(root: Path, errors: list[str]) -> set[str]:
-    discovered: set[str] = set()
-    for extension in ("*.ts", "*.tsx"):
-        for path in (root / "apps").glob(f"*/frontend/src/**/{extension}"):
-            source = read_text(path, errors)
-            audit_ids = PRODUCTION_AUDIT_LITERAL.findall(source)
-            mutation_contracts = len(re.findall(r"\bserverDeduplicates\s*:\s*true\b", source))
-            if mutation_contracts != len(audit_ids):
-                errors.append(
-                    f"{path.relative_to(root)}: every retryable mutation contract requires one literal auditId"
-                )
-            discovered.update(audit_ids)
-    return discovered
-
+def audit_ci_hardening(root: Path, errors: list[str]) -> None:
+    ci_source = read_text(root / ".github/workflows/ci.yml", errors)
+    required_ci_commands = (
+        "npm --prefix packages/pwa-cache run typecheck",
+        "npm --prefix packages/pwa-cache test -- --maxWorkers=1",
+        "npm --prefix apps/base-shell run test:service-worker",
+        "npm --prefix apps/settings test -- --maxWorkers=1",
+        "python scripts/pwa_shell_cache_smoke.py",
+    )
+    for command in required_ci_commands:
+        if command not in ci_source:
+            errors.append(f".github/workflows/ci.yml: missing PWA hardening command `{command}`")
+    physical_source = read_text(root / ".github/workflows/pwa-physical-device-gate.yml", errors)
+    verifier = "python scripts/pwa_device_regression.py verify --input pwa-device-evidence.json"
+    if verifier not in physical_source:
+        errors.append("physical-device workflow does not execute the release evidence verifier")
 
 def audit_rollout_contract(policy: dict[str, Any], errors: list[str]) -> None:
     rollout = object_field(policy, "rollout", errors)

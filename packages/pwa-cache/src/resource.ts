@@ -16,6 +16,7 @@ import type {
   CacheBackend,
   CacheEntryMetadata,
   CacheLoader,
+  CacheNetworkResult,
   CacheReadResult,
   CacheRevalidationResult,
   CacheScope,
@@ -196,11 +197,23 @@ export class PwaCacheResource<T> {
         return { changed: !observed || latest.metadata.revision !== observed.metadata.revision, payload: latest.payload, revision: latest.metadata.revision };
       }
       const current = latest ?? observed;
-      const response = await loader({
-        etag: current?.metadata.etag,
-        knownRevision: current?.metadata.revision,
-        signal,
-      });
+      let response: CacheNetworkResult<T>;
+      try {
+        response = await loader({
+          etag: current?.metadata.etag,
+          knownRevision: current?.metadata.revision,
+          signal,
+        });
+      } catch (error) {
+        if (errorName(error) !== "AbortError") {
+          this.telemetry({
+            kind: "error",
+            reason: errorName(error),
+            revalidation: Boolean(current),
+          });
+        }
+        throw error;
+      }
       if (response.kind === "not_modified") {
         if (!current) {
           throw new Error("A not_modified response requires a cached value.");

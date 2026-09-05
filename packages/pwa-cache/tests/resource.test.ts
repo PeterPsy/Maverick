@@ -5,6 +5,7 @@ import {
   PRIVATE_ACCESS_LEASE_MAX_MS,
   PwaCacheClient,
   createPwaCacheHost,
+  type CacheTelemetryEvent,
   type ResourceCachePolicy,
   type StorageQuotaAdapter,
 } from "../src";
@@ -40,6 +41,7 @@ function client(options: {
   backend?: MemoryCacheBackend;
   enabled?: boolean;
   now?: () => number;
+  telemetry?: (event: CacheTelemetryEvent) => void;
   userId?: string;
   workspaceId?: string;
 } = {}): PwaCacheClient {
@@ -52,6 +54,7 @@ function client(options: {
     enabled: options.enabled ?? true,
     now: options.now,
     quotaAdapter: quota,
+    telemetry: options.telemetry,
   }, new CacheBus(null));
 }
 
@@ -302,6 +305,64 @@ describe("PWA cache resource", () => {
     const result = await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "network" }, revision: "r1" }));
     expect(result.payload.value).toBe("network");
     expect(await resource.get("one")).toBeNull();
+  });
+
+  it("marks conditional loader failures as revalidation errors without misclassifying other failures", async () => {
+    const telemetry: CacheTelemetryEvent[] = [];
+    const loaderError = Object.assign(new Error("network unavailable"), { name: "MaverickTransportError" });
+    let now = 1_000;
+    const resource = client({
+      now: () => now,
+      telemetry: (event) => telemetry.push(event),
+    }).resource("records", publicPolicy());
+
+    await resource.readThrough("network-failure", async () => ({
+      kind: "value",
+      payload: { value: "cached" },
+      revision: "r1",
+    }));
+    telemetry.length = 0;
+    now = 2_500;
+    const cached = await resource.readThrough("network-failure", async () => { throw loaderError; });
+    await expect(cached.revalidation).rejects.toBe(loaderError);
+    expect(telemetry).toContainEqual({
+      kind: "error",
+      reason: "MaverickTransportError",
+      revalidation: true,
+    });
+
+    telemetry.length = 0;
+    await expect(resource.readThrough("initial-network-failure", async () => { throw loaderError; }))
+      .rejects.toBe(loaderError);
+    expect(telemetry).toContainEqual({
+      kind: "error",
+      reason: "MaverickTransportError",
+      revalidation: false,
+    });
+
+    telemetry.length = 0;
+    const deniedQuota: StorageQuotaAdapter = {
+      canWrite: async () => false,
+      estimate: quota.estimate,
+    };
+    const quotaResource = createPwaCacheHost({
+      appId: "docs",
+      userId: "user-a",
+      workspaceId: "default",
+    }).createClient({
+      backend: new MemoryCacheBackend(),
+      enabled: true,
+      quotaAdapter: deniedQuota,
+      telemetry: (event) => telemetry.push(event),
+    }, new CacheBus(null)).resource("records", publicPolicy());
+
+    await quotaResource.readThrough("quota-failure", async () => ({
+      kind: "value",
+      payload: { value: "network" },
+      revision: "r1",
+    }));
+    expect(telemetry).toContainEqual({ bytes: expect.any(Number), kind: "error", reason: "budget-or-quota" });
+    expect(telemetry.some((event) => event.kind === "error" && event.revalidation === true)).toBe(false);
   });
 
   it("keeps the server-first path when the rollout gate is disabled", async () => {

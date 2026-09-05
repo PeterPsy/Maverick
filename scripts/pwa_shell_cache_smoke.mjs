@@ -32,6 +32,7 @@ try {
   try {
     firstContext = await launchPersistentContext();
   } catch (error) {
+    if (args["require-browser"]) throw error;
     emit({
       schema: "maverick.pwa-shell-cache-smoke.v2",
       skipped: true,
@@ -87,6 +88,9 @@ try {
   assert(install.precache_count > 0, "generated precache manifest is empty");
   assert(install.missing_count === 0, "one or more generated precache records are missing");
 
+  const settingsCache = username
+    ? await exerciseSettingsCacheDiagnostics(firstPage)
+    : { authenticated: false, clear: "not-run", isolated_origin: "not-run", refresh: "not-run" };
   const beforeTransportLoss = await standardTreeSnapshot(firstPage);
   if (username) {
     assert(beforeTransportLoss.iframe_count > 0, "authenticated shell did not mount its application frame");
@@ -185,6 +189,10 @@ try {
     standard_shell_restart_without_network: "passed",
     non_shell_navigation_bypass: "passed",
     excluded_dynamic_requests: "passed",
+    settings_cache_authenticated: settingsCache.authenticated ? "passed" : "not-run",
+    settings_cache_clear: settingsCache.clear,
+    settings_cache_isolated_origin: settingsCache.isolated_origin,
+    settings_cache_refresh: settingsCache.refresh,
     transparent_transport_recovery: "passed",
     superseded_mode_ui_absent: "passed",
   });
@@ -201,6 +209,39 @@ async function authenticate(context, credential, secret) {
   if (!response.ok()) {
     throw new Error(`login failed with HTTP ${response.status()}`);
   }
+}
+
+async function exerciseSettingsCacheDiagnostics(page) {
+  await page.goto(`${baseUrl}/app/settings/pages/cache`, {
+    waitUntil: "domcontentloaded",
+    timeout: 30_000,
+  });
+  await page.locator("main.bs-shell").waitFor({ state: "visible", timeout: 30_000 });
+  const frameLocator = page.locator('iframe[title="Settings viewport"].is-active');
+  await frameLocator.waitFor({ state: "visible", timeout: 30_000 });
+  await page.waitForFunction(() => {
+    const frame = document.querySelector('iframe[title="Settings viewport"].is-active');
+    return Boolean(frame?.dataset.maverickFrameOrigin);
+  }, null, { timeout: 30_000 });
+  const frameElement = await frameLocator.elementHandle();
+  const frame = await frameElement?.contentFrame();
+  assert(frame, "Settings isolated frame did not become available");
+  await frame.locator(".settings-cache-diagnostics").waitFor({ state: "visible", timeout: 30_000 });
+  await frame.locator('.settings-cache-diagnostics[aria-busy="false"]').waitFor({ timeout: 30_000 });
+
+  const declaredOrigin = await frameLocator.getAttribute("data-maverick-frame-origin");
+  assert(declaredOrigin && new URL(frame.url()).origin === declaredOrigin, "Settings frame origin does not match shell authority");
+  assert(declaredOrigin !== new URL(baseUrl).origin, "Settings cache diagnostics did not run in an isolated origin");
+
+  await frame.locator("#refresh-pwa-cache").click();
+  await frame.locator('.settings-cache-diagnostics[aria-busy="false"]').waitFor({ timeout: 30_000 });
+  await frame.locator("#clear-pwa-cache").click();
+  await frame.locator("#clear-pwa-cache", { hasText: "Confirm clear cache" }).waitFor({ timeout: 10_000 });
+  await frame.locator("#clear-pwa-cache").click();
+  await frame.locator("#clear-pwa-cache", { hasText: "Clear cache" }).waitFor({ timeout: 30_000 });
+  const alert = frame.locator('.settings-cache-diagnostics [role="alert"]');
+  assert(await alert.count() === 0, `Settings cache clear failed: ${await alert.first().textContent().catch(() => "unknown")}`);
+  return { authenticated: true, clear: "passed", isolated_origin: "passed", refresh: "passed" };
 }
 
 async function standardTreeSnapshot(page) {

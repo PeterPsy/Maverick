@@ -13,9 +13,16 @@ from core.providers.hosted_text_profiles import (
     pin_hosted_text_execution_binding,
 )
 from core.providers.provider_credentials import bind_provider_credential
-from core.providers.service import builtin_provider_registry, register_builtin_providers
+from core.providers.service import (
+    builtin_provider_registry,
+    configure_hosted_model_provider,
+    register_builtin_providers,
+)
 from core.providers.store import ProviderCollections, ProviderDocumentStore
-from core.providers.text_generation import HostedTextGenerationError
+from core.providers.text_generation import (
+    HostedTextGenerationError,
+    TextGenerationResult,
+)
 from core.api.runtime_api import _session_payload
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.plain_hosted_text import execute_plain_hosted_text_turn
@@ -202,12 +209,148 @@ class HostedTextProfilesTest(unittest.TestCase):
         google = self.provider_store.get_provider_definition("google-ai-studio")
         self.provider_store.save_provider_definition(replace(google, status="active"))
 
-        with self.assertRaises(HostedTextGenerationError):
+        with patch(
+            "core.runtime.plain_hosted_text.execute_hosted_text_generation"
+        ) as transport, self.assertRaises(HostedTextGenerationError) as raised:
             execute_plain_hosted_text_turn(
                 self.state,
                 session=session,
                 input_text="Do not change provider",
             )
+
+        self.assertEqual(raised.exception.reason_code, "provider_disabled")
+        transport.assert_not_called()
+
+    def test_dispatch_rejects_live_profile_drift_before_transport(self) -> None:
+        binding = self.pin()
+        session = create_runtime_session(
+            self.runtime_store,
+            session_id=binding.session_id,
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            hosted_text_binding=binding,
+            start_path=self.root,
+            now=NOW,
+        )
+        current = self.provider_store.get_provider_definition("openrouter")
+        changed_options = [
+            replace(
+                option,
+                input_modalities=[*option.input_modalities, "audio"],
+                metadata={
+                    **option.metadata,
+                    "model_revision": "drifted-revision",
+                    "hosted_text_endpoint": "https://openrouter.ai/drifted",
+                },
+            )
+            if option.model_id == binding.model_id
+            else option
+            for option in current.model_options
+        ]
+        changed = replace(current, model_options=changed_options)
+        self.provider_store.save_provider_definition(changed)
+        self.state.provider_registry.register_provider_definition(changed)
+
+        with patch(
+            "core.runtime.plain_hosted_text.execute_hosted_text_generation"
+        ) as transport, self.assertRaises(HostedTextGenerationError) as raised:
+            execute_plain_hosted_text_turn(
+                self.state,
+                session=session,
+                input_text="Reject drift",
+            )
+
+        self.assertEqual(raised.exception.reason_code, "hosted_text_profile_drift")
+        transport.assert_not_called()
+
+    def test_dispatch_uses_pinned_endpoint_and_routing_snapshot(self) -> None:
+        binding = self.pin()
+        session = create_runtime_session(
+            self.runtime_store,
+            session_id=binding.session_id,
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            hosted_text_binding=binding,
+            start_path=self.root,
+            now=NOW,
+        )
+        result = TextGenerationResult(
+            output_text="pinned transport",
+            deltas=["pinned transport"],
+            provider_id=binding.provider_id,
+            model_id=binding.model_id,
+        )
+
+        with patch(
+            "core.runtime.plain_hosted_text.execute_hosted_text_generation",
+            return_value=result,
+        ) as transport:
+            executed, _decision = execute_plain_hosted_text_turn(
+                self.state,
+                session=session,
+                input_text="Use the pin",
+            )
+
+        self.assertEqual(executed.output_text, "pinned transport")
+        kwargs = transport.call_args.kwargs
+        self.assertEqual(kwargs["endpoint_url"], binding.profile.endpoint_id)
+        self.assertEqual(
+            kwargs["request"].provider_routing,
+            binding.provider_routing_snapshot,
+        )
+
+    def test_dispatch_rejects_live_routing_drift_before_transport(self) -> None:
+        configure_hosted_model_provider(
+            self.provider_store,
+            workspace_id="default",
+            provider_id="openrouter",
+            model_id="google/gemma-4-31b-it:free",
+            openrouter_provider_routing={
+                "mode": "only",
+                "provider_id": "google-ai-studio",
+                "allow_fallbacks": False,
+            },
+            registry=self.state.provider_registry,
+            now=NOW,
+        )
+        binding = self.pin()
+        session = create_runtime_session(
+            self.runtime_store,
+            session_id=binding.session_id,
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            hosted_text_binding=binding,
+            start_path=self.root,
+            now=NOW,
+        )
+        configure_hosted_model_provider(
+            self.provider_store,
+            workspace_id="default",
+            provider_id="openrouter",
+            model_id=binding.model_id,
+            openrouter_provider_routing={
+                "mode": "only",
+                "provider_id": "open-inference",
+                "allow_fallbacks": False,
+            },
+            registry=self.state.provider_registry,
+            now=NOW,
+        )
+
+        with patch(
+            "core.runtime.plain_hosted_text.execute_hosted_text_generation"
+        ) as transport, self.assertRaises(HostedTextGenerationError) as raised:
+            execute_plain_hosted_text_turn(
+                self.state,
+                session=session,
+                input_text="Reject routing drift",
+            )
+
+        self.assertEqual(raised.exception.reason_code, "hosted_text_routing_drift")
+        transport.assert_not_called()
 
     def test_successful_text_dispatch_still_creates_no_agent_journal(self) -> None:
         binding = self.pin()

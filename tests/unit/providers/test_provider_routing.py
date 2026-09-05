@@ -454,7 +454,7 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIn("fallback_no_credential_authorization", decision.reason_codes)
         self.assertNotIn("platform:secret-alias/missing-openrouter", str(decision))
 
-    def test_disabled_builtin_provider_with_bound_secret_is_routable(self) -> None:
+    def test_disabled_builtin_provider_with_bound_secret_fails_closed(self) -> None:
         store = self.make_provider_store()
         secret_store = self.make_secret_store()
         create_platform_secret(
@@ -484,11 +484,11 @@ class ProviderRoutingTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.selected_provider_id, "google-ai-studio")
-        self.assertEqual(decision.selected_model_id_or_voice_id, "gemini-3.5-flash")
-        self.assertEqual(decision.execution_path, "plain_hosted_text")
-        self.assertNotIn("provider_disabled:google-ai-studio", decision.reason_codes)
-        self.assertIn("provider_secret_binding_present", decision.reason_codes)
+        self.assertIsNone(decision.selected_provider_id)
+        self.assertIsNone(decision.selected_model_id_or_voice_id)
+        self.assertIsNone(decision.execution_path)
+        self.assertIn("provider_disabled:google-ai-studio", decision.reason_codes)
+        self.assertNotIn("provider_secret_binding_present", decision.reason_codes)
 
 if __name__ == "__main__":
     unittest.main()

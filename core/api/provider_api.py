@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
 from core.api.http import StartResponse, json_response, query_params
@@ -51,7 +51,6 @@ from core.providers.payloads import (
     sort_provider_definitions,
     speech_provider_selection_payload,
 )
-from core.providers.provider_authorization import check_provider_credential_authorization
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.read_snapshot import ProviderReadSnapshot
@@ -220,13 +219,9 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
         and selection.provider_id == active_provider.provider_id
         else None
     )
-    display_providers = [
-        _hosted_provider_display_definition(state, provider, workspace_id=workspace_id)
-        for provider in available_providers
-    ]
     profiles = [
         _hosted_text_profile_payload(provider, model)
-        for provider in sort_provider_definitions(display_providers)
+        for provider in sort_provider_definitions(available_providers)
         for model in provider.model_options
         if _provider_model_option_supports_text_output(model)
     ]
@@ -239,7 +234,7 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
             if active_provider is None
             else hosted_provider_model_settings_payload(active_provider, active_selection)
         ),
-        "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(display_providers)],
+        "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(available_providers)],
         "route_preview": routing_decision_payload(decision),
         "profiles": profiles,
         "workspace_actions_message": NO_WORKSPACE_ACTIONS_MESSAGE,
@@ -263,25 +258,6 @@ def _hosted_text_profile_payload(definition, model) -> dict[str, object]:
         "unavailable_reason": status.reason_code,
         "workspace_actions_message": NO_WORKSPACE_ACTIONS_MESSAGE,
     }
-
-
-def _hosted_provider_display_definition(
-    state: PlatformState,
-    provider: ProviderDefinition,
-    *,
-    workspace_id: str,
-) -> ProviderDefinition:
-    if provider.status == "active":
-        return provider
-    authorization = check_provider_credential_authorization(
-        state.provider_store,
-        definition=provider,
-        workspace_id=workspace_id,
-        secret_store=getattr(state, "secret_store", None),
-    )
-    if not authorization.authorized:
-        return provider
-    return replace(provider, status="active")
 
 
 def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:

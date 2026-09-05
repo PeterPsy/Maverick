@@ -11,8 +11,12 @@ from pathlib import Path, PurePosixPath
 from typing import Callable
 
 from core.observability.service import record_platform_event
+from core.providers.errors import ProviderError
 from core.providers.models import ProviderDefinition, ProviderModelOption, RoutingDecision
-from core.providers.hosted_text_profiles import validate_hosted_text_execution_binding
+from core.providers.hosted_text_profiles import (
+    hosted_text_provider_routing_snapshot,
+    validate_hosted_text_execution_binding,
+)
 from core.providers.payloads import routing_decision_payload
 from core.providers.routing import ProviderRoutingContext, primary_routing_failure_reason, select_provider_for_profile
 from core.providers.service import effective_provider_registry
@@ -99,16 +103,20 @@ def execute_plain_hosted_text_turn(
     """Execute one plain hosted chat turn through a routed hosted text provider."""
     text_binding = session.hosted_text_binding
     if text_binding is not None:
-        validate_hosted_text_execution_binding(text_binding)
+        try:
+            validate_hosted_text_execution_binding(text_binding)
+        except ValueError as error:
+            raise HostedTextGenerationError("hosted_text_binding_invalid") from error
+    registry = effective_provider_registry(
+        state.provider_store,
+        registry=getattr(state, "provider_registry", None),
+    )
     decision = select_provider_for_profile(
         "plain_hosted_chat",
         ProviderRoutingContext(
             workspace_id=session.workspace_id,
             provider_store=state.provider_store,
-            registry=effective_provider_registry(
-                state.provider_store,
-                registry=getattr(state, "provider_registry", None),
-            ),
+            registry=registry,
             secret_store=state.secret_store,
             request_id=None,
             hosted_provider_id=(
@@ -136,13 +144,30 @@ def execute_plain_hosted_text_turn(
             "hosted_text_session_route_changed",
             reason_codes=[*decision.reason_codes, "hosted_text_session_route_changed"],
         )
+    definition = registry.get_provider_definition(decision.selected_provider_id)
     model_option = _selected_model_option(
-        effective_provider_registry(
-            state.provider_store,
-            registry=getattr(state, "provider_registry", None),
-        ).get_provider_definition(decision.selected_provider_id),
+        definition,
         decision.selected_model_id_or_voice_id,
     )
+    if model_option is None:
+        raise HostedTextGenerationError("hosted_text_model_unavailable")
+    if text_binding is not None:
+        live_routing = hosted_text_provider_routing_snapshot(
+            state.provider_store,
+            workspace_id=session.workspace_id,
+            provider_id=decision.selected_provider_id,
+            model_id=decision.selected_model_id_or_voice_id or "",
+        )
+        try:
+            validate_hosted_text_execution_binding(
+                text_binding,
+                definition=definition,
+                model=model_option,
+                provider_routing_snapshot=live_routing,
+            )
+        except ProviderError as error:
+            reason_code = str(error).strip() or "hosted_text_profile_unavailable"
+            raise HostedTextGenerationError(reason_code) from error
     messages = build_plain_hosted_message_history(
         state.runtime_store,
         session_id=session.session_id,
@@ -168,7 +193,15 @@ def execute_plain_hosted_text_turn(
         timeout_seconds=30,
         workspace_id=session.workspace_id,
         workspace_root=session.workspace_root,
-        provider_routing=_openrouter_provider_routing_for_decision(state, session=session, decision=decision),
+        provider_routing=(
+            text_binding.provider_routing_snapshot
+            if text_binding is not None
+            else _openrouter_provider_routing_for_decision(
+                state,
+                session=session,
+                decision=decision,
+            )
+        ),
     )
     try:
         with plain_hosted_request_cancellation(
@@ -182,6 +215,11 @@ def execute_plain_hosted_text_turn(
                 decision=decision,
                 request=request,
                 runtime_session_id=session.session_id,
+                endpoint_url=(
+                    text_binding.profile.endpoint_id
+                    if text_binding is not None
+                    else None
+                ),
                 transport=_fake_transport_from_environment(),
                 delta_sink=_hosted_delta_sink(event_sink, decision=decision),
                 sent_sink=_hosted_provider_sent_sink(on_provider_turn_start_sent, decision=decision),

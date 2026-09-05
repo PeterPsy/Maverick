@@ -122,6 +122,9 @@ class ProviderExecutionContract:
     """Describe how a model provider can be executed by a Maverick-owned adapter."""
 
     adapter_type: str | None = None
+    provider_protocol: str | None = None
+    provider_api_version: str | None = None
+    endpoint_url_template: str | None = None
     request_shape: str | None = None
     streaming_supported: bool = False
     non_streaming_supported: bool = False

@@ -57,9 +57,18 @@ def _hosted_text_capabilities(*, latency_class: str) -> ProviderCapabilitySet:
     )
 
 
-def _hosted_text_contract(secret_name: str) -> ProviderExecutionContract:
+def _hosted_text_contract(
+    secret_name: str,
+    *,
+    provider_protocol: str,
+    provider_api_version: str | None,
+    endpoint_url_template: str,
+) -> ProviderExecutionContract:
     return ProviderExecutionContract(
         adapter_type="hosted_text_generation",
+        provider_protocol=provider_protocol,
+        provider_api_version=provider_api_version,
+        endpoint_url_template=endpoint_url_template,
         request_shape="chat_messages",
         streaming_supported=True,
         non_streaming_supported=True,
@@ -234,7 +243,12 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
         ],
         credential_requirements=[_credential("openrouter_api_key", modes=["plain_hosted_chat", "fast_model"])],
         network_requirements=[_network("openrouter.ai")],
-        execution_contract=_hosted_text_contract("openrouter_api_key"),
+        execution_contract=_hosted_text_contract(
+            "openrouter_api_key",
+            provider_protocol="openai-chat-completions",
+            provider_api_version="v1",
+            endpoint_url_template="https://openrouter.ai/api/v1/chat/completions",
+        ),
         latency_metadata={"latency_class": "low", "router": "openrouter"},
     )
 

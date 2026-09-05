@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import json
 from typing import Literal, Mapping
+from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
 from core.providers.errors import ProviderError
@@ -106,18 +107,25 @@ def build_hosted_text_profile(
     if "text" not in output_modalities:
         raise ProviderError("hosted_text_model_output_unsupported")
     metadata = dict(model.metadata)
+    execution_contract = definition.execution_contract
     protocol = str(
-        metadata.get("protocol")
-        or getattr(definition.execution_contract, "request_shape", "")
+        metadata.get("hosted_text_protocol")
+        or getattr(execution_contract, "provider_protocol", "")
+        or metadata.get("protocol")
+        or getattr(execution_contract, "request_shape", "")
         or "hosted-text-generation"
     )
-    api_version = str(metadata.get("api_version") or "").strip() or None
-    endpoint_id = str(
-        metadata.get("endpoint")
-        or _first_network_host(definition)
-        or definition.provider_id
-    )
+    api_version = str(
+        metadata.get("hosted_text_api_version")
+        or getattr(execution_contract, "provider_api_version", "")
+        or metadata.get("api_version")
+        or ""
+    ).strip() or None
+    endpoint_id = _hosted_text_endpoint(definition, model)
     model_revision = str(metadata.get("model_revision") or "").strip() or None
+    cost_policy = canonical_digest(definition.cost_metadata)
+    retention_policy = _retention_policy(definition)
+    data_destination = _data_destination(definition)
     identity = {
         "provider_id": definition.provider_id,
         "model_id": model.model_id,
@@ -133,8 +141,9 @@ def build_hosted_text_profile(
             "max_output_tokens",
             "max_completion_tokens",
         ),
-        "cost_metadata": definition.cost_metadata,
-        "retention_policy": _retention_policy(definition),
+        "cost_policy": cost_policy,
+        "retention_policy": retention_policy,
+        "data_destination": data_destination,
     }
     revision = canonical_digest(identity)
     profile = HostedTextProfileDefinition(
@@ -160,9 +169,9 @@ def build_hosted_text_profile(
             "max_output_tokens",
             "max_completion_tokens",
         ),
-        cost_policy=canonical_digest(definition.cost_metadata),
-        retention_policy=_retention_policy(definition),
-        data_destination=_data_destination(definition),
+        cost_policy=cost_policy,
+        retention_policy=retention_policy,
+        data_destination=data_destination,
     )
     profile_digest = canonical_digest(profile)
     state: HostedTextProfileState = (
@@ -243,7 +252,7 @@ def pin_hosted_text_execution_binding(
     profile, status, certificate = build_hosted_text_profile(definition, model)
     if status.status != "available":
         raise ProviderError(status.reason_code or "hosted_text_profile_unavailable")
-    routing_snapshot = _provider_routing_snapshot(
+    routing_snapshot = hosted_text_provider_routing_snapshot(
         state.provider_store,
         workspace_id=workspace_id,
         provider_id=profile.provider_id,
@@ -314,9 +323,36 @@ def hosted_text_binding_from_document(
 
 def validate_hosted_text_execution_binding(
     binding: HostedTextExecutionBinding,
+    *,
+    definition: ProviderDefinition | None = None,
+    model: ProviderModelOption | None = None,
+    provider_routing_snapshot: Mapping[str, object] | None = None,
 ) -> None:
-    """Validate an in-memory binding before every provider dispatch."""
+    """Validate the stored identity and, when supplied, its exact live tuple."""
     _validate_hosted_text_binding(binding)
+    live_values = (definition, model, provider_routing_snapshot)
+    if all(value is None for value in live_values):
+        return
+    if definition is None or model is None or provider_routing_snapshot is None:
+        raise ValueError("Hosted text live validation inputs are incomplete.")
+    live_profile, live_status, live_certificate = build_hosted_text_profile(
+        definition,
+        model,
+    )
+    if live_status.status != "available":
+        raise ProviderError(live_status.reason_code or "hosted_text_profile_unavailable")
+    if (
+        live_profile != binding.profile
+        or live_status != binding.status
+        or live_certificate != binding.certificate
+    ):
+        raise ProviderError("hosted_text_profile_drift")
+    live_routing = _json_snapshot(provider_routing_snapshot)
+    if (
+        live_routing != binding.provider_routing_snapshot
+        or canonical_digest(live_routing) != binding.provider_routing_digest
+    ):
+        raise ProviderError("hosted_text_routing_drift")
 
 
 def _validate_hosted_text_binding(binding: HostedTextExecutionBinding) -> None:
@@ -343,7 +379,7 @@ def _validate_hosted_text_binding(binding: HostedTextExecutionBinding) -> None:
         raise ValueError("Hosted text execution binding digest is invalid.")
 
 
-def _provider_routing_snapshot(
+def hosted_text_provider_routing_snapshot(
     store,
     *,
     workspace_id: str,
@@ -364,6 +400,36 @@ def _provider_routing_snapshot(
         else selection.openrouter_provider_routing_by_model.get(model_id)
     )
     return _json_snapshot(routing)
+
+
+def _hosted_text_endpoint(
+    definition: ProviderDefinition,
+    model: ProviderModelOption,
+) -> str:
+    metadata = dict(model.metadata)
+    template = str(
+        metadata.get("hosted_text_endpoint")
+        or getattr(definition.execution_contract, "endpoint_url_template", "")
+        or metadata.get("endpoint")
+        or ""
+    ).strip()
+    endpoint = template.replace("{model_id}", quote(model.model_id, safe=""))
+    parsed = urlsplit(endpoint)
+    allowed_hosts = {
+        host
+        for requirement in definition.network_requirements
+        for host in requirement.allowed_hosts
+    }
+    if (
+        not endpoint
+        or "{" in endpoint
+        or "}" in endpoint
+        or parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.hostname not in allowed_hosts
+    ):
+        raise ProviderError("hosted_text_endpoint_invalid")
+    return endpoint
 
 
 def _json_snapshot(value: object) -> dict[str, object]:
@@ -413,6 +479,7 @@ __all__ = [
     "build_hosted_text_profile",
     "fork_hosted_text_execution_binding",
     "hosted_text_binding_from_document",
+    "hosted_text_provider_routing_snapshot",
     "pin_hosted_text_execution_binding",
     "validate_hosted_text_execution_binding",
 ]

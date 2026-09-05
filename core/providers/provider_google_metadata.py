@@ -98,6 +98,12 @@ def build_google_ai_studio_definition(timestamp: datetime) -> ProviderDefinition
         ],
         execution_contract=ProviderExecutionContract(
             adapter_type="hosted_text_generation",
+            provider_protocol="google-generate-content",
+            provider_api_version="v1beta",
+            endpoint_url_template=(
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                "{model_id}:streamGenerateContent?alt=sse"
+            ),
             request_shape="chat_messages",
             streaming_supported=True,
             non_streaming_supported=True,

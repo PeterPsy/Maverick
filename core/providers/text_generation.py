@@ -526,11 +526,13 @@ class GoogleAIStudioTextGenerationClient:
         *,
         api_key: str,
         endpoint_root: str | None = None,
+        endpoint_url: str | None = None,
         transport: HostedTextTransport | None = None,
     ) -> None:
         self.provider_id = "google-ai-studio"
         self.api_key = api_key
         self.endpoint_root = (endpoint_root or GOOGLE_AI_STUDIO_ENDPOINT_ROOT).rstrip("/")
+        self.endpoint_url = endpoint_url
         self.transport = transport or GoogleAIStudioHttpTransport()
 
     def generate(
@@ -546,7 +548,14 @@ class GoogleAIStudioTextGenerationClient:
         _validate_hosted_text_request(request)
         payload = _gemini_payload(request)
         result = self.transport.send(
-            endpoint_url=_gemini_endpoint(self.endpoint_root, model_id=request.model_id, stream=request.stream),
+            endpoint_url=(
+                self.endpoint_url
+                or _gemini_endpoint(
+                    self.endpoint_root,
+                    model_id=request.model_id,
+                    stream=request.stream,
+                )
+            ),
             headers={
                 "x-goog-api-key": self.api_key,
                 "Content-Type": "application/json",
@@ -594,6 +603,7 @@ def execute_hosted_text_generation(
     request: TextGenerationRequest,
     runtime_session_id: str | None = None,
     app_id: str | None = None,
+    endpoint_url: str | None = None,
     transport: HostedTextTransport | None = None,
     delta_sink: Callable[[str], None] | None = None,
     sent_sink: Callable[[dict[str, object]], None] | None = None,
@@ -613,6 +623,7 @@ def execute_hosted_text_generation(
     client = _hosted_text_generation_client(
         provider_id=decision.selected_provider_id,
         api_key=api_key,
+        endpoint_url=endpoint_url,
         transport=transport,
     )
     return client.generate(
@@ -628,13 +639,19 @@ def _hosted_text_generation_client(
     *,
     provider_id: str,
     api_key: str,
+    endpoint_url: str | None = None,
     transport: HostedTextTransport | None = None,
 ) -> TextGenerationClient:
     if provider_id == "google-ai-studio":
-        return GoogleAIStudioTextGenerationClient(api_key=api_key, transport=transport)
+        return GoogleAIStudioTextGenerationClient(
+            api_key=api_key,
+            endpoint_url=endpoint_url,
+            transport=transport,
+        )
     return OpenAICompatibleTextGenerationClient(
         provider_id=provider_id,
         api_key=api_key,
+        endpoint_url=endpoint_url,
         transport=transport,
     )
 

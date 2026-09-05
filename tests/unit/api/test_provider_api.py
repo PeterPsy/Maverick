@@ -388,7 +388,7 @@ class ProviderApiTest(unittest.TestCase):
         self.assertNotIn("super-secret-token", json.dumps(payload_after_disable))
         self.assertNotIn("secret_ref", json.dumps(payload_after_disable))
 
-    def test_hosted_text_status_marks_bound_google_provider_active(self) -> None:
+    def test_hosted_text_status_does_not_reenable_disabled_provider_from_secret(self) -> None:
         state = self.make_state()
         secret = create_platform_secret(
             state.secret_store,
@@ -408,13 +408,13 @@ class ProviderApiTest(unittest.TestCase):
         status, payload = self.invoke("/api/providers/active", state=state)
 
         self.assertEqual(status, "200 OK")
-        google = next(
-            provider
-            for provider in payload["hosted_text"]["available_providers"]
-            if provider["provider_id"] == "google-ai-studio"
-        )
-        self.assertEqual(google["status"], "active")
-        self.assertEqual(payload["hosted_text"]["route_preview"]["selected_provider_id"], "google-ai-studio")
+        hosted_text = payload["hosted_text"]
+        google = next(item for item in hosted_text["available_providers"] if item["provider_id"] == "google-ai-studio")
+        profiles = [item for item in hosted_text["profiles"] if item["provider"]["provider_id"] == "google-ai-studio"]
+        self.assertEqual(google["status"], "disabled")
+        self.assertIsNone(hosted_text["route_preview"]["selected_provider_id"])
+        self.assertTrue(profiles)
+        self.assertTrue(all(not item["selectable"] and item["unavailable_reason"] == "provider_disabled" for item in profiles))
         self.assertNotIn("super-secret-token", json.dumps(payload))
         self.assertNotIn("secret_ref", json.dumps(payload))
 

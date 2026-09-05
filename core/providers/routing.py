@@ -155,6 +155,10 @@ def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
             reason_codes.append(f"hosted_model_output_unsupported:{model.model_id}")
             continue
 
+        if candidate.status != "active":
+            reason_codes.append(f"provider_disabled:{candidate.provider_id}")
+            continue
+
         authorization = check_provider_credential_authorization(
             context.provider_store,
             definition=candidate,
@@ -163,9 +167,6 @@ def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
             app_id=context.app_id,
         )
         reason_codes.extend(authorization.reason_codes)
-        if candidate.status != "active" and not authorization.authorized:
-            reason_codes.append(f"provider_disabled:{candidate.provider_id}")
-            continue
         if not authorization.authorized:
             reason_codes.append("fallback_no_credential_authorization")
             continue

@@ -185,3 +185,9 @@ export {
   type FileCacheTelemetryEvent,
   type PwaFileCacheOptions,
 } from "./fileCacheTypes";
+
+export {
+  PWA_DATA_CACHE_BROKER_RETRY,
+  isParentDataCacheRetryMessage,
+  type ParentDataCacheRetryMessage,
+} from "./readModelRetryTelemetry";

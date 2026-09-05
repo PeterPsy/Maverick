@@ -1,3 +1,4 @@
+import { bindReadModelRetryTelemetry, PWA_DATA_CACHE_BROKER_RETRY, type ParentDataCacheRetryMessage } from "./readModelRetryTelemetry";
 import type {
   CacheLoader,
   CacheNetworkResult,
@@ -302,6 +303,22 @@ async function requestBrokeredRead<T>(
     }
 
     async function serveNetwork(payload: ParentDataCacheNetworkRequestMessage): Promise<void> {
+      const unbindTelemetry = bindReadModelRetryTelemetry(localController.signal, {
+        appId: request.app_id, resource: request.resource,
+      }, ({ attempt, keyHash, kind }) => {
+        if (finished) return;
+        try {
+          channel.port1.postMessage({
+            app_id: request.app_id,
+            request_id: request.request_id,
+            network_request_id: payload.network_request_id,
+            type: PWA_DATA_CACHE_BROKER_RETRY,
+            event: { attempt, keyHash, kind },
+          } satisfies ParentDataCacheRetryMessage);
+        } catch {
+          // Metrics delivery must never change the transport result.
+        }
+      });
       try {
         const response = await loader({
           ...(payload.etag ? { etag: payload.etag } : {}),
@@ -331,6 +348,8 @@ async function requestBrokeredRead<T>(
         } catch {
           fail(error);
         }
+      } finally {
+        unbindTelemetry();
       }
     }
 

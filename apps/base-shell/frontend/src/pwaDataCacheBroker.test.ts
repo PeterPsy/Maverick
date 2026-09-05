@@ -9,7 +9,7 @@ import {
   PWA_DATA_CACHE_BROKER_RESULT,
 } from "@maverick/pwa-cache";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
-import { shellCacheLifecycle, shellRetryCoordinator, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
+import { shellCacheLifecycle, shellRetryCoordinator, shellPwaMetrics, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
 import { setMaverickFrameOrigin, type MaverickFrameScope } from "./iframePolicy";
 
 type PortMessage = Record<string, unknown>;
@@ -116,12 +116,13 @@ describe("Base Shell structured data-cache broker", () => {
     vi.restoreAllMocks();
   });
 
-  it.each(["recovery", "cleanup"])("keeps brokered retry cancellation scoped to the shell: %s", async (outcome) => {
+  it.each(["recovery", "cleanup", "dispose", "terminal"])("keeps brokered retry cancellation scoped to the shell: %s", async (outcome) => {
+    shellPwaMetrics.reset();
     const subject = broker();
     brokers.push(subject);
     const fetch = vi.spyOn(globalThis, "fetch")
       .mockRejectedValueOnce(new TypeError("link down"))
-      .mockResolvedValueOnce(Response.json({ revision: "recovered", items: [] }));
+      .mockResolvedValueOnce(outcome === "terminal" ? new Response(null, { status: 400 }) : Response.json({ revision: "recovered", items: [] }));
     const loader = vi.fn(async ({ signal }: { signal?: AbortSignal }) => {
       const payload = await readCacheModelJson<{ revision: string; items: unknown[] }>({ appId: "app-store", resource: "catalog" }, signal);
       return { kind: "value" as const, payload, revision: payload.revision };
@@ -143,17 +144,29 @@ describe("Base Shell structured data-cache broker", () => {
     expect(settled).toBe(false);
     expect(loader).toHaveBeenCalledTimes(1);
     expect(shellRetryCoordinator.pendingCount()).toBeGreaterThan(0);
-    if (outcome === "cleanup") {
+    await vi.waitFor(() => expect(shellPwaMetrics.snapshot().requestWait.pendingCount).toBe(1));
+    expect(shellPwaMetrics.snapshot().counters.pwa_request_wait_started).toBe(1);
+    const cancelled = outcome === "cleanup" || outcome === "dispose";
+    if (cancelled) {
       const rejected = expect(result).rejects.toBeInstanceOf(Error);
-      shellRetryCoordinator.cancelAll("PWA cache was cleared.");
+      if (outcome === "cleanup") shellRetryCoordinator.cancelAll("PWA cache was cleared.");
+      else subject.dispose();
       await rejected;
       expect(fetch).toHaveBeenCalledTimes(1);
       expect(shellRetryCoordinator.pendingCount()).toBe(0);
     } else {
-      await expect(result).resolves.toMatchObject({ brokered: true, source: "network", revision: "recovered" });
+      if (outcome === "terminal") await expect(result).rejects.toBeInstanceOf(Error);
+      else await expect(result).resolves.toMatchObject({ brokered: true, source: "network", revision: "recovered" });
       expect(fetch).toHaveBeenCalledTimes(2);
     }
     expect(loader).toHaveBeenCalledTimes(1);
+    const metrics = shellPwaMetrics.snapshot();
+    expect(metrics.requestWait.pendingCount).toBe(0);
+    expect(metrics.requestWait.durationObservations).toBe(1);
+    expect(metrics.requestWait.totalDurationMs).toBeGreaterThan(0);
+    expect(metrics.counters.pwa_request_retry_attempt).toBe(cancelled ? 0 : 1);
+    expect(metrics.counters.pwa_request_wait_cancelled).toBe(cancelled ? 1 : 0);
+    expect(metrics.counters.pwa_request_wait_resolved).toBe(cancelled ? 0 : 1);
   });
 
   it("mediates a network miss and then returns a warm hit with conditional revalidation", async () => {

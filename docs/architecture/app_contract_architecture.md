@@ -1802,6 +1802,14 @@ Store remains a conditional GET. Closing the private broker channel cancels
 its read transport; the shell retains a one-shot cancellation envelope so
 Settings clear also cancels the delegated transport. Unreviewed forks retain
 one-shot reads.
+The SDK binds read-model retry telemetry to the broker loader's signal and
+app/resource for that invocation only. Redacted wait/retry/completion events
+travel over its private MessagePort; the shell requires the active app, read
+and network request ids before recording them. A bounded per-network tracker
+re-keys child hashes with the host network id, deduplicates ordered events,
+measures wait duration on the host, and drains pending waits on cancellation
+or channel teardown. M6 receives the actual HTTP retries, not a replay of the
+one-shot outer loader, and persists aggregate counts/durations only.
 Storage file retry uses a host-issued `PwaFileCache.retryableRead` executor for
 the SDK-owned GET/cache pipeline, not a caller-supplied operation. Ordinary
 callbacks remain one-shot; nominal executor validation and mutation

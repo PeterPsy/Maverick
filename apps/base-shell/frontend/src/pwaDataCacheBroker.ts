@@ -7,6 +7,7 @@ import {
   isParentDataCacheInvalidateMessage,
   isParentDataCacheNetworkResultMessage,
   isParentDataCacheOpenMessage,
+  isParentDataCacheRetryMessage,
   type AccessLease,
   type CacheLoader,
   type CacheNetworkResult,
@@ -27,7 +28,8 @@ import {
   type MaverickFrameScope,
 } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
-import { revokeShellAuthorization, shellCacheLifecycle, shellRetryCoordinator } from "./pwaCacheRuntime";
+import { PwaDataCacheRetryMetrics } from "./pwaDataCacheRetryMetrics";
+import { revokeShellAuthorization, shellCacheLifecycle, shellPwaMetrics, shellRetryCoordinator } from "./pwaCacheRuntime";
 import {
   RESOURCE_DECLARATIONS,
   type ResourceDeclaration,
@@ -45,6 +47,7 @@ type ActiveRead = {
   initialDelivered: boolean;
   network: {
     id: string;
+    metrics: PwaDataCacheRetryMetrics;
     reject: (error: unknown) => void;
     resolve: (result: CacheNetworkResult<unknown>) => void;
   } | null;
@@ -210,6 +213,12 @@ export class PwaDataCacheBroker {
       return;
     }
     const network = active.network;
+    if (network && isParentDataCacheRetryMessage(value, {
+      appId: active.request.app_id, requestId: active.request.request_id, networkRequestId: network.id,
+    })) {
+      network.metrics.receive(value.event);
+      return;
+    }
     if (!network || !isParentDataCacheNetworkResultMessage(
       value,
       active.request.request_id,
@@ -346,18 +355,23 @@ export class PwaDataCacheBroker {
     if (signal.aborted) return Promise.reject(abortFromSignal(signal));
     if (active.network) return Promise.reject(new Error("Concurrent data-cache loader requests are not allowed."));
     const networkRequestId = requestIdentity();
+    const metrics = new PwaDataCacheRetryMetrics(networkRequestId, (event) => shellPwaMetrics.recordRetry(event));
     return new Promise((resolve, reject) => {
       const abort = () => {
+        metrics.close("cancelled");
         if (active.network?.id === networkRequestId) active.network = null;
         reject(abortFromSignal(signal));
       };
       active.network = {
         id: networkRequestId,
+        metrics,
         reject: (error) => {
+          metrics.close(error instanceof Error && error.name === "AbortError" ? "cancelled" : "resolved");
           signal.removeEventListener("abort", abort);
           reject(error);
         },
         resolve: (result) => {
+          metrics.close("resolved");
           signal.removeEventListener("abort", abort);
           resolve(result);
         },
@@ -373,6 +387,7 @@ export class PwaDataCacheBroker {
           type: PWA_DATA_CACHE_BROKER_NETWORK_REQUEST,
         } satisfies ParentDataCacheNetworkRequestMessage);
       } catch (error) {
+        metrics.close("cancelled");
         active.network = null;
         signal.removeEventListener("abort", abort);
         reject(error);

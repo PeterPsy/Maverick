@@ -1,0 +1,13 @@
+.chatapp-local-mode { display:flex; gap:.5rem; padding:.5rem 1rem; }
+.chatapp-local-mode button, .chatapp-local-mac button { color:inherit; background:transparent; border:1px solid currentColor; border-radius:.6rem; padding:.5rem .9rem; cursor:pointer; }
+.chatapp-local-mode button[aria-pressed=true] { background:color-mix(in srgb, currentColor 12%, transparent); }
+.chatapp-local-mac { display:flex; flex:1; min-height:0; flex-direction:column; gap:.75rem; padding:1rem; max-width:1000px; width:100%; margin:auto; box-sizing:border-box; }
+.chatapp-local-mac header p, .chatapp-local-mac [role=status] { font-size:.85rem; opacity:.75; }
+.chatapp-local-mac__messages { flex:1; min-height:120px; overflow:auto; }
+.chatapp-local-mac article { margin:1rem 0; padding:.8rem; border-radius:.8rem; background:color-mix(in srgb, currentColor 5%, transparent); }
+.chatapp-local-mac article div { white-space:pre-wrap; overflow-wrap:anywhere; margin-top:.5rem; }
+.chatapp-local-mac form { display:flex; gap:.5rem; align-items:end; }
+.chatapp-local-mac textarea { flex:1; min-height:70px; color:inherit; background:transparent; padding:.8rem; border:1px solid currentColor; border-radius:.8rem; font:inherit; }
+.chatapp-local-mac button:disabled { opacity:.4; cursor:default; }
+.chatapp-local-mac [role=alert] { color:#da5959; }
+.chatapp-execution-mode { display:flex; flex-direction:column; height:100%; min-height:0; }

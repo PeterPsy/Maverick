@@ -53,6 +53,7 @@ import {
   type MaverickFrameScope,
 } from "./iframePolicy";
 import { usePwaDataCacheBrokerHost } from "./usePwaDataCacheBrokerHost";
+import { useLocalRuntimeBroker } from "./useLocalRuntimeBroker";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
 import { MobileShellHeader } from "./components/MobileShellHeader";
@@ -139,6 +140,7 @@ export function AppShell() {
         })
       : null
   ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId]);
+  useLocalRuntimeBroker(frameScope);
   const cancelShellLoading = useCallback(({ resetRecovery = false } = {}) => {
     shellLoadAbortRef.current?.abort();
     shellLoadAbortRef.current = null;

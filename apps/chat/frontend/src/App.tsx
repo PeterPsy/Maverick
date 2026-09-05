@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 import type { ChatThread } from "./api/client";
 import { ChatSurface } from "./components/ChatSurface";
+import { ChatExecutionMode } from "./components/ChatExecutionMode";
 import { useChatAppController } from "./hooks/useChatAppController";
 import { useChatShellMessages } from "./hooks/useChatShellMessages";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import type { ExternalFileDrop, ExternalMentionDrop } from "./lib/externalInputs";
 
-export function App({
+function ServerChatApp({
   enablePageCapture = false,
   externalFileDrop = null,
   externalMentionDrop = null,
@@ -55,4 +56,9 @@ export function App({
       <ChatSurface {...controller.surfaceProps} />
     </main>
   );
+}
+
+export function App(props: Parameters<typeof ServerChatApp>[0] = {}) {
+  // Unmount server controllers in local mode, including their upload/drop listeners.
+  return <ChatExecutionMode><ServerChatApp {...props} /></ChatExecutionMode>;
 }

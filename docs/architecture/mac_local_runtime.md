@@ -159,3 +159,8 @@ No field contents are read and no alternate clipboard or AX-value write path is
 introduced. Synthetic tests cover metadata policy, rejected confirmation and
 stop invalidating an eventual approval. Physical typing and stop tests remain
 pending; ad-hoc build updates can still require fresh app-specific TCC grants.
+
+V4 native commit `32046d2` passed all 19 Swift tests, the release build and
+credential-free Codex checks in [run 33989065896](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/33989065896).
+The push workflow built an artifact only; installation is pending the user's
+confirmation that MaverickMac is closed. The Python unused-import check passed.

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import asyncio
+from types import SimpleNamespace
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from core.providers.agentic_profiles import CODEX_PROFILE_ARTIFACT_DIGEST
 from core.providers.certificate_service import runtime_adapter_artifact_digest
@@ -19,8 +22,16 @@ from core.providers.native_agent_builtins import (
     build_gemini_cli_candidate_definition,
     build_gemini_cli_candidate_installation,
 )
-from core.providers.native_agent_contract import validate_native_agent_installation
-from core.providers.agentic_adapter import RuntimeProviderEvent
+from core.providers.native_agent_contract import (
+    validate_native_agent_installation,
+    validate_native_runtime_adapter,
+)
+from core.providers.agentic_adapter import (
+    LocalPrewarmResult,
+    RuntimeProviderEvent,
+    RuntimeRecoveryContext,
+)
+from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import builtin_provider_registry
 
@@ -174,6 +185,75 @@ class NativeAgentFrameworkTest(unittest.TestCase):
                 definition=build_gemini_cli_candidate_definition(NOW),
                 runtime_adapter=_IncompleteNativeAdapter(),
             )
+
+    def test_recovery_contract_validates_the_primitive_used_by_controller(self) -> None:
+        candidate = build_gemini_cli_candidate_installation()
+        adapter = SimpleNamespace(
+            provider_definition=lambda: build_gemini_cli_candidate_definition(NOW),
+            validate_backend=lambda: None,
+            prepare_runtime_skills=lambda *_args: [],
+            build_launch_spec=lambda *_args, **_kwargs: None,
+            execute_turn=lambda **_kwargs: None,
+            steer_turn=lambda *_args, **_kwargs: None,
+            interrupt_turn=lambda *_args: False,
+            build_recovery_command=lambda **_kwargs: [],
+            close_runtime=lambda *_args: 0,
+        )
+
+        with self.assertRaisesRegex(ValueError, "runtime_adapter_incomplete"):
+            validate_native_runtime_adapter(candidate, adapter)
+
+        adapter.prewarm_runtime = lambda *_args: "provider-thread"
+        validate_native_runtime_adapter(candidate, adapter)
+
+    def test_codex_controller_recover_and_resume_use_validated_prewarm(self) -> None:
+        controller = builtin_provider_registry().get_native_agent_controller("codex")
+        context = RuntimeRecoveryContext(
+            session=object(),  # type: ignore[arg-type]
+            binding=object(),  # type: ignore[arg-type]
+            provider_state=object(),  # type: ignore[arg-type]
+        )
+        launch_spec = RuntimeBackendLaunchSpec(
+            provider_id="codex",
+            command=["codex", "app-server"],
+            env_overrides={},
+            credential_binding_id=None,
+            resolved_secret_refs=[],
+            working_directory="/tmp",
+            execution_mode="full-access",
+            readable_roots=["/tmp"],
+            writable_roots=["/tmp"],
+        )
+        recovered = LocalPrewarmResult(
+            ready=True,
+            provider_state_updates={
+                "provider_thread_id": "thread-recovered",
+                "continuation_id": "thread-recovered",
+            },
+        )
+        lifecycle = controller.engine_adapter.local_process_lifecycle
+        self.assertIsNotNone(lifecycle)
+        with patch.object(
+            lifecycle,
+            "build_launch_spec",
+            new=AsyncMock(return_value=launch_spec),
+        ) as build_launch, patch.object(
+            lifecycle,
+            "prewarm",
+            new=AsyncMock(return_value=recovered),
+        ) as prewarm:
+            recovery_result = asyncio.run(controller.recover(context))
+            resume_result = asyncio.run(controller.resume(context))
+
+        self.assertTrue(recovery_result.recovered)
+        self.assertEqual(recovery_result.reason_code, "recovered")
+        self.assertEqual(
+            recovery_result.provider_state_updates["provider_thread_id"],
+            "thread-recovered",
+        )
+        self.assertEqual(resume_result, recovery_result)
+        self.assertEqual(build_launch.await_count, 2)
+        self.assertEqual(prewarm.await_count, 2)
 
     def test_native_final_output_must_contain_non_empty_text(self) -> None:
         controller = builtin_provider_registry().get_native_agent_controller("codex")

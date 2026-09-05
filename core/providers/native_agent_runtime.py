@@ -100,7 +100,7 @@ class NativeAgentRuntimeController:
         return await self.connect(context)
 
     async def resume(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
-        return await self.engine_adapter.recover(context)
+        return await self.recover(context)
 
     def start_turn(self, context: RuntimeTurnContext) -> AsyncIterator[RuntimeProviderEvent]:
         return self.engine_adapter.execute(context)
@@ -156,7 +156,33 @@ class NativeAgentRuntimeController:
         return await self.interrupt(context)
 
     async def recover(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
-        return await self.engine_adapter.recover(context)
+        lifecycle = self.engine_adapter.local_process_lifecycle
+        if lifecycle is None:
+            return await self.engine_adapter.recover(context)
+        try:
+            launch_spec = await lifecycle.build_launch_spec(
+                LocalLaunchContext(
+                    session=context.session,
+                    binding=context.binding,
+                )
+            )
+            prewarm = await lifecycle.prewarm(
+                LocalPrewarmContext(
+                    session=context.session,
+                    binding=context.binding,
+                    launch_spec=launch_spec,
+                )
+            )
+        except Exception:
+            return RuntimeRecoveryResult(
+                recovered=False,
+                reason_code="native_recovery_failed",
+            )
+        return RuntimeRecoveryResult(
+            recovered=prewarm.ready,
+            reason_code="recovered" if prewarm.ready else "not_recovered",
+            provider_state_updates=prewarm.provider_state_updates,
+        )
 
     async def cleanup(self, context: RuntimeCloseContext) -> RuntimeCloseResult:
         return await self.engine_adapter.close(context)

@@ -51,7 +51,7 @@ _NATIVE_OPERATION_ADAPTER_METHODS = {
     "start_turn": "execute_turn",
     "steer": "steer_turn",
     "interrupt": "interrupt_turn",
-    "recover": "build_recovery_command",
+    "recover": "prewarm_runtime",
     "cleanup": "close_runtime",
     "close": "close_runtime",
 }

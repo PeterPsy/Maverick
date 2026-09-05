@@ -11,7 +11,6 @@ from core.runtime.errors import RuntimeTransitionError
 from core.runtime.execution_binding import RuntimeExecutionBinding, fork_runtime_execution_binding
 from core.providers.hosted_text_profiles import (
     HostedTextExecutionBinding,
-    fork_hosted_text_execution_binding,
     validate_hosted_text_execution_binding,
 )
 from core.runtime.models import RuntimeRoutingDecision

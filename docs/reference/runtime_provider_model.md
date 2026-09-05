@@ -181,14 +181,17 @@ The product execution-family catalog is Core-owned and ordered as
 five independent records: a structured adapter manifest, an immutable harness
 recipe, one or more model selections, a sandbox/effect-observation contract,
 and a certificate reference. `ProviderRegistry` validates this composition and
-exposes a structured controller for discovery/version/health/update status,
+the callable inspector/backend implementation, then exposes that controller as
+the production agentic adapter for discovery/version/health/update status,
 launch, connect, resume, event streaming/final output, steering, interrupt,
-recovery, cleanup, and close. A candidate cannot acquire an executable
-controller or become active merely from provider capability metadata. Exact
-legacy Codex identity is the sole safe family inference for profiles created
-before the family field; arbitrary vendor labels and flags are never used for
-that inference. The discovery-only Gemini CLI candidate demonstrates a second
-native registration while remaining hard-disabled until full certification.
+recovery, cleanup, and close. Nominally successful execution with a blank final
+result fails as `agent_final_output_empty`. A candidate cannot acquire an
+executable controller or become active merely from provider capability
+metadata. Exact legacy Codex identity is the sole safe family inference for
+profiles created before the family field; arbitrary vendor labels and flags are
+never used for that inference. The discovery-only Gemini CLI candidate
+demonstrates a second native registration while remaining hard-disabled until
+full certification.
 
 For the Maverick-owned API loop, onboarding records are data rather than Core
 loop branches. `MaverickProtocolAdapterManifest` identifies the trusted
@@ -202,7 +205,9 @@ metadata only as an observation digest with no family or authority. Immutable
 publication rejects in-place tuple drift and refuses `maverick_agent`
 classification until the Full Workspace revision, complete tool set, context
 contract, streaming, usage accounting, tool calling, and cancellation contract
-all match.
+all match. Production bootstrap consumes this catalog for both runtime-registry
+composition and profile publication; Google/OpenRouter are no longer manually
+branched in bootstrap or instantiated directly by the registry builder.
 
 `hosted_text` is not an incomplete agent profile. Its immutable
 `HostedTextProfileDefinition`, separate `HostedTextProfileStatus`, and
@@ -213,10 +218,12 @@ certificate is required. A new text session pins these records, provider/model,
 and provider-routing snapshot in `HostedTextExecutionBinding` before
 persistence. The session initializer receives no agentic execution binding, so
 it creates neither provider-private agent state nor a provider-step journal.
-Dispatch supplies the exact pinned provider/model and routing snapshot and
-fails on drift instead of falling back. A continuation only forks the binding's
-session identity. Legacy stored text sessions remain byte-for-byte unmigrated;
-hydration does not synthesize authority for them.
+Dispatch rebuilds and compares the complete live profile and routing snapshot,
+then supplies the exact pinned provider/model, endpoint, and routing snapshot.
+Provider disable or identity/route drift fails before transport instead of
+falling back. A continuation only forks the binding's session identity. Legacy
+stored text sessions remain byte-for-byte unmigrated; hydration does not
+synthesize authority for them.
 
 ## Provider status and product taxonomy
 
@@ -245,7 +252,9 @@ does not expose capability tiers, a `Full/Read-only` switch, per-agent controls
 that remove required filesystem/shell/CLI/MCP/skill surfaces, or a way to
 promote text-only models. Administrative binding enable/disable, credentials,
 default selection, approvals, rollout, and kill-switch authority remain
-server-governed. Chat uses the same family order and copy, shows agent
+server-governed. The binding control consumes the server's family-neutral
+`enable_eligible` field, so a disabled non-Codex binding can be enabled once its
+independent blockers clear. Chat uses the same family order and copy, shows agent
 destination/profile/recipe before a new session, and displays `No workspace
 tools or actions.` for every text-only option.
 

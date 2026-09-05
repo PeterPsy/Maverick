@@ -606,6 +606,10 @@ completion claim.
   update status, launch, connect, resume, event stream/final output, steering,
   interrupt, recovery, cleanup, and close boundaries over the generic agentic
   engine contract.
+- [x] Registry admission verifies that the inspector and executable backend
+  primitives behind that declaration are callable; production adapter lookup
+  returns the native controller rather than bypassing it through the legacy
+  bridge. Blank successful output fails closed.
 - [x] Human-terminal/ANSI/free-text scraping, incomplete lifecycle contracts,
   unconfined effects, unobserved effects, and unsupervised process trees fail
   closed before registration.
@@ -631,6 +635,9 @@ completion claim.
   and keeps rollout status in its independent CAS record. Google/OpenRouter
   preview publication now uses this common path without changing their profile,
   recipe, adapter, or certification revisions.
+- [x] Production bootstrap builds and retains one onboarding catalog, derives
+  its hosted runtime registry from that catalog, validates the composed engine,
+  and publishes every builtin profile through the generic publication path.
 - [x] `maverick_agent` classification fails closed unless the exact Full
   Workspace revision, complete tool policy, context compaction, streaming,
   usage accounting, tool calling, and cancellation prerequisites are present.
@@ -651,6 +658,10 @@ completion claim.
   its pinned provider/model with its pinned upstream policy. Provider disable or
   route drift fails closed instead of falling back, and an existing session
   rejects a requested family/provider/model change.
+- [x] Dispatch also rebuilds the complete live provider/model identity and
+  rejects revision, protocol/API, endpoint, modality, limit, cost, retention,
+  destination, or routing drift before transport. The transport consumes the
+  pinned endpoint and routing snapshot.
 - [x] Continuations fork only the text binding session identity. Historical
   text-session documents hydrate without synthesizing authority or rewriting
   their stored provider/model fields.
@@ -683,12 +694,18 @@ completion claim.
 - [x] Exact Codex remains active on profile revision 14 through the generic
   native readiness projection; the discovery-only Gemini CLI candidate and the
   Google/OpenRouter agentic previews remain unavailable and cannot be selected.
+- [x] Settings re-enablement is family-neutral and follows `enable_eligible`;
+  it no longer relies on a Codex-only exception to an already-blocked effective
+  capability snapshot.
 
 The source-level P5 exit gate is closed: the UI family id is bound to the
 server execution contract, partial agents are unavailable rather than degraded,
 no cross-family fallback is introduced, and native effect confinement remains
-registry-validated. This does not issue or promote a remote certificate and
-does not change the release decision below.
+registry-validated. The 2026-09-05 review remediation also closes the disabled
+provider credential bypass, text-pin live-drift bypass, native-controller path
+bypass, production onboarding disconnect, and non-Codex re-enable deadlock.
+This does not issue or promote a remote certificate and does not change the
+release decision below.
 
 ## Certification and release gates — still open
 

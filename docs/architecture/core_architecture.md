@@ -561,8 +561,14 @@ run inside a supervised Maverick sandbox with structured effect events. An
 uncertified native installation is always clamped to `disabled`, including
 when stale persisted provider metadata says otherwise. Codex is registered
 through this generic contract without changing its existing app-server adapter
-or certified artifact digest; the Gemini CLI registration is a discovery-only
-second candidate and has no execution controller or release authority.
+or certified artifact digest. Registration verifies the callable inspector and
+backend primitives behind the declared lifecycle before granting an executable
+controller, and `get_agentic_runtime_adapter()` returns that controller on the
+production path. The controller delegates the supervised local-process
+lifecycle, validates structured final events, and the provider-neutral executor
+turns a nominally successful blank result into `agent_final_output_empty`. The
+Gemini CLI registration is a discovery-only second candidate and has no
+execution controller or release authority.
 
 Maverick Agent onboarding is likewise composition-driven. A trusted protocol
 adapter manifest owns transport, request/response codec, private state, usage,
@@ -577,6 +583,11 @@ but always return `authority_granted=false` and no execution family. Publication
 classifies a profile as `maverick_agent` only after the complete Full Workspace
 contract, context, tool, streaming, usage, cancellation, and policy prerequisites
 are present; otherwise it cannot be published under that family.
+Production bootstrap assembles one builtin onboarding catalog, builds the
+hosted runtime registry from it, validates the composed engine, and publishes
+all registered profiles through the same catalog. Adding another model for an
+existing trusted protocol therefore changes its config/recipe/publication data,
+not the runtime-registry builder or bootstrap control flow.
 
 Text-only API sessions have a third and disjoint identity path. Before a new
 session is persisted, Core resolves the exact hosted provider/model and creates
@@ -587,9 +598,14 @@ action loop, and workspace actions to false, plus the exact provider-routing
 snapshot. It is never passed to agentic provider-state initialization, the
 provider-step journal, tool orchestration, or an agentic certificate validator.
 Every text dispatch revalidates the binding and requests its pinned provider and
-model; a missing/disabled route fails rather than selecting another provider or
-execution family. Continuation may fork the binding identity but cannot change
-its route. Stored pre-P5 text sessions hydrate without manufacturing or
+model. Before transport, Core rebuilds the live profile from the current model
+and provider records and compares the entire pinned identity—including model
+and profile revisions, protocol/API version, endpoint, modalities, limits,
+cost, retention, and destination—plus the live routing snapshot. A
+missing/disabled route or any drift fails rather than selecting another
+provider or execution family. The transport receives the exact pinned endpoint
+and routing snapshot. Continuation may fork the binding identity but cannot
+change its route. Stored pre-P5 text sessions hydrate without manufacturing or
 rewriting a pin. An existing session cannot accept a different runtime family,
 provider, or model through a later app request, and text sessions cannot create
 agent children.
@@ -617,10 +633,13 @@ provider/upstream, recipe, data policy, certificate, health, native
 install/version/sandbox, and text-profile limits required for administration;
 Chat shows the pinned destination/profile/recipe before creation. Text-only
 entries always state `No workspace tools or actions.` and cannot inherit an
-agent binding. An unavailable persisted new-session target leaves the picker
-unselected instead of falling through to another family. Existing Chat sessions
-continue to resolve their pinned runtime or hosted-text identity before
-considering any new-session default.
+agent binding. Settings uses the server-owned `enable_eligible` disposition for
+every agent family; a disabled binding can be re-enabled after its independent
+blockers clear without a Codex-specific browser exception. An unavailable
+persisted new-session target leaves the picker unselected instead of falling
+through to another family. Existing Chat sessions continue to resolve their
+pinned runtime or hosted-text identity before considering any new-session
+default.
 
 The core must also be installable and bootable with no AI provider configured or available.
 

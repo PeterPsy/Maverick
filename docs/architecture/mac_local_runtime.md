@@ -247,3 +247,30 @@ Codex checks; it installed `355adfa` and requested desktop launch at 21:59:38 UT
 on 2026-09-05 following user-confirmed exit. The unused-import check passed.
 Credentials were not reimported or removed. Physical click/scroll remains the
 next user-assisted acceptance test; no outcome is inferred from CI alone.
+
+### Physical click acceptance and guided activation (v7)
+
+The user's 2026-09-06 00:12 local screenshot confirms the v6 click in Notes'
+search field (focus outline and suggestions visible, no added text). Initial
+observation without foreground Notes still failed at model interpretation.
+The subsequent explicit `open_app` → `observe` test succeeded after native
+consent, without manual activation. Background capture reliability and the
+cause of its failure are not established by this evidence.
+
+V7 adds shared native model/tool guidance: each new UI request normally starts
+with separately approved `open_app`, followed by observation after success;
+the user need not name the tool or focus the app. The activation dialog explains
+the focus change without click, typing or scrolling. Text-only requests must
+not use computer tools; an explicit background/no-focus requirement forbids
+activation. Tool failures, denials and unreadable images stop the workflow;
+there is no automatic retry or bypass. Post-action verification observes
+directly without another activation.
+
+This is guidance, not a deterministic model-compliance guarantee. `observe`
+itself still does not activate the app, and all native authorization/stop gates
+remain authoritative. Tests cover shared guidance, rejected/missing activation
+confirmation and stop invalidating approval without desktop capture or input.
+The installed app must restart to start a thread with the new instructions.
+Plain-language physical acceptance is pending; scroll, lock/sleep, concurrent
+credential refresh and packet-level transport checks remain open. No auth,
+image payload routing, web broker or Ubuntu runtime behavior changes in v7.

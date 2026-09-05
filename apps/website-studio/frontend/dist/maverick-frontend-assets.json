@@ -1,5 +1,5 @@
 {
-  "build_id": "6b55b8ab90c6595dddac79069ba0a4b8c7b86f4b779d2520fd00ad015efb4bd1",
+  "build_id": "8653a626d0784d01c5a7f9a93d6585b3815f3550e518ffffe39b972acbf90706",
   "entrypoints": [
     "index.html",
     "preview-runtime/index.html",
@@ -9,9 +9,14 @@
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/api-XJ4Z7z2U.js",
-      "sha256": "c69ffd2a4bcd8cf3bba411d886a8ae9858cf5f015661747681289810f036118d",
-      "size_bytes": 222407
+      "path": "assets/api-Vi_JtxVm.js",
+      "sha256": "e733c6003615a6558274681ff5c6c897f9d889d635b1c7fc02092ca3649214d3",
+      "size_bytes": 223428
+    },
+    {
+      "path": "assets/app-B29jQRpK.js",
+      "sha256": "d5ec5308dce4ceed1399e56b5f523efb9c67305e91a871792e2db7ed9f1e7f4b",
+      "size_bytes": 15492
     },
     {
       "path": "assets/app-CYpWH8f0.css",
@@ -19,23 +24,18 @@
       "size_bytes": 9582
     },
     {
-      "path": "assets/app-DzbSHo0U.js",
-      "sha256": "9291a16c6a5713eade7f59b4a3c3261998b4bd8a4ee745223fc2bc6833c084c5",
-      "size_bytes": 15492
-    },
-    {
       "path": "assets/index-B8WuCG98.css",
       "sha256": "4b9ae1486709e84c8bf93734ee51bedecfdc67cbe0e8c6e922677f5fa4ed7aa6",
       "size_bytes": 7084
     },
     {
-      "path": "assets/widgets/website-studio-sitemap-sidebar/index-ByGU0-6s.js",
-      "sha256": "b45817e033b9a0031473fc1d873250457478c4f8753bb3594af9de7c55b4edd2",
+      "path": "assets/widgets/website-studio-sitemap-sidebar/index-MRAePwAX.js",
+      "sha256": "7a1c49137dd48a528bf65f3fb66112ad3eebce1138b21fe5a16f1733d191c1c5",
       "size_bytes": 43696
     },
     {
       "path": "index.html",
-      "sha256": "73207b6324d6f30d20d4e6528d44f7c6f19b5edd8f641516cb1f371794d694ea",
+      "sha256": "5996469b05d9d46df5ab63a904ca8c41b6d1d116cb47ac3b45aa3d2eb3bf6f25",
       "size_bytes": 529
     },
     {
@@ -50,7 +50,7 @@
     },
     {
       "path": "widgets/website-studio-sitemap-sidebar/index.html",
-      "sha256": "784de9e9d784cc6e504c39f83990b03d3a2c2b438e25ac210d66db951c75622c",
+      "sha256": "11acb336cfaceb3b2eb397613b604940e179afc661b33a10d0cbdfefc903e086",
       "size_bytes": 629
     }
   ],

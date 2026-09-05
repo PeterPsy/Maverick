@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "37c013fb3cf35f57645734bf126a7d68aecf6c99683330bdd7b188a20c93a512",
+  "build_id": "35d48b4deaedf88638f72f4439ba067d6cec0289588a66e4151d6d66208c417f",
   "entrypoints": [
     "index.html",
     "widgets/file-preview/index.html",
@@ -14,18 +14,18 @@
       "size_bytes": 43048
     },
     {
-      "path": "assets/app-ZmqliQPJ.js",
-      "sha256": "3b2ee05ee4acc7019c166522c1d91064d7a8e1f20972646623c01307f48c6feb",
+      "path": "assets/app-YVT0Sp_8.js",
+      "sha256": "73521eb43e938524f20cc888d9ce7787ffbd2e4a12e26e4ed344b3d0e09dda61",
       "size_bytes": 92080
     },
     {
-      "path": "assets/browserFullscreen-fwSjljYa.js",
-      "sha256": "e38d88992d9a7b8464a539efb2a24727661e43d860014fdfdf658f2b94893487",
+      "path": "assets/browserFullscreen-BSwc7ys3.js",
+      "sha256": "b9f5f4a66b6d5a20a4e8b039df99bc51fb84724a7f1221af797452fe5e5035a1",
       "size_bytes": 11418
     },
     {
-      "path": "assets/docx-preview-B1qYLBcG.js",
-      "sha256": "653d3a69fb1e6f9353722915f49ea0126dbcb17416cca3dab61a33c96bc88a5d",
+      "path": "assets/docx-preview-DAWJcosf.js",
+      "sha256": "1ccc69ad105b12860f0a90249f75ba28413996dacfc152b930a88391e7225ffd",
       "size_bytes": 172974
     },
     {
@@ -39,13 +39,13 @@
       "size_bytes": 1232303
     },
     {
-      "path": "assets/storageApi-CsMAOd0g.js",
-      "sha256": "49b9a5862f049e04d44d238434e9c334cc05ad9f4ea53a7d61bc99d66e287b0b",
-      "size_bytes": 239624
+      "path": "assets/storageApi-DLoc4Ouq.js",
+      "sha256": "a3e61ae76ba218255f7c01e420742619db25b03d2ea9acda99b0685f97df1271",
+      "size_bytes": 241483
     },
     {
-      "path": "assets/storageNavigationParams-DeLR8AbS.js",
-      "sha256": "383819bb95b0beebcf4341ab9ae4240fc78124417b55591726c2f05af9919f71",
+      "path": "assets/storageNavigationParams-Bic_A1RK.js",
+      "sha256": "b5f5271cb90971d42709c641db4f459ccc2a94fda6190b6880b9b30b4355e3ce",
       "size_bytes": 10494
     },
     {
@@ -54,23 +54,23 @@
       "size_bytes": 789
     },
     {
-      "path": "assets/storageViewFilterEvents-DM6bFG6Y.js",
-      "sha256": "087dac715e9b8ac7e1377f66025a620349b253f15691a91bc778370c64b665a4",
+      "path": "assets/storageViewFilterEvents-D7mIa3IM.js",
+      "sha256": "49866a566110da4a6414bcd9568c457824852e917f83105bb0ac190ab29fa530",
       "size_bytes": 175020
     },
     {
-      "path": "assets/widgets/file-preview/index-CiY1D9ha.js",
-      "sha256": "eeb074fb85ba9dd1014b70d8a97678484db2984c2ac206072095c09ad8b78017",
+      "path": "assets/widgets/file-preview/index-BCcJuh3U.js",
+      "sha256": "68bfb1671cbf247b06f8a05d80cf90d5bf465d0f7a3b2c2cea24187e80e57d0e",
       "size_bytes": 427200
     },
     {
-      "path": "assets/widgets/storage-sidebar/index-CPiORU6V.js",
-      "sha256": "b584924ed66acf89bcb2b339b7c558b619036d892ed8489822253b10e690da7c",
+      "path": "assets/widgets/storage-sidebar/index-YGuxHJlX.js",
+      "sha256": "31b6cfa019ef99fcf2e4e077d7303fb71ec31f9e648d6ea9a664fec81aa2e094",
       "size_bytes": 27087
     },
     {
-      "path": "assets/widgets/storage-sidebar-footer/index-C6cEutFb.js",
-      "sha256": "5a3d01c7e932edc83d8a3adf0d8cc7389870dc41437a53f2261a478ab5c39b44",
+      "path": "assets/widgets/storage-sidebar-footer/index-GHk2JnSA.js",
+      "sha256": "2c1b782afbd67b00689012cd6e71ac65dfc4b97f7aaaf8412c03eeb5fb729cd6",
       "size_bytes": 9868
     }
   ],
@@ -87,22 +87,22 @@
     },
     {
       "path": "index.html",
-      "sha256": "9eab1cf80d53aba26c6ee781f08ea98c4f53fda233fdc9afc13029655a528eef",
+      "sha256": "2098192bd364d8ffd513bc6e3bfa2cc768df8b64a3605e5c43579c5feb06bef9",
       "size_bytes": 1054
     },
     {
       "path": "widgets/file-preview/index.html",
-      "sha256": "529e5a96a3323d9966d0f59d9b6fc8ca69692e933d119828e8efe37b1d616f3e",
+      "sha256": "02ccebad1fdc7895ed53b2ce8a1bb7cd43d37f9a5d9d102cca5e31b4cec91d4f",
       "size_bytes": 767
     },
     {
       "path": "widgets/storage-sidebar/index.html",
-      "sha256": "29294f123162d142348af6fcf39f1d5118b2e9c57d17ebd1b4326e176789fc12",
+      "sha256": "ebf5cbdd1357c917d1b608b97294f857a1c67b87633c305375dafabbbbfb238e",
       "size_bytes": 808
     },
     {
       "path": "widgets/storage-sidebar-footer/index.html",
-      "sha256": "a58045176a9086c962d10fbb109743db2b95a706f97c13643114db9631adc4a6",
+      "sha256": "f8f4f35f2657c4995f862c21b36642a08ceb75e5d53458db601c735977f7721d",
       "size_bytes": 800
     }
   ]

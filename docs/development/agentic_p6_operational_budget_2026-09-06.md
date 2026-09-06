@@ -10,6 +10,11 @@ The user superseded the proposed 100 USD budget with **at most 5 USD total on
 OpenRouter and Google free tier only**, and authorized a separate review agent.
 No model generation, credential resolution, top-up, billing upgrade, backend
 restart or certificate/binding activation was performed in this checkpoint.
+The workspace plan's authorized section 17 records these limits and the
+required separate candidate/Codex cutover. The guarded Storage write changed
+SHA-256 `0c8796ded071189b315982cd17596f001e02062c550c3be3f57b203f920069e9`
+to `7fae659a9d903d0f776fb7f87526b8eda348aaa753e01c5ff555999e44990471`;
+it does not remove any P6-L/S/R gate.
 
 One private operator job was initialized, outside the repository and workspace:
 `/var/tmp/maverick/maverick-p6-operator-dd5hrvqq`. Its local locator is

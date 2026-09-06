@@ -580,3 +580,16 @@ disposable signing fixture tried to copy protected system-file metadata. The
 fixture now copies only bytes and executable mode; a regression raises the Python
 suite to 15 tests. Panel presentation explicitly stays on MainActor. Update and
 physical acceptance remain pending; no OS protection has been relaxed.
+
+Approved update run `34031255162` passed 107 Swift and 15 Python tests on Mac,
+release without the actor warning, credential-free Codex and image wire checks,
+real Apple Development signature validation and the two-version bidirectional
+identity fixture. The app's designated requirement digest was unchanged between
+the two v15 code builds. At 11:50:44 UTC on 2026-09-06 the updater migrated the
+verified ad-hoc app to `a02643c`, replaced the same path atomically without a new
+persistent backup and requested launch (`consenso senza focus v15`). Historical
+backup apps were not deleted. Linux passed 14 applicable updater tests (one
+Darwin-only skip), wire/diff checks, and Core unused-import checks passed.
+Physical typing/focus preservation and TCC retention on later signed updates
+remain acceptance gates; migration may still require normal macOS permission or
+Keychain approval once. No full computer-use completion is claimed.

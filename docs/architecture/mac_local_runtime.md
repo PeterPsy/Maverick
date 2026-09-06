@@ -461,3 +461,11 @@ existing consent, destination, secure-input, lease and Stop rules remain intact.
 Eight focused tests cover diagnostics and unchanged validation semantics.
 User-approved build/install and the no-typing physical diagnostic remain pending;
 v12 does not claim to fix the unverified native search-focus cause.
+
+User-approved install run `34026779799` passed all 75 Swift tests with zero
+failures, release, credential-free Codex checks and the same-turn wire regression.
+It installed `a5e689e` and requested desktop launch at 10:15:17 UTC on 2026-09-06;
+setup shows `a5e689e · diagnostica focus v12`. Linux wire and Core unused-import
+checks passed. The physical gate is a single approved search click followed by
+observation and the staged native diagnostic, without typing. No root cause or
+successful search-focus recognition is inferred from this installation.

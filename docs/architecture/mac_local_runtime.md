@@ -770,3 +770,55 @@ The same path was updated without persistent backup and launch requested at
 **15:13:37 UTC on 2026-09-06**, build **1bb3b8b · focus nativo v19**. Physical
 Calendar search/create/edit/verify acceptance remains pending; build success is
 not evidence that the user's precise AX focus case has been resolved.
+
+### v20 reuse of local automation engines (2026-09-06)
+
+Physical v19 Calendar quick-create still failed MC-TOOL-19 / AX -25205 before
+reported event creation. The user approved a change of approach: reuse a GUI
+engine and prefer native domain APIs over further field-specific AX patches.
+
+Apple-repo v20 exposes `mac_peekaboo` around a checksum-pinned MIT Peekaboo 4.3.1
+CLI/dylib bundled in the signed Mac app. A native-owned stdio MCP child has a
+private temporary HOME/config, migration disabled and explicit local-only
+routing, with no provider keys, secondary AI, runtime installer or global MCP
+configuration. The adapter exposes exact-app window inventory/observation,
+element click/type/replace, named keys and bounded scroll, not arbitrary tools,
+executables, paths or foreground fallback. One native-bound snapshot authorizes
+one input; Peekaboo owns the native interaction compatibility checks. Requires
+macOS 15+, whereas the existing baseline still targets macOS 14.
+
+`mac_calendar` directly integrates Apple's EventKit inside the signed host,
+rather than a separate calendar MCP helper and permission identity. Calendar
+must be natively approved. Tools discover calendar IDs, read bounded date ranges,
+create and update timed events without recurrence/invitees; they do not delete
+or send invitations. Explicit timezones, duplicate creation checks and read
+receipts/concurrent-change checks constrain writes. The new Calendars full-access
+prompt is expected; it is not a reset of Screen/Accessibility grants. EventKit
+readback verifies data, not visual Month/Week acceptance.
+
+All engines share native task/per-action consent, scope, Stop, session/turn
+invalidation and failure blocking. Legacy GUI tools remain for deliberately
+requested coordinate operations, not automatic bypass after a failed new tool.
+PNG images are converted locally to one bounded JPEG in the established
+same-turn Codex attachment route. Screenshots/AX content do not pass through
+Ubuntu. Peekaboo may use temporary on-disk artifacts in its private session
+home, cleaned after shutdown; secure erasure/crash cleanup is not guaranteed.
+Credentials, Astra model, host signing identity and atomic same-path updater are
+unchanged. No Core implementation change. Deterministic adapter/image/package
+checks and credential-free real MCP initialize/catalog checks gate installation;
+physical Calendar/Notes/third-app comparison remains pending.
+
+V20 final run `34043636547` passed 201 Swift tests (11 added), 18 Python tests,
+release, credential-free Codex image wire, private Foundation-home verification
+and the real pinned Peekaboo MCP initialize/catalog check (no tools/call/model
+request). The installed bundle passed bidirectional identity continuity; its
+designated requirement SHA256 remains
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+The same app path was updated without persistent backup and launch requested at
+**15:55:54 UTC on 2026-09-06**, build **323b273 · Peekaboo + EventKit v20**.
+Linux updater/packaging and Core unused-import checks passed. Physical integrated
+acceptance, new helper permission behavior and real in-flight cancellation still
+need user verification. No Cua/Macuse desktop comparison has been performed.
+Calendar read output has a byte budget and only the latest bounded read set is
+kept as writable receipts. Private helper artifacts have best-effort cleanup;
+rapid Quit/crash can leave them until OS cleanup. No secure-erasure claim.

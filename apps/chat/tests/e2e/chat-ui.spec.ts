@@ -1166,6 +1166,8 @@ function providerPayload() {
     configured: true,
     active_provider: {
       provider_id: "codex",
+      provider_role: "runtime_engine",
+      kind: "runtime_backend",
       label: "Codex",
       description: "Local test provider",
       status: "active",
@@ -1174,6 +1176,8 @@ function providerPayload() {
     items: [
       {
         provider_id: "codex",
+        provider_role: "runtime_engine",
+        kind: "runtime_backend",
         label: "Codex",
         description: "Local test provider",
         status: "active",

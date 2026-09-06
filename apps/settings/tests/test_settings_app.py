@@ -356,6 +356,7 @@ function transpile(relativePath) {
 
 transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/bouncyToggle.ts');
+transpile('frontend/src/agenticProfileGroups.ts');
 transpile('frontend/src/providerModelOptions.ts');
 transpile('frontend/src/executionFamilies.ts');
 transpile('frontend/src/usageHistoryFilters.ts');

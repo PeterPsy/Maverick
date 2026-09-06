@@ -1401,6 +1401,32 @@ button.settings-adapter-card {
   margin-top: 2px;
 }
 
+.settings-agentic-profile-group {
+  min-width: 0;
+}
+
+.settings-agentic-revision-history {
+  margin: 6px 0 4px 14px;
+  padding-left: 12px;
+  border-left: 1px solid var(--maverick-border);
+}
+
+.settings-agentic-revision-history > summary {
+  padding: 6px 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.settings-agentic-revision-history > summary:focus-visible {
+  outline: 2px solid var(--maverick-text);
+  outline-offset: 3px;
+}
+
+.settings-agentic-profile-id {
+  overflow-wrap: anywhere;
+}
+
 .settings-runtime-family {
   display: grid;
   gap: 10px;

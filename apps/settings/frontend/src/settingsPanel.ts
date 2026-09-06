@@ -17,6 +17,7 @@ import {
   selectedHostedProviderDraft
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
+import { groupAgenticProfileRevisions, type AgenticProfileRevisionGroup } from './agenticProfileGroups';
 import {
   NO_WORKSPACE_ACTIONS_MESSAGE,
   executionFamily
@@ -450,22 +451,24 @@ function agenticRuntimeSettingsCardHtml(
   projectedFamilies: ExecutionFamilyDefinition[] | undefined,
   nativeAgents: NativeAgentStatus[]
 ) {
-  const visibleItems = admin?.items || [];
+  const groups = groupAgenticProfileRevisions(admin?.items || []);
+  const visibleItems = groups.map((group) => group.primary);
   const releaseDecision = admin?.release_decision || 'GO';
   const nativeFamily = executionFamily('native_agent', projectedFamilies || admin?.execution_families);
   const maverickFamily = executionFamily('maverick_agent', projectedFamilies || admin?.execution_families);
-  const nativeItems = visibleItems.filter((item) =>
+  const nativeGroups = groups.filter(({ primary: item }) =>
     item.execution_family === 'native_agent'
       || (!item.execution_family && item.runtime_engine_id === 'codex')
   );
-  const maverickItems = visibleItems.filter((item) => item.execution_family === 'maverick_agent');
-  const representedNativeIds = new Set(nativeItems.map((item) => item.runtime_engine_id));
+  const maverickGroups = groups.filter(({ primary: item }) => item.execution_family === 'maverick_agent');
+  const representedNativeIds = new Set(nativeGroups.map(({ primary }) => primary.runtime_engine_id));
   const standaloneNativeAgents = nativeAgents.filter(
     (item) => !representedNativeIds.has(item.runtime_engine_id)
   );
   return `<section class="settings-card settings-platform settings-agentic-runtimes-card">
     ${modelSettingsHeadingHtml('account_tree', 'Agent runtimes')}
     <p class="settings-card-copy">Enable complete certified profiles for new chats. Execution family and Full Workspace status are derived from immutable server contracts.</p>
+    ${groups.some((group) => group.otherRevisions.length) ? '<p class="settings-platform-note">One card per profile. Enabled workspace revisions stay visible; other revisions are grouped below each card. No sessions or bindings are migrated.</p>' : ''}
     ${releaseDecision === 'NO-GO' ? `<p class="settings-platform-error settings-agentic-no-go"><strong>Remote agentic release: NO-GO</strong><br>Remote profiles remain visible for containment review but cannot be enabled or selected.</p>` : ''}
     ${visibleItems.some((item) => item.runtime_engine_id === 'codex') ? `<div class="settings-models-toolbar">
       <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
@@ -476,17 +479,31 @@ function agenticRuntimeSettingsCardHtml(
     ${runtimeFamilySectionHtml(
       nativeFamily,
       [
-        ...nativeItems.map((item) => agenticRuntimeBindingHtml(item, state)),
+        ...nativeGroups.map((group) => agenticRuntimeProfileGroupHtml(group, state)),
         ...standaloneNativeAgents.map(nativeAgentInstallationHtml)
       ],
       'No native-agent runtime is registered by this installation.'
     )}
     ${runtimeFamilySectionHtml(
       maverickFamily,
-      maverickItems.map((item) => agenticRuntimeBindingHtml(item, state)),
+      maverickGroups.map((group) => agenticRuntimeProfileGroupHtml(group, state)),
       'No complete Maverick Agent profile is currently available.'
     )}
   </section>`;
+}
+
+function agenticRuntimeProfileGroupHtml(group: AgenticProfileRevisionGroup, state: SettingsPanelState) {
+  const enabledNotice = group.otherEnabledCount ? ` · ${group.otherEnabledCount} enabled` : '';
+  return `<div class="settings-agentic-profile-group" data-agentic-profile-group="${escapeAttr(group.primary.definition_id)}">
+    ${agenticRuntimeBindingHtml(group.primary, state)}
+    ${group.otherRevisions.length ? `<details class="settings-agentic-revision-history" data-agentic-revision-history>
+      <summary>Other revisions · ${group.otherRevisions.length}${escapeHtml(enabledNotice)}</summary>
+      <p class="settings-platform-note">Historical and alternative revisions, with their own bindings and certification. Opening a revision does not enable it or migrate existing sessions.</p>
+      <div class="settings-agentic-runtime-list">
+        ${group.otherRevisions.map((item) => agenticRuntimeBindingHtml(item, state)).join('')}
+      </div>
+    </details>` : ''}
+  </div>`;
 }
 
 function runtimeFamilySectionHtml(
@@ -593,7 +610,8 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       <span class="settings-model-summary-copy">
         <span class="settings-kicker">${escapeHtml(item.model_provider_id)}</span>
         <strong>${escapeHtml(item.display_name)}</strong>
-        <small>${escapeHtml(item.model_id)}${binding?.is_default ? ' · Default' : ''}${usageSummary ? ` · ${escapeHtml(usageSummary)}` : ''}</small>
+        <small>${escapeHtml(item.model_id)} · Revision ${escapeHtml(item.definition_revision)}${binding?.is_default ? ' · Default' : ''}${usageSummary ? ` · ${escapeHtml(usageSummary)}` : ''}</small>
+        <small class="settings-agentic-profile-id">${escapeHtml(item.definition_id)}@${escapeHtml(item.definition_revision)}</small>
       </span>
       <span class="settings-agentic-summary-badges">
         ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}

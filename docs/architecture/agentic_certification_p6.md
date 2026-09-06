@@ -9,9 +9,10 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
 The subsequent aggregate-budget and admission/publication work is not covered
-by that historical freeze. Suite 44 / TCB 34 requires new exact-source
-verification before signing or release; the independent candidate delta is
-documented in `docs/development/agentic_p6_runtime_publication_delta.md`.
+by that historical freeze. Suite 44 / TCB 34 offline verification on the exact
+candidate source, and its still-open laboratory/native/release requirements,
+are recorded in `docs/development/agentic_p6_runtime_publication_delta.md`.
+Those deterministic results are not signing or release approval.
 
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`, revision read on 2026-09-06 (SHA-256

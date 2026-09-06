@@ -156,3 +156,49 @@ These are remaining gates, not waived requirements or a declaration that the
 multimodel program is complete. The source budget cap is now also enforced in
 `CertificationBudgetLimit`, so direct policy creation cannot exceed OpenRouter
 5 USD or reclassify Google's free-tier quota as paid credit.
+
+## Final exact-source offline verification
+
+Tested source: `84a684b8f8de8d1188041a329279b3ff404caa32`, on
+`p6/admission-publication-20260906`, 2026-09-06. Both exact suite-44 fixture
+commands from `core/providers/certification_manifests.py` ran sequentially with
+`MAVERICK_CERTIFICATION_ALLOW_LIVE=0`. The stricter production
+`fixture_receipt` parser accepted their complete retained stderr.
+
+| Verification | Tests | Errors/failures/skips | Uncaught background failures |
+| --- | ---: | --- | --- |
+| Google suite 44, fixture-contract step | 672 | 0 / 0 / 0 | 0 |
+| OpenRouter suite 44, fixture-contract step | 681 | 0 / 0 / 0 | 0 |
+| Additional Codex/queue/API/status/usage/app-mount/cleanup regressions | 94 | 0 / 0 / 0 | 0 |
+
+These are per-command counts with overlapping shared tests, not a count of
+unique tests or a repository-wide fast/pre-merge run. Expanded argv for all
+three commands, exit codes, timings, output hashes and receipts are retained in
+`/var/tmp/maverick/maverick-p6-receipts-verified-mluhskps/summary.json`.
+Its SHA-256 is
+`1f331b60d96655f0b715702d32c9184b641f87ef1a59dd9fa6b048fc399dcacf`.
+The same private directory retains each command's actual stdout/stderr, reread
+and compared with the summary after completion. Stderr SHA-256 values:
+
+- `google-ai-studio.stderr`:
+  `adb730c2e545572de754d35f3d41af4d64fc2785e6551ed89271d2cedb15e3a3`;
+- `openrouter.stderr`:
+  `e69f952156724c860549b04fe7f72f9d67bef348cc239448c9c1fd5ea43c8b3f`;
+- `extra-regressions.stderr`:
+  `a40caed178e349c6b7f4f9a687cd0b42ee02f03e72d6ccb22861356b93d3807b`.
+
+The checkout was clean before and after verification, with unchanged Git commit
+and TCB identity. TCB manifest 34 has structure digest
+`55db98ad5c512808cedadcc0fe5135e27b927160bf44a8379fb4a2a55727efe1`
+and live digest
+`5f795c9b96fc91327d4ad74c03371b2ed50b7e1c8d50320ad9522a8c713fc6e7`.
+Unused-import and whitespace checks also passed. Direct source verification
+again matched candidate Codex 15 and active Codex 14 to their respective
+unchanged digests above; no deployment, migration or cutover occurred.
+
+This later documentation-only record names the exact earlier tested source;
+it is not a claim that a different Git commit has been operationally certified.
+All provider traffic in these regressions is fabricated. No live provider
+request, actual natural scenario, independent operational signoff or release
+certificate was produced. The remaining laboratory, native and P6-L/S/R gates
+listed above are still open.

@@ -69,7 +69,7 @@ accepted in a physical test. No periodic replication/refresh broker is added.
 If reauthentication is required, fail clearly; never fall back to Ubuntu relay.
 The internal-only `chatgptAuthTokens` mode in Codex 0.153.4 is not used.
 
-The ad-hoc macOS development client stores the import copy in the local login
+The macOS development client stores the import copy in the local login
 Keychain (explicit file-based Keychain, no iCloud synchronization), alongside
 the dedicated private Codex auth cache. It does not claim iOS Data Protection
 or `ThisDeviceOnly` restoration semantics. `kSecAttrAccessible` is not valid for
@@ -537,3 +537,39 @@ checks. It installed `fc51711` and requested desktop launch at 11:13:10 UTC on
 Physical full-window image quality, Search focus and search-only typing remain
 unverified; the user must test without manually focusing Note, stopping on denial
 or unknown focus and preserving the native diagnostic before another turn.
+
+### V15 stable updates and focus-preserving consent
+
+V14 physically produced a readable full Notes image and verified native Search
+focus via AXWindow. The post-consent input check then failed MC-TOOL-18, with no
+typing. An activating consent sheet and app reactivation are suspected focus
+disruptors. User approved a closed-app update, stable signing and removal of
+future accumulated backup apps.
+
+V15 uses a nonactivating, non-key/main AppKit panel for computer-action consent,
+with explicit mouse-only buttons, no keyboard equivalents and a 30-second deny
+deadline. Close/cancel/Stop/scope/sleep invalidation resolve false; request IDs
+reject stale callbacks and overlapping requests. Only open_app may activate the
+target, and only if not already foreground. Other inputs never restore focus or
+reselect a destination; all exact text/PID/window/lease/secure-input checks remain.
+The ordinary setup/import dialogs are unchanged. Eight Swift tests cover panel
+configuration, consent lifecycle and activation policy without showing test UI.
+
+Signing audit `34030515976` found one valid local Apple Development identity.
+The native build pins that certificate, uses its standard designated requirement
+and verifies the Apple anchor/leaf certificate/bundle ID with no ad-hoc fallback.
+A real disposable two-version signing fixture checks bidirectional identity
+compatibility. No private keys, Keychain ACLs, TCC database or OS security settings
+are changed. Local development signing is not Developer ID/notarized distribution;
+the initial ad-hoc migration may require permissions once more, and physical
+permission persistence across subsequent signed updates remains to be verified.
+
+Updates verify a staged signed bundle, recheck the app is closed, atomically swap
+it into the fixed ~/Applications/MaverickMac.app path and verify the result.
+Failed verification rolls back; failed rollback preserves explicit recovery data.
+The transaction directory is removed normally, with no persistent backup apps,
+no merge of stale files and no deletion of existing user backups or credentials.
+Signed-to-signed updates require compatible designated requirements in both
+directions. Symlink/unrelated targets and unknown signing transitions fail closed.
+Fourteen Python tests cover updater/signing policy (Darwin swap test skipped on
+Linux). Mac build, signing, update and physical input acceptance remain pending.

@@ -659,3 +659,7 @@ acceptance is pending. Linux updater/wire and Core unused-import checks passed.
 Final source cleanup explicitly marks the immutable interruption enum Sendable
 (no runtime behavior change); its artifact-only validation does not reinstall
 or close the user's newly opened app. Installed code remains 121e69c.
+
+Artifact-only source cleanup run `34035891721` (4a293f0) passed the same 138 Swift
+and 15 Python tests, release/image-wire/signing gates. It did not reinstall the
+app or change the installed functional build 121e69c.

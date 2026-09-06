@@ -1,5 +1,11 @@
 # PWA cache — Website Studio recovery follow-up, 2026-09-06
 
+> Historical report for `e2466671`. A subsequent review reproduced navigation
+> during recovery and late navigation-build errors that this checkpoint did not
+> cover. The [concurrency follow-up](pwa_cache_website_concurrency_validation_2026-09-06.md)
+> records their corrections and the new `724c93e5` candidate; the evidence and
+> counts below are retained for their original candidate, not the current release.
+
 ## Verdict and candidate
 
 **The reported Website Studio P2 is corrected and regression-tested. M6 remains

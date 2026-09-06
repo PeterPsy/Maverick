@@ -1,0 +1,58 @@
+{
+  "schema": "maverick.pwa-cache-completion-candidate.v1",
+  "candidate_commit": "724c93e50c8e55585b88246ab489ca918185be00",
+  "live_flags_changed": false,
+  "apps": {
+    "calendar": {
+      "manifest_path": "apps/calendar/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "2827b1e10af31dbd8122125b0d1a0b40236871e27c0ec63326204899fa6bb82f"
+    },
+    "chat": {
+      "manifest_path": "apps/chat/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "608bfc7abee8eff905a8cdea279912280e2bab6371f7eb75a174f42083f61876"
+    },
+    "crm": {
+      "manifest_path": "apps/crm/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "2673dc3b6914a268f6afd925f214996513dfc639422dd2f2c51f86ac4b737c5c"
+    },
+    "mail": {
+      "manifest_path": "apps/mail/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "a39fceb80e1e74bd4f48e559bba3ec52ff2bc58a1a9a156cd7214fe7cd5766ab"
+    },
+    "fitness-coach": {
+      "manifest_path": "apps/fitness-coach/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "02ccc42c03897378a94e57a48c3a654fe74f45dad36f13e9f422ba0f6cab08bb"
+    },
+    "storage": {
+      "manifest_path": "apps/storage/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "bf9d04fc9b9a0dbee611c23672d9d65d8496d144c9727c98fe5df13f5d44cfe6"
+    },
+    "website-studio": {
+      "manifest_path": "apps/website-studio/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "910ef054f0a0cf15dc775457405aee5b94797a033471ae29a8501bf8d1bd6517"
+    },
+    "app-store": {
+      "manifest_path": "apps/app-store/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "7c4046f3891a5b9b6d4744fd783123989c0d13c56c9a86444b75eff4087fa20a"
+    },
+    "settings": {
+      "manifest_path": "apps/settings/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "0b0a6b2fef856c073b67d736c4b0ce24eb67c16738cc8911b0d4c1951a2a411a"
+    },
+    "base-shell": {
+      "manifest_path": "apps/base-shell/frontend/dist/maverick-frontend-assets.json",
+      "build_id": "84699ab3435c079dbb87461c448bb3f805c2d1edec5245780ccc05246cf8cf4b"
+    }
+  },
+  "automated_evidence": {
+    "path": "docs/development/pwa_cache_website_concurrency_chromium_2026-09-06.json",
+    "sha256": "27e28a498e793e0f6d10b2e4902dca22b38d5cfba803f9480bf13216169ee2e9"
+  },
+  "source_isolation": {
+    "kind": "full_git_archive",
+    "archived_tracked_files_verified_before_and_after": 3559,
+    "python_core_import": "candidate_archive/core/__init__.py",
+    "dependencies": "existing Python venv and locked Chat Playwright installation",
+    "shared_working_tree_used_by_smoke": false
+  }
+}

@@ -493,3 +493,12 @@ and identity, secure-input and post-consent checks remain unchanged, as do Stop
 fences and same-turn direct image transport. Eleven tests cover the resolver and
 readiness semantics. User approved closed-app installation; physical acceptance
 on Notes remains pending.
+
+User-approved install run `34028729854` passed all 86 Swift tests with zero
+failures, release, credential-free Codex admission and same-turn image wire
+checks. It installed `e93cd51` and requested desktop launch at 10:57:39 UTC on
+2026-09-06 (`e93cd51 · selezione campo v13`). Linux wire, Core unused-import and
+diff checks also passed. Physical acceptance remains a single approved Search
+click followed by fresh observation, with one search-only typing action only
+after native search-focus verification; denial or unknown focus stops the test.
+Installation and synthetic tests do not prove Notes focus recognition.

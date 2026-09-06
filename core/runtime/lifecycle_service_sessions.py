@@ -89,11 +89,14 @@ def create_runtime_session(
     execution_binding: RuntimeExecutionBinding | None = None,
     hosted_text_binding: HostedTextExecutionBinding | None = None,
     routing: RuntimeRoutingDecision | None = None,
+    workspace_store: object | None = None,
 ) -> RuntimeSessionRecord:
     """Create one runtime session and its initial runtime state."""
     require_remote_agentic_session_admission(
         execution_binding,
         declared_remote_data_class=declared_remote_data_class,
+        workspace_id=workspace_id,
+        workspace_store=workspace_store,
     )
     timestamp = now or utcnow()
     session_id = normalize_runtime_session_id(session_id)
@@ -265,10 +268,14 @@ def create_child_runtime_session(
     created_by_user_id: str | None = None,
     grants: list[RuntimeSessionGrantRecord] | None = None,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> RuntimeSessionRecord:
     """Create one runtime child session using only explicit materialized authority."""
     parent = store.get_session(parent_session_id)
-    require_remote_agentic_session_admission(parent.execution_binding)
+    require_remote_agentic_session_admission(
+        parent.execution_binding, workspace_id=parent.workspace_id,
+        workspace_store=workspace_store,
+    )
     if parent.runtime_mode == "plain_hosted_chat":
         raise ValueError("Text-only runtime sessions cannot create agent children.")
     timestamp = now or utcnow()

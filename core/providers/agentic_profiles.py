@@ -43,7 +43,7 @@ from core.runtime.agentic_feature_flags import (
 from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
 
 
-CODEX_PROFILE_REVISION = "14"
+CODEX_PROFILE_REVISION = "15"
 CODEX_PREVIOUS_PROFILE_REVISIONS = (
     "1",
     "2",
@@ -58,6 +58,7 @@ CODEX_PREVIOUS_PROFILE_REVISIONS = (
     "11",
     "12",
     "13",
+    "14",
 )
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
@@ -227,6 +228,7 @@ def resolve_workspace_agentic_profile(
     workspace_id: str,
     binding_id: str | None = None,
     enforce_remote_admission: bool = True,
+    workspace_store: object | None = None,
 ) -> tuple[AgenticProfileDefinition, WorkspaceAgenticProfileBinding]:
     """Resolve one enabled binding; only admission code may defer the remote guard."""
     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
@@ -249,7 +251,9 @@ def resolve_workspace_agentic_profile(
     if status is None or status.rollout_status in {"disabled", "suspended"}:
         raise AgenticProfileError("profile_definition_invalid")
     if enforce_remote_admission:
-        require_remote_agentic_session_admission(definition)
+        require_remote_agentic_session_admission(
+            definition, workspace_id=workspace_id, workspace_store=workspace_store,
+        )
     if binding.credential_binding_id:
         credential = resolve_provider_binding(
             store,
@@ -271,6 +275,7 @@ def build_pinned_execution_binding(
     workspace_id: str,
     execution_mode: ExecutionMode,
     workspace_binding_id: str | None = None,
+    workspace_store: object | None = None,
     reasoning_effort: str | None = None,
     authorized_definition_snapshot: AgenticProfileDefinition | None = None,
     authorized_workspace_binding_snapshot: WorkspaceAgenticProfileBinding | None = None,
@@ -285,6 +290,7 @@ def build_pinned_execution_binding(
         store,
         workspace_id=workspace_id,
         binding_id=workspace_binding_id,
+        workspace_store=workspace_store,
     )
     from core.providers.agentic_lineage_admission import require_lineage_admission
 

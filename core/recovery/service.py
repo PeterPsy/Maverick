@@ -147,6 +147,7 @@ def record_runtime_health(
     session: RuntimeSessionRecord,
     provider_store=None,
     runtime_store=None,
+    workspace_store=None,
     provider_registry=None,
     observability_store=None,
     now=None,
@@ -156,6 +157,7 @@ def record_runtime_health(
         session,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        workspace_store=workspace_store,
         provider_registry=provider_registry,
         now=now,
     )

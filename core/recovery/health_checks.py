@@ -26,6 +26,7 @@ def run_runtime_health_check(
     provider_store: ProviderStore | None = None,
     runtime_store=None,
     provider_registry: ProviderRegistry | None = None,
+    workspace_store: object | None = None,
     now: datetime | None = None,
 ) -> HealthCheckResult:
     """Evaluate one runtime session's health."""
@@ -44,6 +45,7 @@ def run_runtime_health_check(
             session=session,
             target_session_id=f"runtime-health-{target_digest}",
             now=now,
+            workspace_store=workspace_store,
         )
         if assessment.status == "direct":
             status = "healthy"

@@ -53,7 +53,8 @@ class HostedProviderRuntime:
 class HostedProviderRuntimeRegistry:
     """Resolve provider implementations by every pinned protocol identity field."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, workspace_store: object | None = None) -> None:
+        self._workspace_store = workspace_store
         self._runtimes: dict[
             tuple[str, str, str | None], list[HostedProviderRuntime]
         ] = {}
@@ -80,7 +81,7 @@ class HostedProviderRuntimeRegistry:
         return runtime
 
     def resolve(self, binding) -> HostedProviderRuntime:
-        require_remote_agentic_dispatch(binding)
+        require_remote_agentic_dispatch(binding, workspace_store=self._workspace_store)
         identity = (
             binding.model_provider_id,
             binding.provider_protocol,

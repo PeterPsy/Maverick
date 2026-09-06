@@ -283,6 +283,7 @@ def submit_runtime_turn(
                     session_id=session.session_id,
                     turn_id=turn.turn_id,
                     on_provider_accepted=provider_callbacks.record_accepted,
+                    workspace_store=getattr(state, "workspace_store", None),
                 ) as (provider_session, provider_accepted):
                     result = execute_runtime_turn(
                         session=provider_session,

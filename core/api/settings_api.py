@@ -189,6 +189,7 @@ def _record_workspace_health(state: PlatformState, context: RequestSession, body
                     provider_store=state.provider_store,
                     runtime_store=state.runtime_store,
                     provider_registry=state.provider_registry,
+                    workspace_store=state.workspace_store,
                 )
             )
         }

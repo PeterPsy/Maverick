@@ -34,7 +34,7 @@ class CertificationBudgetLimit:
                 or type(self.max_cost_microusd) is not int
                 or type(self.max_requests) is not int or not 0 < self.max_requests <= 10_000
                 or type(self.min_interval_seconds) is not int or not 0 <= self.min_interval_seconds <= 3600
-                or (self.billing_mode == "paid" and not 0 < self.max_cost_microusd <= 100_000_000)
+                or (self.billing_mode == "paid" and not 0 < self.max_cost_microusd <= 5_000_000)
                 or (self.billing_mode == "free_tier" and self.max_cost_microusd != 0)):
             raise CapabilityCertificateError("certification_budget_policy_invalid")
 

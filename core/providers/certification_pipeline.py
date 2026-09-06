@@ -40,6 +40,7 @@ from core.providers.certification_validation import (
 )
 from core.providers.certification_summary import certification_result_summary
 from core.providers.certification_fixture_receipt import fixture_receipt
+from core.providers.certification_artifacts import CertificationArtifactStore, canonical_artifact
 from core.providers.certification_live_receipt import (
     decode_certification_json, validate_live_probe_receipt,
 )
@@ -66,6 +67,7 @@ def execute_certification_suite(
     started_at: datetime | None = None,
     environment: Mapping[str, str] | None = None,
     step_kinds: Sequence[str] | None = None,
+    evidence_store: CertificationArtifactStore | None = None,
 ) -> CertificationRunResult:
     """Run selected code-owned steps; only a complete run is certificate evidence."""
     manifest = get_certification_manifest(suite_id, suite_version)
@@ -98,6 +100,9 @@ def execute_certification_suite(
             "stderr_digest": hashlib.sha256(completed.stderr).hexdigest(),
             "outcome": "passed" if completed.returncode == 0 else "failed",
         })
+        if evidence_store is not None:
+            for content in (completed.stdout, completed.stderr):
+                evidence_store.put(content)
         if completed.returncode != 0:
             raise CapabilityCertificateError(f"certification_step_failed:{step.step_id}")
         if step.kind == "fixture_contract":
@@ -166,7 +171,10 @@ def execute_certification_suite(
     )
 
 
-def attach_behavioral_evidence(run: CertificationRunResult, report: object, *, cwd: Path) -> CertificationRunResult:
+def attach_behavioral_evidence(
+    run: CertificationRunResult, report: object, *, cwd: Path,
+    evidence_store: CertificationArtifactStore,
+) -> CertificationRunResult:
     """Seal an independent, later natural run into collected protocol evidence.
 
     This does not run a model, invent observations, approve release, or sign.
@@ -184,6 +192,11 @@ def attach_behavioral_evidence(run: CertificationRunResult, report: object, *, c
     candidate = replace(run, behavioral_evidence=snapshot, evidence_refs=(*run.evidence_refs, evidence_ref))
     candidate = replace(candidate, result_summary_digest=canonical_digest(certification_result_summary(candidate)))
     validate_completed_run(candidate)
+    # A reference is emitted only after actual durable retention. Publication
+    # separately reads and verifies the complete trace/source/effect closure.
+    stored_ref = evidence_store.put(canonical_artifact(snapshot), expected_digest=canonical_digest(snapshot))
+    if stored_ref != evidence_ref:
+        raise CapabilityCertificateError("certification_behavior_artifact_mismatch")
     return candidate
 
 

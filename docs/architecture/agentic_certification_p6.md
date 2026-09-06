@@ -8,8 +8,10 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-The subsequent aggregate-budget work is not covered by that historical freeze;
-it requires new exact-source verification before signing or release.
+The subsequent aggregate-budget and admission/publication work is not covered
+by that historical freeze. Suite 42 / TCB 32 requires new exact-source
+verification before signing or release; the independent candidate delta is
+documented in `docs/development/agentic_p6_runtime_publication_delta.md`.
 
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`, revision read on 2026-09-06 (SHA-256
@@ -52,9 +54,11 @@ retained, never credentials or request bodies. The ledger must remain outside
 tenant/source mounts. Its authority is local spend/quota authority, **not**
 workspace attestation, natural evidence, signer trust or a release permit.
 
-Independent review found that the current session/profile/queue/dispatch chain
-drops authoritative workspace context; flipping the hard availability flag
-alone cannot enable it. A laboratory run of the real hosted loop is not a
+Independent review found that the session/profile/queue/dispatch chain dropped
+authoritative workspace context. The isolated candidate now forwards the live
+workspace store at those boundaries and at hosted full/cheap transport refresh;
+an earlier snapshot cannot mask revocation. Neither this correction nor flipping
+the hard availability flag is release approval. A laboratory run of the real hosted loop is not a
 substitute for the full API-to-dispatch canary. The correct full-path fix also
 changes shared queue/handoff files declared in Codex's artifact. Such a change
 requires a separate candidate deployment and explicitly reviewed native
@@ -66,8 +70,10 @@ its own approved connection/artifact path, not an API model certificate.
 Certification is per exact API profile (including model, provider config,
 endpoint/routing, recipe, and adapter), or per native runtime/provider
 connection. Native model slugs inherit their connection certificate; a model
-diagnostic must not mint a new connection certificate. Existing Codex revision
-14 and its artifact remain outside the remote candidate revision cycle.
+diagnostic must not mint a new connection certificate. The active Codex revision
+14 is not modified or cut over by this work. The shared queue/handoff delta is
+explicitly represented by candidate revision 15, with its own digest and review;
+the old connection certificate is never transferred to those new bytes.
 
 ### Recovery fixture scope
 
@@ -90,9 +96,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 37,
-   recipe 24, Google profile 46, OpenRouter profile 45, suite 41, and canonical
-   TCB manifest 31. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 38,
+   unchanged recipe 24, Google profile 47, OpenRouter profile 46, suite 42, and canonical
+   TCB manifest 32. The corpus includes P5 family/pinning/onboarding, native ACP
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural
@@ -164,9 +170,15 @@ The separate natural observation report covers all 14 plan scenarios at each
 claimed effort, with source/projection/effect/trace digests, exact boolean
 checks, profile-specific resource bounds and zero absolute failure counters.
 It must follow the fixture/live collection on the same target, commit and TCB.
-The trusted signer reviews actual retained traces; the report validator does
-not execute natural tasks or turn user-supplied claims into trusted evidence.
-Fixture/protocol-only collections are deliberately unsigned and ineligible.
+The report attachment stores canonical bytes before returning its reference.
+Collection stores actual stdout/stderr bytes; signing reads the full natural
+prompt/trace/source/projection/effect closure through digest verification.
+Publication uses installation-owned public trust, not a worker-supplied key map,
+and requires a second independently trusted reviewer signature over the exact
+signed run and artifact manifest. Key or principal aliases cannot manufacture
+independence. The trusted reviewer must still inspect the actual retained
+traces; cryptography cannot prove that a review happened or execute natural
+tasks. Fixture/protocol-only collections are unsigned and ineligible.
 
 The result summary and signed JSON bind the natural report; publication checks
 the complete profile target again before creating a certificate. API certificate
@@ -201,5 +213,8 @@ app/surface pairs, without classifying their content or granting egress.
 
 The general production blockers in `SECURITY.md` require a separate security
 review. Until the relevant evidence and approvals actually exist,
-`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` stays false and Gemini CLI and remote
-API agents remain unavailable. Changing a flag is not certification.
+`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` and the separate native connection barrier
+`NATIVE_AGENTIC_ATTESTATION_AVAILABLE` stay false. Gemini CLI has its own
+default-off `MAVERICK_FEATURE_GEMINI_CLI_PREVIEW` gate; the `google` native
+connection is not added to the API allowlist or authorized by Google API flags.
+Changing a flag is not certification.

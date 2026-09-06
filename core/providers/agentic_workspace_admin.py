@@ -163,6 +163,7 @@ def save_workspace_agentic_binding(
     observability_store=None,
     now: datetime | None = None,
     record_operator_decision: bool = True,
+    workspace_store: object | None = None,
 ) -> WorkspaceAgenticProfileBinding:
     """Create or update one binding while proving every policy change is restrictive."""
     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
@@ -209,7 +210,9 @@ def save_workspace_agentic_binding(
     if enabled and not _actor_policy_has_principal(actor_policy):
         raise AgenticProfileError("workspace_profile_actor_policy_empty")
     if enabled:
-        require_remote_agentic_session_admission(definition)
+        require_remote_agentic_session_admission(
+            definition, workspace_id=workspace_id, workspace_store=workspace_store,
+        )
         from core.providers.native_agent_catalog import require_native_agent_model_available
 
         require_native_agent_model_available(registry, definition)

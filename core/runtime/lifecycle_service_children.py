@@ -166,6 +166,7 @@ def queue_runtime_turn(
     client_message_id: str | None = None,
     invoked_skill_ids: list[str] | None = None,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> RuntimeTurnRecord:
     """Create one queued runtime turn."""
     with runtime_message_admission_handoff(session_id):
@@ -182,6 +183,7 @@ def queue_runtime_turn(
                 client_message_id=client_message_id,
                 invoked_skill_ids=invoked_skill_ids,
                 now=now,
+                workspace_store=workspace_store,
             )
 
 
@@ -194,10 +196,11 @@ def _queue_runtime_turn_locked(
     client_message_id: str | None = None,
     invoked_skill_ids: list[str] | None = None,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> RuntimeTurnRecord:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
-    require_turn_queue_session_executable(store, session, turn_id=turn_id)
+    require_turn_queue_session_executable(store, session, turn_id=turn_id, workspace_store=workspace_store)
     record = store.save_turn(
         RuntimeTurnRecord(
             turn_id=turn_id,
@@ -229,6 +232,7 @@ def queue_runtime_turn_if_client_message_absent(
     invoked_skill_ids: list[str] | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> tuple[RuntimeTurnRecord, bool]:
     """Create one queued runtime turn unless the client message was already queued."""
     with runtime_message_admission_handoff(session_id):
@@ -246,6 +250,7 @@ def queue_runtime_turn_if_client_message_absent(
                 invoked_skill_ids=invoked_skill_ids,
                 client_message_claim=client_message_claim,
                 now=now,
+                workspace_store=workspace_store,
             )
 
 
@@ -259,10 +264,11 @@ def _queue_runtime_turn_if_client_message_absent_locked(
     invoked_skill_ids: list[str] | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> tuple[RuntimeTurnRecord, bool]:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
-    require_turn_queue_session_executable(store, session, turn_id=turn_id)
+    require_turn_queue_session_executable(store, session, turn_id=turn_id, workspace_store=workspace_store)
     record = RuntimeTurnRecord(
         turn_id=turn_id,
         session_id=session_id,

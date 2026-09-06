@@ -134,9 +134,10 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 41 \
+  --suite-version 42 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
+  --evidence-root "$PRIVATE_CERTIFICATION_ARCHIVE" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
 ```
 
@@ -181,6 +182,7 @@ No production code generates passing natural observations; fabricated data in
 
 ```bash
 python3 scripts/run_agentic_certification.py sign \
+  --evidence-root "$PRIVATE_CERTIFICATION_ARCHIVE" \
   --collection-file "$CERTIFICATION_OUTPUT/google-live-collection.json" \
   --behavioral-evidence-file "$CERTIFICATION_OUTPUT/google-natural-observations.json" \
   --confirmation natural-traces-reviewed \
@@ -371,3 +373,61 @@ is in doubt. Never edit or reactivate the immutable certificate. A corrected
 build requires a new run, evidence id, signed artifact, certificate identity,
 expiry, and canary. Preserve the old redaction-safe metadata for audit and
 follow the rollback sequence in the preview runbook.
+
+## Publisher-owned retention and independent review (suite 42)
+
+`--evidence-root` is mandatory for collection and signing. It must be an
+absolute, private path outside the checkout and all tenant mounts. Collection
+stores stdout/stderr bytes, including empty streams. Natural report attachment
+stores the canonical report; signing then verifies that every referenced
+prompt, trace, source snapshot, projection and effect artifact is present and
+matches its digest. A hash without bytes cannot be signed by this runner.
+These restricted archives may contain sensitive observations and must never be
+served as workspace/app storage, public logs or chat attachments.
+
+Before publication, the operator imports the complete archive into the
+**candidate installation's** `data/certification-publisher/evidence/` using
+`CapabilityEvidenceBlobStore.put` (bounded, digest-checked create-if-absent), and
+provisions `data/certification-publisher/trust.json` under the publisher account.
+The policy file cannot be a symlink or group/other-writable and must be owned by
+the publisher process UID. It contains only public information:
+
+- `schema`: `maverick-certification-publisher-trust.v1`;
+- `collectors` and `reviewers`: maps from stable key ID to an object containing
+  `principal_ref` (the operator-provisioned 64-hex identity reference) and
+  `public_key` (base64 of the raw 32-byte Ed25519 public key).
+
+The publisher reloads this policy for each publication. No collector principal
+or raw key may also appear in the reviewer role, even under another key ID.
+The report's `reviewer_ref` must name that independently provisioned reviewer.
+Worker accounts must not be able to write publisher policy/archive or access
+reviewer private keys. Ownership checks are defense in depth, not proof of
+correct account/container separation: the operator must verify that separation.
+
+After inspecting the actual traces, the independent reviewer supplies a
+`CertificationReview` JSON object with `signer_key_id`, `signed_run_digest`,
+`artifacts_digest`, `reviewed_at` and `signature`. The first digest is SHA-256
+of `signed_run_to_json(signed).encode("utf-8")`; the second is the digest returned
+by `artifact_manifest_digest(verify_retained_run(run, archive))`. The Ed25519
+signature covers the exact canonical `review_payload(...)`, whose schema and
+`approved` decision are code-owned. `reviewed_at` must be timezone-aware,
+follow completion of natural evidence, and be at most 24 hours old at
+publication. A signature proves the independent approval claim, not that the
+human actually performed the review. Import this signed review and signed run
+as archive blobs as well.
+
+The official operator surface is discoverable with:
+
+```bash
+maverick core cli inspect core.providers.agentic.certification.publish --json
+```
+
+It accepts `definition_id`, `definition_revision`, `signed_run_ref`, `review_ref`
+and confirmation `reviewed-candidate-certificate-only`. It never accepts trust
+keys or archive paths from a worker. The normal CLI runner and handler both
+reject agent callers. It verifies the current target/TCB/adapter/commit,
+retained closure and independent signature before certificate persistence,
+then includes both signed artifacts in certificate evidence and audits only
+bounded identifiers/digests. It does not enable a binding, change default
+selection, attest a workspace, open a release barrier, run a canary or perform
+a Codex cutover. Native Gemini certificates require a separate native workflow.

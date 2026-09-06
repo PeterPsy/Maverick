@@ -242,7 +242,9 @@ def _session_payload(
         }
     if session.execution_binding is not None:
         binding = session.execution_binding
-        containment_reason = remote_agentic_containment_reason(binding)
+        containment_reason = remote_agentic_containment_reason(
+            binding, workspace_id=session.workspace_id, workspace_store=getattr(state, "workspace_store", None),
+        )
         payload["agentic_containment"] = {
             "status": "NO-GO" if containment_reason else "GO",
             "reason_code": containment_reason,
@@ -1079,6 +1081,7 @@ def _create_session(
         execution_binding=execution_binding,
         hosted_text_binding=hosted_text_binding,
         routing=routing,
+        workspace_store=getattr(state, "workspace_store", None),
     )
     session = transition_runtime_session(
         state.runtime_store,
@@ -1189,6 +1192,7 @@ def _preflight_runtime_session_creation_before_persistence(
             reasoning_effort=str(body.get("reasoning_effort") or "").strip() or None,
             authorized_definition_snapshot=authorized_profile[0],
             authorized_workspace_binding_snapshot=authorized_profile[1],
+            workspace_store=getattr(state, "workspace_store", None),
         )
         adapter = registry.get_agentic_runtime_adapter(
             execution_binding.runtime_engine_id
@@ -1713,6 +1717,7 @@ def _handle_session_item(state: PlatformState, context: RequestSession, session_
                 state.runtime_store,
                 state.provider_registry,
                 session=session,
+                workspace_store=getattr(state, "workspace_store", None),
             ),
         ),
     )

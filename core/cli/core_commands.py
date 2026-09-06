@@ -15,6 +15,7 @@ from core.cli.persistence_commands import persistence_command_specs
 from core.cli.models import CliCommandDefinition
 from core.cli.recovery_commands import recovery_command_specs
 from core.cli.runtime_provider_commands import runtime_provider_command_specs
+from core.cli.certification_publication_commands import certification_publication_command_specs
 from core.cli.runtime_transcript_commands import runtime_transcript_command_specs
 from core.cli.secret_commands import secret_command_specs
 from core.cli.workspace_commands import workspace_command_specs
@@ -61,6 +62,10 @@ def _core_command_specs(
     specs.extend(job_command_specs(job_service=job_service))
     specs.extend(persistence_command_specs(start_path=start_path))
     specs.extend(developer_context_command_specs(start_path=start_path))
+    specs.extend(certification_publication_command_specs(
+        provider_store=provider_store, provider_registry=provider_registry,
+        observability_store=observability_store, start_path=start_path,
+    ))
     specs.extend(
         app_sdk_command_specs(
             app_store=app_store,

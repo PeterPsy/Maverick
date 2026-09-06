@@ -21,6 +21,8 @@ from core.providers.certification_pipeline import (
 from core.providers.certification_records import collection_from_json, collection_to_json
 from core.providers.certification_live_receipt import decode_certification_json
 from core.providers.certification_budget_ledger import CertificationBudgetLedger
+from core.providers.evidence_store import CapabilityEvidenceBlobStore
+from core.providers.certification_artifacts import verify_retained_run
 
 
 def main(argv=None) -> int:
@@ -43,10 +45,15 @@ def main(argv=None) -> int:
     sign.add_argument("--confirmation", required=True, choices=("natural-traces-reviewed",))
     collect.add_argument("--output", type=Path, required=True)
     sign.add_argument("--output", type=Path, required=True)
+    for phase in (collect, sign):
+        phase.add_argument("--evidence-root", type=Path, required=True)
     args = parser.parse_args(argv)
     root = REPOSITORY_ROOT
     if args.output.exists() or args.output.resolve().is_relative_to(root.resolve()):
         parser.error("Output must be a new file outside the source checkout.")
+    if not args.evidence_root.is_absolute() or args.evidence_root.resolve().is_relative_to(root.resolve()):
+        parser.error("Evidence must be retained in a private operator archive outside source/tenant mounts.")
+    evidence_store = CapabilityEvidenceBlobStore(args.evidence_root)
     if args.phase == "collect":
         if args.live_probe and (args.max_cost_microusd is None or not 0 < args.max_cost_microusd <= 100_000_000):
             parser.error("Live collection requires a positive bounded --max-cost-microusd.")
@@ -67,12 +74,14 @@ def main(argv=None) -> int:
             adapter_artifact_digest=args.adapter_artifact_digest,
             evidence_refs=tuple(args.evidence_ref), environment=environment,
             step_kinds=None if args.live_probe else ("fixture_contract",),
+            evidence_store=evidence_store,
         )
         serialized = collection_to_json(run)
     else:
         run = collection_from_json(_read_bounded(args.collection_file))
         report = decode_certification_json(_read_bounded(args.behavioral_evidence_file))
-        run = attach_behavioral_evidence(run, report, cwd=root)
+        run = attach_behavioral_evidence(run, report, cwd=root, evidence_store=evidence_store)
+        verify_retained_run(run, evidence_store)
         signed = sign_certification_run(
             run, signer_key_id=args.signer_key_id,
             private_key=load_ed25519_private_key(args.private_key_file), cwd=root,

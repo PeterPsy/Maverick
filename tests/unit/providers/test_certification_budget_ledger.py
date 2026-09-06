@@ -14,6 +14,15 @@ from core.providers.errors import CapabilityCertificateError
 
 
 class CertificationBudgetLedgerTest(unittest.TestCase):
+    def test_policy_cannot_exceed_p6_five_dollar_authorization_or_upgrade_google(self):
+        for limit in (
+            CertificationBudgetLimit("openrouter", "paid", 5_000_001, 200, 0),
+            CertificationBudgetLimit("google-ai-studio", "paid", 1, 80, 15),
+            CertificationBudgetLimit("google-ai-studio", "free_tier", 1, 80, 15),
+        ):
+            with self.subTest(limit=limit), self.assertRaisesRegex(CapabilityCertificateError, "policy_invalid"):
+                limit.validate()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

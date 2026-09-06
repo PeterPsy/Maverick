@@ -29,7 +29,7 @@ def start_orchestrated_execution_worker(
     with _ACTIVE_WORKERS_LOCK:
         if key in _ACTIVE_WORKERS:
             return False
-    run_service = service or InterAgentService(state.inter_agent_store)
+    run_service = service or InterAgentService(state.inter_agent_store, workspace_store=state.workspace_store)
 
     def worker() -> None:
         try:

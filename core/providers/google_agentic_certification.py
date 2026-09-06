@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
-from typing import Mapping
-
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from core.providers.agentic_models import AgenticProfileDefinition
 from core.providers.capability_models import CapabilityCertificate, RuntimeCapabilitySet
@@ -16,8 +13,9 @@ from core.providers.certificate_service import (
     runtime_adapter_artifact_digest,
 )
 from core.providers.certification_pipeline import (
-    SignedCertificationRun, validate_run_against_manifest, verify_certification_run,
+    SignedCertificationRun, validate_run_against_manifest,
 )
+from core.providers.certification_publication import CertificationPublicationAuthority, CertificationReview
 from core.providers.errors import CapabilityCertificateError
 from core.providers.certification_target import api_profile_target_digest
 from core.providers.google_agentic_profile import (
@@ -30,9 +28,9 @@ from core.runtime.full_workspace_contract import validate_full_workspace_contrac
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "41"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "42"
 GOOGLE_CERTIFICATION_MATRIX_REVISION = (
-    "2026-09-06-r41-p6-reviewed-gates-tcb31"
+    "2026-09-06-r42-p6-admission-retention-tcb32"
 )
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 
@@ -43,10 +41,11 @@ def publish_google_preview_certificate(
     definition: AgenticProfileDefinition,
     adapter: object,
     signed_run: SignedCertificationRun,
-    trusted_keys: Mapping[str, Ed25519PublicKey],
+    publisher: CertificationPublicationAuthority,
+    review: CertificationReview,
 ) -> CapabilityCertificate:
     """Verify a completed run and publish its exact Google combination."""
-    run = verify_certification_run(signed_run, trusted_keys=trusted_keys)
+    run, evidence_refs = publisher.verify(signed_run, review, cwd=Path(__file__).resolve().parents[2])
     if run.target_digest != api_profile_target_digest(definition):
         raise CapabilityCertificateError("certification_target_mismatch")
     _validate_run(run, adapter)
@@ -56,7 +55,7 @@ def publish_google_preview_certificate(
         test_run_id=run.test_run_id,
         adapter_artifact_digest=run.adapter_artifact_digest,
         result_summary_digest=run.result_summary_digest,
-        evidence_refs=run.evidence_refs,
+        evidence_refs=evidence_refs,
         recorded_at=run.certification_completed_at,
         source_commit=run.source_commit,
         artifact_bundle_digest=run.artifact_bundle_digest,

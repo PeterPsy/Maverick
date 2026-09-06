@@ -599,6 +599,7 @@ def _runtime_session_for_request(
         execution_binding=execution_binding,
         hosted_text_binding=hosted_text_binding,
         routing=routing,
+        workspace_store=getattr(state, "workspace_store", None),
     )
     session = transition_runtime_session(
         state.runtime_store,
@@ -659,7 +660,7 @@ def _preflight_runtime_request_before_persistence(
         ):
             if requested and requested != str(pinned or ""):
                 raise ProviderError("hosted_text_session_route_immutable")
-        require_turn_queue_session_executable(state.runtime_store, session)
+        require_turn_queue_session_executable(state.runtime_store, session, workspace_store=getattr(state, "workspace_store", None))
         if runtime_session_is_plain_hosted_chat(session):
             if request.get("skill_ids") or request.get("invoked_skill_ids"):
                 raise ProviderError("plain_hosted_chat_blocks_skills")
@@ -754,6 +755,7 @@ def _preflight_runtime_request_before_persistence(
             reasoning_effort=_text(request.get("reasoning_effort")) or None,
             authorized_definition_snapshot=authorized_profile[0],
             authorized_workspace_binding_snapshot=authorized_profile[1],
+            workspace_store=getattr(state, "workspace_store", None),
         )
         preflight_execution_binding_context(
             state,

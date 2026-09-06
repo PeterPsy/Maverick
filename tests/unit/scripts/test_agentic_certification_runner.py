@@ -15,6 +15,7 @@ class AgenticCertificationRunnerTest(unittest.TestCase):
     def arguments(self, output):
         return ["collect", "--suite-id", "suite", "--suite-version", "40",
                 "--adapter-artifact-digest", "a" * 64,
+                "--evidence-root", str(output.parent / "evidence"),
                 "--evidence-ref", "platform-evidence:test", "--output", str(output)]
 
     def test_collection_defaults_to_no_live_and_cannot_sign(self):

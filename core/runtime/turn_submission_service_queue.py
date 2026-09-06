@@ -115,6 +115,7 @@ def _queue_turn_with_event_result(
         client_message_id=client_message_id,
         invoked_skill_ids=invoked_skill_ids,
         client_message_claim=client_message_claim,
+        workspace_store=getattr(state, "workspace_store", None),
     )
     if not created:
         return turn, _turn_events_for_response(state, turn, wait_seconds=2.0), False

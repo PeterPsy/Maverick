@@ -64,6 +64,10 @@ def hosted_builtin_app_execution_roots(
     if app_id == "vault":
         # Vault deliberately imports its single app-root implementation module.
         roots.append(Path("agent_operations.py"))
+    if app_id in {"crm", "mail"}:
+        # Imported backend read projections load this app-root policy as data.
+        # Its fields govern output, so Python-only closure hashing is insufficient.
+        roots.append(Path("pwa_read_models.v1.json"))
     if app_id == "design-studio" and surface == "cli":
         # The CLI additionally prepends service/. Its reachable Python closure
         # is explicit so multi-gigabyte release artifacts are never mistaken

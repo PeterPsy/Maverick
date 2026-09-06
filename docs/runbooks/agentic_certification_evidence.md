@@ -107,8 +107,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v39 matrix revision
-  `2026-09-04-r39-p4-typed-result-classification-tcb29` declared by the provider
+- the dated suite-v40 matrix revision
+  `2026-09-06-r40-p6-exact-target-tcb30` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -147,7 +147,8 @@ probe entrypoints also require `MAVERICK_CERTIFICATION_ALLOW_LIVE=1` and
 `MAVERICK_CERTIFICATION_MAX_COST_MICROUSD`. Merely setting a credential does
 not authorize a paid request. The actual translated payload is bounded before
 HTTPS: model identity, conservative input-byte ceiling, output limit, request
-count and non-refundable price reservation are checked. Failed/ambiguous
+count and non-refundable price reservation are checked. Stateful Interactions
+also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
 Both suite-40 manifests bind matrix revision

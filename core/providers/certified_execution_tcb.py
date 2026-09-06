@@ -108,6 +108,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             (
                 "core/__init__.py",
                 "core/app_sdk/__init__.py",
+                "core/app_sdk/display_models.py",
                 "core/app_sdk/errors.py",
                 "core/app_sdk/storage.py",
                 "core/inter_agent/__init__.py",

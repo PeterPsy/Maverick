@@ -19,6 +19,10 @@ from core.providers.certified_execution_tcb import (
     compute_certified_tcb_digest,
 )
 from core.providers.errors import CapabilityCertificateError
+from core.runtime.hosted_builtin_app_execution import (
+    hosted_builtin_app_execution_digest,
+    hosted_builtin_app_execution_roots,
+)
 
 
 class CertifiedExecutionTcbTest(unittest.TestCase):
@@ -30,7 +34,7 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
         self.assertEqual(identity.manifest_version, "30")
         self.assertEqual(
             identity.structure_digest,
-            "0462ae1effd2518b0d436b5bfb094340ce9160c2d19b4b80a68337cd52382e0a",
+            "4f6269d5aaeda6fc0cb15ab4a933e6f0636ecf6f9508a4606072d076709c7f78",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",
@@ -107,6 +111,26 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
                 "certificate_tcb_transitive_dependency_uncovered",
             ):
                 audit_certified_tcb_dependencies(self.root)
+
+    def test_display_projection_schemas_are_bound_to_app_execution_authority(self) -> None:
+        self.assertIn("core/app_sdk/display_models.py", CERTIFIED_EXECUTION_TCB.artifact_paths)
+        for app_id in ("crm", "mail"):
+            relative = f"apps/{app_id}/pwa_read_models.v1.json"
+            self.assertIn(relative, CERTIFIED_EXECUTION_TCB.artifact_paths)
+            target = (self.root / relative).resolve()
+            original_read_bytes = Path.read_bytes
+
+            def drifted_bytes(path, *, _target=target):
+                content = original_read_bytes(path)
+                return content + b"\n" if path.resolve() == _target else content
+
+            for surface in ("cli", "mcp"):
+                with self.subTest(app_id=app_id, surface=surface):
+                    arguments = {"surface": surface, "apps_root": self.root / "apps"}
+                    self.assertIn("pwa_read_models.v1.json", hosted_builtin_app_execution_roots(app_id, **arguments))
+                    baseline = hosted_builtin_app_execution_digest(app_id, **arguments)
+                    with patch.object(Path, "read_bytes", drifted_bytes):
+                        self.assertNotEqual(hosted_builtin_app_execution_digest(app_id, **arguments), baseline)
 
     def test_live_digest_reaudits_a_new_source_identity_before_returning(self) -> None:
         target = (self.root / "core/runtime/provider_input_context.py").resolve()
@@ -213,6 +237,9 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
             "generalist_context": "core/inter_agent/generalist_context.py",
             "continuation_admission": "core/recovery/continuation_admission.py",
             "app_runtime_entrypoint": "core/shared/entrypoints.py",
+            "display_projection": "core/app_sdk/display_models.py",
+            "crm_display_schema": "apps/crm/pwa_read_models.v1.json",
+            "mail_display_schema": "apps/mail/pwa_read_models.v1.json",
             "hosted_app_entrypoint": next(
                 path for path in hosted_app_paths if path.endswith("/cli/app_cli.py")
             ),

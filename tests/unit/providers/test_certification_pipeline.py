@@ -204,8 +204,8 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "4a1765279518c575b72f0ac25fba095dcfae031fae4c82ab4abcb47183f4d027",
-            "openrouter": "4d7713b5e014222db7f5a16aa8a36e6217e00648f0b48b264fca87f2ae80c03c",
+            "google-ai-studio": "31946c205500a3dc1e6642073ef0c537f10678133ebd2c8f95837c816bce49fa",
+            "openrouter": "b70368a905e770547f4a8bef99130b422a14882e27b4166b39a833f374f6e118",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,

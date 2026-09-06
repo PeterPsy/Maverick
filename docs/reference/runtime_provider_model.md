@@ -112,12 +112,13 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v29 also
+status, workspace binding, and upstream constraint. TCB manifest v30 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance, and hashes the exact executable roots of every built-in app surface
 admitted as a hosted read. Package initializers, the exact generalist
-orchestration-context closure, and audited app-local execution bytes are
+orchestration-context closure, the app SDK display projector, app-root CRM/Mail
+display schemas, and audited app-local execution bytes are
 artifacts; any newly reached, uncovered dependency or app-code drift fails
 identity/authority calculation. Core then computes one
 `EffectiveRuntimeAuthority` by intersecting certificate capability, profile

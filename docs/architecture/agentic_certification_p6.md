@@ -71,6 +71,13 @@ TCB also includes the collection/signing entrypoint. This implementation does
 not provide missing live credentials, trust a new signing key, approve native
 runtime artifacts, run a canary, or close an independent security review.
 
+The P6 integrity review also binds the app SDK display projector and the CRM
+and Mail app-root display schemas to the TCB and executable app closures.
+Backend imports load these schemas outside `backend/`; changing projected
+fields must invalidate authority just like changing Python. Adding this
+coverage does **not** refresh the existing built-in effect audit hashes: changed
+app closures require their own effect/leakage review before reauthorization.
+
 The general production blockers in `SECURITY.md` require a separate security
 review. Until the relevant evidence and approvals actually exist,
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` stays false and Gemini CLI and remote

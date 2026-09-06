@@ -440,3 +440,24 @@ launch at 09:56:58 UTC on 2026-09-06; setup shows `3a4cfd3 · focus nativo v11`.
 Linux wire and Core unused-import checks passed. Physical native search-focus
 recognition and approved search-only typing remain to be verified in Notes;
 CI does not read real desktop controls or establish that acceptance outcome.
+
+### V12 staged native focus diagnostics
+
+The v11 physical attempt stopped before typing with `MC-TOOL-28`. The code
+conflated native owner/window/geometry checks, so the actual cause remains
+unidentified. V12 adds `MC-FOCUS-01…18` stage-specific reporting for the existing
+reader, including API numeric status and CF/AX type/decode distinctions.
+Geometry failures report only bounded numeric captured-window, AX-window and
+field rectangles in global points. Display rounding does not change exact
+geometry equality/containment or grant typing authority. Diagnostic coordinates
+must never be used as screenshot click coordinates.
+
+Reports use enum labels, numeric status and sanitized geometry, not field values,
+titles, selected text, raw exceptions or AX trees. They remain within native
+diagnostics and the existing Mac → OpenAI tool metadata; no screenshot, export,
+credential or network-route change is added. Unknown/failed readings still have
+no typing target, and input recheck failures preserve their staged code. The
+existing consent, destination, secure-input, lease and Stop rules remain intact.
+Eight focused tests cover diagnostics and unchanged validation semantics.
+User-approved build/install and the no-typing physical diagnostic remain pending;
+v12 does not claim to fix the unverified native search-focus cause.

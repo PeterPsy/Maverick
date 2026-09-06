@@ -86,7 +86,7 @@ class CertificationPipelineTest(unittest.TestCase):
                 self._execute_unpatched()
 
     def test_green_process_without_live_receipt_is_not_evidence(self) -> None:
-        green = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")
+        green = mock.Mock(returncode=0, stdout=b"passed", stderr=b"Ran 1 test in 0.1s\n\nOK\n")
         with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
             "core.providers.certification_pipeline._git_commit", return_value="a" * 40
         ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=green):

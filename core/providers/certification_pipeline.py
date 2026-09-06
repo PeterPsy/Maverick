@@ -39,6 +39,7 @@ from core.providers.certification_validation import (
     validate_completed_run, _sha256, _required, _require_aware,
 )
 from core.providers.certification_summary import certification_result_summary
+from core.providers.certification_fixture_receipt import fixture_receipt
 from core.providers.certification_live_receipt import (
     decode_certification_json, validate_live_probe_receipt,
 )
@@ -99,6 +100,8 @@ def execute_certification_suite(
         })
         if completed.returncode != 0:
             raise CapabilityCertificateError(f"certification_step_failed:{step.step_id}")
+        if step.kind == "fixture_contract":
+            step_results[-1]["fixture_receipt"] = fixture_receipt(completed.stderr)
         if step.kind == "live_probe":
             step_results[-1]["live_receipt"] = validate_live_probe_receipt(
                 decode_certification_json(completed.stdout, max_bytes=16_384),

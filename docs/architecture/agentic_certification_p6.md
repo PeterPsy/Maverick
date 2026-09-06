@@ -43,6 +43,10 @@ requires a declared executable-artifact identity and Full Workspace contract; no
 native model slug grants a new certificate.
 
 The collector accepts only canonical manifest steps. A live step additionally
+requires its own exact receipt. Deterministic collection also requires the
+standard unittest success footer, a nonzero executed-test count and **zero
+skips**; empty/partial green runs cannot silently close mandatory conformance.
+The live step additionally
 requires a strict, bounded receipt with the exact target, fresh nonce, complete
 per-response protocol observations and exact reasoning-effort counts. The
 probes reject extra/unpaired calls, missing usage/state/completion, and empty

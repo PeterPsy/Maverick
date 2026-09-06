@@ -12,6 +12,7 @@ from core.providers.certification_target import (
 from core.providers.certification_behavior import validate_behavioral_evidence
 from core.providers.certification_live_receipt import validate_live_probe_receipt
 from core.providers.certification_summary import certification_result_summary
+from core.providers.certification_fixture_receipt import validate_fixture_receipt
 from core.providers.errors import CapabilityCertificateError
 from core.runtime.execution_binding import canonical_digest
 
@@ -77,6 +78,9 @@ def validate_completed_run(run: CertificationRunResult) -> None:
         fields = {"step_id", "kind", "command_digest", "exit_code", "stdout_digest", "stderr_digest", "outcome"}
         if step["kind"] == "live_probe":
             fields.add("live_receipt")
+        else:
+            fields.add("fixture_receipt")
+            validate_fixture_receipt(step.get("fixture_receipt"))
         if set(step) != fields or type(step["exit_code"]) is not int:
             raise CapabilityCertificateError("certification_step_manifest_mismatch")
         for key in ("stdout_digest", "stderr_digest"):

@@ -46,7 +46,7 @@ def fixture_step_process(command, **kwargs):
     stdout = b"passed" if provider is None else json.dumps(fixture_live_receipt(
         provider, nonce=kwargs["env"]["MAVERICK_CERTIFICATION_RUN_NONCE"],
     )).encode()
-    return CompletedProcess(command, 0, stdout=stdout, stderr=b"")
+    return CompletedProcess(command, 0, stdout=stdout, stderr=b"Ran 1 test in 0.1s\n\nOK\n" if provider is None else b"")
 
 
 def fixture_behavior_report(run, *, provider_id):

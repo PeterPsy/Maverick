@@ -8,6 +8,7 @@ import unittest
 
 from core.providers.certification_behavior import validate_behavioral_evidence
 from core.providers.certification_live_receipt import decode_certification_json, validate_live_probe_receipt
+from core.providers.certification_fixture_receipt import fixture_receipt, validate_fixture_receipt
 from core.providers.certification_target import (
     api_certification_resource_limits, api_profile_target_digest,
     builtin_api_certification_profile, builtin_api_certification_target,
@@ -98,6 +99,16 @@ class CertificationBehaviorTest(unittest.TestCase):
         for raw in (b"passed", b'{"ok":true,"ok":false}', b'{"cost":NaN}', b" " * 262_145):
             with self.assertRaises(CapabilityCertificateError):
                 decode_certification_json(raw)
+
+    def test_skipped_empty_or_nonstandard_fixture_runs_cannot_certify(self):
+        self.assertEqual(fixture_receipt(b"...\nRan 123 tests in 2.50s\n\nOK\n"), {"tests_run": 123, "skipped": 0})
+        for footer in (b"passed", b"Ran 0 tests in 0.1s\n\nOK\n",
+                       b"Ran 123 tests in 2.5s\n\nOK (skipped=1)\n",
+                       b"Ran 123 tests in 2.5s\n\nOK\nextra output\n"):
+            with self.assertRaises(CapabilityCertificateError):
+                fixture_receipt(footer)
+        with self.assertRaises(CapabilityCertificateError):
+            validate_fixture_receipt({"tests_run": True, "skipped": 0})
 
 
 if __name__ == "__main__":

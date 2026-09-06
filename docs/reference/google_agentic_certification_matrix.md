@@ -1,17 +1,18 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-06
-Matrix revision: `2026-09-06-r42-p6-admission-retention-tcb32`
+Matrix revision: `2026-09-06-r43-p6-full-submission-retention-tcb33`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==38`
+Adapter: `maverick-hosted-tool-loop==39`
 
 ## P6 candidate checkpoint
 
-Suite 42 / TCB manifest 32 / hosted adapter 38 / unchanged recipe 24 bind
-fresh-attestation admission, retained evidence, independent publisher trust and
-the durable aggregate budget to the existing P0–P5 corpus. The new profile is
-immutable, unbound and uncertified. The prior suite-41 deterministic receipts
+Suite 43 / TCB manifest 33 / hosted adapter 39 / unchanged recipe 24 bind
+fresh-attestation admission, production-composed API-to-final submission,
+retained evidence, independent publisher trust and the durable aggregate budget
+to the existing P0–P5 corpus. The new profile is immutable, unbound and uncertified.
+The prior suite-41/42 deterministic receipts
 are historical, not evidence for this delta. Codex's shared queue/handoff change
 has its own explicit revision 15; no source is excluded from its artifact.
 See `docs/development/agentic_p6_runtime_publication_delta.md` for the scope and
@@ -24,7 +25,7 @@ remaining live, laboratory, independent review and release requirements.
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `47` (revision `46` suspended) |
+| Immutable profile revision | `48` (revision `47` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |

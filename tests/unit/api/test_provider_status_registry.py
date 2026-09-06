@@ -13,7 +13,8 @@ class ProviderStatusRegistryTest(unittest.TestCase):
     def test_app_backend_metadata_reuses_platform_registry(self) -> None:
         store = object()
         registry = object()
-        state = SimpleNamespace(provider_store=store, provider_registry=registry)
+        workspace_store = object()
+        state = SimpleNamespace(provider_store=store, provider_registry=registry, workspace_store=workspace_store)
         binding = SimpleNamespace(source_kind="platform", data_root=Path("/unused"))
         parsed = SimpleNamespace(app_id="chat", contract=SimpleNamespace(
             entrypoints=SimpleNamespace(backend=object()),
@@ -36,14 +37,15 @@ class ProviderStatusRegistryTest(unittest.TestCase):
                 start_response=lambda *_args: None, trusted_platform_invocation=True,
             )
 
-        resolve.assert_called_once_with(store, workspace_id="workspace-one", registry=registry)
+        resolve.assert_called_once_with(store, workspace_id="workspace-one", registry=registry, workspace_store=workspace_store)
 
     def test_status_resolution_reuses_platform_registry_even_on_explicit_refresh(self) -> None:
         for refresh in (False, True):
             with self.subTest(refresh=refresh):
                 store = SimpleNamespace()
                 registry = object()
-                state = SimpleNamespace(provider_store=store, provider_registry=registry)
+                workspace_store = object()
+                state = SimpleNamespace(provider_store=store, provider_registry=registry, workspace_store=workspace_store)
                 status = SimpleNamespace(
                     active_provider=None,
                     selection=None,
@@ -66,7 +68,7 @@ class ProviderStatusRegistryTest(unittest.TestCase):
 
                 resolve.assert_called_once_with(
                     store, workspace_id="workspace-one", registry=registry,
-                    refresh_model_catalog=refresh,
+                    refresh_model_catalog=refresh, workspace_store=workspace_store,
                 )
                 self.assertFalse(payload["configured"])
                 self.assertEqual(payload["blocked_reason"], "no_provider_configured")

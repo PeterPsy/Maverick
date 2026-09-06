@@ -176,6 +176,7 @@ class AgenticProfileApiTest(unittest.TestCase):
             provider_store=provider_store,
             provider_registry=registry,
             secret_store=None,
+            workspace_store=None,
         )
 
         payload = workspace_provider_status(state, workspace_id="default")
@@ -235,7 +236,7 @@ class AgenticProfileApiTest(unittest.TestCase):
             ),
             expected_revision=binding.revision,
         )
-        state = SimpleNamespace(provider_store=provider_store, secret_store=None)
+        state = SimpleNamespace(provider_store=provider_store, secret_store=None, workspace_store=None)
 
         member_payload = workspace_provider_status(
             state,

@@ -66,7 +66,7 @@ class ProviderUsageApiTest(unittest.TestCase):
             captured["status"] = status
             captured["headers"] = headers
 
-        state = SimpleNamespace(provider_store=object())
+        state = SimpleNamespace(provider_store=object(), workspace_store=None)
         with patch("core.api.provider_api.require_session", return_value=context):
             body = handle_provider_api(state, environ, start_response)
 

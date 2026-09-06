@@ -27,7 +27,7 @@ from tests.support.certification_evidence import fixture_step_process, with_fixt
 from tests.support.repo import make_temp_repo_root
 
 
-def admitted_fixture(test):
+def admitted_fixture(test, *, is_default=False):
     test.enterContext(patch.dict("os.environ", {
         "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1", "MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME": "1",
         "MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW": "1",
@@ -37,6 +37,10 @@ def admitted_fixture(test):
     test.enterContext(patch("core.runtime.remote_agentic_admission.REMOTE_AGENTIC_ATTESTATION_AVAILABLE", True))
     now = datetime.now(UTC)
     root = make_temp_repo_root(test)
+    test.enterContext(patch.dict("os.environ", {
+        "MAVERICK_CONTROL_STORE": "json",
+        "MAVERICK_JSON_CONTROL_STORE_ROOT": str(root / "data" / "control-plane" / "json"),
+    }))
     state = bootstrap_platform_state(start_path=root, install_builtin_apps=False)
     profile = state.provider_store.get_agentic_profile_definition(OPENROUTER_AGENTIC_PROFILE_ID, OPENROUTER_AGENTIC_PROFILE_REVISION)
     adapter = state.provider_registry.get_agentic_runtime_adapter(profile.runtime_engine_id)
@@ -65,7 +69,7 @@ def admitted_fixture(test):
     enabled = save_workspace_agentic_binding(
         state.provider_store, state.provider_registry, workspace_id="default", definition_id=profile.definition_id,
         definition_revision=profile.revision, credential_binding_id=credential.binding_id,
-        enabled=True, is_default=False, actor_policy=default_actor_selection_policy(), policy_patch={},
+        enabled=True, is_default=is_default, actor_policy=default_actor_selection_policy(), policy_patch={},
         workspace_store=state.workspace_store,
     )
     binding = build_pinned_execution_binding(

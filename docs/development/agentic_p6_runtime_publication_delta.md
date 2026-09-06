@@ -3,7 +3,7 @@
 This delta implements review corrections, not P6-L/S/R approval. The prior
 P6-D evidence describes commit `5a7ca45a`; it does not certify these new bytes.
 No production availability constant is enabled, provider request made, trusted
-operator key created, workspace reclassified, or production certificate issued
+operator key created, operational workspace reclassified, or production certificate issued
 by this development work.
 
 ## Runtime and native boundary
@@ -15,11 +15,33 @@ attestation state again. A supplied earlier snapshot cannot override the store;
 missing, revoked, changed-workspace and unreadable authority fail closed.
 Queueing also fences persisted owner and exact pin, not only workspace/status.
 Hosted full/cheap transport authority checks re-enter the same admission gate.
+Settings session inventory and default-provider/app-proxy projections receive
+that same store too: a read-side status cannot lose valid authority or hide a
+revocation merely because the write-side API already checked it.
 
 Gemini CLI uses the exact native connection identity (`gemini-cli`,
 `gemini-cli-acp`, `google`, ACP), its own default-off flag and a separate closed
 release barrier. `google` is not added to the API provider allowlist. Neither
 Google API certification nor an API preview flag admits a native connection.
+
+## Full submission and final-output identity
+
+An additional production-composed offline test executes API preflight and
+creation, synchronous queue/dispatch, real catalog validation, request/egress
+composition, HTTPS/SSE codecs, the hosted loop and final-outbox persistence.
+Only the HTTP peer's catalog/stream bytes are fabricated; direct networking is
+forbidden by the test. It does not replace any admission/certificate/actor/egress
+guard, nor does it use the `HostedAgenticHarness` authority substitutions.
+
+This exposed a second functional integration failure after the provider had
+completed: lifecycle submission passed the runtime engine id while the durable
+hosted final identifies the model provider. Final-output reconciliation now
+resolves that namespace from the persisted Maverick Agent pin. Session, exact
+model-provider, content and exit-code conflicts still reject; the existing
+delivery id is reused, never duplicated or silently rewritten. The common
+completion helper covers synchronous and asynchronous submission. A queued
+turn revoked before dispatch makes neither catalog nor completion requests in
+the offline integration test.
 
 ## Explicit Codex shared-source review
 
@@ -79,22 +101,25 @@ were preserved. Direct source verification then confirmed active Codex 14's
 original digest and candidate Codex 15's different digest. No backend restart,
 control-plane migration or cutover was performed.
 
-The new API candidate identities are adapter 38, unchanged data-only recipe 24,
-Google profile 47, OpenRouter profile 46, suite 42, TCB manifest 32. No recipe
+The final API candidate identities are adapter 39, unchanged data-only recipe 24,
+Google profile 48, OpenRouter profile 47, suite 43, TCB manifest 33. No recipe
 payload changed, so its immutable revision is not artificially renewed.
+The earlier suite-42 checkpoint is superseded by the full-submission correction;
+its successful deterministic receipts do not certify this final candidate.
 
 Remaining operational/program work is explicit:
 
 - a distinct experimental permission and isolated worker for the **real** hosted
   natural loop is not implemented by this delta; the release barrier remains
   closed, and no client/environment laboratory permit is accepted;
-- the positive control-plane tests use fabricated certification observations
+- the positive offline tests use fabricated certification observations
   and only set the release-availability constant as an offline test condition;
-  they do not replace admission guards, certificate validators or stores, but
+  they do not replace admission guards, certificate validators or stores, and
   they include the real API capability preflight, creation, queue and dispatch
   resolution, revocation between API preflight and persistence, and a new
-  process rereading revoked authority from disk. They do not open a provider
-  transport and do not prove P6-L or the complete API-to-provider canary;
+  process rereading revoked authority from disk. The full-submission test also
+  runs the real transport against a fabricated in-memory HTTP peer; none of
+  these tests proves P6-L or an actual API-to-provider canary;
 - the API-positive test uses the existing `full-access` execution policy in a
   disposable installation. The existing sandbox policy removes shell and
   therefore cannot satisfy the atomic Full Workspace preflight; this delta

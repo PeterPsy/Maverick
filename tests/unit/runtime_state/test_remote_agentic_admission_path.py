@@ -9,7 +9,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 from core.api.runtime_api import _create_session, _preflight_runtime_session_creation_before_persistence
+from core.api.settings_api import _runtime_session_settings_payload
 from core.providers.errors import AgenticProfileError
+from core.providers.service import resolve_workspace_provider_status
 from core.runtime.errors import RuntimeTurnQueueRejectedError
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_runtime_registry_builder import build_hosted_provider_runtime_registry
@@ -75,6 +77,25 @@ class RemoteAdmissionPathTest(unittest.TestCase):
                                            workspace_store=self.state.workspace_store) as (fresh, _accepted):
             runtime = build_hosted_provider_runtime_registry(workspace_store=self.state.workspace_store).resolve(fresh.execution_binding)
             self.assertEqual(runtime.model_provider_id, "openrouter")
+
+    def test_settings_inventory_rechecks_the_same_live_attestation(self):
+        session = self.create()
+        self.assertEqual(_runtime_session_settings_payload(self.state, session)["agentic_containment"]["status"], "GO")
+        self.revoke()
+        self.assertEqual(_runtime_session_settings_payload(self.state, session)["agentic_containment"]["reason_code"],
+                         "remote_agentic_attestation_revoked")
+
+    def test_default_provider_status_receives_the_authoritative_workspace_store(self):
+        state, _binding, attestation = admitted_fixture(self, is_default=True)
+        def status():
+            return resolve_workspace_provider_status(state.provider_store, workspace_id="default",
+                registry=state.provider_registry, workspace_store=state.workspace_store)
+        self.assertTrue(status().configured)
+        state.workspace_store.save_data_attestation(
+            revoke_data_attestation(attestation, actor_id="offline-operator", expected_revision=1, reason="retired"),
+            expected_revision=1,
+        )
+        self.assertEqual(status().blocked_detail, "remote_agentic_attestation_revoked")
 
     def test_revocation_between_api_preflight_and_create_never_persists(self):
         context, body, preflight = self.api_preflight()

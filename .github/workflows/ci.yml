@@ -108,6 +108,7 @@ jobs:
             apps/base-shell/package-lock.json
             apps/chat/package-lock.json
             apps/settings/package-lock.json
+            apps/website-studio/package-lock.json
             packages/pwa-cache/package-lock.json
       - name: Install Core and PWA frontend dependencies
         run: |
@@ -117,6 +118,7 @@ jobs:
           npm --prefix apps/base-shell ci
           npm --prefix apps/chat ci
           npm --prefix apps/settings ci
+          npm --prefix apps/website-studio ci
       - name: Typecheck PWA SDK
         run: npm --prefix packages/pwa-cache run typecheck
       - name: Run complete PWA SDK hardening suite
@@ -125,6 +127,13 @@ jobs:
         run: npm --prefix apps/base-shell run test:service-worker
       - name: Run Settings cache interaction tests
         run: npm --prefix apps/settings test -- --maxWorkers=1
+      - name: Run Website Studio derived-cache recovery tests
+        run: npm --prefix apps/website-studio test -- --maxWorkers=1
+      - name: Install Chromium for Website Studio preview recovery
+        working-directory: apps/website-studio
+        run: npx playwright install --with-deps chromium
+      - name: Recover Website Studio previews and warmed routes
+        run: npm --prefix apps/website-studio run test:visual -- website-studio-recovery.spec.ts --workers=1
       - name: Install Chromium for authenticated isolated-frame smoke
         working-directory: apps/chat
         run: npx playwright install --with-deps chromium

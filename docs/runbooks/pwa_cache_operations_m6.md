@@ -72,6 +72,8 @@ npm --prefix packages/pwa-cache test -- --maxWorkers=1
 npm --prefix apps/base-shell test -- --maxWorkers=1
 npm --prefix apps/base-shell run test:service-worker
 npm --prefix apps/settings test -- --maxWorkers=1
+npm --prefix apps/website-studio test -- --maxWorkers=1
+npm --prefix apps/website-studio run test:visual -- website-studio-recovery.spec.ts --workers=1
 python3 scripts/pwa_shell_cache_smoke.py
 ```
 
@@ -114,6 +116,10 @@ interruption and updates delivered by background revalidation. Preview caches
 are bound to the accepted snapshot revision, not to the alias chosen by Shell.
 The app-owned component and Chromium regressions cover these paths; an alias
 rename or reordered declaration must not be needed to recover the display.
+The PWA hardening CI job installs Website Studio's locked test dependencies and
+runs both suites with one worker. The Chromium tests render the real app/API
+adapter and nested preview runtime with simulated HTTP data; they do not count
+as physical PWA-098 evidence.
 
 ## Progressive workspace/user rollout
 

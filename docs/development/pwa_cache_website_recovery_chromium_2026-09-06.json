@@ -1,0 +1,47 @@
+{
+  "schema": "maverick.pwa-shell-cache-smoke.v2",
+  "captured_at": "2026-09-06T10:30:48.203Z",
+  "engine": "chromium",
+  "environment": "playwright-persistent-profile",
+  "real_safari_and_home_screen_required_for_release_gate": true,
+  "build_id": "84699ab3435c079dbb87461c448bb3f805c2d1edec5245780ccc05246cf8cf4b",
+  "precache_count": 16,
+  "app_read_models": [
+    {
+      "app": "calendar",
+      "indexeddb_seed_verified": true,
+      "scoped_warm_paint_with_display_transport_blocked": "passed"
+    },
+    {
+      "app": "chat",
+      "indexeddb_seed_verified": true,
+      "scoped_warm_paint_with_display_transport_blocked": "passed"
+    },
+    {
+      "app": "crm",
+      "indexeddb_seed_verified": true,
+      "scoped_warm_paint_with_display_transport_blocked": "passed"
+    },
+    {
+      "app": "mail",
+      "indexeddb_seed_verified": true,
+      "scoped_warm_paint_with_display_transport_blocked": "passed"
+    },
+    {
+      "app": "fitness-coach",
+      "indexeddb_seed_verified": true,
+      "scoped_warm_paint_with_display_transport_blocked": "passed"
+    }
+  ],
+  "first_online_install": "passed",
+  "mounted_tree_preserved_during_transport_loss": "passed",
+  "standard_shell_restart_without_network": "passed",
+  "non_shell_navigation_bypass": "passed",
+  "excluded_dynamic_requests": "passed",
+  "settings_cache_authenticated": "passed",
+  "settings_cache_clear": "passed",
+  "settings_cache_isolated_origin": "passed",
+  "settings_cache_refresh": "passed",
+  "transparent_transport_recovery": "passed",
+  "superseded_mode_ui_absent": "passed"
+}

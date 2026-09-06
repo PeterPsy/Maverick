@@ -1,5 +1,11 @@
 # PWA cache — review corrections and release handoff, 2026-09-06
 
+> Historical candidate `fb6e7145`: the four corrections below were independently
+> confirmed, but a later review reproduced stale Website Studio previews after
+> recovery. That follow-up is corrected and the replacement candidate/evidence
+> is recorded in [Website Studio recovery validation](pwa_cache_website_recovery_validation_2026-09-06.md).
+> This checkpoint does not certify the replacement Website Studio bundle.
+
 ## Verdict and exact candidate
 
 **All four reported code findings are corrected and regression-tested. M6's

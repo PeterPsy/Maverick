@@ -649,3 +649,13 @@ key in approval. Settings are disabled during active turns. Twenty-two new Swift
 tests use synthetic states/events and injected sinks, not the user's desktop.
 No Core implementation, credential, screenshot transport, OS-permission or
 same-identity atomic updater change. Mac CI and physical lock acceptance pending.
+
+Approved v17 run `34035594195` passed 138 Swift and 15 Python tests, release,
+credential-free Codex/image wire, stable Apple Development signing and the real
+identity fixture. Bidirectional continuity with the installed app passed; the
+same path was updated without persistent backup and launch requested at
+13:19:45 UTC on 2026-09-06 (`121e69c · sessione protetta v17`). Physical screen-lock
+acceptance is pending. Linux updater/wire and Core unused-import checks passed.
+Final source cleanup explicitly marks the immutable interruption enum Sendable
+(no runtime behavior change); its artifact-only validation does not reinstall
+or close the user's newly opened app. Installed code remains 121e69c.

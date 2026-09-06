@@ -1,10 +1,10 @@
 import type { PreviewPayload, WorkspaceSnapshot } from './api';
 
-export function preview(version: string, route = '/'): PreviewPayload {
-  const previewId = `preview-${version}-${route === '/' ? 'home' : 'about'}`;
+export function preview(version: string, route = '/', siteId = 'site'): PreviewPayload {
+  const previewId = `preview-${version}-${route === '/' ? 'home' : route.replace(/[^a-z0-9]+/gi, '')}`;
   return {
     preview_id: previewId,
-    site_id: 'site',
+    site_id: siteId,
     environment_id: 'env_preview',
     route,
     runtime_kind: 'static',
@@ -17,9 +17,9 @@ export function preview(version: string, route = '/'): PreviewPayload {
   };
 }
 
-export function snapshot(version: string, withPreview = true): WorkspaceSnapshot {
-  const site = { id: 'site', display_name: 'Site', slug: 'site', status: 'draft', source_provider: 'git', is_active: true };
-  const latest = preview(version);
+export function snapshot(version: string, withPreview = true, siteId = 'site'): WorkspaceSnapshot {
+  const site = { id: siteId, display_name: siteId, slug: siteId, status: 'draft', source_provider: 'git', is_active: true };
+  const latest = preview(version, '/', siteId);
   return {
     schema: 'workspace_snapshot.v1',
     revision: version.repeat(64),

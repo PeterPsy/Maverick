@@ -350,8 +350,13 @@ refresh because events have no replay cursor; it never remounts app frames or
 changes product mode. Event aliases are reread triggers, not exhaustive change
 sets: Website Studio retires resolved and pending derived previews whenever
 the accepted site's snapshot revision changes, including revalidation without
-another event. Late builds cannot publish or remove a replacement pending
-entry. Pending-count/oldest-wait gauges belong solely to the
+another event. Same-site navigation does not invalidate the data-read lifetime:
+initial and revalidated snapshots reconcile the latest selection directly,
+without waiting for a prior preview build or issuing a replacement read. A
+separate selection lifetime guards preview publication, errors and loader
+cleanup for both navigation and recovery. Late builds cannot publish, report
+errors over the current view or remove a replacement pending entry.
+Pending-count/oldest-wait gauges belong solely to the
 current shell document's RAM, while persisted shards aggregate historical
 counters and completed durations. Expired diagnostics are automatically pruned
 in throttled, bounded batches, not merely ignored at aggregation time.

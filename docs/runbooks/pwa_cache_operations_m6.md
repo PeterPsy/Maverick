@@ -116,6 +116,12 @@ interruption and updates delivered by background revalidation. Preview caches
 are bound to the accepted snapshot revision, not to the alias chosen by Shell.
 The app-owned component and Chromium regressions cover these paths; an alias
 rename or reordered declaration must not be needed to recover the display.
+Navigate to a warmed route while the recovery snapshot is still pending:
+the new snapshot must update the latest selection and all derived route caches
+without a replacement snapshot read. Repeat with background revalidation and
+an unfinished old preview build. Reject that old build after B is visible:
+neither an error notice nor cleanup of a newer loader may escape the selection
+guard. Info-panel navigation uses the same guard and preserves its route/target.
 The PWA hardening CI job installs Website Studio's locked test dependencies and
 runs both suites with one worker. The Chromium tests render the real app/API
 adapter and nested preview runtime with simulated HTTP data; they do not count

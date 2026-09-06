@@ -1759,6 +1759,12 @@ Website Studio binds resolved previews and in-flight preview builds to the
 snapshot's site/revision: changed initial or revalidated snapshots retire both
 maps before rendering, while unchanged revisions retain warm route reuse.
 Obsolete completions cannot publish into or remove entries from the new view.
+Read validity must be independent of same-site navigation. Website Studio
+applies initial and revalidated snapshots to the latest selection, without
+waiting for an old preview build or rereading a snapshot already delivered by
+revalidation. Only a superseding read or retired site/view cancels that data
+lifetime. Navigation and recovery use one selection-generation guard for
+preview publication, errors and loader cleanup; current failures still surface.
 
 The M3 shared implementation is `packages/pwa-cache/`. The top-level host must
 create an app-bound capability with explicit non-empty user id, workspace id,

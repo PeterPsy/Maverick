@@ -20,8 +20,9 @@ import {
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
 type ActiveTarget = { anchor?: string; componentId?: string; id?: string; kind?: string; selector?: string };
+type ViewRequest = { siteId: string; pageId: string; route: string; routeId: string; assetId: string; target: ActiveTarget };
 type RefreshOptions = { resetPreview?: boolean };
-type RenderOptions = RefreshOptions & { runId?: number };
+type RenderOptions = RefreshOptions & { runId: number };
 type Selection = { asset?: Asset; page?: Page; previewRoute: string; route?: Route };
 type PreviewNavigateCommand = {
   owner_app_id: 'website-studio';
@@ -33,6 +34,7 @@ type PreviewNavigateCommand = {
 };
 
 const EMPTY_SITEMAP: SitemapPayload = { site_id: '', items: [], routes: [], assets: [] };
+const EMPTY_VIEW: ViewRequest = { siteId: '', pageId: '', route: '', routeId: '', assetId: '', target: {} };
 const PREVIEW_RUNTIME_VERSION = 'preview-browser-stream-v6';
 const PREVIEW_CLIENT_VERSION = 'website-studio-preview-frame-v9';
 
@@ -53,14 +55,13 @@ export function App() {
   const [notice, setNotice] = useState<Notice>(null);
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const [navigationLoadingLabel, setNavigationLoadingLabel] = useState('');
-  const activeSiteIdRef = useRef('');
-  const activePageIdRef = useRef('');
+  const viewRequestRef = useRef<ViewRequest>(EMPTY_VIEW);
   const infoPanelOpenRef = useRef(false);
   const previewStateRef = useRef<PreviewPayload | null>(null);
   const previewCacheRef = useRef<Map<string, PreviewPayload>>(new Map());
   const previewRequestCacheRef = useRef<Map<string, Promise<PreviewPayload>>>(new Map());
   const previewSnapshotRevisionRef = useRef('');
-  const refreshRunRef = useRef(0);
+  const viewRunRef = useRef(0);
   const snapshotAbortRef = useRef<AbortController | null>(null);
   const sitemapRef = useRef<SitemapPayload>(EMPTY_SITEMAP);
 
@@ -72,36 +73,15 @@ export function App() {
   const importOnly = showNewWebsite || !activeSite;
   const previewUrl = useMemo(() => normalizePreviewUrl(previewState?.preview_url || '', activeTarget), [activeTarget, previewState?.preview_url]);
 
-  useEffect(() => {
-    activeSiteIdRef.current = activeSiteId;
-  }, [activeSiteId]);
+  function updateInfoPanel(open: boolean) {
+    infoPanelOpenRef.current = open;
+    setInfoPanelOpen(open);
+  }
 
-  useEffect(() => {
-    activePageIdRef.current = activePageId;
-  }, [activePageId]);
-
-  useEffect(() => {
-    infoPanelOpenRef.current = infoPanelOpen;
-  }, [infoPanelOpen]);
-
-  useEffect(() => {
-    sitemapRef.current = sitemap;
-  }, [sitemap]);
-
-  useEffect(() => {
-    previewStateRef.current = previewState;
-  }, [previewState]);
-
-  async function refresh(
-    nextSiteId = activeSiteIdRef.current,
-    nextPageId = activePageIdRef.current,
-    nextRoute = '',
-    nextRouteId = '',
-    nextAssetId = '',
-    nextTarget: ActiveTarget = {},
-    options: RefreshOptions = {}
-  ) {
-    const runId = ++refreshRunRef.current;
+  async function refresh(request = viewRequestRef.current, options: RefreshOptions = {}) {
+    const previousSiteId = viewRequestRef.current.siteId;
+    viewRequestRef.current = request;
+    const runId = ++viewRunRef.current;
     const resetPreview = options.resetPreview ?? !previewStateRef.current;
     if (resetPreview) {
       setPreviewLoading(true);
@@ -111,80 +91,125 @@ export function App() {
     } else {
       setPreviewLoading(false);
     }
-    const currentSiteId = activeSiteIdRef.current;
-    if (resetPreview || (nextSiteId && nextSiteId !== currentSiteId)) {
+    if (resetPreview || request.siteId !== previousSiteId) {
       setSiteStatus(null);
       setChangeHistory(null);
     }
+    snapshotAbortRef.current?.abort();
+    const snapshotAbort = new AbortController();
+    snapshotAbortRef.current = snapshotAbort;
+    const isCurrentRead = () => snapshotAbortRef.current === snapshotAbort && !snapshotAbort.signal.aborted;
+    let initialDelivered = false;
     try {
-      snapshotAbortRef.current?.abort();
-      const snapshotAbort = new AbortController();
-      snapshotAbortRef.current = snapshotAbort;
-      const snapshotRequest = cachedWorkspaceSnapshot(nextSiteId, nextRoute || '/', { revalidate: true, signal: snapshotAbort.signal });
+      const snapshotRequest = cachedWorkspaceSnapshot(request.siteId, request.route || '/', { revalidate: true, signal: snapshotAbort.signal });
+      // Observe early rejection even if the initial phase has not settled yet.
+      void snapshotRequest.revalidated.catch(() => undefined);
       const initialSnapshot = await snapshotRequest.fresh;
-      const bootstrap = snapshotToBootstrap(initialSnapshot);
-      void snapshotRequest.revalidated.then((freshSnapshot) => {
-        if (runId !== refreshRunRef.current || !freshSnapshot || freshSnapshot === initialSnapshot) return;
-        return refresh(nextSiteId, nextPageId, nextRoute, nextRouteId, nextAssetId, nextTarget, { resetPreview: false });
-      }).catch((error: Error) => {
-        if (error.name !== 'AbortError' && runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error.message });
+      if (!isCurrentRead()) return;
+      applySnapshot(initialSnapshot, resetPreview);
+      initialDelivered = true;
+      const freshSnapshot = await snapshotRequest.revalidated;
+      if (!isCurrentRead() || !freshSnapshot || freshSnapshot === initialSnapshot) return;
+      applySnapshot(freshSnapshot, false);
+    } catch (error) {
+      if (!isCurrentRead()) return;
+      setNotice({ tone: initialDelivered ? 'warn' : 'error', text: error instanceof Error ? error.message : 'Workspace snapshot failed to load' });
+      if (runId === viewRunRef.current) {
+        setPreviewLoading(false);
+        setNavigationLoadingLabel('');
+      }
+    }
+  }
+
+  function applySnapshot(snapshot: WorkspaceSnapshot, resetPreview: boolean) {
+    // Data-read validity is independent of route navigation. Apply the
+    // accepted snapshot to the latest selection, not the one sent to HTTP.
+    const request = viewRequestRef.current;
+    const bootstrap = snapshotToBootstrap(snapshot);
+    // Aliases only trigger a reread; missed events cannot describe which
+    // derived previews changed. Bind all routes and pending builds to the
+    // accepted site's snapshot revision, including background revalidation.
+    const previewRevision = JSON.stringify([snapshot.project?.site.id, snapshot.revision]);
+    if (previewSnapshotRevisionRef.current !== previewRevision) {
+      previewCacheRef.current.clear();
+      previewRequestCacheRef.current.clear();
+      previewSnapshotRevisionRef.current = previewRevision;
+    }
+    setSites(bootstrap.sites);
+    const availableSites = bootstrap.sites.filter((site) => site.status !== 'archived');
+    const requestedSite = availableSites.find((site) => site.id === request.siteId)?.id || '';
+    const persistedSite = bootstrap.persisted_active_site_id || availableSites.find((site) => site.is_active)?.id || '';
+    const selectedSite = bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || '';
+    setActiveSiteId(selectedSite);
+    if (!selectedSite) {
+      ++viewRunRef.current;
+      viewRequestRef.current = EMPTY_VIEW;
+      sitemapRef.current = EMPTY_SITEMAP;
+      setSitemap(EMPTY_SITEMAP);
+      setActivePageId('');
+      setActiveRouteId('');
+      setActiveAssetId('');
+      setActiveTarget({});
+      setPreviewHtml('');
+      setPreviewState(null);
+      previewStateRef.current = null;
+      setSiteStatus(null);
+      setChangeHistory(null);
+      setShowNewWebsite(true);
+      updateInfoPanel(false);
+      setPreviewLoading(false);
+      setNavigationLoadingLabel('');
+      return;
+    }
+
+    setShowNewWebsite(false);
+    const map = bootstrap.sitemap || { site_id: selectedSite, items: [], routes: [], assets: [] };
+    sitemapRef.current = map;
+    setSitemap(map);
+    const latestPreview = bootstrap.latest_preview || null;
+    if (latestPreview?.id && latestPreview.route && latestPreview.preview_url) {
+      rememberPreview(previewPayloadFromRecord(selectedSite, latestPreview.route, latestPreview));
+    }
+    const selection = resolveSelection(map, request.pageId, request.route, request.routeId, request.assetId);
+    showSelection(selectedSite, selection, request.target, latestPreview, resetPreview);
+    if (selectedSite !== persistedSite) {
+      const runId = viewRunRef.current;
+      callBackend({ action: 'site_set_active', site_id: selectedSite }).catch((error: Error) => {
+        if (runId === viewRunRef.current) setNotice({ tone: 'warn', text: error.message });
       });
-      if (runId !== refreshRunRef.current) return;
-      // Aliases only trigger a reread; missed events cannot describe which
-      // derived previews changed. Bind all routes and pending builds to the
-      // accepted site's snapshot revision, including background revalidation.
-      const previewRevision = JSON.stringify([initialSnapshot.project?.site.id, initialSnapshot.revision]);
-      if (previewSnapshotRevisionRef.current !== previewRevision) {
-        previewCacheRef.current.clear();
-        previewRequestCacheRef.current.clear();
-        previewSnapshotRevisionRef.current = previewRevision;
-      }
-      setSites(bootstrap.sites);
-      const availableSites = bootstrap.sites.filter((site) => site.status !== 'archived');
-      const requestedSite = availableSites.find((site) => site.id === nextSiteId)?.id || '';
-      const persistedSite = bootstrap.persisted_active_site_id || availableSites.find((site) => site.is_active)?.id || '';
-      const selectedSite = bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || '';
-      setActiveSiteId(selectedSite);
-      if (!selectedSite) {
-        setSitemap(EMPTY_SITEMAP);
-        setActivePageId('');
-        setActiveRouteId('');
-        setActiveAssetId('');
-        setActiveTarget({});
-        setPreviewHtml('');
-        setPreviewState(null);
-        previewStateRef.current = null;
-        setSiteStatus(null);
-        setChangeHistory(null);
-        setShowNewWebsite(true);
-        setInfoPanelOpen(false);
-        return;
-      }
+    }
+  }
 
-      setShowNewWebsite(false);
-      if (selectedSite !== persistedSite) {
-        callBackend({ action: 'site_set_active', site_id: selectedSite }).catch((error: Error) => {
-          if (runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error.message });
-        });
-      }
+  function showSelection(siteId: string, selection: Selection, target: ActiveTarget, latestPreview: RuntimeSummary['latest_preview'] | null, resetPreview: boolean) {
+    const runId = ++viewRunRef.current;
+    viewRequestRef.current = {
+      siteId, pageId: selection.page?.id || '', route: selection.previewRoute,
+      routeId: selection.route?.id || '', assetId: selection.asset?.id || '', target
+    };
+    setActivePageId(selection.page?.id || '');
+    setActiveRouteId(selection.route?.id || '');
+    setActiveAssetId(selection.asset?.id || '');
+    setActiveTarget(target);
+    postSelection(siteId, selection.page, selection.route, selection.asset, target);
+    void finishSelection(siteId, selection.previewRoute, latestPreview, { resetPreview, runId });
+  }
 
-      const map = bootstrap.sitemap || { site_id: selectedSite, items: [], routes: [], assets: [] };
-      setSitemap(map);
-      const selection = resolveSelection(map, nextPageId, nextRoute, nextRouteId, nextAssetId);
-      setActivePageId(selection.page?.id || '');
-      setActiveRouteId(selection.route?.id || '');
-      setActiveAssetId(selection.asset?.id || '');
-      setActiveTarget(nextTarget || {});
-      postSelection(selectedSite, selection.page, selection.route, selection.asset, nextTarget);
-      await renderSite(selectedSite, selection.previewRoute, bootstrap.latest_preview || null, { resetPreview, runId });
-      if (runId === refreshRunRef.current && infoPanelOpenRef.current) {
-        loadSiteDetails(selectedSite, runId);
+  async function finishSelection(siteId: string, route: string, latestPreview: RuntimeSummary['latest_preview'] | null, options: RenderOptions) {
+    const { runId } = options;
+    try {
+      await renderSite(siteId, route, latestPreview, options);
+      if (runId === viewRunRef.current && infoPanelOpenRef.current) {
+        void loadSiteDetails(siteId, runId);
       }
     } catch (error) {
-      // Supersession and teardown are not failures of the current display.
-      if (runId === refreshRunRef.current && !snapshotAbortRef.current?.signal.aborted) throw error;
+      // Navigation and snapshot-driven renders share the same publication
+      // barrier for success, errors and loaders. No unguarded outer catch.
+      if (runId === viewRunRef.current) {
+        setNavigationLoadingLabel('');
+        setNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Preview failed to load' });
+      }
     } finally {
-      if (runId === refreshRunRef.current) setPreviewLoading(false);
+      if (runId === viewRunRef.current) setPreviewLoading(false);
     }
   }
 
@@ -194,15 +219,15 @@ export function App() {
         callBackend<SiteStatusPayload>({ action: 'site_status', site_id: siteId }),
         callBackend<ChangeHistoryPayload>({ action: 'list_changes', site_id: siteId })
       ]);
-      if (runId !== refreshRunRef.current || activeSiteIdRef.current !== siteId) return;
+      if (runId !== viewRunRef.current || viewRequestRef.current.siteId !== siteId) return;
       setSiteStatus(statusPayload);
       setChangeHistory(changesPayload);
     } catch (error) {
-      if (runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error instanceof Error ? error.message : 'Site details failed to load' });
+      if (runId === viewRunRef.current) setNotice({ tone: 'warn', text: error instanceof Error ? error.message : 'Site details failed to load' });
     }
   }
 
-  async function renderSite(siteId: string, route = '/', latestPreview?: RuntimeSummary['latest_preview'] | null, options: RenderOptions = {}) {
+  async function renderSite(siteId: string, route: string, latestPreview: RuntimeSummary['latest_preview'] | null, options: RenderOptions) {
     const cacheKey = previewCacheKey(siteId, route);
     if (latestPreview?.id && latestPreview.route === route && latestPreview.preview_url) {
       const payload = previewPayloadFromRecord(siteId, route, latestPreview);
@@ -226,57 +251,48 @@ export function App() {
     applyPreviewPayload(payload, options.runId);
   }
 
-  function applyPreviewPayload(payload: PreviewPayload, runId?: number) {
-    if (runId && runId !== refreshRunRef.current) return;
+  function rememberPreview(payload: PreviewPayload) {
     previewCacheRef.current.set(previewCacheKey(payload.site_id, payload.route || '/'), payload);
     while (previewCacheRef.current.size > 12) {
       const oldest = previewCacheRef.current.keys().next().value;
       if (oldest) previewCacheRef.current.delete(oldest);
       else break;
     }
+  }
+
+  function applyPreviewPayload(payload: PreviewPayload, runId: number) {
+    if (runId !== viewRunRef.current) return;
+    rememberPreview(payload);
     previewStateRef.current = payload;
     setPreviewState(payload);
     setPreviewHtml(payload.html || '');
   }
 
-  async function navigateLoadedSite(
-    nextSiteId: string,
-    nextPageId: string,
-    nextRoute: string,
-    nextRouteId: string,
-    nextAssetId: string,
-    nextTarget: ActiveTarget,
-    wantsInfoPanel: boolean
-  ): Promise<boolean> {
-    const siteId = nextSiteId || activeSiteIdRef.current;
+  function navigateLoadedSite(request: ViewRequest): boolean {
+    const { siteId, pageId, route, routeId, assetId, target } = request;
     const map = sitemapRef.current;
-    if (!siteId || siteId !== activeSiteIdRef.current || map.site_id !== siteId) return false;
+    if (!siteId || siteId !== viewRequestRef.current.siteId || map.site_id !== siteId) return false;
     if (!(map.items?.length || map.routes?.length || map.assets?.length)) return false;
 
-    const selection = resolveSelection(map, nextPageId, nextRoute, nextRouteId, nextAssetId);
-    if ((nextPageId || nextRoute || nextRouteId || nextAssetId) && !selection.page && !selection.route && !selection.asset) {
+    const selection = resolveSelection(map, pageId, route, routeId, assetId);
+    if ((pageId || route || routeId || assetId) && !selection.page && !selection.route && !selection.asset) {
       return false;
     }
 
-    const runId = ++refreshRunRef.current;
-    setShowNewWebsite(false);
-    setInfoPanelOpen(wantsInfoPanel);
     setPreviewLoading(false);
-    setActivePageId(selection.page?.id || '');
-    setActiveRouteId(selection.route?.id || '');
-    setActiveAssetId(selection.asset?.id || '');
-    setActiveTarget(nextTarget || {});
-    postSelection(siteId, selection.page, selection.route, selection.asset, nextTarget);
-    await renderSite(siteId, selection.previewRoute, null, { resetPreview: false, runId });
-    if (runId === refreshRunRef.current && wantsInfoPanel) {
-      loadSiteDetails(siteId, runId);
-    }
+    showSelection(siteId, selection, target, null, false);
     return true;
   }
 
+  function cancelView() {
+    ++viewRunRef.current;
+    snapshotAbortRef.current?.abort();
+    snapshotAbortRef.current = null;
+  }
+
   useEffect(() => {
-    refresh().catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
-    return () => snapshotAbortRef.current?.abort();
+    void refresh();
+    return cancelView;
   }, []);
 
   useEffect(() => {
@@ -291,13 +307,14 @@ export function App() {
           previewRequestCacheRef.current.clear();
         }
         invalidateWorkspaceSnapshots(resource ? [resource] : []);
-        refresh(activeSiteIdRef.current, activePageIdRef.current, '', '', '', {}, { resetPreview: resetsPreview }).catch((error: Error) =>
-          setNotice({ tone: 'error', text: error.message })
-        );
+        void refresh(viewRequestRef.current, { resetPreview: resetsPreview });
         return;
       }
       if (payload.type !== 'maverick.app.navigate') return;
       if (payload.params?.new_website_request_id) {
+        cancelView();
+        viewRequestRef.current = EMPTY_VIEW;
+        sitemapRef.current = EMPTY_SITEMAP;
         setActiveSiteId('');
         setSitemap(EMPTY_SITEMAP);
         setActivePageId('');
@@ -312,7 +329,9 @@ export function App() {
         setSiteStatus(null);
         setChangeHistory(null);
         setShowNewWebsite(true);
-        setInfoPanelOpen(false);
+        updateInfoPanel(false);
+        setPreviewLoading(false);
+        setNavigationLoadingLabel('');
         setNotice(null);
         return;
       }
@@ -335,42 +354,25 @@ export function App() {
         selector: payload.params?.target_selector || payload.params?.selector || '',
         anchor: payload.params?.target_anchor || payload.params?.anchor || ''
       };
-      if (wantsInfoPanel) {
+      const siteId = payload.params?.site_id || viewRequestRef.current.siteId;
+      const pageId = payload.params?.page_id || pageFromRoute;
+      const route = payload.params?.route || '';
+      const routeId = payload.params?.route_id || routeFromRoute;
+      const assetId = payload.params?.asset_id || assetFromRoute;
+      const hasSelection = Boolean(pageId || route || routeId || assetId);
+      const hasTarget = Object.values(target).some(Boolean);
+      if (wantsInfoPanel || payload.params?.site_id || hasSelection || hasTarget) {
         setShowNewWebsite(false);
-        setInfoPanelOpen(true);
-        const siteId = payload.params?.site_id || activeSiteIdRef.current;
-        const pageId = payload.params?.page_id || pageFromRoute || activePageIdRef.current;
-        const route = payload.params?.route || '';
-        const routeId = payload.params?.route_id || routeFromRoute;
-        const assetId = payload.params?.asset_id || assetFromRoute;
-        navigateLoadedSite(siteId, pageId, route, routeId, assetId, target, true)
-          .then((handled) => {
-            if (handled) return;
-            return refresh(siteId, pageId, route, routeId, assetId, target, { resetPreview: !previewStateRef.current });
-          })
-          .catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
-        return;
-      }
-      if (payload.params?.site_id || pageFromRoute || routeFromRoute || assetFromRoute || componentFromRoute || sectionFromRoute || anchorFromRoute || payload.params?.route) {
-        setShowNewWebsite(false);
-        setInfoPanelOpen(false);
-        const siteId = payload.params?.site_id || activeSiteIdRef.current;
-        const pageId = payload.params?.page_id || pageFromRoute;
-        const route = payload.params?.route || '';
-        const routeId = payload.params?.route_id || routeFromRoute;
-        const assetId = payload.params?.asset_id || assetFromRoute;
-        if (pageId || route || routeId) {
+        updateInfoPanel(wantsInfoPanel);
+        if (!wantsInfoPanel && (pageId || route || routeId)) {
           setNavigationLoadingLabel(navigationLoadingName(sitemapRef.current, pageId, routeId, route));
         }
-        navigateLoadedSite(siteId, pageId, route, routeId, assetId, target, false)
-          .then((handled) => {
-            if (handled) return;
-            return refresh(siteId, pageId, route, routeId, assetId, target, { resetPreview: !previewStateRef.current });
-          })
-          .catch((error: Error) => {
-            setNavigationLoadingLabel('');
-            setNotice({ tone: 'error', text: error.message });
-          });
+        // Opening details alone must not replace a route-only selection
+        // with the default page or discard its current target.
+        const request = wantsInfoPanel && siteId === viewRequestRef.current.siteId && !hasSelection
+          ? { ...viewRequestRef.current, target: hasTarget ? target : viewRequestRef.current.target }
+          : { siteId, pageId, route, routeId, assetId, target };
+        if (!navigateLoadedSite(request)) void refresh(request, { resetPreview: !previewStateRef.current });
       }
     }
     window.addEventListener('message', handleMessage);
@@ -427,7 +429,7 @@ export function App() {
                   status={siteStatus}
                   changes={changeHistory}
                   site={activeSite}
-                  onClose={() => setInfoPanelOpen(false)}
+                  onClose={() => updateInfoPanel(false)}
                 />
               ) : null}
               {navigationLoadingLabel ? <PreviewLoadingState label={navigationLoadingLabel} overlay /> : null}

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "bdac44002587bad3d9726c39e004722a421a2a2599b7e689235b0187dead6c71",
+  "build_id": "a39fceb80e1e74bd4f48e559bba3ec52ff2bc58a1a9a156cd7214fe7cd5766ab",
   "entrypoints": [
     "index.html",
     "widgets/mail-sidebar/index.html",
@@ -8,8 +8,8 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-CEPXEgds.js",
-      "sha256": "0a75062ebd812378bfb7d907c101af5d3a1ac1a82e8d5e17f1def8450f05b197",
+      "path": "assets/app-CFeoOL7L.js",
+      "sha256": "37e8165b8c1f57c57136b5af1b2d0c5c95f6746e749641693f822216dc204eca",
       "size_bytes": 33196
     },
     {
@@ -33,13 +33,13 @@
       "size_bytes": 1969
     },
     {
-      "path": "assets/mailboxScopes-CdNckCW7.js",
-      "sha256": "14a611697ac31d186d61579efe20be3d7063679ffd0de6a416d41d4fe8284dc6",
-      "size_bytes": 33927
+      "path": "assets/mailboxScopes-0Fs-VSVS.js",
+      "sha256": "1380524dae8e5249a98fcacc30e7168f83dd25411a3a0c525fc4da0e94928d6d",
+      "size_bytes": 33987
     },
     {
-      "path": "assets/widgets/mail-sidebar/index-BUng7jt-.js",
-      "sha256": "b561e87cb430a3005664a806a85e5db278a19a1ea4f6dd4868ec04548f3f469f",
+      "path": "assets/widgets/mail-sidebar/index-C0UPyzSL.js",
+      "sha256": "d211242b1f78343830b23a2543c90ae742901d08b7bdc5e63feb3af3ee596f71",
       "size_bytes": 142912
     },
     {
@@ -51,12 +51,12 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "0ea421276bc09ad52adffaa02ca10d2c370f24f871389ce938fde17b68076960",
+      "sha256": "623a61e7154faf7ac407fd6d8a2574447d4ec9d1bf095968d8ddb514d51dd558",
       "size_bytes": 596
     },
     {
       "path": "widgets/mail-sidebar/index.html",
-      "sha256": "f1e77f123f7e50b1aa7de842aa4bb3b4ec15b4c4a008f2bea057620d880441c5",
+      "sha256": "44cb55b891c7d029daa62831934e2514799511906ec88061114aa3871f7a5230",
       "size_bytes": 642
     },
     {

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "63bdd0bb2ad3e971af602328b4416c8dbf791d2cd6596d00dad9645a8239315e",
+  "build_id": "2827b1e10af31dbd8122125b0d1a0b40236871e27c0ec63326204899fa6bb82f",
   "entrypoints": [
     "index.html",
     "widgets/calendar-sidebar/index.html",
@@ -18,14 +18,14 @@
       "size_bytes": 40261
     },
     {
+      "path": "assets/app-BEuow3T0.js",
+      "sha256": "20429905a2a217b3a7ce6a099f23c428ac2a970a3d5278a8c27341603b9672fc",
+      "size_bytes": 183413
+    },
+    {
       "path": "assets/app-CnYbNVml.js",
       "sha256": "591046a67c7bdab1bfc31d202d1c0e9797c43f71af54eb28c117a07cff3d5fd5",
       "size_bytes": 137984
-    },
-    {
-      "path": "assets/app-ZWTfr7Om.js",
-      "sha256": "ac5bd19e747da56e06d5092179a1dc7ddfc85d906cac88d96fb28d7ff6f081f8",
-      "size_bytes": 183064
     },
     {
       "path": "assets/index-BkWb-iKo.css",
@@ -51,7 +51,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "637f51b6742fcffc9ce43a024fcf51180d5491c2ca7589f64c9fdfe01cdb4453",
+      "sha256": "294b9b127999b6985a31f845451aec76b61f5f033c5b9ddf43a3783fe6d6de5a",
       "size_bytes": 599
     },
     {

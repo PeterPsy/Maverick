@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "e7d41339edc7d88d597a95809f92cc6f1cecb736e3eeff14a7ffb9dbc37dc70a",
+  "build_id": "2673dc3b6914a268f6afd925f214996513dfc639422dd2f2c51f86ac4b737c5c",
   "entrypoints": [
     "index.html",
     "widgets/crm-sidebar/index.html"
@@ -12,9 +12,9 @@
       "size_bytes": 46556
     },
     {
-      "path": "assets/app-BgzZwNlG.js",
-      "sha256": "a8e4321a0316f7767f704d90c4fed32c7d56608b9f069d797d0f7ac8b4a9ca7d",
-      "size_bytes": 288342
+      "path": "assets/app-C8EWXWeo.js",
+      "sha256": "f03e681100f07d27f60b5797da3c749678d80eccb7d857164f189c1101e9e78d",
+      "size_bytes": 288402
     },
     {
       "path": "assets/handshake-C9horJz2.js",
@@ -35,7 +35,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "52c9de7456d51afbe879b17911fa778af60044d29315417795deadaf2d0a4a18",
+      "sha256": "3b1baaf861527b68a78b062dc7407a711335e8a400ee78013b74208d7e2e9453",
       "size_bytes": 491
     },
     {

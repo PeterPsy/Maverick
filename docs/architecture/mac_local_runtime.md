@@ -613,3 +613,12 @@ Stop/new turn. No screenshot routing, core runtime or web snapshot change.
 Nine new native tests use injected post sinks, never the real desktop. Mac CI,
 signed-to-signed update and physical long-note movement remain pending; stable
 signing and atomic same-path replacement without persistent backups are retained.
+
+Approved Mac run `34032673570` passed 116 Swift and 15 Python tests, release,
+credential-free Codex/image wire and the real two-version signing fixture. The
+installer verified bidirectional identity continuity with the installed signed
+app, updated the same path without persistent backup and requested launch at
+12:20:28 UTC on 2026-09-06: `d379aee · scroll esplicito v16`. The designated
+requirement digest remains unchanged from v15. Linux updater/wire and Core
+unused-import checks passed. Physical scroll movement and permission retention
+across this signed-to-signed update remain user-verification gates, not CI claims.

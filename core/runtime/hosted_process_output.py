@@ -8,7 +8,7 @@ import subprocess
 from threading import Event, Lock, Thread
 import time
 
-from core.runtime.process_control import terminate_runtime_process
+from core.runtime.hosted_process_termination import terminate_hosted_process
 
 
 MAX_PROCESS_OUTPUT_BYTES = 16_777_216
@@ -53,7 +53,7 @@ class HostedProcessOutputCapture:
             self._set_reason("process_output_capture_failed")
             self.output_handle.close()
             self._finished.set()
-            terminate_runtime_process(self.process)
+            terminate_hosted_process(self.process)
             return
         selector = selectors.DefaultSelector()
         total = 0
@@ -64,7 +64,7 @@ class HostedProcessOutputCapture:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     self._set_reason("process_timed_out")
-                    terminate_runtime_process(self.process)
+                    terminate_hosted_process(self.process)
                     break
                 events = selector.select(timeout=min(remaining, 0.1))
                 if not events:
@@ -78,11 +78,11 @@ class HostedProcessOutputCapture:
                     total += writable
                 if writable != len(chunk):
                     self._set_reason("process_output_too_large")
-                    terminate_runtime_process(self.process)
+                    terminate_hosted_process(self.process)
                     break
         except Exception:
             self._set_reason("process_output_capture_failed")
-            terminate_runtime_process(self.process)
+            terminate_hosted_process(self.process)
         finally:
             selector.close()
             stream.close()

@@ -23,6 +23,7 @@ from core.runtime.hosted_result_authority_guard import (
     HostedResultAuthorityGuard,
 )
 from core.runtime.hosted_process_output import HostedProcessOutputCapture
+from core.runtime.hosted_process_termination import terminate_hosted_process
 from core.runtime.lifecycle_service_turns import (
     create_runtime_process,
     transition_runtime_process,
@@ -31,7 +32,6 @@ from core.runtime.process_control import (
     register_runtime_process,
     runtime_processes_alive_for_session,
     terminate_orphaned_runtime_processes_for_session,
-    terminate_runtime_process,
     unregister_runtime_process,
 )
 from core.runtime.tool_errors import RuntimeToolError
@@ -193,7 +193,7 @@ class HostedToolProcessRegistry:
             }
         except Exception as error:
             if process is not None:
-                terminate_runtime_process(process)
+                terminate_hosted_process(process)
                 unregister_runtime_process(session_id, process)
             if output_capture is not None:
                 output_capture.wait()
@@ -636,7 +636,7 @@ class HostedToolProcessRegistry:
         *,
         release_handle: bool = True,
     ) -> bool:
-        terminated = terminate_runtime_process(live.process)
+        terminated = terminate_hosted_process(live.process)
         if live.effect_overlay is not None:
             live.workspace_effects = live.effect_overlay.discard()
         unregister_runtime_process(live.session_id, live.process)

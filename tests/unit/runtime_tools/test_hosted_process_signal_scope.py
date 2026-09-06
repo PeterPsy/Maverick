@@ -66,6 +66,6 @@ def _marked_processes(session_id):
             if f"MAVERICK_RUNTIME_SESSION_ID={session_id}".encode() in environment:
                 fields = (directory / "stat").read_text().rsplit(")", 1)[1].split()
                 result.append(tuple(int(fields[index]) for index in (2, 3, 4)))  # pgid, sid, tty
-        except (OSError, ProcessLookupError):
+        except OSError:
             continue
     return result

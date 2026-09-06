@@ -63,6 +63,13 @@ the documented [Python pre-exec session boundary](https://docs.python.org/3/libr
 instead of a second [Bubblewrap session boundary](https://github.com/containers/bubblewrap/blob/main/bwrap.xml),
 not the removal of terminal isolation; all namespace, mount, network and
 workspace-effect restrictions remain in place.
+Hosted cancellation, output timeout and process interruption share a bounded
+group-termination helper. After SIGTERM it always escalates the active owned
+group to SIGKILL, even if the launcher has already exited during the grace
+period: [namespace init can ignore SIGTERM before its handler is installed](https://man7.org/linux/man-pages/man7/pid_namespaces.7.html)
+and keep the output pipe open. An already-reaped handle at entry never grants authority over a
+potentially reused numeric group ID; session-owned orphan cleanup remains the
+separate fallback. No generic/native process-control implementation is changed.
 The live step additionally requires a strict, bounded receipt with the exact
 target, fresh nonce, complete per-response protocol observations and exact
 reasoning-effort counts. The

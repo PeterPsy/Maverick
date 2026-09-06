@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import selectors
 import shutil
-import signal
 import subprocess
 import time
 from typing import Callable
@@ -21,6 +20,7 @@ from core.runtime.hosted_workspace_snapshot import HostedWorkspaceSnapshot
 from core.runtime.hosted_result_authority_guard import (
     HostedResultAuthorityGuard,
 )
+from core.runtime.hosted_process_termination import terminate_hosted_process
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_catalog import RuntimeToolSurfaceResult
 
@@ -271,11 +271,11 @@ def run_hosted_workspace_command(
         raise
     except OSError as error:
         if process is not None:
-            _terminate_group(process)
+            terminate_hosted_process(process)
         raise RuntimeToolError("shell_execution_failed") from error
     except Exception as error:
         if process is not None:
-            _terminate_group(process)
+            terminate_hosted_process(process)
         raise RuntimeToolError("shell_execution_failed") from error
     finally:
         if prepared.effect_overlay is not None:
@@ -409,11 +409,11 @@ def _read_bounded_output(
                 try:
                     execution_control.check()
                 except RuntimeToolError:
-                    _terminate_group(process)
+                    terminate_hosted_process(process)
                     raise
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                _terminate_group(process)
+                terminate_hosted_process(process)
                 raise RuntimeToolError("shell_execution_timed_out")
             events = selector.select(timeout=min(remaining, 0.1))
             if not events:
@@ -422,13 +422,13 @@ def _read_bounded_output(
             if not chunk:
                 break
             if len(output) + len(chunk) > max_output_bytes:
-                _terminate_group(process)
+                terminate_hosted_process(process)
                 raise RuntimeToolError("shell_output_too_large")
             output.extend(chunk)
         process.wait(timeout=max(0.1, deadline - time.monotonic()))
         return bytes(output)
     except subprocess.TimeoutExpired as error:
-        _terminate_group(process)
+        terminate_hosted_process(process)
         raise RuntimeToolError("shell_execution_timed_out") from error
     finally:
         selector.close()
@@ -444,27 +444,10 @@ def _parent_directories(paths: list[Path]) -> list[Path]:
     return [Path(value) for value in sorted(values, key=lambda item: (item.count("/"), item))]
 
 
-def _terminate_group(process: subprocess.Popen[bytes]) -> None:
-    if process.poll() is not None:
-        return
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-        process.wait(timeout=1.0)
-    except (OSError, subprocess.TimeoutExpired):
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except OSError:
-            process.kill()
-        try:
-            process.wait(timeout=1.0)
-        except subprocess.TimeoutExpired:
-            pass
-
-
 def _cancel_workspace_command(
     process: subprocess.Popen[bytes],
     prepared: PreparedHostedWorkspaceCommand,
 ) -> None:
-    _terminate_group(process)
+    terminate_hosted_process(process)
     if prepared.effect_overlay is not None:
         prepared.effect_overlay.discard()

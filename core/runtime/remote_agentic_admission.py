@@ -58,6 +58,13 @@ def remote_agentic_containment_reason(
     workspace_store: object | None = None,
 ) -> str | None:
     """Return the authoritative Phase-0 block reason, including unknown providers."""
+    from core.runtime.authorization_domain import require_production_authorization
+    from core.providers.errors import CapabilityCertificateError
+
+    try:
+        require_production_authorization(binding_or_definition)
+    except CapabilityCertificateError as error:
+        return error.reason_code
     if not is_remote_agentic_identity(binding_or_definition):
         return None
     native = (
@@ -116,6 +123,13 @@ def require_remote_agentic_session_admission(
     workspace_store: object | None = None,
 ) -> None:
     """Reject remote sessions before persistence; client declarations never authorize them."""
+    from core.runtime.authorization_domain import require_production_authorization
+    from core.providers.errors import CapabilityCertificateError
+
+    try:
+        require_production_authorization(binding_or_definition)
+    except CapabilityCertificateError as error:
+        raise AgenticProfileError(error.reason_code) from error
     if declared_remote_data_class is not None:
         raise AgenticProfileError("remote_data_declaration_not_accepted")
     if not is_remote_agentic_identity(binding_or_definition):
@@ -131,9 +145,21 @@ def require_remote_agentic_session_admission(
 
 
 def require_remote_agentic_dispatch(
-    binding: object | None, *, workspace_store: object | None = None,
+    binding: object | None, *, workspace_store: object | None = None, lab_authorization=None,
 ) -> None:
     """Reject contained or unknown pinned runtimes before provider dispatch."""
+    if lab_authorization is not None:
+        from core.certification_lab.authority import LabRuntimeAuthorization
+        from core.certification_lab.errors import LabAuthorizationError
+        from core.runtime.hosted_agentic_models import HostedAgenticLoopError
+
+        if type(lab_authorization) is not LabRuntimeAuthorization or lab_authorization.workspace_store is not workspace_store:
+            raise HostedAgenticLoopError("lab_trusted_context_invalid")
+        try:
+            lab_authorization.validate_binding(binding)
+        except LabAuthorizationError as error:
+            raise HostedAgenticLoopError(error.reason_code) from error
+        return
     reason = remote_agentic_containment_reason(
         binding, workspace_id=getattr(binding, "workspace_id", None),
         workspace_store=workspace_store,
@@ -164,4 +190,14 @@ def require_remote_agentic_context(state, context) -> None:
                       "agent_type_id", "effective_mode", "runtime_mode")
     ):
         raise HostedAgenticLoopError("remote_agentic_session_identity_changed")
-    require_remote_agentic_dispatch(current.execution_binding, workspace_store=state.workspace_store)
+    from core.certification_lab.runtime_context import lab_authorization_for_state
+    from core.certification_lab.errors import LabAuthorizationError
+
+    try:
+        lab = lab_authorization_for_state(state, current.execution_binding)
+        if lab is not None:
+            lab.validate_session(current)
+    except LabAuthorizationError as error:
+        raise HostedAgenticLoopError(error.reason_code) from error
+    require_remote_agentic_dispatch(current.execution_binding, workspace_store=state.workspace_store,
+                                    lab_authorization=lab)

@@ -317,6 +317,9 @@ def validate_certificate_for_binding_with_revision_fence(
     adapter_artifact_digest: str | None = None,
 ) -> tuple[CapabilityCertificate, str]:
     """Validate a certificate and return its content-bound cheap TCB fence."""
+    from core.runtime.authorization_domain import require_production_authorization
+
+    require_production_authorization(binding)
     try:
         certificate = store.get_capability_certificate(binding.capability_certificate_id)
     except ProviderNotFoundError as error:

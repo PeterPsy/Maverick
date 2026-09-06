@@ -1,6 +1,6 @@
 {
   "adapter_id": "codex-app-server",
-  "current_revision": "15",
+  "current_revision": "16",
   "revisions": {
     "7": "7015f0fd1232170c003b8a5397769cef4ce37d8dd035e697b85e739224bbd7fd",
     "8": "3900af3183255444be1651da59c439914cc4dae6a187d3bfcffac06f87f54b0c",
@@ -10,7 +10,8 @@
     "12": "d3bd83c89ce0533c7b4a1af8efb407f6794685ccebf7819854fbb11b525ec290",
     "13": "5ba802484255ac1c1215f8187de7b68f0577f7215845907c39e2fd75de3046a8",
     "14": "33b483337b160ba8281b3ad17176030905ee0b83f2067d5eee911ef6517eab55",
-    "15": "a8d11f6cd051c39ab87b3453d6579c79ac8509c5e892018c4564abaac2bc4958"
+    "15": "a8d11f6cd051c39ab87b3453d6579c79ac8509c5e892018c4564abaac2bc4958",
+    "16": "0297245b4a9c234614ada790fb05d18a0429e9d2d3378b8fa2cf8e087b9b0b19"
   },
   "schema_version": "1"
 }

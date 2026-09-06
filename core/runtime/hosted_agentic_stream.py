@@ -20,7 +20,7 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     raise_if_hosted_cancelled,
 )
-from core.runtime.hosted_agentic_transport import HostedTransportAuthorization
+from core.runtime.hosted_agentic_transport import HostedTransportAuthorization, bind_hosted_generation_revalidator
 from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 
 
@@ -214,6 +214,7 @@ async def _cancellable_provider_events(
             request=request,
             iterator_holder=iterator_holder,
             authorize_transport=authorize_transport,
+            revalidate_transport=revalidate_transport,
         ),
         cancellation=cancellation,
         budget=budget,
@@ -231,18 +232,26 @@ async def _drive_cancellable_events(
     before_transport: Callable[[], object],
 ):
     pending = asyncio.create_task(initial_next)
+    last_idle_check = asyncio.get_running_loop().time()
     try:
         while True:
             done, _pending = await asyncio.wait({pending}, timeout=0.05)
             raise_if_hosted_cancelled(cancellation)
             budget.check_time()
             if not done:
+                # A silent peer must not keep a revoked generation alive.
+                # This is the cheap live fence, not the expensive initial proof.
+                now = asyncio.get_running_loop().time()
+                if now - last_idle_check >= 0.25:
+                    before_transport()
+                    last_idle_check = now
                 continue
             try:
                 item = pending.result()
             except StopAsyncIteration:
                 return
             yield item
+            last_idle_check = asyncio.get_running_loop().time()
             iterator = iterator_holder[0]
             pending = asyncio.create_task(
                 _next_provider_event(
@@ -268,6 +277,7 @@ async def _open_and_next_provider_event(
     request,
     iterator_holder: list[object],
     authorize_transport: Callable[[], HostedTransportAuthorization],
+    revalidate_transport: Callable[[], object],
 ) -> object:
     """Authorize, bind the fresh credential, and advance without yielding."""
     authorization = authorize_transport()
@@ -280,7 +290,8 @@ async def _open_and_next_provider_event(
     )
     iterator = stream.__aiter__()
     iterator_holder.append(iterator)
-    return await iterator.__anext__()
+    with bind_hosted_generation_revalidator(revalidate_transport):
+        return await iterator.__anext__()
 
 
 async def _next_provider_event(
@@ -290,7 +301,8 @@ async def _next_provider_event(
 ) -> object:
     """Run the live guard in the task that advances the lazy client stream."""
     before_transport()
-    return await iterator.__anext__()
+    with bind_hosted_generation_revalidator(before_transport):
+        return await iterator.__anext__()
 
 
 def _validate_provider_event(event: AgenticModelEvent, request_id: str, last_ordinal: int) -> None:

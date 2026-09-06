@@ -205,9 +205,16 @@ class MaverickAgentOnboardingCatalog:
                 )
         return tuple(candidates)
 
-    def build_runtime_registry(self, *, workspace_store=None) -> HostedProviderRuntimeRegistry:
+    def build_runtime_registry(self, *, workspace_store=None, lab_authorization=None, generation_authorization=None) -> HostedProviderRuntimeRegistry:
         """Compose trusted protocol factories from registered data only."""
-        registry = HostedProviderRuntimeRegistry(workspace_store=workspace_store)
+        registry = HostedProviderRuntimeRegistry(workspace_store=workspace_store, lab_authorization=lab_authorization)
+        if lab_authorization is not None:
+            from core.certification_lab.generation_budget import LabGenerationAuthorization
+
+            if type(generation_authorization) is not LabGenerationAuthorization or generation_authorization.lab is not lab_authorization:
+                raise ValueError("lab_generation_fence_required")
+        elif generation_authorization is not None:
+            raise ValueError("lab_authority_forbidden_in_production")
         for key in sorted(self._publications):
             publication = self._publications[key]
             adapter_key = (
@@ -235,6 +242,10 @@ class MaverickAgentOnboardingCatalog:
                 ),
             )
             validate_composed_maverick_runtime(publication, runtime)
+            if generation_authorization is not None:
+                runtime.client.transport = generation_authorization.wrap(
+                    runtime.client.transport, config=publication.provider_config, recipe=publication.recipe,
+                )
             registry.register(runtime)
         return registry
 

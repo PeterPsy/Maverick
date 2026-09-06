@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 
 from core.runtime.hosted_agentic_stream import _cancellable_events
@@ -32,6 +33,30 @@ class _CountingStream:
 
 
 class HostedAgenticStreamAuthorityTest(unittest.IsolatedAsyncioTestCase):
+    async def test_silent_stream_revocation_cancels_and_closes_pending_read(self):
+        opened, closed = asyncio.Event(), asyncio.Event()
+        revoked = False
+
+        async def stream():
+            try:
+                opened.set()
+                await asyncio.Event().wait()
+                yield 1
+            finally:
+                closed.set()
+
+        def guard():
+            if revoked:
+                raise RuntimeError('authority_revoked')
+
+        events = _cancellable_events(stream(), RuntimeCancellationSignal(), _Budget(), before_transport=guard)
+        pending = asyncio.create_task(anext(events))
+        await asyncio.wait_for(opened.wait(), timeout=1)
+        revoked = True
+        with self.assertRaisesRegex(RuntimeError, 'authority_revoked'):
+            await asyncio.wait_for(pending, timeout=2)
+        self.assertTrue(closed.is_set())
+
     async def test_authority_guard_runs_for_every_stream_advancement(self) -> None:
         stream = _CountingStream([1, 2, 3])
         guard_calls = 0

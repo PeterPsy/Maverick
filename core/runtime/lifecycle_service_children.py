@@ -167,6 +167,7 @@ def queue_runtime_turn(
     invoked_skill_ids: list[str] | None = None,
     now: datetime | None = None,
     workspace_store: object | None = None,
+    lab_authorization=None,
 ) -> RuntimeTurnRecord:
     """Create one queued runtime turn."""
     with runtime_message_admission_handoff(session_id):
@@ -184,6 +185,7 @@ def queue_runtime_turn(
                 invoked_skill_ids=invoked_skill_ids,
                 now=now,
                 workspace_store=workspace_store,
+                lab_authorization=lab_authorization,
             )
 
 
@@ -197,10 +199,12 @@ def _queue_runtime_turn_locked(
     invoked_skill_ids: list[str] | None = None,
     now: datetime | None = None,
     workspace_store: object | None = None,
+    lab_authorization=None,
 ) -> RuntimeTurnRecord:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
-    require_turn_queue_session_executable(store, session, turn_id=turn_id, workspace_store=workspace_store)
+    require_turn_queue_session_executable(store, session, turn_id=turn_id, workspace_store=workspace_store,
+                                          lab_authorization=lab_authorization)
     record = store.save_turn(
         RuntimeTurnRecord(
             turn_id=turn_id,

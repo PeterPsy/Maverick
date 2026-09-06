@@ -78,6 +78,15 @@ class CertificationBudgetLedger:
         with self._connection():
             pass
 
+    @property
+    def identity_digest(self) -> str:
+        """Bind a permit to this exact private file, not a restart-created ledger."""
+        _private_path(self.path)
+        info = self.path.stat()
+        content = json.dumps({"path": str(self.path), "device": info.st_dev, "inode": info.st_ino,
+                              "policy_digest": self.policy_digest}, sort_keys=True).encode()
+        return hashlib.sha256(content).hexdigest()
+
     @contextmanager
     def _connection(self):
         connection = None

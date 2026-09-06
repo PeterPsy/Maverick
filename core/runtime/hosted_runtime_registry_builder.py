@@ -89,10 +89,14 @@ def build_hosted_provider_runtime_registry(
     *,
     onboarding_catalog: MaverickAgentOnboardingCatalog | None = None,
     workspace_store: object | None = None,
+    lab_authorization=None,
+    generation_authorization=None,
 ) -> HostedProviderRuntimeRegistry:
     """Build the runtime registry exclusively through production onboarding."""
     catalog = onboarding_catalog or build_builtin_maverick_agent_onboarding_catalog()
-    return catalog.build_runtime_registry(workspace_store=workspace_store)
+    return catalog.build_runtime_registry(workspace_store=workspace_store,
+                                          lab_authorization=lab_authorization,
+                                          generation_authorization=generation_authorization)
 
 
 def _google_interactions_runtime(

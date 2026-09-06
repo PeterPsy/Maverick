@@ -15,6 +15,7 @@ def require_turn_queue_session_executable(
     *,
     turn_id: str | None = None,
     workspace_store: object | None = None,
+    lab_authorization=None,
 ) -> None:
     """Reject turns whose session is stopped or has transferred ownership."""
     if session.status == "recovery_required":
@@ -22,10 +23,18 @@ def require_turn_queue_session_executable(
             f"Cannot queue a runtime turn while session `{session.session_id}` requires recovery.",
             reason_code="runtime_session_recovery_required",
         )
-    containment_reason = remote_agentic_containment_reason(
-        session.execution_binding, workspace_id=session.workspace_id,
-        workspace_store=workspace_store,
-    )
+    if lab_authorization is not None:
+        from core.certification_lab.authority import LabRuntimeAuthorization
+
+        if type(lab_authorization) is not LabRuntimeAuthorization or lab_authorization.runtime_store is not store:
+            raise RuntimeTurnQueueRejectedError("Invalid lab context.", reason_code="lab_trusted_context_invalid")
+        lab_authorization.validate_session(session)
+        containment_reason = None
+    else:
+        containment_reason = remote_agentic_containment_reason(
+            session.execution_binding, workspace_id=session.workspace_id,
+            workspace_store=workspace_store,
+        )
     if containment_reason is not None:
         raise RuntimeTurnQueueRejectedError(
             f"Cannot queue a runtime turn while session `{session.session_id}` is remotely contained.",

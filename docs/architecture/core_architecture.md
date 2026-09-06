@@ -830,6 +830,20 @@ catalog and encrypted invocation ledger. Provider-private protocol bytes remain
 behind the matching codec service and public events are bounded, normalized,
 and private-field-free.
 
+`core/certification_lab/` is a separate experimental authorization domain, not
+a production release flag or a temporary certificate. Production always validates
+its capability certificate; a private laboratory instead validates an immutable
+signed exact-target permit and fresh CAS ownership/revocation. Both feed the same
+monotonic authority lattice and the **same** hosted factory, tools, classifier,
+vault, WAL and runtime stores. The explicit side-effect-free store composition
+is shared with production bootstrap; laboratory bootstrap never calls the latter.
+Lab pins/snapshots retain their domain/installation identity and no certificate
+fields. Production APIs reject laboratory authority. The private synthetic lab
+may grant the Full Workspace product mode, but uses the real confined hosted
+filesystem/process sandbox, never unrestricted host access. Production workspace
+execution policy is unchanged. See `docs/architecture/certification_lab.md` for
+the isolation contract, non-renewable ownership and remaining release gates.
+
 Provider preflight is not the final authority boundary. After preflight and
 before the staged egress CAS, one shared last-mile guard re-resolves the full
 certificate/binding/feature/actor/health/Full Workspace authority, rechecks the
@@ -845,6 +859,11 @@ first advances the lazy provider iterator. Every later advance uses a lightweigh
 mutable-authority, TCB-filesystem, classification, credential, policy, and
 deadline fence, so revocation remains immediate without rehashing the complete
 TCB or rerunning Full Workspace behavior probes per SSE event.
+The same cheap fence also runs while waiting on a silent provider stream. A
+task-local guard carries this exact prepared-request authorization through the
+real codec to the laboratory's durable job-budget fence; after pacing/reservation
+it rechecks authority and credential immediately before HTTPS. No natural-loop
+generation can inherit a protocol probe's round limit or omit the job ledger.
 
 Before egress, that loop compiles a Core-owned semantic-envelope schema. Its
 ordered blocks preserve platform, runtime/capability, workspace, agent, user,

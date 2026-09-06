@@ -1,5 +1,10 @@
 # P6 runtime admission and publication delta
 
+**Historical admission/publication checkpoint.** The subsequent Settings and
+isolated-laboratory delta is recorded in `agentic_p6_lab_delta.md`; its new
+candidate identities and remaining gates supersede the status below. The old
+receipts remain exact-source historical records, not approval for newer bytes.
+
 This delta implements review corrections, not P6-L/S/R approval. The prior
 P6-D evidence describes commit `5a7ca45a`; it does not certify these new bytes.
 No production availability constant is enabled, provider request made, trusted

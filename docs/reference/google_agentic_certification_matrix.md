@@ -1,20 +1,27 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-06
-Matrix revision: `2026-09-06-r45-p6-combined-tools-omitted-tcb35`
+Matrix revision: `2026-09-06-r46-p6-isolated-lab-tcb36`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==41`
+Adapter: `maverick-hosted-tool-loop==42`
 
 ## P6 candidate checkpoint
 
-Suite 45 / TCB manifest 35 / hosted adapter 41 / unchanged recipe 24 bind
+This delta additionally binds the isolated typed laboratory, shared authority
+lattice/store composition, Settings exact-revision grouping, and post-pacing
+job fence. Lab observations are not certification or production-release evidence.
+See `docs/architecture/certification_lab.md`. Recipes remain unchanged: the
+new adapter/profile/suite/TCB identities bind the authorization-composition change.
+
+
+Suite 46 / TCB manifest 36 / hosted adapter 42 / unchanged recipe 24 bind
 fresh-attestation admission, production-composed API-to-final submission,
 retained evidence with reparsed step receipts, independent publisher trust and the durable aggregate budget
 to the existing P0–P5 corpus. The new profile is immutable, unbound and uncertified.
-The prior suite-41/42/43/44 deterministic receipts
+The prior suite-41/42/43/44/45 deterministic receipts
 are historical, not evidence for this delta. Codex's shared queue/handoff change
-has its own explicit revision 15; no source is excluded from its artifact.
+has its own explicit revision 16; no source is excluded from its artifact.
 See `docs/development/agentic_p6_runtime_publication_delta.md` for the scope and
 remaining live, laboratory, independent review and release requirements.
 
@@ -25,7 +32,7 @@ remaining live, laboratory, independent review and release requirements.
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `50` (revision `49` suspended) |
+| Immutable profile revision | `51` (revision `50` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |

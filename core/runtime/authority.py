@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from core.certification_lab.permit_store import LabPermitReference
 
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
@@ -20,9 +24,7 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 from core.runtime.failure_messages import public_runtime_failure_reason_code
-from core.runtime.full_workspace_contract import (
-    validate_full_workspace_live_authority,
-)
+from core.runtime.authority_lattice import restrict_runtime_authority_ceiling
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
@@ -62,7 +64,7 @@ class EffectiveRuntimeAuthority:
 
     execution_binding_id: str
     turn_id: str
-    certificate_id: str
+    certificate_id: str | None
     allowed_capabilities: RuntimeCapabilitySet
     allowed_tool_handles: tuple[str, ...]
     execution_mode: ExecutionMode
@@ -104,6 +106,11 @@ class EffectiveRuntimeAuthority:
     tool_contract_revision: str = ""
     context_policy_revision: str = ""
 
+    authorization_domain: Literal["production", "certification_lab"] = "production"
+    lab_permit_reference: LabPermitReference | None = None
+    lab_permit_expires_at: datetime | None = None
+    lab_granted_upstream_ids: tuple[str, ...] = ()
+
 
 def resolve_effective_runtime_authority(
     store: ProviderStore,
@@ -122,6 +129,9 @@ def resolve_effective_runtime_authority(
     adapter_artifact_digest: str | None = None,
 ) -> EffectiveRuntimeAuthority:
     """Intersect certified capability with every pinned and live restriction."""
+    from core.runtime.authorization_domain import require_production_authorization
+
+    require_production_authorization(binding)
     timestamp = now or datetime.now(tz=UTC)
     certificate, tcb_revision_fence = (
         validate_certificate_for_binding_with_revision_fence(
@@ -133,78 +143,15 @@ def resolve_effective_runtime_authority(
             adapter_artifact_digest=adapter_artifact_digest,
         )
     )
-    if health_status not in {"healthy", "degraded"}:
-        raise CapabilityCertificateError("runtime_health_unavailable")
-    if not actor_policy_allowed:
-        raise CapabilityCertificateError("runtime_actor_policy_denied")
-    workspace_binding = validate_live_runtime_binding_governance(
-        store,
-        binding=binding,
+    restricted = restrict_runtime_authority_ceiling(
+        store, binding=binding, capability_ceiling=certificate.certified_capabilities,
+        currently_authorized_tool_handles=currently_authorized_tool_handles,
+        live_execution_mode=live_execution_mode, health_status=health_status,
+        actor_policy_allowed=actor_policy_allowed,
     )
-    policy = intersect_runtime_policies(
-        binding.profile_policy_ceiling_snapshot,
-        binding.workspace_policy_ceiling_snapshot,
-        workspace_binding.workspace_policy_ceiling,
-    )
-    policy_capabilities = _narrow_capabilities(
-        certificate.certified_capabilities,
-        policy,
-    )
-    feature_capabilities, feature_revision = _feature_capability_ceiling(
-        binding,
-        certificate.certified_capabilities,
-    )
-    health_capabilities = _health_capability_ceiling(
-        certificate.certified_capabilities,
-        health_status=health_status,
-    )
-    execution_mode: ExecutionMode = (
-        "sandbox"
-        if "sandbox" in {binding.execution_mode, live_execution_mode}
-        else "full-access"
-    )
-    execution_mode_capabilities = _execution_mode_capability_ceiling(
-        certificate.certified_capabilities,
-        execution_mode=execution_mode,
-    )
-    capabilities = intersect_runtime_capabilities(
-        certificate.certified_capabilities,
-        policy_capabilities,
-        feature_capabilities,
-        health_capabilities,
-        execution_mode_capabilities,
-    )
-    capabilities = _confirmation_capability_ceiling(capabilities, policy)
-    tool_handles = _allowed_tool_handles(
-        currently_authorized_tool_handles,
-        binding.profile_policy_ceiling_snapshot,
-        binding.workspace_policy_ceiling_snapshot,
-        workspace_binding.workspace_policy_ceiling,
-    )
-    if not capabilities.tool_orchestration:
-        tool_handles = ()
-    else:
-        tool_handles = _narrow_handles_to_capabilities(tool_handles, capabilities)
-    exact_codex = is_exact_codex_identity(
-        runtime_engine_id=binding.runtime_engine_id,
-        adapter_id=binding.adapter_id,
-        model_provider_id=binding.model_provider_id,
-        provider_protocol=binding.provider_protocol,
-    )
-    # The exact local Codex app-server contract predates a live catalog API.
-    # Hosted runtimes, by contrast, treat an empty live handle set as no tool
-    # authority rather than as permission to fall back to the certificate.
-    if tool_handles or not exact_codex:
-        capabilities = _narrow_capabilities_to_live_handles(
-            capabilities,
-            tool_handles,
-        )
-    validate_full_workspace_live_authority(
-        revision=binding.full_workspace_contract_revision,
-        capabilities=capabilities,
-        policy=policy,
-        allowed_handles=tool_handles,
-    )
+    capabilities, tool_handles = restricted.capabilities, restricted.tool_handles
+    execution_mode, policy = restricted.execution_mode, restricted.policy
+    workspace_binding, feature_revision = restricted.workspace_binding, restricted.feature_revision
     status = store.get_capability_certificate_status(certificate.certificate_id)
     status_revision = 0 if status is None else status.revision
     authority = EffectiveRuntimeAuthority(
@@ -369,7 +316,7 @@ def intersect_runtime_policies(*policies: AgenticRuntimePolicy) -> AgenticRuntim
 def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> dict[str, object]:
     """Return the redaction-safe persisted projection of ephemeral authority."""
     capabilities = authority.allowed_capabilities
-    return {
+    payload = {
         "execution_binding_id": authority.execution_binding_id,
         "certificate_id": authority.certificate_id,
         "authority_digest": authority.authority_digest,
@@ -406,12 +353,24 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
         ),
     }
 
+    payload["authorization_domain"] = authority.authorization_domain
+    if authority.authorization_domain == "certification_lab":
+        payload.pop("certificate_id", None)
+        payload.pop("certificate", None)
+        payload["lab_authorization"] = {
+            "reference": asdict(authority.lab_permit_reference),
+            "expires_at": authority.lab_permit_expires_at,
+            "granted_upstream_ids": authority.lab_granted_upstream_ids,
+            "certification_active": False,
+        }
+    return payload
+
 
 def effective_runtime_capability_payload(
     authority: EffectiveRuntimeAuthority,
 ) -> dict[str, object]:
     """Project the one server-owned snapshot without bearer or credential authority."""
-    return {
+    payload = {
         "status": "active",
         "reason_code": None,
         "snapshot_digest": authority.authority_digest,
@@ -469,6 +428,14 @@ def effective_runtime_capability_payload(
         "actor_policy_revision": authority.actor_policy_revision,
         "feature_flag_revision": authority.feature_flag_revision,
     }
+
+    payload["authorization_domain"] = authority.authorization_domain
+    if authority.authorization_domain == "certification_lab":
+        payload["status"] = "experimental"
+        payload.pop("certificate", None)
+        payload["provider"].pop("certified_upstream_ids", None)
+        payload["lab_authorization"] = effective_authority_audit_payload(authority)["lab_authorization"]
+    return payload
 
 
 def blocked_runtime_capability_payload(

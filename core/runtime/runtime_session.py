@@ -109,6 +109,9 @@ class RuntimeSessionRecord:
     recovery_reason_code: str | None = None
     prepared_session_fingerprint: str | None = None
 
+    authorization_domain: str = "production"
+    lab_installation_id: str | None = None
+
 
 @dataclass(frozen=True)
 class RuntimeApiTokenRecord:
@@ -228,6 +231,19 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     ):
         raise ValueError("Hosted text execution binding must be an object.")
     payload.setdefault("hosted_text_binding", None)
+    payload.setdefault("authorization_domain", "production")
+    payload.setdefault("lab_installation_id", None)
+    binding = payload.get("execution_binding")
+    domain = payload["authorization_domain"]
+    if domain not in {"production", "certification_lab"} or (
+        binding is not None and binding.authorization_domain != domain
+    ) or (domain == "production" and payload["lab_installation_id"] is not None):
+        raise ValueError("Runtime session authorization domain mismatch.")
+    if domain == "certification_lab" and (
+        binding is None or payload["lab_installation_id"] != binding.lab_permit_reference.installation_id
+        or binding.session_id != payload["session_id"] or binding.workspace_id != payload["workspace_id"]
+    ):
+        raise ValueError("Runtime lab session identity mismatch.")
     _validate_runtime_family_pins(payload)
     return RuntimeSessionRecord(**payload)
 

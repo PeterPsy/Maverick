@@ -3,6 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import core.certification_lab.authority as lab_authority_module
+import core.certification_lab.execution_binding as lab_binding_module
+import core.certification_lab.generation_budget as lab_budget_module
+import core.certification_lab.permit as lab_permit_module
+import core.certification_lab.permit_codec as lab_permit_codec_module
+import core.certification_lab.permit_store as lab_permit_store_module
+import core.certification_lab.private_files as lab_private_files_module
+import core.certification_lab.runtime_context as lab_context_module
+import core.certification_lab.trust as lab_trust_module
+import core.certification_lab.isolation as lab_isolation_module
+import core.providers.certification_job_budget as job_budget_module
+import core.runtime.authority_lattice as authority_lattice_module
 from pathlib import Path
 
 from core.authorization.errors import AuthorizationError
@@ -91,9 +103,17 @@ def build_hosted_agentic_engine_adapter(
         or state.agentic_egress_evaluator is None
     ):
         raise RuntimeError("Hosted agentic runtime dependencies are unavailable.")
+    from core.certification_lab import bootstrap, seed, worker, evidence
+    from core.api import platform_store_composition
+
+    lab = getattr(state, 'lab_runtime_authorization', None)
+    if lab is not None and type(lab) is not lab_authority_module.LabRuntimeAuthorization:
+        raise RuntimeError("lab_trusted_context_invalid")
+    generation_authorization = lab_budget_module.LabGenerationAuthorization(state, lab) if lab is not None else None
     provider_runtimes = build_hosted_provider_runtime_registry(
         onboarding_catalog=onboarding_catalog,
         workspace_store=state.workspace_store,
+        lab_authorization=lab, generation_authorization=generation_authorization,
     )
     process_registry = HostedToolProcessRegistry(store=state.runtime_store)
     adapter_holder: dict[str, HostedAgenticEngineAdapter] = {}
@@ -105,10 +125,12 @@ def build_hosted_agentic_engine_adapter(
             )
             if not live.enabled or live.workspace_id != context.binding.workspace_id:
                 raise HostedAgenticLoopError("workspace_profile_binding_disabled")
+            grant_ceilings = () if lab is None else (lab.validate_session(context.session).policy_ceiling,)
             return intersect_runtime_policies(
                 context.binding.profile_policy_ceiling_snapshot,
                 context.binding.workspace_policy_ceiling_snapshot,
                 live.workspace_policy_ceiling,
+                *grant_ceilings,
             )
         except HostedAgenticLoopError:
             raise
@@ -125,7 +147,7 @@ def build_hosted_agentic_engine_adapter(
                 turn_id=context.correlation_id,
                 currently_authorized_tool_handles=authorized_core_tool_handles(context.binding),
             )
-        except CapabilityCertificateError as error:
+        except (CapabilityCertificateError, lab_authority_module.LabAuthorizationError) as error:
             raise HostedAgenticLoopError(error.reason_code) from error
 
     def authority_revalidator(context, authority):
@@ -137,7 +159,7 @@ def build_hosted_agentic_engine_adapter(
                 adapter=adapter_holder["adapter"],
                 authority=authority,
             )
-        except CapabilityCertificateError as error:
+        except (CapabilityCertificateError, lab_authority_module.LabAuthorizationError) as error:
             raise HostedAgenticLoopError(error.reason_code) from error
 
     # Transient content is admitted only when the server-owned input composer
@@ -219,6 +241,13 @@ def build_hosted_agentic_engine_adapter(
             build_hosted_agentic_engine_adapter,
             build_hosted_provider_runtime_registry,
             resolve_filesystem_mutation_lineage,
+            # Both compositions hash these same modules, regardless of which
+            # validated base supplies the ceiling. Never attest another adapter.
+            authority_lattice_module, lab_authority_module, lab_binding_module,
+            lab_budget_module, lab_permit_module, lab_permit_codec_module,
+            lab_permit_store_module, lab_private_files_module, lab_context_module,
+            lab_trust_module, lab_isolation_module, job_budget_module,
+            bootstrap, seed, worker, evidence, platform_store_composition,
         ),
         process_registry=process_registry,
     )

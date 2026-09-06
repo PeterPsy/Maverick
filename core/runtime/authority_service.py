@@ -85,6 +85,13 @@ def resolve_runtime_authority_snapshot(
         session=session,
         provider_store=active_provider_store,
     )
+    from core.certification_lab.runtime_context import lab_authorization_for_state
+
+    lab = lab_authorization_for_state(state, binding)
+    if lab is not None:
+        return lab.resolve(session=session, adapter=adapter, turn_id=turn_id,
+                           tool_handles=currently_authorized_tool_handles, health=health,
+                           actor_allowed=actor_allowed, actor_revision=actor_revision)
     return resolve_effective_runtime_authority(
         active_provider_store,
         binding=binding,
@@ -110,58 +117,18 @@ def revalidate_runtime_authority_snapshot(
     now: datetime | None = None,
 ) -> EffectiveRuntimeAuthority:
     """Check mutable revocation inputs without rerunning TCB/behavior proof."""
+    from core.certification_lab.runtime_context import lab_authorization_for_state
+
     binding = session.execution_binding
-    if binding is None or (
-        authority.execution_binding_id != binding.execution_binding_id
-        or authority.certificate_id != binding.capability_certificate_id
-    ):
+    if binding is None or authority.execution_binding_id != binding.execution_binding_id:
         raise CapabilityCertificateError("runtime_authority_unavailable")
     active_provider_store = provider_store or state.provider_store
-    try:
-        certificate = active_provider_store.get_capability_certificate(
-            binding.capability_certificate_id
-        )
-    except ProviderNotFoundError as error:
-        raise CapabilityCertificateError("certificate_missing") from error
-    status = active_provider_store.get_capability_certificate_status(
-        certificate.certificate_id
-    )
-    if status is None:
-        raise CapabilityCertificateError("certificate_status_missing")
-    if status.status != "active":
-        raise CapabilityCertificateError("certificate_revoked")
-    from core.providers.certificate_service import _is_native_certificate
-    from core.providers.native_agent_certificates import native_installation_for_adapter, validate_native_connection_certificate
-
-    if _is_native_certificate(certificate):
-        from core.providers.native_model_revision import require_native_model_revision_transport
-
-        require_native_model_revision_transport(binding)
-        validate_native_connection_certificate(
-            active_provider_store, certificate, now=now, installation=native_installation_for_adapter(adapter),
-        )
-    validate_api_binding_certificate_target(
-        active_provider_store, binding=binding, certificate=certificate,
-    )
-    if not _authority_revision_matches(
-        authority,
-        f"certificate-status:{certificate.certificate_id}:{status.revision}",
-    ):
-        raise CapabilityCertificateError("certificate_status_changed")
-    timestamp = now or datetime.now(tz=UTC)
-    if (
-        authority.certificate_expires_at is None
-        or certificate.expires_at != authority.certificate_expires_at
-        or timestamp >= certificate.expires_at
-    ):
-        raise CapabilityCertificateError("certificate_expired")
-    if (
-        certificate.tcb_manifest_id != authority.tcb_manifest_id
-        or certificate.tcb_manifest_version != authority.tcb_manifest_version
-        or certificate.tcb_structure_digest != authority.tcb_structure_digest
-        or certificate.tcb_live_digest != authority.tcb_live_digest
-    ):
-        raise CapabilityCertificateError("certificate_tcb_binding_mismatch")
+    lab = lab_authorization_for_state(state, binding)
+    if lab is None:
+        _revalidate_production_certificate(active_provider_store, binding=binding, adapter=adapter,
+                                           authority=authority, now=now)
+    else:
+        lab.revalidate(session=session, authority=authority)
     workspace_binding = validate_live_runtime_binding_governance(
         active_provider_store,
         binding=binding,
@@ -208,6 +175,60 @@ def revalidate_runtime_authority_snapshot(
     return authority
 
 
+def _revalidate_production_certificate(active_provider_store, *, binding, adapter, authority, now):
+    from core.runtime.authorization_domain import require_production_authorization
+
+    require_production_authorization(binding)
+    require_production_authorization(authority)
+    if authority.certificate_id != binding.capability_certificate_id:
+        raise CapabilityCertificateError("runtime_authority_unavailable")
+    try:
+        certificate = active_provider_store.get_capability_certificate(
+            binding.capability_certificate_id
+        )
+    except ProviderNotFoundError as error:
+        raise CapabilityCertificateError("certificate_missing") from error
+    status = active_provider_store.get_capability_certificate_status(
+        certificate.certificate_id
+    )
+    if status is None:
+        raise CapabilityCertificateError("certificate_status_missing")
+    if status.status != "active":
+        raise CapabilityCertificateError("certificate_revoked")
+    from core.providers.certificate_service import _is_native_certificate
+    from core.providers.native_agent_certificates import native_installation_for_adapter, validate_native_connection_certificate
+
+    if _is_native_certificate(certificate):
+        from core.providers.native_model_revision import require_native_model_revision_transport
+
+        require_native_model_revision_transport(binding)
+        validate_native_connection_certificate(
+            active_provider_store, certificate, now=now, installation=native_installation_for_adapter(adapter),
+        )
+    validate_api_binding_certificate_target(
+        active_provider_store, binding=binding, certificate=certificate,
+    )
+    if not _authority_revision_matches(
+        authority,
+        f"certificate-status:{certificate.certificate_id}:{status.revision}",
+    ):
+        raise CapabilityCertificateError("certificate_status_changed")
+    timestamp = now or datetime.now(tz=UTC)
+    if (
+        authority.certificate_expires_at is None
+        or certificate.expires_at != authority.certificate_expires_at
+        or timestamp >= certificate.expires_at
+    ):
+        raise CapabilityCertificateError("certificate_expired")
+    if (
+        certificate.tcb_manifest_id != authority.tcb_manifest_id
+        or certificate.tcb_manifest_version != authority.tcb_manifest_version
+        or certificate.tcb_structure_digest != authority.tcb_structure_digest
+        or certificate.tcb_live_digest != authority.tcb_live_digest
+    ):
+        raise CapabilityCertificateError("certificate_tcb_binding_mismatch")
+
+
 def _authority_revision_matches(
     authority: EffectiveRuntimeAuthority,
     revision: str,
@@ -240,6 +261,10 @@ def live_runtime_actor_policy(
             f"workspace-actor:{workspace_binding.binding_id}:"
             f"{workspace_binding.revision}"
         )
+    if getattr(binding, 'authorization_domain', 'production') == 'certification_lab' and (
+        platform_role != 'member' or workspace_role != 'member'
+    ):
+        return False, f"workspace-actor:{workspace_binding.binding_id}:{workspace_binding.revision}"
     return (
         actor_selection_allowed(
             workspace_binding,

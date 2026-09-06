@@ -36,6 +36,12 @@ class CertificationSuiteManifest:
 
 
 _SHARED_FIXTURE_TESTS = (
+    "tests.unit.certification_lab.test_permit_store",
+    "tests.unit.certification_lab.test_isolation",
+    "tests.unit.certification_lab.test_execution_binding",
+    "tests.unit.certification_lab.test_job_budget",
+    "tests.unit.certification_lab.test_generation_guard",
+    "tests.unit.certification_lab.test_offline_vertical",
     "tests.unit.runtime_state.test_remote_agentic_admission_path",
     "tests.unit.runtime_state.test_remote_agentic_full_submission",
     "tests.unit.providers.test_certification_publication",
@@ -166,11 +172,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="45",
+        suite_version="46",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-06-r45-p6-combined-tools-omitted-tcb35"
+            "2026-09-06-r46-p6-isolated-lab-tcb36"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

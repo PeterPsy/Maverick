@@ -11,7 +11,7 @@ from core.providers.agentic_models import ModelRevisionPolicy
 
 @dataclass(frozen=True)
 class RuntimeCapabilitySet:
-    """End-to-end behaviors proven for one exact runtime combination."""
+    """Capability lattice values, not proof without a validated authority base."""
 
     streaming: bool
     tool_orchestration: bool

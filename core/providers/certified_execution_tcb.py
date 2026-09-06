@@ -71,8 +71,13 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="35",
+    manifest_version="36",
     components=(
+        CertifiedTcbComponent(
+            "certification-laboratory",
+            "Independent experimental permits, trust, isolation, budget and shared-composition authority.",
+            ("core/certification_lab",),
+        ),
         CertifiedTcbComponent(
             "data-security-boundary",
             "Workspace attestations, resource classification, taint, and egress policy.",
@@ -229,6 +234,13 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
         ),
     ),
     dependency_contracts=(
+        CertifiedTcbDependencyContract(
+            "experimental-laboratory",
+            "Typed permit bootstrap/ownership, shared authority and real worker outside production admission.",
+            ("core/certification_lab/bootstrap.py", "core/certification_lab/worker.py",
+             "core/certification_lab/seed.py", "core/certification_lab/generation_budget.py"),
+            ("core.certification_lab",),
+        ),
         CertifiedTcbDependencyContract(
             "runtime-admission",
             "Session/turn admission, app-runtime admission, continuation, and live authority.",

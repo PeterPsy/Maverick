@@ -10,6 +10,8 @@ import json
 from typing import Any
 from uuid import uuid4
 
+from core.certification_lab.permit_store import LabPermitReference
+
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
     AgenticContextPolicy,
@@ -30,8 +32,8 @@ class RuntimeExecutionBinding:
     profile_definition_revision: str
     workspace_binding_id: str
     workspace_binding_revision: int
-    capability_certificate_id: str
-    certificate_evidence_digest: str
+    capability_certificate_id: str | None
+    certificate_evidence_digest: str | None
     runtime_engine_id: str
     adapter_id: str
     adapter_version: str
@@ -75,6 +77,23 @@ class RuntimeExecutionBinding:
     protocol_adapter_id: str = ""
     protocol_adapter_version: str = ""
 
+    authorization_domain: str = "production"
+    lab_permit_reference: LabPermitReference | None = None
+    lab_reasoning_efforts: tuple[str, ...] = ()
+
+    def __post_init__(self):
+        if self.authorization_domain == "production":
+            if self.lab_permit_reference is not None or self.lab_reasoning_efforts:
+                raise ValueError("Production binding cannot carry experimental authority.")
+        elif self.authorization_domain == "certification_lab":
+            if (not isinstance(self.lab_permit_reference, LabPermitReference)
+                    or self.capability_certificate_id is not None or self.certificate_evidence_digest is not None
+                    or self.certified_reasoning_efforts or not self.lab_reasoning_efforts
+                    or self.reasoning_effort not in self.lab_reasoning_efforts or self.legacy_inferred):
+                raise ValueError("Lab binding cannot carry certification or implicit authority.")
+        else:
+            raise ValueError("Runtime authorization domain is invalid.")
+
 
 @dataclass(frozen=True)
 class _LegacySchemaFieldGroup:
@@ -85,6 +104,9 @@ class _LegacySchemaFieldGroup:
 
 
 _LEGACY_SCHEMA_FIELD_GROUPS = (
+    _LegacySchemaFieldGroup(
+        binding_fields=("authorization_domain", "lab_permit_reference", "lab_reasoning_efforts"),
+    ),
     _LegacySchemaFieldGroup(
         binding_fields=("certified_reasoning_efforts", "default_reasoning_effort"),
     ),
@@ -309,6 +331,8 @@ def fork_runtime_execution_binding(
     created_at: datetime,
 ) -> RuntimeExecutionBinding:
     """Create a child-session binding with the same immutable ceiling."""
+    if binding.authorization_domain != "production":
+        raise ValueError("Lab descendants require individually granted ownership.")
     forked = replace(
         binding,
         execution_binding_id=f"runtime-binding-{uuid4().hex}",
@@ -375,9 +399,13 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload["context_policy_snapshot"] = _context_policy_from_document(
         payload.get("context_policy_snapshot")
     )
+    payload.setdefault("authorization_domain", "production")
+    reference = payload.get("lab_permit_reference")
+    payload["lab_permit_reference"] = LabPermitReference(**reference) if isinstance(reference, dict) else reference
+    payload["lab_reasoning_efforts"] = tuple(payload.get("lab_reasoning_efforts", ()))
     binding = RuntimeExecutionBinding(**payload)
     digest_matches = binding.binding_digest == canonical_digest(binding)
-    if not digest_matches:
+    if not digest_matches and binding.authorization_domain == "production":
         digest_matches = _matches_legacy_digest(
             binding,
             compatible_field_groups=legacy_compatible_field_groups,
@@ -436,7 +464,11 @@ def _legacy_binding_field_has_fail_closed_default(
 ) -> bool:
     if field_name not in payload:
         return True
-    if field_name == "certified_reasoning_efforts":
+    if field_name == "authorization_domain":
+        return payload[field_name] == "production"
+    if field_name == "lab_permit_reference":
+        return payload[field_name] is None
+    if field_name in {"certified_reasoning_efforts", "lab_reasoning_efforts"}:
         return payload[field_name] in ([], ())
     if field_name == "default_reasoning_effort":
         return payload[field_name] is None

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, replace
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import hmac
 import secrets
@@ -173,6 +175,30 @@ async def preflight_and_commit_hosted_request(
         request_builder.commit(prepared_request, context=authorized_context),
         endpoint_capability_snapshot_digest=endpoint_snapshot_digest,
     )
+
+
+_LAST_MILE_REVALIDATOR = ContextVar("hosted_last_mile_revalidator", default=None)
+
+
+@contextmanager
+def bind_hosted_generation_revalidator(revalidator):
+    """Task-local trusted guard propagation through the real codec/transport."""
+    token = _LAST_MILE_REVALIDATOR.set(revalidator)
+    try:
+        yield
+    finally:
+        _LAST_MILE_REVALIDATOR.reset(token)
+
+
+def revalidate_hosted_generation():
+    """Fail closed if a laboratory transport bypassed the shared hosted loop."""
+    revalidator = _LAST_MILE_REVALIDATOR.get()
+    if revalidator is None:
+        raise HostedAgenticLoopError("hosted_generation_guard_missing")
+    result = revalidator()
+    if not isinstance(result, HostedTransportAuthorization):
+        raise HostedAgenticLoopError("hosted_generation_guard_invalid")
+    return result
 
 
 def _credential_fingerprint(

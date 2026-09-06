@@ -1,0 +1,134 @@
+{
+  "schema": "maverick.pwa-cache-device-regression.v1",
+  "captured_at": null,
+  "environment": "physical-device",
+  "redaction_reviewed": false,
+  "release_id": "fb6e71453a3ae080d90315491ea2339c29f69cc6",
+  "runs": [
+    {
+      "profile": "safari-macos-minimum-browser",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending",
+        "private-storage-degradation": "pending"
+      }
+    },
+    {
+      "profile": "safari-macos-current-browser",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending",
+        "private-storage-degradation": "pending"
+      }
+    },
+    {
+      "profile": "safari-macos-current-dock",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending"
+      }
+    },
+    {
+      "profile": "safari-ios-ipados-minimum-browser",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending",
+        "private-storage-degradation": "pending"
+      }
+    },
+    {
+      "profile": "safari-iphone-current-browser",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending",
+        "private-storage-degradation": "pending"
+      }
+    },
+    {
+      "profile": "safari-iphone-current-home-screen",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending"
+      }
+    },
+    {
+      "profile": "chrome-edge-current-desktop-browser",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending",
+        "private-storage-degradation": "pending"
+      }
+    },
+    {
+      "profile": "chrome-current-desktop-app",
+      "os_version": "replace",
+      "browser_version": "replace",
+      "scenarios": {
+        "cold-launch": "pending",
+        "warm-launch": "pending",
+        "worker-update": "pending",
+        "worker-recovery": "pending",
+        "quota-pressure": "pending",
+        "intermittent-network": "pending",
+        "logout-cleanup": "pending",
+        "workspace-switch-cleanup": "pending"
+      }
+    }
+  ]
+}

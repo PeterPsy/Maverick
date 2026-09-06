@@ -1,5 +1,10 @@
 # PWA cache — approved app completion candidate, 2026-09-05
 
+> Historical checkpoint. The four subsequent review corrections, rebuilt
+> candidate and current evidence are recorded in
+> [the 2026-09-06 validation](pwa_cache_review_validation_2026-09-06.md).
+> Do not reuse this older candidate's evidence for changed binaries.
+
 ## Verdict and candidate
 
 **The approved M5 application code is implemented and the pertinent automated

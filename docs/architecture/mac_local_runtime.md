@@ -864,3 +864,32 @@ verification, without a persistent backup; launch was requested at
 Permissions and Calendar data were not reset or modified. Real Calendar visual,
 Notes-search and TextEdit acceptance still require the user's next local task;
 no claim of universal GUI compatibility follows from CI success.
+
+### v22 explicit activation and background app selection
+
+Physical v21 evidence confirmed Peekaboo observation of Calendar. The next
+legacy app-switch step failed MC-TOOL-16 before Notes search or TextEdit work.
+The old code used one AppKit activation request and at most one second of PID
+readback; that diagnostic did not identify which stage failed.
+
+The native v22 client separates the workflows: background mac_peekaboo calls
+use each approved bundle_id directly, without mac_computer select_app/open_app.
+Both instruction surfaces now agree. Peekaboo's background-only execution
+policy is unchanged. Explicit foreground open_app/select_app uses a dedicated
+activation helper: cooperative yield/request when Maverick is foreground;
+one settable AXFrontmost request to the already-running target when Maverick
+is background, using existing Accessibility authorization. It never yields on
+behalf of another application, launches a stopped target, or retries through
+another mechanism after failure. AX messaging has a 0.5-second per-call bound.
+
+Success requires two consecutive foreground-PID samples within three seconds,
+with session/scope/cancellation checks. This is app focus, not text-field or
+window readiness. Focus changing to another app during verification stops the
+operation. Selection commits only after success; activation clears both legacy
+and Peekaboo observation receipts before dispatch. MC-ACTIVATE diagnostics
+separate request refusal, AX trust/capability/write errors, target termination,
+readback timeout and focus loss without exposing titles or screenshot data.
+Input destination checks and failure blocking remain; no automatic focus repair
+for typing/clicks. No Core runtime, image route, Calendar data, credentials or
+updater/signing change. Deterministic helper/guidance tests do not operate the
+real desktop; signed-delivery and physical acceptance are recorded separately.

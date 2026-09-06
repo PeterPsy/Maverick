@@ -593,3 +593,23 @@ Darwin-only skip), wire/diff checks, and Core unused-import checks passed.
 Physical typing/focus preservation and TCC retention on later signed updates
 remain acceptance gates; migration may still require normal macOS permission or
 Keychain approval once. No full computer-use completion is claimed.
+
+### v15 physical checks and v16 explicit scroll (2026-09-06)
+
+The user confirmed search typing, Annulla without input, Stop during pending
+consent and a clean text-only restart without a popup. A subsequent single
+scroll did not move a confirmed long note. Its old trace lacked delta/point,
+so the original cause is not proven; subsequent MC-FOCUS-01 is typing metadata,
+not a scroll failure.
+
+Native v16 replaces raw delta with direction up/down, positive amount 1...500
+pixel units and screenshot x/y over the intended scroll region. Approval names
+these parameters; both mouseMoved and scrollWheel events are allocated and
+located before final session/lease/foreground/hit authorization, with inherited
+modifiers cleared. Exactly one of each is submitted, with no click or retry.
+Typed bounded diagnostics record actual pixel delta and points, distinguish
+submission from verified movement, persist through observation and clear on
+Stop/new turn. No screenshot routing, core runtime or web snapshot change.
+Nine new native tests use injected post sinks, never the real desktop. Mac CI,
+signed-to-signed update and physical long-note movement remain pending; stable
+signing and atomic same-path replacement without persistent backups are retained.

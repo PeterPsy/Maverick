@@ -90,11 +90,15 @@ describe("AppFrameHost app frame readiness", () => {
     vi.clearAllMocks();
   });
 
-  it("refreshes mounted display resources after useful reconnection without remounting frames", async () => {
+  it.each([
+    { owner: storage, resource: "files" },
+    { owner: websiteStudio, resource: "records" },
+  ])("refreshes mounted $resource after useful reconnection without remounting frames", async ({ owner, resource }) => {
     const post = vi.spyOn(window, "postMessage");
-    await renderHost(root, storage);
-    await waitForFrame(container, "Storage viewport", "storage");
-    const frame = frameByTitle(container, "Storage viewport");
+    const title = `${owner.name} viewport`;
+    await renderHost(root, owner);
+    await waitForFrame(container, title, owner.app_id);
+    const frame = frameByTitle(container, title);
     MockWebSocket.instances[0].onopen?.();
     expect(post.mock.calls.some(([message]) => message.type === "maverick.app.data-changed")).toBe(false);
     MockWebSocket.instances[0].onclose?.();
@@ -102,9 +106,9 @@ describe("AppFrameHost app frame readiness", () => {
     expect(MockWebSocket.instances).toHaveLength(2);
     await act(async () => { MockWebSocket.instances[1].onopen?.(); });
     expect(post).toHaveBeenCalledWith({
-      type: "maverick.app.data-changed", owner_app_id: "storage", resource: "files", workspace_id: "default",
+      type: "maverick.app.data-changed", owner_app_id: owner.app_id, resource, workspace_id: "default",
     }, window.location.origin);
-    expect(frameByTitle(container, "Storage viewport")).toBe(frame);
+    expect(frameByTitle(container, title)).toBe(frame);
   });
 
   it("keeps the previous app frame visible until the target app is ready", async () => {

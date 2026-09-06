@@ -87,6 +87,7 @@ test.describe('Website Studio visual smoke', () => {
     await installWebsiteStudioMocks(page, { delayedAction: 'build_preview', delayMs: 1_200 });
     await page.goto('/');
     await openSite(page);
+    await expect(page.locator('.preview-loading-state')).toHaveCount(0);
 
     await emitShellMessage(page, {
       type: 'maverick.app.navigate',
@@ -256,7 +257,7 @@ test.describe('Website Studio visual smoke', () => {
 
   test('sidebar visual navigation opens pages and component targets', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 780 });
-    await installWebsiteStudioMocks(page);
+    const mockState = await installWebsiteStudioMocks(page);
     await page.goto('/apps/website-studio/widgets/website-studio-sitemap-sidebar/');
     await page.evaluate(() => {
       (window as unknown as { __websiteStudioMessages?: unknown[] }).__websiteStudioMessages = [];
@@ -647,6 +648,14 @@ async function installWebsiteStudioMocks(page: Page, options: MockOptions = {}):
                   <p>Runtime preview ready for ${routePath}.</p>
                 </main>
                 <script>
+                  const notifyReady = (previewId) => window.setTimeout(() => {
+                    parent.postMessage({
+                      type: 'website-studio.preview.document-ready',
+                      owner_app_id: 'website-studio',
+                      preview_id: previewId
+                    }, window.location.origin);
+                  }, ${options.delayedAction === 'preview_document' ? options.delayMs || 500 : 0});
+                  notifyReady(${JSON.stringify(requested.searchParams.get('preview_id'))});
                   const renderRoute = (routePath) => {
                     const cleanRoute = routePath || '/';
                     document.querySelector('h1').textContent = cleanRoute === '/about' ? 'About Giuntitrail' : 'Giuntitrail';
@@ -656,6 +665,7 @@ async function installWebsiteStudioMocks(page: Page, options: MockOptions = {}):
                     const data = event.data || {};
                     if (data.type !== 'website-studio.preview.navigate') return;
                     renderRoute(data.route || '/');
+                    notifyReady(data.preview_id);
                   });
                 </script>
               </body>
@@ -679,13 +689,6 @@ async function openSite(page: Page, params: Record<string, string> = {}): Promis
 
 async function emitShellMessage(page: Page, payload: Record<string, unknown>): Promise<void> {
   await page.evaluate((message) => {
-    window.dispatchEvent(
-      new MessageEvent('message', {
-        origin: window.location.origin,
-        source: window,
-        data: message
-      })
-    );
     window.postMessage(message, window.location.origin);
   }, payload);
 }

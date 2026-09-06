@@ -1752,6 +1752,14 @@ Their adapters enforce that allowlist independently of rollout gates. No app
 is implicitly enabled by the existence of the broker; default-off flags remain
 unchanged.
 
+An invalidation alias is a display-reread trigger, not an exhaustive change set
+after a live-event interruption. Apps must reconcile derived RAM caches with
+the accepted read-model revision as well as handling ordinary live events.
+Website Studio binds resolved previews and in-flight preview builds to the
+snapshot's site/revision: changed initial or revalidated snapshots retire both
+maps before rendering, while unchanged revisions retain warm route reuse.
+Obsolete completions cannot publish into or remove entries from the new view.
+
 The M3 shared implementation is `packages/pwa-cache/`. The top-level host must
 create an app-bound capability with explicit non-empty user id, workspace id,
 and owning app id; an adapter receives a client from that capability and

@@ -55,9 +55,11 @@ export function App() {
   const [navigationLoadingLabel, setNavigationLoadingLabel] = useState('');
   const activeSiteIdRef = useRef('');
   const activePageIdRef = useRef('');
+  const infoPanelOpenRef = useRef(false);
   const previewStateRef = useRef<PreviewPayload | null>(null);
   const previewCacheRef = useRef<Map<string, PreviewPayload>>(new Map());
   const previewRequestCacheRef = useRef<Map<string, Promise<PreviewPayload>>>(new Map());
+  const previewSnapshotRevisionRef = useRef('');
   const refreshRunRef = useRef(0);
   const snapshotAbortRef = useRef<AbortController | null>(null);
   const sitemapRef = useRef<SitemapPayload>(EMPTY_SITEMAP);
@@ -77,6 +79,10 @@ export function App() {
   useEffect(() => {
     activePageIdRef.current = activePageId;
   }, [activePageId]);
+
+  useEffect(() => {
+    infoPanelOpenRef.current = infoPanelOpen;
+  }, [infoPanelOpen]);
 
   useEffect(() => {
     sitemapRef.current = sitemap;
@@ -124,6 +130,15 @@ export function App() {
         if (error.name !== 'AbortError' && runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error.message });
       });
       if (runId !== refreshRunRef.current) return;
+      // Aliases only trigger a reread; missed events cannot describe which
+      // derived previews changed. Bind all routes and pending builds to the
+      // accepted site's snapshot revision, including background revalidation.
+      const previewRevision = JSON.stringify([initialSnapshot.project?.site.id, initialSnapshot.revision]);
+      if (previewSnapshotRevisionRef.current !== previewRevision) {
+        previewCacheRef.current.clear();
+        previewRequestCacheRef.current.clear();
+        previewSnapshotRevisionRef.current = previewRevision;
+      }
       setSites(bootstrap.sites);
       const availableSites = bootstrap.sites.filter((site) => site.status !== 'archived');
       const requestedSite = availableSites.find((site) => site.id === nextSiteId)?.id || '';
@@ -162,9 +177,12 @@ export function App() {
       setActiveTarget(nextTarget || {});
       postSelection(selectedSite, selection.page, selection.route, selection.asset, nextTarget);
       await renderSite(selectedSite, selection.previewRoute, bootstrap.latest_preview || null, { resetPreview, runId });
-      if (runId === refreshRunRef.current && infoPanelOpen) {
+      if (runId === refreshRunRef.current && infoPanelOpenRef.current) {
         loadSiteDetails(selectedSite, runId);
       }
+    } catch (error) {
+      // Supersession and teardown are not failures of the current display.
+      if (runId === refreshRunRef.current && !snapshotAbortRef.current?.signal.aborted) throw error;
     } finally {
       if (runId === refreshRunRef.current) setPreviewLoading(false);
     }
@@ -186,6 +204,11 @@ export function App() {
 
   async function renderSite(siteId: string, route = '/', latestPreview?: RuntimeSummary['latest_preview'] | null, options: RenderOptions = {}) {
     const cacheKey = previewCacheKey(siteId, route);
+    if (latestPreview?.id && latestPreview.route === route && latestPreview.preview_url) {
+      const payload = previewPayloadFromRecord(siteId, route, latestPreview);
+      applyPreviewPayload(payload, options.runId);
+      return;
+    }
     if (!options.resetPreview) {
       const cached = previewCacheRef.current.get(cacheKey);
       if (cached) {
@@ -193,15 +216,10 @@ export function App() {
         return;
       }
     }
-    if (latestPreview?.id && latestPreview.route === route && latestPreview.preview_url) {
-      const payload = previewPayloadFromRecord(siteId, route, latestPreview);
-      applyPreviewPayload(payload, options.runId);
-      return;
-    }
     const pending =
       previewRequestCacheRef.current.get(cacheKey) ||
       callBackend<PreviewPayload>({ action: 'build_preview', site_id: siteId, route, include_html: false }).finally(() => {
-        previewRequestCacheRef.current.delete(cacheKey);
+        if (previewRequestCacheRef.current.get(cacheKey) === pending) previewRequestCacheRef.current.delete(cacheKey);
       });
     previewRequestCacheRef.current.set(cacheKey, pending);
     const payload = await pending;

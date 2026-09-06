@@ -108,6 +108,12 @@ and an actual Chromium document reload plus expired localStorage shard pruning.
 The service-worker/browser contract command includes that metrics regression.
 Live app events have no replay cursor: a useful WebSocket reconnection must
 initiate display revalidation even if no read was pending at disconnect.
+Verify derived displays too: Website Studio must replace preview A with B
+after the ordinary `records` recovery, including routes warmed before the
+interruption and updates delivered by background revalidation. Preview caches
+are bound to the accepted snapshot revision, not to the alias chosen by Shell.
+The app-owned component and Chromium regressions cover these paths; an alias
+rename or reordered declaration must not be needed to recover the display.
 
 ## Progressive workspace/user rollout
 

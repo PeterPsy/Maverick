@@ -346,8 +346,12 @@ single-flight consumer owns only its own cancellation; the shared transport is
 cancelled when no consumer remains. A broker transfers a departing loader
 frame's read only to an already admitted reader of the same resource/entity.
 Useful reconnection of the live app-event socket triggers scoped display
-refresh because events have no replay cursor; it never remounts frames or
-changes product mode. Pending-count/oldest-wait gauges belong solely to the
+refresh because events have no replay cursor; it never remounts app frames or
+changes product mode. Event aliases are reread triggers, not exhaustive change
+sets: Website Studio retires resolved and pending derived previews whenever
+the accepted site's snapshot revision changes, including revalidation without
+another event. Late builds cannot publish or remove a replacement pending
+entry. Pending-count/oldest-wait gauges belong solely to the
 current shell document's RAM, while persisted shards aggregate historical
 counters and completed durations. Expired diagnostics are automatically pruned
 in throttled, bounded batches, not merely ignored at aggregation time.

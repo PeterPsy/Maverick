@@ -8,6 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "predev": "node scripts/check-node-runtime.mjs",
     "dev": "vite --host 0.0.0.0",
+    "pretest": "node scripts/check-node-runtime.mjs",
+    "test": "vitest run",
     "pretest:visual": "node scripts/check-node-runtime.mjs",
     "test:visual": "playwright test --config=playwright.config.ts"
   },
@@ -24,8 +26,10 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "happy-dom": "^20.14.0",
     "typescript": "^5.0.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=24.11.0 <25"

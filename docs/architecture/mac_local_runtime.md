@@ -622,3 +622,30 @@ app, updated the same path without persistent backup and requested launch at
 requirement digest remains unchanged from v15. Linux updater/wire and Core
 unused-import checks passed. Physical scroll movement and permission retention
 across this signed-to-signed update remain user-verification gates, not CI claims.
+
+### Combined v17 native session protection (2026-09-06)
+
+Physical v16 checks confirmed scrolling in both directions, refusal/Stop and
+restart, and retained permissions across the signed update. Lid sleep returned
+idle, but screen lock without sleep left the pending scroll consent visible;
+this was a failed acceptance gate, not proof of input delivery.
+
+Native v17 adds active-session 250 ms CGSession lock/console sampling, workspace
+sleep/session/wake and display-change observers, plus Space invalidation while
+consent is pending. Supplemental undocumented loginwindow lock/unlock distributed
+notifications can only revoke authority; unlock never grants or resumes. Missing
+session/console or malformed present lock state fails closed; macOS may omit the
+lock key when unlocked. Checks also run at consent admission/acceptance. Physical
+quick transitions still require verification rather than a perfect-detection claim.
+
+Unsafe events invalidate pending consent, observation/image state, active turn
+and local provider before reporting a bounded MC-SESSION diagnostic. Consent has
+a live countdown and last-moment deadline check. Interrupted chat placeholders
+become explicit terminal messages; partial text is retained, late deltas ignored.
+Tool denial/failure natively blocks further tools until a new user turn, fenced
+against stale callbacks; turn completion clears remaining observation authority.
+Keypress now prepares both events before posting, clears modifiers and names the
+key in approval. Settings are disabled during active turns. Twenty-two new Swift
+tests use synthetic states/events and injected sinks, not the user's desktop.
+No Core implementation, credential, screenshot transport, OS-permission or
+same-identity atomic updater change. Mac CI and physical lock acceptance pending.

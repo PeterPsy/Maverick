@@ -6,10 +6,11 @@ Target: Phase 5 runtime-family separation, onboarding, and product taxonomy
 complete; provider certification, security review, canary, and release gates
 remain open; remote agentic release remains **NO-GO**.
 
-P6 now has checkpointed evidence-boundary implementation and exact-checkout
-verification. Its complete deterministic gate is not green; see
-`docs/development/agentic_p6_validation_2026-09-06.md`. Historical P0–P5
-checkboxes below are not a substitute for that required rerun.
+P6-D is green on frozen commit `5a7ca45a`: 635 Google and 644 OpenRouter
+tests, zero failures/errors/skips; see
+`docs/development/agentic_p6_deterministic_closeout_2026-09-06.md`.
+P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
+checkpoint do not substitute for live evidence, signing or canary approval.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
@@ -786,6 +787,6 @@ reauthorized with executable regressions (`a09e22dd`), not blindly rehashed.
 Suite 41 adds repair/multi-hop/native and effect-delta coverage; hosted adapter
 37, recipe 24, Google/OpenRouter 46/45 and TCB 31 supersede the unreleased
 candidates. No Codex artifact, certificate, binding, release gate or credential
-is changed. Full exact-source verification is required before P6-D closes;
-P6-L/S/R and the overall P6 remain open until their actual evidence exists.
+is changed. Full exact-source verification passed on `5a7ca45a` and closes
+P6-D only; P6-L/S/R and overall P6 remain open until their actual evidence exists.
 The normative plan section 16 now records these separate closure checkpoints.

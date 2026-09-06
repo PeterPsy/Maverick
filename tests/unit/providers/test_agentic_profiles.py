@@ -267,6 +267,8 @@ class AgenticProfilesTest(unittest.TestCase):
                 self.provider_store,
                 "get_capability_certificate",
                 return_value=SimpleNamespace(
+                    execution_family="",
+                    certification_target_digest="",
                     evidence_digest="evidence-google",
                     certified_reasoning_efforts=("minimal", "low", "medium", "high"),
                     default_reasoning_effort="high",

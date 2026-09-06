@@ -63,8 +63,10 @@ Neither cryptography nor artifact hashing proves that a human actually reviewed
 the traces. That approval, deployment isolation, and P6-S remain operational
 requirements, not automatically closed software tests.
 
-The source checkout and all tenant mounts are forbidden archive locations for
-the collection/signing runner. No test fixture artifact or temporary test key
+The collection/signing runner rejects archive paths within its own source
+checkout. The operator must also exclude other installation/tenant mounts and
+keep the archive inaccessible to the worker's tools; a path check is not a
+mount-isolation proof. No test fixture artifact or temporary test key
 is accepted as operational evidence merely because unit tests exercise signing.
 
 ## Isolation and limits of this checkpoint
@@ -89,8 +91,14 @@ Remaining operational/program work is explicit:
 - the positive control-plane tests use fabricated certification observations
   and only set the release-availability constant as an offline test condition;
   they do not replace admission guards, certificate validators or stores, but
-  they resolve dispatch without opening a provider transport and do not prove
-  P6-L or the complete API-to-provider canary;
+  they include the real API capability preflight, creation, queue and dispatch
+  resolution, revocation between API preflight and persistence, and a new
+  process rereading revoked authority from disk. They do not open a provider
+  transport and do not prove P6-L or the complete API-to-provider canary;
+- the API-positive test uses the existing `full-access` execution policy in a
+  disposable installation. The existing sandbox policy removes shell and
+  therefore cannot satisfy the atomic Full Workspace preflight; this delta
+  neither weakens that check nor proves a sandbox-mode Full Workspace canary;
 - live synthetic probes, all 14 natural scenarios per claimed configuration,
   provider billing/project verification, trusted operational signatures and
   independent source/leakage review remain required for each target;

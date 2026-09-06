@@ -469,3 +469,27 @@ setup shows `a5e689e · diagnostica focus v12`. Linux wire and Core unused-impor
 checks passed. The physical gate is a single approved search click followed by
 observation and the staged native diagnostic, without typing. No root cause or
 successful search-focus recognition is inferred from this installation.
+
+### V13 role-first focus and bounded window association
+
+V12's physical diagnostic was `MC-FOCUS-03 / -25205` before the Search click:
+the currently focused element did not support `AXWindow`. Its role and Search's
+focus were not established. V13 checks role and text editability before any
+text-control window query. Non-text controls remain ineligible for typing.
+Unknown text focus now explicitly means `typing_ready=false`, not failure of an
+otherwise successful observation. A requested destination click can proceed
+under existing consent/lease/hit checks, followed by observation; it is not an
+automatic retry or authority to click during observation-only tasks. Failed or
+denied actions still stop; unknown/mismatched focus still blocks typing.
+
+For verified text controls only, exact `AXWindow` attributeUnsupported may be
+resolved by proving an AXParent path to the application's exact focused window:
+at most eight links, selected PID at every node, no cycles. Direct association
+mismatch, other AX errors or malformed objects fail closed without parent lookup.
+This bounded ancestor-metadata read does not enumerate children, siblings or
+whole trees and never reads field values/titles/selected text. Diagnostic codes
+19…22 extend the stable 01…18 stages. Geometry equality/containment, target kind
+and identity, secure-input and post-consent checks remain unchanged, as do Stop
+fences and same-turn direct image transport. Eleven tests cover the resolver and
+readiness semantics. User approved closed-app installation; physical acceptance
+on Notes remains pending.

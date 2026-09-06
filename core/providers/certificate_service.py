@@ -20,6 +20,11 @@ from core.providers.certified_execution_tcb import (
     validate_remote_tcb_identity_with_revision_fence,
 )
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
+from core.providers.certificate_targets import (
+    validate_api_binding_certificate_target,
+    validate_api_certificate_target_shape,
+    validate_api_profile_certificate_target,
+)
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 from core.runtime.full_workspace_contract import validate_full_workspace_binding
@@ -43,6 +48,7 @@ _EXECUTED_EVIDENCE_FIELDS = (
     "run_signature",
     "certification_started_at",
     "certification_outcome",
+    "certification_target_digest",
     "tcb_manifest_id",
     "tcb_manifest_version",
     "tcb_structure_digest",
@@ -120,6 +126,7 @@ def build_capability_evidence(
     tcb_manifest_version: str = "",
     tcb_structure_digest: str = "",
     tcb_live_digest: str = "",
+    certification_target_digest: str = "",
 ) -> CapabilityEvidenceRecord:
     """Build one self-identifying evidence record from platform-owned references."""
     _require_aware(recorded_at, "certificate_evidence_time_invalid")
@@ -145,6 +152,10 @@ def build_capability_evidence(
         "tcb_structure_digest": tcb_structure_digest,
         "tcb_live_digest": tcb_live_digest,
     }
+    if certification_target_digest:
+        payload["certification_target_digest"] = _sha256(
+            certification_target_digest, "certificate_target_missing_or_invalid",
+        )
     return CapabilityEvidenceRecord(evidence_digest=canonical_digest(payload), **payload)
 
 
@@ -160,7 +171,7 @@ def publish_capability_certificate(
     _validate_certificate_tcb(certificate)
     if certificate.evidence_digest != evidence.evidence_digest:
         raise CapabilityCertificateError("certificate_evidence_mismatch")
-    for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest"):
+    for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest", "certification_target_digest"):
         if getattr(certificate, field_name) != getattr(evidence, field_name):
             raise CapabilityCertificateError("certificate_evidence_identity_mismatch")
     if certificate.evidence_refs != evidence.evidence_refs:
@@ -331,9 +342,10 @@ def validate_certificate_for_binding_with_revision_fence(
         raise CapabilityCertificateError("certificate_evidence_missing") from error
     if not _evidence_digest_is_valid(evidence):
         raise CapabilityCertificateError("certificate_evidence_corrupt")
-    for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest"):
+    for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest", "certification_target_digest"):
         if getattr(certificate, field_name) != getattr(evidence, field_name):
             raise CapabilityCertificateError("certificate_evidence_identity_mismatch")
+    validate_api_binding_certificate_target(store, binding=binding, certificate=certificate)
     tcb_revision_fence = _validate_binding_tcb(certificate, binding)
     validate_full_workspace_binding(certificate=certificate, binding=binding)
     timestamp = now or datetime.now(tz=UTC)
@@ -406,7 +418,8 @@ def validate_certificate_for_binding_with_revision_fence(
 
 
 def validate_profile_certificate_execution_contract(*, profile, certificate) -> None:
-    """Pin recipe, context, semantic, tool, and provider-catalog identities."""
+    """Pin the complete certified API target and native execution identities."""
+    validate_api_profile_certificate_target(profile=profile, certificate=certificate)
     expected = {
         "model_revision": str(getattr(profile, "model_revision", "") or ""),
         "model_revision_policy": str(
@@ -466,6 +479,8 @@ def _evidence_digest_is_valid(evidence: CapabilityEvidenceRecord) -> bool:
         key: value
         for key, value in evidence.__dict__.items()
         if key != "evidence_digest"
+        # API-only extension: preserve the unchanged native evidence hash domain.
+        and not (key == "certification_target_digest" and value == "")
     }
     if canonical_digest(current_payload) == evidence.evidence_digest:
         return True
@@ -476,6 +491,7 @@ def _evidence_digest_is_valid(evidence: CapabilityEvidenceRecord) -> bool:
 
 
 def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
+    validate_api_certificate_target_shape(certificate)
     if certificate.certificate_scope not in {"model", "native_connection", "native_runtime_artifact"}:
         raise CapabilityCertificateError("certificate_scope_invalid")
     if certificate.certificate_scope == "native_runtime_artifact" and (

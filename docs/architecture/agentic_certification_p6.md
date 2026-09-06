@@ -68,7 +68,21 @@ not execute natural tasks or turn user-supplied claims into trusted evidence.
 Fixture/protocol-only collections are deliberately unsigned and ineligible.
 
 The result summary and signed JSON bind the natural report; publication checks
-the complete profile target again before creating a certificate. The source
+the complete profile target again before creating a certificate. API certificate
+schema 7 persists that target as `certification_target_digest` in both the
+certificate and its digest-bound evidence. Status projection, admission, full
+runtime validation and cheap authority refresh recheck it against the exact
+stored profile revision. Runtime pins must also match the certified profile's
+complete policy/context snapshots and configuration, not just revision labels.
+A different API tuple cannot inherit a certificate; targetless API certificates
+fail closed and are not backfilled. Workspace ceilings remain separately governed
+and can narrow authority.
+
+This extension is API-scoped: native certificates keep an empty API target.
+An empty target is omitted from the evidence hash domain so existing Codex
+evidence and connection attestations remain byte-identical; a nonempty target
+is always hashed and cannot use the historical evidence-validation path.
+The source
 TCB also includes the collection/signing entrypoint. This implementation does
 not provide missing live credentials, trust a new signing key, approve native
 runtime artifacts, run a canary, or close an independent security review.

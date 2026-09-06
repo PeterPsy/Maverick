@@ -36,6 +36,7 @@ class CertificationSuiteManifest:
 
 
 _SHARED_FIXTURE_TESTS = (
+    "tests.unit.providers.test_api_certificate_targets",
     "tests.unit.providers.test_agentic_probe_validation",
     "tests.unit.providers.test_certification_behavior",
     "tests.unit.providers.test_certification_probe_budget",

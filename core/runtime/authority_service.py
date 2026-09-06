@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter, RuntimeHealthContext
 from core.providers.agentic_workspace_policy import actor_selection_allowed
+from core.providers.certificate_targets import validate_api_binding_certificate_target
 from core.providers.certified_execution_tcb import certified_tcb_revision_fence
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.service import effective_provider_registry
@@ -139,6 +140,9 @@ def revalidate_runtime_authority_snapshot(
         validate_native_connection_certificate(
             active_provider_store, certificate, now=now, installation=native_installation_for_adapter(adapter),
         )
+    validate_api_binding_certificate_target(
+        active_provider_store, binding=binding, certificate=certificate,
+    )
     if not _authority_revision_matches(
         authority,
         f"certificate-status:{certificate.certificate_id}:{status.revision}",

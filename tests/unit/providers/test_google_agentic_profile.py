@@ -12,6 +12,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from core.api.platform_state import bootstrap_platform_state
 from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.certificate_projection import certificate_profile_status
+from core.providers.certification_target import api_profile_target_digest
 from core.providers.certification_pipeline import (
     SignedCertificationRun,
     execute_certification_suite,
@@ -224,6 +226,28 @@ class GoogleAgenticProfileTest(unittest.TestCase):
                 adapter=adapter, signed_run=signed, trusted_keys={"test-ci": private_key.public_key()},
             )
         evidence = state.provider_store.get_capability_evidence(certificate.evidence_digest)
+        self.assertEqual(certificate.certification_target_digest, run.target_digest)
+        self.assertEqual(evidence.certification_target_digest, run.target_digest)
+        revised = replace(
+            profile, revision=f"{profile.revision}-uncertified",
+            policy_ceiling=replace(
+                profile.policy_ceiling,
+                max_steps_per_turn=profile.policy_ceiling.max_steps_per_turn * 2,
+                max_tool_calls_per_turn=profile.policy_ceiling.max_tool_calls_per_turn * 2,
+                max_estimated_cost_microusd=profile.policy_ceiling.max_estimated_cost_microusd * 2,
+            ),
+        )
+        state.provider_store.save_agentic_profile_definition(revised)
+        self.assertNotEqual(api_profile_target_digest(revised), run.target_digest)
+        for definition, expected_status in (
+            (profile, "active"), (revised, "certificate_target_mismatch"),
+        ):
+            self.assertEqual(certificate_profile_status(
+                certificate,
+                state.provider_store.get_capability_certificate_status(certificate.certificate_id),
+                definition=definition, adapter=adapter, now=NOW,
+                store=state.provider_store,
+            ), expected_status)
         self.assertEqual(certificate.test_run_id, run.test_run_id)
         self.assertEqual(evidence.source_commit, run.source_commit)
         self.assertEqual(evidence.artifact_bundle_digest, run.artifact_bundle_digest)

@@ -70,10 +70,11 @@ def publish_google_preview_certificate(
         tcb_manifest_version=run.tcb_manifest_version,
         tcb_structure_digest=run.tcb_structure_digest,
         tcb_live_digest=run.tcb_live_digest,
+        certification_target_digest=run.target_digest,
     )
     certificate = CapabilityCertificate(
         certificate_id=definition.capability_certificate_id,
-        schema_version="6",
+        schema_version="7",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=str(getattr(adapter, "adapter_id", definition.adapter_id)),
         adapter_version=str(getattr(adapter, "adapter_version", "")),
@@ -99,6 +100,7 @@ def publish_google_preview_certificate(
         tcb_manifest_version=run.tcb_manifest_version,
         tcb_structure_digest=run.tcb_structure_digest,
         tcb_live_digest=run.tcb_live_digest,
+        certification_target_digest=run.target_digest,
         full_workspace_contract_revision=(
             definition.full_workspace_contract_revision
         ),

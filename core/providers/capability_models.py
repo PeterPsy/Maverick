@@ -56,6 +56,7 @@ class CapabilityEvidenceRecord:
     tcb_manifest_version: str = ""
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
+    certification_target_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ class CapabilityCertificate:
     tcb_manifest_version: str = ""
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
+    certification_target_digest: str = ""
     full_workspace_contract_revision: str = ""
     execution_family: str = ""
     harness_recipe_id: str = ""

@@ -86,10 +86,9 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
             app_references=True,
             confirmations=True,
         )
-        evidence = fake_capability_evidence(adapter, now=NOW)
-
         for profile, reasoning_efforts, default_effort in profiles:
             with self.subTest(profile=profile.definition_id):
+                evidence = fake_capability_evidence(adapter, now=NOW, definition=profile)
                 binding = build_runtime_execution_binding(
                     session_id=f"session:{profile.definition_id}",
                     workspace_id="default",
@@ -151,6 +150,7 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     evidence=evidence,
                     now=NOW,
                     certified_capabilities=capabilities,
+                    definition=profile,
                 )
                 with mock.patch(
                     "core.runtime.authority.feature_enabled",

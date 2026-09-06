@@ -36,7 +36,8 @@ def fixture_live_receipt(provider_id, *, nonce):
         **common, "request_count": 16, "filesystem_result_count": 12,
         "catalog_snapshot_digest": "a" * 64, "catalog_model_record_digest": "b" * 64,
         "catalog_zdr_record_digest": "c" * 64, "context_length": 1_048_576,
-        "max_completion_tokens": 65_536, "supports_tool_choice_none": True,
+        "max_completion_tokens": 65_536, "supports_tool_choice_none": False,
+        "finalization_mode": "omit_tools_and_choice",
         "upstream_id": "deepinfra/fp8",
     }
 

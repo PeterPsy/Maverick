@@ -112,7 +112,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
             support_flags=replace(
                 OPENROUTER_GOVERNED_WORKSPACE_RECIPE.support_flags,
-                supports_tool_choice_none=False,
+                supports_tool_choice_none=True,
             ),
         )
 
@@ -160,7 +160,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
         self.assertEqual(final.tool_choice_mode, "provider-default")
         self.assertNotEqual(exploration.snapshot_digest, final.snapshot_digest)
 
-    def test_openrouter_final_preflight_requires_empty_tools_and_none(self) -> None:
+    def test_openrouter_final_preflight_requires_omission_without_explicit_none_support(self) -> None:
         catalog = OpenRouterAgenticCatalogSnapshot(
             upstream_id="deepinfra/fp8",
             supported_parameters=(
@@ -172,7 +172,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             ),
             model_catalog_record_digest="a" * 64,
             zdr_catalog_record_digest="b" * 64,
-            supports_tool_choice_none=True,
+            supports_tool_choice_none=False,
             context_length=1_048_576,
             max_completion_tokens=65_536,
             catalog_snapshot_digest="c" * 64,
@@ -193,8 +193,8 @@ class HostedHarnessRecipeTest(unittest.TestCase):
 
         self.assertEqual(exploration.tool_choice_mode, "auto")
         self.assertEqual(exploration.tool_catalog_mode, "declared")
-        self.assertEqual(final.tool_choice_mode, "none")
-        self.assertEqual(final.tool_catalog_mode, "empty")
+        self.assertEqual(final.tool_choice_mode, "provider-default")
+        self.assertEqual(final.tool_catalog_mode, "omitted")
         self.assertNotEqual(exploration.snapshot_digest, final.snapshot_digest)
 
 

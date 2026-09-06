@@ -188,10 +188,20 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                         zdr_catalog=catalog,
                     )
 
-    def test_tool_choice_none_and_total_context_window_are_mandatory(self) -> None:
+    def test_explicit_none_is_observed_not_required_by_the_tools_omitted_contract(self) -> None:
+        model_catalog = _model_catalog()
+        zdr_catalog = _zdr_catalog()
+        for record in (model_catalog["data"]["endpoints"][0], zdr_catalog["data"][0]):
+            record["supports_tool_choice"]["none"] = False
+        snapshot = validate_openrouter_agentic_catalog(
+            _request(), model_catalog=model_catalog, zdr_catalog=zdr_catalog,
+        )
+        self.assertFalse(snapshot.supports_tool_choice_none)
+
+    def test_auto_capability_shape_and_total_context_window_are_mandatory(self) -> None:
         for catalog_name in ("model", "zdr"):
             for update in (
-                {"supports_tool_choice": {"auto": True, "none": False}},
+                {"supports_tool_choice": {"auto": False, "none": False}},
                 {"supports_tool_choice": {"auto": True}},
                 {"context_length": 16_384},
             ):

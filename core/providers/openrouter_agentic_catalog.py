@@ -139,10 +139,6 @@ def validate_openrouter_agentic_catalog(
         )
     model_none = supports_tool_choice_none(model_record)
     zdr_none = supports_tool_choice_none(zdr_record)
-    if not model_none or not zdr_none:
-        raise OpenRouterAgenticProtocolError(
-            "provider_endpoint_parameters_unsupported"
-        )
     model_context = positive_int(model_record.get("context_length"))
     zdr_context = positive_int(zdr_record.get("context_length"))
     model_completion = positive_int(model_record.get("max_completion_tokens"))
@@ -156,7 +152,7 @@ def validate_openrouter_agentic_catalog(
         "zdr_catalog_record_digest": canonical_digest(
             catalog_identity(zdr_record, model_id=request.model_id)
         ),
-        "supports_tool_choice_none": True,
+        "supports_tool_choice_none": model_none and zdr_none,
         "context_length": min(model_context, zdr_context),
         "max_completion_tokens": min(model_completion, zdr_completion),
     }

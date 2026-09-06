@@ -16,6 +16,7 @@ from core.providers.certification_pipeline import (
     verify_certification_run,
 )
 from core.providers.errors import CapabilityCertificateError
+from core.providers.certification_live_receipt import validate_live_probe_receipt
 from core.providers.google_agentic_certification import GOOGLE_CERTIFICATION_SUITE_VERSION
 from core.providers.certification_manifests import (
     GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -24,7 +25,7 @@ from core.providers.certification_manifests import (
 from core.runtime.execution_binding import canonical_digest
 
 
-from tests.support.certification_evidence import fixture_step_process, with_fixture_behavior
+from tests.support.certification_evidence import fixture_live_receipt, fixture_step_process, with_fixture_behavior
 
 class CertificationPipelineTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -92,6 +93,20 @@ class CertificationPipelineTest(unittest.TestCase):
         ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=green):
             with self.assertRaisesRegex(CapabilityCertificateError, "certification_json_invalid"):
                 self._execute_unpatched()
+
+    def test_openrouter_omission_receipt_preserves_negative_catalog_observation(self) -> None:
+        receipt = fixture_live_receipt("openrouter", nonce="1" * 32)
+        self.assertFalse(receipt["supports_tool_choice_none"])
+        def validate(value):
+            return validate_live_probe_receipt(
+                value, provider_id="openrouter", target_digest=receipt["target_digest"], run_nonce="1" * 32,
+            )
+        self.assertEqual(validate(receipt)["finalization_mode"], "omit_tools_and_choice")
+        legacy = {key: value for key, value in receipt.items() if key != "finalization_mode"}
+        for invalid in (legacy, {**receipt, "finalization_mode": "explicit_none"},
+                        {**receipt, "supports_tool_choice_none": "false"}):
+            with self.assertRaisesRegex(CapabilityCertificateError, "live_receipt_invalid"):
+                validate(invalid)
 
     def test_protocol_success_without_natural_behavior_cannot_be_signed(self) -> None:
         run = self._execute(complete_behavior=False)

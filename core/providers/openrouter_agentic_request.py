@@ -31,18 +31,6 @@ def openrouter_chat_payload(
     payload: dict[str, object] = {
         "model": request.model_id,
         "messages": messages,
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                },
-            }
-            for tool in request.tool_definitions
-        ],
-        "tool_choice": "auto" if request.tool_definitions else "none",
         "stream": True,
         "stream_options": {"include_usage": True},
         "max_tokens": request.max_output_tokens,
@@ -57,6 +45,17 @@ def openrouter_chat_payload(
             ),
         },
     }
+    # No offered tools means neither tool parameter is sent. In particular,
+    # finalization does not require an endpoint's unsupported explicit-none mode.
+    if request.tool_definitions:
+        payload["tools"] = [
+            {"type": "function", "function": {
+                "name": tool.name, "description": tool.description,
+                "parameters": tool.input_schema,
+            }}
+            for tool in request.tool_definitions
+        ]
+        payload["tool_choice"] = "auto"
     if request.reasoning_effort is not None:
         effort = request.reasoning_effort.strip().lower()
         if effort not in {"minimal", "low", "medium", "high"}:

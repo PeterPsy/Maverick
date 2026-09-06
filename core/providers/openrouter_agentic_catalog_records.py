@@ -112,13 +112,13 @@ def catalog_identity(
 
 
 def supports_tool_choice_none(record: dict[str, object]) -> bool:
+    """Validate automatic tool support; report explicit-none without inventing it."""
     value = record.get("supports_tool_choice")
-    return (
-        isinstance(value, dict)
-        and value.get("none") is True
-        and value.get("auto") is True
-        and all(isinstance(item, bool) for item in value.values())
-    )
+    if (not isinstance(value, dict) or value.get("auto") is not True
+            or type(value.get("none")) is not bool
+            or not all(isinstance(item, bool) for item in value.values())):
+        raise OpenRouterAgenticProtocolError("provider_endpoint_parameters_unsupported")
+    return value["none"]
 
 
 def positive_int(value: object) -> int:

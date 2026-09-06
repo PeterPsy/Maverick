@@ -10,6 +10,7 @@ from core.providers.agentic_protocol import (
     HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.openrouter_agentic_client import OpenRouterAgenticClient
+from core.providers.agentic_probe_validation import validate_probe_response
 from tests.unit.providers.test_openrouter_agentic_codec import (
     _events,
     _private_state,
@@ -41,7 +42,7 @@ def _finalize(request, block_id: str):
 
 
 class OpenRouterAgenticFinalizationCodecTest(unittest.TestCase):
-    def test_finalization_forces_tool_choice_none_after_paired_result(self) -> None:
+    def test_finalization_omits_tools_and_choice_after_paired_result(self) -> None:
         transport = _ScriptedTransport(
             [
                 _tool_stream(
@@ -75,14 +76,25 @@ class OpenRouterAgenticFinalizationCodecTest(unittest.TestCase):
 
         self.assertEqual(events[-1].event_type, "completed")
         payload = transport.payloads[1]
-        self.assertEqual(payload["tools"], [])
-        self.assertEqual(payload["tool_choice"], "none")
+        self.assertNotIn("tools", payload)
+        self.assertNotIn("tool_choice", payload)
         self.assertEqual(payload["messages"][-2]["role"], "tool")
         self.assertEqual(
             payload["messages"][-1],
             {"role": "system", "content": HOSTED_FINALIZATION_INSTRUCTION},
         )
         self._assert_mutations_fail_before_transport(client, transport, request)
+
+    def test_unsolicited_final_tool_proposal_remains_pairable_but_is_not_probe_success(self) -> None:
+        transport = _ScriptedTransport([_tool_stream("generation-unsolicited", "fixture_read", call_id="call-denied")])
+        client = OpenRouterAgenticClient(transport=transport)
+        request = _finalize(_request("request-unsolicited"), "request-unsolicited:finalize")
+        events = asyncio.run(_events(client, request))
+        # Protocol completion is not user-turn completion. Preserve the exact
+        # pending state for core budget_denied pairing and the protected recovery.
+        self.assertFalse(validate_probe_response(events, final=True))
+        self.assertTrue(any(event.event_type == "provider_state" for event in events))
+        self.assertTrue(any(event.event_type == "tool_call" for event in events))
 
     def test_initial_finalization_instruction_is_last_wire_message(self) -> None:
         transport = _ScriptedTransport(

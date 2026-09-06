@@ -15,7 +15,7 @@ _GOOGLE = _COMMON | _GOOGLE_FLAGS | {"reason_code", "test_run_id", "result_summa
 _OPENROUTER = _COMMON | {
     "catalog_snapshot_digest", "catalog_model_record_digest", "catalog_zdr_record_digest",
     "context_length", "filesystem_result_count", "max_completion_tokens",
-    "supports_tool_choice_none", "upstream_id",
+    "supports_tool_choice_none", "upstream_id", "finalization_mode",
 }
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -60,7 +60,9 @@ def validate_live_probe_receipt(
         if receipt["result_summary_digest"] != canonical_digest(summary):
             _fail()
     else:
-        if (receipt["supports_tool_choice_none"] is not True or receipt["upstream_id"] != "deepinfra/fp8"
+        if (type(receipt["supports_tool_choice_none"]) is not bool
+                or receipt["finalization_mode"] != "omit_tools_and_choice"
+                or receipt["upstream_id"] != "deepinfra/fp8"
                 or type(receipt["filesystem_result_count"]) is not int
                 or receipt["filesystem_result_count"] != rounds * len(efforts)):
             _fail()

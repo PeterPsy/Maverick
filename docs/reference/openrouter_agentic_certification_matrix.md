@@ -23,6 +23,17 @@ suite-40 failures are not waived or removed; the corrected fixtures and complete
 inventory must pass on this candidate. See
 `docs/development/agentic_p6_effect_audit_2026-09-06.md`.
 
+## Tools-omitted protocol follow-up (not yet recertified)
+
+The isolated protocol follow-up replaces explicit-none finalization with the
+contract in `docs/architecture/openrouter_finalization_contract.md`. Numeric
+identities above describe the previous freeze, **not approval for this delta**;
+new identities and full exact-source verification are required before merge or
+publication. Observed `supports_tool_choice.none=false` stays false. The new
+method offers no tools and sends neither tool parameter. Unsolicited final
+calls remain pairable for core denial/recovery; they cannot authorize tool
+execution or successful user-turn finalization.
+
 ## Preview combination
 
 | Field | Pinned value |
@@ -50,7 +61,7 @@ inventory must pass on this candidate. See
 | Accounting policy | `openrouter-deepinfra-deepseek-v4-flash-public-list-price@1`; 90,000 / 180,000 micro-USD per million input/output tokens |
 | Finalization reserve | one 2,048-token / 35,000-micro-USD / 20-second final request plus one equal recovery |
 | Turn cost ceiling | 250,000 micro-USD; 70,000 remains protected for the two terminal attempts |
-| Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
+| Final request | exact Core finalization instruction; omit both `tools` and `tool_choice`; unsolicited tool-bearing terminal fails closed |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Policy surfaces | exact `cli`, `mcp`, `app-interface`, and `core-capability` set plus every Full Workspace wrapper handle; the public resolver must produce complete live authority |
 | Tool handles | Full Workspace `codex-baseline-v20` surface: all 24 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result projection; only complete probe evidence is cached, while transient/partial results remain retryable; app reads require a Core-audited descriptor plus executable closure and are rechecked at dispatch, inter-agent CLI/MCP operations have exact effects and content-dropping projections, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates authority plus the freshly read nonnumeric policy before every stream advance, and shell/process effects remain rollbackable over an immutable `.git`-excluding snapshot in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
@@ -72,9 +83,11 @@ The certification probe fetches both official catalogs immediately before any
 completion request and fails unless this exact record is active, ZDR-listed,
 large enough for the requested completion budget, and supports every parameter
 the translated payload sends that participates in endpoint parameter routing.
-Suite 39 also requires `supports_tool_choice.none=true` in both exact records,
-so the current DeepInfra record is an explicit certification blocker rather
-than a capability Maverick guesses or works around. A changed endpoint or
+Historically, suite 39 and the suite-41 freeze required
+`supports_tool_choice.none=true` in both exact records, so the current record
+correctly blocks that explicit-none contract. The tools-omitted follow-up changes
+the method rather than relabeling this capability; it still requires new live
+evidence and certification. A changed endpoint or
 upstream requires a new recipe/catalog digest and immutable profile revision.
 
 Every agentic request sends this router object without a permissive default.
@@ -119,7 +132,7 @@ Primary references:
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
 | Certified execution TCB | manifest v31 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
-| Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, `tool_choice:none`, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
+| Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, automatic tool selection, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
 | No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
@@ -137,14 +150,14 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
-| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a complete terminal request at the hosted input ceiling; request-specific staged preflight with tool-less fallback before egress commit; tool-call and cumulative result-byte exhaustion, including live tightening after preparation, rebuild finalization without exposing tools; persisted execution lease whose live deadline is part of the terminal success CAS; `tools: []` plus `tool_choice: none`; exact request-scoped final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a complete terminal request at the hosted input ceiling; request-specific staged preflight with tool-less fallback before egress commit; tool-call and cumulative result-byte exhaustion, including live tightening after preparation, rebuild finalization without exposing tools; persisted execution lease whose live deadline is part of the terminal success CAS; both tool parameters omitted; exact request-scoped final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Outage after acceptance | terminal normalized failure with no blind retry | not certified |
 | Revocation and egress drift | complete authority refresh after endpoint preflight and before lazy transport open; the request's data classes, catalog handles, surfaces, filesystem/shell flags, and complete semantic capability projection are then revalidated against the freshly policy-narrowed live authority, including skill/app-reference blocks without tools; the endpoint snapshot and transport share one process-local redaction-safe credential fingerprint; live policy tightens the active reservation and checks its finalization deadline at every boundary; later SSE advances use a lightweight certificate/binding/actor/feature/health/TCB/classification/credential revocation fence instead of rerunning the full TCB and behavior gates | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r40 |
+| Live capability probe | operator-only catalog/ZDR preflight of actual translated parameters and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r40 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -519,8 +532,8 @@ performed.
   indices, or conflicting fragments fail closed. A multi-call response is
   completely dispositioned: calls inside the remaining budget receive
   `parallel_denied`, overflow receives `budget_denied`, and no call executes.
-- Finalization must carry no tool definitions, the exact Core instruction, an
-  empty `tools` array, and `tool_choice: none`; any mismatch fails before
+- Finalization must carry no tool definitions and the exact Core instruction;
+  both `tools` and `tool_choice` must be absent. Any mismatch fails before
   transport. Empty/whitespace output is rolled back, and only one paired
   recovery follows an unexpected journaled finalization call.
 - A requested reasoning effort outside the immutable certificate tuple, or a

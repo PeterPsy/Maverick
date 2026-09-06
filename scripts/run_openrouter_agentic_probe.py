@@ -224,7 +224,6 @@ def _finish(events, request_count: int, filesystem_result_count: int, catalog, *
         and sum(event.event_type == "usage" for event in events) >= request_count
         and sum(event.event_type == "provider_state" for event in events) >= request_count
         and not any(event.event_type == "error" for event in events)
-        and catalog.supports_tool_choice_none is True
         and catalog.context_length >= 16_384
         and catalog.max_completion_tokens >= 16_384
     )
@@ -241,6 +240,7 @@ def _finish(events, request_count: int, filesystem_result_count: int, catalog, *
         "request_count": request_count,
         "succeeded": succeeded,
         "supports_tool_choice_none": catalog.supports_tool_choice_none,
+        "finalization_mode": "omit_tools_and_choice",
         "upstream_id": catalog.upstream_id,
     }, sort_keys=True))
     return 0 if succeeded else 1

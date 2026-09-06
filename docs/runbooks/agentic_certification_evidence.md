@@ -274,8 +274,19 @@ fixture verification neither performs this deployment nor authorizes live writes
 Before its first completion request, the OpenRouter probe must fetch both the
 official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
 the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion
-capacity, total input-plus-output context capacity, explicit support for
-`tool_choice:none`, and every endpoint-gated translated parameter. In
+capacity, total input-plus-output context capacity, automatic tool selection,
+and every endpoint-gated translated parameter. The new OpenRouter candidate
+omits both `tools` and `tool_choice` when no tool is offered; it does not send
+an empty catalog or require the unsupported explicit `tool_choice:none` mode.
+The catalog's explicit-none capability remains an observed boolean, never
+relabeled as true. Its receipt identifies `finalization_mode=omit_tools_and_choice`;
+old receipts without that contract are not eligible for this candidate.
+An unsolicited final tool proposal and its exact pending state are retained
+for core denial/audit and the required paired recovery, not execution or
+successful user-turn finalization. The probe rejects that final response.
+Live confirmation is
+still required: omission is not evidence that the provider actually obeyed.
+In
 particular, the request must not reintroduce `parallel_tool_calls` while the
 endpoint does not declare it. The required set is derived from the translated
 completion payload rather than maintained as a second hard-coded parameter

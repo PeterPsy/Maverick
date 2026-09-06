@@ -30,7 +30,7 @@ from core.providers.openrouter_agentic_models import (
 
 
 HOSTED_TOOL_LOOP_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_TOOL_LOOP_ADAPTER_VERSION = "35"
+HOSTED_TOOL_LOOP_ADAPTER_VERSION = "36"
 
 GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
     protocol_adapter_id="google-interactions-protocol",

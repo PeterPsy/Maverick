@@ -723,6 +723,13 @@ release decision below.
 
 ## Certification and release gates — still open
 
+P6 implementation is tracked in `docs/architecture/agentic_certification_p6.md`.
+The first checkpoint advances the contained hosted candidate to adapter 36,
+recipe 23, Google/OpenRouter profile revisions 45/44, suite 40, and TCB manifest
+30. Suite 40 includes the P5 family, native ACP lifecycle, and text-only
+regression corpus. These identities supersede the historical P4/P5 candidate
+values above; they are not live certification or rollout evidence.
+
 - [ ] Run each complete provider manifest on an exact clean deployable commit:
   deterministic fixture, operator-only synthetic live probe, behavioral
   validation, signing, verification, and immutable certificate publication.

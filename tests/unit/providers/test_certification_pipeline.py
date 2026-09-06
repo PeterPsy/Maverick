@@ -165,35 +165,31 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "0387d6594cdb20c9c9959dbcee679f28393c2c92417874a06c062c415f3c10f5"
+                "d1e43438e323bdfba06c5c9aeb2f1e64465680561705bbb29003c9594117010b"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "de8e054da115dc37482782ea48766f9da3951e58ca2f4136feb47d5fbbfb7a52"
+                "b73d66bb2ed90cc21a16bc5ac679c4a48960c53ce9558b4afb7cd8b4e8d02af8"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": (
-                "88f6405993b91e733c00e03f5521021ad771fa5d901bab0e612378b4dc0cc8a9"
-            ),
-            "openrouter": (
-                "90b4ccd6c8d28b3b6a805bb27e7f26504fd93feaa10d1376cdb02dcefc0bb661"
-            ),
+            "google-ai-studio": "56ec0d81bfcd5348f0d613c9a91109d13c2dc8b360345bbacafee7e4fc7da123",
+            "openrouter": "2f84905a91365fd7f9d0ca8968c9c575973291e8ec4bf949ab92f6ad00c53615",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "39")
+                self.assertEqual(manifest.suite_version, "40")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-04-r39-p4-typed-result-classification-tcb29",
+                    "2026-09-06-r40-p6-exact-target-tcb30",
                 )
                 self.assertEqual(
                     manifest.digest,

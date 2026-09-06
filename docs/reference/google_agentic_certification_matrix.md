@@ -1,10 +1,19 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-09-05
-Matrix revision: `2026-09-04-r39-p4-typed-result-classification-tcb29`
+Status date: 2026-09-06
+Matrix revision: `2026-09-06-r40-p6-exact-target-tcb30`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==35`
+Adapter: `maverick-hosted-tool-loop==36`
+
+## P6 candidate checkpoint
+
+Suite 40 / TCB manifest 30 / hosted adapter 36 / recipe 23 bind the P5
+executable family, native ACP lifecycle, catalog/lineage, and text-only
+non-regression corpus in addition to the P0–P4 fixtures. The new API profile
+revision is immutable, unbound, and uncertified. Historical evidence below is
+not evidence for this candidate. No runtime flag, Codex artifact, native
+certificate, or operator binding is changed by this checkpoint.
 
 ## Preview combination
 
@@ -13,7 +22,7 @@ Adapter: `maverick-hosted-tool-loop==35`
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `44` (revision `43` suspended) |
+| Immutable profile revision | `45` (revision `44` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |

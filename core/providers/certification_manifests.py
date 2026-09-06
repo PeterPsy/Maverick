@@ -36,6 +36,17 @@ class CertificationSuiteManifest:
 
 
 _SHARED_FIXTURE_TESTS = (
+    "tests.unit.api.test_provider_execution_families",
+    "tests.unit.providers.test_agentic_lineage_admission",
+    "tests.unit.providers.test_gemini_cli_native",
+    "tests.unit.providers.test_gemini_cli_sync_runtime",
+    "tests.unit.providers.test_hosted_text_profiles",
+    "tests.unit.providers.test_maverick_agent_onboarding",
+    "tests.unit.providers.test_maverick_agent_runtime_composition",
+    "tests.unit.providers.test_native_agent_catalog_admission",
+    "tests.unit.providers.test_native_agent_framework",
+    "tests.unit.providers.test_native_runtime_identity",
+    "tests.unit.providers.test_plain_hosted_text",
     "tests.unit.api.test_runtime_context_capability_preflight",
     "tests.unit.api.test_runtime_message_steering",
     "tests.unit.apps.test_runtime_request_security_boundary",
@@ -137,11 +148,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="39",
+        suite_version="40",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-04-r39-p4-typed-result-classification-tcb29"
+            "2026-09-06-r40-p6-exact-target-tcb30"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

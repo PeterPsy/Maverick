@@ -1038,6 +1038,11 @@ remote profile beyond the contained preview.
 
 ## Consequences
 
+The P6 certification implementation and its explicit distinction between
+source checkpoints and release evidence are tracked in
+`docs/architecture/agentic_certification_p6.md`. Candidate revision changes do
+not alter the existing Codex artifact or grant remote runtime authority.
+
 - Codex remains supported, but becomes one adapter with an optional local
   process lifecycle rather than a generic runtime special case.
 - Hosted models can become complete Maverick runtimes without owning platform

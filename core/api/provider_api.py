@@ -519,6 +519,7 @@ def workspace_provider_status(
     status = resolve_workspace_provider_status(
         state.provider_store,
         workspace_id=workspace_id,
+        registry=getattr(state, "provider_registry", None),
         refresh_model_catalog=refresh_model_catalog,
     )
     active_provider = None if status.active_provider is None else provider_payload(status.active_provider)

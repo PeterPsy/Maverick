@@ -617,7 +617,11 @@ def handle_app_backend(
         raise
     provider_id = None
     try:
-        provider, _selection = resolve_provider_for_workspace(state.provider_store, workspace_id=workspace_id)
+        provider, _selection = resolve_provider_for_workspace(
+            state.provider_store,
+            workspace_id=workspace_id,
+            registry=getattr(state, "provider_registry", None),
+        )
         provider_id = provider.provider_id
     except ProviderError:
         provider_id = None

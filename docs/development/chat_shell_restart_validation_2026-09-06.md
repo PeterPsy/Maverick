@@ -93,3 +93,48 @@ The existing mobile utility-panel browser fixture now supplies the runtime
 engine role and runtime-backend kind already required by the provider selector.
 The fixture previously left the model button disabled; no production provider
 eligibility check was relaxed to make the browser test pass.
+
+## Subsequent startup bottleneck investigation
+
+After the user's confirmation that project labels still fail, access logs showed
+repeated client cancellations of initial Chat/backend and provider-setup reads,
+at intervals consistent with the SDK's 15-second request deadline. An occasional
+expired frame session also went through the existing authorization refresh path.
+These observations do not justify weakening authentication or lengthening the
+timeout to conceal expensive server work.
+
+Profiling isolated copies of the real JSON provider collections identified an
+unnecessary catalog reconciliation in ordinary reads. Both
+`workspace_provider_status` and app backend metadata resolution omitted the
+already initialized `PlatformState.provider_registry`. Each omission rebuilt a
+registry and repeated adoption/reconciliation of the same native catalog.
+They now pass the existing registry through the existing resolver API. Fresh
+catalog discovery, reconciliation after a catalog change, explicit refresh, and
+all certificate/admission checks remain in that resolver; no response cache or
+new certification authority was introduced.
+
+Measured on the same host (diagnostic observations, not latency guarantees):
+
+| Measurement | Before | Registry reuse |
+| --- | ---: | ---: |
+| Provider projection on disposable live-metadata JSON copies, under cProfile | 3.55 s | 1.90 s |
+| JSON collection reads in that projection | 862 | 281 |
+| Disposable browser cold pin read | 5.91 s | 1.69 s |
+| Disposable browser warm pin read | 8.82 s | 1.85 s |
+| Disposable browser cold provider setup | 6.43 s | 2.46 s |
+| Disposable browser warm provider setup | 7.86 s | 2.66 s |
+
+The real built UI again displayed all fixture pins and the named project after
+cold and service-worker-controlled warm loads. The Core change requires a
+backend restart before the real-device project labels can be rechecked. This is
+a verified startup bottleneck fix, not yet confirmation that the user's project
+label symptom is resolved. WebKit testing is unavailable on this host because
+the downloaded fallback browser lacks compatible system libraries; the browser
+measurements above are Chromium results.
+
+Startup-fix verification: 408 provider tests and 333 API tests passed, including
+the new registry-identity regressions for app backend metadata, ordinary status,
+and explicit catalog refresh. The focused app-mount/provider suite passed 63
+tests. Unused-import and whitespace checks passed. Codex revision, artifact
+digest, operator default, new-pin eligibility, and shared evidence expiry were
+rechecked using only in-memory copies and remain unchanged.

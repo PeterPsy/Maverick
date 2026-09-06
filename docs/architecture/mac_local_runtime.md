@@ -573,3 +573,10 @@ Signed-to-signed updates require compatible designated requirements in both
 directions. Symlink/unrelated targets and unknown signing transitions fail closed.
 Fourteen Python tests cover updater/signing policy (Darwin swap test skipped on
 Linux). Mac build, signing, update and physical input acceptance remain pending.
+
+Run `34031045783` passed 107 Swift and 14 updater tests, release and real app
+signature verification. It stopped before updating the installed app because a
+disposable signing fixture tried to copy protected system-file metadata. The
+fixture now copies only bytes and executable mode; a regression raises the Python
+suite to 15 tests. Panel presentation explicitly stays on MainActor. Update and
+physical acceptance remain pending; no OS protection has been relaxed.

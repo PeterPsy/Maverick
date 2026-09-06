@@ -352,3 +352,11 @@ prevent silent replays and overlapping turns. Tests cover these contracts and
 the bundled-runtime smoke admits a separate empty-tool thread without account
 credentials or an actual model turn. User confirmed the app is closed for v9
 installation after tests; real same-image comparison remains pending.
+
+Install run `34023421228` passed all 45 Swift tests with zero failures, release
+compilation and credential-free admission of both Codex threads. It installed
+`d50db13` and requested desktop launch at 09:05:54 UTC on 2026-09-06; setup shows
+`d50db13 · confronto immagine v9`. The next physical gate is a fresh observation
+followed by **Diagnostica immagine → Test allegato diretto**, separate consent
+and inspection of the native result before Stop/new turn clears it. No real
+provider vision result is inferred from this successful installation.

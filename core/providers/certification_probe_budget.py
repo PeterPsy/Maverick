@@ -1,9 +1,13 @@
 """Operator opt-in and conservative, non-refundable live-probe reservations."""
 
+import asyncio
+import hashlib
 import json
 import os
 from contextlib import aclosing
+from pathlib import Path
 
+from core.providers.certification_budget_ledger import CertificationBudgetLedger
 from core.providers.certification_target import builtin_api_certification_profile
 from core.providers.errors import CapabilityCertificateError
 
@@ -27,6 +31,14 @@ class CertificationProbeTransport:
         if self.endpoint != publication.provider_config.endpoint_url:
             raise CapabilityCertificateError("certification_target_mismatch")
         self.transport = transport
+        try:
+            self.ledger = CertificationBudgetLedger(
+                Path(env["MAVERICK_CERTIFICATION_BUDGET_LEDGER"]),
+                policy_digest=env["MAVERICK_CERTIFICATION_BUDGET_POLICY_DIGEST"],
+            )
+            self.run_id = env["MAVERICK_CERTIFICATION_RUN_NONCE"]
+        except KeyError as error:
+            raise CapabilityCertificateError("certification_budget_ledger_required") from error
         self.provider_id = provider_id
         self.profile = builtin_api_certification_profile(provider_id)
         self.pricing = publication.provider_config.token_cost_policy
@@ -40,7 +52,8 @@ class CertificationProbeTransport:
     async def stream(self, *, payload, credential):
         # One token per serialized byte is deliberately more conservative than
         # the ordinary estimated bytes/token rate, and includes schemas/history.
-        input_ceiling = len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")) + 64
+        encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        input_ceiling = len(encoded) + 64
         if self.provider_id == "google-ai-studio" and payload.get("previous_interaction_id"):
             # Stateful Interactions can bill retained history which is not in
             # this request's serialized bytes. Include all previously reserved
@@ -55,10 +68,25 @@ class CertificationProbeTransport:
         reservation = self.pricing.usage_cost_microusd(input_ceiling, output_ceiling)
         if self.reserved + reservation > self.maximum:
             raise CapabilityCertificateError("certification_probe_budget_exceeded")
+        while delay := self.ledger.reserve(
+            provider_id=self.provider_id, cost_microusd=reservation,
+            payload_digest=hashlib.sha256(encoded).hexdigest(), run_id=self.run_id,
+        ):
+            # This waits for a pre-egress quota slot, never retries a provider call.
+            await asyncio.sleep(delay)
+            if self.requests >= self.max_requests or self.reserved + reservation > self.maximum:
+                raise CapabilityCertificateError("certification_probe_request_limit")
         self.reserved += reservation
         self.requests += 1
         self.retained_context_ceiling = input_ceiling + output_ceiling
         # Ambiguous/failed requests retain their full charge; never retry/refund.
-        async with aclosing(self.transport.stream(payload=payload, credential=credential)) as events:
-            async for event in events:
-                yield event
+        try:
+            async with aclosing(self.transport.stream(payload=payload, credential=credential)) as events:
+                async for event in events:
+                    if event.get("error") or event.get("event_type", event.get("type")) == "error":
+                        self.ledger.halt(self.provider_id, reason="provider_stream_error")
+                    yield event
+        except Exception:
+            # Keep ambiguous charges and prevent a new process from silently retrying.
+            self.ledger.halt(self.provider_id, reason="provider_transport_error")
+            raise

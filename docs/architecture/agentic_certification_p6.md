@@ -8,6 +8,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
+The subsequent aggregate-budget work is not covered by that historical freeze;
+it requires new exact-source verification before signing or release.
+
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`, revision read on 2026-09-06 (SHA-256
 `482566795fa8ac3737c1a7c0c0413aaa62ff380bd19bc2fd724027a42ee715de`).
@@ -22,6 +25,39 @@ behavioral evidence, independent security review, certificate publication,
 disposable full-workspace canary, and an explicit release decision. A passed
 fixture or a subprocess exit code alone is not a release approval. Synthetic
 protocol probes are not natural behavioral conformance.
+
+## Operator budget and remaining full-path work
+
+The operator's updated authorization on 2026-09-06 supersedes the proposed
+100 USD allowance: **OpenRouter at most 5 USD total; Google free tier only**.
+The P6 worker defaults to a 4.50 USD non-refundable reservation ceiling, leaving
+0.50 USD headroom, and 200 OpenRouter requests; Google has 80 generation
+requests and at least 15 seconds between reservations. These are conservative
+job limits, not claims about the remaining account balance or Google quota.
+There is no automatic top-up, billing-tier change, quota reset, or paid fallback.
+Google's project tier must be confirmed operationally; a local `free_tier`
+policy is not proof of the provider's billing configuration.
+
+Every live protocol transport must open the same private operator-owned SQLite
+ledger with its expected policy digest. It reserves before egress in a durable
+transaction shared across workers and process restarts; failed, ambiguous and
+cancelled requests are not refunded. Pacing waits occur before transport, not
+as provider retries. Transport/stream failures halt that provider durably.
+Only payload digests, run identifiers, ceilings and reservation amounts are
+retained, never credentials or request bodies. The ledger must remain outside
+tenant/source mounts. Its authority is local spend/quota authority, **not**
+workspace attestation, natural evidence, signer trust or a release permit.
+
+Independent review found that the current session/profile/queue/dispatch chain
+drops authoritative workspace context; flipping the hard availability flag
+alone cannot enable it. A laboratory run of the real hosted loop is not a
+substitute for the full API-to-dispatch canary. The correct full-path fix also
+changes shared queue/handoff files declared in Codex's artifact. Such a change
+requires a separate candidate deployment and explicitly reviewed native
+revision/cutover, not exclusions from artifact hashing or global callbacks to
+smuggle authority. The current Codex 14 deployment must remain untouched until
+its successor is actually verified and approved. Native Gemini CLI still needs
+its own approved connection/artifact path, not an API model certificate.
 
 Certification is per exact API profile (including model, provider config,
 endpoint/routing, recipe, and adapter), or per native runtime/provider

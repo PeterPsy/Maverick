@@ -228,6 +228,44 @@ into a previous run. API certificates persist the signed target in both
 certificate and evidence, and revalidate it during projection, admission and
 authority refresh; a new profile revision requires its own certification.
 
+### Aggregate P6 spend and quota authority
+
+The operator reduced the entire job to **5 USD maximum on OpenRouter and only
+Google's free tier**. No earlier 100 USD example authorizes that spending.
+Before live collection, create exactly one ledger in an operator-owned `0700`
+directory outside all source checkouts and tenant mounts:
+
+```bash
+python3 scripts/manage_agentic_certification_budget.py \
+  --ledger /private/operator-job/budget.sqlite3 create \
+  --authorization-ref <sha256-of-recorded-operator-authorization> \
+  --confirmation google-project-free-tier-confirmed
+```
+
+Defaults reserve at most 4.50 USD and 200 OpenRouter requests, and 80 Google
+generation requests paced at least 15 seconds apart. The Google zero-dollar
+column expresses the operator-confirmed project tier, not a billing API
+observation; list-price exposure is reported separately. Quota errors stop the
+provider, with no retry storm or upgrade. Check the actual account/project
+configuration before egress and retain the redaction-safe observations. The
+job must verify the pinned endpoint price is covered by the reservation policy;
+the ledger alone cannot prove the provider will honor a stale price estimate.
+OpenRouter documents [key credit observations](https://openrouter.ai/docs/api_reference/limits)
+and [provider-side price caps](https://openrouter.ai/docs/guides/routing/provider-selection).
+Google's [active rate limits](https://ai.google.dev/gemini-api/docs/rate-limits)
+are project-dependent, not guaranteed by the local pacing default.
+
+Pass both `--budget-ledger` and `--budget-policy-digest` to every live
+`run_agentic_certification.py collect`, in addition to the per-probe cost bound.
+Direct probe workers require `MAVERICK_CERTIFICATION_BUDGET_LEDGER`,
+`MAVERICK_CERTIFICATION_BUDGET_POLICY_DIGEST`, and a nonempty
+`MAVERICK_CERTIFICATION_RUN_NONCE`. Never create a new ledger for a retry or
+provider change: that would discard aggregate spend. `status --policy-digest …`
+reads reservations; `halt --policy-digest … --provider openrouter` permanently
+stops that provider for the job. No reset/refund/resume operation exists.
+These commands do not retrieve credentials, classify a workspace, approve
+natural traces, issue certificates, or activate a runtime.
+
 Before any live schema-7 certificate/evidence/profile/binding write, deploy the
 reviewed source, restart the backend and verify health. Do not let a new writer
 publish these records while an older in-memory reader is serving them. Offline

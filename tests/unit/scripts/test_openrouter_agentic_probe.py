@@ -19,6 +19,7 @@ from core.providers.agentic_protocol import (
     HOSTED_FINALIZATION_INSTRUCTION,
 )
 from scripts import run_openrouter_agentic_probe as probe
+from tests.support.certification_budget import fixture_budget_environment
 
 
 class _ProbeClient:
@@ -74,6 +75,7 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
         with mock.patch.dict(
             "os.environ",
             {
+                **fixture_budget_environment(self),
                 "MAVERICK_OPENROUTER_CERTIFICATION_API_KEY": "synthetic-key",
                 "MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS": "0",
                 "MAVERICK_CERTIFICATION_ALLOW_LIVE": "1",

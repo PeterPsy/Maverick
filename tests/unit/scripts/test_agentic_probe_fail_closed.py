@@ -14,6 +14,7 @@ from core.providers.agentic_protocol import (
 )
 from core.providers.google_interactions_probe import probe_google_interactions
 from tests.support.certification_evidence import fixture_google_catalog_snapshot
+from tests.support.certification_budget import fixture_budget_environment
 from scripts import run_openrouter_agentic_probe as openrouter
 
 
@@ -84,6 +85,7 @@ class AgenticProbeFailClosedTest(unittest.TestCase):
                 )).succeeded
         output = StringIO()
         with patch.dict("os.environ", {
+            **fixture_budget_environment(self),
             "MAVERICK_OPENROUTER_CERTIFICATION_API_KEY": "synthetic",
             "MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS": "0",
                 "MAVERICK_CERTIFICATION_ALLOW_LIVE": "1",

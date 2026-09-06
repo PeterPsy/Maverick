@@ -9,6 +9,7 @@ from unittest import TestCase, mock
 
 from core.providers.certification_live_receipt import validate_live_probe_receipt
 from core.providers.certification_target import builtin_api_certification_target
+from tests.support.certification_budget import fixture_budget_environment
 from core.providers.errors import CapabilityCertificateError
 from core.providers.google_interactions_models import GoogleInteractionsProtocolError
 from core.providers.google_interactions_probe_contract import PROBE_TOOL_NAME
@@ -54,6 +55,7 @@ class GoogleProbeCatalogReceiptTest(TestCase):
 
         output = StringIO()
         with mock.patch.dict("os.environ", {
+            **fixture_budget_environment(self),
             "MAVERICK_GOOGLE_CERTIFICATION_API_KEY": "synthetic-secret",
             "MAVERICK_CERTIFICATION_ALLOW_LIVE": "1",
             "MAVERICK_CERTIFICATION_MAX_COST_MICROUSD": "10000000",

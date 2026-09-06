@@ -20,6 +20,7 @@ from core.providers.certification_pipeline import (
 )
 from core.providers.certification_records import collection_from_json, collection_to_json
 from core.providers.certification_live_receipt import decode_certification_json
+from core.providers.certification_budget_ledger import CertificationBudgetLedger
 
 
 def main(argv=None) -> int:
@@ -32,6 +33,8 @@ def main(argv=None) -> int:
     collect.add_argument("--evidence-ref", action="append", required=True)
     collect.add_argument("--live-probe", action="store_true", help="Explicit operator opt-in; default is fixture-only.")
     collect.add_argument("--max-cost-microusd", type=int)
+    collect.add_argument("--budget-ledger", type=Path)
+    collect.add_argument("--budget-policy-digest")
     sign = phases.add_parser("sign")
     sign.add_argument("--collection-file", type=Path, required=True)
     sign.add_argument("--behavioral-evidence-file", type=Path, required=True)
@@ -47,9 +50,18 @@ def main(argv=None) -> int:
     if args.phase == "collect":
         if args.live_probe and (args.max_cost_microusd is None or not 0 < args.max_cost_microusd <= 100_000_000):
             parser.error("Live collection requires a positive bounded --max-cost-microusd.")
+        if args.live_probe:
+            if args.budget_ledger is None or not args.budget_policy_digest:
+                parser.error("Live collection requires the shared --budget-ledger and --budget-policy-digest.")
+            if args.budget_ledger.resolve().is_relative_to(root.resolve()):
+                parser.error("The operator budget ledger must not be mounted in the source checkout.")
+            CertificationBudgetLedger(args.budget_ledger, policy_digest=args.budget_policy_digest)
         environment = dict(os.environ)
         environment["MAVERICK_CERTIFICATION_ALLOW_LIVE"] = "1" if args.live_probe else "0"
         environment["MAVERICK_CERTIFICATION_MAX_COST_MICROUSD"] = str(args.max_cost_microusd or 0)
+        if args.live_probe:
+            environment["MAVERICK_CERTIFICATION_BUDGET_LEDGER"] = str(args.budget_ledger)
+            environment["MAVERICK_CERTIFICATION_BUDGET_POLICY_DIGEST"] = args.budget_policy_digest
         run = execute_certification_suite(
             cwd=root, suite_id=args.suite_id, suite_version=args.suite_version,
             adapter_artifact_digest=args.adapter_artifact_digest,

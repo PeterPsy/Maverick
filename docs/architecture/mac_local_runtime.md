@@ -708,3 +708,22 @@ Drag/drop, arbitrary filesystem/shell/clipboard, closed-app launching, security
 UI, background scheduling and full-desktop/any-app parity remain outside scope.
 See Apple repo `docs/maverick-macos-direct-runtime.md` for the exact capabilities,
 limits, evidence and primary Apple API references.
+
+
+V18 final validation/install: approved GitHub run `34039092985` passed 169 Swift
+(31 added) and 15 Python tests, release, credential-free admission/image wire and
+the stable Apple Development signing/identity fixture. The installer verified
+bidirectional continuity with the actual installed app, atomically updated the
+same path without persistent backup and requested launch at **14:27:05 UTC on
+2026-09-06**: **4abebf6 · controllo esteso v18**. Designated requirement SHA256
+remains `99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+Artifact-only `34038873606` also passed 169 Swift tests; no installation there.
+Linux updater/image wire and Core unused-import checks passed. Native scene
+limits include Apple's standard owned context-menu level (not arbitrary layer
+25); higher overlays and foreign PIDs remain excluded. Long native task approvals
+show complete text in a bounded read-only scroll area. Every input path rechecks
+Secure Event Input after asynchronous scene reads, immediately before posting.
+No credential/OS permission reset or Core implementation change was made.
+Physical Calendar popup/create/edit/task-mode acceptance is still pending, as is
+multi-display/alternate-keyboard-layout validation; fixed virtual-key shortcuts
+are not a claim of universal layout compatibility.

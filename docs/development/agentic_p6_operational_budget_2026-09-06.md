@@ -40,6 +40,8 @@ list-price exposure separately; its zero paid reservation is not billing proof.
 - Cross-worker pacing before egress, not a provider retry. Stream/transport
   failures durably stop the provider; cancellation retains the reservation
   without preventing an independently authorized cancellation/next-turn test.
+  Follow-up regression covers nested Google terminal failure statuses and
+  OpenRouter `finish_reason: error`, not only a top-level SSE error field.
 - Both direct protocol probes require the ledger. Live collection validates
   and forwards its path/digest before running the costly fixture step.
 - The P6 budget CLI rejects an OpenRouter ceiling over USD 5 or Google pacing
@@ -60,6 +62,7 @@ python3 -W error::ResourceWarning -m unittest \
 Result: **28 tests, zero failures/errors**. Expected argparse rejection messages
 are negative tests. The unused-import check and scoped whitespace check pass.
 This is focused worker evidence, not a rerun of the 635/644 canonical suites.
+The nested-terminal follow-up passed the 16 ledger/transport tests separately.
 
 ## Public catalog diagnostic, not authenticated live evidence
 
@@ -79,6 +82,14 @@ Raw public response retained in the private job as
 This does not establish authenticated routing/ZDR, remaining credit, a provider
 generation, or a successful protocol probe. Pricing observations can expire;
 the worker still needs an effective provider-side price fence before spending.
+
+Google's public Interactions OpenAPI was also fetched without credentials at
+`2026-09-06T14:05:49.868349Z`: API version `v1`, revision `0`, with the expected
+Interactions operation path. Its canonical JSON is retained as
+`google-public-interactions-openapi.json`, SHA-256
+`9fac0a4a618960a2740a1d38907b2f6bd294cdd53d851eb0bb14a578f3ca5a56`.
+This is only the public schema half of preflight, not the authenticated exact
+model observation required by the Google probe.
 
 ## Independent review and shared-worktree boundary
 

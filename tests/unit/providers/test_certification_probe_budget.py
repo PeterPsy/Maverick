@@ -84,14 +84,20 @@ class CertificationProbeBudgetTest(unittest.TestCase):
             self.run_request(budget)
 
     def test_sse_error_halts_provider_even_if_transport_exits_normally(self):
-        budget = self.make()
-        async def stream(**kwargs):
-            yield {"error": {"code": "quota_exceeded"}}
-        budget.transport.stream = stream
-        self.run_request(budget)
-        self.assertEqual(budget.ledger.status()["google-ai-studio"]["halt_reason"], "provider_stream_error")
-        with self.assertRaisesRegex(CapabilityCertificateError, "budget_halted"):
-            self.run_request(budget)
+        for event in (
+            {"error": {"code": "quota_exceeded"}},
+            {"event_type": "interaction.complete", "interaction": {"status": "failed"}},
+            {"choices": [{"finish_reason": "error"}]},
+        ):
+            with self.subTest(event=event):
+                budget = self.make()
+                async def stream(**kwargs):
+                    yield event
+                budget.transport.stream = stream
+                self.run_request(budget)
+                self.assertEqual(budget.ledger.status()["google-ai-studio"]["halt_reason"], "provider_stream_error")
+                with self.assertRaisesRegex(CapabilityCertificateError, "budget_halted"):
+                    self.run_request(budget)
 
     def test_cancellation_keeps_reservation_without_halting_unrelated_scenarios(self):
         budget = self.make()

@@ -83,10 +83,22 @@ class CertificationProbeTransport:
         try:
             async with aclosing(self.transport.stream(payload=payload, credential=credential)) as events:
                 async for event in events:
-                    if event.get("error") or event.get("event_type", event.get("type")) == "error":
+                    if _provider_failure(event):
                         self.ledger.halt(self.provider_id, reason="provider_stream_error")
                     yield event
         except Exception:
             # Keep ambiguous charges and prevent a new process from silently retrying.
             self.ledger.halt(self.provider_id, reason="provider_transport_error")
             raise
+
+
+def _provider_failure(event):
+    if event.get("error") or event.get("event_type", event.get("type")) == "error":
+        return True
+    interaction = event.get("interaction")
+    if isinstance(interaction, dict) and interaction.get("status") in {"failed", "incomplete", "budget_exceeded"}:
+        return True
+    choices = event.get("choices")
+    return isinstance(choices, list) and any(
+        isinstance(choice, dict) and choice.get("finish_reason") == "error" for choice in choices
+    )

@@ -402,3 +402,33 @@ launch at 09:24:42 UTC on 2026-09-06; native setup shows
 `eb42d80 · immagine nel turno v10`. The Core unused-import check passed. The
 remaining immediate physical gate is normal-chat image interpretation without
 invoking the separate direct-attachment comparison.
+
+### V11 native text-focus evidence and destination binding
+
+The user confirmed successful normal-chat observation and approved search-field
+click plus visual verification on v10. Subsequent search typing stopped before
+input because the model could not determine focus from the small caret image.
+V11 addresses that uncertainty with native control metadata, not another image
+upload or instructions to ignore uncertain focus.
+
+Each observation samples the selected foreground app's focused AX control after
+capture on a serial background reader. A bounded static `native_text_focus`
+classification (`search`, `text_area`, `text_field`, `unknown`) accompanies the
+existing metadata and appears in native diagnostics. Verified search requires
+Apple's search-field subrole, editability, nonsecure input, matching owner PID,
+focused/containing AX window identity, captured-window geometry and control
+containment. No field value, selected text, title or AX tree is read. Unknown
+metadata does not fail the screenshot; it prohibits typing. Stop/generation,
+session and foreground checks fence the asynchronous read.
+
+Typing now requires a declared `target_kind`, displayed in the local consent.
+After approval the native runtime rereads the target and requires the same AX
+field/window, PID and declared/observed/current kind, in addition to the existing
+observation lease, geometry, secure-input and foreground checks. An unverified
+or changed destination blocks text (`MC-TOOL-28/29`), without restoring focus,
+clipboard/AXValue fallback or retry. Search-only intent must never be mapped to
+a note body or generic field. Target references remain in native RAM and clear
+on Stop, new observation and completed mutation; images still use the v10
+same-turn Mac → OpenAI route. Twelve new Swift tests cover the policy and safe
+rejection contracts. User-approved Mac build/install and the physical search
+typing check remain pending.

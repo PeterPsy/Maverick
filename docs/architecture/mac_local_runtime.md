@@ -893,3 +893,10 @@ Input destination checks and failure blocking remain; no automatic focus repair
 for typing/clicks. No Core runtime, image route, Calendar data, credentials or
 updater/signing change. Deterministic helper/guidance tests do not operate the
 real desktop; signed-delivery and physical acceptance are recorded separately.
+
+V22 checkpoint at **21:24 UTC on 2026-09-06**: Apple source **1dbe182** is
+published; Linux's 18 Python tests passed (one Darwin-only skip), Core unused
+imports and diff checks passed. Eight new Swift tests await Mac execution.
+Approved install run **34060662672** is still `pending`; no native test or
+installation result is claimed. Continue monitoring that run rather than
+creating a duplicate. The last verified installed app remains v21 / **94a52b5**.

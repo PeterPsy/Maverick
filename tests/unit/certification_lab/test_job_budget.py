@@ -1,6 +1,8 @@
 import asyncio
 from dataclasses import replace
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -62,6 +64,20 @@ class LabJobBudgetTest(unittest.TestCase):
             return [item async for item in (fence or self.fence()).stream(payload={'model': 'model', 'max_tokens': 2048}, credential=None)]
         return asyncio.run(run())
 
+    def revoke_from_other_process(self):
+        # Do not rely on the revoking worker invalidating an in-process cache.
+        # The last-mile caller must see another process's committed CAS write.
+        code = '''from pathlib import Path
+from core.certification_lab.permit_store import LabPermitStore
+from core.certification_lab.trust import LabPermitTrust
+import sys
+store=LabPermitStore(Path(sys.argv[1]), trust=LabPermitTrust(Path(sys.argv[2]), 'offline-lab'))
+store.revoke('offline-permit', expected_revision=1)
+'''
+        result = subprocess.run([sys.executable, '-B', '-c', code, str(self.permits.path), str(self.permits.trust.path)],
+                                capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+
     def test_all_generation_phases_and_next_turns_share_durable_budget_without_probe_round_limit(self):
         for _phase in ('exploration', 'finalization', 'recovery', 'compaction', 'next-turn', 'restart'):
             self.request()
@@ -87,7 +103,7 @@ class LabJobBudgetTest(unittest.TestCase):
                 return 0.01
             return original(**kwargs)
         async def revoke(_seconds):
-            self.permits.revoke(self.ref.permit_id, expected_revision=1)
+            self.revoke_from_other_process()
         with patch.object(self.ledger, 'reserve', side_effect=paced), patch('core.providers.certification_job_budget.asyncio.sleep', side_effect=revoke):
             with self.assertRaisesRegex(LabAuthorizationError, 'revoked'):
                 self.request()
@@ -98,7 +114,7 @@ class LabJobBudgetTest(unittest.TestCase):
         original = self.ledger.reserve
         def revoke_after_reserve(**kwargs):
             result = original(**kwargs)
-            self.permits.revoke(self.ref.permit_id, expected_revision=1)
+            self.revoke_from_other_process()
             return result
         with patch.object(self.ledger, 'reserve', side_effect=revoke_after_reserve):
             with self.assertRaisesRegex(LabAuthorizationError, 'revoked'):
@@ -107,7 +123,7 @@ class LabJobBudgetTest(unittest.TestCase):
         self.assertEqual(self.ledger.status()['openrouter']['requests'], 1)
 
     def test_revocation_during_stream_stops_delivery_and_later_generations(self):
-        self.peer.after_first = lambda: self.permits.revoke(self.ref.permit_id, expected_revision=1)
+        self.peer.after_first = self.revoke_from_other_process
         with self.assertRaisesRegex(LabAuthorizationError, 'revoked'):
             self.request()
         self.assertTrue(self.peer.closed)

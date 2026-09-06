@@ -99,3 +99,41 @@ a renewed ownership lease. Descendants are not executable even if named until a
 parent-liveness/recovery protocol exists. The worker is a library entrypoint, not
 an operator live-launch CLI or a general multi-worker scheduler. These limitations
 are fail-closed and must not be presented as completed natural/release scenarios.
+
+## Recorded offline verification
+
+Exact full-suite source: `cc1e2d5f4745a9d11051f88e4e25de7d5355093e`, with a clean
+checkout before and after both sequential fixture commands and unchanged TCB.
+`MAVERICK_CERTIFICATION_ALLOW_LIVE=0`; only `fixture_contract` steps were run.
+
+| Check | Tests | Failures / errors / skips |
+| --- | ---: | --- |
+| Exact Google suite-46 fixture command | 699 | 0 / 0 / 0 |
+| Exact OpenRouter suite-46 fixture command | 710 | 0 / 0 / 0 |
+| Additional native rollout, queue, API, cleanup and historical pin regressions | 95 | 0 / 0 / 0 |
+| Settings frontend (plus separate TypeScript check) | 19 | 0 / 0 / 0 |
+
+Counts overlap between commands; they are not a repository-wide unique total.
+The strict fixture parser accepted both complete retained stderr streams and
+the extra regressions, including its uncaught-background-failure checks.
+Expanded commands, timings, output hashes and verified receipts are retained at
+`/var/tmp/maverick/maverick-p6-lab-verified-uiry0pld/summary.json`, SHA-256
+`619a9f5cf20f2ce19c0bc374dc1875e9d634546c581a44ba1387ef23197dfde8`.
+The adjacent `extra-summary.json` has SHA-256
+`e08903cb1c7f36109052cc3638016a5e22f39b63f4e313898d44265b23b3c607`.
+
+A subsequent **test-only** strengthening revokes the permit from another process
+during pacing, after reservation and during streaming; all six job-budget tests
+pass. Its retained `cross-process-budget.stderr` SHA-256 is
+`fcd935949acd05d0565c171ebd84025f8b7b30df26b3180e31952c7905e737c3`.
+The matrix tables were also corrected to manifest 36 / seven dependency
+contracts. These final test/documentation changes do not alter runtime bytes or
+served assets. The full-suite receipts above name the exact earlier source,
+not certification evidence for a later commit or the live laboratory.
+
+TCB structure: `149f897cc921d7abbfbf96b5cb9684a17aaf1933a3d4923292a7cb2c4fb4549e`.
+TCB live: `00ad85af941e1ea16ca88cbb06d7988fc932040863428485814e232f22e29a30`.
+Unused-import and whitespace checks passed. Final read-only verification
+confirmed the active Settings draft's original hashes and active Codex revision
+14/digest `33b483337b160ba8281b3ad17176030905ee0b83f2067d5eee911ef6517eab55`
+were unchanged. The full repository fast/pre-merge suite was not run.

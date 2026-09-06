@@ -39,6 +39,12 @@ requires local confirmation in v1 (not a model-authored sensitivity label).
 Stopping invalidates outstanding observations/approvals before killing Codex.
 There is no automatic replay after an ambiguous process failure.
 
+V10 delivers observation JPEGs as same-turn Codex image attachments using
+`turn/steer` before releasing a text-only tool response. Images are not duplicated
+in the tool output. The native pipeline and pending admission remain serialized,
+generation-fenced and bound to the active thread/turn; no second model turn or
+Ubuntu image relay is introduced.
+
 Codex uses a dedicated private HOME, fixed OpenAI provider, no inherited MCP,
 plugins, hooks or project instructions, disabled shell tools and code-mode,
 read-only sandbox and fail-closed approval responses. Only the pinned bundled
@@ -360,3 +366,31 @@ compilation and credential-free admission of both Codex threads. It installed
 followed by **Diagnostica immagine → Test allegato diretto**, separate consent
 and inspection of the native result before Stop/new turn clears it. No real
 provider vision result is inferred from this successful installation.
+
+### V10 same-turn observation attachment
+
+The v9 physical comparison successfully read the retained JPEG as a direct
+attachment, while normal tool-result delivery remained unreadable to the model.
+This demonstrates a route/context difference, not its exact internal cause.
+V10 intercepts successful native observation results and submits their exact
+JPEG once through `turn/steer`, using `expectedTurnId` for the active normal
+thread/turn. The tool stays pending until matching local admission, then returns
+metadata only. The model continues the original user request with the attached
+observation. No extra capture, encoding, thread, automatic diagnostic comparison
+or fallback resend is added. Normal provider history/context behavior is unchanged;
+this is elimination of duplicate image representations, not a promise that later
+context is never retransmitted by the provider.
+
+Native delivery is serialized through admission, with bounded duplicate-call
+tracking, active-turn checks and Stop generation fences. Failed/uncertain
+admission stops the runtime (`MC-IMAGE-01`) rather than releasing a successful
+observation or trying another route. Existing local confirmations and target-app
+authority remain unchanged. Diagnostics report attachment admission, not an
+image-bearing tool echo; neither receipt alone establishes model vision.
+
+Ten new Swift tests cover the delivery contract. A build-integrated loopback
+fake-provider probe, isolated from real credentials/screenshots, verifies the
+pinned binary's stale-turn rejection and that the next request contains exactly
+one synthetic user-image attachment and no image in the tool result. Linux
+Codex 0.153.4 passed this wire probe. Mac tests/release and normal-chat physical
+acceptance remain pending; the user authorized installation with the app closed.

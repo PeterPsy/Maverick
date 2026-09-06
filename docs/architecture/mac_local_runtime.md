@@ -727,3 +727,46 @@ No credential/OS permission reset or Core implementation change was made.
 Physical Calendar popup/create/edit/task-mode acceptance is still pending, as is
 multi-display/alternate-keyboard-layout validation; fixed virtual-key shortcuts
 are not a claim of universal layout compatibility.
+
+### v19 compound focus compatibility (2026-09-06)
+
+Physical v18 Calendar acceptance stopped after the Search click with MC-TOOL-18,
+before typing or event creation. The screenshot showed a highlighted field but
+did not expose its AX role or prove a timing cause. This is not evidence of
+missing permissions or acceptance of the owned-popup/event workflow.
+
+Apple-repo v19 preserves direct text-field/text-area resolution and additionally
+follows bounded explicit native focused-element links. A system-wide focused
+pointer is accepted only after checking its PID before metadata and proving a
+bounded parent path back to the app's original focus anchor. Same PID alone is
+insufficient. No window-wide child search, AXValue/title read, focus setter or
+extra click is used. Foreign/secure/cyclic paths and API errors fail closed.
+Editable combo boxes require native settable-selection-range capability, a
+non-missing/non-secure subrole and writable value; Search kind still requires
+AXSearchField, not a label guess. Observation and final input validation share
+the resolver and retain observed-scene, ownership and requested-kind checks.
+
+Read-only settling requires two consecutive matching focus readings within four
+samples and at most three 80 ms waits. It can settle unrecognized/changing focus,
+not secure/ownership/API failures; cancellation, session and task validity are
+checked around each sample. No input is retried. Full bounded diagnostics expose
+source, recognized role/subrole, selection capability and sample stability;
+unknown role strings are sanitized, and unqueried capability is explicitly
+`not_queried`. Provider guidance requests this evidence on failure.
+
+Twenty-one new deterministic tests use synthetic AX data and no desktop input.
+The 190-test Swift suite passed artifact-only run `34040821191`; final source
+`1bb3b8b` also passed artifact-only run `34041204216`. Linux updater/image-wire
+and Core unused-import checks passed. Signed update and physical Calendar
+create/edit/verify acceptance are tracked below; no Core implementation,
+credential, OS-permission, screenshot-routing or updater-policy change was made.
+
+V19 final install run `34041481359` passed 190 Swift tests, the 15-test Python
+updater gate, release, credential-free Codex/image wire and stable signing.
+The real installed app passed bidirectional identity continuity; designated
+requirement SHA256 remains
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+The same path was updated without persistent backup and launch requested at
+**15:13:37 UTC on 2026-09-06**, build **1bb3b8b · focus nativo v19**. Physical
+Calendar search/create/edit/verify acceptance remains pending; build success is
+not evidence that the user's precise AX focus case has been resolved.

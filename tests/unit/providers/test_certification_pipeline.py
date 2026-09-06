@@ -191,31 +191,31 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "b73388015a4ed86f6e89aa80d90bffbe1a854097bf5e7b7e7cd86c5642db7960"
+                "d03df22e2359c4d103ec90120a8dd857cc2263ff854c4a08a680e7445873244d"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "c24df73367c6eba4cb00760ffcaba4d463a89d9851e55d75209cd63e99b27c5e"
+                "568cb2f984ba6068160bb12219946f1c7cb0e3d25b06c3dac88dd7a80cc4783c"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "6bf88778fcd32ab0ea10f2a37b1b45cdd1257a53ec76ee5f9c82f956f613118f",
-            "openrouter": "fe88bd41314b3cfc8c5f1473b8f88d3e4f8947d364364cf06ba4dd5f95fc5533",
+            "google-ai-studio": "baa9cace62a5d18823d7197b3068ba1eb7300d97e2fd746f72ac1ae7e35e74a5",
+            "openrouter": "2366266162a21d9a5eff6474567313118b82c6b16ef933ce8cc3faba855c8a86",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "40")
+                self.assertEqual(manifest.suite_version, "41")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-06-r40-p6-exact-target-tcb30",
+                    "2026-09-06-r41-p6-reviewed-gates-tcb31",
                 )
                 self.assertEqual(
                     manifest.digest,
@@ -229,6 +229,15 @@ class CertificationPipelineTest(unittest.TestCase):
                     manifest.steps[1].command,
                     expected_live_commands[manifest.provider_id],
                 )
+                for required in (
+                    "tests.unit.recovery.test_continuation_fork",
+                    "tests.unit.recovery.test_continuation_repair",
+                    "tests.unit.recovery.test_continuation_multihop",
+                    "tests.unit.recovery.test_continuation_native_identity",
+                    "tests.integration.cli_mcp.test_builtin_surface_effects",
+                    "tests.integration.cli_mcp.test_p6_effect_audit_delta",
+                ):
+                    self.assertIn(required, manifest.steps[0].command)
                 for step in manifest.steps:
                     self.assertEqual(
                         canonical_digest(step.command),

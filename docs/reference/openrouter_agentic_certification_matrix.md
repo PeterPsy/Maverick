@@ -1,14 +1,14 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-09-06
-Matrix revision: `2026-09-06-r40-p6-exact-target-tcb30`
+Matrix revision: `2026-09-06-r41-p6-reviewed-gates-tcb31`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==36`
+Adapter: `maverick-hosted-tool-loop==37`
 
 ## P6 candidate checkpoint
 
-Suite 40 / TCB manifest 30 / hosted adapter 36 / recipe 23 bind the P5
+Suite 41 / TCB manifest 31 / hosted adapter 37 / recipe 24 bind the P5
 executable family, native ACP lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -17,6 +17,12 @@ conformance before signing. Protocol-only success is not signable evidence. Hist
 not evidence for this candidate. No runtime flag, Codex artifact, native
 certificate, or operator binding is changed by this checkpoint.
 
+Suite 41 additionally includes generic continuation repair/multi-hop, explicit
+native identity rejection and the reviewed app-effect delta regressions. Prior
+suite-40 failures are not waived or removed; the corrected fixtures and complete
+inventory must pass on this candidate. See
+`docs/development/agentic_p6_effect_audit_2026-09-06.md`.
+
 ## Preview combination
 
 | Field | Pinned value |
@@ -24,7 +30,7 @@ certificate, or operator binding is changed by this checkpoint.
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-08-17`, with exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `44` (revision `43` suspended) |
+| Immutable profile revision | `45` (revision `44` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
@@ -112,7 +118,7 @@ Primary references:
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
-| Certified execution TCB | manifest v29 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-03-p4-builtin-effects-execution-v3`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v31 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, `tool_choice:none`, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -453,7 +459,7 @@ app references and skills on tool-less requests; tool-call and cumulative
 result-byte exhaustion rebuild an uncommitted request as finalization; and the
 profile plus Full Workspace contract require the distinct CLI, MCP,
 app-interface, and Core-capability surfaces. Built-in effect audit
-`2026-09-03-p4-builtin-effects-execution-v3` binds the reviewed Fitness Coach,
+`2026-09-06-p6-builtin-effects-reviewed-v4` binds the reviewed Fitness Coach,
 Storage, and Website Studio read-model closure updates. The immutable definition
 remains uncertified, unbound, contained, and unavailable; no live probe, signed
 run, provider completion, certificate, canary, or remote activation has been

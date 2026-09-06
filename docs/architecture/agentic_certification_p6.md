@@ -48,9 +48,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 36,
-   recipe 23, Google profile 45, OpenRouter profile 44, suite 40, and canonical
-   TCB manifest 30. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 37,
+   recipe 24, Google profile 46, OpenRouter profile 45, suite 41, and canonical
+   TCB manifest 31. The corpus includes P5 family/pinning/onboarding, native ACP
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural

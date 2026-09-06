@@ -776,3 +776,16 @@ profile revision 14 and its existing artifact digest.
   and `docs/reference/openrouter_agentic_certification_matrix.md`
 - Security posture: `docs/security/threat_model.md` and
   `docs/security/production_readiness.md`
+
+### P6 deterministic gate remediation — 2026-09-06
+
+Recovery fixtures now use independently targeted offline API authorities and
+retain a dedicated native connection rejection regression (`f29d5114`). The
+App Store/Calendar/Chat/CRM/Mail effect-audit delta was source-reviewed and
+reauthorized with executable regressions (`a09e22dd`), not blindly rehashed.
+Suite 41 adds repair/multi-hop/native and effect-delta coverage; hosted adapter
+37, recipe 24, Google/OpenRouter 46/45 and TCB 31 supersede the unreleased
+candidates. No Codex artifact, certificate, binding, release gate or credential
+is changed. Full exact-source verification is required before P6-D closes;
+P6-L/S/R and the overall P6 remain open until their actual evidence exists.
+The normative plan section 16 now records these separate closure checkpoints.

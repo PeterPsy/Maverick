@@ -61,7 +61,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "23")
+                self.assertEqual(recipe.revision, "24")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
                     "10",

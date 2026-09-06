@@ -21,7 +21,7 @@ from core.shared.tool_effects import resolve_tool_effect_class
 
 
 HOSTED_BUILTIN_APP_EFFECT_AUDIT_REVISION = (
-    "2026-09-03-p4-builtin-effects-execution-v3"
+    "2026-09-06-p6-builtin-effects-reviewed-v4"
 )
 _AUDIT_PATH = Path(__file__).with_name("hosted_builtin_app_effect_audit.json")
 _REPOSITORY_APPS_ROOT = Path(__file__).resolve().parents[2] / "apps"

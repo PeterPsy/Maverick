@@ -12,12 +12,12 @@
     },
     "app-store": {
       "cli": {
-        "descriptor_sha256": "4193b197db1b68c2142b724df72e1e198ea2ca8997c896fc941d1afe357143e8",
-        "execution_sha256": "bfd9d3e9052b2d0046eed5be3dd5c0f70b893397be43748023ca9c78619b42a3"
+        "descriptor_sha256": "9d6c0e6a7972935700e7ad8c135d00d4cf8c3dae19effe84497b8c048b7c0df1",
+        "execution_sha256": "be87d2b98b5efdcf91221f322f69534f628a71eb2b9a1bb202f68d8cfdcd8b52"
       },
       "mcp": {
-        "descriptor_sha256": "99a50d9ac0b1dfed06fd668477d99d5b3d0606d34d0236fd96239181ff558547",
-        "execution_sha256": "760f61aa39a6bf16ebb0f33a0fbadcd0d91fc299fdd32ac4b35e03c5d1f92a89"
+        "descriptor_sha256": "5dfc56b46aced113f549bbafd180e8068ed4dd00a3c9a4033ba39205812eee1f",
+        "execution_sha256": "1c1d349e32b8f3fb2cc94b025f228859399eb4e21e0587bb97bc1d7f3979c4d2"
       }
     },
     "base-shell": {
@@ -43,21 +43,21 @@
     "calendar": {
       "cli": {
         "descriptor_sha256": "4233b2b289c9d39c3b292539824110b125964d415b882edfaf2726256d6e0ea7",
-        "execution_sha256": "cab319f1fa8db6280a724714c1122abfed81e7401456fb20c98fc3b2738a65b7"
+        "execution_sha256": "00e074cf4eb05cb1b8785d6b852f9e0d0145dbff175d59c02988605c93bdbd69"
       },
       "mcp": {
         "descriptor_sha256": "9b093e5a8c2edd76d6795bc93af713443f876d3a8c711c984aab01114de4040b",
-        "execution_sha256": "c63fa193d646c4468c190f0951e0d99a439d4c7afd240f703270e1f61c0bbcb5"
+        "execution_sha256": "735cdb83a6d84294bb23b5ac3e8fec31f0b89276a489a12ce6a315842ce79b20"
       }
     },
     "chat": {
       "cli": {
         "descriptor_sha256": "06b9ca56cdf38ea7383dba2c909f1241cbf40dda873f095c240ae9af440ff5e3",
-        "execution_sha256": "8d6d7d9a50ec2e3d85a0674e136a78914347c290ba9e0398472c9ad09112eb53"
+        "execution_sha256": "c0d0e88779eb79177c5aef6525202006f2d0470af09b77ef9138314b3056d8f0"
       },
       "mcp": {
         "descriptor_sha256": "eedd8f7e3c54567ddb9665b7b82c1eee6849be2978ac664f2fea91caaf3c9587",
-        "execution_sha256": "46f246caeb65e21d1e9450cb1fff4738bf9c972f8d059827e92ac9496a38fbe8"
+        "execution_sha256": "215238488c05bc12c6976f9f295027e25eb6395404792e575050e4a3cd011669"
       }
     },
     "checklist": {
@@ -73,11 +73,11 @@
     "crm": {
       "cli": {
         "descriptor_sha256": "c9d01969acabdd343d579d49e3a924361a1aca60ec1c33e397e879887452e82a",
-        "execution_sha256": "118d22cb150ff9faf6ca0af9c5dc576672acdd068879b95205c9d85d76510b0a"
+        "execution_sha256": "b094446489c6c669e6231dd7c2292246d707ab0893119b7ef430ddd395db9ff2"
       },
       "mcp": {
         "descriptor_sha256": "5170d0ae5accd5e66d9d08a5634e290c5f1fc29eab7c349d36c3778c72914077",
-        "execution_sha256": "285d885f39d1a0d3bb9a3f8ca7f45297d0c40cb16714befe3ca7f1081c6a1208"
+        "execution_sha256": "b5ca2af7224ff909e0b29379d42da48353f5b3e96686c87eb236c221fb1a64ab"
       }
     },
     "design-studio": {
@@ -133,11 +133,11 @@
     "mail": {
       "cli": {
         "descriptor_sha256": "b1e00ebf70f7cc72f7b0865778bb22b5a2e2932d82c80c7c6c03fb8e7a898c9d",
-        "execution_sha256": "17d02836637869701efe8fe7e7f8c3c15e6448a7ad10bb4464d025cb9591cd00"
+        "execution_sha256": "6a094e34f66e892e42a1f0cea4ed1283bcd71df1a08130b9960c984775dbdb2d"
       },
       "mcp": {
         "descriptor_sha256": "1270eab5ef5ce7cd6631568f46226fb616648e3cae12b702c3fc68beff5e2249",
-        "execution_sha256": "a8b41e935d75714ec667b41909101b0489d376a208db70222ae7b89929b6e777"
+        "execution_sha256": "414bfeeec228bd47420e7016e3aa438255a0fd44c25615bb8adcb32af45e834e"
       }
     },
     "memory": {
@@ -231,6 +231,6 @@
       }
     }
   },
-  "audit_revision": "2026-09-03-p4-builtin-effects-execution-v3",
+  "audit_revision": "2026-09-06-p6-builtin-effects-reviewed-v4",
   "schema_version": "2"
 }

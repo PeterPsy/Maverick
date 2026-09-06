@@ -152,6 +152,10 @@ Backend imports load these schemas outside `backend/`; changing projected
 fields must invalidate authority just like changing Python. Adding this
 coverage does **not** refresh the existing built-in effect audit hashes: changed
 app closures require their own effect/leakage review before reauthorization.
+The subsequent scoped source review and regressions are recorded in
+`docs/development/agentic_p6_effect_audit_2026-09-06.md`. Audit revision
+`2026-09-06-p6-builtin-effects-reviewed-v4` renews only its ten reviewed
+app/surface pairs, without classifying their content or granting egress.
 
 The general production blockers in `SECURITY.md` require a separate security
 review. Until the relevant evidence and approvals actually exist,

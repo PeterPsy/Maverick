@@ -59,6 +59,17 @@ Stateful Interactions reservations include retained input/output ceilings, not
 only the wire bytes of `previous_interaction_id`; ambiguous requests are never
 refunded.
 
+The Google collector runs the production OpenAPI/model preflight before **each**
+of its three transport requests, including finalization. A missing/incompatible
+catalog or a catalog change between rounds aborts before the next transport.
+The receipt includes one verified catalog snapshot per request: observed API
+and model revision, capability/limit metadata, endpoint-schema digest,
+model-record digest and canonical snapshot digest. These snapshots are also
+bound into the result summary. The validator checks exact identities, full
+profile capacity, snapshot integrity/count and consistency across rounds; it
+rejects the old catalog-free receipt even if its summary is rehashed. The
+receipt's target is derived using the verified API/model observations.
+
 The separate natural observation report covers all 14 plan scenarios at each
 claimed effort, with source/projection/effect/trace digests, exact boolean
 checks, profile-specific resource bounds and zero absolute failure counters.

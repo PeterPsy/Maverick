@@ -12,12 +12,12 @@ from core.providers.agentic_protocol import (
     HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
-from core.providers.google_interactions_probe import (
+from core.providers.google_interactions_probe import probe_google_interactions
+from core.providers.google_interactions_probe_contract import (
     CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS,
     CERTIFICATION_PROBE_TOOL_ROUNDS,
     CERTIFIED_REASONING_EFFORTS,
     PROBE_TOOL_NAME,
-    probe_google_interactions,
 )
 from tests.unit.providers.test_google_interactions_codec import (
     _ScriptedTransport,
@@ -26,6 +26,7 @@ from tests.unit.providers.test_google_interactions_codec import (
     _text_stream,
     _tool_stream,
 )
+from tests.unit.providers.test_google_interactions_catalog import _endpoint_schema, _model_record
 from scripts import run_google_interactions_probe as probe_runner
 
 
@@ -107,16 +108,24 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
             )
         transport = _ScriptedTransport(scripts)
 
-        result = asyncio.run(
-            probe_google_interactions(
-                credential=EphemeralCredential("probe-key"),
-                client=GoogleInteractionsAgenticClient(
-                    state_mode="stateless",
-                    transport=transport,
-                ),
-                request_interval_seconds=0,
+        catalog_calls = []
+
+        def fetch(url, credential):
+            catalog_calls.append(url)
+            return _endpoint_schema() if credential is None else _model_record()
+
+        with mock.patch("core.providers.google_interactions_catalog._fetch_catalog", side_effect=fetch):
+            result = asyncio.run(
+                probe_google_interactions(
+                    credential=EphemeralCredential("probe-key"),
+                    client=GoogleInteractionsAgenticClient(
+                        state_mode="stateless",
+                        transport=transport,
+                    ),
+                    request_interval_seconds=0,
+                )
             )
-        )
+        self.assertEqual(len(catalog_calls), 6)
 
         self.assertTrue(result.succeeded)
         self.assertEqual(result.reason_code, "ok")

@@ -13,6 +13,7 @@ from core.providers.agentic_protocol import (
     EphemeralCredential,
 )
 from core.providers.google_interactions_probe import probe_google_interactions
+from tests.support.certification_evidence import fixture_google_catalog_snapshot
 from scripts import run_openrouter_agentic_probe as openrouter
 
 
@@ -75,10 +76,12 @@ class AgenticProbeFailClosedTest(unittest.TestCase):
 
     def run_probe(self, provider, client):
         if provider == "google":
-            return asyncio.run(probe_google_interactions(
-                credential=EphemeralCredential("synthetic"), client=client,
-                request_interval_seconds=0,
-            )).succeeded
+            with patch("core.providers.google_interactions_probe.preflight_google_interactions_catalog",
+                       return_value=fixture_google_catalog_snapshot()):
+                return asyncio.run(probe_google_interactions(
+                    credential=EphemeralCredential("synthetic"), client=client,
+                    request_interval_seconds=0,
+                )).succeeded
         output = StringIO()
         with patch.dict("os.environ", {
             "MAVERICK_OPENROUTER_CERTIFICATION_API_KEY": "synthetic",

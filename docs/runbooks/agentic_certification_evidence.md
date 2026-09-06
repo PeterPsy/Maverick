@@ -215,10 +215,20 @@ among `quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not
 infer a
 project-quota cause from the broader family alone.
 
-Before its first completion request, the Google probe must fetch the official
+Before **every** completion request, the Google probe fetches the official
 current Interactions OpenAPI operation and the authenticated exact model record;
 streaming, usage, function tools, reasoning controls, model identity, and both
-token limits must match. Before its first completion request, the OpenRouter probe must fetch both the
+token limits must match the request and support the full profile ceiling.
+Each Google receipt includes three `catalog_snapshots` with the observed API
+and model revision, endpoint/model digests and canonical snapshot digest,
+also hashed into `result_summary_digest`. No absent/incompatible catalog or
+mid-probe catalog drift may reach the next transport or produce successful
+evidence. Catalog-free receipts are ineligible; do not retrofit observations
+into a previous run. API certificates persist the signed target in both
+certificate and evidence, and revalidate it during projection, admission and
+authority refresh; a new profile revision requires its own certification.
+
+Before its first completion request, the OpenRouter probe must fetch both the
 official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
 the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion
 capacity, total input-plus-output context capacity, explicit support for

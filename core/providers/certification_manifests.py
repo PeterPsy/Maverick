@@ -41,6 +41,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.providers.test_certification_behavior",
     "tests.unit.providers.test_certification_probe_budget",
     "tests.unit.scripts.test_agentic_probe_fail_closed",
+    "tests.unit.scripts.test_google_probe_catalog_receipt",
     "tests.unit.scripts.test_agentic_certification_runner",
     "tests.unit.api.test_provider_execution_families",
     "tests.unit.providers.test_agentic_lineage_admission",

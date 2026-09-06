@@ -5,12 +5,13 @@ import math
 import re
 
 from core.providers.errors import CapabilityCertificateError
+from core.providers.google_interactions_probe_catalog import validate_google_probe_catalog_receipt
 from core.runtime.execution_binding import canonical_digest
 
 
 _COMMON = {"target_digest", "run_nonce", "succeeded", "request_count", "reasoning_efforts"}
 _GOOGLE_FLAGS = {"saw_streaming", "saw_tool_call", "saw_filesystem_list", "saw_usage", "saw_private_state"}
-_GOOGLE = _COMMON | _GOOGLE_FLAGS | {"reason_code", "test_run_id", "result_summary_digest"}
+_GOOGLE = _COMMON | _GOOGLE_FLAGS | {"reason_code", "test_run_id", "result_summary_digest", "catalog_snapshots"}
 _OPENROUTER = _COMMON | {
     "catalog_snapshot_digest", "catalog_model_record_digest", "catalog_zdr_record_digest",
     "context_length", "filesystem_result_count", "max_completion_tokens",
@@ -54,7 +55,8 @@ def validate_live_probe_receipt(
                 or not isinstance(receipt["test_run_id"], str)
                 or not re.fullmatch(r"google-interactions-live:[0-9a-f-]{36}", receipt["test_run_id"])):
             _fail()
-        summary = {key: receipt[key] for key in (*_GOOGLE_FLAGS, "reason_code", "request_count", "reasoning_efforts")}
+        validate_google_probe_catalog_receipt(receipt)
+        summary = {key: receipt[key] for key in (*_GOOGLE_FLAGS, "reason_code", "request_count", "reasoning_efforts", "catalog_snapshots")}
         if receipt["result_summary_digest"] != canonical_digest(summary):
             _fail()
     else:

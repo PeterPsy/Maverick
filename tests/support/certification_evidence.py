@@ -1,5 +1,6 @@
 """Fabricated observations for unit tests ONLY; never operational evidence."""
 
+from dataclasses import asdict
 from datetime import UTC, datetime
 import json
 from pathlib import Path
@@ -25,6 +26,7 @@ def fixture_live_receipt(provider_id, *, nonce):
             "reason_code": "ok", "request_count": 3, "saw_streaming": True,
             "saw_tool_call": True, "saw_filesystem_list": True, "saw_usage": True,
             "saw_private_state": True, "reasoning_efforts": list(efforts),
+            "catalog_snapshots": [asdict(fixture_google_catalog_snapshot()) for _ in range(3)],
         }
         return {
             **common, **summary, "result_summary_digest": canonical_digest(summary),
@@ -37,6 +39,21 @@ def fixture_live_receipt(provider_id, *, nonce):
         "max_completion_tokens": 65_536, "supports_tool_choice_none": True,
         "upstream_id": "deepinfra/fp8",
     }
+
+
+def fixture_google_catalog_snapshot():
+    """Fabricated catalog metadata for non-network protocol/collector unit tests."""
+    from core.providers.google_interactions_catalog import GoogleInteractionsCatalogSnapshot
+
+    profile = builtin_api_certification_profile("google-ai-studio")
+    projection = {
+        "api_version": profile.provider_api_version, "operation_id": "CreateInteraction",
+        "model_name": f"models/{profile.model_id}", "model_version": profile.model_revision,
+        "input_token_limit": 1_048_576, "output_token_limit": 65_536,
+        "streaming": True, "usage_accounting": True, "tool_calling": True,
+        "endpoint_schema_digest": "a" * 64, "model_record_digest": "b" * 64,
+    }
+    return GoogleInteractionsCatalogSnapshot(**projection, catalog_snapshot_digest=canonical_digest(projection))
 
 
 def fixture_step_process(command, **kwargs):

@@ -117,6 +117,51 @@ describe("Base Shell structured data-cache broker", () => {
     vi.restoreAllMocks();
   });
 
+  it.each([false, true])("hands off a cancelled frame without failing another registered reader (warm=%s)", async (warm) => {
+    vi.stubGlobal("navigator", { storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) } });
+    const subject = broker(); brokers.push(subject);
+    const otherWindow = {} as Window;
+    const otherFrame = { contentWindow: otherWindow, dataset: {} } as unknown as HTMLIFrameElement;
+    vi.stubGlobal("window", { location: { origin: "https://maverick.test" } });
+    registerFrame(otherFrame, appOrigin, "app-store");
+    vi.stubGlobal("window", undefined);
+    const entityId = crypto.randomUUID();
+    const request = { appId: "app-store", entityId, resource: "catalog", schemaRevision: "app-store.catalog.v1" };
+    const options = (source: Window, signal?: AbortSignal) => ({
+      parentOrigin: "https://maverick.test", signal,
+      parentWindow: {
+        postMessage(data: unknown, _origin: string, ports?: Transferable[]) {
+          subject.handleWindowMessage({ data, ports, origin: appOrigin, source } as unknown as MessageEvent, new Set(["app-store"]));
+        },
+      } as Pick<Window, "postMessage">,
+      sanitize: (payload: unknown) => payload as { revision: string; items: unknown[] },
+    });
+    if (warm) await readThroughParentDataCache(request, async () => ({ kind: "value", payload: { revision: "old", items: [] }, revision: "old" }), options(appWindow));
+    const controller = new AbortController();
+    const firstLoader = vi.fn(({ signal }: { signal?: AbortSignal }) => new Promise<never>((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }));
+    const first = readThroughParentDataCache(request, firstLoader, options(appWindow, controller.signal));
+    const secondLoader = vi.fn(async () => ({ kind: "value" as const, payload: { revision: "fresh", items: [] }, revision: "fresh" }));
+    const second = readThroughParentDataCache(request, secondLoader, options(otherWindow));
+    await vi.waitFor(() => expect(firstLoader).toHaveBeenCalledOnce());
+    if (warm) expect(await second).toMatchObject({ source: "cache" });
+    // Let both ports reach the resource flight before cancelling its loader frame.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const firstCompletion = warm ? (await first).revalidation! : first;
+    const rejected = expect(firstCompletion).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+    await rejected;
+    const secondCompletion = warm ? (await second).revalidation! : second;
+    await expect(secondCompletion).resolves.toMatchObject({ revision: "fresh" });
+    expect(secondLoader).toHaveBeenCalledOnce();
+    expect(shellRetryCoordinator.pendingCount()).toBe(0);
+    // The surviving consumer must be able to publish, not just render once.
+    const cached = await readThroughParentDataCache(request, async () => ({ kind: "not_modified", revision: "fresh" }), options(otherWindow));
+    expect(cached).toMatchObject({ source: "cache", revision: "fresh" });
+    await cached.revalidation;
+  });
+
   it.each([
     ['calendar', 'bounded-event-window', { events: [], calendars: [], has_more: false }],
     ['chat', 'projects-and-completed-messages', { kind: 'projects', data: { projects: [], has_more: false } }],

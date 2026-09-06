@@ -9,12 +9,8 @@ export type PersistedMetrics = Omit<PwaCacheMetricsSnapshot, "requestWait"> & {
   requestWait: Omit<PwaCacheMetricsSnapshot["requestWait"], "oldestPendingMs" | "pendingCount">;
 };
 
-export type PersistedMetricsShard = Omit<PersistedMetrics, "requestWait"> & {
+export type PersistedMetricsShard = PersistedMetrics & {
   collectorId: string;
-  requestWait: PersistedMetrics["requestWait"] & {
-    oldestPendingStartedAt: number | null;
-    pendingCount: number;
-  };
   resetId: string;
 };
 
@@ -67,16 +63,10 @@ export function parsePersistedMetricsShard(raw: string): PersistedMetricsShard |
   } catch {
     return null;
   }
-  const requestWait = plainObject(value.requestWait) ? value.requestWait : {};
   if (!validCollectorId(value.collectorId) || !validResetId(value.resetId)) return null;
   return {
     ...persisted,
     collectorId: value.collectorId,
-    requestWait: {
-      ...persisted.requestWait,
-      oldestPendingStartedAt: optionalFiniteNumber(requestWait.oldestPendingStartedAt),
-      pendingCount: finiteInteger(requestWait.pendingCount, 0),
-    },
     resetId: value.resetId,
   };
 }

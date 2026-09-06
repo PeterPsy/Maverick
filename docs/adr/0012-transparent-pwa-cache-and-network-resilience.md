@@ -341,6 +341,17 @@ principal, record id, payload, token, or content. Clear cancels RAM work,
 executes the durable structured/file cleanup, and resets metrics only after a
 complete deletion result.
 
+The 2026-09-06 review fixes clarify two lifetime boundaries. Each structured
+single-flight consumer owns only its own cancellation; the shared transport is
+cancelled when no consumer remains. A broker transfers a departing loader
+frame's read only to an already admitted reader of the same resource/entity.
+Useful reconnection of the live app-event socket triggers scoped display
+refresh because events have no replay cursor; it never remounts frames or
+changes product mode. Pending-count/oldest-wait gauges belong solely to the
+current shell document's RAM, while persisted shards aggregate historical
+counters and completed durations. Expired diagnostics are automatically pruned
+in throttled, bounded batches, not merely ignored at aggregation time.
+
 Each existing boolean flag may be narrowed by stable 0–100 workspace and user
 cohorts. Invalid values and missing identities in a partial cohort select
 nobody; cohort inputs and buckets are not returned by the public config. The

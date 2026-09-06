@@ -91,8 +91,8 @@ function resilienceHtml(metrics: PwaCacheMetricsSnapshot): string {
   return `<div class="settings-cache-diagnostics__section">
     <h4>Requests and recovery</h4>
     <div class="settings-cache-diagnostics__grid">
-      ${metricHtml('Pending waits', formatCount(wait.pendingCount))}
-      ${metricHtml('Oldest pending', formatOptionalDuration(wait.oldestPendingMs))}
+      ${metricHtml('Pending waits (this window)', formatCount(wait.pendingCount))}
+      ${metricHtml('Oldest pending (this window)', formatOptionalDuration(wait.oldestPendingMs))}
       ${metricHtml('Average wait', formatDuration(wait.averageDurationMs))}
       ${metricHtml('Longest wait', formatDuration(wait.maxDurationMs))}
       ${metricHtml('Resolved / cancelled', ratio(counters.pwa_request_wait_resolved, counters.pwa_request_wait_cancelled))}

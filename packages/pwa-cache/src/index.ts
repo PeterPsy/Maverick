@@ -198,3 +198,4 @@ export { displayRecord, displayFields, displayList, displayStrings } from "./rea
 
 export { projectDisplayModel, type DisplayModelSchema } from "./displayModelSchema";
 export { readAppCachePages } from './appReadModelPages';
+export { connectAppEventSocket } from "./appEventSocket";

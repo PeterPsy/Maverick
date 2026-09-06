@@ -32,12 +32,20 @@ winning marker before pruning, and only touches keys captured before that
 decision. A losing concurrent reset therefore cannot remove a shard written in
 the winning generation; stale writers remain ignored. The service worker sends
 each fixed metric to one window client rather than broadcasting it to every tab,
-preventing duplicate counts. Aggregate counters and pending-count/oldest-time
-summaries remain
-eligible for aggregation for at most seven days in the shell origin; expired
-or superseded shards are ignored and winning reset cleanup prunes captured old
-generations best-effort. Active wait keys are
-salted hashes held in RAM and are never persisted.
+preventing duplicate counts. Historical counters and completed wait-duration
+summaries are eligible for aggregation for at most seven days. **Pending waits
+(this window)** and **Oldest pending (this window)** describe only the current
+shell document's active RAM requests, not history or unverified peer-tab state.
+Neither gauge is serialized or restored from older shards; their salted wait
+keys also remain RAM-only. Reload therefore preserves history but starts with
+no pending requests until a real wait begins.
+
+Retention is physical as well as logical: collector startup and subsequent
+telemetry/dashboard activity sweep up to 64 localStorage keys per pass, at most
+once per minute per collector. A rolling cursor prunes expired, corrupt, and
+superseded owned shards best-effort, preserving unrelated storage and refreshed
+or newer-generation writers. No user clear or dashboard visit is required;
+storage cannot be pruned while the browser is closed or storage access is denied.
 
 `pwa_revalidate_error` counts only a conditional loader failure; cancellation
 does not count. Local cache, quota, and cache-write failures use the separate
@@ -92,6 +100,14 @@ The `hardeningChaos.test.ts` suite injects uncertain quota, LRU pressure,
 corrupt persisted payloads, and intermittent transport. A valid server response
 must survive every cache failure; corrupt bytes must be deleted before render;
 retry remains single-flight and rate-limited.
+
+The review regressions additionally exercise independent reader cancellation,
+loader handoff between real registered frames, warm revalidation publication,
+reconnect-triggered Calendar reads and shell owner refreshes without remounts,
+and an actual Chromium document reload plus expired localStorage shard pruning.
+The service-worker/browser contract command includes that metrics regression.
+Live app events have no replay cursor: a useful WebSocket reconnection must
+initiate display revalidation even if no read was pending at disconnect.
 
 ## Progressive workspace/user rollout
 

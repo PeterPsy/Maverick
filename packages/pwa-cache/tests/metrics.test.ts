@@ -1,42 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  PWA_CACHE_METRICS_STORAGE_KEY,
-  createPwaCacheMetricsCollector,
-} from "../src";
-
-class MemoryStorage implements Storage {
-  private readonly values = new Map<string, string>();
-  get length(): number { return this.values.size; }
-  clear(): void { this.values.clear(); }
-  getItem(key: string): string | null { return this.values.get(key) ?? null; }
-  key(index: number): string | null { return [...this.values.keys()][index] ?? null; }
-  removeItem(key: string): void { this.values.delete(key); }
-  setItem(key: string, value: string): void { this.values.set(key, value); }
-  serializedValues(): string { return [...this.values.values()].join("\n"); }
-  writerKeys(): string[] { return [...this.values.keys()].filter((key) => key.includes(":writer:")); }
-}
-
-class ResetInterleavingStorage extends MemoryStorage {
-  afterResetRead: (() => void) | null = null;
-  afterResetMarker: (() => void) | null = null;
-
-  override getItem(key: string): string | null {
-    const value = super.getItem(key);
-    if (!key.endsWith(":reset") || !this.afterResetRead) return value;
-    const callback = this.afterResetRead;
-    this.afterResetRead = null;
-    callback();
-    return value;
-  }
-
-  override setItem(key: string, value: string): void {
-    super.setItem(key, value);
-    if (!key.endsWith(":reset") || !this.afterResetMarker) return;
-    const callback = this.afterResetMarker;
-    this.afterResetMarker = null;
-    callback();
-  }
-}
+import { createPwaCacheMetricsCollector } from "../src";
+import { MemoryStorage } from "./metricsTestStorage";
 
 describe("redaction-safe PWA cache metrics", () => {
   it("aggregates only fixed cache, file, eviction, and quota measurements", () => {
@@ -98,29 +62,6 @@ describe("redaction-safe PWA cache metrics", () => {
     expect(storage.serializedValues()).not.toContain("opaque-");
   });
 
-  it("restores valid aggregates but discards stale or malformed documents", () => {
-    const storage = new MemoryStorage();
-    const first = createPwaCacheMetricsCollector({ now: () => 1_000, retentionMs: 1_000, storage });
-    first.recordServiceWorker("pwa_static_cache_hit");
-    expect(createPwaCacheMetricsCollector({ now: () => 1_500, retentionMs: 1_000, storage })
-      .snapshot().counters.pwa_static_cache_hit).toBe(1);
-
-    expect(createPwaCacheMetricsCollector({ now: () => 2_001, retentionMs: 1_000, storage })
-      .snapshot().counters.pwa_static_cache_hit).toBe(0);
-    storage.setItem(PWA_CACHE_METRICS_STORAGE_KEY, JSON.stringify({ schema: "wrong" }));
-    expect(createPwaCacheMetricsCollector({ now: () => 3_000, retentionMs: 1_000, storage })
-      .snapshot().counters.pwa_static_cache_hit).toBe(0);
-
-    const future = createPwaCacheMetricsCollector({ now: () => 4_000, retentionMs: 1_000, storage });
-    future.recordServiceWorker("pwa_static_cache_hit");
-    const writerKey = storage.writerKeys().at(-1) as string;
-    const corrupted = JSON.parse(storage.getItem(writerKey) ?? "{}") as { updatedAt: number };
-    corrupted.updatedAt = 5_000;
-    storage.setItem(writerKey, JSON.stringify(corrupted));
-    expect(createPwaCacheMetricsCollector({ now: () => 4_500, retentionMs: 1_000, storage })
-      .snapshot().counters.pwa_static_cache_hit).toBe(0);
-  });
-
   it("rolls an active in-memory window when its retention bound expires", () => {
     let now = 1_000;
     const collector = createPwaCacheMetricsCollector({ now: () => now, retentionMs: 1_000, storage: null });
@@ -135,109 +76,22 @@ describe("redaction-safe PWA cache metrics", () => {
     });
   });
 
+  it("keeps real pending waits when only the historical retention window rolls", () => {
+    let now = 1_000;
+    const collector = createPwaCacheMetricsCollector({ now: () => now, retentionMs: 1_000, storage: null });
+    collector.recordRetry({ attempt: 0, keyHash: "live", kind: "wait_started", waitMs: 100 });
+    now = 3_000;
+    expect(collector.snapshot().requestWait).toMatchObject({ pendingCount: 1, oldestPendingMs: 2_000 });
+    collector.recordRetry({ attempt: 0, keyHash: "live", kind: "resolved" });
+    expect(collector.snapshot().requestWait).toMatchObject({ pendingCount: 0, oldestPendingMs: null });
+  });
+
   it("rejects arbitrary service-worker metric names", () => {
     const collector = createPwaCacheMetricsCollector({ storage: null });
 
     expect(collector.recordServiceWorker("pwa_static_cache_hit")).toBe(true);
     expect(collector.recordServiceWorker("pwa_static_cache_hit:https://secret.test")).toBe(false);
     expect(collector.snapshot().counters.pwa_static_cache_hit).toBe(1);
-  });
-
-  it("merges independent tab writers without losing either tab's counters", () => {
-    const storage = new MemoryStorage();
-    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
-    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
-
-    tabA.recordDataCache({ kind: "hit" });
-    tabB.recordFileCache({ kind: "hit" });
-
-    expect(tabA.snapshot().counters).toMatchObject({
-      pwa_data_cache_hit: 1,
-      pwa_file_cache_hit: 1,
-    });
-    expect(tabB.snapshot().counters).toMatchObject({
-      pwa_data_cache_hit: 1,
-      pwa_file_cache_hit: 1,
-    });
-  });
-
-  it("uses a reset generation so a stale tab cannot resurrect cleared metrics", () => {
-    const storage = new MemoryStorage();
-    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
-    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
-    tabA.recordDataCache({ kind: "hit" });
-    tabB.recordFileCache({ kind: "hit" });
-
-    tabA.reset();
-    tabB.recordFileCache({ kind: "miss" });
-
-    expect(tabA.snapshot().counters).toMatchObject({
-      pwa_data_cache_hit: 0,
-      pwa_file_cache_hit: 0,
-      pwa_file_cache_miss: 1,
-    });
-    expect(tabB.snapshot().counters).toMatchObject({
-      pwa_data_cache_hit: 0,
-      pwa_file_cache_hit: 0,
-      pwa_file_cache_miss: 1,
-    });
-  });
-
-  it("does not prune a peer event that is causally newer than the reset marker", () => {
-    const storage = new ResetInterleavingStorage();
-    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
-    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
-    tabB.recordFileCache({ kind: "hit" });
-    storage.afterResetMarker = () => tabB.recordFileCache({ kind: "miss" });
-
-    tabA.reset();
-
-    expect(tabA.snapshot().counters).toMatchObject({
-      pwa_file_cache_hit: 0,
-      pwa_file_cache_miss: 1,
-    });
-  });
-
-  it("preserves events from the winning generation when two tabs reset concurrently", () => {
-    const storage = new ResetInterleavingStorage();
-    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
-    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
-    tabA.recordDataCache({ kind: "hit" });
-    tabB.recordFileCache({ kind: "hit" });
-    storage.afterResetMarker = () => {
-      tabB.reset();
-      tabB.recordFileCache({ kind: "miss" });
-    };
-
-    tabA.reset();
-
-    expect(tabA.snapshot().counters).toMatchObject({
-      pwa_data_cache_hit: 0,
-      pwa_file_cache_hit: 0,
-      pwa_file_cache_miss: 1,
-    });
-    expect(tabB.snapshot().counters.pwa_file_cache_miss).toBe(1);
-  });
-
-  it("cannot prune a later reset even after observing itself as the provisional winner", () => {
-    const storage = new ResetInterleavingStorage();
-    const tabA = createPwaCacheMetricsCollector({ collectorId: "tab-a", now: () => 1_000, storage });
-    const tabB = createPwaCacheMetricsCollector({ collectorId: "tab-b", now: () => 1_000, storage });
-    tabA.recordDataCache({ kind: "hit" });
-    tabB.recordFileCache({ kind: "hit" });
-    storage.afterResetRead = () => {
-      tabB.reset();
-      tabB.recordFileCache({ kind: "miss" });
-    };
-
-    tabA.reset();
-
-    expect(tabA.snapshot().counters).toMatchObject({
-      pwa_data_cache_hit: 0,
-      pwa_file_cache_hit: 0,
-      pwa_file_cache_miss: 1,
-    });
-    expect(tabB.snapshot().counters.pwa_file_cache_miss).toBe(1);
   });
 
   it("separates local cache failures from explicit revalidation loader errors", () => {

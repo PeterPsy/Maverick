@@ -9,17 +9,15 @@ import {
   type PersistedMetricsShard,
 } from "./metricsPersistence";
 
-const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1_000;
-
 export function aggregateMetricsShards(
   shards: readonly PersistedMetricsShard[],
   now: number,
+  activeWaits: readonly number[],
 ): PwaCacheMetricsSnapshot {
   const counters = emptyCounters();
   let durationObservations = 0;
   let maxDurationMs = 0;
-  let oldestPendingStartedAt: number | null = null;
-  let pendingCount = 0;
+  const oldestPendingStartedAt = activeWaits.length ? Math.min(...activeWaits) : null;
   let quota = emptyQuota();
   let quotaUpdatedAt = -1;
   let totalDurationMs = 0;
@@ -35,15 +33,6 @@ export function aggregateMetricsShards(
     durationObservations = saturatedAdd(durationObservations, shard.requestWait.durationObservations);
     totalDurationMs = saturatedAdd(totalDurationMs, shard.requestWait.totalDurationMs);
     maxDurationMs = Math.max(maxDurationMs, shard.requestWait.maxDurationMs);
-
-    const pendingStartedAt = shard.requestWait.oldestPendingStartedAt;
-    if (pendingStartedAt !== null && pendingStartedAt <= now
-        && now - pendingStartedAt <= MAX_PENDING_AGE_MS) {
-      pendingCount = saturatedAdd(pendingCount, shard.requestWait.pendingCount);
-      oldestPendingStartedAt = oldestPendingStartedAt === null
-        ? pendingStartedAt
-        : Math.min(oldestPendingStartedAt, pendingStartedAt);
-    }
 
     const estimatedAt = shard.quota.lastEstimatedAt;
     if (estimatedAt !== null && estimatedAt >= quotaUpdatedAt) {
@@ -61,7 +50,7 @@ export function aggregateMetricsShards(
       durationObservations,
       maxDurationMs,
       oldestPendingMs: oldestPendingStartedAt === null ? null : Math.max(0, now - oldestPendingStartedAt),
-      pendingCount,
+      pendingCount: activeWaits.length,
       totalDurationMs,
     },
     updatedAt: shards.length ? updatedAt : now,

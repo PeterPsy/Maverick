@@ -45,6 +45,7 @@ type ActiveRead = {
   controller: AbortController;
   declaration: ResourceDeclaration;
   initialDelivered: boolean;
+  networkEligible: boolean;
   network: {
     id: string;
     metrics: PwaDataCacheRetryMetrics;
@@ -135,6 +136,7 @@ export class PwaDataCacheBroker {
       controller: new AbortController(),
       declaration,
       initialDelivered: false,
+      networkEligible: false,
       network: null,
       port,
       request,
@@ -267,14 +269,15 @@ export class PwaDataCacheBroker {
 
       const migrationCommitted = await this.migrateSeed(active);
       if (active.controller.signal.aborted) return;
+      active.networkEligible = true;
       const result = await resource.readThrough(
         request.entity_id,
-        // The shell owns cancellation; this callback remains strictly one-shot.
+        // The shared flight, not its first consumer, owns cancellation.
         // The app adapter retries only its SDK-described HTTP read internally.
         (context) => shellRetryCoordinator.runOpaque({
           key: `data-cache:${request.app_id}:${request.resource}:${request.entity_id}`,
-          operation: ({ signal }) => this.requestNetwork(active, context, signal),
-          signal: active.controller.signal,
+          operation: ({ signal }) => this.requestSharedNetwork(active, context, signal),
+          signal: context.signal,
         }),
         active.controller.signal,
       );
@@ -393,6 +396,28 @@ export class PwaDataCacheBroker {
         reject(error);
       }
     });
+  }
+
+  private async requestSharedNetwork(
+    original: ActiveRead,
+    context: Parameters<CacheLoader<unknown>>[0],
+    signal: AbortSignal,
+  ): Promise<CacheNetworkResult<unknown>> {
+    while (true) {
+      signal.throwIfAborted();
+      const reader = [...this.active.values()].find((candidate) => candidate.networkEligible
+        && !candidate.controller.signal.aborted
+        && candidate.resource === original.resource
+        && candidate.request.entity_id === original.request.entity_id);
+      if (!reader) throw new DOMException("No active data-cache reader remains.", "AbortError");
+      try {
+        return await this.requestNetwork(reader, context, signal);
+      } catch (error) {
+        // A cancelled frame closes its port and cannot keep serving the shared
+        // request. Hand off only that lost reader, never retry a loader error.
+        if (signal.aborted || !reader.controller.signal.aborted) throw error;
+      }
+    }
   }
 
   private async handleReadError(error: unknown): Promise<void> {

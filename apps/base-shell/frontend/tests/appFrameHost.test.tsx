@@ -68,6 +68,7 @@ describe("AppFrameHost app frame readiness", () => {
   let root: Root;
 
   beforeEach(() => {
+    MockWebSocket.instances = [];
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", MockWebSocket);
@@ -87,6 +88,23 @@ describe("AppFrameHost app frame readiness", () => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it("refreshes mounted display resources after useful reconnection without remounting frames", async () => {
+    const post = vi.spyOn(window, "postMessage");
+    await renderHost(root, storage);
+    await waitForFrame(container, "Storage viewport", "storage");
+    const frame = frameByTitle(container, "Storage viewport");
+    MockWebSocket.instances[0].onopen?.();
+    expect(post.mock.calls.some(([message]) => message.type === "maverick.app.data-changed")).toBe(false);
+    MockWebSocket.instances[0].onclose?.();
+    await act(async () => { vi.advanceTimersByTime(1_000); });
+    expect(MockWebSocket.instances).toHaveLength(2);
+    await act(async () => { MockWebSocket.instances[1].onopen?.(); });
+    expect(post).toHaveBeenCalledWith({
+      type: "maverick.app.data-changed", owner_app_id: "storage", resource: "files", workspace_id: "default",
+    }, window.location.origin);
+    expect(frameByTitle(container, "Storage viewport")).toBe(frame);
   });
 
   it("keeps the previous app frame visible until the target app is ready", async () => {
@@ -442,9 +460,13 @@ function clearHappyDomFetchInterceptor() {
 }
 
 class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
+
+  constructor() { MockWebSocket.instances.push(this); }
 
   close() {
     return undefined;

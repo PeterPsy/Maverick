@@ -60,6 +60,7 @@ export class PwaCacheMetricsCollector {
     this.updatedAt = timestamp;
     const restored = this.persistence?.loadOwn(timestamp, this.retentionMs, this.resetId);
     if (restored) this.restoreOwn(restored);
+    this.persistence?.prune(timestamp, this.retentionMs);
   }
 
   recordDataCache(event: CacheTelemetryEvent): void {
@@ -127,7 +128,7 @@ export class PwaCacheMetricsCollector {
     const timestamp = this.ensureCurrentWindow();
     const own = this.persistedShard();
     const peers = this.persistence?.readPeers(timestamp, this.retentionMs, this.resetId) ?? [];
-    return aggregateMetricsShards([own, ...peers], timestamp);
+    return aggregateMetricsShards([own, ...peers], timestamp, [...this.pendingWaits.values()]);
   }
 
   reset(): void {
@@ -151,15 +152,15 @@ export class PwaCacheMetricsCollector {
     const timestamp = finiteTimestamp(this.now(), this.updatedAt);
     this.synchronizeReset(timestamp);
     if (timestamp < this.windowStartedAt || timestamp - this.windowStartedAt > this.retentionMs) {
-      this.resetState(timestamp);
+      this.resetState(timestamp, false);
       this.persistence?.removeOwn(this.resetId);
     }
     return timestamp;
   }
 
-  private resetState(timestamp: number): void {
+  private resetState(timestamp: number, clearPending = true): void {
     this.counters = emptyCounters();
-    this.pendingWaits.clear();
+    if (clearPending) this.pendingWaits.clear();
     this.quota = emptyQuota();
     this.waitDurations = emptyWaitDurations();
     this.updatedAt = timestamp;
@@ -193,11 +194,10 @@ export class PwaCacheMetricsCollector {
   }
 
   private persist(): void {
-    this.persistence?.persist(this.persistedShard());
+    this.persistence?.persist(this.persistedShard(), this.retentionMs);
   }
 
   private persistedShard(): PersistedMetricsShard {
-    const pendingStarts = [...this.pendingWaits.values()];
     return {
       schema: PWA_CACHE_METRICS_SCHEMA,
       collectorId: this.persistence?.collectorId ?? "memory",
@@ -208,8 +208,6 @@ export class PwaCacheMetricsCollector {
         averageDurationMs: this.waitDurations.durationObservations > 0
           ? Math.round(this.waitDurations.totalDurationMs / this.waitDurations.durationObservations)
           : 0,
-        oldestPendingStartedAt: pendingStarts.length ? Math.min(...pendingStarts) : null,
-        pendingCount: pendingStarts.length,
       },
       resetId: this.resetId,
       updatedAt: this.updatedAt,

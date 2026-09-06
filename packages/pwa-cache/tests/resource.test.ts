@@ -59,6 +59,25 @@ function client(options: {
 }
 
 describe("PWA cache resource", () => {
+  it("keeps a shared publication alive when only its first consumer is cancelled", async () => {
+    const scoped = client();
+    const resource = scoped.resource("consumer-cancellation", publicPolicy({ revalidateOnRead: "always" }));
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const firstController = new AbortController();
+    const loader = vi.fn(async () => { await pending; return { kind: "value" as const, payload: { value: "fresh" }, revision: "one" }; });
+    const first = resource.readThrough("one", loader, firstController.signal);
+    const second = resource.readThrough("one", loader);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+    const cancelled = expect(first).rejects.toMatchObject({ name: "AbortError" });
+    firstController.abort();
+    await cancelled;
+    release();
+    await expect(second).resolves.toMatchObject({ payload: { value: "fresh" } });
+    await expect(resource.get("one")).resolves.toMatchObject({ revision: "one" });
+    scoped.dispose();
+  });
+
   it("rejects clients whose scope was not attested by the top-level host", () => {
     expect(() => new PwaCacheClient({
       backend: new MemoryCacheBackend(),

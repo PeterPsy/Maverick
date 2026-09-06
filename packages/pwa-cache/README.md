@@ -120,6 +120,32 @@ accepts the operations protocol only from the exact registered Settings frame
 and wires data, file, quota, retry, and worker telemetry. An explicit clear
 cancels pending retry before the durable structured/file cleanup.
 
+### Review hardening (2026-09-06)
+
+Structured single-flight reads give every consumer an independent cancellation
+promise. The shared loader's signal is cancelled only when its last consumer
+leaves; a cancelled consumer never receives the result. Publication additionally
+checks that shared signal and the existing cleanup/lease/generation barriers.
+If a broker loader frame closes, Base Shell transfers the conditional read to
+an already admitted reader of the exact same resource/entity. This is reader
+handoff, not permission to replay an arbitrary failing loader or a mutation.
+
+`connectAppEventSocket` treats an opened connection after interruption as a
+display-refresh trigger: live events have no replay cursor. Shell routes scoped
+owner refreshes to mounted display apps without remounting them; Calendar also
+refreshes on its own socket recovery. Initial connection, reconnect backoff,
+and teardown cannot create extra refreshes or revive an obsolete scope.
+
+Historical counters and completed-duration summaries merge across documents.
+`pendingCount` and `oldestPendingMs` come exclusively from the current shell
+document's live RAM waits, never from a persisted shard (including older shard
+formats). Settings explicitly labels these gauges **this window**. Automatic
+retention pruning starts with the collector and examines at most 64 storage keys
+per pass, at most once per minute during further writes/reads. A rolling cursor
+eventually removes expired, malformed, and superseded owned shards without
+requiring Settings or a reset, while preserving unrelated keys and newer writes.
+Denied storage remains best-effort diagnostics, never a cache-path failure.
+
 Unsafe retry executors now require a versioned `auditId` bound to one exact
 HTTP method, API endpoint, and backend action. Production executors and their
 client/server/replay evidence are registered in

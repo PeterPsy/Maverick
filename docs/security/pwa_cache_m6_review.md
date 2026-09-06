@@ -50,15 +50,16 @@ No M6 metric, cohort decision, or cached derivative may become authorization.
   structured/file data. It resets aggregate M6 metrics only after cleanup is
   complete, preserving incident evidence when deletion remains pending.
 - Metrics make only fixed aggregate counters/gauges eligible for aggregation
-  for at most seven days; expired generations are ignored and winning-reset
-  cleanup prunes captured obsolete shards best-effort.
+  for at most seven days; expired generations are ignored and automatic bounded
+  pruning plus winning-reset cleanup remove obsolete shards best-effort.
   Each tab owns an opaque generation-qualified writer shard; reads merge
   current-generation shards, and a reset marker prevents stale writers from
   republishing earlier values. Cleanup rereads the winning marker and cannot
   remove a new-generation key created by a concurrent winning reset. Worker
   metrics go to one window client rather than every tab. Pending hashed
-  operation keys stay in RAM and are not serialized; only pending count and
-  oldest-time aggregates cross a reload. Reasons, URLs, names, ids, payloads,
+  operation keys and pending/oldest gauges stay in RAM and are not serialized.
+  Only historical counters and completed durations cross a reload. Pending
+  gauges explicitly refer to the current shell window. Reasons, URLs, names, ids, payloads,
   and content are discarded
   at collection time.
 - The worker stores public, manifest-verified static bytes in named namespaces.
@@ -100,9 +101,21 @@ The new structured generation marker contains only an opaque nonce, not a
 principal, payload, URL, or resource id. A removed marker gets a fresh nonce rather than resurrecting an older
 generation; unwritable shared generation storage or missing Web Locks fails
 closed for browser persistence. This corrective verification
-does not constitute physical-device evidence or privacy approval. Remaining
-release conditions are explicit rather than waived: private per-resource
-privacy approval, current physical Safari/Home Screen/Dock evidence, and
+does not constitute physical-device evidence. The product owner's 2026-09-05
+decision approves the specific bounded resources in the completion inventory,
+not arbitrary private payloads. Remaining release conditions are explicit
+rather than waived: current candidate-bound physical Safari/Home Screen/Dock
+evidence, controlled rollout and rollback execution, and
 Maverick's wider production-readiness blockers. The implementation must be
 reviewed again if a new data class, storage namespace, broker action, retrying
 mutation, or persistent telemetry dimension is introduced.
+
+The 2026-09-06 review hardening separates consumer cancellation from shared
+request lifetime and hands a departed loader frame's read to another admitted
+same-resource reader without widening frame authority. Cleanup, authorization,
+scope transitions and last-reader cancellation still stop shared publication.
+Useful event-socket reconnection initiates owner-scoped display refresh rather
+than assuming that missed live events will be replayed. Persisted pending gauges
+are no longer trusted or written. Startup/ongoing metric pruning is bounded to
+64 inspected keys per pass with a one-minute throttle; refreshed shards,
+concurrent winning resets, denied storage and unrelated keys have regressions.

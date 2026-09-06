@@ -1,4 +1,5 @@
 import { loadCachedCatalog, requestJson } from "./appStoreApi.js";
+import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
 
 const state = {
   apps: [],
@@ -1777,6 +1778,19 @@ async function lookupPublicSubmission() {
   }
 }
 
+async function refreshCatalog() {
+  const result = await loadCachedCatalog();
+  applyCatalog(result.payload);
+  state.catalogReady = true;
+  render();
+  void result.revalidation?.then((next) => {
+    if (!next.changed) return;
+    applyCatalog(next.payload);
+    render();
+  }).catch(() => undefined);
+  return result.payload;
+}
+
 async function load() {
   state.isLoading = true;
   state.catalogReady = false;
@@ -1784,19 +1798,7 @@ async function load() {
   setStatus("Loading", "busy");
   render();
   try {
-    const catalogRead = loadCachedCatalog().then((result) => {
-      applyCatalog(result.payload);
-      state.catalogReady = true;
-      render();
-      if (result.revalidation) {
-        void result.revalidation.then((next) => {
-          if (!next.changed) return;
-          applyCatalog(next.payload);
-          render();
-        }).catch(() => undefined);
-      }
-      return result.payload;
-    });
+    const catalogRead = refreshCatalog();
     const [workspaces, catalog, serverApps, installations, pinned] = await Promise.all([
       requestJson("/api/workspaces"),
       catalogRead,
@@ -1867,6 +1869,16 @@ promotionModalClose?.addEventListener("click", closePromotionModal);
 promotionModal?.addEventListener("click", (event) => {
   if (event.target === promotionModal) {
     closePromotionModal();
+  }
+});
+
+window.addEventListener("message", (event) => {
+  if (!isExactMaverickParentMessage(event)) return;
+  const payload = event.data;
+  if (payload?.type === "maverick.app.data-changed" && payload.owner_app_id === "app-store"
+      && ["records", "catalog"].includes(payload.resource)) {
+    // Display recovery cannot confer installation or workspace authority.
+    refreshCatalog().catch(() => undefined);
   }
 });
 

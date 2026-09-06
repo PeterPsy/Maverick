@@ -33,6 +33,9 @@ describe("M6 review regressions", () => {
     const resource = client.resource("review", policy);
     const controller = new AbortController();
     const read = resource.readThrough("one", async () => ({ kind: "value", payload: { value: "private" }, revision: "one" }), controller.signal);
+    const completion = operation === "cancel"
+      ? expect(read).rejects.toMatchObject({ name: "AbortError" })
+      : read;
     await quotaStarted.promise;
     if (operation === "cancel") controller.abort();
     if (operation === "dispose") client.dispose();
@@ -46,7 +49,7 @@ describe("M6 review regressions", () => {
     }
     expect(await backend.list()).toHaveLength(0);
     quota.resolve(true);
-    await read;
+    await completion;
     expect(await backend.list()).toHaveLength(0);
     expect(await resource.get("one")).toBeNull();
     client.dispose();

@@ -59,14 +59,14 @@ export function nativeCrossClientLocksAvailable(): boolean {
 export async function withCrossClientLock<T>(
   key: string,
   operation: () => Promise<T>,
-  options: { mode?: "exclusive" | "shared"; nativeOnly?: boolean } = {},
+  options: { mode?: "exclusive" | "shared"; nativeOnly?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
   const name = `maverick-pwa-cache:${stableHash(key)}`;
   const locks = nativeCrossClientLocksAvailable()
     ? (globalThis.navigator as Navigator & { locks: LockManager }).locks
     : null;
   if (locks) {
-    return locks.request(name, { mode: options.mode ?? "exclusive" }, operation);
+    return locks.request(name, { mode: options.mode ?? "exclusive", ...(options.signal ? { signal: options.signal } : {}) }, operation);
   }
   if (options.nativeOnly) return operation();
   return withLocalLock(name, operation);

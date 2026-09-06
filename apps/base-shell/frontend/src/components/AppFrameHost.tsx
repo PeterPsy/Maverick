@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { clampPrivateAccessLease } from "@maverick/pwa-cache";
+import { clampPrivateAccessLease, connectAppEventSocket } from "@maverick/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import {
   MAVERICK_IFRAME_SANDBOX,
@@ -24,9 +24,9 @@ import { ShellPendingIndicator } from "./ShellPendingIndicator";
 import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
 import { StorageFileCacheBroker } from "../storageFileCacheBroker";
 import { shellPwaMetrics, shellPwaQuotaAdapter } from "../pwaCacheRuntime";
+import runtimeResources from "../pwaDataCacheResourceDeclarations.v1.json";
 
 type AppFrameParams = Record<string, string | boolean | null>;
-const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
 
 type AppReadyMessage = {
   app_id?: string;
@@ -315,7 +315,7 @@ export function AppFrameHost({
   }, [activeApp.app_id, activeDependencyCacheKey, hasDeclaredDependencies]);
 
   useEffect(() => {
-    return connectAppEventSocket((event) => {
+    return connectAppEventSocket<AppEventMessage>((event) => {
       if (event.workspace_id && event.workspace_id !== activeWorkspaceId) {
         return;
       }
@@ -335,6 +335,18 @@ export function AppFrameHost({
         ...current,
         [eventMountKey]: (current[eventMountKey] || 0) + 1,
       }));
+    }, () => {
+      // Do not remount frames or invent a connectivity mode. Live events may
+      // have been lost; reuse each owner's ordinary display refresh route.
+      for (const declaration of runtimeResources.resources) {
+        if (!frameRefs.current[declaration.app_id]) continue;
+        window.postMessage({
+          type: "maverick.app.data-changed",
+          owner_app_id: declaration.app_id,
+          resource: declaration.aliases[0] ?? declaration.resource,
+          workspace_id: activeWorkspaceId,
+        }, window.location.origin);
+      }
     });
   }, [activeWorkspaceId, mountScopePrefix]);
 
@@ -695,47 +707,4 @@ function isResolvedDependencyPayload(value: unknown): value is AppDependenciesPa
   }
   const payload = value as Partial<AppDependenciesPayload>;
   return payload.status === "resolved" && typeof payload.consumer_app_id === "string" && Array.isArray(payload.dependencies);
-}
-
-function connectAppEventSocket(onEvent: (event: AppEventMessage) => void): () => void {
-  if (typeof WebSocket === "undefined") {
-    return () => {};
-  }
-  let socket: WebSocket | null = null;
-  let reconnectTimer: number | undefined;
-  let closed = false;
-
-  function connect() {
-    socket = new WebSocket(appEventSocketUrl());
-    socket.onmessage = (message) => {
-      try {
-        const event = JSON.parse(message.data) as AppEventMessage;
-        onEvent(event);
-      } catch {
-        return;
-      }
-    };
-    socket.onclose = () => {
-      if (!closed) {
-        reconnectTimer = window.setTimeout(connect, 1000);
-      }
-    };
-    socket.onerror = () => {
-      socket?.close();
-    };
-  }
-
-  connect();
-  return () => {
-    closed = true;
-    if (reconnectTimer !== undefined) {
-      window.clearTimeout(reconnectTimer);
-    }
-    socket?.close();
-  };
-}
-
-function appEventSocketUrl(): string {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${APP_EVENTS_WS_PATH}`;
 }

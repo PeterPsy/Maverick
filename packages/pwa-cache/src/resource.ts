@@ -86,6 +86,7 @@ export class PwaCacheResource<T> {
   }
 
   async readThrough(entityId: string, loader: CacheLoader<T>, signal?: AbortSignal): Promise<CacheReadResult<T>> {
+    signal?.throwIfAborted();
     const normalizedEntityId = validateEntityId(entityId);
     const generation = this.generation;
     const shared = this.persistencePolicy === "cache" && this.persistentBackend.durabilityMode() === "indexeddb";
@@ -97,11 +98,12 @@ export class PwaCacheResource<T> {
     const maintenanceKey = await maintenancePublicationKey(backendKey, this.scope);
     const maintenance = publicationGeneration(maintenanceKey, shared, true);
     const broadMaintenance = publicationGeneration(backendKey, shared, true);
-    const canPublish = () => !signal?.aborted && generation === this.generation
+    const canPublish = () => generation === this.generation
       && cleanup !== null && cleanup === publicationGeneration(backendKey, shared)
       && maintenance !== null && maintenance === publicationGeneration(maintenanceKey, shared, true)
       && broadMaintenance !== null && broadMaintenance === publicationGeneration(backendKey, shared, true);
     const hit = await this.cacheHit(normalizedEntityId);
+    signal?.throwIfAborted();
     if (hit && (hit.freshness === "fresh" || this.policy.allowStale === true)) {
       const shouldRevalidate = this.revalidationMode() === "always"
         || (this.revalidationMode() === "stale" && hit.freshness === "stale");
@@ -214,8 +216,10 @@ export class PwaCacheResource<T> {
     signal?: AbortSignal,
   ): Promise<CacheRevalidationResult<T>> {
     const key = cacheEntryKey(this.scope, entityId);
-    return runSingleFlight(key, async () => {
+    return runSingleFlight(key, async (sharedSignal) => {
+      const canPublishShared = () => !sharedSignal.aborted && canPublish();
       const latest = await this.cacheHit(entityId);
+      sharedSignal.throwIfAborted();
       if (latest && (!observed || latest.metadata.cachedAt > observed.metadata.cachedAt)) {
         return { changed: !observed || latest.metadata.revision !== observed.metadata.revision, payload: latest.payload, revision: latest.metadata.revision };
       }
@@ -225,7 +229,7 @@ export class PwaCacheResource<T> {
         response = await loader({
           etag: current?.metadata.etag,
           knownRevision: current?.metadata.revision,
-          signal,
+          signal: sharedSignal,
         });
       } catch (error) {
         if (errorName(error) !== "AbortError") {
@@ -242,7 +246,7 @@ export class PwaCacheResource<T> {
           throw new Error("A not_modified response requires a cached value.");
         }
         await withPublicationLock(this.persistentBackend.durabilityKey(), async () => {
-          if (canPublish()) await this.refreshMetadata(current.metadata, response.revision, response.etag);
+          if (canPublishShared()) await this.refreshMetadata(current.metadata, response.revision, response.etag);
         });
         this.telemetry({ kind: "not_modified" });
         return { changed: false, payload: current.payload, revision: response.revision?.trim() || current.metadata.revision };
@@ -250,10 +254,10 @@ export class PwaCacheResource<T> {
       const revision = String(response.revision || "").trim();
       const sanitized = safeSanitize(this.policy.sanitize, response.payload);
       if (sanitized !== null && revision) {
-        await this.storeValue(entityId, sanitized, revision, response.etag, Boolean(current), canPublish);
+        await this.storeValue(entityId, sanitized, revision, response.etag, Boolean(current), canPublishShared);
       }
       return { changed: !current || current.metadata.revision !== revision, payload: sanitized ?? response.payload, revision };
-    });
+    }, signal);
   }
 
   private async storeValue(

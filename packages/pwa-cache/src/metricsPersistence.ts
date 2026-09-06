@@ -22,6 +22,8 @@ export {
 const RESET_SCHEMA = "maverick.pwa-cache-metrics-reset.v1";
 const INITIAL_RESET_ID = "initial";
 const COLLECTOR_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/u;
+const PRUNE_BATCH_SIZE = 64;
+const PRUNE_INTERVAL_MS = 60_000;
 
 type MetricsResetMarker = {
   resetAt: number;
@@ -35,6 +37,8 @@ export class MetricsShardPersistence {
   private readonly storage: PwaCacheMetricsStorage;
   private readonly storageKey: string;
   private readonly writerPrefix: string;
+  private pruneCursor = 0;
+  private lastPrunedAt: number | null = null;
 
   constructor(storage: PwaCacheMetricsStorage, storageKey: string, collectorId?: string) {
     this.storage = storage;
@@ -66,6 +70,7 @@ export class MetricsShardPersistence {
   }
 
   readPeers(now: number, retentionMs: number, resetId: string): PersistedMetricsShard[] {
+    this.prune(now, retentionMs);
     const peers: PersistedMetricsShard[] = [];
     const ownWriterKey = this.writerKey(resetId);
     try {
@@ -85,11 +90,51 @@ export class MetricsShardPersistence {
     return peers;
   }
 
-  persist(shard: PersistedMetricsShard): void {
+  persist(shard: PersistedMetricsShard, retentionMs: number): void {
+    this.prune(shard.updatedAt, retentionMs);
     try {
       this.storage.setItem(this.writerKey(shard.resetId), JSON.stringify(shard));
     } catch {
       // Metrics are best-effort and never participate in the cache path.
+    }
+  }
+
+  prune(now: number, retentionMs: number): void {
+    if (this.lastPrunedAt !== null && now >= this.lastPrunedAt
+        && now - this.lastPrunedAt < PRUNE_INTERVAL_MS) return;
+    this.lastPrunedAt = now;
+    try {
+      const length = this.storage.length;
+      if (this.pruneCursor >= length) this.pruneCursor = 0;
+      const end = Math.min(length, this.pruneCursor + PRUNE_BATCH_SIZE);
+      const keys: string[] = [];
+      for (let index = this.pruneCursor; index < end; index += 1) {
+        const key = this.storage.key(index);
+        if (key && (key.startsWith(this.writerPrefix) || key === this.storageKey)) keys.push(key);
+      }
+      // Capture keys before observing the reset marker, as in explicit reset.
+      // Generation-qualified keys protect writes from any subsequent reset.
+      const resetRaw = this.storage.getItem(this.resetKey);
+      const marker = resetRaw ? parseResetMarker(resetRaw) : null;
+      // A denied/corrupt marker is not evidence that all other generations
+      // are obsolete. Leave their history intact until a readable decision.
+      if (resetRaw && !marker) return;
+      const resetId = marker?.resetId ?? INITIAL_RESET_ID;
+      let removed = 0;
+      for (const key of keys) {
+        const raw = this.storage.getItem(key);
+        if (!raw) continue;
+        const shard = key === this.storageKey ? parsePersistedMetrics(raw) : parsePersistedMetricsShard(raw);
+        const generation = shard && "resetId" in shard ? shard.resetId : INITIAL_RESET_ID;
+        if (shard && generation === resetId && persistedMetricsAreCurrent(shard, now, retentionMs)) continue;
+        // A live writer may have refreshed a captured shard during inspection.
+        if (this.storage.getItem(key) !== raw) continue;
+        this.storage.removeItem(key);
+        removed += 1;
+      }
+      this.pruneCursor = Math.max(0, end - removed);
+    } catch {
+      // Quota/denied storage must never interrupt cache reads or telemetry.
     }
   }
 
@@ -182,11 +227,6 @@ export class MetricsShardPersistence {
       peers.push({
         ...legacy,
         collectorId: "legacy",
-        requestWait: {
-          ...legacy.requestWait,
-          oldestPendingStartedAt: null,
-          pendingCount: 0,
-        },
         resetId: INITIAL_RESET_ID,
       });
     } else if (raw) {

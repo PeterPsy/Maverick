@@ -1,4 +1,4 @@
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { connectAppEventSocket, isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { calendarEvents, calendarWindow, readCalendarWindow, readCalendarEvent } from './pwaCache';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,7 +29,6 @@ import {
 } from './runtime';
 import type { CalendarConnection, CalendarRemoteCalendar, CalendarViewState } from './types';
 
-const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
 const DEFAULT_VIEW_STATE: CalendarViewState = { mode: 'default', entity_ids: [], tags: [], conflicts_only: false };
 
 export function App() {
@@ -170,43 +169,13 @@ export function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  useEffect(() => {
-    if (typeof WebSocket === 'undefined') {
-      return undefined;
+  useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((payload) => {
+    if (payload.type === 'maverick.app.data-changed'
+        && payload.owner_app_id === runtimeAppIdRef.current
+        && payload.resource !== CALENDAR_UI_STATE_RESOURCE) {
+      scheduleReload(payload.resource);
     }
-    let closed = false;
-    let socket: WebSocket | null = null;
-    let reconnectTimer = 0;
-    const connect = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      socket = new WebSocket(`${protocol}//${window.location.host}${APP_EVENTS_WS_PATH}`);
-      socket.onmessage = (message) => {
-        try {
-          const payload = JSON.parse(message.data) as { type?: string; owner_app_id?: string };
-          if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === runtimeAppIdRef.current) {
-            const resource = (payload as { resource?: string }).resource;
-            if (resource !== CALENDAR_UI_STATE_RESOURCE) {
-              scheduleReload(resource);
-            }
-          }
-        } catch {
-          return;
-        }
-      };
-      socket.onclose = () => {
-        if (!closed) {
-          reconnectTimer = window.setTimeout(connect, 1000);
-        }
-      };
-      socket.onerror = () => socket?.close();
-    };
-    connect();
-    return () => {
-      closed = true;
-      window.clearTimeout(reconnectTimer);
-      socket?.close();
-    };
-  }, []);
+  }, () => scheduleReload()), []);
 
   async function handleCreate(event: Omit<Event, 'id'>) {
     setError('');

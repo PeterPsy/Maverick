@@ -19,6 +19,7 @@ from core.providers.certification_pipeline import (
     SignedCertificationRun, validate_run_against_manifest, verify_certification_run,
 )
 from core.providers.errors import CapabilityCertificateError
+from core.providers.certification_target import api_profile_target_digest
 from core.providers.google_agentic_profile import (
     GOOGLE_CERTIFIED_REASONING_EFFORTS,
     GOOGLE_DEFAULT_REASONING_EFFORT,
@@ -46,6 +47,8 @@ def publish_google_preview_certificate(
 ) -> CapabilityCertificate:
     """Verify a completed run and publish its exact Google combination."""
     run = verify_certification_run(signed_run, trusted_keys=trusted_keys)
+    if run.target_digest != api_profile_target_digest(definition):
+        raise CapabilityCertificateError("certification_target_mismatch")
     _validate_run(run, adapter)
     evidence = build_capability_evidence(
         suite_id=run.suite_id,
@@ -54,7 +57,7 @@ def publish_google_preview_certificate(
         adapter_artifact_digest=run.adapter_artifact_digest,
         result_summary_digest=run.result_summary_digest,
         evidence_refs=run.evidence_refs,
-        recorded_at=run.completed_at,
+        recorded_at=run.certification_completed_at,
         source_commit=run.source_commit,
         artifact_bundle_digest=run.artifact_bundle_digest,
         matrix_revision=run.matrix_revision,
@@ -90,8 +93,8 @@ def publish_google_preview_certificate(
         test_run_id=evidence.test_run_id,
         evidence_digest=evidence.evidence_digest,
         evidence_refs=evidence.evidence_refs,
-        issued_at=run.completed_at,
-        expires_at=run.completed_at + timedelta(days=GOOGLE_CERTIFICATION_VALIDITY_DAYS),
+        issued_at=run.certification_completed_at,
+        expires_at=run.certification_completed_at + timedelta(days=GOOGLE_CERTIFICATION_VALIDITY_DAYS),
         tcb_manifest_id=run.tcb_manifest_id,
         tcb_manifest_version=run.tcb_manifest_version,
         tcb_structure_digest=run.tcb_structure_digest,

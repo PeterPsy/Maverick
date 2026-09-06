@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import os
 from pathlib import Path
@@ -45,6 +46,8 @@ from tests.support.repo import make_temp_repo_root
 
 NOW = datetime(2026, 8, 17, tzinfo=UTC)
 
+
+from tests.support.certification_evidence import fixture_step_process, with_fixture_behavior
 
 class OpenRouterAgenticProfileTest(unittest.TestCase):
     def test_bootstrap_publishes_exact_expiring_unbound_preview(self) -> None:
@@ -151,7 +154,6 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
 
         private_key = Ed25519PrivateKey.generate()
         repository_root = Path(__file__).resolve().parents[3]
-        completed = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")
         with mock.patch(
             "core.providers.certification_pipeline._require_clean_checkout"
         ), mock.patch(
@@ -159,7 +161,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             return_value="a" * 40,
         ), mock.patch(
             "core.providers.certification_pipeline.subprocess.run",
-            return_value=completed,
+            side_effect=fixture_step_process,
         ):
             fixture_run = execute_certification_suite(
                 cwd=repository_root,
@@ -178,6 +180,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 evidence_refs=("platform-evidence:test-run:openrouter",),
                 started_at=NOW,
             )
+        run = with_fixture_behavior(run)
         with self.assertRaisesRegex(
             CapabilityCertificateError,
             "certification_required_steps_missing",
@@ -212,6 +215,11 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 adapter=adapter,
                 signed_run=signed,
                 trusted_keys={"test-ci": private_key.public_key()},
+            )
+        with self.assertRaisesRegex(CapabilityCertificateError, "certification_target_mismatch"):
+            publish_openrouter_preview_certificate(
+                state.provider_store, definition=replace(profile, model_id="unproven-model"),
+                adapter=adapter, signed_run=signed, trusted_keys={"test-ci": private_key.public_key()},
             )
         evidence = state.provider_store.get_capability_evidence(
             certificate.evidence_digest

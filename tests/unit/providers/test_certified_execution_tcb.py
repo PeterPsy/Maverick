@@ -30,7 +30,7 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
         self.assertEqual(identity.manifest_version, "30")
         self.assertEqual(
             identity.structure_digest,
-            "de0adc5ee81f15df14cbaa43de49cc92af95477465a7699ad7c5de4c392f3df2",
+            "0462ae1effd2518b0d436b5bfb094340ce9160c2d19b4b80a68337cd52382e0a",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",

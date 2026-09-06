@@ -24,6 +24,16 @@ The runtime engine adapter owns:
 Local process launch is an optional lifecycle capability, not a requirement of
 an agentic runtime.
 
+## P6 certification boundary
+
+Current remote candidates use hosted adapter 36, recipe 23, suite 40 and TCB
+manifest 30 (Google/OpenRouter profiles 45/44). Exact-target live receipts and
+independently observed natural conformance are required before trusted signing
+and publication; neither step grants release authority. The procedure is in
+`docs/runbooks/agentic_certification_evidence.md`. Historical revision numbers
+below describe earlier implementation checkpoints, not current certification.
+Codex retains its existing revision-14 artifact and connection authority.
+
 ## Pinned Agentic Session Identity
 
 Agentic sessions no longer resolve their runtime from the mutable workspace

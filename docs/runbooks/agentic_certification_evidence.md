@@ -1,10 +1,13 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-09-04
+Status date: 2026-09-06
 
 Scope: trusted CI or operator-controlled certification worker
 
-Production status: **not approved; no complete two-step certificate evidence recorded**
+Production status: **NO-GO; no P6 live/natural evidence or release approval recorded**
+
+The following coverage inventory is historical P4 evidence, not a P6 run.
+P6 collection/signing below supersedes its former two-step signing procedure.
 
 Phase-4 repository closure executes only the explicitly selected deterministic
 `fixture_contract` steps for Google and OpenRouter. It does not execute
@@ -120,41 +123,80 @@ non-synthetic data. Ordinary repository-test workers must not receive a provider
 credential or send provider traffic; the complete certification worker is a
 separate trusted environment.
 
-## Execute and sign
+## Collect, observe, review, then sign
 
-Create an output directory outside the repository. The runner opens its output
-with create-only semantics and emits nothing when the command exits non-zero.
-The runner selects a code-owned, versioned manifest from `suite-id` and
-`suite-version`. It accepts no command, matrix path/revision, artifact list, or
-probe entrypoint from the CLI. Every current remote manifest contains one
-deterministic `fixture_contract` step and one distinct operator-only
-`live_probe` step; both must pass in canonical order before the run can be
-signed, verified, or published.
+Use a clean, isolated checkout at the exact deployable commit. Outputs must be
+new files outside that checkout. Collection and signing are separate commands;
+collection does not create a certificate, and signing never invokes a provider.
 
-Normal repository tests may call `execute_certification_suite` with
-`step_kinds=("fixture_contract",)` to exercise deterministic conformance without
-provider traffic. That explicit selection does not remove or rewrite the live
-step in the manifest. The resulting incomplete run is deliberately rejected by
-completed-run validation and can never be certificate evidence.
+The default is fixture-only, even if ambient environment enables live probes:
 
 ```bash
-python3 scripts/run_agentic_certification.py \
+python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 39 \
+  --suite-version 40 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
-  --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
-  --private-key-file "$CERTIFICATION_PRIVATE_KEY_FILE" \
-  --output "$CERTIFICATION_OUTPUT/google-run.json"
+  --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
 ```
 
-For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `39`, matrix revision
-`2026-09-04-r39-p4-typed-result-classification-tcb29`, and the OpenRouter manifest.
-The Google suite uses version `39` and the same matrix revision. The
-canonical matrices, artifact bundles, commands, and live-probe entrypoints live
-in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
-bundle, result, live probe, or evidence reference.
+Only an authorized operator with explicitly scoped test credentials and a cost
+budget may add `--live-probe --max-cost-microusd <approved-ceiling>` to a **new**
+collection. The subprocess receives explicit opt-in and the budget; standalone
+probe entrypoints also require `MAVERICK_CERTIFICATION_ALLOW_LIVE=1` and
+`MAVERICK_CERTIFICATION_MAX_COST_MICROUSD`. Merely setting a credential does
+not authorize a paid request. The actual translated payload is bounded before
+HTTPS: model identity, conservative input-byte ceiling, output limit, request
+count and non-refundable price reservation are checked. Failed/ambiguous
+requests are never refunded or retried automatically.
+
+Both suite-40 manifests bind matrix revision
+`2026-09-06-r40-p6-exact-target-tcb30`. OpenRouter uses suite id
+`maverick-openrouter-agentic-contract`. The live step must return a bounded,
+strict JSON receipt with the exact API-profile target digest and the
+collector-generated nonce. Duplicate fields, arbitrary text, extra payload
+fields, missing observations, stale receipts and false counters fail closed,
+even when the subprocess exits zero.
+
+After successful fixture and live collection, an independent trusted operator
+must actually execute and review the plan's 14 natural behavioral scenarios at
+every claimed reasoning effort, on the same source/TCB and exact target. The
+report schema and required checks are code-owned in
+`core/providers/certification_behavior.py`; scenario proof contains only
+prompt/trace/source/projection/effect digests, exact booleans and bounded
+resource counters. Each absolute failure counter must be the integer zero.
+Record native observations per approved runtime/provider connection, not per
+model slug. This API signing runner does **not** implement or approve a new
+native connection.
+
+The report must be later than the protocol collection. It is an operator
+observation record, not an executable behavioral runner or a self-authenticating
+certificate. Do not fill checkboxes without executing the real scenarios.
+Retain the reviewed private traces in the platform-owned evidence store and
+store the canonical report under its `platform-evidence:sha256:<digest>` ref.
+The signer must verify those traces and their provenance independently.
+No production code generates passing natural observations; fabricated data in
+`tests/support/certification_evidence.py` is only a unit-test fixture.
+
+```bash
+python3 scripts/run_agentic_certification.py sign \
+  --collection-file "$CERTIFICATION_OUTPUT/google-live-collection.json" \
+  --behavioral-evidence-file "$CERTIFICATION_OUTPUT/google-natural-observations.json" \
+  --confirmation natural-traces-reviewed \
+  --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
+  --private-key-file "$CERTIFICATION_PRIVATE_KEY_FILE" \
+  --output "$CERTIFICATION_OUTPUT/google-signed-run.json"
+```
+
+Only a previously trusted operator/CI signer may be used; generating a new key
+and declaring it trusted does not satisfy the independent trust gate. Signing,
+verification and publication reject fixture-only, protocol-only, incomplete,
+wrong-target, resource-exceeding or drifted reports. The certificate publisher
+also compares the full immutable definition to the signed target, so a run for
+one model/recipe/policy cannot certify a different profile sharing its adapter.
+The collection id retains the fixture/live run identity; the signature and
+result-summary digest additionally bind the natural report and its evidence
+reference. Certificate issuance/expiry use the natural completion timestamp.
 
 Both live probes must make the provider call the exact generated alias for
 `core-capability:filesystem.list`, execute the real Core handler over an
@@ -194,8 +236,8 @@ The trust sequence is indivisible:
 
 1. deterministic conformance through `fixture_contract`;
 2. synthetic provider behavior through `live_probe`;
-3. behavioral conformance validation of both successful results, their order,
-   manifest digest, and canonical command digests;
+3. independently executed natural behavioral conformance, with exact target,
+   source/projection/effect/trace evidence, resource bounds and absolute gates;
 4. signing, independent verification, and immutable certificate publication.
 
 The server-owned availability boundary still blocks remote admission after a

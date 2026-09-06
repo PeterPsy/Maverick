@@ -20,6 +20,7 @@ from core.providers.agentic_protocol import (
     EphemeralCredential,
     HOSTED_FINALIZATION_INSTRUCTION,
 )
+from core.providers.agentic_probe_validation import validate_probe_response
 from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
 from core.providers.google_agentic_profile import (
     GOOGLE_CERTIFIED_REASONING_EFFORTS,
@@ -61,7 +62,6 @@ async def probe_google_interactions(
     """Run a paced two-tool continuation round trip per certified effort."""
     # Certification exercises the exact full-workspace recipe rather than the
     # historical provider-stored continuation mode.
-    active_client = client or GoogleInteractionsAgenticClient(state_mode="stateless")
     test_run_id = f"google-interactions-live:{uuid4()}"
     normalized_efforts = tuple(str(value).strip().lower() for value in reasoning_efforts)
     if not normalized_efforts or any(
@@ -76,6 +76,14 @@ async def probe_google_interactions(
             normalized_efforts,
             0,
         )
+    if client is None:
+        from core.providers.certification_probe_budget import CertificationProbeTransport
+        from core.providers.google_interactions_transport import GoogleInteractionsHttpTransport
+
+        client = GoogleInteractionsAgenticClient(state_mode="stateless", transport=CertificationProbeTransport(
+            GoogleInteractionsHttpTransport(), provider_id="google-ai-studio",
+        ))
+    active_client = client
     events: list = []
     request_count = 0
     filesystem_result_count = 0
@@ -127,6 +135,7 @@ async def probe_google_interactions(
                 )
                 if (
                     error
+                    or not validate_probe_response(response, final=False)
                     or call is None
                     or private is None
                     or call.provider_tool_name != PROBE_TOOL_NAME
@@ -184,7 +193,7 @@ async def probe_google_interactions(
                 and bool((event.text or "").strip())
                 for event in final_response
             )
-            if error or not (completed and final):
+            if error or not (completed and final) or not validate_probe_response(final_response, final=True):
                 return _result(
                     test_run_id, events, error or "probe_final_response_missing", request_count,
                     normalized_efforts, filesystem_result_count,

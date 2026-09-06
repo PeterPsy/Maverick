@@ -76,6 +76,8 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
             {
                 "MAVERICK_OPENROUTER_CERTIFICATION_API_KEY": "synthetic-key",
                 "MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS": "0",
+                "MAVERICK_CERTIFICATION_ALLOW_LIVE": "1",
+                "MAVERICK_CERTIFICATION_MAX_COST_MICROUSD": "1000000",
             },
         ), mock.patch.object(
             probe,

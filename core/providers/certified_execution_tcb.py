@@ -195,6 +195,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             (
                 "core/providers",
                 "core/secrets",
+                "scripts/run_agentic_certification.py",
                 "scripts/run_google_interactions_probe.py",
                 "scripts/run_openrouter_agentic_probe.py",
             ),

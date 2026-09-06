@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import replace
 from datetime import UTC, datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 from typing import Mapping, Sequence
+from uuid import uuid4
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -28,76 +30,19 @@ from core.providers.certified_execution_tcb import (
     certified_tcb_identity,
     validate_remote_tcb_identity,
 )
+from core.providers.certification_records import (
+    CertificationRunResult, SignedCertificationRun, signed_run_from_json, signed_run_to_json,
+)
 from core.providers.errors import CapabilityCertificateError
+from core.providers.certification_target import builtin_api_certification_target
+from core.providers.certification_validation import (
+    validate_completed_run, _sha256, _required, _require_aware,
+)
+from core.providers.certification_summary import certification_result_summary
+from core.providers.certification_live_receipt import (
+    decode_certification_json, validate_live_probe_receipt,
+)
 from core.runtime.execution_binding import canonical_digest
-
-
-@dataclass(frozen=True)
-class CertificationRunResult:
-    """Immutable result of one completed certification suite execution."""
-
-    suite_id: str
-    suite_version: str
-    test_run_id: str
-    source_commit: str
-    adapter_artifact_digest: str
-    artifact_bundle_digest: str
-    matrix_revision: str
-    matrix_digest: str
-    result_summary_digest: str
-    manifest_digest: str
-    step_results: tuple[dict[str, object], ...]
-    evidence_refs: tuple[str, ...]
-    started_at: datetime
-    completed_at: datetime
-    outcome: str
-    tcb_manifest_id: str = ""
-    tcb_manifest_version: str = ""
-    tcb_structure_digest: str = ""
-    tcb_live_digest: str = ""
-
-
-@dataclass(frozen=True)
-class SignedCertificationRun:
-    run: CertificationRunResult
-    signer_key_id: str
-    signature: str
-
-
-def signed_run_to_json(signed: SignedCertificationRun) -> str:
-    payload = {
-        "run": {
-            key: value.isoformat() if isinstance(value, datetime) else value
-            for key, value in signed.run.__dict__.items()
-        },
-        "signer_key_id": signed.signer_key_id,
-        "signature": signed.signature,
-    }
-    return json.dumps(payload, sort_keys=True, indent=2) + "\n"
-
-
-def signed_run_from_json(value: str) -> SignedCertificationRun:
-    try:
-        payload = json.loads(value)
-        run_payload = dict(payload["run"])
-        run_payload["evidence_refs"] = tuple(run_payload["evidence_refs"])
-        run_payload["step_results"] = tuple(run_payload["step_results"])
-        for field in (
-            "tcb_manifest_id",
-            "tcb_manifest_version",
-            "tcb_structure_digest",
-            "tcb_live_digest",
-        ):
-            run_payload.setdefault(field, "")
-        for field in ("started_at", "completed_at"):
-            run_payload[field] = datetime.fromisoformat(run_payload[field])
-        return SignedCertificationRun(
-            run=CertificationRunResult(**run_payload),
-            signer_key_id=str(payload["signer_key_id"]),
-            signature=str(payload["signature"]),
-        )
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise CapabilityCertificateError("certification_artifact_invalid") from error
 
 
 def load_ed25519_private_key(path: Path) -> Ed25519PrivateKey:
@@ -131,12 +76,17 @@ def execute_certification_suite(
     tcb_identity = certified_tcb_identity(cwd)
     matrix_bytes = resolve_manifest_path(cwd, manifest.matrix_path).read_bytes()
     bundle_digest = tcb_identity.live_digest
+    target_digest = builtin_api_certification_target(manifest.provider_id)
+    collection_nonce = uuid4().hex
+    child_environment = dict(os.environ if environment is None else environment)
+    child_environment["MAVERICK_CERTIFICATION_RUN_NONCE"] = collection_nonce
     step_results: list[dict[str, object]] = []
     for step in selected_steps:
         completed = subprocess.run(
             step.command, cwd=cwd,
-            env=dict(environment) if environment is not None else None,
+            env=child_environment,
             capture_output=True, check=False,
+            timeout=1_800 if step.kind == "fixture_contract" else 900,
         )
         step_results.append({
             "step_id": step.step_id,
@@ -149,6 +99,12 @@ def execute_certification_suite(
         })
         if completed.returncode != 0:
             raise CapabilityCertificateError(f"certification_step_failed:{step.step_id}")
+        if step.kind == "live_probe":
+            step_results[-1]["live_receipt"] = validate_live_probe_receipt(
+                decode_certification_json(completed.stdout, max_bytes=16_384),
+                provider_id=manifest.provider_id, target_digest=target_digest,
+                run_nonce=collection_nonce,
+            )
     _require_clean_checkout(cwd)
     if _git_commit(cwd) != source_commit:
         raise CapabilityCertificateError("certification_source_commit_changed")
@@ -158,11 +114,14 @@ def execute_certification_suite(
     end = datetime.now(tz=UTC)
     summary = {
         "manifest_digest": manifest.digest,
+        "target_digest": target_digest,
+        "collection_nonce": collection_nonce,
         "tcb_manifest_id": tcb_identity.manifest_id,
         "tcb_manifest_version": tcb_identity.manifest_version,
         "tcb_structure_digest": tcb_identity.structure_digest,
         "tcb_live_digest": tcb_identity.live_digest,
         "steps": tuple(step_results),
+        "behavioral_evidence_digest": None,
     }
     test_run_id = canonical_digest(
         {
@@ -199,7 +158,30 @@ def execute_certification_suite(
         tcb_manifest_version=tcb_identity.manifest_version,
         tcb_structure_digest=tcb_identity.structure_digest,
         tcb_live_digest=tcb_identity.live_digest,
+        target_digest=target_digest,
+        collection_nonce=collection_nonce,
     )
+
+
+def attach_behavioral_evidence(run: CertificationRunResult, report: object, *, cwd: Path) -> CertificationRunResult:
+    """Seal an independent, later natural run into collected protocol evidence.
+
+    This does not run a model, invent observations, approve release, or sign.
+    The trusted signer remains responsible for reviewing the actual traces.
+    """
+    validate_run_against_manifest(run, cwd=cwd)
+    if run.behavioral_evidence is not None:
+        raise CapabilityCertificateError("certification_behavior_already_attached")
+    # Copy before validation so a caller cannot mutate a previously checked report.
+    try:
+        snapshot = decode_certification_json(json.dumps(report, allow_nan=False))
+    except (ValueError, TypeError) as error:
+        raise CapabilityCertificateError("certification_behavior_shape_invalid") from error
+    evidence_ref = f"platform-evidence:sha256:{canonical_digest(snapshot)}"
+    candidate = replace(run, behavioral_evidence=snapshot, evidence_refs=(*run.evidence_refs, evidence_ref))
+    candidate = replace(candidate, result_summary_digest=canonical_digest(certification_result_summary(candidate)))
+    validate_completed_run(candidate)
+    return candidate
 
 
 def sign_certification_run(
@@ -239,70 +221,6 @@ def verify_certification_run(
     return signed.run
 
 
-def validate_completed_run(run: CertificationRunResult) -> None:
-    if run.outcome != "passed" or run.completed_at < run.started_at:
-        raise CapabilityCertificateError("certification_run_not_passed")
-    _require_aware(run.started_at)
-    _require_aware(run.completed_at)
-    if not run.test_run_id.startswith("run:"):
-        raise CapabilityCertificateError("certification_test_run_id_invalid")
-    _required(run.source_commit, "certification_source_commit_missing")
-    _required(run.matrix_revision, "certification_matrix_revision_missing")
-    for value in (
-        run.adapter_artifact_digest,
-        run.artifact_bundle_digest,
-        run.matrix_digest,
-        run.result_summary_digest,
-        run.manifest_digest,
-        run.tcb_structure_digest,
-        run.tcb_live_digest,
-    ):
-        _sha256(value)
-    if not run.evidence_refs:
-        raise CapabilityCertificateError("certificate_evidence_ref_invalid")
-    if {str(item.get("kind")) for item in run.step_results} != {
-        "fixture_contract",
-        "live_probe",
-    }:
-        raise CapabilityCertificateError("certification_required_steps_missing")
-    manifest = get_certification_manifest(run.suite_id, run.suite_version)
-    if run.manifest_digest != manifest.digest:
-        raise CapabilityCertificateError("certification_manifest_mismatch")
-    if (
-        run.tcb_manifest_id != manifest.tcb_manifest_id
-        or run.tcb_manifest_version != manifest.tcb_manifest_version
-        or run.tcb_structure_digest != manifest.tcb_structure_digest
-        or run.artifact_bundle_digest != run.tcb_live_digest
-    ):
-        raise CapabilityCertificateError("certificate_tcb_identity_mismatch")
-    expected_steps = tuple(
-        (step.step_id, step.kind, canonical_digest(step.command))
-        for step in manifest.steps
-    )
-    actual_steps = tuple(
-        (item.get("step_id"), item.get("kind"), item.get("command_digest"))
-        for item in run.step_results
-    )
-    if actual_steps != expected_steps:
-        raise CapabilityCertificateError("certification_step_manifest_mismatch")
-    if any(item.get("outcome") != "passed" or item.get("exit_code") != 0 for item in run.step_results):
-        raise CapabilityCertificateError("certification_run_not_passed")
-    expected_summary = canonical_digest({
-        "manifest_digest": run.manifest_digest,
-        "tcb_manifest_id": run.tcb_manifest_id,
-        "tcb_manifest_version": run.tcb_manifest_version,
-        "tcb_structure_digest": run.tcb_structure_digest,
-        "tcb_live_digest": run.tcb_live_digest,
-        "steps": run.step_results,
-    })
-    if run.result_summary_digest != expected_summary:
-        raise CapabilityCertificateError("certification_result_summary_mismatch")
-    if len(set(run.evidence_refs)) != len(run.evidence_refs) or any(
-        not str(ref).startswith("platform-evidence:") for ref in run.evidence_refs
-    ):
-        raise CapabilityCertificateError("certificate_evidence_ref_invalid")
-
-
 def validate_run_against_manifest(
     run: CertificationRunResult,
     *,
@@ -311,6 +229,8 @@ def validate_run_against_manifest(
 ) -> CertificationSuiteManifest:
     """Recompute publisher-owned identities instead of trusting signed CLI inputs."""
     manifest = get_certification_manifest(run.suite_id, run.suite_version)
+    if run.target_digest != builtin_api_certification_target(manifest.provider_id):
+        raise CapabilityCertificateError("certification_target_mismatch")
     if run.manifest_digest != manifest.digest:
         raise CapabilityCertificateError("certification_manifest_mismatch")
     current_tcb = validate_remote_tcb_identity(
@@ -376,24 +296,6 @@ def _selected_manifest_steps(
     return tuple(step for step in manifest.steps if step.kind in normalized)
 
 
-def _artifact_bundle_digest(cwd: Path, paths: Sequence[Path]) -> str:
-    if not paths:
-        raise CapabilityCertificateError("certification_artifact_bundle_empty")
-    digest = hashlib.sha256()
-    for item in sorted((path.resolve() for path in paths), key=str):
-        try:
-            relative = item.relative_to(cwd.resolve())
-        except ValueError as error:
-            raise CapabilityCertificateError("certification_artifact_outside_source") from error
-        if not item.is_file():
-            raise CapabilityCertificateError("certification_artifact_missing")
-        digest.update(relative.as_posix().encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(item.read_bytes())
-        digest.update(b"\0")
-    return digest.hexdigest()
-
-
 def _git_commit(cwd: Path) -> str:
     result = subprocess.run(
         ("git", "rev-parse", "HEAD"),
@@ -426,20 +328,11 @@ def _run_payload(run: CertificationRunResult) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _sha256(value: str) -> str:
-    normalized = str(value or "").strip().lower()
-    if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
-        raise CapabilityCertificateError("certification_digest_invalid")
-    return normalized
 
 
-def _required(value: str, reason: str) -> str:
-    normalized = str(value or "").strip()
-    if not normalized:
-        raise CapabilityCertificateError(reason)
-    return normalized
-
-
-def _require_aware(value: datetime) -> None:
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise CapabilityCertificateError("certification_time_invalid")
+__all__ = [
+    "CertificationRunResult", "SignedCertificationRun", "signed_run_from_json", "signed_run_to_json",
+    "execute_certification_suite", "attach_behavioral_evidence", "sign_certification_run",
+    "verify_certification_run", "validate_completed_run", "validate_run_against_manifest",
+    "load_ed25519_private_key",
+]

@@ -24,6 +24,8 @@ from core.providers.certification_manifests import (
 from core.runtime.execution_binding import canonical_digest
 
 
+from tests.support.certification_evidence import fixture_step_process, with_fixture_behavior
+
 class CertificationPipelineTest(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(__file__).resolve().parents[3]
@@ -82,6 +84,30 @@ class CertificationPipelineTest(unittest.TestCase):
         ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=failed):
             with self.assertRaisesRegex(CapabilityCertificateError, "certification_step_failed"):
                 self._execute_unpatched()
+
+    def test_green_process_without_live_receipt_is_not_evidence(self) -> None:
+        green = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")
+        with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
+            "core.providers.certification_pipeline._git_commit", return_value="a" * 40
+        ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=green):
+            with self.assertRaisesRegex(CapabilityCertificateError, "certification_json_invalid"):
+                self._execute_unpatched()
+
+    def test_protocol_success_without_natural_behavior_cannot_be_signed(self) -> None:
+        run = self._execute(complete_behavior=False)
+        with self.assertRaisesRegex(CapabilityCertificateError, "certification_behavior_required"):
+            sign_certification_run(run, signer_key_id="test", private_key=Ed25519PrivateKey.generate())
+
+    def test_signed_natural_observations_are_bound_to_the_summary(self) -> None:
+        run = self._execute()
+        private_key = Ed25519PrivateKey.generate()
+        signed = sign_certification_run(run, signer_key_id="test", private_key=private_key)
+        from copy import deepcopy
+
+        tampered = deepcopy(signed)
+        tampered.run.behavioral_evidence["counters"]["false_classifications"] = 1
+        with self.assertRaisesRegex(CapabilityCertificateError, "certification_result_summary_mismatch"):
+            verify_certification_run(tampered, trusted_keys={"test": private_key.public_key()})
 
     def test_tampered_or_untrusted_run_is_rejected(self) -> None:
         run = self._execute()
@@ -165,21 +191,21 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "d1e43438e323bdfba06c5c9aeb2f1e64465680561705bbb29003c9594117010b"
+                "08f5dceeed1691e426cd683bc13c88c0fec3f6406aca68c9020b7f00d0a9d2b5"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "b73d66bb2ed90cc21a16bc5ac679c4a48960c53ce9558b4afb7cd8b4e8d02af8"
+                "8cad9bc9b0c609684c08be04154ff1d387fcc386e6e9ebed01209e6df819775c"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "56ec0d81bfcd5348f0d613c9a91109d13c2dc8b360345bbacafee7e4fc7da123",
-            "openrouter": "2f84905a91365fd7f9d0ca8968c9c575973291e8ec4bf949ab92f6ad00c53615",
+            "google-ai-studio": "4a1765279518c575b72f0ac25fba095dcfae031fae4c82ab4abcb47183f4d027",
+            "openrouter": "4d7713b5e014222db7f5a16aa8a36e6217e00648f0b48b264fca87f2ae80c03c",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -209,13 +235,12 @@ class CertificationPipelineTest(unittest.TestCase):
                         expected_command_digests[(manifest.provider_id, step.kind)],
                     )
 
-    def _execute(self, *, step_kinds: tuple[str, ...] | None = None):
-        passed = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")
+    def _execute(self, *, step_kinds: tuple[str, ...] | None = None, complete_behavior=True):
         with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
             "core.providers.certification_pipeline._git_commit", return_value="a" * 40
         ), mock.patch(
             "core.providers.certification_pipeline.subprocess.run",
-            return_value=passed,
+            side_effect=fixture_step_process,
         ) as run_subprocess:
             result = self._execute_unpatched(step_kinds=step_kinds)
         expected_steps = [
@@ -231,7 +256,7 @@ class CertificationPipelineTest(unittest.TestCase):
             [item["command_digest"] for item in result.step_results],
             [canonical_digest(step.command) for step in expected_steps],
         )
-        return result
+        return with_fixture_behavior(result) if step_kinds is None and complete_behavior else result
 
     def _execute_unpatched(self, *, step_kinds: tuple[str, ...] | None = None):
         return execute_certification_suite(

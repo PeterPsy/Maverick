@@ -13,6 +13,7 @@ from core.providers.capability_models import CapabilityCertificate, RuntimeCapab
 from core.providers.certificate_service import build_capability_evidence, publish_capability_certificate, runtime_adapter_artifact_digest
 from core.providers.certification_pipeline import SignedCertificationRun, validate_run_against_manifest, verify_certification_run
 from core.providers.errors import CapabilityCertificateError
+from core.providers.certification_target import api_profile_target_digest
 from core.providers.openrouter_agentic_profile import (
     OPENROUTER_CERTIFIED_REASONING_EFFORTS,
     OPENROUTER_DEFAULT_REASONING_EFFORT,
@@ -40,6 +41,8 @@ def publish_openrouter_preview_certificate(
 ) -> CapabilityCertificate:
     """Verify a completed run and publish its exact OpenRouter combination."""
     run = verify_certification_run(signed_run, trusted_keys=trusted_keys)
+    if run.target_digest != api_profile_target_digest(definition):
+        raise CapabilityCertificateError("certification_target_mismatch")
     validate_run_against_manifest(run, cwd=Path(__file__).resolve().parents[2])
     if (run.suite_id, run.suite_version) != (
         OPENROUTER_CERTIFICATION_SUITE_ID,
@@ -54,7 +57,7 @@ def publish_openrouter_preview_certificate(
         suite_id=run.suite_id, suite_version=run.suite_version,
         test_run_id=run.test_run_id, adapter_artifact_digest=run.adapter_artifact_digest,
         result_summary_digest=run.result_summary_digest, evidence_refs=run.evidence_refs,
-        recorded_at=run.completed_at, source_commit=run.source_commit,
+        recorded_at=run.certification_completed_at, source_commit=run.source_commit,
         artifact_bundle_digest=run.artifact_bundle_digest,
         matrix_revision=run.matrix_revision, matrix_digest=run.matrix_digest,
         signer_key_id=signed_run.signer_key_id, run_signature=signed_run.signature,
@@ -89,8 +92,8 @@ def publish_openrouter_preview_certificate(
         default_reasoning_effort=OPENROUTER_DEFAULT_REASONING_EFFORT,
         suite_id=evidence.suite_id, suite_version=evidence.suite_version,
         test_run_id=evidence.test_run_id, evidence_digest=evidence.evidence_digest,
-        evidence_refs=evidence.evidence_refs, issued_at=run.completed_at,
-        expires_at=run.completed_at + timedelta(days=OPENROUTER_CERTIFICATION_VALIDITY_DAYS),
+        evidence_refs=evidence.evidence_refs, issued_at=run.certification_completed_at,
+        expires_at=run.certification_completed_at + timedelta(days=OPENROUTER_CERTIFICATION_VALIDITY_DAYS),
         tcb_manifest_id=run.tcb_manifest_id,
         tcb_manifest_version=run.tcb_manifest_version,
         tcb_structure_digest=run.tcb_structure_digest,

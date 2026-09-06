@@ -257,14 +257,25 @@ Workspace Storage may receive an explicit redaction-safe export, but it is not
 authoritative evidence.
 
 Certification follows one trust sequence: deterministic conformance, an
-operator-only synthetic live probe, behavioral conformance validation of the
-complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v29 manifests contain both
-`fixture_contract` and `live_probe`. Repository tests may explicitly select the
-fixture step so normal CI sends no provider traffic, but an incomplete run is
-rejected by signing, verification, and publication and can never become
-certificate evidence. Every stage recomputes the live TCB digest instead of
-accepting one supplied by a caller.
+operator-only synthetic live probe, independently executed natural behavioral
+conformance, trusted review/signing, then certificate publication. Suite 40
+retains `fixture_contract` and `live_probe` collection steps; natural evidence
+is a separate later observation record, not an alias for validating those two
+exit codes. A strict live receipt binds the exact API-profile target and a fresh
+collection nonce. The signature/result summary additionally binds every natural
+scenario at every claimed effort, semantic/effect trace digests and absolute
+failure counters. The publisher rechecks the target against the full immutable
+profile. Native certification remains connection-scoped.
+
+Normal repository checks select only fixtures and never produce signable
+certificate evidence. Live collection requires explicit operator opt-in and a
+bounded cost reservation at the translated-payload transport boundary. All
+signing, verification and publication paths recheck the current TCB. Neither
+collection nor signing grants availability; independent security, disposable
+full-workspace canary and release decisions remain mandatory. See
+`docs/architecture/agentic_certification_p6.md` and
+`docs/runbooks/agentic_certification_evidence.md` for the current evidence and
+operator boundaries.
 
 ### 4. Runtime adapters are asynchronous and provider-agnostic
 

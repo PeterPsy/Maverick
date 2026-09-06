@@ -11,7 +11,9 @@ Adapter: `maverick-hosted-tool-loop==36`
 Suite 40 / TCB manifest 30 / hosted adapter 36 / recipe 23 bind the P5
 executable family, native ACP lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
-revision is immutable, unbound, and uncertified. Historical evidence below is
+revision is immutable, unbound, and uncertified. P6 also binds exact-target live
+receipts, explicit budgeted transport opt-in, and independently observed natural
+conformance before signing. Protocol-only success is not signable evidence. Historical evidence below is
 not evidence for this candidate. No runtime flag, Codex artifact, native
 certificate, or operator binding is changed by this checkpoint.
 
@@ -48,7 +50,7 @@ certificate, or operator binding is changed by this checkpoint.
 | Tool handles | Full Workspace `codex-baseline-v20` surface: all 24 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result projection; only complete probe evidence is cached, while transient/partial results remain retryable; app reads require a Core-audited descriptor plus executable closure and are rechecked at dispatch, inter-agent CLI/MCP operations have exact effects and content-dropping projections, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates authority plus the freshly read nonnumeric policy before every stream advance, and shell/process effects remain rollbackable over an immutable `.git`-excluding snapshot in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 30 days |
 
-Revision 43 and provider-config revision 2 add the exact executable
+Historical P5: revision 43 and provider-config revision 2 add the exact executable
 config/protocol-adapter identity and config-owned endpoint, upstream/provider/
 resolved-model, quantization, and accounting data. They have no signed suite-39
 result; the unchanged matrix revision describes the required rerun, not
@@ -136,7 +138,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r39 |
+| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r40 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the uncertified preview profile and never manufactures a

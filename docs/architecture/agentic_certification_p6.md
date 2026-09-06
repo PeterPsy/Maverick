@@ -35,6 +35,36 @@ diagnostic must not mint a new connection certificate. Existing Codex revision
    release, control-store write, production workspace classification, or
    cross-family fallback is permitted.
 
+## Evidence implementation
+
+`certification_target.py` hashes every immutable API definition field except
+publication time. The native target is separately connection-scoped and
+requires a declared executable-artifact identity and Full Workspace contract; no
+native model slug grants a new certificate.
+
+The collector accepts only canonical manifest steps. A live step additionally
+requires a strict, bounded receipt with the exact target, fresh nonce, complete
+per-response protocol observations and exact reasoning-effort counts. The
+probes reject extra/unpaired calls, missing usage/state/completion, and empty
+finals. OpenRouter's last-response failure cannot be converted into success by
+aggregate counts. The probe transport requires explicit operator opt-in and a
+bounded non-refundable cost reservation before the exact translated payload
+reaches HTTPS; all responses retain the configured model/revision policy.
+
+The separate natural observation report covers all 14 plan scenarios at each
+claimed effort, with source/projection/effect/trace digests, exact boolean
+checks, profile-specific resource bounds and zero absolute failure counters.
+It must follow the fixture/live collection on the same target, commit and TCB.
+The trusted signer reviews actual retained traces; the report validator does
+not execute natural tasks or turn user-supplied claims into trusted evidence.
+Fixture/protocol-only collections are deliberately unsigned and ineligible.
+
+The result summary and signed JSON bind the natural report; publication checks
+the complete profile target again before creating a certificate. The source
+TCB also includes the collection/signing entrypoint. This implementation does
+not provide missing live credentials, trust a new signing key, approve native
+runtime artifacts, run a canary, or close an independent security review.
+
 The general production blockers in `SECURITY.md` require a separate security
 review. Until the relevant evidence and approvals actually exist,
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` stays false and Gemini CLI and remote

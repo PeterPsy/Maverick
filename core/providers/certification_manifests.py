@@ -125,6 +125,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_hosted_agentic_tool_execution",
     "tests.unit.runtime_tools.test_hosted_behavior_probe_cache",
     "tests.unit.runtime_tools.test_hosted_shell_probe_isolation",
+    "tests.unit.runtime_tools.test_hosted_process_signal_scope",
     "tests.unit.runtime_tools.test_hosted_collaboration_contract",
     "tests.unit.providers.test_hosted_profile_live_authority",
     "tests.unit.runtime_tools.test_hosted_result_security_behavior",

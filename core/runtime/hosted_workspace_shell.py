@@ -298,7 +298,10 @@ def _build_bwrap_command(
     command = [
         bwrap,
         "--die-with-parent",
-        "--new-session",
+        # Both hosted spawn sites use Popen(start_new_session=True): terminal
+        # isolation is established before exec. A second setsid inside bwrap
+        # would move the child outside the launcher's termination group and
+        # can strand it if the launcher dies during sandbox initialization.
         "--unshare-pid",
         "--unshare-net",
         "--unshare-ipc",

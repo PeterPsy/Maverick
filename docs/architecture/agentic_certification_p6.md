@@ -51,6 +51,18 @@ Cold shell/process behavior checks use a unique session identity per invocation:
 their real session-scoped orphan cleanup must not terminate another concurrent
 check's worker, even when it runs in another backend/test process. Failed
 observations remain fail-closed and uncached; isolation is not a retry policy.
+Hosted shell/process launchers additionally establish their single terminal
+session with `Popen(start_new_session=True)` before executing Bubblewrap. The
+hosted command must not add a second `--new-session` inside Bubblewrap: that
+would move descendants outside the group used by interruption, leaving an
+early-startup termination race and an undrained output pipe. The process-group
+regression checks a detached session, no controlling terminal, one shared
+termination group and no surviving marked worker after interrupt. The native
+Codex sandbox and generic process-control artifact are unchanged. This uses
+the documented [Python pre-exec session boundary](https://docs.python.org/3/library/subprocess.html#subprocess.Popen)
+instead of a second [Bubblewrap session boundary](https://github.com/containers/bubblewrap/blob/main/bwrap.xml),
+not the removal of terminal isolation; all namespace, mount, network and
+workspace-effect restrictions remain in place.
 The live step additionally requires a strict, bounded receipt with the exact
 target, fresh nonce, complete per-response protocol observations and exact
 reasoning-effort counts. The

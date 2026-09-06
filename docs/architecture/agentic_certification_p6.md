@@ -18,6 +18,10 @@ Its authorized operational addendum (section 16), written through Storage with
 that SHA fence on 2026-09-06, has SHA-256
 `0c8796ded071189b315982cd17596f001e02062c550c3be3f57b203f920069e9`.
 It separates P6-D/L/S/R checkpoints without dropping any release gate.
+The subsequent operator budget/candidate-isolation addendum (section 17),
+also guarded through Storage, has SHA-256
+`7fae659a9d903d0f776fb7f87526b8eda348aaa753e01c5ff555999e44990471`.
+It authorizes the bounded operational work, not a release or waiver of evidence.
 Its P5 review checkpoint is `617ed21c39e6111e2bb0c8d102bfa34709312227`.
 
 P6 distinguishes repository conformance, live protocol evidence, natural

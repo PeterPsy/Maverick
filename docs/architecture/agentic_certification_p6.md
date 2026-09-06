@@ -47,6 +47,10 @@ native model slug grants a new certificate.
 The collector accepts only canonical manifest steps. Deterministic collection
 requires the standard unittest success footer, a nonzero executed-test count and **zero
 skips**; empty/partial green runs cannot silently close mandatory conformance.
+Cold shell/process behavior checks use a unique session identity per invocation:
+their real session-scoped orphan cleanup must not terminate another concurrent
+check's worker, even when it runs in another backend/test process. Failed
+observations remain fail-closed and uncached; isolation is not a retry policy.
 The live step additionally requires a strict, bounded receipt with the exact
 target, fresh nonce, complete per-response protocol observations and exact
 reasoning-effort counts. The

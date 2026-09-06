@@ -6,6 +6,7 @@ import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from core.runtime.hosted_behavior_probe_cache import cache_complete_behavior_probe
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
@@ -28,13 +29,16 @@ HOSTED_SHELL_PROCESS_BEHAVIOR_IDS = (
     "core-capability:process.interrupt",
 )
 _WORKSPACE_ID = "behavior-probe"
-_SESSION_ID = "shell-process-behavior-probe"
+_SESSION_ID_PREFIX = "shell-process-behavior-probe"
 _PROBE_TIME = datetime(2026, 9, 3, tzinfo=UTC)
 
 
 @cache_complete_behavior_probe(HOSTED_SHELL_PROCESS_BEHAVIOR_IDS)
 def inspect_hosted_shell_process_behavior() -> tuple[str, ...]:
     """Execute each real handler family once for this immutable code revision."""
+    # Cold checks may overlap, including across backend/test processes. The
+    # orphan reaper is session-scoped, not registry/store-scoped.
+    session_id = f"{_SESSION_ID_PREFIX}-{uuid4().hex}"
     verified: set[str] = set()
     try:
         with tempfile.TemporaryDirectory() as directory:
@@ -53,7 +57,7 @@ def inspect_hosted_shell_process_behavior() -> tuple[str, ...]:
                     workspace_root,
                     runtime_root,
                     workspace_id=_WORKSPACE_ID,
-                    session_id=_SESSION_ID,
+                    session_id=session_id,
                     now=_PROBE_TIME,
                 )
             )
@@ -79,7 +83,7 @@ def inspect_hosted_shell_process_behavior() -> tuple[str, ...]:
                     agent_id="core-shell-process-probe",
                     platform_role="admin",
                     workspace_role="owner",
-                    session_id=_SESSION_ID,
+                    session_id=session_id,
                     execution_mode="full-access",
                 )
                 _probe_shell(
@@ -98,7 +102,7 @@ def inspect_hosted_shell_process_behavior() -> tuple[str, ...]:
                 )
             finally:
                 try:
-                    registry.terminate_session(_SESSION_ID)
+                    registry.terminate_session(session_id)
                 except Exception:
                     verified.difference_update(
                         {

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   listRuntimeSessionEvents: vi.fn(),
   listRuntimeThreads: vi.fn(),
   markThreadRead: vi.fn(),
+  readChatDisplay: vi.fn(),
   setChatViewFilter: vi.fn(),
   updateThread: vi.fn(),
   useRuntimeThreads: vi.fn(),
@@ -41,6 +42,8 @@ vi.mock("../../hooks/useRuntimeThreads", () => ({
   useRuntimeThreads: mocks.useRuntimeThreads,
 }));
 
+vi.mock("../../pwaCache", () => ({ readChatDisplay: mocks.readChatDisplay }));
+
 import { useChatSidebarState } from "./useChatSidebarState";
 
 function deferred<T>() {
@@ -58,6 +61,15 @@ function SidebarStateProbe() {
       {sidebar.searchQuery}
     </button>
   );
+}
+
+function SidebarProjectsProbe() {
+  const sidebar = useChatSidebarState();
+  return <>
+    <p role="alert">{sidebar.error}</p>
+    <output>{sidebar.sections.map((section) => section.title).join(",")}</output>
+    <button onClick={() => void sidebar.refreshProjects()} type="button">Reload projects</button>
+  </>;
 }
 
 function SidebarSectionsProbe({ onTitles }: { onTitles: (titles: string[]) => void }) {
@@ -98,6 +110,7 @@ describe("useChatSidebarState search persistence", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mocks.listChatProjects.mockResolvedValue({ projects: [] });
+    mocks.readChatDisplay.mockResolvedValue({ projects: [], has_more: false });
     mocks.deleteThreads.mockResolvedValue({ deleted_thread_ids: [], deleted_runtime_session_ids: [], results: [] });
     mocks.listInterAgentRuns.mockResolvedValue({ items: [] });
     mocks.listRuntimeSessionEvents.mockResolvedValue({ items: [] });
@@ -117,6 +130,29 @@ describe("useChatSidebarState search persistence", () => {
     });
     container.remove();
     vi.useRealTimers();
+  });
+
+  it("keeps the project-read failure visible and recoverable when the runtime clears its own error", async () => {
+    let setRuntimeError: Dispatch<SetStateAction<string | null>> = () => undefined;
+    mocks.readChatDisplay.mockRejectedValueOnce(new Error("Project catalog unavailable"));
+    mocks.useRuntimeThreads.mockImplementation(({ setError, setThreads }) => {
+      setRuntimeError = setError;
+      useEffect(() => {
+        setThreads([thread({ project_id: "project-known" })]);
+      }, []);
+    });
+    await act(async () => { root.render(<SidebarProjectsProbe />); });
+    expect(container.querySelector("output")?.textContent).toBe("Project");
+    await act(async () => { setRuntimeError(null); });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Project catalog unavailable");
+
+    mocks.readChatDisplay.mockResolvedValue({
+      projects: [{ project_id: "project-known", name: "Named project" }], has_more: false,
+    });
+    await act(async () => { container.querySelector("button")?.click(); });
+    expect(container.querySelector("output")?.textContent).toBe("Named project");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("");
+    expect(mocks.readChatDisplay).toHaveBeenCalledTimes(2);
   });
 
   it("does not overwrite a locally edited query when the initial view filter finishes loading", async () => {

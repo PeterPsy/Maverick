@@ -1,7 +1,6 @@
-import { readAppCachePages, isExactMaverickParentMessage } from '@maverick/pwa-cache';
-import { readChatDisplay } from '../../pwaCache';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChatProject, ChatThread } from "../../api/client";
+import type { ChatThread } from "../../api/client";
 import {
   applyThreadCatalogPayload,
   deleteThread,
@@ -43,6 +42,7 @@ import {
   type TranscriptSearchCacheEntry,
 } from "./transcriptSearchIndex";
 import { useSidebarProjectActions } from "./useSidebarProjectActions";
+import { useSidebarProjects } from "./useSidebarProjects";
 import { useThreadTouchSelection } from "./useThreadTouchSelection";
 
 const CHAT_APP_ID = "chat";
@@ -53,7 +53,10 @@ const THREAD_BACKFILL_IDLE_DELAY_MS = 320;
 const THREAD_FILTERS: ThreadFilter[] = ["all", "hot", "unread", "opendesign", "senses", "multi_agent"];
 
 export function useChatSidebarState() {
-  const [projects, setProjects] = useState<ChatProject[]>([]);
+  const {
+    projects, error: projectsError, isLoading: isProjectsLoading,
+    refresh: refreshProjects, replaceProjects: applyProjects,
+  } = useSidebarProjects();
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [multiAgentThreadIds, setMultiAgentThreadIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,10 +133,6 @@ export function useChatSidebarState() {
       transcriptSearchTextByThreadId,
     ],
   );
-  function applyProjects(nextProjects: ChatProject[]) {
-    setProjects(nextProjects);
-  }
-
   const projectActions = useSidebarProjectActions({
     activeThreadId,
     projects,
@@ -159,27 +158,6 @@ export function useChatSidebarState() {
     setError,
     setThreads,
   });
-
-  const projectReadRef = useRef<AbortController | null>(null);
-  useEffect(() => () => projectReadRef.current?.abort(), []);
-
-  async function refreshProjects() {
-    try {
-      projectReadRef.current?.abort();
-      const controller = new AbortController();
-      projectReadRef.current = controller;
-      await readAppCachePages<{ projects: ChatProject[]; has_more: boolean }>({
-        signal: controller.signal, pageSize: 200, hasMore: (page) => page.has_more,
-        onUpdate: (pages) => applyProjects(pages.flatMap((page) => page.projects)),
-        onError: (error) => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Unable to update projects.'); },
-        readPage: (offset, onRevalidated) => readChatDisplay({ kind: 'projects', offset }, { signal: controller.signal, onRevalidated }),
-      });
-      setError(null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load chat projects.");
-      setIsInitialLoading(false);
-    }
-  }
 
   async function refreshViewFilter() {
     const requestSearchRevision = localSearchRevisionRef.current;
@@ -246,7 +224,6 @@ export function useChatSidebarState() {
   }, [isBulkDeletePending, selectedThreadIds, threads, workspaceId]);
 
   useEffect(() => {
-    void refreshProjects();
     void refreshViewFilter();
   }, []);
 
@@ -695,17 +672,20 @@ export function useChatSidebarState() {
     createChat,
     editingProject: projectActions.editingProject,
     editingProjectRef: projectActions.editingProjectRef,
-    error,
+    error: projectsError || error,
     expandedThreadId,
     expandedThreadTitle,
     hasThreadSelection: selectedThreadIds.size > 0,
     isInitialLoading,
     isPending,
+    isProjectsLoading,
     isShellMobileLayout,
     moveThread,
     multiAgentThreadIds,
     pendingProjectDeletion: projectActions.pendingProjectDeletion,
     projects,
+    projectsError,
+    refreshProjects,
     removeEditingProject: projectActions.removeEditingProject,
     removeThread,
     renameThread,

@@ -125,12 +125,11 @@ Measured on the same host (diagnostic observations, not latency guarantees):
 | Disposable browser warm provider setup | 7.86 s | 2.66 s |
 
 The real built UI again displayed all fixture pins and the named project after
-cold and service-worker-controlled warm loads. The Core change requires a
-backend restart before the real-device project labels can be rechecked. This is
-a verified startup bottleneck fix, not yet confirmation that the user's project
-label symptom is resolved. WebKit testing is unavailable on this host because
-the downloaded fallback browser lacks compatible system libraries; the browser
-measurements above are Chromium results.
+cold and service-worker-controlled warm loads. At that checkpoint the Core
+change still required a backend restart and real-device project labels had not
+been rechecked; the operational result is recorded below. WebKit testing is
+unavailable on this host because the downloaded fallback browser lacks
+compatible system libraries; the browser measurements above are Chromium results.
 
 Startup-fix verification: 408 provider tests and 333 API tests passed, including
 the new registry-identity regressions for app backend metadata, ordinary status,
@@ -138,3 +137,56 @@ and explicit catalog refresh. The focused app-mount/provider suite passed 63
 tests. Unused-import and whitespace checks passed. Codex revision, artifact
 digest, operator default, new-pin eligibility, and shared evidence expiry were
 rechecked using only in-memory copies and remain unchanged.
+
+## Operational restart and failed project-read recovery
+
+The subsequent authorized restart completed at 08:00:10 UTC on 2026-09-06,
+PID 2890750, loading the registry-reuse fix from `de9dbd2e`. `/health` returned
+HTTP 200. The official Chat CLI again returned all 27 correctly named projects;
+Codex revision 14, digest, runtime version, default binding, and new-pin admission
+in the read-only metadata clone remained unchanged. These checks do not prove
+that every real-client project read completed: post-restart access logs still
+included a cancelled Chat read followed by successful reads.
+
+The user subsequently confirmed that project names were correct after this
+restart, before publication of the additional frontend recovery fix below.
+The named-project symptom is therefore confirmed recovered on the real client;
+the isolated timing measurements are still not a real-device startup latency
+guarantee.
+
+A separate deterministic sidebar regression reproduced a persistent symptom:
+the catalog read fails, a healthy runtime stream clears the shared `error`, and
+all thread project sections remain `Project` without a visible recovery action.
+The test failed against the previous hook with an empty error after that stream
+update. This demonstrates a frontend recovery defect, not proof that one
+particular HTTP failure caused every reported occurrence on the user's device.
+
+Project display reads now have an independent hook and error lifecycle. The
+sidebar retains existing names on failure, displays a reload action, and retries
+failed non-pending reads on visible focus/online/visibility recovery. It does not
+poll healthy or empty catalogs, change the SDK's HTTP retry allowlist, bypass
+authorization, or fabricate names for genuinely missing project records.
+Revalidation failures are surfaced; superseded callbacks and unmounted reads
+cannot replace a newer projection. A project mutation/read-receipt projection
+also fences an older pending display read.
+
+The browser regression covers 27 named projects with live thread snapshots,
+a delayed failed initial project request, and successful explicit recovery
+without page reload, on both 390 px and 1280 px viewports. All four Chromium
+runs passed (both widths repeated twice). The focused hook/integration suite
+passed 15 tests, including the original negative regression, lifecycle cleanup,
+revalidation, empty catalog, and superseded-read cases. Typechecking passed.
+
+Final frontend verification passed 631 Chat unit tests and eight combined
+Chromium project-recovery/active-turn steering scenarios. Import and whitespace
+checks passed. The previously verified 408 provider and 333 API suites cover
+the already restarted Core fix; this additional recovery change is Chat-only
+and does not require another Core restart.
+
+The official Chat frontend build published the project-recovery hook with
+build ID `608bfc7abee8eff905a8cdea279912280e2bab6371f7eb75a174f42083f61876`,
+emitting the normal `maverick.app.frontend-changed` event for mounted clients.
+The published artifacts also passed the disposable Core/browser smoke again:
+all fixture pins and the named project rendered on cold and service-worker-
+controlled warm loads. Post-build `/health` and the read-only Codex compatibility
+probe passed, preserving the same revision, digest, executable, and authority.

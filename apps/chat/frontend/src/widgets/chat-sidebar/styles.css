@@ -92,6 +92,22 @@
   box-sizing: border-box;
 }
 
+.bs-chat-sidebar-project-retry {
+  min-height: 36px;
+  margin: 0 12px 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: 10px;
+  background: var(--chat-sidebar-soft-surface);
+  color: var(--maverick-text);
+  cursor: pointer;
+}
+
+.bs-chat-sidebar-project-retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 html,
 body,
 #chat-sidebar-root {

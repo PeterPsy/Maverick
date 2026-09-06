@@ -18,7 +18,21 @@ function ChatSidebarWidget() {
         sidebar.hasThreadSelection ? "has-thread-selection" : ""
       } ${sidebar.areThreadActionsRevealed ? "has-thread-actions-revealed" : ""}`}
     >
-      {sidebar.error ? <p className="bs-chat-folder__empty">{sidebar.error}</p> : null}
+      {sidebar.error ? (
+        <div role="alert">
+          <p className="bs-chat-folder__empty">{sidebar.error}</p>
+          {sidebar.projectsError ? (
+            <button
+              className="bs-chat-sidebar-project-retry"
+              disabled={sidebar.isProjectsLoading}
+              onClick={() => void sidebar.refreshProjects()}
+              type="button"
+            >
+              {sidebar.isProjectsLoading ? "Loading projects…" : "Reload project names"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="bs-chat-sidebar-search-frame">
         <Search size={17} aria-hidden="true" />

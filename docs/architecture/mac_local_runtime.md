@@ -282,3 +282,32 @@ release and credential-free Codex checks passed. Installation and desktop
 launch were requested at 08:05:57 UTC on 2026-09-06. The setup label is
 `cddae62 · focus guidato v7`. Plain-language physical acceptance remains pending;
 successful installation is not evidence of model compliance.
+
+### V8: distinguish capture bytes from provider interpretation
+
+The user accepted v7's activation confirmation, but the model still reported
+an unreadable/encoded-text image. Focus alone therefore does not explain the
+remaining failure. A credential-free Linux probe of pinned Codex 0.153.4 against
+a localhost fake provider preserved a valid synthetic PNG as structured image
+input; an invalid PNG became a static processing-failure text. This is not a
+trace of the Mac's actual JPEG or a real OpenAI request.
+
+Native v8 adds an explicit between-turn **Diagnostica immagine** panel for the
+last JPEG, decoded from the exact outgoing bytes. It shows dimensions, byte
+count, foreground state sampled before capture, and up to eight action outcomes
+without raw arguments/titles. A matching call-ID and image-digest check of the
+Codex dynamic-tool completion event distinguishes local protocol acceptance
+from mere preparation. It explicitly does not certify provider delivery or
+model interpretation. Neither preview nor receipt/trace is added to JavaScript
+snapshots, files, CI output or Ubuntu storage.
+
+Encoding and decode validation move off the main actor to a serial queue, with
+the existing JPEG quality and <4 MB payload bound plus an 8-million-pixel limit.
+Invalid bytes/dimensions fail MC-TOOL-11; there is no fallback or retry. Native
+generation checks after encoding prevent stale capture delivery. Diagnostic
+RAM is cleared on stop, new turn, new observation, app/scope/session change,
+sleep and explicit clear; callbacks cannot restore data after stop. Opening
+the panel neither captures nor activates the selected app. Synthetic tests
+cover bytes, geometry, matching typed receipts, lifecycle clearing and safe
+bounded traces. The real provider failure remains unconfirmed pending a local
+preview/receipt inspection, not another identical blind retry.

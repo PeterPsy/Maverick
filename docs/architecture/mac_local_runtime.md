@@ -305,9 +305,15 @@ Encoding and decode validation move off the main actor to a serial queue, with
 the existing JPEG quality and <4 MB payload bound plus an 8-million-pixel limit.
 Invalid bytes/dimensions fail MC-TOOL-11; there is no fallback or retry. Native
 generation checks after encoding prevent stale capture delivery. Diagnostic
-RAM is cleared on stop, new turn, new observation, app/scope/session change,
-sleep and explicit clear; callbacks cannot restore data after stop. Opening
+RAM is cleared on stop, new turn, app/scope/session change, sleep and explicit
+clear; a new observation drops the previous image and pending receipt while
+retaining the bounded action trace. Callbacks cannot restore data after stop. Opening
 the panel neither captures nor activates the selected app. Synthetic tests
 cover bytes, geometry, matching typed receipts, lifecycle clearing and safe
 bounded traces. The real provider failure remains unconfirmed pending a local
 preview/receipt inspection, not another identical blind retry.
+
+V8 native revision `475a55f` passed 36 Swift tests, release compilation and
+credential-free Codex checks in run `34021867258`; the Python unused-import
+check passed. This push build did not install or launch the app. Installation
+awaits user-confirmed exit; the real provider interpretation issue remains open.

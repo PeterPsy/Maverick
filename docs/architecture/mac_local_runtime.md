@@ -274,3 +274,11 @@ The installed app must restart to start a thread with the new instructions.
 Plain-language physical acceptance is pending; scroll, lock/sleep, concurrent
 credential refresh and packet-level transport checks remain open. No auth,
 image payload routing, web broker or Ubuntu runtime behavior changes in v7.
+
+V7 push run `33995873811` failed without retrievable log files; its cause is
+unconfirmed. Following user-confirmed app exit, install run `34020791755`
+successfully rebuilt the unchanged native revision `cddae62`: 30 Swift tests,
+release and credential-free Codex checks passed. Installation and desktop
+launch were requested at 08:05:57 UTC on 2026-09-06. The setup label is
+`cddae62 · focus guidato v7`. Plain-language physical acceptance remains pending;
+successful installation is not evidence of model compliance.

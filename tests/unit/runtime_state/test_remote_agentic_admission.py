@@ -12,6 +12,7 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+    MAVERICK_FEATURE_GEMINI_CLI_PREVIEW,
 )
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.errors import RuntimeTurnQueueRejectedError
@@ -38,6 +39,22 @@ def _identity(provider_id: str):
 
 
 class RemoteAgenticAdmissionTest(unittest.TestCase):
+    def test_native_google_connection_has_a_distinct_default_closed_gate(self):
+        native = SimpleNamespace(
+            execution_family="native_agent", runtime_engine_id="gemini-cli", adapter_id="gemini-cli-acp",
+            model_provider_id="google", provider_protocol="acp-ndjson", provider_api_version="1",
+        )
+        with patch.dict("os.environ", {MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+                                     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1"}, clear=True):
+            with self.assertRaisesRegex(AgenticProfileError, "gemini_cli_preview_disabled"):
+                require_remote_agentic_session_admission(native)
+            with patch.dict("os.environ", {MAVERICK_FEATURE_GEMINI_CLI_PREVIEW: "1"}), self.assertRaisesRegex(
+                AgenticProfileError, "native_agentic_attestation_unavailable",
+            ):
+                require_remote_agentic_session_admission(native)
+            with self.assertRaisesRegex(AgenticProfileError, "provider_unapproved"):
+                require_remote_agentic_session_admission(_identity("google"))
+
     def test_google_and_openrouter_sessions_fail_before_any_store_call(self) -> None:
         for provider_id in ("google-ai-studio", "openrouter"):
             with self.subTest(provider_id=provider_id), patch.dict("os.environ", {}, clear=True):

@@ -62,6 +62,7 @@ from core.runtime.hosted_runtime_registry_builder import (
     build_hosted_provider_runtime_registry,
 )
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
+from core.runtime.remote_agentic_admission import require_remote_agentic_context
 from core.runtime.semantic_envelope import HostedSemanticEnvelopeCompiler
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
@@ -92,6 +93,7 @@ def build_hosted_agentic_engine_adapter(
         raise RuntimeError("Hosted agentic runtime dependencies are unavailable.")
     provider_runtimes = build_hosted_provider_runtime_registry(
         onboarding_catalog=onboarding_catalog,
+        workspace_store=state.workspace_store,
     )
     process_registry = HostedToolProcessRegistry(store=state.runtime_store)
     adapter_holder: dict[str, HostedAgenticEngineAdapter] = {}
@@ -114,6 +116,7 @@ def build_hosted_agentic_engine_adapter(
             raise HostedAgenticLoopError("runtime_policy_unavailable") from error
 
     def authority_refresher(context):
+        require_remote_agentic_context(state, context)
         try:
             return resolve_runtime_authority_snapshot(
                 state,
@@ -126,6 +129,7 @@ def build_hosted_agentic_engine_adapter(
             raise HostedAgenticLoopError(error.reason_code) from error
 
     def authority_revalidator(context, authority):
+        require_remote_agentic_context(state, context)
         try:
             return revalidate_runtime_authority_snapshot(
                 state,

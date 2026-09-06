@@ -86,7 +86,7 @@ def handle_inter_agent_api(
     context = context_or_response
     method = str(environ.get("REQUEST_METHOD") or "GET").upper()
     body = read_json_body(environ) if method in {"POST", "PATCH", "PUT", "DELETE"} else {}
-    service = InterAgentService(state.inter_agent_store)
+    service = InterAgentService(state.inter_agent_store, workspace_store=state.workspace_store)
     try:
         return _handle_inter_agent_route(
             state,

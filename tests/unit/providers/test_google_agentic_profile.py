@@ -51,7 +51,7 @@ from tests.support.repo import make_temp_repo_root
 NOW = datetime(2026, 8, 16, tzinfo=UTC)
 
 
-from tests.support.certification_evidence import fixture_step_process, with_fixture_behavior
+from tests.support.certification_evidence import fixture_step_process, with_fixture_behavior, fixture_publication_authority
 
 class GoogleAgenticProfileTest(unittest.TestCase):
     def test_bootstrap_publishes_unbound_full_workspace_preview(self) -> None:
@@ -89,8 +89,8 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "46")
-        self.assertEqual(profile.adapter_version_constraint, "==37")
+        self.assertEqual(profile.revision, "47")
+        self.assertEqual(profile.adapter_version_constraint, "==38")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
             ("cli", "mcp", "app-interface", "core-capability"),
@@ -188,6 +188,8 @@ class GoogleAgenticProfileTest(unittest.TestCase):
                 started_at=NOW,
             )
         run = with_fixture_behavior(run)
+        signed = sign_certification_run(run, signer_key_id="test-ci", private_key=private_key)
+        publisher, review = fixture_publication_authority(self, signed, private_key)
         with self.assertRaisesRegex(
             CapabilityCertificateError,
             "certification_required_steps_missing",
@@ -201,7 +203,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
                     signer_key_id="test-ci",
                     signature="fixture-only-is-not-certificate-evidence",
                 ),
-                trusted_keys={"test-ci": private_key.public_key()},
+                publisher=publisher, review=review,
             )
         with self.assertRaises(ProviderNotFoundError):
             state.provider_store.get_capability_certificate(
@@ -218,12 +220,12 @@ class GoogleAgenticProfileTest(unittest.TestCase):
                 definition=profile,
                 adapter=adapter,
                 signed_run=signed,
-                trusted_keys={"test-ci": private_key.public_key()},
+                publisher=publisher, review=review,
             )
         with self.assertRaisesRegex(CapabilityCertificateError, "certification_target_mismatch"):
             publish_google_preview_certificate(
                 state.provider_store, definition=replace(profile, model_id="unproven-model"),
-                adapter=adapter, signed_run=signed, trusted_keys={"test-ci": private_key.public_key()},
+                adapter=adapter, signed_run=signed, publisher=publisher, review=review,
             )
         evidence = state.provider_store.get_capability_evidence(certificate.evidence_digest)
         self.assertEqual(certificate.certification_target_digest, run.target_digest)

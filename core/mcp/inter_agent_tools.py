@@ -60,7 +60,7 @@ def inter_agent_tool_specs(
     def _service() -> InterAgentService:
         if inter_agent_store is None:
             raise RuntimeError("inter_agent_store is required for inter-agent MCP tools.")
-        return InterAgentService(inter_agent_store)
+        return InterAgentService(inter_agent_store, workspace_store=workspace_store)
 
     def _state() -> SimpleNamespace:
         return SimpleNamespace(

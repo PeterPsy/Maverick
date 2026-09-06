@@ -15,8 +15,10 @@ from core.runtime.remote_agentic_admission import require_remote_agentic_dispatc
 class RuntimeProviderStartHandoff:
     """Hold one session lifecycle fence until the provider accepts a turn."""
 
-    def __init__(self, store: RuntimeStore, *, session_id: str, turn_id: str | None = None) -> None:
+    def __init__(self, store: RuntimeStore, *, session_id: str, turn_id: str | None = None,
+                 workspace_store: object | None = None) -> None:
         self.store = store
+        self.workspace_store = workspace_store
         self.session_id = session_id
         self.turn_id = turn_id
         self.session: RuntimeSessionRecord | None = None
@@ -36,11 +38,13 @@ class RuntimeProviderStartHandoff:
                 raise RuntimeTransitionError(
                     f"Cannot start a provider for unprepared runtime session `{session.session_id}`."
                 )
-            require_turn_queue_session_executable(self.store, session)
+            require_turn_queue_session_executable(
+                self.store, session, workspace_store=self.workspace_store,
+            )
             if session.runtime_mode == "agentic":
                 binding = session.execution_binding
                 if binding is not None:
-                    require_remote_agentic_dispatch(binding)
+                    require_remote_agentic_dispatch(binding, workspace_store=self.workspace_store)
                     provider_state = self.store.get_provider_state(session.session_id)
                     if (
                         provider_state.runtime_engine_id != binding.runtime_engine_id
@@ -97,9 +101,12 @@ def runtime_provider_start_handoff(
     session_id: str,
     turn_id: str | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
+    workspace_store: object | None = None,
 ) -> Iterator[tuple[RuntimeSessionRecord, Callable[[dict[str, object]], None]]]:
     """Yield fresh provider input and the acceptance callback under one fence."""
-    with RuntimeProviderStartHandoff(store, session_id=session_id, turn_id=turn_id) as handoff:
+    with RuntimeProviderStartHandoff(
+        store, session_id=session_id, turn_id=turn_id, workspace_store=workspace_store,
+    ) as handoff:
         assert handoff.session is not None
         yield handoff.session, handoff.release_after(on_provider_accepted)
 

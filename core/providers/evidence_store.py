@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
+import stat
 
 from core.providers.errors import CapabilityCertificateError
 
@@ -22,7 +23,7 @@ class CapabilityEvidenceBlobStore:
 
     def put(self, content: bytes, *, expected_digest: str | None = None) -> str:
         """Persist bounded bytes by digest and return an opaque platform reference."""
-        if not isinstance(content, bytes) or not content or len(content) > self.max_blob_bytes:
+        if not isinstance(content, bytes) or len(content) > self.max_blob_bytes:
             raise CapabilityCertificateError("certificate_evidence_blob_size_invalid")
         digest = hashlib.sha256(content).hexdigest()
         if expected_digest is not None and expected_digest != digest:
@@ -39,21 +40,33 @@ class CapabilityEvidenceBlobStore:
                 handle.write(content)
                 handle.flush()
                 os.fsync(handle.fileno())
+            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         return f"{EVIDENCE_REF_PREFIX}{digest}"
 
     def get(self, evidence_ref: str) -> bytes:
         """Read one opaque evidence reference with integrity verification."""
         digest = self._digest_from_ref(evidence_ref)
         path = self._path(digest)
-        if not path.is_file():
-            raise CapabilityCertificateError("certificate_evidence_blob_missing")
         return self._read_verified(path, digest)
 
     def _path(self, digest: str) -> Path:
         return self.root / digest[:2] / digest
 
     def _read_verified(self, path: Path, digest: str) -> bytes:
-        content = path.read_bytes()
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as handle:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    raise CapabilityCertificateError("certificate_evidence_blob_corrupt")
+                content = handle.read(self.max_blob_bytes + 1)
+        except FileNotFoundError as error:
+            raise CapabilityCertificateError("certificate_evidence_blob_missing") from error
+        except OSError as error:
+            raise CapabilityCertificateError("certificate_evidence_blob_corrupt") from error
         if len(content) > self.max_blob_bytes or hashlib.sha256(content).hexdigest() != digest:
             raise CapabilityCertificateError("certificate_evidence_blob_corrupt")
         return content

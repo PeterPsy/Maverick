@@ -418,7 +418,10 @@ def runtime_session_payload(
     state: PlatformState | None = None,
 ) -> dict[str, object]:
     """Return public runtime session metadata."""
-    containment_reason = remote_agentic_containment_reason(session.execution_binding)
+    containment_reason = remote_agentic_containment_reason(
+        session.execution_binding, workspace_id=session.workspace_id,
+        workspace_store=getattr(state, "workspace_store", None),
+    )
     payload = {
         "session_id": session.session_id,
         "workspace_id": session.workspace_id,
@@ -646,7 +649,9 @@ def workspace_agentic_profile_status(
             binding=binding,
             registry=registry,
         )
-        containment_reason = remote_agentic_containment_reason(definition)
+        containment_reason = remote_agentic_containment_reason(
+            definition, workspace_id=workspace_id, workspace_store=getattr(state, "workspace_store", None),
+        )
         certificate_active = bool(
             certificate_payload and certificate_payload["effective_status"] == "active"
         )
@@ -1032,6 +1037,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             certificate=certificate if certificate_payload is not None else None,
         )
         blocked_reason = _agentic_definition_blocked_reason(
+            workspace_id=workspace_id, workspace_store=state.workspace_store,
             definition=definition,
             rollout_status=None if status is None else status.rollout_status,
             binding=binding,
@@ -1042,6 +1048,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             native_runtime=native_by_engine.get(definition.runtime_engine_id),
         )
         enable_blocked_reason = _agentic_definition_blocked_reason(
+            workspace_id=workspace_id, workspace_store=state.workspace_store,
             definition=definition,
             rollout_status=None if status is None else status.rollout_status,
             binding=binding,
@@ -1074,7 +1081,9 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 effective_capabilities.get("reason_code")
                 or "runtime_authority_unavailable"
             )
-        containment_reason = remote_agentic_containment_reason(definition)
+        containment_reason = remote_agentic_containment_reason(
+            definition, workspace_id=workspace_id, workspace_store=getattr(state, "workspace_store", None),
+        )
         effective_policy = (
             definition.policy_ceiling
             if binding is None
@@ -1234,8 +1243,12 @@ def _agentic_definition_blocked_reason(
     family_readiness,
     native_runtime,
     require_enabled_binding: bool = True,
+    workspace_id: str | None = None,
+    workspace_store=None,
 ) -> str | None:
-    containment_reason = remote_agentic_containment_reason(definition)
+    containment_reason = remote_agentic_containment_reason(
+        definition, workspace_id=workspace_id, workspace_store=workspace_store,
+    )
     if containment_reason is not None:
         return containment_reason
     if not family_readiness.complete:
@@ -1384,7 +1397,9 @@ def runtime_session_agentic_governance_payload(
         adapters[runtime_engine_id] = resolved
         return resolved
 
-    containment_reason = remote_agentic_containment_reason(binding)
+    containment_reason = remote_agentic_containment_reason(
+        binding, workspace_id=session.workspace_id, workspace_store=getattr(state, "workspace_store", None),
+    )
     definition = None
     rollout_status = None
     try:
@@ -1711,6 +1726,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 actor_policy=actor_policy,
                 policy_patch=policy_patch,
                 observability_store=state.observability_store,
+                workspace_store=getattr(state, "workspace_store", None),
             )
         except (ProviderError, ValueError) as error:
             return json_response(

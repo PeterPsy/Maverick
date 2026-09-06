@@ -205,9 +205,9 @@ class MaverickAgentOnboardingCatalog:
                 )
         return tuple(candidates)
 
-    def build_runtime_registry(self) -> HostedProviderRuntimeRegistry:
+    def build_runtime_registry(self, *, workspace_store=None) -> HostedProviderRuntimeRegistry:
         """Compose trusted protocol factories from registered data only."""
-        registry = HostedProviderRuntimeRegistry()
+        registry = HostedProviderRuntimeRegistry(workspace_store=workspace_store)
         for key in sorted(self._publications):
             publication = self._publications[key]
             adapter_key = (

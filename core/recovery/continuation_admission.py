@@ -60,6 +60,7 @@ def runtime_session_admission_payload(
     *,
     session: RuntimeSessionRecord,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> dict[str, object]:
     """Return a redaction-safe read-only admission status for UI and operators."""
     digest = hashlib.sha256(session.session_id.encode("utf-8")).hexdigest()[:24]
@@ -70,6 +71,7 @@ def runtime_session_admission_payload(
         session=session,
         target_session_id=f"runtime-admission-{digest}",
         now=now,
+        workspace_store=workspace_store,
     )
     source = session.execution_binding
     target = assessment.target_execution_binding
@@ -95,6 +97,7 @@ def assess_runtime_session_admission(
     session: RuntimeSessionRecord,
     target_session_id: str,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> RuntimeAdmissionAssessment:
     """Validate direct authority or prove one conservative continuation upgrade."""
     try:
@@ -176,6 +179,7 @@ def assess_runtime_session_admission(
             workspace_binding_id=target_workspace_binding_id,
             reasoning_effort=binding.reasoning_effort,
             now=now,
+            workspace_store=workspace_store,
         )
         capabilities, proof_digest = prove_compatible_runtime_upgrade(
             provider_store,

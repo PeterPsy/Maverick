@@ -68,7 +68,8 @@ MAX_WAIT_TIMEOUT_SECONDS = 30.0
 class InterAgentService:
     """Coordinate inter-agent records and F2 runtime operations."""
 
-    def __init__(self, store: InterAgentStore) -> None:
+    def __init__(self, store: InterAgentStore, *, workspace_store=None) -> None:
+        self.workspace_store = workspace_store
         self.store = store
 
     def create_run(self, spec: InterAgentRunSpec, *, now: datetime | None = None) -> InterAgentRunRecord:
@@ -932,6 +933,7 @@ class InterAgentService:
         try:
             child = create_child_runtime_session(
                 runtime_store,
+                workspace_store=self.workspace_store,
                 parent_session_id=run.root_runtime_session_id,
                 child_session_id=session_id,
                 child_agent_id=agent_id,

@@ -36,6 +36,9 @@ class CertificationSuiteManifest:
 
 
 _SHARED_FIXTURE_TESTS = (
+    "tests.unit.runtime_state.test_remote_agentic_admission_path",
+    "tests.unit.providers.test_certification_publication",
+    "tests.unit.providers.test_certification_budget_ledger",
     "tests.unit.providers.test_api_certificate_targets",
     "tests.unit.providers.test_agentic_probe_validation",
     "tests.unit.providers.test_certification_behavior",
@@ -162,11 +165,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="41",
+        suite_version="42",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-06-r41-p6-reviewed-gates-tcb31"
+            "2026-09-06-r42-p6-admission-retention-tcb32"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

@@ -43,6 +43,12 @@ completion helper covers synchronous and asynchronous submission. A queued
 turn revoked before dispatch makes neither catalog nor completion requests in
 the offline integration test.
 
+The full-submission fixture also drains and joins its own scheduled idle reaper
+through the real cleanup service before removing the disposable store. A full
+suite initially had a green unittest footer but a delayed timer exception on
+the already removed fixture directory; that run is rejected, not counted as
+clean verification. No production cleanup/guard is suppressed to fix the test.
+
 ## Explicit Codex shared-source review
 
 Codex revision 14 remains recorded with digest

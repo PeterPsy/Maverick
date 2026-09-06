@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from core.api.runtime_api import _create_session, _preflight_runtime_session_creation_before_persistence
+from core.runtime import runtime_process_lifecycle
 from core.runtime.public_content_authority_store import issue_runtime_public_content_authority
 from core.runtime.turn_submission_service_events import _record_final_output
 from core.runtime.turn_submission_service_submit import submit_runtime_turn
@@ -51,6 +52,24 @@ class RemoteFullSubmissionTest(unittest.TestCase):
                                        start_path=self.state.repository_root, preflight=preflight)
         self.enterContext(patch("urllib.request.OpenerDirector.open",
                                 new=lambda _opener, request, *args, **kwargs: self.open_http(request)))
+        self.addCleanup(self.close_runtime_resources)
+
+    def close_runtime_resources(self):
+        # The real submission schedules a 180-second idle reaper. Drain this
+        # session's real cleanup before its disposable store is removed; never
+        # leave that timer to fail later in an unrelated test or mask the error.
+        with runtime_process_lifecycle._IDLE_REAP_TIMERS_LOCK:
+            timer = runtime_process_lifecycle._IDLE_REAP_TIMERS.get(self.session.session_id)
+        before = (len(self.posts), self.catalog_reads)
+        runtime_process_lifecycle.release_idle_runtime_processes(
+            self.state, session_id=self.session.session_id, provider_id="maverick-tool-loop",
+            reason="offline_fixture_teardown", idle_ttl_seconds=0,
+        )
+        if timer is not None:
+            timer.join(timeout=5)
+            self.assertFalse(timer.is_alive(), "fixture idle reaper survived teardown")
+        self.assertEqual((len(self.posts), self.catalog_reads), before)
+        self.network.assert_not_called()
 
     def open_http(self, request):
         url, method = request.full_url, request.get_method()

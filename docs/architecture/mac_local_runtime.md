@@ -1,8 +1,9 @@
-# macOS direct-provider runtime (v1)
+# macOS direct-provider runtime
 
 Status: development implementation; focused tests and native runner build pass.
 Real-account import and a local authenticated text reply are confirmed. Physical
-computer-use acceptance and production signing remain pending.
+Notes/search/scroll and lock/restart checks are physically accepted; v18 extended
+control acceptance and production distribution remain pending.
 
 ## Decision
 
@@ -35,7 +36,9 @@ raw protocol events or filesystem paths are returned through JavaScript.
 
 The native executor implements bounded tools. It refuses unapproved apps,
 locked/sleeping sessions, expired observations and stale focus. Every mutation
-requires local confirmation in v1 (not a model-authored sensitivity label).
+requires native authorization: per-action by default; v18 optionally uses a
+one-turn, exact-app-set grant of at most 40 actions / 5 minutes. This grant is
+not a model-authored sensitivity label or a native semantic risk classifier.
 Stopping invalidates outstanding observations/approvals before killing Codex.
 There is no automatic replay after an ambiguous process failure.
 
@@ -663,3 +666,45 @@ or close the user's newly opened app. Installed code remains 121e69c.
 Artifact-only source cleanup run `34035891721` (4a293f0) passed the same 138 Swift
 and 15 Python tests, release/image-wire/signing gates. It did not reinstall the
 app or change the installed functional build 121e69c.
+
+
+### v18 extended native control (2026-09-06)
+
+User physically accepted v17 lock/unlock MC-SESSION-01 invalidation, Notes search
+following restart and Calendar September/October navigation. A new startup
+consent after lock is expected and distinct from stale input consent. Calendar
+quick-create then failed MC-TOOL-25 on its owned popover, without creating an
+event. The user closed the app and requested a substantial capability update.
+
+Apple-repo v18 captures a bounded scene of exact-PID observed windows/popups via
+explicit SCWindow inclusion on each display, then composes one local JPEG.
+Window IDs/order/frames and actual pointer receiver remain checked; this is not
+an all-windows-of-a-PID bypass. Up to eight surfaces/four contiguous displays;
+foreign windows, offscreen gaps/mirrored overlaps and stale scenes fail closed.
+Native AX focus accepts only geometry/owner-verified scene surfaces. Image
+routing remains Mac → OpenAI, same-turn attachment once, text-only tool result;
+Core/Ubuntu/JavaScript receive no screenshot or AX values.
+
+Added native capabilities: double/right click, hover, four-direction scroll,
+navigation keys + Shift, fixed named app shortcuts, full verified-field text
+replacement without clipboard/AXValue access, bounded animation wait and
+switching among explicitly native-selected running apps. Optional **Per incarico**
+consent binds one operation UUID, exact app set, 40-action budget and 300-second
+monotonic deadline (including final checks after awaits). Stop, lock/Space/scope
+changes, failures and turn completion revoke it; no automatic renewal/replay.
+**Ogni azione** remains default. `confirm_action` always requests fresh native
+human approval; provider guidance requires it for external/destructive effects.
+No infallible native classification of button semantics is claimed: task mode
+can modify data inside the approved apps and should be used for clear tasks.
+Settings expose app selection/consent mode and remaining actions; startup panels
+are visibly distinct. Credentials and OS permission/signing/updater policies
+are unchanged. Existing signed app is updated atomically at the same path,
+without new persistent backups, only after successful Mac CI and user closure.
+
+Tests use synthetic geometry/AX metadata and injected event sinks, never real
+desktop actions. Linux updater and image-wire checks passed; Mac CI/install and
+physical popup/event/task-mode acceptance pending. No Core implementation change.
+Drag/drop, arbitrary filesystem/shell/clipboard, closed-app launching, security
+UI, background scheduling and full-desktop/any-app parity remain outside scope.
+See Apple repo `docs/maverick-macos-direct-runtime.md` for the exact capabilities,
+limits, evidence and primary Apple API references.

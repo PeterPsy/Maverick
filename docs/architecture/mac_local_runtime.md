@@ -324,3 +324,31 @@ and requested desktop launch at 08:36:07 UTC on 2026-09-06. Native setup shows
 `fed1b91 · diagnostica immagine v8`. Physical preview/receipt inspection is
 pending; it must happen after observation but before Stop or a new turn clears
 the retained diagnostics. Installation does not prove the provider issue fixed.
+
+### V9 explicit same-image attachment comparison
+
+The v8 physical diagnostic confirmed a readable 1028×1229 / 39,734-byte JPEG,
+foreground Notes and unchanged `inputImage` acceptance by Codex locally.
+A credential-free Linux fake-provider probe also preserved a larger synthetic
+113,001-byte JPEG as structured tool output. These facts do not establish the
+real provider's visual interpretation or the model's claimed truncation cause.
+
+V9's native **Test allegato diretto** button requests separate consent to send
+the exact retained JPEG as a direct `turn/start` image input, not a tool result.
+No screenshot is reacquired or re-encoded, and there is no automatic fallback.
+This additional authenticated request stays on Mac → OpenAI. A fresh ephemeral
+tool-free thread in the existing Codex process preserves the normal chat thread
+while excluding its transcript from comparison context. Model, effort, private
+HOME and read-only policy remain fixed. No second process/auth owner is created;
+normal turns and native computer calls are blocked while comparison is active,
+and the comparison thread never receives native computer authority.
+
+The native panel retains the original JPEG until stop/clear/new ordinary turn,
+and shows only a bounded, thread-correlated comparison result. JPEG, probe input
+and result are not added to JavaScript snapshots, files, CI logs or Ubuntu.
+One submission per retained image, rejection before any provider call, stop
+generation fences, a 120-second response deadline and stop-on-uncertain-request
+prevent silent replays and overlapping turns. Tests cover these contracts and
+the bundled-runtime smoke admits a separate empty-tool thread without account
+credentials or an actual model turn. User confirmed the app is closed for v9
+installation after tests; real same-image comparison remains pending.

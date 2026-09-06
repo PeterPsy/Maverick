@@ -13,6 +13,7 @@ from core.providers.certificate_service import (
     build_capability_evidence,
     publish_capability_certificate,
 )
+from core.providers.certification_target import api_profile_target_digest
 from core.runtime.execution_binding import (
     build_runtime_execution_binding,
     canonical_digest,
@@ -20,13 +21,14 @@ from core.runtime.execution_binding import (
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, transition_runtime_session
 from tests.support.repo import make_temp_repo_root
+from tests.support.continuation_profiles import install_continuation_target
 
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
 
 class RuntimeContinuationFixture:
-    """Build a fresh provider/runtime store and one obsolete Codex chat."""
+    """Exercise generic handoff with offline API tuples, not forged native roots."""
 
     def setUp(self) -> None:
         self.root = make_temp_repo_root(self)
@@ -40,6 +42,16 @@ class RuntimeContinuationFixture:
                 now=NOW,
                 install_builtin_apps=False,
             )
+        self.target = install_continuation_target(self.state, now=NOW)
+        # Only the external release gate is replaced in this isolated store.
+        # Certificates, exact targets, TCB, governance and handoff proofs stay real;
+        # the registered adapter cannot dispatch any network/process request.
+        containment = patch(
+            "core.runtime.remote_agentic_admission.remote_agentic_containment_reason",
+            return_value=None,
+        )
+        containment.start()
+        self.addCleanup(containment.stop)
 
     def _source_session(
         self,
@@ -60,12 +72,27 @@ class RuntimeContinuationFixture:
             session_id=f"{session_id}-target-template",
             workspace_id="default",
             execution_mode="full-access",
-            workspace_binding_id=target_workspace_binding_id,
+            workspace_binding_id=target_workspace_binding_id or self.target.workspace_binding_id,
             now=NOW,
         )
         target_certificate = self.state.provider_store.get_capability_certificate(
             target.capability_certificate_id
         )
+        target_profile = self.state.provider_store.get_agentic_profile_definition(
+            target.profile_definition_id, target.profile_definition_revision,
+        )
+        source_routing = (
+            replace(target.routing_constraint_snapshot, allowed_upstream_ids=("incompatible-upstream",))
+            if routing_mismatch else target.routing_constraint_snapshot
+        )
+        source_profile = replace(
+            target_profile,
+            revision=f"obsolete:{session_id}",
+            capability_certificate_id=f"old-certificate:{session_id}",
+            model_id=source_model_id or target.model_id,
+            routing_constraint=source_routing,
+        )
+        self.state.provider_store.save_agentic_profile_definition(source_profile)
         old_artifact_digest = "2" * 64
         old_evidence = build_capability_evidence(
             suite_id=target_certificate.suite_id,
@@ -75,14 +102,13 @@ class RuntimeContinuationFixture:
             result_summary_digest=canonical_digest({"session_id": session_id}),
             evidence_refs=target_certificate.evidence_refs,
             recorded_at=NOW,
-        )
-        source_routing = (
-            replace(
-                target.routing_constraint_snapshot,
-                allowed_upstream_ids=("incompatible-upstream",),
-            )
-            if routing_mismatch
-            else target.routing_constraint_snapshot
+            certification_target_digest=(
+                api_profile_target_digest(source_profile)
+                if source_profile.execution_family == "maverick_agent" else ""
+            ),
+            **{name: getattr(target_certificate, name) for name in (
+                "tcb_manifest_id", "tcb_manifest_version", "tcb_structure_digest", "tcb_live_digest",
+            )},
         )
         source_capabilities = target_certificate.certified_capabilities
         if restrict_source_capability:
@@ -93,6 +119,7 @@ class RuntimeContinuationFixture:
             adapter_artifact_digest=old_artifact_digest,
             test_run_id=old_evidence.test_run_id,
             evidence_digest=old_evidence.evidence_digest,
+            certification_target_digest=old_evidence.certification_target_digest,
             model_id=source_model_id or target.model_id,
             certified_upstream_ids=source_routing.allowed_upstream_ids,
             routing_constraint_digest=canonical_digest(source_routing),
@@ -108,7 +135,7 @@ class RuntimeContinuationFixture:
             session_id=session_id,
             workspace_id="default",
             profile_definition_id=target.profile_definition_id,
-            profile_definition_revision="5",
+            profile_definition_revision=source_profile.revision,
             workspace_binding_id=target.workspace_binding_id,
             workspace_binding_revision=target.workspace_binding_revision,
             capability_certificate_id=old_certificate.certificate_id,
@@ -148,6 +175,14 @@ class RuntimeContinuationFixture:
             certificate_evidence_digest=old_certificate.evidence_digest,
             created_at=NOW,
             legacy_inferred=legacy_inferred,
+            context_policy=source_profile.context_policy,
+            **{name: getattr(source_profile, name) for name in (
+                "model_revision", "model_revision_policy", "full_workspace_contract_revision",
+                "execution_family", "harness_recipe_id", "harness_recipe_revision", "harness_recipe_digest",
+                "provider_capability_catalog_digest", "semantic_projection_compiler_revision",
+                "tool_contract_revision", "provider_config_id", "provider_config_revision",
+                "provider_config_digest", "protocol_adapter_id", "protocol_adapter_version",
+            )},
         )
         source = create_runtime_session(
             self.state.runtime_store,
@@ -156,7 +191,7 @@ class RuntimeContinuationFixture:
             agent_id="chat",
             source_app_id="chat",
             thread_title="Continuation test",
-            agent_label="Codex",
+            agent_label="Offline continuation fixture",
             session_kind=session_kind,
             runtime_mode="agentic",
             requested_mode="full-access",
@@ -190,7 +225,7 @@ class RuntimeContinuationFixture:
                 thread_id=session_id,
                 runtime_session_id=session_id,
                 title="Continuation test",
-                agent_label="Codex",
+                agent_label="Offline continuation fixture",
                 source_app_id="chat",
                 system_prompt="",
                 now=NOW,

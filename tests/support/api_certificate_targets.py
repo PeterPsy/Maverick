@@ -7,8 +7,8 @@ from tests.support.agentic_certification import certified_test_provider_store, f
 from tests.support.fake_agentic_adapter import FakeHostedAgenticAdapter
 
 
-def api_certificate_fixture(provider_id, *, now):
-    profile = builtin_api_certification_profile(provider_id)
+def api_certificate_fixture(provider_id, *, now, profile=None, validity_days=1):
+    profile = profile or builtin_api_certification_profile(provider_id)
     adapter = FakeHostedAgenticAdapter()
     adapter.runtime_engine_id = profile.runtime_engine_id
     adapter.adapter_id = profile.adapter_id
@@ -28,7 +28,7 @@ def api_certificate_fixture(provider_id, *, now):
         **{name: getattr(profile, name) for name in fields},
         session_id="target-session", workspace_id="default",
         profile_definition_id=profile.definition_id, profile_definition_revision=profile.revision,
-        workspace_binding_id="target-workspace", workspace_binding_revision=0,
+        workspace_binding_id=f"target-workspace:{profile.definition_id}", workspace_binding_revision=0,
         adapter_version=adapter.adapter_version, adapter_artifact_digest=evidence.adapter_artifact_digest,
         certificate_evidence_digest=evidence.evidence_digest,
         credential_binding_id=None, reasoning_effort="high", certified_reasoning_efforts=("high",),
@@ -39,5 +39,6 @@ def api_certificate_fixture(provider_id, *, now):
     store = certified_test_provider_store(
         binding, adapter, evidence=evidence, now=now, definition=profile,
         certified_capabilities=_capabilities(),
+        validity_days=validity_days,
     )
     return profile, adapter, binding, store

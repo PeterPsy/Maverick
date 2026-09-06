@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
-from core.providers.agentic_profiles import CODEX_PROFILE_REVISION
+from core.providers.certification_target import api_profile_target_digest
 from core.providers.certificate_service import (
     build_capability_evidence,
     publish_capability_certificate,
@@ -62,7 +62,7 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
         self.assertEqual(middle.status, "stopped")
         self.assertEqual(middle.execution_binding.profile_definition_revision, "8")
         self.assertEqual(final.status, "running")
-        self.assertEqual(final.execution_binding.profile_definition_revision, CODEX_PROFILE_REVISION)
+        self.assertEqual(final.execution_binding.profile_definition_revision, self.target.profile_definition_revision)
         self.assertEqual(final.predecessor_session_id, middle.session_id)
         self.assertEqual(
             self.state.runtime_store.get_thread(source.session_id).runtime_session_id,
@@ -78,7 +78,7 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
         source_binding = source.execution_binding
         current_definition = self.state.provider_store.get_agentic_profile_definition(
             source_binding.profile_definition_id,
-            CODEX_PROFILE_REVISION,
+            self.target.profile_definition_revision,
         )
         current_workspace_binding = (
             self.state.provider_store.get_workspace_agentic_profile_binding(
@@ -89,6 +89,11 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
             source_binding.capability_certificate_id
         )
         artifact_digest = "3" * 64
+        intermediate_definition = replace(
+            current_definition,
+            revision="8",
+            capability_certificate_id="intermediate-revision-8-certificate",
+        )
         evidence = build_capability_evidence(
             suite_id=source_certificate.suite_id,
             suite_version=source_certificate.suite_version,
@@ -97,6 +102,10 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
             result_summary_digest=canonical_digest({"revision": "8"}),
             evidence_refs=source_certificate.evidence_refs,
             recorded_at=NOW,
+            certification_target_digest=api_profile_target_digest(intermediate_definition),
+            **{name: getattr(source_certificate, name) for name in (
+                "tcb_manifest_id", "tcb_manifest_version", "tcb_structure_digest", "tcb_live_digest",
+            )},
         )
         certificate = replace(
             source_certificate,
@@ -104,16 +113,12 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
             adapter_artifact_digest=artifact_digest,
             test_run_id=evidence.test_run_id,
             evidence_digest=evidence.evidence_digest,
+            certification_target_digest=evidence.certification_target_digest,
         )
         publish_capability_certificate(
             self.state.provider_store,
             certificate=certificate,
             evidence=evidence,
-        )
-        intermediate_definition = replace(
-            current_definition,
-            revision="8",
-            capability_certificate_id=certificate.certificate_id,
         )
         self.state.provider_store.save_agentic_profile_definition(
             intermediate_definition
@@ -167,6 +172,14 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
             egress_policy_revision=source_binding.egress_policy_revision,
             certificate_evidence_digest=evidence.evidence_digest,
             created_at=NOW,
+            context_policy=intermediate_definition.context_policy,
+            **{name: getattr(intermediate_definition, name) for name in (
+                "model_revision", "model_revision_policy", "full_workspace_contract_revision",
+                "execution_family", "harness_recipe_id", "harness_recipe_revision", "harness_recipe_digest",
+                "provider_capability_catalog_digest", "semantic_projection_compiler_revision",
+                "tool_contract_revision", "provider_config_id", "provider_config_revision",
+                "provider_config_digest", "protocol_adapter_id", "protocol_adapter_version",
+            )},
         )
 
 

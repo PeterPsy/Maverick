@@ -9,6 +9,10 @@ remains in `docs/development/agentic_p6_validation_2026-09-06.md`.
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`, revision read on 2026-09-06 (SHA-256
 `482566795fa8ac3737c1a7c0c0413aaa62ff380bd19bc2fd724027a42ee715de`).
+Its authorized operational addendum (section 16), written through Storage with
+that SHA fence on 2026-09-06, has SHA-256
+`0c8796ded071189b315982cd17596f001e02062c550c3be3f57b203f920069e9`.
+It separates P6-D/L/S/R checkpoints without dropping any release gate.
 Its P5 review checkpoint is `617ed21c39e6111e2bb0c8d102bfa34709312227`.
 
 P6 distinguishes repository conformance, live protocol evidence, natural
@@ -22,6 +26,25 @@ endpoint/routing, recipe, and adapter), or per native runtime/provider
 connection. Native model slugs inherit their connection certificate; a model
 diagnostic must not mint a new connection certificate. Existing Codex revision
 14 and its artifact remain outside the remote candidate revision cycle.
+
+### Recovery fixture scope
+
+Generic continuation crash/fork/repair tests use an explicitly offline API
+engine and independently issued, exact-target source/intermediate/target
+certificates in a disposable store. Only the external release-containment
+decision is stubbed; certificate validation, TCB checks, persisted governance,
+compatibility proofs, process-absence fences and lineage writes remain real.
+The fake engine cannot make provider calls. These tests are deterministic
+state-machine evidence, not natural or live provider-continuation evidence.
+
+The old fixture changed a Codex artifact but borrowed its current native
+connection certificate. P5 correctly rejects that before considering generic
+compatibility. Dedicated native regressions now assert this rejection, no
+handoff/state transfer, and unchanged current Codex evidence. No native
+validator or Codex artifact is relaxed to recover a green generic fixture.
+Hosted provider-private/WAL recovery remains covered by its separate crash
+matrix; an opaque native or hosted conversation is not assumed transferable
+merely because a generic handoff fixture passes.
 
 ## Checkpoints
 

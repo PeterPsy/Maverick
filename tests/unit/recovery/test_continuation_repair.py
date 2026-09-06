@@ -7,12 +7,6 @@ from unittest.mock import patch
 
 from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.cli.recovery_commands import recovery_command_specs
-from core.providers.agentic_models import (
-    WorkspaceAgenticProfileBinding,
-    default_actor_selection_policy,
-)
-from core.providers.agentic_profiles import publish_codex_agentic_profile
-from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.recovery import continuation_handoff_service
 from core.recovery.continuation_admission import assess_runtime_session_admission
 from core.recovery.continuation_fork import (
@@ -28,6 +22,7 @@ from core.runtime.errors import (
 )
 from core.runtime.provider_start_handoff import runtime_provider_start_handoff
 from tests.support.continuation import NOW, RuntimeContinuationFixture
+from tests.support.continuation_profiles import install_continuation_target
 
 
 class RuntimeContinuationRepairTest(RuntimeContinuationFixture, unittest.TestCase):
@@ -77,38 +72,17 @@ class RuntimeContinuationRepairTest(RuntimeContinuationFixture, unittest.TestCas
         )
 
     def test_upgrade_targets_current_binding_for_the_source_model(self) -> None:
-        provider = self.state.provider_registry.get_provider_definition("codex")
-        profile = publish_codex_agentic_profile(
-            self.state.provider_store,
-            definition=provider,
+        profile = replace(
+            self.state.provider_store.get_agentic_profile_definition(
+                self.target.profile_definition_id, self.target.profile_definition_revision,
+            ),
+            definition_id="alternate-offline-continuation-profile",
+            capability_certificate_id="alternate-offline-continuation-certificate",
             model_id="alternate-certified-model",
-            now=NOW,
         )
-        ensure_codex_preview_certificate(
-            self.state.provider_store,
-            definition=profile,
-            provider_definition=provider,
-            adapter=self.state.provider_registry.get_agentic_runtime_adapter("codex"),
-        )
-        binding = WorkspaceAgenticProfileBinding(
-            binding_id="alternate-current-binding",
-            workspace_id="default",
-            definition_id=profile.definition_id,
-            definition_revision=profile.revision,
-            credential_binding_id=None,
-            enabled=True,
-            is_default=False,
-            actor_policy=default_actor_selection_policy(),
-            workspace_policy_ceiling=profile.policy_ceiling,
-            egress_policy_id=profile.egress_policy_id,
-            egress_policy_revision=profile.egress_policy_revision,
-            revision=0,
-            created_at=NOW,
-            updated_at=NOW,
-        )
-        self.state.provider_store.save_workspace_agentic_profile_binding(
-            binding,
-            expected_revision=None,
+        target = install_continuation_target(self.state, profile=profile, now=NOW)
+        binding = self.state.provider_store.get_workspace_agentic_profile_binding(
+            target.workspace_binding_id,
         )
         self.state.provider_store.save_workspace_agentic_profile_binding(
             replace(

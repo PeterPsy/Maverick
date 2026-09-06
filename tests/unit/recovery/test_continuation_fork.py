@@ -5,7 +5,6 @@ import unittest
 from unittest.mock import patch
 
 from core.api.runtime_api import _list_session_payloads
-from core.providers.agentic_profiles import CODEX_PROFILE_REVISION
 from core.recovery.continuation_admission import assess_runtime_session_admission
 from core.recovery.continuation_fork import admit_runtime_session
 from core.recovery.health_checks import run_runtime_health_check
@@ -17,6 +16,7 @@ from core.runtime.errors import (
 )
 from core.runtime.errors import RuntimeProfileUpgradeRequiredError
 from core.runtime.lifecycle import queue_runtime_turn
+from core.runtime.runtime_turns import RuntimeTurnRecord
 from tests.support.continuation import NOW, RuntimeContinuationFixture
 
 
@@ -51,13 +51,13 @@ class RuntimeContinuationForkTest(RuntimeContinuationFixture, unittest.TestCase)
 
         self.assertEqual(result.status, "forked")
         self.assertEqual(predecessor.execution_binding, original_binding)
-        self.assertEqual(predecessor.execution_binding.profile_definition_revision, "5")
+        self.assertEqual(predecessor.execution_binding.profile_definition_revision, "obsolete:source-session")
         self.assertEqual(predecessor.status, "stopped")
         self.assertEqual(predecessor.continuation_successor_session_id, successor.session_id)
         self.assertEqual(successor.predecessor_session_id, predecessor.session_id)
         self.assertEqual(
             successor.execution_binding.profile_definition_revision,
-            CODEX_PROFILE_REVISION,
+            self.target.profile_definition_revision,
         )
         self.assertEqual(result.handoff.phase, "completed")
 
@@ -342,13 +342,17 @@ class RuntimeContinuationForkTest(RuntimeContinuationFixture, unittest.TestCase)
 
     def test_upgrade_rejects_queued_turn_before_forking(self) -> None:
         source = self._source_session("source-queued-turn")
-        queue_runtime_turn(
-            self.state.runtime_store,
+        # This turn predates the artifact change; new queue admission must not
+        # be bypassed to manufacture an obsolete session's historical state.
+        self.state.runtime_store.save_turn(RuntimeTurnRecord(
             turn_id="turn-before-continuation",
             session_id=source.session_id,
+            workspace_id=source.workspace_id,
+            status="queued",
             input_text="preserve me",
-            now=NOW,
-        )
+            created_at=NOW, updated_at=NOW,
+            started_at=None, completed_at=None, failure_reason=None,
+        ))
 
         with self.assertRaises(RuntimeProfileUpgradeRequiredError) as caught:
             admit_runtime_session(self.state, session=source, now=NOW)

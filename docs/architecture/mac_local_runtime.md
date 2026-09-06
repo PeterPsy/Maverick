@@ -432,3 +432,11 @@ on Stop, new observation and completed mutation; images still use the v10
 same-turn Mac → OpenAI route. Twelve new Swift tests cover the policy and safe
 rejection contracts. User-approved Mac build/install and the physical search
 typing check remain pending.
+
+User-approved run `34025926048` subsequently passed 67 Swift tests with zero
+failures, release compilation, credential-free Codex admission and the same-turn
+image wire regression on Darwin. It installed `3a4cfd3` and requested desktop
+launch at 09:56:58 UTC on 2026-09-06; setup shows `3a4cfd3 · focus nativo v11`.
+Linux wire and Core unused-import checks passed. Physical native search-focus
+recognition and approved search-only typing remain to be verified in Notes;
+CI does not read real desktop controls or establish that acceptance outcome.

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import hashlib
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -16,6 +18,7 @@ from core.providers.certification_pipeline import (
     verify_certification_run,
 )
 from core.providers.errors import CapabilityCertificateError
+from core.providers.evidence_store import CapabilityEvidenceBlobStore, EVIDENCE_REF_PREFIX
 from core.providers.google_agentic_certification import GOOGLE_CERTIFICATION_SUITE_VERSION
 from core.providers.certification_manifests import (
     GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -92,6 +95,29 @@ class CertificationPipelineTest(unittest.TestCase):
         ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=green):
             with self.assertRaisesRegex(CapabilityCertificateError, "certification_json_invalid"):
                 self._execute_unpatched()
+
+    def test_background_failure_retains_outputs_but_cannot_start_live_probe(self) -> None:
+        completed = mock.Mock(
+            returncode=0, stdout=b"offline fixture output",
+            stderr=b"Exception in thread Thread-1:\nRuntimeError: failed\nRan 1 test in 0.1s\n\nOK\n",
+        )
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            "core.providers.certification_pipeline._require_clean_checkout"
+        ), mock.patch(
+            "core.providers.certification_pipeline._git_commit", return_value="a" * 40
+        ), mock.patch(
+            "core.providers.certification_pipeline.subprocess.run", return_value=completed
+        ) as execute:
+            archive = CapabilityEvidenceBlobStore(Path(directory))
+            with self.assertRaisesRegex(CapabilityCertificateError, "certification_fixture_receipt_invalid"):
+                execute_certification_suite(
+                    cwd=self.root, suite_id=self.suite_id, suite_version=self.suite_version,
+                    adapter_artifact_digest=self.digest, evidence_refs=(), evidence_store=archive,
+                )
+            self.assertEqual(execute.call_count, 1)
+            self.assertEqual(execute.call_args.args[0], GOOGLE_AGENTIC_CERTIFICATION_MANIFEST.steps[0].command)
+            for content in (completed.stdout, completed.stderr):
+                self.assertEqual(archive.get(EVIDENCE_REF_PREFIX + hashlib.sha256(content).hexdigest()), content)
 
     def test_protocol_success_without_natural_behavior_cannot_be_signed(self) -> None:
         run = self._execute(complete_behavior=False)
@@ -204,18 +230,18 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "318940748990b62e71f4631a39149bf72b6d5996384d5f2c5982bedd00789f79",
-            "openrouter": "e2a8d4cc3e2a20abbd34917464f5242dc2bb83282fcb19648290de77910da7b3",
+            "google-ai-studio": "63c83e06f6d35fa2756830c51c9ca7501dd8ba44655006182ff86ea782bdc908",
+            "openrouter": "62dd224b92aaa31339b7260cb81f5652524a1ce7e17560af694a9923704fbe46",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "43")
+                self.assertEqual(manifest.suite_version, "44")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-06-r43-p6-full-submission-retention-tcb33",
+                    "2026-09-06-r44-p6-retained-receipt-verification-tcb34",
                 )
                 self.assertEqual(
                     manifest.digest,

@@ -107,8 +107,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v43 matrix revision
-  `2026-09-06-r43-p6-full-submission-retention-tcb33` declared by the provider
+- the dated suite-v44 matrix revision
+  `2026-09-06-r44-p6-retained-receipt-verification-tcb34` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -134,7 +134,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 43 \
+  --suite-version 44 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --evidence-root "$PRIVATE_CERTIFICATION_ARCHIVE" \
@@ -152,8 +152,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-Both suite-43 manifests bind matrix revision
-`2026-09-06-r43-p6-full-submission-retention-tcb33`. OpenRouter uses suite id
+Both suite-44 manifests bind matrix revision
+`2026-09-06-r44-p6-retained-receipt-verification-tcb34`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
 collector-generated nonce. Duplicate fields, arbitrary text, extra payload
@@ -363,7 +363,7 @@ build requires a new run, evidence id, signed artifact, certificate identity,
 expiry, and canary. Preserve the old redaction-safe metadata for audit and
 follow the rollback sequence in the preview runbook.
 
-## Publisher-owned retention and independent review (suite 43)
+## Publisher-owned retention and independent review (suite 44)
 
 `--evidence-root` is mandatory for collection and signing. It must be an
 absolute, private path outside the checkout and all tenant mounts. Collection
@@ -371,6 +371,13 @@ stores stdout/stderr bytes, including empty streams. Natural report attachment
 stores the canonical report; signing then verifies that every referenced
 prompt, trace, source snapshot, projection and effect artifact is present and
 matches its digest. A hash without bytes cannot be signed by this runner.
+Signing and publication also reparse the retained fixture stderr and live-probe
+stdout and require exact agreement with the signed step receipts. The fixture
+collector rejects uncaught thread/destructor/task errors and pending or
+unawaited tasks anywhere in stderr, even before a green final unittest footer.
+It retains failed output but must not start a live probe after this rejection.
+Tests intentionally exercising those failures must capture their diagnostics;
+never remove them from retained evidence to obtain a passing receipt.
 These restricted archives may contain sensitive observations and must never be
 served as workspace/app storage, public logs or chat attachments.
 

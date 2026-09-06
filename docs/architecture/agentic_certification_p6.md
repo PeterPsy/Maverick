@@ -9,7 +9,7 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
 The subsequent aggregate-budget and admission/publication work is not covered
-by that historical freeze. Suite 43 / TCB 33 requires new exact-source
+by that historical freeze. Suite 44 / TCB 34 requires new exact-source
 verification before signing or release; the independent candidate delta is
 documented in `docs/development/agentic_p6_runtime_publication_delta.md`.
 
@@ -67,7 +67,7 @@ smuggle authority. The current Codex 14 deployment must remain untouched until
 its successor is actually verified and approved. Native Gemini CLI still needs
 its own approved connection/artifact path, not an API model certificate.
 
-Suite 43 additionally runs production-composed API creation, synchronous
+The current suite additionally runs production-composed API creation, synchronous
 submission, catalog/egress checks, codecs and the real hosted loop against an
 in-memory HTTP peer, with direct network access forbidden. It found and fixes
 the completion boundary's engine/model-provider id mismatch: a durable hosted
@@ -76,6 +76,14 @@ while lifecycle events retain the engine id. Exact content, session, provider
 and exit-code conflicts still fail closed; no duplicate final is appended.
 Fabricated HTTP bytes and certification observations are offline regression
 evidence, not P6-L, a laboratory permission, or release approval.
+
+Suite 44 also closes the observed green-footer/background-error gap. The
+collector checks the whole fixture stderr for uncaught thread, destructor and
+async-task failures before accepting its final unittest receipt. Rejected output
+is still retained; no live probe starts after that failed fixture gate. At
+publication, Core reparses the retained fixture and live-probe output bytes and
+requires exact agreement with the signed step receipts. A valid collector
+signature cannot replace those observed receipts or independent natural review.
 
 Certification is per exact API profile (including model, provider config,
 endpoint/routing, recipe, and adapter), or per native runtime/provider
@@ -106,9 +114,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 39,
-   unchanged recipe 24, Google profile 48, OpenRouter profile 47, suite 43, and canonical
-   TCB manifest 33. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 40,
+   unchanged recipe 24, Google profile 49, OpenRouter profile 48, suite 44, and canonical
+   TCB manifest 34. The corpus includes P5 family/pinning/onboarding, native ACP
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural

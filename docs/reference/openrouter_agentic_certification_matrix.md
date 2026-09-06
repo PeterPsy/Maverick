@@ -1,18 +1,18 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-09-06
-Matrix revision: `2026-09-06-r43-p6-full-submission-retention-tcb33`
+Matrix revision: `2026-09-06-r44-p6-retained-receipt-verification-tcb34`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==39`
+Adapter: `maverick-hosted-tool-loop==40`
 
 ## P6 candidate checkpoint
 
-Suite 43 / TCB manifest 33 / hosted adapter 39 / unchanged recipe 24 bind
+Suite 44 / TCB manifest 34 / hosted adapter 40 / unchanged recipe 24 bind
 fresh-attestation admission, production-composed API-to-final submission,
-retained evidence, independent publisher trust and the durable aggregate budget
+retained evidence with reparsed step receipts, independent publisher trust and the durable aggregate budget
 to the existing P0–P5 corpus. The new profile is immutable, unbound and uncertified.
-The prior suite-41/42 deterministic receipts
+The prior suite-41/42/43 deterministic receipts
 are historical, not evidence for this delta. Codex's shared queue/handoff change
 has its own explicit revision 15; no source is excluded from its artifact.
 See `docs/development/agentic_p6_runtime_publication_delta.md` for the scope and
@@ -25,7 +25,7 @@ remaining live, laboratory, independent review and release requirements.
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-08-17`, with exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `47` (revision `46` suspended) |
+| Immutable profile revision | `48` (revision `47` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |

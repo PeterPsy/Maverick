@@ -49,6 +49,15 @@ suite initially had a green unittest footer but a delayed timer exception on
 the already removed fixture directory; that run is rejected, not counted as
 clean verification. No production cleanup/guard is suppressed to fix the test.
 
+The collector now rejects that class of failure itself: uncaught thread,
+destructor, pending-task and unawaited-coroutine diagnostics anywhere in the
+retained stderr invalidate even a green unittest footer. Output from that failed
+step is still retained, but execution stops before a live probe. The publisher
+also reparses retained fixture stderr and live-probe stdout and compares their
+receipts with the signed claims; digest integrity alone cannot substitute for
+this operational check. Tests cover valid worker signatures attached to failed,
+malformed or differently counted observed output.
+
 ## Explicit Codex shared-source review
 
 Codex revision 14 remains recorded with digest
@@ -107,11 +116,16 @@ were preserved. Direct source verification then confirmed active Codex 14's
 original digest and candidate Codex 15's different digest. No backend restart,
 control-plane migration or cutover was performed.
 
-The final API candidate identities are adapter 39, unchanged data-only recipe 24,
-Google profile 48, OpenRouter profile 47, suite 43, TCB manifest 33. No recipe
+The final API candidate identities are adapter 40, unchanged data-only recipe 24,
+Google profile 49, OpenRouter profile 48, suite 44, TCB manifest 34. No recipe
 payload changed, so its immutable revision is not artificially renewed.
-The earlier suite-42 checkpoint is superseded by the full-submission correction;
-its successful deterministic receipts do not certify this final candidate.
+The earlier suite-42/43 checkpoints are superseded by the full-submission and
+retained-receipt corrections; their successful deterministic receipts do not
+certify this final candidate. The clean suite-43 rerun on `5c16dac71bfdc39f92e2e85ed8f21ee755c6dd44`
+passed 669 Google and 678 OpenRouter tests, zero skips/background errors, with
+unchanged TCB and source, retained in
+`/var/tmp/maverick/maverick-p6-admission-verified-zrq7ohdy/summary.json`.
+That is a historical offline checkpoint, not final-candidate or natural evidence.
 
 Remaining operational/program work is explicit:
 

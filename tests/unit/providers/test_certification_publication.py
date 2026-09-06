@@ -13,11 +13,13 @@ from core.cli.certification_publication_commands import certification_publicatio
 from core.cli.models import CliInvocationContext
 from core.providers.certification_artifacts import canonical_artifact, retained_run_references
 from core.providers.certification_pipeline import execute_certification_suite, sign_certification_run
+from core.providers.certification_summary import certification_result_summary
 from core.providers.certification_target import builtin_api_certification_profile
 from core.providers.errors import CapabilityCertificateError
 from core.providers.google_agentic_certification import (
     GOOGLE_CERTIFICATION_SUITE_ID, GOOGLE_CERTIFICATION_SUITE_VERSION, publish_google_preview_certificate,
 )
+from core.runtime.execution_binding import canonical_digest
 from tests.support.certification_evidence import fixture_step_process, with_fixture_behavior, fixture_publication_authority
 
 
@@ -74,6 +76,26 @@ class CertificationPublicationTest(unittest.TestCase):
             self.verify(signed=other)
         with self.assertRaisesRegex(CapabilityCertificateError, "signer_untrusted"):
             self.verify(review=replace(self.review, signer_key_id="self-appointed"))
+
+    def test_valid_worker_signature_cannot_replace_observed_step_receipts(self):
+        live_receipt = {**self.run.step_results[1]["live_receipt"],
+                        "test_run_id": "google-interactions-live:11111111-1111-1111-1111-111111111111"}
+        for index, stream, content, reason in (
+            (0, "stderr_digest", b"Exception in thread Thread-1:\nRan 1 test in 0.1s\n\nOK\n", "fixture_receipt_invalid"),
+            (0, "stderr_digest", b"Ran 2 tests in 0.1s\n\nOK\n", "artifact_receipt_mismatch"),
+            (1, "stdout_digest", canonical_artifact(live_receipt), "artifact_receipt_mismatch"),
+            (1, "stdout_digest", b"not a live receipt", "certification_json_invalid"),
+        ):
+            with self.subTest(index=index, reason=reason):
+                steps = [dict(step) for step in self.run.step_results]
+                steps[index][stream] = self.publisher.evidence_store.put(content).rsplit(":", 1)[1]
+                run = replace(self.run, step_results=tuple(steps))
+                run = replace(run, result_summary_digest=canonical_digest(certification_result_summary(run)))
+                signed = sign_certification_run(run, signer_key_id="worker", private_key=self.key)
+                # A trusted collector's valid signature is not sufficient: the
+                # actual bytes are rejected before even considering the review.
+                with self.assertRaisesRegex(CapabilityCertificateError, reason):
+                    self.verify(signed=signed)
 
     def test_reviewer_key_alias_is_not_independence_and_policy_is_reloaded(self):
         path = self.publisher.trust_policy_path

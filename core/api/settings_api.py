@@ -106,7 +106,10 @@ def _runtime_session_settings_payload(state: PlatformState, session: RuntimeSess
         workspace_name = state.workspace_store.get_workspace(session.workspace_id).name
     except Exception:
         workspace_name = session.workspace_id
-    containment_reason = remote_agentic_containment_reason(session.execution_binding)
+    containment_reason = remote_agentic_containment_reason(
+        session.execution_binding, workspace_id=session.workspace_id,
+        workspace_store=state.workspace_store,
+    )
     return {
         "session_id": session.session_id,
         "workspace_id": session.workspace_id,

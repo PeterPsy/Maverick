@@ -61,7 +61,9 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "25")
+                self.assertEqual(
+                    recipe.revision, "24" if recipe.model_provider_id == "google-ai-studio" else "25",
+                )
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
                     "10",

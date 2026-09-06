@@ -9,9 +9,12 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
 The subsequent aggregate-budget and admission/publication work is not covered
-by that historical freeze. Suite 43 / TCB 33 requires new exact-source
-verification before signing or release; the independent candidate delta is
-documented in `docs/development/agentic_p6_runtime_publication_delta.md`.
+by that historical freeze. Suite 44 / TCB 34 offline verification on the exact
+candidate source, and its still-open laboratory/native/release requirements,
+are recorded in `docs/development/agentic_p6_runtime_publication_delta.md`.
+Those deterministic results are not signing or release approval. The combined
+OpenRouter-omission candidate uses suite 45 / TCB 35 and requires its own
+clean-source verification; it cannot inherit the fixer's suite-44 receipts.
 
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`, revision read on 2026-09-06 (SHA-256
@@ -67,6 +70,24 @@ smuggle authority. The current Codex 14 deployment must remain untouched until
 its successor is actually verified and approved. Native Gemini CLI still needs
 its own approved connection/artifact path, not an API model certificate.
 
+The current suite additionally runs production-composed API creation, synchronous
+submission, catalog/egress checks, codecs and the real hosted loop against an
+in-memory HTTP peer, with direct network access forbidden. It found and fixes
+the completion boundary's engine/model-provider id mismatch: a durable hosted
+final is reconciled against the model provider resolved from its persisted pin,
+while lifecycle events retain the engine id. Exact content, session, provider
+and exit-code conflicts still fail closed; no duplicate final is appended.
+Fabricated HTTP bytes and certification observations are offline regression
+evidence, not P6-L, a laboratory permission, or release approval.
+
+Suite 44 also closes the observed green-footer/background-error gap. The
+collector checks the whole fixture stderr for uncaught thread, destructor and
+async-task failures before accepting its final unittest receipt. Rejected output
+is still retained; no live probe starts after that failed fixture gate. At
+publication, Core reparses the retained fixture and live-probe output bytes and
+requires exact agreement with the signed step receipts. A valid collector
+signature cannot replace those observed receipts or independent natural review.
+
 Certification is per exact API profile (including model, provider config,
 endpoint/routing, recipe, and adapter), or per native runtime/provider
 connection. Native model slugs inherit their connection certificate; a model
@@ -96,10 +117,11 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 39,
-   recipe 25, Google profile 48, OpenRouter profile 47, suite 43, and canonical
-   TCB manifest 33. OpenRouter codec 3 omits both tool parameters when no tools
-   are offered; the observed explicit-none capability is not relabeled. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 41,
+   Google recipe 24 / OpenRouter recipe 25, profiles 50 / 49 respectively,
+   suite 45 and canonical TCB manifest 35. OpenRouter codec 3 omits both
+   tool parameters when no tools are offered; the observed explicit-none
+   capability is not relabeled. The corpus includes P5 family/pinning/onboarding, native ACP
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural

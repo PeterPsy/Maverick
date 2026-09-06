@@ -3,7 +3,7 @@
 This delta implements review corrections, not P6-L/S/R approval. The prior
 P6-D evidence describes commit `5a7ca45a`; it does not certify these new bytes.
 No production availability constant is enabled, provider request made, trusted
-operator key created, workspace reclassified, or production certificate issued
+operator key created, operational workspace reclassified, or production certificate issued
 by this development work.
 
 ## Runtime and native boundary
@@ -15,11 +15,48 @@ attestation state again. A supplied earlier snapshot cannot override the store;
 missing, revoked, changed-workspace and unreadable authority fail closed.
 Queueing also fences persisted owner and exact pin, not only workspace/status.
 Hosted full/cheap transport authority checks re-enter the same admission gate.
+Settings session inventory and default-provider/app-proxy projections receive
+that same store too: a read-side status cannot lose valid authority or hide a
+revocation merely because the write-side API already checked it.
 
 Gemini CLI uses the exact native connection identity (`gemini-cli`,
 `gemini-cli-acp`, `google`, ACP), its own default-off flag and a separate closed
 release barrier. `google` is not added to the API provider allowlist. Neither
 Google API certification nor an API preview flag admits a native connection.
+
+## Full submission and final-output identity
+
+An additional production-composed offline test executes API preflight and
+creation, synchronous queue/dispatch, real catalog validation, request/egress
+composition, HTTPS/SSE codecs, the hosted loop and final-outbox persistence.
+Only the HTTP peer's catalog/stream bytes are fabricated; direct networking is
+forbidden by the test. It does not replace any admission/certificate/actor/egress
+guard, nor does it use the `HostedAgenticHarness` authority substitutions.
+
+This exposed a second functional integration failure after the provider had
+completed: lifecycle submission passed the runtime engine id while the durable
+hosted final identifies the model provider. Final-output reconciliation now
+resolves that namespace from the persisted Maverick Agent pin. Session, exact
+model-provider, content and exit-code conflicts still reject; the existing
+delivery id is reused, never duplicated or silently rewritten. The common
+completion helper covers synchronous and asynchronous submission. A queued
+turn revoked before dispatch makes neither catalog nor completion requests in
+the offline integration test.
+
+The full-submission fixture also drains and joins its own scheduled idle reaper
+through the real cleanup service before removing the disposable store. A full
+suite initially had a green unittest footer but a delayed timer exception on
+the already removed fixture directory; that run is rejected, not counted as
+clean verification. No production cleanup/guard is suppressed to fix the test.
+
+The collector now rejects that class of failure itself: uncaught thread,
+destructor, pending-task and unawaited-coroutine diagnostics anywhere in the
+retained stderr invalidate even a green unittest footer. Output from that failed
+step is still retained, but execution stops before a live probe. The publisher
+also reparses retained fixture stderr and live-probe stdout and compares their
+receipts with the signed claims; digest integrity alone cannot substitute for
+this operational check. Tests cover valid worker signatures attached to failed,
+malformed or differently counted observed output.
 
 ## Explicit Codex shared-source review
 
@@ -63,8 +100,10 @@ Neither cryptography nor artifact hashing proves that a human actually reviewed
 the traces. That approval, deployment isolation, and P6-S remain operational
 requirements, not automatically closed software tests.
 
-The source checkout and all tenant mounts are forbidden archive locations for
-the collection/signing runner. No test fixture artifact or temporary test key
+The collection/signing runner rejects archive paths within its own source
+checkout. The operator must also exclude other installation/tenant mounts and
+keep the archive inaccessible to the worker's tools; a path check is not a
+mount-isolation proof. No test fixture artifact or temporary test key
 is accepted as operational evidence merely because unit tests exercise signing.
 
 ## Isolation and limits of this checkpoint
@@ -77,20 +116,34 @@ were preserved. Direct source verification then confirmed active Codex 14's
 original digest and candidate Codex 15's different digest. No backend restart,
 control-plane migration or cutover was performed.
 
-The new API candidate identities are adapter 38, unchanged data-only recipe 24,
-Google profile 47, OpenRouter profile 46, suite 42, TCB manifest 32. No recipe
+The final API candidate identities are adapter 40, unchanged data-only recipe 24,
+Google profile 49, OpenRouter profile 48, suite 44, TCB manifest 34. No recipe
 payload changed, so its immutable revision is not artificially renewed.
+The earlier suite-42/43 checkpoints are superseded by the full-submission and
+retained-receipt corrections; their successful deterministic receipts do not
+certify this final candidate. The clean suite-43 rerun on `5c16dac71bfdc39f92e2e85ed8f21ee755c6dd44`
+passed 669 Google and 678 OpenRouter tests, zero skips/background errors, with
+unchanged TCB and source, retained in
+`/var/tmp/maverick/maverick-p6-admission-verified-zrq7ohdy/summary.json`.
+That is a historical offline checkpoint, not final-candidate or natural evidence.
 
 Remaining operational/program work is explicit:
 
 - a distinct experimental permission and isolated worker for the **real** hosted
   natural loop is not implemented by this delta; the release barrier remains
   closed, and no client/environment laboratory permit is accepted;
-- the positive control-plane tests use fabricated certification observations
+- the positive offline tests use fabricated certification observations
   and only set the release-availability constant as an offline test condition;
-  they do not replace admission guards, certificate validators or stores, but
-  they resolve dispatch without opening a provider transport and do not prove
-  P6-L or the complete API-to-provider canary;
+  they do not replace admission guards, certificate validators or stores, and
+  they include the real API capability preflight, creation, queue and dispatch
+  resolution, revocation between API preflight and persistence, and a new
+  process rereading revoked authority from disk. The full-submission test also
+  runs the real transport against a fabricated in-memory HTTP peer; none of
+  these tests proves P6-L or an actual API-to-provider canary;
+- the API-positive test uses the existing `full-access` execution policy in a
+  disposable installation. The existing sandbox policy removes shell and
+  therefore cannot satisfy the atomic Full Workspace preflight; this delta
+  neither weakens that check nor proves a sandbox-mode Full Workspace canary;
 - live synthetic probes, all 14 natural scenarios per claimed configuration,
   provider billing/project verification, trusted operational signatures and
   independent source/leakage review remain required for each target;
@@ -103,3 +156,49 @@ These are remaining gates, not waived requirements or a declaration that the
 multimodel program is complete. The source budget cap is now also enforced in
 `CertificationBudgetLimit`, so direct policy creation cannot exceed OpenRouter
 5 USD or reclassify Google's free-tier quota as paid credit.
+
+## Final exact-source offline verification
+
+Tested source: `84a684b8f8de8d1188041a329279b3ff404caa32`, on
+`p6/admission-publication-20260906`, 2026-09-06. Both exact suite-44 fixture
+commands from `core/providers/certification_manifests.py` ran sequentially with
+`MAVERICK_CERTIFICATION_ALLOW_LIVE=0`. The stricter production
+`fixture_receipt` parser accepted their complete retained stderr.
+
+| Verification | Tests | Errors/failures/skips | Uncaught background failures |
+| --- | ---: | --- | --- |
+| Google suite 44, fixture-contract step | 672 | 0 / 0 / 0 | 0 |
+| OpenRouter suite 44, fixture-contract step | 681 | 0 / 0 / 0 | 0 |
+| Additional Codex/queue/API/status/usage/app-mount/cleanup regressions | 94 | 0 / 0 / 0 | 0 |
+
+These are per-command counts with overlapping shared tests, not a count of
+unique tests or a repository-wide fast/pre-merge run. Expanded argv for all
+three commands, exit codes, timings, output hashes and receipts are retained in
+`/var/tmp/maverick/maverick-p6-receipts-verified-mluhskps/summary.json`.
+Its SHA-256 is
+`1f331b60d96655f0b715702d32c9184b641f87ef1a59dd9fa6b048fc399dcacf`.
+The same private directory retains each command's actual stdout/stderr, reread
+and compared with the summary after completion. Stderr SHA-256 values:
+
+- `google-ai-studio.stderr`:
+  `adb730c2e545572de754d35f3d41af4d64fc2785e6551ed89271d2cedb15e3a3`;
+- `openrouter.stderr`:
+  `e69f952156724c860549b04fe7f72f9d67bef348cc239448c9c1fd5ea43c8b3f`;
+- `extra-regressions.stderr`:
+  `a40caed178e349c6b7f4f9a687cd0b42ee02f03e72d6ccb22861356b93d3807b`.
+
+The checkout was clean before and after verification, with unchanged Git commit
+and TCB identity. TCB manifest 34 has structure digest
+`55db98ad5c512808cedadcc0fe5135e27b927160bf44a8379fb4a2a55727efe1`
+and live digest
+`5f795c9b96fc91327d4ad74c03371b2ed50b7e1c8d50320ad9522a8c713fc6e7`.
+Unused-import and whitespace checks also passed. Direct source verification
+again matched candidate Codex 15 and active Codex 14 to their respective
+unchanged digests above; no deployment, migration or cutover occurred.
+
+This later documentation-only record names the exact earlier tested source;
+it is not a claim that a different Git commit has been operationally certified.
+All provider traffic in these regressions is fabricated. No live provider
+request, actual natural scenario, independent operational signoff or release
+certificate was produced. The remaining laboratory, native and P6-L/S/R gates
+listed above are still open.

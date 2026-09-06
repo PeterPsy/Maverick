@@ -621,6 +621,7 @@ def handle_app_backend(
             state.provider_store,
             workspace_id=workspace_id,
             registry=getattr(state, "provider_registry", None),
+            workspace_store=state.workspace_store,
         )
         provider_id = provider.provider_id
     except ProviderError:

@@ -45,7 +45,7 @@ No live provider request was made. The native artifact in this checkout remains
 Codex 14 `33b483337b160ba8281b3ad17176030905ee0b83f2067d5eee911ef6517eab55`.
 
 The combined isolated candidate integrates admission/publication checkpoint
-`2f4a8d00` without deploying it to the active root. It uses OpenRouter codec 3,
-hosted adapter 39, recipe 25, Google/OpenRouter profiles 48/47 and suite 43 /
-TCB 33. These identities do not certify themselves: the complete exact-source
+`23e36403` without deploying it to the active root. It uses OpenRouter codec 3,
+hosted adapter 41, Google/OpenRouter recipes 24/25, profiles 50/49 and
+suite 45 / TCB 35. These identities do not certify themselves: the complete exact-source
 corpus, live and natural evidence, independent review and canary remain required.

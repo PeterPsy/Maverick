@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import hashlib
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -17,6 +19,8 @@ from core.providers.certification_pipeline import (
 )
 from core.providers.errors import CapabilityCertificateError
 from core.providers.certification_live_receipt import validate_live_probe_receipt
+
+from core.providers.evidence_store import CapabilityEvidenceBlobStore, EVIDENCE_REF_PREFIX
 from core.providers.google_agentic_certification import GOOGLE_CERTIFICATION_SUITE_VERSION
 from core.providers.certification_manifests import (
     GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -107,6 +111,29 @@ class CertificationPipelineTest(unittest.TestCase):
                         {**receipt, "supports_tool_choice_none": "false"}):
             with self.assertRaisesRegex(CapabilityCertificateError, "live_receipt_invalid"):
                 validate(invalid)
+
+    def test_background_failure_retains_outputs_but_cannot_start_live_probe(self) -> None:
+        completed = mock.Mock(
+            returncode=0, stdout=b"offline fixture output",
+            stderr=b"Exception in thread Thread-1:\nRuntimeError: failed\nRan 1 test in 0.1s\n\nOK\n",
+        )
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            "core.providers.certification_pipeline._require_clean_checkout"
+        ), mock.patch(
+            "core.providers.certification_pipeline._git_commit", return_value="a" * 40
+        ), mock.patch(
+            "core.providers.certification_pipeline.subprocess.run", return_value=completed
+        ) as execute:
+            archive = CapabilityEvidenceBlobStore(Path(directory))
+            with self.assertRaisesRegex(CapabilityCertificateError, "certification_fixture_receipt_invalid"):
+                execute_certification_suite(
+                    cwd=self.root, suite_id=self.suite_id, suite_version=self.suite_version,
+                    adapter_artifact_digest=self.digest, evidence_refs=(), evidence_store=archive,
+                )
+            self.assertEqual(execute.call_count, 1)
+            self.assertEqual(execute.call_args.args[0], GOOGLE_AGENTIC_CERTIFICATION_MANIFEST.steps[0].command)
+            for content in (completed.stdout, completed.stderr):
+                self.assertEqual(archive.get(EVIDENCE_REF_PREFIX + hashlib.sha256(content).hexdigest()), content)
 
     def test_protocol_success_without_natural_behavior_cannot_be_signed(self) -> None:
         run = self._execute(complete_behavior=False)
@@ -206,31 +233,31 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "5e61ec88c393b8ff01f08a84d6c8ac09a22cb6c83bbb2a028cbdb1b69ff3968b"
+                "3aa903165e422c5a9d6733df3eb9429f9275109cf2a83b72e0b5ce16711604e5"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "49188c254af64a1822cb638b2c51f675909572958d2d5ea3fa5050b8b1075eb0"
+                "dde0e28e643f2186c846df65c15fcd882a12bae60fcf2c372b45facbcb9aa3be"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "e3311c18dafbe722cc9f7396df55fffe07fc6876c76dfc4a7f454b0cb76d005d",
-            "openrouter": "9301c9a986797cbf9df813a5a6cccfd2506a988ce846142c37225b8b9275937b",
+            "google-ai-studio": "436f7dab8d009c1bc9bf67dbfc9cb358db624748dbd43fd41ed6478f4f0a26d0",
+            "openrouter": "5ab8d084b92a5a6b18dd1fde1fc47d39ee9dbbded2440a9a85ea0abc94436113",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "43")
+                self.assertEqual(manifest.suite_version, "45")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-06-r43-p6-tools-omitted-tcb33",
+                    "2026-09-06-r45-p6-combined-tools-omitted-tcb35",
                 )
                 self.assertEqual(
                     manifest.digest,

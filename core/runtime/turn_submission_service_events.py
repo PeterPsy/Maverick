@@ -53,9 +53,21 @@ def _record_final_output(
     except RuntimeTurnNotFoundError:
         existing = None
     if existing is not None and isinstance(existing.payload.get("delivery_id"), str):
+        # Submission lifecycle events identify the runtime engine. The hosted
+        # durable final outbox identifies the model provider instead. Resolve
+        # that namespace from the persisted pin, never from the emitted payload.
+        binding = state.runtime_store.get_session(session_id).execution_binding
+        expected_provider_id = provider_id
         if (
-            existing.payload.get("complete_text") != complete_text
-            or existing.payload.get("provider_id") != provider_id
+            binding is not None
+            and binding.execution_family == "maverick_agent"
+            and provider_id == binding.runtime_engine_id
+        ):
+            expected_provider_id = binding.model_provider_id
+        if (
+            existing.session_id != session_id
+            or existing.payload.get("complete_text") != complete_text
+            or existing.payload.get("provider_id") != expected_provider_id
             or existing.payload.get("exit_code") != exit_code
         ):
             raise RuntimeError("runtime_final_output_identity_conflict")

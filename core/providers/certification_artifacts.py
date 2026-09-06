@@ -4,6 +4,9 @@ import hashlib
 import json
 from typing import Protocol
 
+from core.providers.certification_fixture_receipt import fixture_receipt
+from core.providers.certification_live_receipt import decode_certification_json, validate_live_probe_receipt
+from core.providers.certification_manifests import get_certification_manifest
 from core.providers.errors import CapabilityCertificateError
 from core.providers.evidence_store import EVIDENCE_REF_PREFIX
 from core.runtime.execution_binding import canonical_digest
@@ -44,4 +47,21 @@ def verify_retained_run(run, store: CertificationArtifactStore) -> tuple[str, ..
     report_ref = EVIDENCE_REF_PREFIX + canonical_digest(run.behavioral_evidence)
     if store.get(report_ref) != canonical_artifact(run.behavioral_evidence):
         raise CapabilityCertificateError("certification_behavior_artifact_mismatch")
+    # The publisher checks observed output bytes too, not only the collector's
+    # signed assertion that those bytes contained successful step receipts.
+    manifest = get_certification_manifest(run.suite_id, run.suite_version)
+    for step in run.step_results:
+        if step["kind"] == "fixture_contract":
+            observed = fixture_receipt(store.get(EVIDENCE_REF_PREFIX + step["stderr_digest"]))
+            declared = step["fixture_receipt"]
+        elif step["kind"] == "live_probe":
+            observed = validate_live_probe_receipt(
+                decode_certification_json(store.get(EVIDENCE_REF_PREFIX + step["stdout_digest"]), max_bytes=16_384),
+                provider_id=manifest.provider_id, target_digest=run.target_digest, run_nonce=run.collection_nonce,
+            )
+            declared = step["live_receipt"]
+        else:
+            raise CapabilityCertificateError("certification_step_manifest_mismatch")
+        if observed != declared:
+            raise CapabilityCertificateError("certification_artifact_receipt_mismatch")
     return refs

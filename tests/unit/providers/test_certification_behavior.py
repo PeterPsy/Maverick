@@ -111,6 +111,19 @@ class CertificationBehaviorTest(unittest.TestCase):
         with self.assertRaises(CapabilityCertificateError):
             validate_fixture_receipt({"tests_run": True, "skipped": 0})
 
+    def test_background_failures_before_a_green_footer_cannot_certify(self):
+        for diagnostic in (
+            b"Exception in thread Thread-1:\nTraceback (most recent call last):\nRuntimeError: failed\n",
+            b"Exception ignored in: <function cleanup>\nRuntimeError: failed\n",
+            b"Task exception was never retrieved\nRuntimeError: failed\n",
+            b"Task was destroyed but it is pending!\n",
+            b"RuntimeWarning: coroutine 'cleanup' was never awaited\n",
+        ):
+            # The failure can be well outside the bounded footer window.
+            stderr = diagnostic + b"." * 4096 + b"\nRan 123 tests in 2.50s\n\nOK\n"
+            with self.subTest(diagnostic=diagnostic), self.assertRaises(CapabilityCertificateError):
+                fixture_receipt(stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

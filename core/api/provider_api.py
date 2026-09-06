@@ -524,6 +524,7 @@ def workspace_provider_status(
         workspace_id=workspace_id,
         registry=getattr(state, "provider_registry", None),
         refresh_model_catalog=refresh_model_catalog,
+        workspace_store=state.workspace_store,
     )
     active_provider = None if status.active_provider is None else provider_payload(status.active_provider)
     registry = effective_provider_registry(
@@ -1938,6 +1939,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         usages = read_workspace_provider_subscription_usage(
             state.provider_store,
             workspace_id=context.workspace_id,
+            workspace_store=state.workspace_store,
         )
         with suppress(Exception):
             record_provider_quota_snapshots(

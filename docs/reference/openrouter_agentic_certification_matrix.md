@@ -1,17 +1,18 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-09-06
-Matrix revision: `2026-09-06-r43-p6-tools-omitted-tcb33`
+Matrix revision: `2026-09-06-r45-p6-combined-tools-omitted-tcb35`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==39`
+Adapter: `maverick-hosted-tool-loop==41`
 
 ## P6 candidate checkpoint
 
-Suite 43 / TCB manifest 33 / hosted adapter 39 / recipe 25 bind
-fresh-attestation admission, retained evidence, independent publisher trust and
-the durable aggregate budget to the existing P0–P5 corpus. The new profile is
-immutable, unbound and uncertified. The prior suite-41 deterministic receipts
+Suite 45 / TCB manifest 35 / hosted adapter 41 / recipe 25 bind
+fresh-attestation admission, production-composed API-to-final submission,
+retained evidence with reparsed step receipts, independent publisher trust and the durable aggregate budget
+to the existing P0–P5 corpus. The new profile is immutable, unbound and uncertified.
+The prior suite-41/42/43/44 deterministic receipts
 are historical, not evidence for this delta. Codex's shared queue/handoff change
 has its own explicit revision 15; no source is excluded from its artifact.
 See `docs/development/agentic_p6_runtime_publication_delta.md` for the scope and
@@ -35,7 +36,7 @@ execution or successful user-turn finalization.
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-08-17`, with exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `47` (revision `46` suspended) |
+| Immutable profile revision | `49` (revision `48` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
@@ -125,7 +126,7 @@ Primary references:
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
-| Certified execution TCB | manifest v33 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v35 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, automatic tool selection, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |

@@ -597,7 +597,10 @@ def _provider_proxy_payload(
             "deliver_secrets_to_app": False,
         }
     try:
-        status = resolve_workspace_provider_status(state.provider_store, workspace_id=workspace_id)
+        status = resolve_workspace_provider_status(
+            state.provider_store, workspace_id=workspace_id,
+            registry=getattr(state, "provider_registry", None), workspace_store=state.workspace_store,
+        )
     except Exception:
         _LOGGER.exception("Provider proxy status resolution failed in workspace `%s`.", workspace_id)
         return {

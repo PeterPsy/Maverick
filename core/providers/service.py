@@ -893,6 +893,7 @@ def resolve_provider_for_workspace(
     workspace_id: str,
     registry: ProviderRegistry | None = None,
     codex_command: str | None = None,
+    workspace_store: object | None = None,
 ) -> tuple[ProviderDefinition, ProviderSelection | None]:
     """Resolve the default agentic binding as a compatibility projection."""
     status = resolve_workspace_provider_status(
@@ -900,6 +901,7 @@ def resolve_provider_for_workspace(
         workspace_id=workspace_id,
         registry=registry,
         codex_command=codex_command,
+        workspace_store=workspace_store,
     )
     if status.active_provider is None or status.selection is None:
         raise ProviderSelectionError(status.blocked_reason or "no_provider_configured")
@@ -913,6 +915,7 @@ def resolve_workspace_provider_status(
     registry: ProviderRegistry | None = None,
     codex_command: str | None = None,
     refresh_model_catalog: bool = False,
+    workspace_store: object | None = None,
 ) -> WorkspaceProviderStatus:
     """Project the workspace-default agentic binding for legacy status consumers."""
     active_registry = effective_provider_registry(
@@ -926,6 +929,7 @@ def resolve_workspace_provider_status(
         profile, binding = resolve_workspace_agentic_profile(
             store,
             workspace_id=workspace_id,
+            workspace_store=workspace_store,
         )
     except ProviderError as error:
         reason = str(error)
@@ -985,6 +989,7 @@ def read_workspace_provider_subscription_usage(
     registry: ProviderRegistry | None = None,
     codex_command: str | None = None,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> list[ProviderSubscriptionUsage]:
     """Read supported subscription limits for the active workspace provider."""
     active_registry = effective_provider_registry(
@@ -997,6 +1002,7 @@ def read_workspace_provider_subscription_usage(
         workspace_id=workspace_id,
         registry=active_registry,
         codex_command=codex_command,
+        workspace_store=workspace_store,
     )
     definition = status.active_provider
     if definition is None or not definition.capabilities.supports_subscription_usage:

@@ -822,3 +822,45 @@ need user verification. No Cua/Macuse desktop comparison has been performed.
 Calendar read output has a byte budget and only the latest bounded read set is
 kept as writable receipts. Private helper artifacts have best-effort cleanup;
 rapid Quit/crash can leave them until OS cleanup. No secure-erasure claim.
+
+### v21 display boundaries and Peekaboo public-wire correction
+
+Physical v20 evidence confirmed EventKit creation/update/readback of the test
+on 10 September 2026, 16:00–16:30. Calendar data must not be recreated during
+GUI regression testing. Peekaboo listed windows, but observation failed with
+MC-INTEGRATION-03; MC-SESSION-08 was also visible later. The user reported the
+usual local prompts plus Calendar access, not a deliberate display change.
+
+The Apple v21 adapter now consumes the pinned external MCP contract:
+`_meta.coordinate_context.reference_id`. Peekaboo 4.3.1 builds internal
+`snapshot_id` but strips it in its external metadata projector; relying on
+that internal field caused v20's generic observation rejection. Visible text
+is never parsed as receipt authority. The image route and budgets are unchanged.
+Stage-specific MC-PEEKABOO diagnostics distinguish metadata, image decoding and
+encoding; MC-MCP-01 distinguishes process/pipe/timeout/framing/RPC failures.
+Only bounded structural/numeric diagnostics are emitted, not private payloads.
+
+Desktop revocation compares actual online display IDs, bounds, logical/pixel
+sizes, rotation, mirroring and primary display. An unchanged screen-parameters
+notification no longer revokes. Unknown geometry fails closed (MC-SESSION-09),
+actual geometry changes still revoke (MC-SESSION-08); lock/sleep/wake/Space
+rules remain. No Core code, credentials, EventKit behavior, signing/updater
+identity or Ubuntu image routing changes. Physical GUI acceptance remains
+separate from regression/CI results, which are recorded below after completion.
+
+Final v21 run `34059572651` on Apple commit **94a52b5** passed **213 Swift tests**,
+release, credential-free Codex/image-wire and real Peekaboo MCP initialize/catalog
+(no UI tool/model calls). Linux's 18 Python tests passed with one Darwin-only
+skip; the Mac updater/signing gate and Core unused-import checks passed. Earlier
+runs installed nothing because a new ImageIO fixture expected immediate invalid
+container rejection rather than macOS's lazy zero-frame rejection; the test was
+corrected without weakening production checks.
+
+The same `~/Applications/MaverickMac.app` was updated after bidirectional identity
+verification, without a persistent backup; launch was requested at
+**21:01:40 UTC on 2026-09-06**. Installed build:
+**94a52b5 · Peekaboo + EventKit v21**. Designated requirement SHA256 remains
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+Permissions and Calendar data were not reset or modified. Real Calendar visual,
+Notes-search and TextEdit acceptance still require the user's next local task;
+no claim of universal GUI compatibility follows from CI success.

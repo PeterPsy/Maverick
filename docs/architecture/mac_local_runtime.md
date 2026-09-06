@@ -394,3 +394,11 @@ pinned binary's stale-turn rejection and that the next request contains exactly
 one synthetic user-image attachment and no image in the tool result. Linux
 Codex 0.153.4 passed this wire probe. Mac tests/release and normal-chat physical
 acceptance remain pending; the user authorized installation with the app closed.
+
+User-approved run `34024440001` subsequently passed all 55 Swift tests with zero
+failures, release, credential-free Codex checks and the new same-turn wire probe
+against the packaged Darwin binary. It installed `eb42d80` and requested desktop
+launch at 09:24:42 UTC on 2026-09-06; native setup shows
+`eb42d80 · immagine nel turno v10`. The Core unused-import check passed. The
+remaining immediate physical gate is normal-chat image interpretation without
+invoking the separate direct-attachment comparison.

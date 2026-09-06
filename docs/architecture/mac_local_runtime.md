@@ -502,3 +502,30 @@ diff checks also passed. Physical acceptance remains a single approved Search
 click followed by fresh observation, with one search-only typing action only
 after native search-focus verification; denial or unknown focus stops the test.
 Installation and synthetic tests do not prove Notes focus recognition.
+
+### V14 focused-window capture and filter geometry
+
+V13's physical Search click succeeded, but its next capture selected a 241×169
+rectangle while AX identified the Notes window as 1028×1229. MC-FOCUS-14 correctly
+blocked typing. The native preview was shrunk with a white area; the exact pixel
+origin of that area remains unverified. Front-to-back selection admitted the
+search suggestion panel instead of the containing window.
+
+V14 uses selected-PID AXFocusedWindow metadata, independent of focused text role,
+to select the unique exact-frame match among that app's visible, layer-zero,
+on-screen shareable windows. AX owner/identity/type checks run on the serial
+reader without values/titles/tree reads or activation. Missing or ambiguous
+matches fail closed; actual AX errors do not downgrade to frontmost selection.
+Screenshot-only operation without AX permission deliberately retains the existing
+scoped front-to-back mode; it grants no input authority.
+
+Selected window and filter content sizes must agree before screenshot capture;
+output is bounded and aspect-preserving, never sized from an unrelated popup.
+Returned image dimensions and post-capture window ID/frame are rechecked before
+attachment and lease issuance. New static MC-TOOL-30/31 distinguish selection
+ambiguity and capture geometry failures. Post-consent lease age is checked again
+after window-selection awaits. All native input/focus/consent/Stop guards and
+direct same-turn Mac → OpenAI image transport remain intact. Thirteen regression
+tests cover window selection and capture geometry. User approved closed-app
+installation; physical search-focus, search-only typing and image-quality gates
+remain pending.

@@ -2,6 +2,10 @@
 
 Decision: **NO-GO. P6 and the definitive parity plan are not complete.**
 
+This is the historical pre-review baseline. See
+[the reviewer correction report](agentic_p6_review_fixes_2026-09-06.md) for the
+subsequent P1 fixes, instability investigation and final frozen-source reruns.
+
 This is repository-development verification, not trusted provider evidence,
 an independent security approval, a certificate, or a rollout authorization.
 The normative plan and checkpoint boundaries are recorded in

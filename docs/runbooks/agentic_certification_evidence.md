@@ -228,6 +228,11 @@ into a previous run. API certificates persist the signed target in both
 certificate and evidence, and revalidate it during projection, admission and
 authority refresh; a new profile revision requires its own certification.
 
+Before any live schema-7 certificate/evidence/profile/binding write, deploy the
+reviewed source, restart the backend and verify health. Do not let a new writer
+publish these records while an older in-memory reader is serving them. Offline
+fixture verification neither performs this deployment nor authorizes live writes.
+
 Before its first completion request, the OpenRouter probe must fetch both the
 official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
 the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion

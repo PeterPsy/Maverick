@@ -1,8 +1,10 @@
 # P6 certification and release boundary
 
 Status: evidence-boundary checkpoints implemented; complete certification and
-remote release **NO-GO**. The exact-checkout deterministic rerun has unresolved
-failures documented in `docs/development/agentic_p6_validation_2026-09-06.md`.
+remote release **NO-GO**. The reviewer corrections and final exact-checkout
+verification are documented in
+`docs/development/agentic_p6_review_fixes_2026-09-06.md`; the earlier baseline
+remains in `docs/development/agentic_p6_validation_2026-09-06.md`.
 
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`, revision read on 2026-09-06 (SHA-256

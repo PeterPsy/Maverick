@@ -10,6 +10,7 @@ import unittest
 
 from core.api.provider_api import workspace_provider_status
 from core.api.runtime_api import _session_payload
+from core.providers.maverick_agent_builtins import HOSTED_TOOL_LOOP_ADAPTER_VERSION
 from core.providers.service import (
     builtin_provider_registry,
     configure_workspace_provider,
@@ -137,7 +138,7 @@ class AgenticProfileApiTest(unittest.TestCase):
         hosted_adapter = SimpleNamespace(
             runtime_engine_id="maverick-tool-loop",
             adapter_id="maverick-hosted-tool-loop",
-            adapter_version="35",
+            adapter_version=HOSTED_TOOL_LOOP_ADAPTER_VERSION,
         )
         definitions = [
             ensure_google_agentic_preview_profile(

@@ -1,6 +1,7 @@
 """Bounded live protocol receipts; a green subprocess alone is not evidence."""
 
 import json
+import math
 import re
 
 from core.providers.errors import CapabilityCertificateError
@@ -24,7 +25,8 @@ def decode_certification_json(raw: str | bytes, *, max_bytes=262_144):
         encoded = raw.encode("utf-8") if isinstance(raw, str) else raw
         if len(encoded) > max_bytes:
             raise ValueError
-        return json.loads(encoded, object_pairs_hook=_unique_object, parse_constant=_invalid_constant)
+        return json.loads(encoded, object_pairs_hook=_unique_object,
+                          parse_constant=_invalid_constant, parse_float=_finite_float)
     except (ValueError, TypeError, UnicodeError, RecursionError) as error:
         raise CapabilityCertificateError("certification_json_invalid") from error
 
@@ -80,6 +82,13 @@ def _unique_object(pairs):
 
 def _invalid_constant(value):
     raise ValueError
+
+
+def _finite_float(value):
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError
+    return parsed
 
 
 def _fail():

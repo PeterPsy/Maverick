@@ -42,18 +42,20 @@ publication time. The native target is separately connection-scoped and
 requires a declared executable-artifact identity and Full Workspace contract; no
 native model slug grants a new certificate.
 
-The collector accepts only canonical manifest steps. A live step additionally
-requires its own exact receipt. Deterministic collection also requires the
-standard unittest success footer, a nonzero executed-test count and **zero
+The collector accepts only canonical manifest steps. Deterministic collection
+requires the standard unittest success footer, a nonzero executed-test count and **zero
 skips**; empty/partial green runs cannot silently close mandatory conformance.
-The live step additionally
-requires a strict, bounded receipt with the exact target, fresh nonce, complete
-per-response protocol observations and exact reasoning-effort counts. The
+The live step additionally requires a strict, bounded receipt with the exact
+target, fresh nonce, complete per-response protocol observations and exact
+reasoning-effort counts. The
 probes reject extra/unpaired calls, missing usage/state/completion, and empty
 finals. OpenRouter's last-response failure cannot be converted into success by
 aggregate counts. The probe transport requires explicit operator opt-in and a
 bounded non-refundable cost reservation before the exact translated payload
 reaches HTTPS; all responses retain the configured model/revision policy.
+Stateful Interactions reservations include retained input/output ceilings, not
+only the wire bytes of `previous_interaction_id`; ambiguous requests are never
+refunded.
 
 The separate natural observation report covers all 14 plan scenarios at each
 claimed effort, with source/projection/effect/trace digests, exact boolean

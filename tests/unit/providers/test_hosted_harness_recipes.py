@@ -231,7 +231,7 @@ def _binding(recipe):
         certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version="35",
+        adapter_version=protocol_adapter.runtime_adapter_version,
         adapter_artifact_digest="b" * 64,
         model_provider_id=recipe.model_provider_id,
         model_id=recipe.model_id,

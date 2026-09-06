@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+from core.providers.maverick_agent_builtins import HOSTED_TOOL_LOOP_ADAPTER_VERSION
 from core.providers.agentic_models import WorkspaceAgenticProfileBinding, default_actor_selection_policy
 from core.providers.agentic_profiles import publish_codex_agentic_profile
 from core.providers.capability_models import (
@@ -99,7 +100,7 @@ class RemoteAgenticContainmentFixture:
             adapter=SimpleNamespace(
                 runtime_engine_id="maverick-tool-loop",
                 adapter_id="maverick-hosted-tool-loop",
-                adapter_version="35",
+                adapter_version=HOSTED_TOOL_LOOP_ADAPTER_VERSION,
             ),
             now=NOW,
         )

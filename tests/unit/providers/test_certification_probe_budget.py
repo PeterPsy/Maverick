@@ -1,6 +1,7 @@
 """Probe credentials/ambient environment alone never authorize paid requests."""
 
 import asyncio
+import json
 import unittest
 
 from core.providers.certification_probe_budget import CertificationProbeTransport
@@ -70,6 +71,29 @@ class CertificationProbeBudgetTest(unittest.TestCase):
             with self.assertRaises(CapabilityCertificateError):
                 self.run_request(budget, {**self.payload(), **patch})
             self.assertEqual(budget.transport.calls, 0)
+
+    def test_stateful_requests_reserve_retained_history_not_only_wire_bytes(self):
+        budget = self.make()
+        self.run_request(budget)
+        previous = budget.retained_context_ceiling
+        reserved = budget.reserved
+        payload = {**self.payload(), "previous_interaction_id": "synthetic-interaction"}
+        wire_ceiling = len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) + 64
+
+        self.run_request(budget, payload)
+
+        self.assertEqual(budget.reserved - reserved, budget.pricing.usage_cost_microusd(
+            wire_ceiling + previous, 2_048,
+        ))
+        self.assertEqual(budget.retained_context_ceiling, wire_ceiling + previous + 2_048)
+
+    def test_retained_history_is_bounded_before_a_stateful_request(self):
+        budget = self.make()
+        budget.retained_context_ceiling = budget.profile.policy_ceiling.max_input_tokens
+        with self.assertRaisesRegex(CapabilityCertificateError, "request_limit"):
+            self.run_request(budget, {**self.payload(), "previous_interaction_id": "synthetic"})
+        self.assertEqual(budget.transport.calls, 0)
+        self.assertEqual(budget.reserved, 0)
 
 
 if __name__ == "__main__":

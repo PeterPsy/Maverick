@@ -96,7 +96,8 @@ class CertificationBehaviorTest(unittest.TestCase):
                                  ("target_digest", "e" * 64), ("prompt", "private")):
                 with self.subTest(provider=provider, field=field), self.assertRaises(CapabilityCertificateError):
                     validate_live_probe_receipt({**receipt, field: value}, **kwargs)
-        for raw in (b"passed", b'{"ok":true,"ok":false}', b'{"cost":NaN}', b" " * 262_145):
+        for raw in (b"passed", b'{"ok":true,"ok":false}', b'{"cost":NaN}',
+                    b'{"cost":1e999}', b'{"cost":-1e999}', b" " * 262_145):
             with self.assertRaises(CapabilityCertificateError):
                 decode_certification_json(raw)
 

@@ -27,11 +27,13 @@ class CertificationProbeTransport:
         if self.endpoint != publication.provider_config.endpoint_url:
             raise CapabilityCertificateError("certification_target_mismatch")
         self.transport = transport
+        self.provider_id = provider_id
         self.profile = builtin_api_certification_profile(provider_id)
         self.pricing = publication.provider_config.token_cost_policy
         self.maximum = maximum
         self.reserved = 0
         self.requests = 0
+        self.retained_context_ceiling = 0
         rounds = 3 if provider_id == "google-ai-studio" else 4
         self.max_requests = rounds * len(publication.recipe.support_flags.reasoning_efforts)
 
@@ -39,6 +41,11 @@ class CertificationProbeTransport:
         # One token per serialized byte is deliberately more conservative than
         # the ordinary estimated bytes/token rate, and includes schemas/history.
         input_ceiling = len(json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")) + 64
+        if self.provider_id == "google-ai-studio" and payload.get("previous_interaction_id"):
+            # Stateful Interactions can bill retained history which is not in
+            # this request's serialized bytes. Include all previously reserved
+            # input and output, including ambiguous/failed responses.
+            input_ceiling += self.retained_context_ceiling
         output_ceiling = payload.get("max_tokens", payload.get("generation_config", {}).get("max_output_tokens"))
         policy = self.profile.policy_ceiling
         if (type(output_ceiling) is not int or not 0 < output_ceiling <= policy.max_output_tokens
@@ -50,6 +57,7 @@ class CertificationProbeTransport:
             raise CapabilityCertificateError("certification_probe_budget_exceeded")
         self.reserved += reservation
         self.requests += 1
+        self.retained_context_ceiling = input_ceiling + output_ceiling
         # Ambiguous/failed requests retain their full charge; never retry/refund.
         async with aclosing(self.transport.stream(payload=payload, credential=credential)) as events:
             async for event in events:

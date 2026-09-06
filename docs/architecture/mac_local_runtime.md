@@ -529,3 +529,11 @@ direct same-turn Mac → OpenAI image transport remain intact. Thirteen regressi
 tests cover window selection and capture geometry. User approved closed-app
 installation; physical search-focus, search-only typing and image-quality gates
 remain pending.
+
+User-approved install run `34029475113` passed all 99 Swift tests with zero
+failures, release, credential-free Codex admission and same-turn image wire
+checks. It installed `fc51711` and requested desktop launch at 11:13:10 UTC on
+2026-09-06 (`fc51711 · finestra Note v14`). Linux wire and diff checks passed.
+Physical full-window image quality, Search focus and search-only typing remain
+unverified; the user must test without manually focusing Note, stopping on denial
+or unknown focus and preserving the native diagnostic before another turn.

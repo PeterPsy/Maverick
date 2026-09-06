@@ -219,18 +219,18 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "e6e835bc6a857562fcb20e3a55ed78adda5ad509a04e2ece2dcd3cb65253cc74",
-            "openrouter": "6b13ef5bb428fe59382f493250f366e6e728e88363c60a328046877287d2cfe5",
+            "google-ai-studio": "e3311c18dafbe722cc9f7396df55fffe07fc6876c76dfc4a7f454b0cb76d005d",
+            "openrouter": "9301c9a986797cbf9df813a5a6cccfd2506a988ce846142c37225b8b9275937b",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "42")
+                self.assertEqual(manifest.suite_version, "43")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-06-r42-p6-admission-retention-tcb32",
+                    "2026-09-06-r43-p6-tools-omitted-tcb33",
                 )
                 self.assertEqual(
                     manifest.digest,

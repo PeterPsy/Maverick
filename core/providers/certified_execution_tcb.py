@@ -71,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="32",
+    manifest_version="33",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -197,6 +197,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/providers",
                 "core/secrets",
                 "scripts/run_agentic_certification.py",
+                "scripts/manage_agentic_certification_budget.py",
                 "scripts/run_google_interactions_probe.py",
                 "scripts/run_openrouter_agentic_probe.py",
             ),

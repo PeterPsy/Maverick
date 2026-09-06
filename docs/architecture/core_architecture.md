@@ -967,8 +967,8 @@ partial result is fail-closed for that evaluation and must remain retryable.
 Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 46 and OpenRouter
-revision 45 definitions bind provider-config revision 2 and make that atomic
+complete atomic contract. The current Google revision 48 and OpenRouter
+revision 47 definitions bind provider-config revision 2 and make that atomic
 claim only because the executable gate returns all 24 required result
 behaviors, including the concrete
 `shell.run` and `process.start/status/input/interrupt` handlers, real app-owned

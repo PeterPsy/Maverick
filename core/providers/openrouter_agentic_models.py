@@ -13,7 +13,7 @@ OPENROUTER_AGENTIC_PROVIDER_NAME = "DeepInfra"
 OPENROUTER_AGENTIC_ENDPOINT_ID = "openrouter-chat-completions-v1"
 OPENROUTER_AGENTIC_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_AGENTIC_CODEC_ID = "openrouter-chat-completions"
-OPENROUTER_AGENTIC_CODEC_VERSION = "2"
+OPENROUTER_AGENTIC_CODEC_VERSION = "3"
 OPENROUTER_AGENTIC_SCHEMA_VERSION = "2"
 OPENROUTER_AGENTIC_CONTENT_TYPE = "application/vnd.maverick.openrouter-chat-state+json"
 

@@ -9,7 +9,7 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
 The subsequent aggregate-budget and admission/publication work is not covered
-by that historical freeze. Suite 42 / TCB 32 requires new exact-source
+by that historical freeze. Suite 43 / TCB 33 requires new exact-source
 verification before signing or release; the independent candidate delta is
 documented in `docs/development/agentic_p6_runtime_publication_delta.md`.
 
@@ -96,9 +96,10 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 38,
-   unchanged recipe 24, Google profile 47, OpenRouter profile 46, suite 42, and canonical
-   TCB manifest 32. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 39,
+   recipe 25, Google profile 48, OpenRouter profile 47, suite 43, and canonical
+   TCB manifest 33. OpenRouter codec 3 omits both tool parameters when no tools
+   are offered; the observed explicit-none capability is not relabeled. The corpus includes P5 family/pinning/onboarding, native ACP
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural

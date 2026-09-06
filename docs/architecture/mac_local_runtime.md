@@ -317,3 +317,10 @@ V8 native revision `475a55f` passed 36 Swift tests, release compilation and
 credential-free Codex checks in run `34021867258`; the Python unused-import
 check passed. This push build did not install or launch the app. Installation
 awaits user-confirmed exit; the real provider interpretation issue remains open.
+
+User-approved install run `34022173519` passed 36 Swift tests, release and
+credential-free Codex checks, installed `fed1b91` (v8 plus build-evidence docs),
+and requested desktop launch at 08:36:07 UTC on 2026-09-06. Native setup shows
+`fed1b91 · diagnostica immagine v8`. Physical preview/receipt inspection is
+pending; it must happen after observation but before Stop or a new turn clears
+the retained diagnostics. Installation does not prove the provider issue fixed.

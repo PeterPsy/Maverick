@@ -1,10 +1,15 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-04
+Status date: 2026-09-06
 
 Target: Phase 5 runtime-family separation, onboarding, and product taxonomy
 complete; provider certification, security review, canary, and release gates
 remain open; remote agentic release remains **NO-GO**.
+
+P6 now has checkpointed evidence-boundary implementation and exact-checkout
+verification. Its complete deterministic gate is not green; see
+`docs/development/agentic_p6_validation_2026-09-06.md`. Historical P0–P5
+checkboxes below are not a substitute for that required rerun.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
@@ -730,6 +735,22 @@ recipe 23, Google/OpenRouter profile revisions 45/44, suite 40, and TCB manifest
 regression corpus. These identities supersede the historical P4/P5 candidate
 values above; they are not live certification or rollout evidence.
 
+- [x] Separate unsigned collection from trusted signing; require exact-target
+  live receipts, a fresh collection nonce, nonempty/no-skip fixture execution,
+  and independent natural observations before signing or publication.
+- [x] Bind every immutable API profile field, all 14 natural scenarios at every
+  claimed effort, source/projection/effect/trace digests, resource ceilings,
+  and zero absolute failure counters to the signed result.
+- [x] Require explicit paid-probe opt-in and pre-HTTPS non-refundable cost,
+  request, input, output, and retained-context bounds. Reject malformed,
+  non-finite, stale, partial, or green-process-only receipts.
+- [x] Include the SDK display projector and CRM/Mail display schemas in the
+  executable TCB; prove that schema drift changes app and TCB identities.
+  This does not renew an app effect audit or grant read authority.
+- [ ] Resolve the complete deterministic rerun's legacy native-continuation
+  fixture conflict and stale built-in app effect audit through their proper
+  reviews, without skipping tests, weakening native authority, or automatically
+  authorizing changed app code.
 - [ ] Run each complete provider manifest on an exact clean deployable commit:
   deterministic fixture, operator-only synthetic live probe, behavioral
   validation, signing, verification, and immutable certificate publication.
@@ -739,12 +760,11 @@ values above; they are not live certification or rollout evidence.
   `docs/security/production_readiness.md` under a separate security review.
 
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false. No remote binding,
-profile, or certificate is enabled by P4; no Google/OpenRouter session, provider
-HTTP/SSE request, live probe, real-store containment/migration apply, canary,
-production release, or push is part of this closure. A backend restart after
-the verified commit is an operational code/schema reload only and does not
-alter those control-plane states. Exact Codex stays on profile revision 14 and
-its existing artifact digest.
+profile, or certificate is enabled by these P6 checkpoints; no Google/OpenRouter
+session, provider HTTP/SSE request, live probe, real-store containment/migration apply, canary,
+production release, or push is part of this work. No backend restart or live
+control-plane write was performed for these checkpoints. Exact Codex stays on
+profile revision 14 and its existing artifact digest.
 
 ## Evidence and acceptance links
 

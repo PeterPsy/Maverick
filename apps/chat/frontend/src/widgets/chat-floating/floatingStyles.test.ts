@@ -43,6 +43,16 @@ describe("floating chat widget styles", () => {
     expect(styles).toMatch(/\.chat-floating-widget-shell__body \.chatapp-chat-scroll__inner::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
   });
 
+  it("keeps the chat execution wrapper full-width while floating content loads", () => {
+    const styles = readStyle("styles.css");
+    const executionModeBlock = cssBlock(styles, ".chat-floating-widget-shell__body .chatapp-execution-mode");
+
+    expect(executionModeBlock).toContain("flex: 1 1 auto;");
+    expect(executionModeBlock).toContain("width: 100%;");
+    expect(executionModeBlock).toContain("max-width: 100%;");
+    expect(executionModeBlock).toContain("min-width: 0;");
+  });
+
   it("hides the floating thread selector dropdown scrollbar without disabling scrolling", () => {
     const styles = readStyle("styles.css");
     const dropdownBlock = cssBlock(styles, ".chat-floating-thread-menu__panel");

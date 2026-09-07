@@ -985,3 +985,21 @@ and retained designated requirement SHA256
 Launch was requested at **20:08:29 UTC on 2026-09-07**. Installed label:
 **0226585 · punti vincolati v24**. Physical integrated acceptance remains a
 separate next gate and is not inferred from CI or installation.
+
+The subsequent physical v24 run observed Calendar without changes and observed
+Notes by bundle ID. Capture-bound `type_at_point` on the visible Notes search
+field returned **MC-PEEKABOO-18** before text delivery: the point did not resolve
+to a writable AX field. Notes remained unchanged; TextEdit and final activation
+were skipped under the first-error rule. The screenshot shows MaverickMac active
+while Notes is backgrounded, and the prior observation classified its search
+field as value-read-only/non-actionable. This is evidence that the current Notes
+search UI does not accept the available background focus route, not evidence
+that all Notes fields or all applications have that limitation.
+
+The original combination of searching this Notes field while never activating
+Notes is therefore not claimed achievable. No hidden activation, shortcut,
+second point or alternate engine is added. A new acceptance turn must explicitly
+authorize native activation of Notes, observe it again as the key app, and only
+then target the fresh search field. This preserves honest failure semantics and
+tests the existing activation path rather than disguising a foreground
+prerequisite as background automation.

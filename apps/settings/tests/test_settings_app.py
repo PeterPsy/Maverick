@@ -356,6 +356,7 @@ function transpile(relativePath) {
 
 transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/bouncyToggle.ts');
+transpile('frontend/src/agenticModelSelection.ts');
 transpile('frontend/src/providerModelOptions.ts');
 transpile('frontend/src/executionFamilies.ts');
 transpile('frontend/src/usageHistoryFilters.ts');
@@ -864,7 +865,16 @@ settings.runtime.all_sessions = [{
   recovery_reason_code: 'remote_agentic_state_ambiguous',
   agentic_containment: { status: 'NO-GO', reason_code: 'hosted_agent_runtime_disabled' }
 }];
+const historicalDuplicate = JSON.parse(JSON.stringify(settings.agentic_admin.items[0]));
+Object.assign(historicalDuplicate, {
+  definition_id: 'google-agentic-gemini-3-5-pro-historical',
+  definition_revision: '7',
+  display_name: 'Google agentic Gemini 3.5 Pro · historical candidate'
+});
+settings.agentic_admin.items.push(historicalDuplicate);
 const containmentHtml = settingsPanelHtml(settings, state);
+assert.equal((containmentHtml.match(/data-agentic-model-toggle/g) || []).length, 1);
+assert.ok(!containmentHtml.includes('google-agentic-gemini-3-5-pro-historical'));
 for (const expected of [
   'Remote agentic release: NO-GO',
   'Provider google-ai-studio · upstream google-ai-studio',

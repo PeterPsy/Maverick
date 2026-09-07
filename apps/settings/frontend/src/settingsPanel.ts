@@ -17,6 +17,7 @@ import {
   selectedHostedProviderDraft
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
+import { deduplicateAgenticModels } from './agenticModelSelection';
 import {
   NO_WORKSPACE_ACTIONS_MESSAGE,
   executionFamily
@@ -450,7 +451,8 @@ function agenticRuntimeSettingsCardHtml(
   projectedFamilies: ExecutionFamilyDefinition[] | undefined,
   nativeAgents: NativeAgentStatus[]
 ) {
-  const visibleItems = admin?.items || [];
+  const allItems = admin?.items || [];
+  const visibleItems = deduplicateAgenticModels(allItems);
   const releaseDecision = admin?.release_decision || 'GO';
   const nativeFamily = executionFamily('native_agent', projectedFamilies || admin?.execution_families);
   const maverickFamily = executionFamily('maverick_agent', projectedFamilies || admin?.execution_families);
@@ -459,7 +461,10 @@ function agenticRuntimeSettingsCardHtml(
       || (!item.execution_family && item.runtime_engine_id === 'codex')
   );
   const maverickItems = visibleItems.filter((item) => item.execution_family === 'maverick_agent');
-  const representedNativeIds = new Set(nativeItems.map((item) => item.runtime_engine_id));
+  const representedNativeIds = new Set(allItems.filter((item) =>
+    item.execution_family === 'native_agent'
+      || (!item.execution_family && item.runtime_engine_id === 'codex')
+  ).map((item) => item.runtime_engine_id));
   const standaloneNativeAgents = nativeAgents.filter(
     (item) => !representedNativeIds.has(item.runtime_engine_id)
   );

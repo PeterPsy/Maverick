@@ -23,6 +23,14 @@ forwards lifecycle signals, checks the upstream `/api/ready` endpoint, and
 keeps the redaction-safe host diagnostic synchronized even when both optional
 bridges are disabled.
 
+Host restarts may change the local service account while retaining the
+installation's trusted setgid operating group. Before launch, the update lock
+and Core-owned single-file diagnostic capability perform a bounded atomic
+handoff to private mode-`0600` inodes owned by the active account. No native
+data or diagnostic payload is trusted during that handoff. The Unix relay uses
+a separate mode-`0700` per-UID namespace beneath the workspace runtime root, so
+a new service account never adopts stale sockets from its predecessor.
+
 ## Official release updates
 
 `official_release_selection.py` owns the workspace-scoped official descriptor

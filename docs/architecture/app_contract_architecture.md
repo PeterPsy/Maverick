@@ -1059,7 +1059,12 @@ host path. A launcher must update the bound file in place rather than replacing
 the mount inode. Readers that request a bounded live handshake must tolerate
 empty or incomplete reads while that in-place rewrite is in progress. This
 surface is redaction-safe operational evidence, never an authorization or
-release-selection input.
+release-selection input. An intentional local service-account change may leave
+the previous private capability inode behind. Core may replace that inode only
+through an atomic handoff when it is a regular single-link file and its writable
+setgid parent belongs to the active account's shared operating group. The new
+empty inode must be owned by the active account and mode `0600`; symlinks,
+special files, hard links, and foreign groups remain rejected.
 
 A sidecar with `permissions.providers.model_proxy: true` may additionally
 request an optional private model transport:
@@ -1298,7 +1303,10 @@ present a per-launch relay preamble before sending HTTP with the separate
 technical token. The host does not connect to, publish, or fall back to the
 internal TCP port. Relay directories use mode `0700`, sockets use `0600`, and
 shutdown or failed health terminates the bubblewrap process group and removes
-the relay identity.
+the relay identity. The workspace runtime relay base may belong to the trusted
+shared operating group, but each service account creates and owns a separate
+mode-`0700` UID namespace beneath it. A restarted host account therefore never
+reuses or chmods another account's stale relay directory or socket.
 
 The proxy must not expose terminal access, host-folder import, wildcard passthrough, arbitrary network binding, or undeclared websocket/streaming semantics for sandbox apps. If an app needs those features, the contract must mark them outside sandbox compatibility or route them through a future generic core policy surface.
 

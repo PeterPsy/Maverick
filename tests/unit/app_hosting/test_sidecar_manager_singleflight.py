@@ -160,6 +160,17 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         self.assertEqual(self._ensure(app_id="one", data_root="/data/one").instance_id, "retry")
         self.assertEqual(attempts, 2)
 
+    def test_host_preparation_failure_is_not_misreported_as_health_timeout(self) -> None:
+        startup = sidecar_proxy.SidecarStartup(phase="host_prepare")
+
+        failure = sidecar_proxy._normalize_startup_error(
+            RuntimeError("private preparation detail"),
+            startup=startup,
+        )
+
+        self.assertEqual(failure.code, "host_prepare_failed")
+        self.assertEqual(failure.phase, "host_prepare")
+
     def test_existing_process_is_rechecked_and_degraded_without_destructive_transient_eviction(self) -> None:
         running = _Running("stale-ready")
         self.manager._start_sidecar = Mock(return_value=running)  # type: ignore[method-assign]

@@ -117,6 +117,17 @@ lifecycle and Model Access result through that single-file capability, so
 `native-host-status.json` cannot remain a stale prelaunch placeholder. Native
 operation remains available when a bridge is degraded or disabled.
 
+Both the update lock and the diagnostics capability remain private to the
+active service account. When a local installation is intentionally handed to
+another account in the same setgid operating group, startup atomically replaces
+an inactive stale inode with a new mode-`0600` inode owned by the active
+account. Symlinks, special files, hard links, foreign groups, and live update
+locks still fail closed.
+
+Core likewise places the authenticated Unix relay in the active service
+account's private runtime namespace. Stale sockets from a previous host account
+are never reused or made accessible to the new process.
+
 ## Official updates
 
 An administrator selects a digest-locked official OCI release descriptor from

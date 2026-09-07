@@ -2096,6 +2096,8 @@ def _normalize_startup_error(error: Exception, *, startup: SidecarStartup) -> Si
         ) else "artifact_missing"
     elif startup.phase == "sandbox_prepare":
         code = "runtime_binding_invalid"
+    elif startup.phase == "host_prepare":
+        code = "host_prepare_failed"
     elif startup.phase == "process_spawn":
         code = "daemon_spawn_failed"
     else:

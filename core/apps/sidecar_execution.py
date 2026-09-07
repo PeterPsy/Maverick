@@ -11,11 +11,13 @@ import shutil
 import stat
 import sys
 import sysconfig
+import tempfile
 from typing import Callable
 
 from core.apps.errors import AppHostingError
 from core.apps.artifact_mounts import ResolvedArtifactMount
 from core.apps.models import HttpSidecarSpec
+from core.shared.operating_group import permits_operating_group_handoff
 
 
 MINIMAL_SIDECAR_ENV = {
@@ -500,10 +502,17 @@ def _prepare_sidecar_diagnostics_file(
     if before is not None and (
         stat.S_ISLNK(before.st_mode)
         or not stat.S_ISREG(before.st_mode)
-        or before.st_uid != os.geteuid()
         or before.st_nlink != 1
     ):
         raise AppHostingError("Sidecar diagnostics file is unsafe.")
+    if before is not None and before.st_uid != os.geteuid():
+        try:
+            parent_metadata = parent.lstat()
+        except OSError as error:
+            raise AppHostingError("Sidecar diagnostics directory is unavailable.") from error
+        if not permits_operating_group_handoff(before, parent_metadata):
+            raise AppHostingError("Sidecar diagnostics file is unsafe.")
+        return _replace_sidecar_diagnostics_file(path, expected=before)
     flags = os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
     if before is None:
         flags |= os.O_CREAT | os.O_EXCL
@@ -547,6 +556,92 @@ def _prepare_sidecar_diagnostics_file(
     ):
         raise AppHostingError("Sidecar diagnostics file changed during launch.")
     return resolved
+
+
+def _replace_sidecar_diagnostics_file(
+    path: Path,
+    *,
+    expected: os.stat_result,
+) -> Path:
+    """Atomically replace one stale trusted-operator diagnostics capability."""
+    temporary_path: Path | None = None
+    descriptor = -1
+    stale_descriptor = -1
+    try:
+        stale_flags = (
+            getattr(os, "O_PATH", os.O_RDONLY)
+            | getattr(os, "O_NOFOLLOW", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+        )
+        stale_descriptor = os.open(path, stale_flags)
+        stale = os.fstat(stale_descriptor)
+        if (
+            (stale.st_dev, stale.st_ino) != (expected.st_dev, expected.st_ino)
+            or stale.st_ctime_ns != expected.st_ctime_ns
+            or not stat.S_ISREG(stale.st_mode)
+            or stale.st_nlink != 1
+        ):
+            raise AppHostingError(
+                "Sidecar diagnostics file changed during handoff."
+            )
+        descriptor, temporary = tempfile.mkstemp(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".handoff",
+        )
+        temporary_path = Path(temporary)
+        os.fchmod(descriptor, 0o600)
+        os.ftruncate(descriptor, 0)
+        os.fsync(descriptor)
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.geteuid()
+            or metadata.st_nlink != 1
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            raise AppHostingError("Replacement sidecar diagnostics file is unsafe.")
+        current = path.lstat()
+        if (
+            (current.st_dev, current.st_ino) != (stale.st_dev, stale.st_ino)
+            or not stat.S_ISREG(current.st_mode)
+            or current.st_nlink != 1
+        ):
+            raise AppHostingError(
+                "Sidecar diagnostics file changed during handoff."
+            )
+        os.replace(temporary_path, path)
+        temporary_path = None
+        installed = path.lstat()
+        if (
+            (installed.st_dev, installed.st_ino) != (metadata.st_dev, metadata.st_ino)
+            or installed.st_uid != os.geteuid()
+            or installed.st_nlink != 1
+            or stat.S_IMODE(installed.st_mode) != 0o600
+        ):
+            raise AppHostingError("Replacement sidecar diagnostics file changed during launch.")
+        _fsync_directory(path.parent)
+        return path.resolve(strict=True)
+    except OSError as error:
+        raise AppHostingError("Sidecar diagnostics file handoff failed.") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if stale_descriptor >= 0:
+            os.close(stale_descriptor)
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _require_model_access_directory(path: Path) -> Path:
@@ -807,8 +902,21 @@ def _create_relay_directory(
 ) -> Path:
     runtime_root = workspace / "runtime"
     _ensure_real_directory(runtime_root, label="workspace runtime root", create=True)
-    relay_root = runtime_root / "sc"
-    _ensure_real_directory(relay_root, label="sidecar relay root", create=True)
+    shared_relay_root = runtime_root / "sc"
+    _ensure_real_directory(shared_relay_root, label="sidecar relay root", create=True)
+    _reject_symlink_components(
+        shared_relay_root,
+        anchor=workspace,
+        label="sidecar relay root",
+    )
+    relay_root = shared_relay_root / f"u{os.geteuid()}"
+    _ensure_real_directory(relay_root, label="service-account relay root", create=True)
+    relay_metadata = relay_root.lstat()
+    if (
+        not stat.S_ISDIR(relay_metadata.st_mode)
+        or relay_metadata.st_uid != os.geteuid()
+    ):
+        raise AppHostingError("Service-account relay root is unsafe.")
     os.chmod(relay_root, stat.S_IRWXU)
     identity = "\0".join((workspace_id, app_id, sidecar_id, str(data_root))).encode("utf-8")
     identity_hash = hashlib.sha256(identity).hexdigest()[:12]

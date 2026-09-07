@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 from hashlib import sha256
+import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 from types import SimpleNamespace
 import sys
@@ -722,6 +724,51 @@ class OfficialUpdateTests(unittest.TestCase):
             self.assertTrue(acquired)
             with self.assertRaisesRegex(OfficialUpdateError, "transaction is active"):
                 self._run(self._verified_control)
+
+    def test_update_lock_repairs_permissions_before_reuse(self) -> None:
+        lock_path = self.data_root / ".official-update.lock"
+        lock_path.write_bytes(b"")
+        lock_path.chmod(0o666)
+
+        with official_update_lock(self.data_root) as acquired:
+            self.assertTrue(acquired)
+
+        self.assertEqual(stat.S_IMODE(lock_path.stat().st_mode), 0o600)
+
+    def test_update_lock_hands_off_an_inactive_shared_group_inode(self) -> None:
+        from unittest.mock import patch
+
+        lock_path = self.data_root / ".official-update.lock"
+        lock_path.write_bytes(b"")
+        lock_path.chmod(0o660)
+        self.data_root.chmod(0o2770)
+        previous_inode = lock_path.stat().st_ino
+        actual_uid = os.geteuid()
+
+        with (
+            patch(
+                "official_update_lock.os.geteuid",
+                side_effect=(actual_uid + 1, actual_uid, actual_uid),
+            ),
+            official_update_lock(self.data_root) as acquired,
+        ):
+            self.assertTrue(acquired)
+
+        self.assertNotEqual(lock_path.stat().st_ino, previous_inode)
+        self.assertEqual(stat.S_IMODE(lock_path.stat().st_mode), 0o600)
+
+    def test_update_lock_rejects_a_path_changed_during_handoff(self) -> None:
+        import official_update_lock as lock_module
+        from unittest.mock import patch
+
+        lock_path = self.data_root / ".official-update.lock"
+        lock_path.write_bytes(b"")
+        expected = lock_path.stat()
+        lock_path.unlink()
+        lock_path.write_bytes(b"replacement")
+
+        with self.assertRaisesRegex(OfficialUpdateError, "changed during handoff"):
+            lock_module._replace_stale_lock(lock_path, expected=expected)
 
     def test_destructive_candidate_migration_is_rejected_before_activation(self) -> None:
         calls: list[str] = []

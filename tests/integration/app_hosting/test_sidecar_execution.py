@@ -25,11 +25,38 @@ from core.apps.contracts import (
 )
 from core.apps.errors import AppHostingError
 from core.apps.models import HttpSidecarBindSpec, HttpSidecarHealthSpec
-from core.apps.sidecar_execution import MINIMAL_SIDECAR_ENV, prepare_confined_sidecar_launch, relay_preamble
+from core.apps.sidecar_execution import (
+    MINIMAL_SIDECAR_ENV,
+    _create_relay_directory,
+    prepare_confined_sidecar_launch,
+    relay_preamble,
+)
 from core.shared.entrypoints import EntrypointShutdownController
 
 
 class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
+    def test_relay_capability_uses_a_private_service_account_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir) / "workspace"
+            shared_relay_root = workspace / "runtime" / "sc"
+            shared_relay_root.mkdir(parents=True)
+            shared_relay_root.chmod(0o2770)
+
+            relay_directory = _create_relay_directory(
+                workspace=workspace,
+                workspace_id="default",
+                app_id="design-studio",
+                sidecar_id="opendesign",
+                data_root=workspace / "data" / "design-studio" / "opendesign-native",
+            )
+
+            account_root = shared_relay_root / f"u{os.geteuid()}"
+            self.assertEqual(relay_directory.parent, account_root)
+            self.assertEqual(relay_directory.stat().st_uid, os.geteuid())
+            self.assertEqual(stat.S_IMODE(account_root.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(relay_directory.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(shared_relay_root.stat().st_mode), 0o2770)
+
     def test_production_launcher_confines_environment_filesystem_network_relay_and_process_group(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(Path(temp_dir))

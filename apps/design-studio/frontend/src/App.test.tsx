@@ -105,6 +105,19 @@ describe("Design Studio native OpenDesign host", () => {
     expect(container.textContent).toContain("Core non ha confermato");
   });
 
+  it("reports a host preparation failure without calling it a readiness timeout", async () => {
+    mocks.requestLaunch.mockRejectedValue(new SidecarLaunchError("host_prepare_failed", 503));
+
+    await act(async () => {
+      root.render(<App />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("non ha potuto preparare");
+    expect(container.textContent).not.toContain("stato pronto");
+  });
+
   it("requests a fresh authenticated launch instead of injecting navigation", async () => {
     await renderThroughBootstrap();
     mocks.requestLaunch.mockClear();

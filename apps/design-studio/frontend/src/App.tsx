@@ -225,6 +225,7 @@ function diagnosticLabel(code: string): string {
     artifact_integrity_mismatch: "Il pacchetto ufficiale non supera la verifica di integrità.",
     browser_ticket_failed: "Non è stato possibile autorizzare l’origine isolata.",
     daemon_ready_timeout: "OpenDesign non ha raggiunto lo stato pronto.",
+    host_prepare_failed: "Maverick non ha potuto preparare l’avvio di OpenDesign.",
     sidecar_bootstrap_confirmation_expired: "Core non ha confermato l’avvio dell’origine isolata.",
     sidecar_bootstrap_confirmation_failed: "La verifica dell’avvio isolato non è riuscita.",
     sidecar_bootstrap_confirmation_invalid: "Core ha restituito una conferma di avvio non valida.",

@@ -1065,3 +1065,26 @@ and requested launch at **21:35:41 UTC on 2026-09-07**. Its cleanup did not
 terminate `MaverickMac`. Installed label: **f2cafd5 · esiti strutturati v25**.
 The three TCC grants, persistent app visibility and integrated desktop behavior
 remain a physical acceptance gate rather than a CI claim.
+
+### v26 stable capture after hover/help overlays
+
+Comprehensive v25 physical acceptance passed 15 observations plus direct
+Calendar/Notes/TextEdit switching, native activation, Notes search and
+TextEdit click/type/replace/double/right/middle-click behavior. After a toolbar
+hover and bounded wait, the next TextEdit observation failed before capture
+with **MC-TOOL-30**; all later steps were correctly skipped. The failure image
+does not exist, so a visible tooltip is not asserted. The timing is consistent
+with a transient owned help surface, while the proven failure is an absent or
+duplicate exact mapping between the active AX frame and capturable windows.
+
+The Apple v26 client retains exact geometry as the primary mapping. Its only
+additional proof requires the stable AX focused-window object to equal the
+stable AX main-window object and requires exactly one visible capturable
+layer-0 candidate for the selected PID. This admits the unique document root
+while preserving owned overlays in its scene. It still rejects non-main
+focused popups, multiple primary windows, foreign/hidden/unshareable surfaces,
+invalid geometry and missing AX-main proof. No approximate-coordinate match,
+cross-app fallback or broader input authority is introduced. Four Swift tests
+cover the positive overlay cases and both ambiguity boundaries; a Python
+packaging test pins the new contract and label **tooltip stabili v26**. Signed
+delivery and physical continuation remain pending gates.

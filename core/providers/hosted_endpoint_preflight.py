@@ -12,7 +12,6 @@ from core.providers.google_interactions_catalog import (
 from core.providers.google_interactions_request import google_interaction_payload
 from core.providers.google_interactions_state import decode_google_interaction_state
 from core.providers.openrouter_agentic_catalog import (
-    OpenRouterAgenticCatalogSnapshot,
     preflight_openrouter_agentic_catalog,
 )
 from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError

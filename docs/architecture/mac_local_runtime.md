@@ -942,3 +942,39 @@ identity continuity in both directions, and updated
 requested at **18:18:57 UTC on 2026-09-07**. Installed label:
 **45edb18 · ricerca sicura v23**. A new physical Calendar/Notes/TextEdit run
 is still required; CI and signed installation do not assert desktop acceptance.
+
+### v24 capture-bound points for observed non-actionable controls
+
+Physical v23 acceptance observed Calendar without editing it and observed Notes
+directly by bundle ID. Notes then exposed `elem_20` as a search field with
+`[value read-only] [not actionable]` and `elem_21` as a search button with
+`[not actionable]`. The model correctly stopped before input; search, TextEdit
+and final activation did not run. No numeric failure code was returned because
+these flags are successful Peekaboo observation metadata, not a tool failure;
+the final MC-TOOL-OK referred only to that observation.
+
+The Apple v24 client exposes Peekaboo 4.3.1's existing capture-owned positional
+routes as `click_point`, `type_at_point` and `replace_at_point`. Each accepts a
+normalized point from the exact attached image (`0 <= x,y < 1`). Maverick passes
+the same fresh ID as both snapshot and coordinate reference, retains bundle/PID,
+120-second receipt, native confirmation and one-action consumption, and makes
+point/element routes mutually exclusive. These are not global desktop points.
+
+Peekaboo maps the point through capture metadata and revalidates exact-window
+identity, bounds and process generation. Point typing performs only a writable
+AX-field focus hit test before targeted text delivery; it does not click or
+press the point. Guidance permits this route immediately after a successful
+observation when exactly one visible target is unambiguous. It remains forbidden
+after any input failure, for an ambiguous or occluded target, or as an engine
+fallback. An observed empty search field uses `type_at_point`, so no clear or
+application-command shortcut is needed.
+
+Static private-text-free **MC-PEEKABOO-18** identifies a pre-dispatch point that
+does not resolve to a writable field; **MC-PEEKABOO-19** identifies a point with
+no pressable control. Both state that no input was sent and require stopping.
+Push run [34153198464](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34153198464)
+on Apple commit **0226585** passed **224 Swift tests** with zero failures and
+**20 Python updater/packaging tests**, credential-free Codex/image-wire checks,
+the real pinned Peekaboo initialize/catalog gate, signing continuity and the
+two-version updater fixture. This was an artifact-only run. Installation awaits
+a closed MaverickMac process; the app is never terminated by the updater.

@@ -1003,3 +1003,65 @@ authorize native activation of Notes, observe it again as the key app, and only
 then target the fresh search field. This preserves honest failure semantics and
 tests the existing activation path rather than disguising a foreground
 prerequisite as background automation.
+
+### v25 canonical GUI outcomes and complete approved-app input
+
+The foreground-relaxed physical run completed Calendar observation, direct
+Notes observation, explicit native Notes activation and a fresh Notes
+observation. Peekaboo then returned `isError` and Maverick exposed generic
+`MC-PEEKABOO-01`, so TextEdit was correctly skipped. The screenshot itself
+shows the requested phrase in Notes and one matching note: dispatch occurred,
+but Peekaboo could not formally confirm the typing effect. Retrying that input
+would have been unsafe.
+
+The Apple client now consumes Peekaboo 4.3.1's bounded canonical action outcome
+from MCP result `_meta` instead of relying only on private visible error text.
+It validates the complete state tuple and compatibility booleans before mapping
+`dispatched_unverified`, `indeterminate`, `partial`, `suspected_noop` and
+pre-dispatch `refused` to static `MC-PEEKABOO-20` through
+`MC-PEEKABOO-24`. Post-dispatch codes require stopping, never replaying, and a
+fresh read-only observation in a new request. Malformed or contradictory
+metadata remains private-text-free `MC-PEEKABOO-01`; existing more-specific
+pre-dispatch point/focus diagnostics remain authoritative.
+
+The native foreground `mac_computer` surface for explicitly approved app scenes
+now includes middle click, an atomic receipt-bound drag and explicit general
+key chords, alongside existing pointer, scroll, verified-field text,
+navigation/function keys and named shortcuts. Chords accept an enumerated
+physical key with a unique bounded combination of Command, Control, Option,
+Shift and Function. Drag validates start, end and its sampled path against the
+unchanged app scene before posting; allocation or authorization failure posts
+nothing.
+
+Screen Recording, Accessibility and Input/Event Synthesizing are now all
+visible/requestable in Configura Mac. Every native synthetic input performs a
+fresh Event Synthesizing preflight and returns **MC-TOOL-36** before dispatch if
+the grant is not recognized. This completes the input vocabulary without
+bypassing macOS TCC, secure input, selected-app scope, exact scene hit tests,
+native consent, Stop or the first-error boundary. It does not authorize
+Terminal/filesystem access or credential/security UI. CI, signed delivery and
+physical acceptance remain separate gates.
+
+V25 push run
+[34161550613](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34161550613)
+first validated **230 Swift tests** and **21 Python tests** at Apple commit
+**9d564ea**. Install run
+[34161847000](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34161847000)
+installed that signed bundle, but runner cleanup terminated the just-opened app
+because it inherited the job's `RUNNER_TRACKING_ID`. The installer now gives
+only its `open` child an empty tracking value, preserving every other variable
+and the unchanged parent environment.
+
+At final Apple commit **f2cafd5**, run
+[34162776478](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34162776478)
+passed **22 Python tests**, all **230 Swift tests**, release build, integrated
+runtime gates and signing, then failed solely on a stalled artifact upload; it
+did not install. The one follow-up signed install run
+[34163464040](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34163464040)
+repeated every gate successfully, verified designated requirement SHA256
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`,
+updated `~/Applications/MaverickMac.app` in place without a persistent backup,
+and requested launch at **21:35:41 UTC on 2026-09-07**. Its cleanup did not
+terminate `MaverickMac`. Installed label: **f2cafd5 · esiti strutturati v25**.
+The three TCC grants, persistent app visibility and integrated desktop behavior
+remain a physical acceptance gate rather than a CI claim.

@@ -3,21 +3,25 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
-from core.api.provider_api import RuntimeSessionGovernanceProjectionContext
+from core.api.provider_api import ProviderProjectionContext
 from core.providers.read_snapshot import ProviderReadSnapshot
 
 
 class ProviderReadSnapshotTestCase(unittest.TestCase):
     def test_reuses_records_and_binding_queries_within_one_snapshot(self) -> None:
         certificate = object()
+        certificates = [certificate]
         bindings = [object()]
         store = Mock()
         store.get_capability_certificate.return_value = certificate
+        store.list_capability_certificates.return_value = certificates
         store.list_provider_bindings.return_value = bindings
         snapshot = ProviderReadSnapshot(store)
 
         self.assertIs(snapshot.get_capability_certificate("certificate-1"), certificate)
         self.assertIs(snapshot.get_capability_certificate("certificate-1"), certificate)
+        self.assertIs(snapshot.list_capability_certificates(), certificates)
+        self.assertIs(snapshot.list_capability_certificates(), certificates)
         self.assertIs(
             snapshot.list_provider_bindings(
                 workspace_id="default",
@@ -34,13 +38,14 @@ class ProviderReadSnapshotTestCase(unittest.TestCase):
         )
 
         store.get_capability_certificate.assert_called_once_with("certificate-1")
+        store.list_capability_certificates.assert_called_once_with()
         store.list_provider_bindings.assert_called_once_with(
             workspace_id="default",
             provider_id="codex",
         )
 
     def test_projection_context_hashes_each_adapter_once(self) -> None:
-        context = RuntimeSessionGovernanceProjectionContext(
+        context = ProviderProjectionContext(
             provider_store=Mock(),
             registry=Mock(),
         )
@@ -65,6 +70,24 @@ class ProviderReadSnapshotTestCase(unittest.TestCase):
             )
 
         self.assertEqual(artifact_digest.call_count, 2)
+
+    def test_projection_context_inspects_native_runtimes_once(self) -> None:
+        provider_store = Mock()
+        registry = Mock()
+        context = ProviderProjectionContext(
+            provider_store=provider_store,
+            registry=registry,
+        )
+        native_items = [{"runtime_engine_id": "codex"}]
+
+        with patch(
+            "core.api.provider_api.native_agent_status_items",
+            return_value=native_items,
+        ) as inspect_native:
+            self.assertIs(context.native_items(), native_items)
+            self.assertIs(context.native_items(), native_items)
+
+        inspect_native.assert_called_once_with(registry, store=provider_store)
 
 
 if __name__ == "__main__":

@@ -916,9 +916,10 @@ def resolve_workspace_provider_status(
     codex_command: str | None = None,
     refresh_model_catalog: bool = False,
     workspace_store: object | None = None,
+    effective_registry: ProviderRegistry | None = None,
 ) -> WorkspaceProviderStatus:
     """Project the workspace-default agentic binding for legacy status consumers."""
-    active_registry = effective_provider_registry(
+    active_registry = effective_registry or effective_provider_registry(
         store,
         registry=registry,
         codex_command=codex_command,

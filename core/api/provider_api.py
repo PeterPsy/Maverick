@@ -85,12 +85,13 @@ from core.workspaces.data_governance import attestation_safe_projection
 
 
 @dataclass
-class RuntimeSessionGovernanceProjectionContext:
-    """Coherent request-local inputs for projecting a runtime session catalog."""
+class ProviderProjectionContext:
+    """Coherent request-local inputs for provider and runtime projections."""
 
     provider_store: ProviderReadSnapshot
     registry: ProviderRegistry
     _adapter_artifact_digests: dict[int, str] = field(default_factory=dict)
+    _native_items: list[dict[str, object]] | None = None
 
     def adapter_artifact_digest(self, adapter: object) -> str:
         cache_key = id(adapter)
@@ -100,16 +101,29 @@ class RuntimeSessionGovernanceProjectionContext:
             self._adapter_artifact_digests[cache_key] = digest
         return digest
 
+    def native_items(self) -> list[dict[str, object]]:
+        if self._native_items is None:
+            self._native_items = native_agent_status_items(
+                self.registry,
+                store=self.provider_store,
+            )
+        return self._native_items
 
-def runtime_session_governance_projection_context(
+
+def provider_projection_context(
     state: PlatformState,
-) -> RuntimeSessionGovernanceProjectionContext:
-    """Capture one provider registry and read snapshot for a bulk projection."""
-    registry = effective_provider_registry(
-        state.provider_store,
-        registry=getattr(state, "provider_registry", None),
-    )
-    return RuntimeSessionGovernanceProjectionContext(
+    *,
+    refresh_model_catalog: bool = False,
+) -> ProviderProjectionContext:
+    """Capture one registry and provider read snapshot for a bulk projection."""
+    registry = getattr(state, "provider_registry", None)
+    if registry is None or refresh_model_catalog:
+        registry = effective_provider_registry(
+            state.provider_store,
+            registry=registry,
+            refresh_model_catalog=refresh_model_catalog,
+        )
+    return ProviderProjectionContext(
         provider_store=ProviderReadSnapshot(state.provider_store),
         registry=registry,
     )
@@ -175,12 +189,16 @@ def _decision_failed_on_unsupported_hosted_model(decision) -> bool:
     return any(str(code).startswith("hosted_model_output_unsupported:") for code in decision.reason_codes)
 
 
-def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+def workspace_hosted_text_status(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    projection_context: ProviderProjectionContext | None = None,
+) -> dict[str, object]:
     """Return workspace-scoped hosted text provider status without secret refs."""
-    registry = effective_provider_registry(
-        state.provider_store,
-        registry=getattr(state, "provider_registry", None),
-    )
+    context = projection_context or provider_projection_context(state)
+    provider_store = context.provider_store
+    registry = context.registry
     available_providers = [
         provider
         for provider in registry.list_provider_definitions()
@@ -188,7 +206,7 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
         and provider.execution_contract is not None
         and provider.execution_contract.adapter_type == "hosted_text_generation"
     ]
-    get_hosted_selection = getattr(state.provider_store, "get_hosted_provider_selection", None)
+    get_hosted_selection = getattr(provider_store, "get_hosted_provider_selection", None)
     selection = (
         get_hosted_selection(workspace_id=workspace_id, profile="fast_model")
         if callable(get_hosted_selection)
@@ -198,7 +216,7 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
         "fast_model",
         ProviderRoutingContext(
             workspace_id=workspace_id,
-            provider_store=state.provider_store,
+            provider_store=provider_store,
             registry=registry,
             secret_store=getattr(state, "secret_store", None),
         ),
@@ -260,12 +278,16 @@ def _hosted_text_profile_payload(definition, model) -> dict[str, object]:
     }
 
 
-def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+def workspace_speech_stt_status(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    projection_context: ProviderProjectionContext | None = None,
+) -> dict[str, object]:
     """Return workspace-scoped speech-to-text provider status without secret refs."""
-    registry = effective_provider_registry(
-        state.provider_store,
-        registry=getattr(state, "provider_registry", None),
-    )
+    context = projection_context or provider_projection_context(state)
+    provider_store = context.provider_store
+    registry = context.registry
     available_providers = [
         provider
         for provider in registry.list_provider_definitions()
@@ -273,7 +295,7 @@ def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> d
         and "audio" in provider.capabilities.input_modalities
         and "text" in provider.capabilities.output_modalities
     ]
-    get_speech_selection = getattr(state.provider_store, "get_speech_provider_selection", None)
+    get_speech_selection = getattr(provider_store, "get_speech_provider_selection", None)
     selection = (
         get_speech_selection(workspace_id=workspace_id, profile="speech_stt")
         if callable(get_speech_selection)
@@ -290,7 +312,7 @@ def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> d
             None
             if selected_provider is None
             else resolve_provider_binding(
-                state.provider_store,
+                provider_store,
                 provider_id=selected_provider.provider_id,
                 workspace_id=workspace_id,
             )
@@ -302,7 +324,7 @@ def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> d
         if active_provider is not None:
             break
         binding = resolve_provider_binding(
-            state.provider_store,
+            provider_store,
             provider_id=provider.provider_id,
             workspace_id=workspace_id,
         )
@@ -416,6 +438,7 @@ def runtime_session_payload(
     session: RuntimeSessionRecord,
     *,
     state: PlatformState | None = None,
+    projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
     """Return public runtime session metadata."""
     containment_reason = remote_agentic_containment_reason(
@@ -450,6 +473,7 @@ def runtime_session_payload(
         payload["agentic_governance"] = runtime_session_agentic_governance_payload(
             state,
             session=session,
+            projection_context=projection_context,
         )
     return payload
 
@@ -520,30 +544,37 @@ def workspace_provider_status(
     workspace_id: str,
     refresh_model_catalog: bool = False,
     actor_roles: tuple[str, str, str] | None = None,
+    projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
     """Return the active provider state for one workspace."""
-    status = resolve_workspace_provider_status(
-        state.provider_store,
-        workspace_id=workspace_id,
-        registry=getattr(state, "provider_registry", None),
+    context = projection_context or provider_projection_context(
+        state,
         refresh_model_catalog=refresh_model_catalog,
+    )
+    provider_store = context.provider_store
+    registry = context.registry
+    status = resolve_workspace_provider_status(
+        provider_store,
+        workspace_id=workspace_id,
         workspace_store=getattr(state, "workspace_store", None),
+        effective_registry=registry,
     )
     active_provider = None if status.active_provider is None else provider_payload(status.active_provider)
-    registry = effective_provider_registry(
-        state.provider_store,
-        registry=getattr(state, "provider_registry", None),
-    )
-    native_items = native_agent_status_items(registry, store=state.provider_store)
+    native_items = context.native_items()
     agentic_profiles = workspace_agentic_profile_status(
         state,
         workspace_id=workspace_id,
         actor_roles=actor_roles,
         native_items=native_items,
+        projection_context=context,
     )
-    hosted_text = workspace_hosted_text_status(state, workspace_id=workspace_id)
+    hosted_text = workspace_hosted_text_status(
+        state,
+        workspace_id=workspace_id,
+        projection_context=context,
+    )
     get_hosted_selection = getattr(
-        state.provider_store,
+        provider_store,
         "get_hosted_provider_selection",
         None,
     )
@@ -569,7 +600,11 @@ def workspace_provider_status(
             hosted_selection=hosted_selection,
             agentic_profile_items=agentic_profiles["items"],
         ),
-        "speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id),
+        "speech_stt": workspace_speech_stt_status(
+            state,
+            workspace_id=workspace_id,
+            projection_context=context,
+        ),
         "blocked_reason": status.blocked_reason,
         "blocked_detail": status.blocked_detail,
         "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(status.available_providers)],
@@ -582,22 +617,22 @@ def workspace_agentic_profile_status(
     workspace_id: str,
     actor_roles: tuple[str, str, str] | None = None,
     native_items: list[dict[str, object]] | None = None,
+    projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
     """Return selectable workspace profiles without credential or authority details."""
     items: list[dict[str, object]] = []
-    registry = effective_provider_registry(
-        state.provider_store,
-        registry=getattr(state, "provider_registry", None),
-    )
+    context = projection_context or provider_projection_context(state)
+    provider_store = context.provider_store
+    registry = context.registry
     native_by_engine = {
         str(item["runtime_engine_id"]): item
         for item in (
             native_items
             if native_items is not None
-            else native_agent_status_items(registry, store=state.provider_store)
+            else context.native_items()
         )
     }
-    for binding in state.provider_store.list_workspace_agentic_profile_bindings(workspace_id):
+    for binding in provider_store.list_workspace_agentic_profile_bindings(workspace_id):
         if actor_roles is not None and not human_actor_selection_allowed(
             binding,
             platform_role=actor_roles[0],
@@ -606,23 +641,23 @@ def workspace_agentic_profile_status(
         ):
             continue
         try:
-            definition = state.provider_store.get_agentic_profile_definition(
+            definition = provider_store.get_agentic_profile_definition(
                 binding.definition_id,
                 binding.definition_revision,
             )
         except ProviderNotFoundError:
             continue
-        status = state.provider_store.get_agentic_profile_definition_status(
+        status = provider_store.get_agentic_profile_definition_status(
             definition.definition_id,
             definition.revision,
         )
         certificate_payload = None
         certificate = None
         try:
-            certificate = state.provider_store.get_capability_certificate(
+            certificate = provider_store.get_capability_certificate(
                 definition.capability_certificate_id
             )
-            certificate_status = state.provider_store.get_capability_certificate_status(
+            certificate_status = provider_store.get_capability_certificate_status(
                 certificate.certificate_id
             )
             certificate_payload = capability_certificate_payload(
@@ -630,12 +665,16 @@ def workspace_agentic_profile_status(
                 certificate_status,
             )
             try:
+                adapter = registry.get_agentic_runtime_adapter(
+                    definition.runtime_engine_id
+                )
                 certificate_payload["effective_status"] = certificate_profile_status(
                     certificate,
                     certificate_status,
                     definition=definition,
-                    store=state.provider_store,
-                    adapter=registry.get_agentic_runtime_adapter(definition.runtime_engine_id),
+                    store=provider_store,
+                    adapter=adapter,
+                    adapter_artifact_digest=context.adapter_artifact_digest(adapter),
                 )
             except ProviderNotFoundError:
                 certificate_payload["effective_status"] = "adapter_unavailable"
@@ -648,7 +687,7 @@ def workspace_agentic_profile_status(
         )
         family_readiness = inspect_agentic_family_readiness(
             definition=definition,
-            store=state.provider_store,
+            store=provider_store,
             certificate=certificate,
             binding=binding,
             registry=registry,
@@ -703,6 +742,7 @@ def workspace_agentic_profile_status(
             certificate=certificate,
             eligible=selectable,
             blocked_reason=blocked_reason,
+            projection_context=context,
         )
         if selectable and effective_capabilities.get("status") != "active":
             selectable = False
@@ -818,6 +858,7 @@ def _profile_effective_capability_snapshot(
     certificate: CapabilityCertificate | None,
     eligible: bool,
     blocked_reason: str | None,
+    projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
     """Calculate a conservative, non-bearer profile projection for Chat/Settings."""
     certified = None if certificate is None else certificate.certified_capabilities
@@ -827,10 +868,9 @@ def _profile_effective_capability_snapshot(
             certified_capabilities=certified,
         )
     try:
-        registry = effective_provider_registry(
-            state.provider_store,
-            registry=getattr(state, "provider_registry", None),
-        )
+        context = projection_context or provider_projection_context(state)
+        provider_store = context.provider_store
+        registry = context.registry
         adapter = registry.get_agentic_runtime_adapter(definition.runtime_engine_id)
         workspace_store = getattr(state, "workspace_store", None)
         governance_resolver = getattr(workspace_store, "get_governance", None)
@@ -910,7 +950,7 @@ def _profile_effective_capability_snapshot(
             )
         )
         authority = resolve_effective_runtime_authority(
-            state.provider_store,
+            provider_store,
             binding=execution_binding,
             adapter=adapter,
             turn_id=f"capability-projection:{binding.binding_id}",
@@ -920,6 +960,7 @@ def _profile_effective_capability_snapshot(
             health_revision=f"runtime-health:{canonical_digest(health)}",
             actor_policy_allowed=True,
             actor_policy_revision=f"workspace-actor:{binding.binding_id}:{binding.revision}",
+            adapter_artifact_digest=context.adapter_artifact_digest(adapter),
         )
         return effective_runtime_capability_payload(authority)
     except (CapabilityCertificateError, ProviderError, ValueError) as error:
@@ -983,23 +1024,28 @@ def _agentic_model_reasoning(
     return certificate.default_reasoning_effort, values
 
 
-def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+def workspace_agentic_admin_status(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    compact: bool = False,
+    projection_context: ProviderProjectionContext | None = None,
+) -> dict[str, object]:
     """Return the redaction-safe administration catalog for Settings."""
-    registry = effective_provider_registry(
-        state.provider_store,
-        registry=getattr(state, "provider_registry", None),
-    )
-    bindings = state.provider_store.list_workspace_agentic_profile_bindings(workspace_id)
+    context = projection_context or provider_projection_context(state)
+    provider_store = context.provider_store
+    registry = context.registry
+    bindings = provider_store.list_workspace_agentic_profile_bindings(workspace_id)
     bindings_by_definition = {
         (item.definition_id, item.definition_revision): item for item in bindings
     }
-    native_items = native_agent_status_items(registry, store=state.provider_store)
+    native_items = context.native_items()
     native_by_engine = {
         str(item["runtime_engine_id"]): item for item in native_items
     }
     items: list[dict[str, object]] = []
-    for definition in state.provider_store.list_agentic_profile_definitions():
-        status = state.provider_store.get_agentic_profile_definition_status(
+    for definition in provider_store.list_agentic_profile_definitions():
+        status = provider_store.get_agentic_profile_definition_status(
             definition.definition_id,
             definition.revision,
         )
@@ -1007,32 +1053,36 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
         certificate_payload = None
         certificate = None
         try:
-            certificate = state.provider_store.get_capability_certificate(
+            certificate = provider_store.get_capability_certificate(
                 definition.capability_certificate_id
             )
-            certificate_status = state.provider_store.get_capability_certificate_status(
+            certificate_status = provider_store.get_capability_certificate_status(
                 certificate.certificate_id
             )
             certificate_payload = capability_certificate_payload(certificate, certificate_status)
+            adapter = registry.get_agentic_runtime_adapter(
+                definition.runtime_engine_id
+            )
             certificate_payload["effective_status"] = certificate_profile_status(
                 certificate,
                 certificate_status,
                 definition=definition,
-                store=state.provider_store,
-                adapter=registry.get_agentic_runtime_adapter(definition.runtime_engine_id),
+                store=provider_store,
+                adapter=adapter,
+                adapter_artifact_digest=context.adapter_artifact_digest(adapter),
             )
         except ProviderNotFoundError:
             pass
         credential_bindings = [
             provider_credential_binding_payload(item)
-            for item in state.provider_store.list_provider_bindings(
+            for item in provider_store.list_provider_bindings(
                 provider_id=definition.model_provider_id
             )
             if item.status == "active" and item.workspace_id in {None, workspace_id}
         ]
         family_readiness = inspect_agentic_family_readiness(
             definition=definition,
-            store=state.provider_store,
+            store=provider_store,
             certificate=certificate,
             binding=binding,
             registry=registry,
@@ -1085,6 +1135,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 certificate=certificate,
                 eligible=blocked_reason is None,
                 blocked_reason=blocked_reason,
+                projection_context=context,
             )
         )
         if blocked_reason is None and effective_capabilities.get("status") != "active":
@@ -1225,19 +1276,83 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             str(item["display_name"]),
         )
     )
+    release_decision = (
+        "NO-GO"
+        if any(item["containment_status"] == "NO-GO" for item in items)
+        else "GO"
+    )
+    if compact:
+        items = _compact_agentic_admin_items(items)
     return {
         "workspace_id": workspace_id,
         "execution_families": [
             asdict(family) for family in execution_family_catalog()
         ],
         "native_agents": {"items": native_items},
-        "release_decision": (
-            "NO-GO"
-            if any(item["containment_status"] == "NO-GO" for item in items)
-            else "GO"
-        ),
+        "release_decision": release_decision,
         "items": items,
     }
+
+
+def _compact_agentic_admin_items(
+    items: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Keep the Settings representative for each provider model and family."""
+    selected: dict[tuple[str, str, str], dict[str, object]] = {}
+    for item in items:
+        family = str(
+            item.get("execution_family")
+            or ("native_agent" if item.get("runtime_engine_id") == "codex" else "unclassified")
+        )
+        key = (
+            family,
+            str(item.get("model_provider_id") or ""),
+            str(item.get("model_id") or ""),
+        )
+        current = selected.get(key)
+        if current is None or _agentic_admin_item_priority(
+            item
+        ) > _agentic_admin_item_priority(current):
+            selected[key] = item
+    return list(selected.values())
+
+
+def _agentic_admin_item_priority(item: dict[str, object]) -> tuple[object, ...]:
+    binding = item.get("binding")
+    binding_payload = binding if isinstance(binding, dict) else {}
+    if binding_payload.get("enabled") and binding_payload.get("is_default"):
+        status_priority = 5
+    elif binding_payload.get("enabled"):
+        status_priority = 4
+    elif item.get("selectable"):
+        status_priority = 3
+    elif item.get("enable_eligible"):
+        status_priority = 2
+    elif item.get("full_workspace_status") == "certified":
+        status_priority = 1
+    else:
+        status_priority = 0
+    return (
+        status_priority,
+        _natural_sort_key(str(item.get("definition_revision") or "")),
+        _natural_sort_key(str(item.get("definition_id") or "")),
+    )
+
+
+def _natural_sort_key(value: str) -> tuple[tuple[int, object], ...]:
+    parts: list[tuple[int, object]] = []
+    current = ""
+    numeric = False
+    for character in value:
+        character_is_numeric = character.isdigit()
+        if current and character_is_numeric != numeric:
+            parts.append((1, int(current)) if numeric else (0, current))
+            current = ""
+        current += character
+        numeric = character_is_numeric
+    if current:
+        parts.append((1, int(current)) if numeric else (0, current))
+    return tuple(parts)
 
 
 def _agentic_definition_blocked_reason(
@@ -1367,36 +1482,23 @@ def runtime_session_agentic_governance_payload(
     state: PlatformState,
     *,
     session: RuntimeSessionRecord,
-    projection_context: RuntimeSessionGovernanceProjectionContext | None = None,
+    projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object] | None:
     """Project exact pinned governance without exposing credential authority."""
     binding = session.execution_binding
     if binding is None:
         return None
-    provider_store = (
-        projection_context.provider_store
-        if projection_context is not None
-        else state.provider_store
-    )
-    registry = None if projection_context is None else projection_context.registry
+    context = projection_context or provider_projection_context(state)
+    provider_store = context.provider_store
+    registry = context.registry
     adapters: dict[str, tuple[object, str]] = {}
 
     def adapter_snapshot(runtime_engine_id: str) -> tuple[object, str]:
-        nonlocal registry
         cached = adapters.get(runtime_engine_id)
         if cached is not None:
             return cached
-        if registry is None:
-            registry = effective_provider_registry(
-                state.provider_store,
-                registry=getattr(state, "provider_registry", None),
-            )
         adapter = registry.get_agentic_runtime_adapter(runtime_engine_id)
-        artifact_digest = (
-            projection_context.adapter_artifact_digest(adapter)
-            if projection_context is not None
-            else runtime_adapter_artifact_digest(adapter)
-        )
+        artifact_digest = context.adapter_artifact_digest(adapter)
         resolved = (adapter, artifact_digest)
         adapters[runtime_engine_id] = resolved
         return resolved
@@ -1452,7 +1554,7 @@ def runtime_session_agentic_governance_payload(
                     certificate,
                     certificate_status,
                     definition=definition,
-                    store=state.provider_store,
+                    store=provider_store,
                     adapter=adapter,
                     adapter_artifact_digest=artifact_digest,
                 )
@@ -1463,14 +1565,9 @@ def runtime_session_agentic_governance_payload(
 
     family_readiness = None
     if definition is not None:
-        if registry is None:
-            registry = effective_provider_registry(
-                state.provider_store,
-                registry=getattr(state, "provider_registry", None),
-            )
         family_readiness = inspect_agentic_family_readiness(
             definition=definition,
-            store=state.provider_store,
+            store=provider_store,
             certificate=certificate,
             binding=binding,
             registry=registry,
@@ -1627,14 +1724,20 @@ def workspace_runtime_status(
     actor_roles: tuple[str, str, str] | None = None,
 ) -> dict[str, object]:
     """Return runtime status for one workspace."""
+    context = provider_projection_context(state)
     return {
         **workspace_provider_status(
             state,
             workspace_id=workspace_id,
             actor_roles=actor_roles,
+            projection_context=context,
         ),
         "sessions": [
-            runtime_session_payload(session, state=state)
+            runtime_session_payload(
+                session,
+                state=state,
+                projection_context=context,
+            )
             for session in state.runtime_store.list_sessions(workspace_id)
         ],
     }
@@ -1740,6 +1843,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 {"error": str(error)},
                 status="409 Conflict" if "revision_conflict" in str(error) else "400 Bad Request",
             )
+        projection_context = provider_projection_context(state)
         return json_response(
             start_response,
             {
@@ -1748,10 +1852,12 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 "agentic_admin": workspace_agentic_admin_status(
                     state,
                     workspace_id=context.workspace_id,
+                    projection_context=projection_context,
                 ),
                 "agentic_profiles": workspace_agentic_profile_status(
                     state,
                     workspace_id=context.workspace_id,
+                    projection_context=projection_context,
                 ),
             },
         )
@@ -1777,6 +1883,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 provider_id=provider_id,
                 secret_ref=secret_ref,
                 label=str(body.get("label") or "").strip() or None,
+                registry=getattr(state, "provider_registry", None),
                 observability_store=state.observability_store,
             )
         except Exception as error:
@@ -1815,6 +1922,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 provider_id=provider_id,
                 secret_ref=secret_ref,
                 label=str(body.get("label") or "").strip() or None,
+                registry=getattr(state, "provider_registry", None),
                 observability_store=state.observability_store,
             )
         except Exception as error:
@@ -1851,6 +1959,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 provider_id=provider_id,
                 audio_transcription_model_id=str(body.get("audio_transcription_model_id") or "").strip() or None,
                 conversation_model_id=str(body.get("conversation_model_id") or "").strip() or None,
+                registry=getattr(state, "provider_registry", None),
                 observability_store=state.observability_store,
             )
         except Exception as error:
@@ -1887,6 +1996,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 provider_id=provider_id,
                 model_id=model_id,
                 openrouter_provider_routing=openrouter_provider_routing,
+                registry=getattr(state, "provider_registry", None),
                 observability_store=state.observability_store,
             )
         except Exception as error:

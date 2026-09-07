@@ -19,9 +19,9 @@ from core.api.app_reference_payloads import (
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
 from core.api.provider_api import (
-    RuntimeSessionGovernanceProjectionContext,
+    ProviderProjectionContext,
     runtime_session_agentic_governance_payload,
-    runtime_session_governance_projection_context,
+    provider_projection_context,
     workspace_provider_status,
 )
 from core.api.runtime_cleanup import cleanup_runtime_session
@@ -189,7 +189,7 @@ def _session_payload(
     provider_id: str | None = None,
     prewarm: RuntimeSessionPrewarmResult | None = None,
     admission: dict[str, object] | None = None,
-    governance_projection_context: RuntimeSessionGovernanceProjectionContext | None = None,
+    governance_projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
     payload = asdict(session)
     payload.pop("prepared_session_fingerprint", None)
@@ -481,7 +481,7 @@ def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_pat
         for session in current_sessions.values()
     ]
     governance_projection_context = (
-        runtime_session_governance_projection_context(state)
+        provider_projection_context(state)
         if any(session.execution_binding is not None for session in reconciled)
         else None
     )

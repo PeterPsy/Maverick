@@ -23,13 +23,39 @@ class SettingsAgenticAdminTest(unittest.TestCase):
         )
 
     def test_workspace_admin_receives_agentic_binding_controls(self) -> None:
+        projection_context = object()
         with self._payload_dependencies(), patch(
+            "core.api.settings_api.provider_projection_context",
+            return_value=projection_context,
+        ) as build_projection_context, patch(
+            "core.api.settings_api.workspace_provider_status",
+            return_value={"workspace_id": "workspace-1"},
+        ) as provider_status, patch(
+            "core.api.settings_api.workspace_agentic_admin_status",
+            return_value={"workspace_id": "workspace-1", "items": []},
+        ) as agentic_admin, patch(
             "core.api.settings_api.require_provider_selection_authority",
             return_value=None,
         ):
             payload = platform_settings_payload(self.state, self.context)
 
         self.assertEqual(payload["agentic_admin"], {"workspace_id": "workspace-1", "items": []})
+        self.assertEqual(
+            payload["runtime"],
+            {"sessions": [], "cleanup_allowed": False, "cleanup_scope": "none"},
+        )
+        build_projection_context.assert_called_once_with(self.state)
+        provider_status.assert_called_once_with(
+            self.state,
+            workspace_id="workspace-1",
+            projection_context=projection_context,
+        )
+        agentic_admin.assert_called_once_with(
+            self.state,
+            workspace_id="workspace-1",
+            compact=True,
+            projection_context=projection_context,
+        )
 
     def test_workspace_member_does_not_receive_agentic_binding_controls(self) -> None:
         with self._payload_dependencies(), patch(
@@ -45,7 +71,7 @@ class SettingsAgenticAdminTest(unittest.TestCase):
         stack.enter_context(patch("core.api.settings_api.public_user_payload", return_value={}))
         stack.enter_context(patch("core.api.settings_api.workspace_payload", return_value={}))
         stack.enter_context(patch("core.api.settings_api.workspace_provider_status", return_value={}))
-        stack.enter_context(patch("core.api.settings_api.workspace_runtime_status", return_value={}))
+        stack.enter_context(patch("core.api.settings_api.provider_projection_context", return_value=object()))
         stack.enter_context(patch("core.api.settings_api.recovery_status", return_value={}))
         stack.enter_context(patch("core.api.settings_api._runtime_cleanup_scope", return_value="none"))
         stack.enter_context(

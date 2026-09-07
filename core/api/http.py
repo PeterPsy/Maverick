@@ -61,9 +61,15 @@ def json_response(
     *,
     status: str = "200 OK",
     headers: list[tuple[str, str]] | None = None,
+    compact: bool = False,
 ) -> list[bytes]:
     """Return a JSON WSGI response."""
-    body = json.dumps(payload, indent=2, default=json_default).encode("utf-8")
+    body = json.dumps(
+        payload,
+        indent=None if compact else 2,
+        separators=(",", ":") if compact else None,
+        default=json_default,
+    ).encode("utf-8")
     response_headers = [
         ("Content-Type", "application/json; charset=utf-8"),
         ("Content-Length", str(len(body))),

@@ -4,7 +4,7 @@ const naturalOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'vari
 
 /**
  * Return the single profile Settings should show for each model in an execution family.
- * The server inventory stays immutable and complete; this only removes duplicate cards.
+ * Dedicated admin APIs may expose full history; keep the UI defensive when they do.
  */
 export function deduplicateAgenticModels(items: readonly AgenticAdminItem[]): AgenticAdminItem[] {
   const models = new Map<string, AgenticAdminItem>();

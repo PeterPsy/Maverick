@@ -672,7 +672,7 @@ export type RuntimeSessionItem = {
   } | null;
 };
 
-export type RuntimeStatus = ProviderStatus & {
+export type RuntimeStatus = {
   sessions: RuntimeSessionItem[];
   all_sessions?: RuntimeSessionItem[];
   cleanup_allowed?: boolean;

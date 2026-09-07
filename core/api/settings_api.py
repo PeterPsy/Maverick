@@ -8,9 +8,9 @@ from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.providers.service import builtin_provider_registry
 from core.api.provider_api import (
+    provider_projection_context,
     workspace_agentic_admin_status,
     workspace_provider_status,
-    workspace_runtime_status,
 )
 from core.api.runtime_cleanup import RuntimeCleanupError, cleanup_runtime_session
 from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
@@ -42,15 +42,22 @@ GOVERNANCE_PATCH_FIELDS = {
 
 def platform_settings_payload(state: PlatformState, context: RequestSession) -> dict[str, object]:
     """Return shell-visible platform settings without secrets."""
-    runtime_status = workspace_runtime_status(state, workspace_id=context.workspace_id)
+    projection_context = provider_projection_context(state)
+    provider_status = workspace_provider_status(
+        state,
+        workspace_id=context.workspace_id,
+        projection_context=projection_context,
+    )
     cleanup_scope = _runtime_cleanup_scope(state, context)
-    runtime_status["cleanup_allowed"] = cleanup_scope != "none"
-    runtime_status["cleanup_scope"] = cleanup_scope
     payload = {
         "user": public_user_payload(context.user),
         "workspace": workspace_payload(state, context.workspace_id),
-        "provider": workspace_provider_status(state, workspace_id=context.workspace_id),
-        "runtime": runtime_status,
+        "provider": provider_status,
+        "runtime": {
+            "sessions": [],
+            "cleanup_allowed": cleanup_scope != "none",
+            "cleanup_scope": cleanup_scope,
+        },
         "recovery": recovery_status(state.recovery_store, workspace_id=context.workspace_id),
     }
     try:
@@ -65,6 +72,8 @@ def platform_settings_payload(state: PlatformState, context: RequestSession) -> 
         payload["agentic_admin"] = workspace_agentic_admin_status(
             state,
             workspace_id=context.workspace_id,
+            compact=True,
+            projection_context=projection_context,
         )
     return payload
 
@@ -325,7 +334,11 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
     context = context_or_response
 
     if path == "/api/settings/platform" and method == "GET":
-        return json_response(start_response, platform_settings_payload(state, context))
+        return json_response(
+            start_response,
+            platform_settings_payload(state, context),
+            compact=True,
+        )
     if path == "/api/settings/provider-setup" and method == "GET":
         return json_response(start_response, provider_setup_settings_payload(state, context))
     if path == "/api/settings/runtime-sessions" and method == "GET":

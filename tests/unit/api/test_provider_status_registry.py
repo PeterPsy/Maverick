@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from core.api.provider_api import workspace_provider_status
 from core.api.app_mounts import handle_app_backend
+from core.providers.read_snapshot import ProviderReadSnapshot
 
 
 class ProviderStatusRegistryTest(unittest.TestCase):
@@ -69,7 +70,10 @@ class ProviderStatusRegistryTest(unittest.TestCase):
                 )
                 with (
                     patch("core.api.provider_api.resolve_workspace_provider_status", return_value=status) as resolve,
-                    patch("core.api.provider_api.effective_provider_registry", return_value=registry),
+                    patch(
+                        "core.api.provider_api.effective_provider_registry",
+                        return_value=registry,
+                    ) as effective_registry,
                     patch("core.api.provider_api.native_agent_status_items", return_value=[]),
                     patch("core.api.provider_api.workspace_agentic_profile_status", return_value={"items": []}),
                     patch("core.api.provider_api.workspace_hosted_text_status", return_value={}),
@@ -79,10 +83,22 @@ class ProviderStatusRegistryTest(unittest.TestCase):
                         state, workspace_id="workspace-one", refresh_model_catalog=refresh,
                     )
 
+                if refresh:
+                    effective_registry.assert_called_once_with(
+                        store,
+                        registry=registry,
+                        refresh_model_catalog=True,
+                    )
+                else:
+                    effective_registry.assert_not_called()
+                snapshot = resolve.call_args.args[0]
+                self.assertIsInstance(snapshot, ProviderReadSnapshot)
+                self.assertIs(snapshot._store, store)
                 resolve.assert_called_once_with(
-                    store, workspace_id="workspace-one", registry=registry,
-                    refresh_model_catalog=refresh,
+                    snapshot,
+                    workspace_id="workspace-one",
                     workspace_store=workspace_store,
+                    effective_registry=registry,
                 )
                 self.assertFalse(payload["configured"])
                 self.assertEqual(payload["blocked_reason"], "no_provider_configured")

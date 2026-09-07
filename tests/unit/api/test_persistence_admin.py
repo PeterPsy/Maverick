@@ -8,10 +8,16 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from core.api.persistence_admin import apply_persistence_migration, dry_run_persistence_migration, target_settings_from_payload
+from core.api.persistence_admin import (
+    _collection_counts,
+    apply_persistence_migration,
+    dry_run_persistence_migration,
+    target_settings_from_payload,
+)
 from core.api.persistence_cleanup_worker import run_pending_cleanup_plans
 from core.api.control_store import ControlStoreSettings
 from core.api.platform_host import PlatformHost
@@ -21,6 +27,21 @@ from core.runtime.runtime_session import RuntimeApiTokenRecord
 
 
 class PersistenceAdminTestCase(unittest.TestCase):
+    def test_collection_counts_use_adapter_native_counts(self) -> None:
+        collection = SimpleNamespace(
+            count_documents=Mock(return_value=42),
+            find=Mock(side_effect=AssertionError("documents should not be copied")),
+        )
+        with patch(
+            "core.api.persistence_admin.control_plane_collection_specs",
+            return_value=[SimpleNamespace(name="usage_samples", collection=collection)],
+        ):
+            counts = _collection_counts(SimpleNamespace())
+
+        self.assertEqual(counts, [{"name": "usage_samples", "count": 42}])
+        collection.count_documents.assert_called_once_with({})
+        collection.find.assert_not_called()
+
     def test_mongo_target_payload_preserves_auth_secret_ref_settings(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._make_repo_root(Path(temp_dir) / "maverick")

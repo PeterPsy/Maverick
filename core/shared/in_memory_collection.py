@@ -30,6 +30,10 @@ class InMemoryCollection:
                 if _matches(document, query)
             ]
 
+    def count_documents(self, query: dict[str, Any]) -> int:
+        with self._lock:
+            return sum(1 for document in self._documents if _matches(document, query))
+
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> None:
         payload = deepcopy(update.get("$set", {}))
         with self._lock:

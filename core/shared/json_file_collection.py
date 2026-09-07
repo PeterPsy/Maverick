@@ -27,6 +27,8 @@ class JsonFileCollection:
         self.path = path
         self.append_only_upserts = append_only_upserts
         self._lock = RLock()
+        self._cached_signature: tuple[int, int, int] | None = None
+        self._cached_documents: list[dict[str, Any]] | None = None
 
     def find_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
         with self._lock:
@@ -41,6 +43,12 @@ class JsonFileCollection:
             with self._process_lock(exclusive=False):
                 return [deepcopy(document) for document in self._read_documents() if _matches(document, query)]
 
+    def count_documents(self, query: dict[str, Any]) -> int:
+        """Count matches without copying every document into the caller."""
+        with self._lock:
+            with self._process_lock(exclusive=False):
+                return sum(1 for document in self._read_documents() if _matches(document, query))
+
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> None:
         payload = deepcopy(update.get("$set", {}))
         with self._lock:
@@ -48,7 +56,7 @@ class JsonFileCollection:
                 if self.append_only_upserts and upsert and query and _query_is_contained(query, payload):
                     self._append_document({**deepcopy(query), **payload})
                     return
-                documents = self._read_documents()
+                documents = self._read_documents(mutable=True)
                 for index, document in enumerate(documents):
                     if _matches(document, query):
                         documents[index] = {**document, **payload}
@@ -63,7 +71,7 @@ class JsonFileCollection:
         payload = deepcopy(update.get("$set", {}))
         with self._lock:
             with self._process_lock(exclusive=True):
-                documents = self._read_documents()
+                documents = self._read_documents(mutable=True)
                 for index, document in enumerate(documents):
                     if _matches(document, query):
                         documents[index] = {**document, **payload}
@@ -82,7 +90,7 @@ class JsonFileCollection:
         payload = deepcopy(update.get("$set", {}))
         with self._lock:
             with self._process_lock(exclusive=True):
-                documents = self._read_documents()
+                documents = self._read_documents(mutable=True)
                 for index, document in enumerate(documents):
                     if _matches(document, query) and _datetime_is_future(document.get(field)):
                         documents[index] = {**document, **payload}
@@ -98,7 +106,7 @@ class JsonFileCollection:
         payload = {**deepcopy(query), **deepcopy(document)}
         with self._lock:
             with self._process_lock(exclusive=True):
-                documents = self._read_documents()
+                documents = self._read_documents(mutable=True)
                 for existing in documents:
                     if _matches(existing, query):
                         return deepcopy(existing), False
@@ -109,7 +117,11 @@ class JsonFileCollection:
     def delete_one(self, query: dict[str, Any]) -> None:
         with self._lock:
             with self._process_lock(exclusive=True):
-                documents = [document for document in self._read_documents() if not _matches(document, query)]
+                documents = [
+                    document
+                    for document in self._read_documents(mutable=True)
+                    if not _matches(document, query)
+                ]
                 self._write_documents(documents)
 
     def delete_many(self, query: dict[str, Any]) -> int:
@@ -120,7 +132,7 @@ class JsonFileCollection:
         """Delete and return matches without a separate collection read."""
         with self._lock:
             with self._process_lock(exclusive=True):
-                documents = self._read_documents()
+                documents = self._read_documents(mutable=True)
                 deleted = [document for document in documents if _matches(document, query)]
                 if deleted:
                     retained = [document for document in documents if not _matches(document, query)]
@@ -140,8 +152,13 @@ class JsonFileCollection:
         lock_path = self.path.with_name(f".{self.path.name}.lock")
         return _FileLock(lock_path, exclusive=exclusive)
 
-    def _read_documents(self) -> list[dict[str, Any]]:
-        if not self.path.is_file():
+    def _read_documents(self, *, mutable: bool = False) -> list[dict[str, Any]]:
+        signature = self._file_signature()
+        if self._cached_documents is not None and signature == self._cached_signature:
+            return deepcopy(self._cached_documents) if mutable else self._cached_documents
+        if signature is None:
+            self._cached_signature = None
+            self._cached_documents = []
             return []
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"), object_hook=_decode_document_value)
@@ -151,7 +168,24 @@ class JsonFileCollection:
             raise ValueError(f"JSON collection `{self.path}` must contain a JSON array.")
         if not all(isinstance(document, dict) for document in payload):
             raise ValueError(f"JSON collection `{self.path}` must contain only JSON objects.")
-        return payload
+        self._cached_signature = signature
+        self._cached_documents = payload
+        return deepcopy(payload) if mutable else payload
+
+    def _file_signature(self) -> tuple[int, int, int] | None:
+        try:
+            metadata = self.path.stat()
+        except FileNotFoundError:
+            return None
+        return (metadata.st_ino, metadata.st_mtime_ns, metadata.st_size)
+
+    def _refresh_cache(self, documents: list[dict[str, Any]]) -> None:
+        self._cached_documents = deepcopy(documents)
+        self._cached_signature = self._file_signature()
+
+    def _invalidate_cache(self) -> None:
+        self._cached_signature = None
+        self._cached_documents = None
 
     def _write_documents(
         self,
@@ -179,6 +213,7 @@ class JsonFileCollection:
                 return False
             temporary_path.replace(self.path)
             _apply_collection_file_mode(self.path)
+            self._refresh_cache(documents)
             return True
         finally:
             if temporary_path is not None and temporary_path.exists():
@@ -190,6 +225,7 @@ class JsonFileCollection:
         if not self.path.exists() or self.path.stat().st_size == 0:
             self.path.write_text(f"[\n{encoded}\n]\n", encoding="utf-8")
             _apply_collection_file_mode(self.path)
+            self._invalidate_cache()
             return
         try:
             with self.path.open("r+b") as handle:
@@ -204,8 +240,9 @@ class JsonFileCollection:
                 handle.write((separator + encoded + "\n]\n").encode("utf-8"))
                 handle.truncate()
             _apply_collection_file_mode(self.path)
+            self._invalidate_cache()
         except (OSError, ValueError):
-            documents = self._read_documents()
+            documents = self._read_documents(mutable=True)
             documents.append(document)
             self._write_documents(documents)
 

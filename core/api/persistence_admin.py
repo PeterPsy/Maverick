@@ -294,10 +294,15 @@ def _copy_collections(
 def _collection_counts(collections: ControlPlaneCollections) -> list[dict[str, Any]]:
     counts: list[dict[str, Any]] = []
     for spec in control_plane_collection_specs(collections):
-        documents = spec.collection.find({})
-        if not isinstance(documents, list):
-            documents = list(documents)
-        counts.append({"name": spec.name, "count": len(documents)})
+        count_documents = getattr(spec.collection, "count_documents", None)
+        if callable(count_documents):
+            count = count_documents({})
+        else:
+            documents = spec.collection.find({})
+            if not isinstance(documents, list):
+                documents = list(documents)
+            count = len(documents)
+        counts.append({"name": spec.name, "count": count})
     return counts
 
 

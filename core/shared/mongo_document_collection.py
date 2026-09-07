@@ -22,6 +22,9 @@ class MongoDocumentCollection:
     def find(self, query: dict[str, Any]) -> list[dict[str, Any]]:
         return [_without_mongo_id(document) for document in self.collection.find(deepcopy(query))]
 
+    def count_documents(self, query: dict[str, Any]) -> int:
+        return int(self.collection.count_documents(deepcopy(query)))
+
     def find_recent(self, query: dict[str, Any], *, limit: int) -> list[dict[str, Any]]:
         if limit < 1:
             return []

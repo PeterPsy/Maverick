@@ -25,6 +25,9 @@ class FakeMongoCollection:
     def find(self, query: dict[str, Any]) -> list[dict[str, Any]]:
         return [deepcopy(document) for document in self.documents if _matches(document, query)]
 
+    def count_documents(self, query: dict[str, Any]) -> int:
+        return sum(1 for document in self.documents if _matches(document, query))
+
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False):
         self.updates.append({"query": deepcopy(query), "update": deepcopy(update), "upsert": upsert})
         payload = deepcopy(update.get("$set", {}))
@@ -60,6 +63,12 @@ class FakeMongoCollection:
 
 
 class MongoDocumentCollectionTestCase(unittest.TestCase):
+    def test_count_documents_uses_the_native_collection_count(self) -> None:
+        fake = FakeMongoCollection()
+        fake.documents.extend([{"kind": "one"}, {"kind": "two"}, {"kind": "one"}])
+
+        self.assertEqual(MongoDocumentCollection(fake).count_documents({"kind": "one"}), 2)
+
     def test_compare_and_set_reports_match_and_rejects_stale_revision(self) -> None:
         fake = FakeMongoCollection()
         fake.documents.append({"record_id": "one", "revision": 0})

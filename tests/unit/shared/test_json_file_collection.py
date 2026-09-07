@@ -23,6 +23,55 @@ def _write_json_collection_records(path_text: str, start: int, count: int) -> No
 
 
 class JsonFileCollectionTestCase(unittest.TestCase):
+    def test_reuses_parsed_documents_until_the_collection_file_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "records.json"
+            path.write_text('[{"record_id": "one", "value": 1}]\n', encoding="utf-8")
+            collection = JsonFileCollection(path)
+
+            with patch("core.shared.json_file_collection.json.loads", wraps=json.loads) as loads:
+                self.assertEqual(collection.find_one({"record_id": "one"})["value"], 1)
+                self.assertEqual(collection.find_one({"record_id": "one"})["value"], 1)
+                self.assertEqual(collection.count_documents({}), 1)
+
+            self.assertEqual(loads.call_count, 1)
+
+    def test_cached_documents_follow_writes_from_another_collection_instance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "records.json"
+            first = JsonFileCollection(path)
+            second = JsonFileCollection(path)
+            first.update_one(
+                {"record_id": "one"},
+                {"$set": {"record_id": "one", "value": 1}},
+                upsert=True,
+            )
+            self.assertEqual(first.find_one({"record_id": "one"})["value"], 1)
+
+            second.update_one(
+                {"record_id": "one"},
+                {"$set": {"value": 2}},
+            )
+
+            self.assertEqual(first.find_one({"record_id": "one"})["value"], 2)
+
+    def test_callers_cannot_mutate_cached_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = JsonFileCollection(Path(temp_dir) / "records.json")
+            collection.update_one(
+                {"record_id": "one"},
+                {"$set": {"record_id": "one", "nested": {"value": 1}}},
+                upsert=True,
+            )
+
+            document = collection.find_one({"record_id": "one"})
+            document["nested"]["value"] = 99
+
+            self.assertEqual(
+                collection.find_one({"record_id": "one"})["nested"]["value"],
+                1,
+            )
+
     def test_deadline_cas_checks_persisted_time_under_the_file_lock(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = JsonFileCollection(Path(temp_dir) / "records.json")

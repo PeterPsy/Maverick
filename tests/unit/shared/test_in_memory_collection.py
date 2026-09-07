@@ -7,6 +7,17 @@ from core.shared.in_memory_collection import InMemoryCollection
 
 
 class InMemoryCollectionTest(unittest.TestCase):
+    def test_count_documents_does_not_materialize_results(self) -> None:
+        collection = InMemoryCollection()
+        for record_id in ("one", "two", "three"):
+            collection.update_one(
+                {"record_id": record_id},
+                {"$set": {"record_id": record_id, "kind": "match"}},
+                upsert=True,
+            )
+
+        self.assertEqual(collection.count_documents({"kind": "match"}), 3)
+
     def test_deadline_cas_rejects_expired_document_and_accepts_live_one(self) -> None:
         collection = InMemoryCollection()
         collection.update_one(

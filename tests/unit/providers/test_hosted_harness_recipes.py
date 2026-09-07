@@ -131,7 +131,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             api_version="v1",
             operation_id="CreateInteraction",
             model_name="models/gemini-3.6-flash",
-            model_version="stable-2026-07",
+            model_version="3.6-flash-07-2026",
             input_token_limit=1_048_576,
             output_token_limit=65_536,
             streaming=True,

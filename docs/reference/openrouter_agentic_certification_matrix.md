@@ -1,14 +1,14 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-09-07
-Matrix revision: `2026-09-07-r43-p6-host-operator-attribution-tcb33`
+Matrix revision: `2026-09-07-r44-p6-google-catalog-refresh-tcb34`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==39`
+Adapter: `maverick-hosted-tool-loop==40`
 
 ## P6 candidate checkpoint
 
-Suite 43 / TCB manifest 33 / hosted adapter 39 / recipe 25 bind the P5
+Suite 44 / TCB manifest 34 / hosted adapter 40 / recipe 25 bind the P5
 executable family, native ACP lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -20,11 +20,12 @@ remote certificate or operator binding is enabled. Shared queue/dispatch changes
 are isolated behind Codex candidate revision 15; the running revision-14 process
 is not cut over by this checkpoint.
 
-Suite 43 additionally includes generic continuation repair/multi-hop, explicit
+Suite 44 additionally includes generic continuation repair/multi-hop, explicit
 native identity rejection, the reviewed app-effect delta regressions, and the
 effective-uid-attributed direct-host operator path. Runtime-token trusted
 contexts cannot self-elevate with `--operator`, and the complete wrapper path is
-inside TCB 33. Prior
+inside TCB 34. The shared identity also records Google's refreshed exact
+stable-alias catalog contract; OpenRouter's provider tuple is unchanged. Prior
 suite-40 failures are not waived or removed; the corrected fixtures and complete
 inventory must pass on this candidate. See
 `docs/development/agentic_p6_effect_audit_2026-09-06.md`.
@@ -36,7 +37,7 @@ inventory must pass on this candidate. See
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-07`, exact resolved slug `deepseek/deepseek-v4-flash-20260423`, and exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `47` (revision `46` suspended) |
+| Immutable profile revision | `48` (revision `47` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
@@ -129,7 +130,7 @@ Primary references:
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
-| Certified execution TCB | manifest v33 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v34 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | Endpoint catalog preflight | main model metadata must pin the exact resolved slug and `xhigh`/`high` reasoning contract; exact model-endpoint and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -155,7 +156,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only three-catalog preflight binding exact model metadata, resolved slug, reasoning contract, DeepInfra/ZDR identity and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at each of `xhigh` and `high` | manifest step available; not run for r43 |
+| Live capability probe | operator-only three-catalog preflight binding exact model metadata, resolved slug, reasoning contract, DeepInfra/ZDR identity and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at each of `xhigh` and `high` | manifest step available; not run for r44 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -541,6 +542,14 @@ instead of silently reusing adapter 38. The direct host `--operator` context is 
 effective OS uid, the runtime-token context remains non-elevatable, and the
 complete wrapper chain is TCB-covered. Codex candidate 15 remains byte-identical
 and no live probe, certificate, binding, canary, or release is implied.
+
+Revision 48 pins hosted adapter 40 and governed recipe 25 together with suite
+44, matrix `2026-09-07-r44-p6-google-catalog-refresh-tcb34`, and TCB manifest
+v34. OpenRouter's exact provider/upstream/ZDR/model contract is unchanged; the
+profile advances because the shared hosted adapter and certified TCB now include
+Google's refreshed stable-alias catalog identity. Codex candidate 15 and recipe
+25 remain byte-identical, and no live probe, certificate, binding, canary, or
+release is implied.
 
 ## Fail-closed conditions
 

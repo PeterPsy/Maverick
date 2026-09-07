@@ -183,11 +183,18 @@ def validate_google_interactions_catalog(
     output_limit = _positive_int(record.get("outputTokenLimit"))
     model_name = str(record.get("name") or "")
     model_version = str(record.get("version") or "")
+    base_model_id = record.get("baseModelId")
+    base_model_matches = base_model_id is None or (
+        isinstance(base_model_id, str) and base_model_id == request.model_id
+    )
     supported_methods = record.get("supportedGenerationMethods")
     required_input = estimate_hosted_request_tokens(request)
     if (
         model_name != f"models/{request.model_id}"
-        or str(record.get("baseModelId") or "") != request.model_id
+        # Google's stable-alias record currently omits this documented field.
+        # Exact resource name and version remain mandatory; a supplied base id
+        # must still match, so omission cannot redirect the certified request.
+        or not base_model_matches
         or request.model_revision_policy != "exact"
         or not str(request.model_revision or "").strip()
         or model_version != request.model_revision
@@ -219,7 +226,7 @@ def validate_google_interactions_catalog(
     }
     model_identity = {
         "name": model_name,
-        "baseModelId": record.get("baseModelId"),
+        "baseModelId": base_model_id,
         "version": model_version,
         "inputTokenLimit": input_limit,
         "outputTokenLimit": output_limit,

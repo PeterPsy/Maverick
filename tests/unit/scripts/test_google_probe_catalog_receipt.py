@@ -86,7 +86,7 @@ class GoogleProbeCatalogReceiptTest(TestCase):
         self.assertEqual(len(receipt["catalog_snapshots"]), 3)
         for snapshot in receipt["catalog_snapshots"]:
             self.assertEqual(snapshot["api_version"], "v1")
-            self.assertEqual(snapshot["model_version"], "stable-2026-07")
+            self.assertEqual(snapshot["model_version"], "3.6-flash-07-2026")
             for key in ("endpoint_schema_digest", "model_record_digest", "catalog_snapshot_digest"):
                 self.assertEqual(len(snapshot[key]), 64)
         self.assertEqual(self.validate(receipt), receipt)

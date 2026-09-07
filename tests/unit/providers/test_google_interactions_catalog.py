@@ -42,7 +42,7 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
             ],
         )
         self.assertEqual(snapshot.operation_id, "CreateInteraction")
-        self.assertEqual(snapshot.model_version, "stable-2026-07")
+        self.assertEqual(snapshot.model_version, "3.6-flash-07-2026")
         self.assertTrue(snapshot.streaming)
         self.assertTrue(snapshot.usage_accounting)
         self.assertTrue(snapshot.tool_calling)
@@ -67,6 +67,9 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
         wrong_revision = _model_record()
         wrong_revision["version"] = "unexpected-live-revision"
         variants.append((_endpoint_schema(), wrong_revision))
+        wrong_base_model = _model_record()
+        wrong_base_model["baseModelId"] = "gemini-unrelated-model"
+        variants.append((_endpoint_schema(), wrong_base_model))
         no_thinking = _model_record()
         no_thinking["thinking"] = False
         variants.append((_endpoint_schema(), no_thinking))
@@ -84,6 +87,22 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
                     endpoint_schema=endpoint_schema,
                     model_record=model_record,
                 )
+
+    def test_exact_name_and_revision_accept_absent_base_model_id(self) -> None:
+        request = _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False)
+        for model_record in (
+            _model_record(),
+            {**_model_record(), "baseModelId": None},
+        ):
+            with self.subTest(base_model_id=model_record.get("baseModelId")):
+                snapshot = validate_google_interactions_catalog(
+                    request,
+                    endpoint_schema=_endpoint_schema(),
+                    model_record=model_record,
+                )
+
+                self.assertEqual(snapshot.model_name, f"models/{request.model_id}")
+                self.assertEqual(snapshot.model_version, request.model_revision)
 
     def test_same_protocol_validates_another_model_from_request_data(self) -> None:
         request = replace(
@@ -205,8 +224,7 @@ def _endpoint_schema() -> dict[str, object]:
 def _model_record() -> dict[str, object]:
     return {
         "name": "models/gemini-3.6-flash",
-        "baseModelId": "gemini-3.6-flash",
-        "version": "stable-2026-07",
+        "version": "3.6-flash-07-2026",
         "inputTokenLimit": 1_048_576,
         "outputTokenLimit": 65_536,
         "supportedGenerationMethods": ["generateContent"],

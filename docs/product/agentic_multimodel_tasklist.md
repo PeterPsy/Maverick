@@ -12,8 +12,8 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 43 / TCB 33 / hosted adapter 39 /
-recipes 25 / Google profile 48 / OpenRouter profile 47 / Codex candidate 15.
+The current contained successor is suite 44 / TCB 34 / hosted adapter 40 /
+recipes 25 / Google profile 49 / OpenRouter profile 48 / Codex candidate 15.
 Its exact-source fixture result is recorded outside the source checkout by the
 operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
 
@@ -770,10 +770,16 @@ values above; they are not live certification or rollout evidence.
   suite-42 candidate with zero failures/errors/skips, including the append-only
   Codex revision-15 artifact guard. The operator record is external to the
   source tree so writing it does not change the verified commit.
-- [ ] Re-run each complete `fixture_contract` provider manifest on the exact
+- [x] Re-run each complete `fixture_contract` provider manifest on the exact
   clean suite-43/TCB-33 successor after the host-operator attribution and TCB
-  closure change; preserve its record outside the source tree.
-- [ ] On that same exact suite-43 commit, run the bounded operator-only synthetic live
+  closure change; preserve its record outside the source tree. Commit
+  `c4b8fc7a` passed 657 Google and 669 OpenRouter tests with zero skips; the
+  external record SHA-256 is
+  `4b5ab3a6b05ea963b447a7d7e1a369caa1fa64a341f268aab8f007c7815fee13`.
+- [ ] Re-run each complete `fixture_contract` provider manifest on the exact
+  clean suite-44/TCB-34 successor after the authenticated Google catalog
+  identity refresh; preserve its record outside the source tree.
+- [ ] On that same exact suite-44 commit, run the bounded operator-only synthetic live
   probes, collect/independently review all natural observations, sign with an
   already trusted key, verify, and publish immutable certificates.
 - [ ] Complete provider onboarding, leakage/security review, one-workspace
@@ -784,10 +790,11 @@ values above; they are not live certification or rollout evidence.
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true only because the server-owned
 boundary is implemented. The hosted-runtime and both provider-specific kill
 switches still default off. No remote binding, profile, or certificate is
-enabled by these P6 checkpoints; no Google/OpenRouter generation/SSE request, authenticated live
-probe, real-store containment/migration apply, canary, production release, or
-push is part of this work. Public catalog GETs are compatibility observations,
-not live certification. No backend restart or live control-plane write was
+enabled by these P6 checkpoints; no Google/OpenRouter generation/SSE request,
+authenticated synthetic live probe, real-store containment/migration apply,
+canary, production release, or push is part of this work. Bounded catalog and
+credential-readiness GETs are compatibility observations, not live
+certification. No backend restart or live control-plane write was
 performed. The running Codex deployment stays on profile revision 14 and its
 existing digest; revision 15 is a separately verified candidate only.
 
@@ -839,3 +846,15 @@ and public-content authority audit. A runtime-token trusted context takes
 precedence, so the flag cannot elevate an agent. The complete host CLI
 parse/context/dispatch chain is now part of the certified TCB. Google/OpenRouter
 profiles 48/47 bind the new TCB and suite; P6-L/S/R remain separate NO-GO gates.
+
+### P6 Google-catalog-refresh candidate — 2026-09-07
+
+An authenticated, zero-generation readiness GET showed that Google's stable
+`models/gemini-3.6-flash` resource now reports exact version
+`3.6-flash-07-2026` while omitting `baseModelId`. Suite 44 and TCB 34 pin that
+observed identity. The preflight still requires the exact resource name and
+revision and rejects a mismatching base-model id when supplied; absence is
+retained in the signed catalog snapshot. Hosted adapter 40 and Google/OpenRouter
+profiles 49/48 bind the source change; recipe 25 and the independently guarded
+Codex candidate 15 remain unchanged. The readiness GET made no generation,
+spent no certification-ledger budget, and does not close P6-L/S/R.

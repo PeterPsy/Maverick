@@ -31,7 +31,7 @@ from core.providers.maverick_agent_provider_config import MaverickTokenCostPolic
 
 
 GOOGLE_AGENTIC_MODEL_ID = "gemini-3.6-flash"
-GOOGLE_AGENTIC_MODEL_REVISION = "stable-2026-07"
+GOOGLE_AGENTIC_MODEL_REVISION = "3.6-flash-07-2026"
 
 
 class GoogleInteractionsAgenticClient:

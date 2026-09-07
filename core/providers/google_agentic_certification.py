@@ -30,9 +30,9 @@ from core.runtime.full_workspace_contract import validate_full_workspace_contrac
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "43"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "44"
 GOOGLE_CERTIFICATION_MATRIX_REVISION = (
-    "2026-09-07-r43-p6-host-operator-attribution-tcb33"
+    "2026-09-07-r44-p6-google-catalog-refresh-tcb34"
 )
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 

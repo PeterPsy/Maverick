@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-07
-Matrix revision: `2026-09-07-r43-p6-host-operator-attribution-tcb33`
+Matrix revision: `2026-09-07-r44-p6-google-catalog-refresh-tcb34`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==39`
+Adapter: `maverick-hosted-tool-loop==40`
 
 ## P6 candidate checkpoint
 
-Suite 43 / TCB manifest 33 / hosted adapter 39 / recipe 25 bind the P5
+Suite 44 / TCB manifest 34 / hosted adapter 40 / recipe 25 bind the P5
 executable family, native ACP lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -20,11 +20,13 @@ remote certificate or operator binding is enabled. Shared queue/dispatch changes
 are isolated behind Codex candidate revision 15; the running revision-14 process
 is not cut over by this checkpoint.
 
-Suite 43 additionally includes generic continuation repair/multi-hop, explicit
+Suite 44 additionally includes generic continuation repair/multi-hop, explicit
 native identity rejection, the reviewed app-effect delta regressions, and the
 effective-uid-attributed direct-host operator path. Runtime-token trusted
 contexts cannot self-elevate with `--operator`, and the complete wrapper path is
-inside TCB 33. Prior
+inside TCB 34. It also pins the authenticated stable-alias catalog's exact
+`3.6-flash-07-2026` version while safely representing its omitted
+`baseModelId`. Prior
 suite-40 failures are not waived or removed; the corrected fixtures and complete
 inventory must pass on this candidate. See
 `docs/development/agentic_p6_effect_audit_2026-09-06.md`.
@@ -35,8 +37,8 @@ inventory must pass on this candidate. See
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `48` (revision `47` suspended) |
+| Model revision policy | `exact`; authenticated catalog `name=models/gemini-3.6-flash`, `version=3.6-flash-07-2026`; an omitted/null `baseModelId` is digest-bound, while any supplied value must equal `gemini-3.6-flash` |
+| Immutable profile revision | `49` (revision `48` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
@@ -76,6 +78,7 @@ result.
 Primary references:
 
 - [Gemini 3.6 Flash model](https://ai.google.dev/gemini-api/docs/models/gemini-3.6-flash)
+- [Gemini Models API](https://ai.google.dev/api/models)
 - [Latest Gemini models](https://ai.google.dev/gemini-api/docs/latest-model)
 - [Interactions overview](https://ai.google.dev/gemini-api/docs/interactions-overview)
 - [Interactions function calling](https://ai.google.dev/gemini-api/docs/function-calling)
@@ -89,12 +92,12 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v33 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v34 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Full Workspace behavioral gate | `codex-baseline-v20` executes 16 concrete filesystem, shell/process, and CLI/MCP capability paths, one production-composed inter-agent CLI-create/MCP-wait workflow, plus seven security probes covering raw/base64/chunk marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation, full-authority/credential/policy revocation at the transport boundary, revoke-between-provider-events, overlay-commit rollback, and concurrent shell/process `.git` snapshots; incomplete or transient probe evidence is never cached | repository gate complete: 24/24 behaviors; signed provider certification not run |
-| Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, model identity, and input/output limits before completion transport | not certified |
+| Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, exact resource name/version, and input/output limits before completion transport; an absent/null base-model field is preserved in the digest and a supplied mismatch fails closed | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
 | Stateless continuation | exact user/thought/function history replay | not certified |
@@ -111,7 +114,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total), with exact OpenAPI/model preflight before every generation | manifest step available; not run for r43 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total), with exact OpenAPI/model preflight before every generation | manifest step available; not run for r44 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -506,3 +509,12 @@ instead of silently reusing adapter 38. The direct host `--operator` context is 
 effective OS uid, the runtime-token context remains non-elevatable, and the
 complete wrapper chain is TCB-covered. Codex candidate 15 remains byte-identical
 and no live probe, certificate, binding, canary, or release is implied.
+
+Revision 49 pins hosted adapter 40 and governed recipe 25 together with suite
+44, matrix `2026-09-07-r44-p6-google-catalog-refresh-tcb34`, and TCB manifest
+v34. An authenticated, zero-generation model GET observed exact stable-alias
+version `3.6-flash-07-2026` and an omitted `baseModelId`; preflight now accepts
+only that exact name/version tuple, rejects a supplied base-id mismatch, and
+digest-binds the omission. OpenRouter profile 48 advances with the shared
+adapter/TCB identity. Codex candidate 15 and recipe 25 remain byte-identical;
+no live generation, certificate, binding, canary, or release is implied.

@@ -204,18 +204,18 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "956e6d9b778d99782960d6394d20c443485dcdc9c4555984d9b2c8c568c2ec82",
-            "openrouter": "19ff31921ac7f1adb7fda8cd930b15285097dee3677bdfaf9e7b3406c9dea633",
+            "google-ai-studio": "ab4887330e1fa31eec752d5569eb8bc26dc5b90313174ac8a97dff6e53e2ece9",
+            "openrouter": "efafd35a292ace81104fba206e46dc559937068e30c7722fec39e4ee40d6ce23",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "43")
+                self.assertEqual(manifest.suite_version, "44")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-07-r43-p6-host-operator-attribution-tcb33",
+                    "2026-09-07-r44-p6-google-catalog-refresh-tcb34",
                 )
                 self.assertEqual(
                     manifest.digest,

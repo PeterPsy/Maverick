@@ -196,7 +196,7 @@ class CapabilityCertificateTest(unittest.TestCase):
 
     def test_exact_model_revision_is_bound_and_verified_live(self) -> None:
         binding = self._binding(
-            model_revision="stable-2026-07",
+            model_revision="3.6-flash-07-2026",
             model_revision_policy="exact",
         )
         store = certified_test_provider_store(
@@ -212,7 +212,7 @@ class CapabilityCertificateTest(unittest.TestCase):
             adapter=self.adapter,
             now=NOW,
         )
-        self.assertEqual(validated.model_revision, "stable-2026-07")
+        self.assertEqual(validated.model_revision, "3.6-flash-07-2026")
         self.assertEqual(validated.model_revision_policy, "exact")
 
         drifted = replace(

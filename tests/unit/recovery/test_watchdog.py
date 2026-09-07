@@ -134,7 +134,15 @@ class BackendWatchdogTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="maverick-rescue-provider-") as temp_dir:
             root = Path(temp_dir)
             store = local_recovery_provider_store(root)
-            configure_workspace_provider(store, workspace_id="default", provider_id="codex", codex_command="/bin/echo")
+            # This test exercises rescue-command resolution, not native-runtime
+            # certification; /bin/echo deliberately cannot satisfy that gate.
+            with patch("core.providers.service.ensure_codex_preview_certificate"):
+                configure_workspace_provider(
+                    store,
+                    workspace_id="default",
+                    provider_id="codex",
+                    codex_command="/bin/echo",
+                )
 
             resolved = build_backend_rescue_command(
                 repository_root=root,

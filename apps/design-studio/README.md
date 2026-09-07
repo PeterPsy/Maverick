@@ -29,7 +29,10 @@ immutable backups remain sibling host-control data and are never mounted into
 OpenDesign or Codex.
 
 The Maverick frontend obtains a one-shot isolated-browser ticket and a separate
-Core confirmation token, then hosts the native page in an iframe. It declares
+Core confirmation token. Because Design Studio itself runs in an authenticated
+isolated app frame, Core binds the ticket and sidecar CSP to that exact parent;
+the frontend redeems the ticket with a credentialed CORS `POST` before
+navigating the native iframe. It declares
 the native frame ready only after Core confirms that bootstrap produced the
 bound sidecar session; `iframe.onload` alone is intentionally insufficient
 because browsers also emit it for TLS/network error documents. Native HTTP

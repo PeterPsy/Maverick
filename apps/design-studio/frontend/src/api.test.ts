@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   currentDesignStudioAppId,
   nativeOpenDesignPath,
+  redeemOpenDesignBootstrap,
   requestOpenDesignBootstrapStatus,
   SidecarLaunchError,
   validateSidecarLaunch,
@@ -11,9 +12,12 @@ import {
 const VALID_LAUNCH = {
   origin: "https://sc-proof.sidecars.example",
   bootstrap_url: "https://sc-proof.sidecars.example/.well-known/maverick-sidecar-bootstrap",
+  bootstrap_transport: "cors" as const,
   method: "POST" as const,
+  parent_origin: "https://af-design.sidecars.example",
   ticket_field: "ticket" as const,
   ticket: "one-shot-ticket",
+  target_url: "https://sc-proof.sidecars.example/",
   confirmation_token: "bootstrap-confirmation-token",
   expires_in_seconds: 30,
   sidecar_instance_id: "instance_12345678",
@@ -49,7 +53,12 @@ describe("isolated browser launch validation", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("accepts a one-shot cross-origin POST bootstrap", () => {
-    expect(validateSidecarLaunch(VALID_LAUNCH, "https://maverick.example")).toEqual(VALID_LAUNCH);
+    expect(validateSidecarLaunch(
+      VALID_LAUNCH,
+      "https://maverick.example",
+      VALID_LAUNCH.parent_origin,
+      "/",
+    )).toEqual(VALID_LAUNCH);
     expect(VALID_LAUNCH.bootstrap_url).not.toContain(VALID_LAUNCH.ticket);
   });
 
@@ -57,11 +66,35 @@ describe("isolated browser launch validation", () => {
     for (const candidate of [
       { ...VALID_LAUNCH, origin: "https://maverick.example", bootstrap_url: "https://maverick.example/.well-known/maverick-sidecar-bootstrap" },
       { ...VALID_LAUNCH, bootstrap_url: `${VALID_LAUNCH.bootstrap_url}?ticket=leaked` },
+      { ...VALID_LAUNCH, target_url: `${VALID_LAUNCH.origin}/projects/other` },
+      { ...VALID_LAUNCH, parent_origin: "https://af-attacker.sidecars.example" },
       { ...VALID_LAUNCH, ticket: "x".repeat(513) },
       { ...VALID_LAUNCH, confirmation_token: undefined },
     ]) {
-      expect(() => validateSidecarLaunch(candidate, "https://maverick.example")).toThrow(SidecarLaunchError);
+      expect(() => validateSidecarLaunch(
+        candidate,
+        "https://maverick.example",
+        VALID_LAUNCH.parent_origin,
+        "/",
+      )).toThrow(SidecarLaunchError);
     }
+  });
+
+  it("redeems a parent-bound ticket with credentialed CORS before navigation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(redeemOpenDesignBootstrap(VALID_LAUNCH)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      VALID_LAUNCH.bootstrap_url,
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        mode: "cors",
+        redirect: "error",
+        body: "ticket=one-shot-ticket",
+      }),
+    );
   });
 
   it("requires an authenticated Core confirmation for the redeemed bootstrap", async () => {

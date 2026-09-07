@@ -108,6 +108,7 @@ class SidecarBrowserOriginTestSupport:
         headers: dict[str, str] | None = None,
         raw_path: bytes | None = None,
         scheme: str = "http",
+        scope_extra: dict | None = None,
     ) -> tuple[int, bytes, dict[str, str]]:
         messages: list[dict] = []
         await self._invoke_streaming(
@@ -119,6 +120,7 @@ class SidecarBrowserOriginTestSupport:
             headers=headers,
             raw_path=raw_path,
             scheme=scheme,
+            scope_extra=scope_extra,
             messages=messages,
             queue=None,
         )
@@ -147,6 +149,7 @@ class SidecarBrowserOriginTestSupport:
         headers: dict[str, str] | None,
         raw_path: bytes | None = None,
         scheme: str = "http",
+        scope_extra: dict | None = None,
         messages: list[dict],
         queue: asyncio.Queue[dict] | None,
     ) -> None:
@@ -166,6 +169,8 @@ class SidecarBrowserOriginTestSupport:
         }
         if raw_path is not None:
             scope["raw_path"] = raw_path
+        if scope_extra:
+            scope.update(scope_extra)
         delivered = False
 
         async def receive() -> dict:

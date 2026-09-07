@@ -12,11 +12,13 @@ import type { SidecarLaunch } from "./types";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
+  redeemBootstrap: vi.fn(),
   requestBootstrapStatus: vi.fn(),
   requestLaunch: vi.fn(),
 }));
 vi.mock("./api", async (importOriginal) => ({
   ...await importOriginal<typeof import("./api")>(),
+  redeemOpenDesignBootstrap: mocks.redeemBootstrap,
   requestOpenDesignBootstrapStatus: mocks.requestBootstrapStatus,
   requestOpenDesignLaunch: mocks.requestLaunch,
 }));
@@ -24,9 +26,12 @@ vi.mock("./api", async (importOriginal) => ({
 const LAUNCH: SidecarLaunch = {
   origin: "https://sc-proof.sidecars.example",
   bootstrap_url: "https://sc-proof.sidecars.example/.well-known/maverick-sidecar-bootstrap",
+  bootstrap_transport: "cors",
   method: "POST",
+  parent_origin: "http://localhost:3000",
   ticket_field: "ticket",
   ticket: "one-shot-ticket",
+  target_url: "about:blank#opendesign",
   confirmation_token: "bootstrap-confirmation-token",
   expires_in_seconds: 30,
   sidecar_instance_id: "instance_12345678",
@@ -39,6 +44,7 @@ describe("Design Studio native OpenDesign host", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/apps/design-studio?od_project_id=project_1&od_conversation_id=conversation_1");
     mocks.requestLaunch.mockReset().mockResolvedValue(LAUNCH);
+    mocks.redeemBootstrap.mockReset().mockResolvedValue(undefined);
     mocks.requestBootstrapStatus.mockReset().mockResolvedValue("ready");
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => undefined);
     vi.spyOn(window, "postMessage").mockImplementation(() => undefined);
@@ -63,6 +69,8 @@ describe("Design Studio native OpenDesign host", () => {
       expect.any(AbortSignal),
     );
     expect(container.querySelector("iframe")?.title).toBe("OpenDesign");
+    expect(mocks.redeemBootstrap).toHaveBeenCalledWith(LAUNCH, expect.any(AbortSignal));
+    expect(frame.src).toBe(LAUNCH.target_url);
     expect(container.querySelector("button")).toBeNull();
     expect(container.textContent).not.toContain("Nuovo progetto");
 

@@ -3,7 +3,7 @@
 Date: 2026-08-03
 Status: Accepted (G1), implemented by WP2 and WP3
 Owners: Maverick Core app hosting and app contract domains
-Amended: 2026-09-02 to add managed exact HTTP-01 TLS without weakening origin isolation
+Amended: 2026-09-07 to bind sidecars nested below authenticated app-frame origins
 
 ## Context
 
@@ -50,9 +50,14 @@ does not fall through to the normal platform host. Unknown routes are denied.
    than 30 seconds. Core also returns a distinct confirmation token and stores
    only its hash. That token can only query this launch's bootstrap state
    through the authenticated platform origin; it grants no sidecar access.
-2. The app submits the ticket in an iframe-targeted form `POST` body to the
-   reserved bootstrap endpoint on the sidecar origin. Tickets are never placed
-   in a URL, fragment, browser storage, referrer, audit target, or log.
+2. A platform-origin caller submits the ticket in an iframe-targeted form
+   `POST` body. When the caller is already inside an authenticated isolated app
+   frame, Core also binds the ticket to that exact parent origin. The app first
+   redeems it with a credentialed CORS `POST`, then navigates the child iframe
+   to the separately attested target URL. The nested bootstrap accepts only the
+   Core-propagated parent and returns `204`; it never redirects. Tickets are
+   never placed in a URL, fragment, browser storage, referrer, audit target, or
+   log.
 3. The sidecar router atomically consumes the ticket, verifies every binding,
    creates a distinct random session, and responds `303` to a clean relative
    URL. It sets a host-only, `HttpOnly`, `SameSite=Strict` main cookie with
@@ -130,11 +135,12 @@ that are safe to embed cross-origin; user-private APIs and media are forbidden.
 CSP is derived from contract data, defaults to
 `default-src 'self'`, permits `connect-src` only to the same sidecar origin and
 declared brokers, and sets `frame-ancestors` to the same isolated origin plus
-the expected Maverick origin. The same-origin entry is required because the
-policy is attached to every proxied document, including native application
-previews embedded below the sidecar's top-level page. The exact Maverick origin
-remains the only permitted external frame parent; wildcard frame parents and
-arbitrary outbound origins are invalid.
+the expected Maverick platform origin. For a launch made through an
+authenticated app frame, Core adds that exact app-frame origin as the immediate
+parent; both it and the platform ancestor must match. The same-origin entry is
+required because the policy is attached to every proxied document, including
+native application previews embedded below the sidecar's top-level page.
+Wildcard frame parents and arbitrary outbound origins are invalid.
 
 ## Ownership
 
@@ -270,9 +276,10 @@ emitted by a proxied sidecar, from reaching the distinct browser origin.
 
 ## Residual Risk And Closure
 
-WP9 and WP10 are complete for Design Studio. The mounted frontend uses only the
-form bootstrap, keeps a stable iframe target from its first browsing context,
-and validates `postMessage` origin/source. The WP10 Chromium proof covers clean
+WP9 and WP10 are complete for Design Studio. A platform-mounted frontend uses
+the form bootstrap; an authenticated isolated app-frame frontend uses the
+exact-parent CORS bootstrap before navigating its stable child frame. The WP10
+Chromium proof covers clean
 redirects, credential leakage, restart session renewal, forbidden/core routes,
 and distinct workspace A/B origins. The evidence is
 `apps/design-studio/service/opendesign_product_acceptance_0_16_1.json`.

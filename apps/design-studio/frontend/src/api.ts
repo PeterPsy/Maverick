@@ -89,7 +89,44 @@ export async function requestOpenDesignLaunch(
       : "browser_ticket_failed";
     throw new SidecarLaunchError(code, response.status);
   }
-  return validateSidecarLaunch(payload, platformOrigin);
+  return validateSidecarLaunch(
+    payload,
+    platformOrigin,
+    window.location.origin,
+    path,
+  );
+}
+
+export async function redeemOpenDesignBootstrap(
+  launch: SidecarLaunch,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (launch.bootstrap_transport !== "cors") {
+    throw new SidecarLaunchError("sidecar_bootstrap_transport_invalid", 0);
+  }
+  let response: Response;
+  try {
+    response = await fetch(launch.bootstrap_url, {
+      method: "POST",
+      credentials: "include",
+      mode: "cors",
+      redirect: "error",
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: new URLSearchParams({ [launch.ticket_field]: launch.ticket }).toString(),
+      signal,
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new SidecarLaunchError("sidecar_bootstrap_failed", 0);
+  }
+  if (!response.ok || response.status !== 204) {
+    throw new SidecarLaunchError("sidecar_bootstrap_failed", response.status);
+  }
 }
 
 export async function requestOpenDesignBootstrapStatus(
@@ -127,13 +164,20 @@ export async function requestOpenDesignBootstrapStatus(
   return payload.status;
 }
 
-export function validateSidecarLaunch(payload: unknown, platformOrigin: string): SidecarLaunch {
+export function validateSidecarLaunch(
+  payload: unknown,
+  platformOrigin: string,
+  callerOrigin: string,
+  expectedPath: string,
+): SidecarLaunch {
   if (!isRecord(payload)) throw new SidecarLaunchError("sidecar_launch_response_invalid", 502);
   const candidate = payload as Partial<SidecarLaunch>;
   if (
     typeof candidate.origin !== "string"
     || typeof candidate.bootstrap_url !== "string"
+    || !["cors", "form"].includes(String(candidate.bootstrap_transport))
     || candidate.method !== "POST"
+    || typeof candidate.parent_origin !== "string"
     || candidate.ticket_field !== "ticket"
     || typeof candidate.ticket !== "string"
     || !candidate.ticket
@@ -148,6 +192,7 @@ export function validateSidecarLaunch(payload: unknown, platformOrigin: string):
     || Number(candidate.expires_in_seconds) > 30
     || typeof candidate.sidecar_instance_id !== "string"
     || !/^[A-Za-z0-9_-]{8,128}$/.test(candidate.sidecar_instance_id)
+    || typeof candidate.target_url !== "string"
   ) {
     throw new SidecarLaunchError("sidecar_launch_response_invalid", 502);
   }
@@ -155,6 +200,9 @@ export function validateSidecarLaunch(payload: unknown, platformOrigin: string):
     const isolated = new URL(candidate.origin);
     const bootstrap = new URL(candidate.bootstrap_url);
     const platform = new URL(platformOrigin);
+    const caller = new URL(callerOrigin);
+    const target = new URL(candidate.target_url);
+    const nested = candidate.bootstrap_transport === "cors";
     if (
       isolated.origin !== candidate.origin
       || isolated.origin === platform.origin
@@ -165,6 +213,16 @@ export function validateSidecarLaunch(payload: unknown, platformOrigin: string):
       || bootstrap.pathname !== BOOTSTRAP_PATH
       || bootstrap.search
       || bootstrap.hash
+      || target.origin !== isolated.origin
+      || target.username
+      || target.password
+      || target.search
+      || target.hash
+      || target.pathname !== expectedPath
+      || !isNativePath(target.pathname)
+      || (nested && candidate.parent_origin !== caller.origin)
+      || (nested && caller.origin === platform.origin)
+      || (!nested && candidate.parent_origin !== "")
     ) {
       throw new Error("invalid launch boundary");
     }

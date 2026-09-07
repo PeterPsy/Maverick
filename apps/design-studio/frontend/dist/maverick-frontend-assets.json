@@ -1,23 +1,23 @@
 {
-  "build_id": "3308868de5b747bf3799c9e8363e96b85e3733bb3d0aa3513dba7981f5792819",
+  "build_id": "02c41463a349f178de5433099b5b7349550cfbc8aba47589059b8a7278981484",
   "entrypoints": [
     "index.html"
   ],
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/app-CQNO6Lk8.js",
-      "sha256": "22ce88912300211502796405e3c3a21f813215b108d72059a783a9f15627b6a5",
-      "size_bytes": 199398
-    },
-    {
       "path": "assets/app-DfuAJ075.css",
       "sha256": "ff4a2a1fc952bfd2b987868ce2028e95b55ded1f5816ca5a26908d20ff3327df",
       "size_bytes": 1104
     },
     {
+      "path": "assets/app-RoQniUGJ.js",
+      "sha256": "8cf15d34a1440043ef685b07220d10e3092a5624fde8829a7532732eca1a08d2",
+      "size_bytes": 200682
+    },
+    {
       "path": "index.html",
-      "sha256": "f10433d2979232a6af812e8653d8f8e1dd7f165d032cb45f75443a1ea56d18a3",
+      "sha256": "d93e5dfecc6cabd0b271f606be2df0d4f9425c25d08708b349d52fc47bb33e79",
       "size_bytes": 432
     }
   ],

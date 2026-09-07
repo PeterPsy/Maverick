@@ -11,6 +11,12 @@ import time
 from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlsplit
 
+from core.api.app_frame_scope import (
+    APP_FRAME_APP_ID_SCOPE_KEY,
+    APP_FRAME_ORIGIN_SCOPE_KEY,
+    APP_FRAME_PROXY_SCOPE_KEY,
+    app_frame_owner_matches,
+)
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession
@@ -97,6 +103,27 @@ def handle_sidecar_browser_launch(
     try:
         launch_started = time.monotonic()
         origin, host, platform_origin, secure = _resolve_origin_configuration(environ, target=target)
+    except AppHostingError as error:
+        return json_response(
+            start_response,
+            sidecar_error_payload(error, default_code="sidecar_origin_unavailable"),
+            status="503 Service Unavailable",
+            headers=_platform_launch_headers(),
+        )
+    try:
+        parent_origin, parent_app_id = _resolve_parent_binding(
+            environ,
+            target=target,
+            platform_origin=platform_origin,
+        )
+    except AppHostingError:
+        return json_response(
+            start_response,
+            {"error": "sidecar_parent_invalid"},
+            status="403 Forbidden",
+            headers=_platform_launch_headers(),
+        )
+    try:
         ensure_browser_origin_tls(
             [host],
             group_key=(
@@ -131,7 +158,12 @@ def handle_sidecar_browser_launch(
         sidecar_instance_id=running.instance_id,
         clean_path=clean_path,
         secure=secure,
-        content_security_policy=_content_security_policy(platform_origin),
+        content_security_policy=_content_security_policy(
+            platform_origin,
+            parent_origin=parent_origin,
+        ),
+        parent_origin=parent_origin,
+        parent_app_id=parent_app_id,
     )
     try:
         ticket = state.sidecar_browser_sessions.issue_ticket(binding)
@@ -183,6 +215,7 @@ def handle_sidecar_browser_launch(
             "generation_id": binding.generation_id,
             "actor_user_id": binding.actor_user_id,
             "expires_in_seconds": MAX_TICKET_TTL_SECONDS,
+            "parent_app_id": parent_app_id,
         },
     )
     return json_response(
@@ -190,9 +223,12 @@ def handle_sidecar_browser_launch(
         {
             "origin": origin,
             "bootstrap_url": f"{origin}{BROWSER_BOOTSTRAP_PATH}",
+            "bootstrap_transport": "cors" if parent_origin else "form",
             "method": "POST",
+            "parent_origin": parent_origin,
             "ticket_field": "ticket",
             "ticket": ticket.value,
+            "target_url": f"{origin}{clean_path}",
             "confirmation_token": ticket.confirmation_value,
             "expires_in_seconds": MAX_TICKET_TTL_SECONDS,
             "sidecar_instance_id": running.instance_id,
@@ -446,7 +482,12 @@ async def _handle_bootstrap(
     if set(fields) != {"ticket"} or len(ticket_values) != 1 or not ticket_values[0]:
         await _deny(state, send, host=host, reason="bootstrap_ticket_invalid", status=400)
         return
-    issued = state.sidecar_browser_sessions.consume_ticket(ticket_values[0], host=host)
+    parent_origins = _header_values(scope, b"origin")
+    issued = state.sidecar_browser_sessions.consume_ticket(
+        ticket_values[0],
+        host=host,
+        parent_origin=parent_origins[0] if len(parent_origins) == 1 else "",
+    )
     if issued is None:
         await _deny(state, send, host=host, reason="bootstrap_ticket_expired_or_spent", status=410)
         return
@@ -486,21 +527,30 @@ async def _handle_bootstrap(
         current.sidecar.browser_origin.sandboxed_frame_resource_prefixes
     )
     headers = _security_headers(binding)
-    headers.extend(
-        [
-            ("Location", binding.clean_path),
-            (
-                "Set-Cookie",
-                _session_cookie(
-                    issued.value,
-                    secure=binding.secure,
-                    stable=sandboxed_resource_session,
-                ),
+    headers.append(
+        (
+            "Set-Cookie",
+            _session_cookie(
+                issued.value,
+                secure=binding.secure,
+                stable=sandboxed_resource_session,
             ),
-        ]
+        )
     )
     if sandboxed_resource_session:
         headers.append(("Set-Cookie", _resource_session_cookie(issued.value)))
+    if binding.parent_origin:
+        headers.extend(
+            [
+                ("Access-Control-Allow-Origin", binding.parent_origin),
+                ("Access-Control-Allow-Credentials", "true"),
+                ("Vary", "Origin"),
+            ]
+        )
+        response_status = 204
+    else:
+        headers.append(("Location", binding.clean_path))
+        response_status = 303
     record_platform_audit(
         state.observability_store,
         action="sidecar.browser_session.bootstrap",
@@ -519,7 +569,7 @@ async def _handle_bootstrap(
     await send(
         {
             "type": "http.response.start",
-            "status": 303,
+            "status": response_status,
             "headers": [(name.lower().encode("latin1"), value.encode("latin1")) for name, value in headers],
         }
     )
@@ -588,6 +638,28 @@ def _resolve_origin_configuration(
     raise AppHostingError("MAVERICK_SIDECAR_ORIGIN_MODE must be `local` or `hosted`.")
 
 
+def _resolve_parent_binding(
+    environ: dict,
+    *,
+    target: AuthorizedSidecarTarget,
+    platform_origin: str,
+) -> tuple[str, str]:
+    """Resolve only Core-authenticated app-frame ancestry for nested sidecars."""
+    if environ.get(APP_FRAME_PROXY_SCOPE_KEY) is not True:
+        return "", ""
+    parent_origin = str(environ.get(APP_FRAME_ORIGIN_SCOPE_KEY) or "").strip()
+    parent_app_id = str(environ.get(APP_FRAME_APP_ID_SCOPE_KEY) or "").strip()
+    if (
+        not parent_origin
+        or not parent_app_id
+        or not app_frame_owner_matches(environ, target.binding.app_id)
+        or _normalize_origin(parent_origin) != parent_origin
+        or parent_origin == platform_origin
+    ):
+        raise AppHostingError("Sidecar launch parent binding is invalid.")
+    return parent_origin, parent_app_id
+
+
 def _request_platform_origin(environ: dict) -> str:
     scheme = str(environ.get("wsgi.url_scheme") or "").strip().lower()
     host = str(environ.get("HTTP_HOST") or "").strip().lower()
@@ -629,11 +701,18 @@ def _generation_id(target: AuthorizedSidecarTarget) -> str:
     return sha256(identity).hexdigest()
 
 
-def _content_security_policy(platform_origin: str) -> str:
+def _content_security_policy(
+    platform_origin: str,
+    *,
+    parent_origin: str = "",
+) -> str:
     # Core stamps this policy onto every proxied response, including documents
     # that the hosted application embeds from its own isolated origin. Allow
-    # that exact same origin for native nested frames while keeping the
-    # platform origin as the only permitted external ancestor.
+    # that exact same origin for native nested frames, plus the authenticated
+    # app-frame parent and platform ancestors when the sidecar itself is nested.
+    ancestors = ["'self'", platform_origin]
+    if parent_origin and parent_origin not in ancestors:
+        ancestors.append(parent_origin)
     return "; ".join(
         (
             "default-src 'self'",
@@ -645,7 +724,7 @@ def _content_security_policy(platform_origin: str) -> str:
             "font-src 'self' data:",
             "connect-src 'self'",
             "worker-src 'self' blob:",
-            f"frame-ancestors 'self' {platform_origin}",
+            f"frame-ancestors {' '.join(ancestors)}",
             "form-action 'self'",
         )
     )

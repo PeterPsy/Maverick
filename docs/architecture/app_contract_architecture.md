@@ -1166,8 +1166,12 @@ Core rejects weakened or unknown values. An authenticated mounted app obtains a
 body-only launch ticket with `POST /api/app-sidecars/browser-launch`, providing
 only its app id, declared sidecar id, and a clean root-relative landing path.
 Core resolves actor/workspace/install generation from the Maverick session,
-starts the already-authorized sidecar, and returns an origin plus form bootstrap
+starts the already-authorized sidecar, and returns an origin plus bootstrap
 instructions and a separate confirmation token that grants no sidecar access.
+When the request arrived through an authenticated app frame, Core binds the
+ticket and response CSP to that exact parent origin. The app redeems the ticket
+with a credentialed CORS `POST` before navigating the child frame; direct
+platform-origin callers retain the iframe-targeted form and clean `303` flow.
 The mounted app polls that launch's authenticated platform-origin confirmation
 endpoint. It may expose the sidecar frame only after Core has confirmed that
 the one-shot ticket became a validated host-bound session and the target frame

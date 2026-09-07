@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   currentDesignStudioAppId,
   nativeOpenDesignPath,
+  redeemOpenDesignBootstrap,
   requestOpenDesignBootstrapStatus,
   requestOpenDesignLaunch,
   SidecarLaunchError,
@@ -73,19 +74,26 @@ export function App() {
     const loadingTimer = window.setTimeout(() => setLoadingVisible(true), LOADING_DELAY_MS);
 
     void requestOpenDesignLaunch(appId, nativePath, maverickPlatformOrigin(), abort.signal)
-      .then((launch) => {
+      .then(async (launch) => {
         if (abort.signal.aborted) return;
         const frame = frameRef.current;
         if (!frame) throw new SidecarLaunchError("sidecar_frame_target_missing", 0);
         submittedFrameRef.current = frame;
         setPhase("bootstrapping");
-        submitBootstrapForm(frame, launch);
-        // Ignore the iframe's initial same-origin about:blank load.  The
-        // one-shot POST navigation cannot complete in the same task.
-        bootstrapArmTimerRef.current = window.setTimeout(() => {
+        if (launch.bootstrap_transport === "cors") {
+          await redeemOpenDesignBootstrap(launch, abort.signal);
+          if (abort.signal.aborted) return;
           bootstrapLoadArmedRef.current = true;
-          bootstrapArmTimerRef.current = null;
-        }, 0);
+          frame.src = launch.target_url;
+        } else {
+          submitBootstrapForm(frame, launch);
+          // Ignore the iframe's initial same-origin about:blank load.  The
+          // one-shot POST navigation cannot complete in the same task.
+          bootstrapArmTimerRef.current = window.setTimeout(() => {
+            bootstrapLoadArmedRef.current = true;
+            bootstrapArmTimerRef.current = null;
+          }, 0);
+        }
 
         const confirmationDeadline = Date.now() + launch.expires_in_seconds * 1000;
         const pollConfirmation = () => {
@@ -229,6 +237,8 @@ function diagnosticLabel(code: string): string {
     sidecar_bootstrap_confirmation_expired: "Core non ha confermato l’avvio dell’origine isolata.",
     sidecar_bootstrap_confirmation_failed: "La verifica dell’avvio isolato non è riuscita.",
     sidecar_bootstrap_confirmation_invalid: "Core ha restituito una conferma di avvio non valida.",
+    sidecar_bootstrap_failed: "L’origine isolata non ha accettato l’avvio autenticato.",
+    sidecar_bootstrap_transport_invalid: "Core ha restituito un protocollo di avvio non valido.",
     sidecar_bootstrap_unconfirmed: "L’origine isolata non ha completato l’avvio entro il tempo previsto.",
     sidecar_frame_load_failed: "L’applicazione nativa non è stata caricata.",
   };

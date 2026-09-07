@@ -894,9 +894,51 @@ for typing/clicks. No Core runtime, image route, Calendar data, credentials or
 updater/signing change. Deterministic helper/guidance tests do not operate the
 real desktop; signed-delivery and physical acceptance are recorded separately.
 
-V22 checkpoint at **21:24 UTC on 2026-09-06**: Apple source **1dbe182** is
-published; Linux's 18 Python tests passed (one Darwin-only skip), Core unused
-imports and diff checks passed. Eight new Swift tests await Mac execution.
-Approved install run **34060662672** is still `pending`; no native test or
-installation result is claimed. Continue monitoring that run rather than
-creating a duplicate. The last verified installed app remains v21 / **94a52b5**.
+The original v22 install run **34060662672** expired without logs while the Mac
+runner was unavailable. After the runner returned, the single replacement run
+[34101624032](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34101624032)
+checked out **7f0abe8**, passed **221 Swift tests** and **18 Python updater and
+packaging tests**, verified the real pinned Peekaboo catalog and credential-free
+Codex/image-wire gates, then installed v22. Bidirectional signing continuity
+passed and the same app path was updated without a persistent backup. Launch was
+requested; this delivery evidence did not by itself certify the cross-app flow.
+
+### v23 exact-element background search
+
+Physical v22 acceptance observed Calendar without modifying it. The event on
+10 September remained the pre-existing v20 EventKit artifact. Notes observation
+also succeeded, but the next background `press` attempted `cmd+f`. Peekaboo 4.3.1
+rejected the request while pinning the current focused AX element to the exact
+observed Notes window because that element's frame was outside the window
+bounds. This happens before `hotkeyWithOutcome`, so no key was sent. TextEdit and
+the final explicit activation were correctly skipped under the first-error rule.
+The evidence does not implicate v22 activation, Screen Recording or Accessibility.
+
+V23 no longer advertises application-command chords (`cmd+f`, `cmd+s`, `cmd+n`,
+`cmd+a`) on the background Peekaboo tool. `press` is limited to navigation in an
+exactly observed, already-focused control. Search must target a fresh explicit
+search-field element with `type`/`replace`, or click one unambiguous search
+button, observe again and type into the resulting field. If no such element is
+available, the operation stops rather than guessing a shortcut. There is no
+native app activation prerequisite, hidden focus repair, automatic retry or
+second GUI engine.
+
+The known upstream pre-dispatch refusal maps to **MC-PEEKABOO-17**, which states
+that no key was sent and directs the caller to an explicit element. Generic
+MC-PEEKABOO-01 errors no longer echo untrusted Accessibility/tool text and keep
+the uncertain-outcome/no-retry boundary. Regression tests cover the reduced
+schema, search route and private-text suppression.
+
+Push run [34150353639](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34150353639)
+and the single approved install run
+[34150890148](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34150890148)
+checked out Apple commit **45edb18**. Both passed **223 Swift tests** with zero
+failures and **19 Python updater/packaging tests**, plus credential-free Codex
+admission/image wire and the real pinned Peekaboo 4.3.1 initialize/catalog gate
+without UI calls. The installer preserved designated requirement SHA256
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`, verified
+identity continuity in both directions, and updated
+`~/Applications/MaverickMac.app` in place with no persistent backup. Launch was
+requested at **18:18:57 UTC on 2026-09-07**. Installed label:
+**45edb18 · ricerca sicura v23**. A new physical Calendar/Notes/TextEdit run
+is still required; CI and signed installation do not assert desktop acceptance.

@@ -973,8 +973,15 @@ Static private-text-free **MC-PEEKABOO-18** identifies a pre-dispatch point that
 does not resolve to a writable field; **MC-PEEKABOO-19** identifies a point with
 no pressable control. Both state that no input was sent and require stopping.
 Push run [34153198464](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34153198464)
-on Apple commit **0226585** passed **224 Swift tests** with zero failures and
-**20 Python updater/packaging tests**, credential-free Codex/image-wire checks,
-the real pinned Peekaboo initialize/catalog gate, signing continuity and the
-two-version updater fixture. This was an artifact-only run. Installation awaits
-a closed MaverickMac process; the app is never terminated by the updater.
+and the single approved install run
+[34158052003](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34158052003)
+both checked out Apple commit **0226585** and passed **224 Swift tests** with
+zero failures and **20 Python updater/packaging tests**, credential-free
+Codex/image-wire checks, the real pinned Peekaboo initialize/catalog gate,
+signing continuity and the two-version updater fixture. The installer updated
+`~/Applications/MaverickMac.app` at the same path without a persistent backup
+and retained designated requirement SHA256
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+Launch was requested at **20:08:29 UTC on 2026-09-07**. Installed label:
+**0226585 · punti vincolati v24**. Physical integrated acceptance remains a
+separate next gate and is not inferred from CI or installation.

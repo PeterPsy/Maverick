@@ -204,18 +204,18 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "ab4887330e1fa31eec752d5569eb8bc26dc5b90313174ac8a97dff6e53e2ece9",
-            "openrouter": "efafd35a292ace81104fba206e46dc559937068e30c7722fec39e4ee40d6ce23",
+            "google-ai-studio": "aca623b04d33b012990cacb50af908a5a71276328cde51a1faf1e5c543bc782d",
+            "openrouter": "ea747c6932afcf27f6eb1383de10e5b43083557afefc52894d7599d30fe6a5f9",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "44")
+                self.assertEqual(manifest.suite_version, "45")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-07-r44-p6-google-catalog-refresh-tcb34",
+                    "2026-09-07-r45-p6-google-partial-lifecycle-tcb35",
                 )
                 self.assertEqual(
                     manifest.digest,

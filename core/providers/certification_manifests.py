@@ -162,11 +162,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="44",
+        suite_version="45",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-07-r44-p6-google-catalog-refresh-tcb34"
+            "2026-09-07-r45-p6-google-partial-lifecycle-tcb35"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

@@ -125,7 +125,10 @@ class GoogleInteractionStreamDecoder:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         interaction = _dict(payload.get("interaction"))
         interaction_id = _required_text(interaction.get("id"))
-        if interaction.get("model") != self.request.model_id:
+        if (
+            "model" in interaction
+            and interaction.get("model") != self.request.model_id
+        ):
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         self.interaction_id = interaction_id
         return self._event(
@@ -236,7 +239,13 @@ class GoogleInteractionStreamDecoder:
         if self.active_step is not None:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         interaction = _dict(payload.get("interaction"))
-        if interaction.get("id") != self.interaction_id or interaction.get("model") != self.request.model_id:
+        if (
+            interaction.get("id") != self.interaction_id
+            or (
+                "model" in interaction
+                and interaction.get("model") != self.request.model_id
+            )
+        ):
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         status = interaction.get("status")
         if status == "requires_action":

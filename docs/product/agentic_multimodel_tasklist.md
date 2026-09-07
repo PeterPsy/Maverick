@@ -12,8 +12,8 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 44 / TCB 34 / hosted adapter 40 /
-recipes 25 / Google profile 49 / OpenRouter profile 48 / Codex candidate 15.
+The current contained successor is suite 45 / TCB 35 / hosted adapter 41 /
+recipes 25 / Google profile 50 / OpenRouter profile 49 / Codex candidate 15.
 Its exact-source fixture result is recorded outside the source checkout by the
 operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
 
@@ -776,10 +776,20 @@ values above; they are not live certification or rollout evidence.
   `c4b8fc7a` passed 657 Google and 669 OpenRouter tests with zero skips; the
   external record SHA-256 is
   `4b5ab3a6b05ea963b447a7d7e1a369caa1fa64a341f268aab8f007c7815fee13`.
-- [ ] Re-run each complete `fixture_contract` provider manifest on the exact
+- [x] Re-run each complete `fixture_contract` provider manifest on the exact
   clean suite-44/TCB-34 successor after the authenticated Google catalog
-  identity refresh; preserve its record outside the source tree.
-- [ ] On that same exact suite-44 commit, run the bounded operator-only synthetic live
+  identity refresh; preserve its record outside the source tree. Commit
+  `167e5547` passed 658 Google and 669 OpenRouter tests with zero skips; the
+  external fixture record digests are recorded by the operator.
+- [ ] Complete the suite-44 live gate. The first OpenRouter request failed at
+  transport and durably halted that provider for the authorized job. The first
+  Google request matched the exact target but failed closed as
+  `provider_response_invalid`; neither attempt is a passing probe and neither
+  reservation is refunded or retried automatically.
+- [ ] Re-run each complete `fixture_contract` provider manifest on the exact
+  clean suite-45/TCB-35 successor after the Google partial-lifecycle fix and
+  intervening TCB changes; preserve its record outside the source tree.
+- [ ] On that same exact suite-45 commit, run the bounded operator-only synthetic live
   probes, collect/independently review all natural observations, sign with an
   already trusted key, verify, and publish immutable certificates.
 - [ ] Complete provider onboarding, leakage/security review, one-workspace
@@ -790,13 +800,11 @@ values above; they are not live certification or rollout evidence.
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true only because the server-owned
 boundary is implemented. The hosted-runtime and both provider-specific kill
 switches still default off. No remote binding, profile, or certificate is
-enabled by these P6 checkpoints; no Google/OpenRouter generation/SSE request,
-authenticated synthetic live probe, real-store containment/migration apply,
-canary, production release, or push is part of this work. Bounded catalog and
-credential-readiness GETs are compatibility observations, not live
-certification. No backend restart or live control-plane write was
-performed. The running Codex deployment stays on profile revision 14 and its
-existing digest; revision 15 is a separately verified candidate only.
+enabled by these P6 checkpoints. The bounded r44 live attempts above are failed
+observations, not certification; no certificate publication, canary, production
+release, containment migration, or Codex cutover is implied. Catalog and
+credential-readiness GETs remain compatibility observations. Codex candidate 15
+continues to be guarded independently and is not changed by the hosted fix.
 
 ## Evidence and acceptance links
 
@@ -858,3 +866,17 @@ retained in the signed catalog snapshot. Hosted adapter 40 and Google/OpenRouter
 profiles 49/48 bind the source change; recipe 25 and the independently guarded
 Codex candidate 15 remain unchanged. The readiness GET made no generation,
 spent no certification-ledger budget, and does not close P6-L/S/R.
+
+### P6 Google partial-lifecycle candidate — 2026-09-07
+
+The first exact r44 Google generation reached the pinned target but failed
+closed before exposing a normalized tool call because a lifecycle interaction
+omitted its optional `model` field. The current v1 OpenAPI describes lifecycle
+interactions as partial resources and permits that omission. Suite 45 accepts
+absence on `interaction.created` and `interaction.completed` while rejecting
+every supplied mismatch, advances the Google protocol codec to revision 4, and
+retains exact request/catalog model pinning.
+TCB 35 also binds intervening Core API/app-hosting changes. Hosted adapter 41
+and Google/OpenRouter profiles 50/49 advance; recipe 25 and Codex candidate 15
+remain byte-identical. The failed r44 provider reservations remain in the one
+external ledger. This correction alone does not close P6-L/S/R.

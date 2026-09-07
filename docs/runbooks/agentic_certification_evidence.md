@@ -95,11 +95,11 @@ endpoint/upstream catalog identity.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
-Suite 44 retains that complete corpus and adds authoritative persisted
+Suite 45 retains that complete corpus and adds authoritative persisted
 attestation propagation/revocation at session, queue, dispatch, authority and
 continuation boundaries plus direct-host operator attribution and the refreshed
-Google stable-alias catalog identity. It binds hosted adapter 40, recipes 25,
-Google profile 49, OpenRouter profile 48, TCB 34 and the append-only Codex candidate artifact
+Google stable-alias and partial-lifecycle contracts. It binds hosted adapter 41,
+recipes 25, Google profile 50, OpenRouter profile 49, TCB 35 and the append-only Codex candidate artifact
 revision 15. The deployed Codex revision 14 remains retained and must not be
 cut over by a certification worker.
 
@@ -116,8 +116,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v44 matrix revision
-  `2026-09-07-r44-p6-google-catalog-refresh-tcb34` declared by the provider
+- the dated suite-v45 matrix revision
+  `2026-09-07-r45-p6-google-partial-lifecycle-tcb35` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -143,7 +143,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 44 \
+  --suite-version 45 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
@@ -160,8 +160,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-Both suite-44 manifests bind matrix revision
-`2026-09-07-r44-p6-google-catalog-refresh-tcb34`. OpenRouter uses suite id
+Both suite-45 manifests bind matrix revision
+`2026-09-07-r45-p6-google-partial-lifecycle-tcb35`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
 collector-generated nonce. Duplicate fields, arbitrary text, extra payload
@@ -354,7 +354,7 @@ live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
 separate local identity. Since manifest v9 the transitive inventory is executable;
-manifest v34 is the current Google-catalog-refresh candidate:
+manifest v35 is the current Google partial-lifecycle candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

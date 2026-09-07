@@ -222,16 +222,43 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         self.assertEqual(result[0].error_code, "provider_tool_result_pairing_invalid")
 
     def test_stream_requires_one_function_call_and_exact_model_identity(self) -> None:
-        events = _tool_stream("interaction-parallel")
-        events[0]["interaction"]["model"] = "wrong-model"
+        for event_index in (0, -1):
+            with self.subTest(event_index=event_index):
+                events = _tool_stream("interaction-parallel")
+                events[event_index]["interaction"]["model"] = "wrong-model"
+                client = GoogleInteractionsAgenticClient(
+                    transport=_ScriptedTransport([events])
+                )
+
+                result = asyncio.run(
+                    _events(client, _request(f"request-invalid-model:{event_index}"))
+                )
+
+                self.assertEqual(result[-1].event_type, "error")
+                self.assertEqual(result[-1].error_code, "provider_response_invalid")
+
+    def test_stream_accepts_documented_partial_lifecycle_identity(self) -> None:
+        events = _text_stream("interaction-partial", "done")
+        events[0]["interaction"].pop("model")
+        events[-1]["interaction"].pop("model")
         client = GoogleInteractionsAgenticClient(
             transport=_ScriptedTransport([events])
         )
 
-        result = asyncio.run(_events(client, _request("request-invalid-model")))
+        result = asyncio.run(_events(client, _request("request-partial-model")))
 
-        self.assertEqual(result[-1].event_type, "error")
-        self.assertEqual(result[-1].error_code, "provider_response_invalid")
+        self.assertEqual(
+            [event.event_type for event in result],
+            [
+                "accepted",
+                "text_delta",
+                "provider_state",
+                "usage",
+                "text_final",
+                "completed",
+            ],
+        )
+        self.assertEqual(result[-2].text, "done")
 
     def test_provider_error_before_acceptance_is_normalized(self) -> None:
         for code, reason_code in (

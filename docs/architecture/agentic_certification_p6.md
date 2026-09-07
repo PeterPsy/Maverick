@@ -8,9 +8,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The subsequent aggregate-budget and authoritative
-dispatch candidate uses suite 42 / TCB 32 / hosted adapter 38 / recipes 25 /
-Google profile 47 / OpenRouter profile 46 / Codex candidate 15. It requires its
+That pass is historical. The current host-operator-attribution successor uses
+suite 43 / TCB 33 / hosted adapter 39 / recipes 25 / Google profile 48 /
+OpenRouter profile 47 / Codex candidate 15. It requires its
 own exact-source operator record before signing or release. The source tree does
 not treat a mocked probe receipt or this status paragraph as that record.
 
@@ -67,6 +67,14 @@ global and per-provider kill switches remain default-off. A laboratory run of
 the real hosted loop is still not a substitute for the full API-to-dispatch
 canary.
 
+Candidate 43 additionally closes the direct-host operator attribution gap. The
+`--operator` wrapper now derives a stable actor from the effective OS uid, while
+a runtime-token supplied trusted context always wins and an agent cannot
+self-elevate with that flag. TCB 33 covers the complete wrapper parsing,
+context, descriptor and dispatch chain. Hosted adapter 39 also records the
+post-r42 preflight source-byte revision instead of silently reusing adapter 38;
+recipe 25 and the Codex artifact are unchanged.
+
 The shared queue/handoff fix changes files declared in Codex's artifact. It is
 recorded as append-only Codex candidate revision 15 with revision 14 retained,
 not hidden by exclusions or by reusing the old certificate. The running Codex
@@ -103,9 +111,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 38,
-   recipe 25, Google profile 47, OpenRouter profile 46, suite 42, canonical
-   TCB manifest 32, and append-only Codex candidate revision 15. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 39,
+   recipe 25, Google profile 48, OpenRouter profile 47, suite 43, canonical
+   TCB manifest 33, and append-only Codex candidate revision 15. The corpus includes P5 family/pinning/onboarding, native ACP
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural

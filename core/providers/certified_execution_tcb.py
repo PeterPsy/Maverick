@@ -71,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="32",
+    manifest_version="33",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -83,6 +83,12 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/shared/json_file_collection.py",
                 "core/shared/mongo_document_collection.py",
                 "core/cli/runtime_provider_commands.py",
+                "core/app_sdk/cli.py",
+                "core/app_sdk/cli_contexts.py",
+                "core/app_sdk/cli_descriptors.py",
+                "core/app_sdk/cli_surface_runners.py",
+                "core/app_sdk/cli_surfaces.py",
+                "core/app_sdk/cli_syntax.py",
             ),
         ),
         CertifiedTcbComponent(

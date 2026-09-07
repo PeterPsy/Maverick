@@ -26,8 +26,8 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-Current remote candidates use hosted adapter 38, recipe 25, suite 42 and TCB
-manifest 32 (Google/OpenRouter profiles 47/46). Exact-target live receipts and
+Current remote candidates use hosted adapter 39, recipe 25, suite 43 and TCB
+manifest 33 (Google/OpenRouter profiles 48/47). Exact-target live receipts and
 independently observed natural conformance are required before trusted signing
 and publication; neither step grants release authority. The procedure is in
 `docs/runbooks/agentic_certification_evidence.md`. Historical revision numbers

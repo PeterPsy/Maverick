@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
+from core.app_sdk.cli_contexts import _cli_context
 from core.cli.models import CliInvocationContext
 from core.cli.runtime_provider_commands import runtime_provider_command_specs
 from core.workspaces.store import WorkspaceCollections, WorkspaceDocumentStore
@@ -110,6 +112,61 @@ class DataAttestationCliTestCase(unittest.TestCase):
             )["error"],
             "operator_actor_required",
         )
+
+    def test_direct_host_operator_context_is_actor_attributed(self) -> None:
+        with patch("core.app_sdk.cli_contexts.os.geteuid", return_value=4242):
+            context = _cli_context({"operator": "true"}, "workspace-1")
+
+        issued = self.handlers["core.providers.agentic.attestation.issue"](
+            {
+                "scope_type": "workspace",
+                "expected_revision": 0,
+                "confirmation": "fake-data-scope-reviewed",
+            },
+            context,
+        )
+
+        self.assertNotIn("error", issued)
+        self.assertEqual(context.caller_kind, "operator")
+        self.assertEqual(context.effective_mode, "full-access")
+        self.assertEqual(context.user_id, "host-operator:uid:4242")
+        persisted = self.store.get_data_attestation("workspace-1")
+        assert persisted is not None
+        self.assertEqual(persisted.attested_by_actor_id, context.user_id)
+
+    def test_runtime_context_cannot_self_elevate_with_operator_flag(self) -> None:
+        trusted = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="workspace-1",
+            agent_id="runtime-session-1",
+            effective_mode="sandbox",
+            platform_role="admin",
+            user_id="user:admin",
+            workspace_role="admin",
+            runtime_session_id="runtime-session-1",
+        )
+
+        with patch("core.app_sdk.cli_contexts.os.geteuid") as get_effective_uid:
+            context = _cli_context(
+                {"operator": "true"},
+                "workspace-1",
+                trusted_context=trusted,
+            )
+
+        get_effective_uid.assert_not_called()
+        self.assertEqual(context.caller_kind, "sandbox_agent")
+        self.assertEqual(context.effective_mode, "sandbox")
+        self.assertEqual(context.user_id, "user:admin")
+
+    def test_direct_operator_without_os_identity_fails_closed(self) -> None:
+        with patch(
+            "core.app_sdk.cli_contexts.os.geteuid",
+            new=None,
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Host operator identity is unavailable",
+        ):
+            _cli_context({"operator": "true"}, "workspace-1")
 
     def test_public_content_authority_is_operator_owned_and_revocable(self) -> None:
         issue_definition = self.definitions[

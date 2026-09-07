@@ -31,10 +31,10 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
 
     def test_every_suite_derives_artifacts_and_identity_from_one_manifest(self) -> None:
         identity = certified_tcb_identity(self.root)
-        self.assertEqual(identity.manifest_version, "32")
+        self.assertEqual(identity.manifest_version, "33")
         self.assertEqual(
             identity.structure_digest,
-            "eef2a5cff52a9291033f06a39c8a97598e56f4c21b16d2d07b7a723701c3ea4d",
+            "ff7091f951a9013ec9bab2a48e6127b882fcb17a1b9e37a9c1c2a139c2dc6304",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",
@@ -44,6 +44,16 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
             "scripts/run_openrouter_agentic_probe.py",
             CERTIFIED_EXECUTION_TCB.artifact_paths,
         )
+        for operator_surface in (
+            "core/app_sdk/cli.py",
+            "core/app_sdk/cli_contexts.py",
+            "core/app_sdk/cli_descriptors.py",
+            "core/app_sdk/cli_surface_runners.py",
+            "core/app_sdk/cli_surfaces.py",
+            "core/app_sdk/cli_syntax.py",
+        ):
+            with self.subTest(operator_surface=operator_surface):
+                self.assertIn(operator_surface, CERTIFIED_EXECUTION_TCB.artifact_paths)
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
@@ -238,6 +248,7 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
             "continuation_admission": "core/recovery/continuation_admission.py",
             "app_runtime_entrypoint": "core/shared/entrypoints.py",
             "display_projection": "core/app_sdk/display_models.py",
+            "operator_cli_context": "core/app_sdk/cli_contexts.py",
             "crm_display_schema": "apps/crm/pwa_read_models.v1.json",
             "mail_display_schema": "apps/mail/pwa_read_models.v1.json",
             "hosted_app_entrypoint": next(

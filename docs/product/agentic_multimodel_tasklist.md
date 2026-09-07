@@ -12,8 +12,8 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 42 / TCB 32 / hosted adapter 38 /
-recipes 25 / Google profile 47 / OpenRouter profile 46 / Codex candidate 15.
+The current contained successor is suite 43 / TCB 33 / hosted adapter 39 /
+recipes 25 / Google profile 48 / OpenRouter profile 47 / Codex candidate 15.
 Its exact-source fixture result is recorded outside the source checkout by the
 operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
 
@@ -770,7 +770,10 @@ values above; they are not live certification or rollout evidence.
   suite-42 candidate with zero failures/errors/skips, including the append-only
   Codex revision-15 artifact guard. The operator record is external to the
   source tree so writing it does not change the verified commit.
-- [ ] On that same exact commit, run the bounded operator-only synthetic live
+- [ ] Re-run each complete `fixture_contract` provider manifest on the exact
+  clean suite-43/TCB-33 successor after the host-operator attribution and TCB
+  closure change; preserve its record outside the source tree.
+- [ ] On that same exact suite-43 commit, run the bounded operator-only synthetic live
   probes, collect/independently review all natural observations, sign with an
   already trusted key, verify, and publish immutable certificates.
 - [ ] Complete provider onboarding, leakage/security review, one-workspace
@@ -825,3 +828,14 @@ deployed. This checkpoint can close only P6-D after its exact clean manifest
 runs; credentials, live/natural evidence, trusted signing, publication,
 disposable canary, rollback and production security approval remain separate
 NO-GO gates.
+
+### P6 host-operator-attribution candidate — 2026-09-07
+
+Suite 43, TCB 33, and hosted adapter 39 supersede the unreleased suite-42
+candidate. Adapter 39 records the post-r42 preflight source-byte revision;
+recipes 25 and Codex candidate 15 remain unchanged. The direct host
+`--operator` context now has an effective-uid-derived actor for CAS attestation
+and public-content authority audit. A runtime-token trusted context takes
+precedence, so the flag cannot elevate an agent. The complete host CLI
+parse/context/dispatch chain is now part of the certified TCB. Google/OpenRouter
+profiles 48/47 bind the new TCB and suite; P6-L/S/R remain separate NO-GO gates.

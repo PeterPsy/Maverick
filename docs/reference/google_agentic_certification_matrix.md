@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-07
-Matrix revision: `2026-09-07-r42-p6-authoritative-dispatch-tcb32`
+Matrix revision: `2026-09-07-r43-p6-host-operator-attribution-tcb33`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==38`
+Adapter: `maverick-hosted-tool-loop==39`
 
 ## P6 candidate checkpoint
 
-Suite 42 / TCB manifest 32 / hosted adapter 38 / recipe 25 bind the P5
+Suite 43 / TCB manifest 33 / hosted adapter 39 / recipe 25 bind the P5
 executable family, native ACP lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -20,8 +20,11 @@ remote certificate or operator binding is enabled. Shared queue/dispatch changes
 are isolated behind Codex candidate revision 15; the running revision-14 process
 is not cut over by this checkpoint.
 
-Suite 42 additionally includes generic continuation repair/multi-hop, explicit
-native identity rejection and the reviewed app-effect delta regressions. Prior
+Suite 43 additionally includes generic continuation repair/multi-hop, explicit
+native identity rejection, the reviewed app-effect delta regressions, and the
+effective-uid-attributed direct-host operator path. Runtime-token trusted
+contexts cannot self-elevate with `--operator`, and the complete wrapper path is
+inside TCB 33. Prior
 suite-40 failures are not waived or removed; the corrected fixtures and complete
 inventory must pass on this candidate. See
 `docs/development/agentic_p6_effect_audit_2026-09-06.md`.
@@ -33,7 +36,7 @@ inventory must pass on this candidate. See
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `47` (revision `46` suspended) |
+| Immutable profile revision | `48` (revision `47` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
@@ -86,7 +89,7 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v32 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v33 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -108,7 +111,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total), with exact OpenAPI/model preflight before every generation | manifest step available; not run for r42 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total), with exact OpenAPI/model preflight before every generation | manifest step available; not run for r43 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -495,3 +498,11 @@ dispatch. This revision remains contained and uncertified until its live and
 natural evidence, trusted review/signature, disposable canary and rollback
 exist. The deployed Codex revision-14 backend is not restarted or migrated by
 the candidate work.
+
+Revision 48 pins hosted adapter 39 and governed recipe 25 together with
+suite 43, matrix `2026-09-07-r43-p6-host-operator-attribution-tcb33`, and TCB
+manifest v33. Adapter 39 records the post-r42 preflight source-byte revision
+instead of silently reusing adapter 38. The direct host `--operator` context is now attributed to the
+effective OS uid, the runtime-token context remains non-elevatable, and the
+complete wrapper chain is TCB-covered. Codex candidate 15 remains byte-identical
+and no live probe, certificate, binding, canary, or release is implied.

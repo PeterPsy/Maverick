@@ -15,8 +15,8 @@ Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
-The contained source candidate is hosted adapter 38 / recipes 25 / Google
-profile 47 / OpenRouter profile 46 / suite 42 / TCB 32. Shared queue/handoff
+The contained source candidate is hosted adapter 39 / recipes 25 / Google
+profile 48 / OpenRouter profile 47 / suite 43 / TCB 33. Shared queue/handoff
 changes are represented by append-only Codex candidate revision 15; deployed
 revision 14 remains retained and must not be restarted, migrated, or cut over
 as a side effect of remote-provider certification.
@@ -198,14 +198,17 @@ Use Settings as the normal control surface. Its agentic panel reads:
 - `GET /api/providers/agentic/workspace-bindings`
 
 Attestation mutation is intentionally not a browser surface. Trusted operators
-use only the Core commands
+use only the direct host Core commands
 `core.providers.agentic.attestation.status`,
 `core.providers.agentic.attestation.issue` (expected revision plus the exact
 `fake-data-scope-reviewed` confirmation), and
 `core.providers.agentic.attestation.revoke` (expected revision plus reason).
-Every mutation records the authenticated actor and an append-only redaction-safe
-audit fact. Do not issue an attestation merely to exercise P3 or to bypass the
-provider kill switches or missing certification gates.
+The host wrapper derives the authenticated actor from its effective OS uid;
+when the CLI is reached through a runtime-token shim, the trusted runtime
+context takes precedence and `--operator` cannot elevate an agent. Every
+mutation records that actor and an append-only redaction-safe audit fact. Do
+not issue an attestation merely to exercise P3 or to bypass the provider kill
+switches or missing certification gates.
 
 Runtime-public classification is a separate authority, not an attestation.
 Trusted operators use only

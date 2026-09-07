@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import os
 
 from core.cli.models import CliCommandDefinition, CliInvocationContext
 from core.cli.service import list_core_cli_commands
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.mcp.service import list_mcp_tools
+
 
 def _cli_commands(
     state,
@@ -39,6 +41,7 @@ def _cli_commands(
         start_path=state.repository_root,
     )
 
+
 def _mcp_tools(
     state,
     workspace_id: str,
@@ -67,6 +70,7 @@ def _mcp_tools(
         start_path=state.repository_root,
     )
 
+
 def _cli_context(
     options: dict[str, str],
     workspace_id: str,
@@ -77,18 +81,39 @@ def _cli_context(
 ) -> CliInvocationContext:
     if trusted_context is not None:
         return replace(trusted_context, workspace_id=workspace_id)
+    user_id = None
     if options.get("operator") == "true":
         default_caller_kind = "operator"
         default_effective_mode = "full-access"
+        user_id = _host_operator_actor_id()
     return CliInvocationContext(
         caller_kind=default_caller_kind,
         workspace_id=workspace_id,
         agent_id=None,
         effective_mode=default_effective_mode,
         platform_role=None,
-        user_id=None,
+        user_id=user_id,
         workspace_role=None,
     )
+
+
+def _host_operator_actor_id() -> str:
+    """Bind direct ``--operator`` attribution to the effective host principal."""
+    get_effective_uid = getattr(os, "geteuid", None)
+    if not callable(get_effective_uid):
+        raise RuntimeError("Host operator identity is unavailable on this platform.")
+    try:
+        effective_uid = get_effective_uid()
+    except OSError as error:
+        raise RuntimeError("Host operator identity is unavailable on this platform.") from error
+    if (
+        not isinstance(effective_uid, int)
+        or isinstance(effective_uid, bool)
+        or effective_uid < 0
+    ):
+        raise RuntimeError("Host operator identity is invalid.")
+    return f"host-operator:uid:{effective_uid}"
+
 
 def _mcp_context(
     options: dict[str, str],

@@ -39,6 +39,9 @@ class ApiCertificateTargetTest(TestCase):
             ))
             with mock.patch("core.runtime.authority.feature_enabled", return_value=True), mock.patch(
                 "core.runtime.authority_service.live_runtime_actor_policy", return_value=(True, "fixture-actor"),
+            ), mock.patch(
+                "core.runtime.authority_service.require_remote_agentic_authority",
+                return_value=None,
             ):
                 authority = resolve_effective_runtime_authority(
                     store, binding=binding, adapter=adapter, turn_id="target-turn", now=NOW,
@@ -111,12 +114,16 @@ class ApiCertificateTargetTest(TestCase):
                 with self.subTest(reason=reason), self.assertRaisesRegex(CapabilityCertificateError, reason):
                     validate_certificate_for_binding(store, binding=pin, adapter=adapter, now=NOW)
                 with self.subTest(refresh=reason), self.assertRaisesRegex(CapabilityCertificateError, reason):
-                    revalidate_runtime_authority_snapshot(
-                        SimpleNamespace(provider_store=store), session=SimpleNamespace(execution_binding=pin),
-                        adapter=adapter, now=NOW, authority=SimpleNamespace(
-                            execution_binding_id=pin.execution_binding_id, certificate_id=pin.capability_certificate_id,
-                        ),
-                    )
+                    with mock.patch(
+                        "core.runtime.authority_service.require_remote_agentic_authority",
+                        return_value=None,
+                    ):
+                        revalidate_runtime_authority_snapshot(
+                            SimpleNamespace(provider_store=store), session=SimpleNamespace(execution_binding=pin),
+                            adapter=adapter, now=NOW, authority=SimpleNamespace(
+                                execution_binding_id=pin.execution_binding_id, certificate_id=pin.capability_certificate_id,
+                            ),
+                        )
 
     def test_targetless_historical_api_certificate_fails_closed(self):
         for profile, adapter, binding, store in self.cases():

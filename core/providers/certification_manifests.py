@@ -162,11 +162,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="41",
+        suite_version="42",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-06-r41-p6-reviewed-gates-tcb31"
+            "2026-09-07-r42-p6-authoritative-dispatch-tcb32"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

@@ -1,6 +1,6 @@
 # Agentic provider preview operations
 
-Status date: 2026-09-03
+Status date: 2026-09-07
 
 Scope: operator runbook
 
@@ -14,6 +14,12 @@ production exposure.
 Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
+
+The contained source candidate is hosted adapter 38 / recipes 25 / Google
+profile 47 / OpenRouter profile 46 / suite 42 / TCB 32. Shared queue/handoff
+changes are represented by append-only Codex candidate revision 15; deployed
+revision 14 remains retained and must not be restarted, migrated, or cut over
+as a side effect of remote-provider certification.
 
 ## Phase-0 containment record and rollback procedure
 
@@ -92,7 +98,9 @@ operation.
   health, and egress state may only narrow authority.
 - OpenRouter remains pinned to `deepseek/deepseek-v4-flash` through
   `deepinfra/fp8`, with fallback disabled, required parameters, denied data
-  collection, required ZDR, and verified router metadata.
+  collection, required ZDR, and verified router metadata. Its main catalog must
+  resolve `deepseek/deepseek-v4-flash-20260423` and advertise exactly
+  `xhigh`/`high`, default `high`, and non-mandatory reasoning.
 - Tool execution is sequential. Google and OpenRouter preserve and journal
   every indexed proposal, including later OpenRouter indices and calls decoded
   before a terminal stream error. A multi-call response is denied and paired
@@ -104,8 +112,8 @@ operation.
   Tool-call exhaustion and cumulative tool-result-byte exhaustion both close
   the catalog. A last-mile tightening rebuilds an uncommitted exploration
   request as finalization, or denies a later lazy-open race before egress. Once
-  tools close, Google omits `tools` and OpenRouter sends `tools: []` with
-  `tool_choice: none`; both carry the exact Core finalization instruction.
+  tools close, Google omits `tools` and OpenRouter omits both `tools` and
+  `tool_choice`; both carry the exact Core finalization instruction.
   Whitespace is not success, and an unexpected final call is journaled and
   `budget_denied` before the single recovery.
 - Provider-private bytes and tool payloads remain encrypted Core state. Never
@@ -129,12 +137,13 @@ operation.
   path spellings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v27 statically audits six maintained
+  authority refresh, or dispatch. Since manifest v27, six maintained
   import closures, including package initializers and the
   `core/inter_agent/generalist_context.py` content-composition path, and hashes
   the executable roots of every built-in app surface admitted as a hosted read;
   a reached local dependency or app-code drift outside the artifact set makes
-  identity/authority calculation fail.
+  identity/authority calculation fail. Manifest v32 is the current
+  authoritative-dispatch candidate.
 - Hosted shell/process sandboxes use an immutable descriptor-confined workspace
   snapshot that excludes every `.git` component; the live workspace namespace
   is never bound into the sandbox. Inter-agent CLI/MCP tools carry explicit
@@ -142,9 +151,11 @@ operation.
 
 ## Future pre-activation gate (suspended pending certification and release review)
 
-This section is retained as future work and must not be executed as part of P4.
-`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false; feature flags alone
-cannot reopen remote agentic admission.
+This section is retained as future work and must not be executed until P6-L/S
+are complete. `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true because the
+server-owned persisted boundary is implemented; it grants no availability.
+The global and per-provider flags remain default-off, and even enabled flags
+cannot replace a current matching workspace attestation.
 
 An operator must verify all of the following before enabling a workspace
 binding:
@@ -153,8 +164,8 @@ binding:
    revision, active unexpired certificate, exact adapter artifact digest, model,
    model revision and revision policy, protocol, and upstream set. Google must
    expose `exact` and the same authenticated live catalog version; OpenRouter
-   must expose `provider_alias` plus the pinned endpoint/upstream catalog
-   identity.
+   must expose `provider_alias`, resolved 20260423 slug, exact `xhigh`/`high`
+   reasoning contract, and the pinned endpoint/upstream catalog identity.
 2. The current matrices in
    `docs/reference/google_agentic_certification_matrix.md` or
    `docs/reference/openrouter_agentic_certification_matrix.md` match the
@@ -194,7 +205,7 @@ use only the Core commands
 `core.providers.agentic.attestation.revoke` (expected revision plus reason).
 Every mutation records the authenticated actor and an append-only redaction-safe
 audit fact. Do not issue an attestation merely to exercise P3 or to bypass the
-false availability gate.
+provider kill switches or missing certification gates.
 
 Runtime-public classification is a separate authority, not an attestation.
 Trusted operators use only
@@ -219,9 +230,12 @@ requires a fresh read and operator review; never overwrite it blindly.
 
 ## Canary and observation
 
-Start with one synthetic workspace and one actor. Create new sessions only;
-never retrofit a running session. Exercise a read-only request, one denied
-unauthorized-tool request, cancellation, and restart recovery.
+Start with one new disposable synthetic workspace, one profile and one actor.
+Create new sessions only; never retrofit a running session. Exercise the whole
+Full Workspace contract with benign synthetic reads and confirmed disposable
+mutations, plus one denied unauthorized-tool request, cancellation, restart
+recovery, and a real rollback/cleanup rehearsal. A read-only canary does not
+certify the target product.
 
 For each canary, verify:
 

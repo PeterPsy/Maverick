@@ -292,9 +292,10 @@ predicates in one collection CAS (locked local atomic replacement or Mongo
 server `$$NOW`). A worker paused after its final cooperative check therefore
 cannot win after expiry even when timeout persistence is delayed. Ambiguous
 non-read effects remain `execution_unknown`. Once a reserve
-boundary is reached, Core sends an empty tool catalog with an exact trusted
-final instruction. Google omits `tools`; OpenRouter sends `tools: []` with
-`tool_choice: none` and never persists the request-scoped instruction into
+boundary is reached, Core sends an empty internal tool catalog with an exact
+trusted final instruction. Google and OpenRouter both omit `tools`; OpenRouter
+also omits `tool_choice` because the pinned endpoint does not advertise the
+`none` mode. Neither provider persists the request-scoped instruction into
 later-turn history. Codec drift fails before transport.
 
 Whitespace is durably rejected and staged state rolls back. An unexpected

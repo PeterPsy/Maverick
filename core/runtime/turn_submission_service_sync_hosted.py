@@ -83,6 +83,7 @@ def execute_sync_plain_hosted_turn(
         session_id=session.session_id,
         turn_id=turn.turn_id,
         on_provider_accepted=record_provider_accepted,
+        workspace_store=getattr(state, "workspace_store", None),
     ) as (provider_session, provider_accepted):
         result, routing_decision = execute_plain_hosted_text_turn(
             state,

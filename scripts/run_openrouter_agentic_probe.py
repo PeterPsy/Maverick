@@ -25,7 +25,10 @@ from core.providers.openrouter_agentic_catalog import preflight_openrouter_agent
 from core.providers.openrouter_agentic_client import OpenRouterAgenticClient
 from core.providers.openrouter_agentic_transport import OpenRouterAgenticHttpTransport
 from core.providers.openrouter_agentic_models import (
-    OPENROUTER_AGENTIC_MODEL_ID, OPENROUTER_AGENTIC_MODEL_REVISION,
+    OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+    OPENROUTER_AGENTIC_MODEL_ID,
+    OPENROUTER_AGENTIC_MODEL_REVISION,
+    OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
 )
 from core.providers.openrouter_agentic_profile import (
     OPENROUTER_CERTIFIED_REASONING_EFFORTS,
@@ -224,20 +227,32 @@ def _finish(events, request_count: int, filesystem_result_count: int, catalog, *
         and sum(event.event_type == "usage" for event in events) >= request_count
         and sum(event.event_type == "provider_state" for event in events) >= request_count
         and not any(event.event_type == "error" for event in events)
-        and catalog.supports_tool_choice_none is True
         and catalog.context_length >= 16_384
         and catalog.max_completion_tokens >= 16_384
+        and catalog.resolved_model_id == OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
+        and catalog.reasoning_efforts == CERTIFIED_REASONING_EFFORTS
+        and catalog.default_reasoning_effort
+        == OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
+        and catalog.reasoning_mandatory is False
     )
     print(json.dumps({
         "target_digest": builtin_api_certification_target("openrouter"),
         "run_nonce": os.environ.get("MAVERICK_CERTIFICATION_RUN_NONCE", ""),
         "catalog_snapshot_digest": catalog.catalog_snapshot_digest,
+        "catalog_model_metadata_record_digest": (
+            catalog.model_metadata_record_digest
+        ),
         "catalog_model_record_digest": catalog.model_catalog_record_digest,
         "catalog_zdr_record_digest": catalog.zdr_catalog_record_digest,
+        "catalog_reasoning_efforts": catalog.reasoning_efforts,
+        "catalog_default_reasoning_effort": catalog.default_reasoning_effort,
+        "catalog_reasoning_mandatory": catalog.reasoning_mandatory,
         "context_length": catalog.context_length,
+        "finalization_tool_catalog_mode": "omitted",
         "filesystem_result_count": filesystem_result_count,
         "max_completion_tokens": catalog.max_completion_tokens,
         "reasoning_efforts": CERTIFIED_REASONING_EFFORTS,
+        "resolved_model_id": catalog.resolved_model_id,
         "request_count": request_count,
         "succeeded": succeeded,
         "supports_tool_choice_none": catalog.supports_tool_choice_none,

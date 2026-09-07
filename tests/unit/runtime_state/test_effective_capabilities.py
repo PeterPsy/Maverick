@@ -247,6 +247,9 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             "core.runtime.authority_service.live_runtime_actor_policy",
             return_value=(True, "actor:live:1"),
         ), patch(
+            "core.runtime.authority_service.require_remote_agentic_authority",
+            return_value=None,
+        ), patch(
             "core.runtime.authority_service.certified_tcb_revision_fence",
             return_value=authority.tcb_revision_fence,
         ), patch(
@@ -272,6 +275,9 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         with self.assertRaisesRegex(
             CapabilityCertificateError,
             "certificate_revoked",
+        ), patch(
+            "core.runtime.authority_service.require_remote_agentic_authority",
+            return_value=None,
         ):
             revalidate_runtime_authority_snapshot(**arguments)
 

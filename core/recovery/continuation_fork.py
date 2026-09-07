@@ -154,6 +154,7 @@ def _admit_runtime_session_once(
             session=current,
             target_session_id=successor_id,
             now=now,
+            workspace_store=getattr(state, "workspace_store", None),
         )
         if assessment.status == "direct":
             return RuntimeContinuationResult(
@@ -270,6 +271,7 @@ def _inventory_admission_assessment(
             session=session,
             target_session_id=target_session_id,
             now=now,
+            workspace_store=getattr(state, "workspace_store", None),
         )
     try:
         predecessor = state.runtime_store.get_session(

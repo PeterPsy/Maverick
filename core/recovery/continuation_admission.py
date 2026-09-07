@@ -20,6 +20,7 @@ from core.runtime.execution_binding import RuntimeExecutionBinding
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.provider_step_admission import provider_step_admission_reason
+from core.runtime.remote_agentic_admission import require_remote_agentic_authority
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeStore
 
@@ -60,6 +61,7 @@ def runtime_session_admission_payload(
     *,
     session: RuntimeSessionRecord,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> dict[str, object]:
     """Return a redaction-safe read-only admission status for UI and operators."""
     digest = hashlib.sha256(session.session_id.encode("utf-8")).hexdigest()[:24]
@@ -70,6 +72,7 @@ def runtime_session_admission_payload(
         session=session,
         target_session_id=f"runtime-admission-{digest}",
         now=now,
+        workspace_store=workspace_store,
     )
     source = session.execution_binding
     target = assessment.target_execution_binding
@@ -95,6 +98,7 @@ def assess_runtime_session_admission(
     session: RuntimeSessionRecord,
     target_session_id: str,
     now: datetime | None = None,
+    workspace_store: object | None = None,
 ) -> RuntimeAdmissionAssessment:
     """Validate direct authority or prove one conservative continuation upgrade."""
     try:
@@ -123,6 +127,7 @@ def assess_runtime_session_admission(
             registry,
             session=session,
             now=now,
+            workspace_store=workspace_store,
         )
     except ProviderError as error:
         source_reason = _provider_reason(error)
@@ -176,6 +181,7 @@ def assess_runtime_session_admission(
             workspace_binding_id=target_workspace_binding_id,
             reasoning_effort=binding.reasoning_effort,
             now=now,
+            workspace_store=workspace_store,
         )
         capabilities, proof_digest = prove_compatible_runtime_upgrade(
             provider_store,
@@ -204,10 +210,16 @@ def _validate_direct_authority(
     *,
     session: RuntimeSessionRecord,
     now: datetime | None,
+    workspace_store: object | None,
 ) -> None:
     binding = session.execution_binding
     if binding is None:
         raise ValueError("runtime_execution_binding_missing")
+    require_remote_agentic_authority(
+        binding,
+        workspace_id=session.workspace_id,
+        workspace_store=workspace_store,
+    )
     adapter = registry.get_agentic_runtime_adapter(binding.runtime_engine_id)
     validate_certificate_for_binding(
         provider_store,

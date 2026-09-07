@@ -167,6 +167,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                 require_turn_queue_session_executable(
                     state.runtime_store,
                     current_session,
+                    workspace_store=getattr(state, "workspace_store", None),
                 )
                 if runtime_session_is_plain_hosted_chat(current_session):
                     status = "skipped_plain_hosted"
@@ -197,6 +198,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                 with runtime_provider_start_handoff(
                     state.runtime_store,
                     session_id=current_session.session_id,
+                    workspace_store=getattr(state, "workspace_store", None),
                 ) as (provider_session, _provider_accepted):
                     if provider_session.execution_binding is None:
                         legacy_prewarm = getattr(resolved_engine.legacy_adapter, "prewarm_runtime", None)
@@ -883,6 +885,7 @@ def submit_runtime_turn_async(
                         session_id=current_session.session_id,
                         turn_id=turn.turn_id,
                         on_provider_accepted=record_plain_provider_accepted,
+                        workspace_store=getattr(state, "workspace_store", None),
                     ) as (provider_session, provider_accepted):
                         result, routing_decision = execute_plain_hosted_text_turn(
                             state,
@@ -1026,6 +1029,7 @@ def submit_runtime_turn_async(
                         session_id=current_session.session_id,
                         turn_id=turn.turn_id,
                         on_provider_accepted=record_provider_accepted,
+                        workspace_store=getattr(state, "workspace_store", None),
                     ) as (provider_session, provider_accepted):
                         result = execute_runtime_turn(
                             session=provider_session,

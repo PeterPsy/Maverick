@@ -92,9 +92,14 @@ class AgenticProbeFailClosedTest(unittest.TestCase):
                 "MAVERICK_CERTIFICATION_MAX_COST_MICROUSD": "1000000",
         }), patch.object(openrouter, "OpenRouterAgenticClient", return_value=client), patch.object(
             openrouter, "preflight_openrouter_agentic_catalog", return_value=SimpleNamespace(
-                upstream_id="deepinfra/fp8", model_catalog_record_digest="a" * 64,
+                upstream_id="deepinfra/fp8",
+                resolved_model_id="deepseek/deepseek-v4-flash-20260423",
+                reasoning_efforts=("xhigh", "high"),
+                default_reasoning_effort="high", reasoning_mandatory=False,
+                model_metadata_record_digest="d" * 64,
+                model_catalog_record_digest="a" * 64,
                 zdr_catalog_record_digest="b" * 64, catalog_snapshot_digest="c" * 64,
-                supports_tool_choice_none=True, context_length=1_048_576,
+                supports_tool_choice_none=False, context_length=1_048_576,
                 max_completion_tokens=65_536,
             ),
         ), redirect_stdout(output):

@@ -15,8 +15,10 @@ from core.providers.agentic_workspace_policy import (
 )
 from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_MODEL_REVISION,
+    OPENROUTER_AGENTIC_REASONING_EFFORTS,
 )
 from core.providers.maverick_agent_builtins import (
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
@@ -36,15 +38,15 @@ from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "45"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "46"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
     "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44",
+    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45",
 )
-OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
-OPENROUTER_DEFAULT_REASONING_EFFORT = "high"
+OPENROUTER_CERTIFIED_REASONING_EFFORTS = OPENROUTER_AGENTIC_REASONING_EFFORTS
+OPENROUTER_DEFAULT_REASONING_EFFORT = OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
 OPENROUTER_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{OPENROUTER_AGENTIC_PROFILE_ID}:{OPENROUTER_AGENTIC_PROFILE_REVISION}"
 )

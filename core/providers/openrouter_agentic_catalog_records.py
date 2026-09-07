@@ -35,6 +35,30 @@ def find_model_record(
     )
 
 
+def find_model_metadata_record(
+    payload: object,
+    *,
+    model_id: str,
+) -> dict[str, object]:
+    """Select exactly one model from OpenRouter's main model catalog."""
+    root = _mapping(payload)
+    value = root.get("data")
+    if not isinstance(value, list):
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    matches = [
+        dict(item)
+        for item in value
+        if isinstance(item, dict) and item.get("id") == model_id
+    ]
+    if len(matches) != 1:
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    return matches[0]
+
+
 def find_zdr_record(
     payload: object,
     *,
@@ -91,6 +115,47 @@ def validate_record(
     return supported
 
 
+def validate_model_metadata_record(
+    record: dict[str, object],
+    *,
+    resolved_model_id: str,
+    reasoning_efforts: tuple[str, ...],
+    default_reasoning_effort: str,
+    request_reasoning_effort: str | None,
+    required_context_tokens: int,
+) -> int:
+    """Require the exact resolved model and its advertised reasoning contract."""
+    reasoning = record.get("reasoning")
+    if not isinstance(reasoning, dict):
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    advertised = reasoning.get("supported_efforts")
+    normalized_request_effort = str(request_reasoning_effort or "").strip().lower()
+    if (
+        record.get("canonical_slug") != resolved_model_id
+        or "expiration_date" not in record
+        or record.get("expiration_date") is not None
+        or reasoning.get("mandatory") is not False
+        or not isinstance(advertised, list)
+        or any(not isinstance(value, str) for value in advertised)
+        or len(advertised) != len(reasoning_efforts)
+        or len(set(advertised)) != len(advertised)
+        or set(advertised) != set(reasoning_efforts)
+        or reasoning.get("default_effort") != default_reasoning_effort
+        or normalized_request_effort not in reasoning_efforts
+    ):
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    context_length = positive_int(record.get("context_length"))
+    if context_length < required_context_tokens:
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    return context_length
+
+
 def catalog_identity(
     record: dict[str, object],
     *,
@@ -111,12 +176,38 @@ def catalog_identity(
     }
 
 
+def model_metadata_identity(record: dict[str, object]) -> dict[str, object]:
+    """Project only stable security-relevant main-catalog model metadata."""
+    reasoning = record.get("reasoning")
+    reasoning_data = reasoning if isinstance(reasoning, dict) else {}
+    return {
+        "id": record.get("id"),
+        "canonical_slug": record.get("canonical_slug"),
+        "context_length": record.get("context_length"),
+        "expiration_date": record.get("expiration_date"),
+        "reasoning": {
+            "mandatory": reasoning_data.get("mandatory"),
+            "supported_efforts": tuple(
+                sorted(reasoning_data.get("supported_efforts", ()))
+            ),
+            "default_effort": reasoning_data.get("default_effort"),
+        },
+    }
+
+
 def supports_tool_choice_none(record: dict[str, object]) -> bool:
+    return _supports_tool_choice(record, "none")
+
+
+def supports_tool_choice_auto(record: dict[str, object]) -> bool:
+    return _supports_tool_choice(record, "auto")
+
+
+def _supports_tool_choice(record: dict[str, object], mode: str) -> bool:
     value = record.get("supports_tool_choice")
     return (
         isinstance(value, dict)
-        and value.get("none") is True
-        and value.get("auto") is True
+        and value.get(mode) is True
         and all(isinstance(item, bool) for item in value.values())
     )
 
@@ -165,9 +256,13 @@ def _mapping(value: object) -> dict[str, object]:
 __all__ = [
     "catalog_identity",
     "configured_upstream_id",
+    "find_model_metadata_record",
     "find_model_record",
     "find_zdr_record",
+    "model_metadata_identity",
     "positive_int",
+    "supports_tool_choice_auto",
     "supports_tool_choice_none",
+    "validate_model_metadata_record",
     "validate_record",
 ]

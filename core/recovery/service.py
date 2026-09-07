@@ -148,6 +148,7 @@ def record_runtime_health(
     provider_store=None,
     runtime_store=None,
     provider_registry=None,
+    workspace_store=None,
     observability_store=None,
     now=None,
 ) -> HealthCheckResult:
@@ -157,6 +158,7 @@ def record_runtime_health(
         provider_store=provider_store,
         runtime_store=runtime_store,
         provider_registry=provider_registry,
+        workspace_store=workspace_store,
         now=now,
     )
     saved = store.save_health_result(result)

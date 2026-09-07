@@ -102,9 +102,32 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
                 "quantizations": ["fp8"],
             },
         )
-        self.assertEqual(payload["reasoning"], {"effort": "medium"})
+        self.assertEqual(payload["reasoning"], {"effort": "high"})
         self.assertEqual(payload["stream_options"], {"include_usage": True})
         self.assertNotIn("parallel_tool_calls", payload)
+
+    def test_request_accepts_only_catalog_advertised_reasoning_efforts(self) -> None:
+        for effort in ("xhigh", "high"):
+            with self.subTest(effort=effort):
+                transport = _ScriptedTransport([
+                    _text_stream(f"generation-reasoning-{effort}", "answer")
+                ])
+                events = asyncio.run(_events(
+                    OpenRouterAgenticClient(transport=transport),
+                    _request(f"request-reasoning-{effort}", reasoning_effort=effort),
+                ))
+                self.assertEqual(events[-1].event_type, "completed")
+                self.assertEqual(transport.payloads[0]["reasoning"], {"effort": effort})
+
+        for effort in ("minimal", "low", "medium"):
+            with self.subTest(effort=effort):
+                transport = _ScriptedTransport([])
+                events = asyncio.run(_events(
+                    OpenRouterAgenticClient(transport=transport),
+                    _request(f"request-reasoning-{effort}", reasoning_effort=effort),
+                ))
+                self.assertEqual(events[0].error_code, "provider_request_invalid")
+                self.assertEqual(transport.payloads, [])
 
     def test_any_relaxed_router_control_fails_before_transport(self) -> None:
         certified = openrouter_agentic_routing_constraint()
@@ -261,14 +284,20 @@ async def _events(client, request):
     ]
 
 
-def _request(request_id: str, *, private_state=None, tool_results=()) -> AgenticModelRequest:
+def _request(
+    request_id: str,
+    *,
+    private_state=None,
+    tool_results=(),
+    reasoning_effort="high",
+) -> AgenticModelRequest:
     pairing = private_state is not None and bool(tool_results)
     return AgenticModelRequest(
         schema_version="1",
         request_id=request_id,
         correlation_id="turn-openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,
-        reasoning_effort="medium",
+        reasoning_effort=reasoning_effort,
         content_blocks=(
             AgenticRequestContentBlock(
                 f"{request_id}:system", "system", "public",

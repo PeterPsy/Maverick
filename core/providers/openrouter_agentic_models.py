@@ -6,14 +6,16 @@ from dataclasses import dataclass
 
 
 OPENROUTER_AGENTIC_MODEL_ID = "deepseek/deepseek-v4-flash"
-OPENROUTER_AGENTIC_MODEL_REVISION = "openrouter-catalog-2026-08-17"
+OPENROUTER_AGENTIC_MODEL_REVISION = "openrouter-catalog-2026-09-07"
 OPENROUTER_AGENTIC_RESOLVED_MODEL_ID = "deepseek/deepseek-v4-flash-20260423"
+OPENROUTER_AGENTIC_REASONING_EFFORTS = ("xhigh", "high")
+OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT = "high"
 OPENROUTER_AGENTIC_UPSTREAM_ID = "deepinfra/fp8"
 OPENROUTER_AGENTIC_PROVIDER_NAME = "DeepInfra"
 OPENROUTER_AGENTIC_ENDPOINT_ID = "openrouter-chat-completions-v1"
 OPENROUTER_AGENTIC_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_AGENTIC_CODEC_ID = "openrouter-chat-completions"
-OPENROUTER_AGENTIC_CODEC_VERSION = "2"
+OPENROUTER_AGENTIC_CODEC_VERSION = "3"
 OPENROUTER_AGENTIC_SCHEMA_VERSION = "2"
 OPENROUTER_AGENTIC_CONTENT_TYPE = "application/vnd.maverick.openrouter-chat-state+json"
 

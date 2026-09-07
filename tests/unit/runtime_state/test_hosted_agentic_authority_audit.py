@@ -40,6 +40,9 @@ class HostedAgenticAuthorityAuditTest(unittest.TestCase):
         ), patch(
             "core.runtime.authority_service.record_runtime_event",
             record,
+        ), patch(
+            "core.runtime.authority_service.require_remote_agentic_authority",
+            return_value=None,
         ):
             resolve_and_record_runtime_authority(
                 state,

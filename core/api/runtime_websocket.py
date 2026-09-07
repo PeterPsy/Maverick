@@ -475,6 +475,7 @@ async def stream_runtime_session_events(
                     state.runtime_store,
                     state.provider_registry,
                     session=session,
+                    workspace_store=getattr(state, "workspace_store", None),
                 ),
                 requested_session_id=requested_session_id,
                 lineage_session_ids=[item.session_id for item in lineage],

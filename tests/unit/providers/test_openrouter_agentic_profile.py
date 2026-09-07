@@ -78,8 +78,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "45")
-        self.assertEqual(profile.adapter_version_constraint, "==37")
+        self.assertEqual(profile.revision, "46")
+        self.assertEqual(profile.adapter_version_constraint, "==38")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
             ("cli", "mcp", "app-interface", "core-capability"),
@@ -283,7 +283,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
         self.assertEqual(
             certificate.certified_reasoning_efforts,
-            ("minimal", "low", "medium", "high"),
+            ("xhigh", "high"),
         )
         self.assertEqual(certificate.default_reasoning_effort, "high")
         self.assertEqual(evidence.matrix_revision, OPENROUTER_CERTIFICATION_MATRIX_REVISION)

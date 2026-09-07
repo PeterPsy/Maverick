@@ -8,6 +8,10 @@ from core.providers.provider_agentic_runtime_metadata import (
     build_hosted_agentic_runtime_definition,
 )
 from core.providers.provider_google_metadata import build_google_ai_studio_definition
+from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+    OPENROUTER_AGENTIC_REASONING_EFFORTS,
+)
 from core.providers.models import (
     ProviderCapabilitySet,
     ProviderCredentialRequirement,
@@ -184,12 +188,17 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                 model_id="deepseek/deepseek-v4-flash",
                 label="DeepSeek V4 Flash",
                 description="OpenRouter paid text model candidate for high-throughput fast_model routing.",
-                default_reasoning_effort="high",
+                default_reasoning_effort=OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
                 supported_reasoning_efforts=[
-                    ProviderReasoningOption(effort="minimal", label="Minimal", description="Fastest responses"),
-                    ProviderReasoningOption(effort="low", label="Low", description="Light reasoning"),
-                    ProviderReasoningOption(effort="medium", label="Medium", description="Balanced reasoning"),
-                    ProviderReasoningOption(effort="high", label="High", description="Deep reasoning"),
+                    ProviderReasoningOption(
+                        effort=effort,
+                        label={"xhigh": "Extra high", "high": "High"}[effort],
+                        description={
+                            "xhigh": "Maximum supported reasoning depth",
+                            "high": "Default deep reasoning",
+                        }[effort],
+                    )
+                    for effort in OPENROUTER_AGENTIC_REASONING_EFFORTS
                 ],
                 input_modalities=["text", "pdf"],
                 output_modalities=["text"],

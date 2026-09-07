@@ -61,9 +61,6 @@ const providerOptions: ProviderItem[] = [
     profile_detail: "Profile: google@1 · Recipe: google@1 · Full Workspace: codex-baseline-v20",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
-      { effort: "minimal", label: "Minimal", description: null },
-      { effort: "low", label: "Low", description: null },
-      { effort: "medium", label: "Medium", description: null },
       { effort: "high", label: "High", description: null },
     ],
   },
@@ -80,9 +77,7 @@ const providerOptions: ProviderItem[] = [
     profile_detail: "Profile: openrouter@1 · Recipe: openrouter@1 · Full Workspace: codex-baseline-v20",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
-      { effort: "minimal", label: "Minimal", description: null },
-      { effort: "low", label: "Low", description: null },
-      { effort: "medium", label: "Medium", description: null },
+      { effort: "xhigh", label: "Extra high", description: null },
       { effort: "high", label: "High", description: null },
     ],
   },

@@ -67,6 +67,7 @@ def runtime_turn_executor(
                 owner_user_id=run.created_by_user_id,
                 created_by_user_id=run.created_by_user_id,
                 expected_recovery_generation=scheduler_generation,
+                workspace_store=getattr(state, "workspace_store", None),
             )
         current, _turn, events = service.send_runtime_message(
             state,

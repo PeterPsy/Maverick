@@ -92,6 +92,25 @@ class CertificationBehaviorTest(unittest.TestCase):
             receipt = fixture_live_receipt(provider, nonce="1" * 32)
             kwargs = dict(provider_id=provider, target_digest=builtin_api_certification_target(provider), run_nonce="1" * 32)
             self.assertEqual(validate_live_probe_receipt(receipt, **kwargs), receipt)
+            if provider == "openrouter":
+                with self.assertRaises(CapabilityCertificateError):
+                    validate_live_probe_receipt(
+                        {**receipt, "finalization_tool_catalog_mode": "empty"},
+                        **kwargs,
+                    )
+                for field, value in (
+                    ("catalog_reasoning_efforts", ["minimal", "low", "medium", "high"]),
+                    ("catalog_default_reasoning_effort", "xhigh"),
+                    ("catalog_reasoning_mandatory", True),
+                    ("resolved_model_id", "deepseek/deepseek-v4-flash"),
+                ):
+                    with self.subTest(field=field), self.assertRaises(
+                        CapabilityCertificateError
+                    ):
+                        validate_live_probe_receipt(
+                            {**receipt, field: value},
+                            **kwargs,
+                        )
             for field, value in (("succeeded", 1), ("request_count", 99), ("run_nonce", "2" * 32),
                                  ("target_digest", "e" * 64), ("prompt", "private")):
                 with self.subTest(provider=provider, field=field), self.assertRaises(CapabilityCertificateError):

@@ -26,13 +26,15 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-Current remote candidates use hosted adapter 36, recipe 23, suite 40 and TCB
-manifest 30 (Google/OpenRouter profiles 45/44). Exact-target live receipts and
+Current remote candidates use hosted adapter 38, recipe 25, suite 42 and TCB
+manifest 32 (Google/OpenRouter profiles 47/46). Exact-target live receipts and
 independently observed natural conformance are required before trusted signing
 and publication; neither step grants release authority. The procedure is in
 `docs/runbooks/agentic_certification_evidence.md`. Historical revision numbers
 below describe earlier implementation checkpoints, not current certification.
-Codex retains its existing revision-14 artifact and connection authority.
+The deployed backend retains Codex revision-14 artifact and connection
+authority. Shared queue/handoff changes are represented by a separate,
+append-only revision-15 candidate and do not authorize an automatic cutover.
 
 ## Pinned Agentic Session Identity
 
@@ -282,6 +284,14 @@ containment, and healthy native installation where applicable. Missing or
 narrowed state is `unavailable`; it is never silently offered as a lesser
 agent.
 
+For remote API profiles, availability and workspace authority are distinct.
+The attestation implementation is present, while the global and provider kill
+switches default off. When they are deliberately enabled, Core re-reads the
+typed persisted workspace attestation during definition resolution, binding
+pinning, session/child creation, queue, provider-start handoff, authority
+refresh, continuation and recovery. Missing, malformed, mismatched or revoked
+records fail closed; persisted state overrides any older supplied snapshot.
+
 Settings renders family and Full Workspace state as derived information. It
 does not expose capability tiers, a `Full/Read-only` switch, per-agent controls
 that remove required filesystem/shell/CLI/MCP/skill surfaces, or a way to
@@ -477,7 +487,9 @@ plain hosted chat, this profile does not inherit workspace OpenRouter routing
 preferences: its immutable routing constraint always disables fallback,
 requires parameter support, denies data collection, requires ZDR, and requires
 FP8. It preserves tool-call and reasoning continuation only in encrypted
-provider-private state. The exact dated evidence and promotion requirements
+provider-private state. Before transport it checks the main model, exact
+endpoint and ZDR catalogs; the main record must resolve the 20260423 slug and
+advertise exactly `xhigh`/`high` with default `high`. The exact dated evidence and promotion requirements
 are in `docs/reference/openrouter_agentic_certification_matrix.md`.
 
 Speech-output OpenRouter models such as `hexgrad/kokoro-82m` are cataloged in
@@ -915,7 +927,7 @@ When the tool-call or cumulative tool-result-byte budget reaches zero—or
 another protected resource reaches its reserve—the next request has phase
 `finalization`, no Core tools, and one exact
 trusted finalization instruction placed last. Google omits the `tools` member;
-OpenRouter sends `tools: []` with `tool_choice: none`; its instruction is
+OpenRouter omits both `tools` and `tool_choice`; its instruction is
 request-scoped wire content and is excluded from durable chat history. Both
 codecs reject a phase/catalog/instruction mismatch before transport. Empty or whitespace final
 text is durably rejected and its staged state rolled back, never committed as a

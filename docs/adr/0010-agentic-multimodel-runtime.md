@@ -487,10 +487,11 @@ exhausts either tool allowance after an exploration candidate was prepared,
 Core releases its uncommitted step reservation and rebuilds it as tool-less
 finalization before provider egress; tightening at the later lazy-open boundary
 fails closed before the iterator advances. The next normalized
-request has phase `finalization`, an empty catalog, and an exact trusted Core
-instruction placed after all other content. Google omits `tools`; OpenRouter
-sends `tools: []` and `tool_choice: none`, and excludes that request-scoped
-instruction from durable history. Both codecs reject a non-empty final catalog,
+request has phase `finalization`, an empty internal catalog, and an exact trusted
+Core instruction placed after all other content. Google and OpenRouter both
+omit `tools`; OpenRouter also omits `tool_choice` because the pinned endpoint
+does not advertise the `none` mode, and excludes that request-scoped instruction
+from durable history. Both codecs reject a non-empty final catalog,
 missing/modified instruction, or incoherent phase before transport.
 
 Synchronous tool surfaces execute behind a pre-terminal deadline and
@@ -625,11 +626,12 @@ preflight while egress decisions are still staged. Google fetches and validates
 the official live Interactions OpenAPI operation plus the authenticated exact
 model record, including streaming, usage, function tools, reasoning, and token
 limits; it also verifies the exact wire shape and omits tools on final requests.
-OpenRouter verifies the exact
-wire shape plus fresh model and ZDR endpoint records, including FP8 identity,
-all translated parameters, `tool_choice:none`, completion capacity, and total
-input-plus-output context capacity. Failed or incoherent preflight commits no
-content egress and sends no completion request.
+OpenRouter verifies the exact wire shape plus fresh main-model, endpoint, and
+ZDR records, including the resolved model revision, exact `xhigh`/`high`
+reasoning metadata, FP8 identity, all translated parameters, the endpoint's
+lack of `tool_choice:none`, completion capacity, and total input-plus-output
+context capacity. Failed or incoherent preflight commits no content egress and
+sends no completion request.
 
 ### 8. Remote-provider egress is decided per content block
 
@@ -998,8 +1000,11 @@ to provide live narrowing for already-pinned sessions.
 Values `0`, `false`, `no`, and `off` disable a surface. Values `1`, `true`,
 `yes`, and `on` enable its switch. An absent value uses the declared default;
 an invalid configured value fails closed. Remote flags do not bypass the
-independent server-owned availability and attestation boundary;
-`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false for this decision state.
+independent server-owned availability and attestation boundary. The P6 source
+candidate sets `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` true only after wiring
+fresh persisted, workspace-scoped attestation reads through admission, queue,
+handoff, dispatch, authority, continuation, and recovery; hosted-runtime and
+provider-specific flags still default disabled.
 Disabling egress enforcement blocks hosted export rather than
 bypassing evaluation. Enabling the parallel-tool-call switch does not override
 the MVP's sequential policy ceilings: codecs account for every call and the

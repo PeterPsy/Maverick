@@ -118,6 +118,7 @@ def recovery_tool_specs(
                 provider_store=provider_store,
                 runtime_store=runtime_store,
                 provider_registry=provider_registry,
+                workspace_store=workspace_store,
                 observability_store=observability_store,
             )
         elif target_kind == "provider":

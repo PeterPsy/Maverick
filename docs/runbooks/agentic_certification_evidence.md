@@ -1,6 +1,6 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-09-06
+Status date: 2026-09-07
 
 Scope: trusted CI or operator-controlled certification worker
 
@@ -34,7 +34,8 @@ first and every later read. It also covers explicit steering fallback, productio
 server-admitted classification/resource-taint continuation, fail-closed generic
 tool results, preflight-before-egress ordering, Google stateless
 continuation and live OpenAPI/model preflight, and OpenRouter request-scoped
-authority plus `tool_choice:none`/context-capacity catalog evidence.
+authority plus three-catalog model/reasoning/endpoint/ZDR evidence and
+tool-control omission during finalization.
 The last-mile fixtures narrow nonnumeric policy immediately after the lazy-open
 authority refresh and require zero provider requests. They cover app-reference
 and skill blocks on requests with and without tools, verify the complete public
@@ -94,6 +95,13 @@ endpoint/upstream catalog identity.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
+Suite 42 retains that complete corpus and adds authoritative persisted
+attestation propagation/revocation at session, queue, dispatch, authority and
+continuation boundaries. It binds hosted adapter 38, recipes 25, Google profile
+47, OpenRouter profile 46, TCB 32 and the append-only Codex candidate artifact
+revision 15. The deployed Codex revision 14 remains retained and must not be
+cut over by a certification worker.
+
 This procedure is the only supported path from an executed provider suite to a
 Google or OpenRouter capability certificate. Bootstrap publishes uncertified,
 unbound Full Workspace preview definitions only. Test source files, fixture
@@ -107,8 +115,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v41 matrix revision
-  `2026-09-06-r41-p6-reviewed-gates-tcb31` declared by the provider
+- the dated suite-v42 matrix revision
+  `2026-09-07-r42-p6-authoritative-dispatch-tcb32` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -134,7 +142,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 41 \
+  --suite-version 42 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
@@ -151,8 +159,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-Both suite-41 manifests bind matrix revision
-`2026-09-06-r41-p6-reviewed-gates-tcb31`. OpenRouter uses suite id
+Both suite-42 manifests bind matrix revision
+`2026-09-07-r42-p6-authoritative-dispatch-tcb32`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
 collector-generated nonce. Duplicate fields, arbitrary text, extra payload
@@ -206,9 +214,10 @@ provider at every certified reasoning effort. The OpenRouter probe requires
 three sequential tool rounds plus a final response at every effort. The Google
 probe requires two sequential tool rounds plus a final response at its single
 certified effort, for exactly three provider requests. For both providers the
-last request must carry the exact Core finalization instruction and an empty
-tool catalog: OpenRouter sends `tools: []` with `tool_choice: none`, while
-Google omits `tools`. A whitespace-only final fails the probe. Requests are
+last request must carry the exact Core finalization instruction and no callable
+tool catalog: OpenRouter omits both `tools` and `tool_choice`, while Google
+omits `tools`. OpenRouter covers exactly `xhigh` and `high`, for eight provider
+requests and six filesystem results. A whitespace-only final fails the probe. Requests are
 paced (one second by default) so the probe itself does not justify diagnosing a
 quota incident. A Google failure must preserve the redaction-safe distinction
 among `quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not
@@ -271,16 +280,21 @@ reviewed source, restart the backend and verify health. Do not let a new writer
 publish these records while an older in-memory reader is serving them. Offline
 fixture verification neither performs this deployment nor authorizes live writes.
 
-Before its first completion request, the OpenRouter probe must fetch both the
-official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
-the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion
-capacity, total input-plus-output context capacity, explicit support for
-`tool_choice:none`, and every endpoint-gated translated parameter. In
-particular, the request must not reintroduce `parallel_tool_calls` while the
-endpoint does not declare it. The required set is derived from the translated
-completion payload rather than maintained as a second hard-coded parameter
-list. OpenRouter may stream more than one indexed proposal despite that
-omission. The certified decoder must retain every contiguous indexed call.
+Before its first completion request, the OpenRouter probe must fetch the main
+model catalog, official model endpoint catalog, and ZDR endpoint catalog in one
+bounded parallel window. It fails closed unless the main record resolves to
+`deepseek/deepseek-v4-flash-20260423`, is unexpired, and advertises exactly
+`xhigh`/`high` with default `high` and `mandatory=false`. The exact
+`deepinfra/fp8` record must be active, FP8, ZDR-listed, have enough completion
+and total input-plus-output context capacity, and support every endpoint-gated
+translated parameter actually present. The current record reports
+`supports_tool_choice.none=false`; that observation is retained, but it is not
+misrepresented as a capability because finalization sends neither tool-control
+field. The request must not reintroduce `parallel_tool_calls` while the endpoint
+does not declare it. The required set is derived from the translated completion
+payload rather than maintained as a second hard-coded parameter list.
+OpenRouter may stream more than one indexed proposal despite that omission. The
+certified decoder must retain every contiguous indexed call.
 Because parallel execution remains unsupported, the shared loop must persist
 every preliminary proposal and then return a denial result for each call; it
 must not discard or execute a secondary call. A missing index, duplicate call
@@ -294,9 +308,10 @@ The trust sequence is indivisible:
    source/projection/effect/trace evidence, resource bounds and absolute gates;
 4. signing, independent verification, and immutable certificate publication.
 
-The server-owned availability boundary still blocks remote admission after a
-valid certificate; certification evidence cannot substitute for later
-recovery, preview, canary, security-review, or production gates.
+The server-owned attestation boundary is implemented, but default-off global
+and provider kill switches still block remote admission. A valid certificate
+cannot substitute for current workspace attestation, later recovery, preview,
+canary, security-review, or production gates.
 
 The runner records and signs the source commit, suite identity/version, matrix
 revision and digest, adapter digest, certified TCB manifest id/version/digest,
@@ -337,7 +352,8 @@ capability projection, Chat/Settings governance, and provider codec/transport/
 live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
-separate local identity. Manifest v9 makes the transitive inventory executable:
+separate local identity. Since manifest v9 the transitive inventory is executable;
+manifest v32 is the current authoritative-dispatch candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

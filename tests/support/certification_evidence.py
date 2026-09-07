@@ -33,10 +33,17 @@ def fixture_live_receipt(provider_id, *, nonce):
             "test_run_id": "google-interactions-live:00000000-0000-0000-0000-000000000000",
         }
     return {
-        **common, "request_count": 16, "filesystem_result_count": 12,
+        **common, "request_count": 8, "filesystem_result_count": 6,
         "catalog_snapshot_digest": "a" * 64, "catalog_model_record_digest": "b" * 64,
-        "catalog_zdr_record_digest": "c" * 64, "context_length": 1_048_576,
-        "max_completion_tokens": 65_536, "supports_tool_choice_none": True,
+        "catalog_model_metadata_record_digest": "d" * 64,
+        "catalog_zdr_record_digest": "c" * 64,
+        "catalog_reasoning_efforts": list(efforts),
+        "catalog_default_reasoning_effort": "high",
+        "catalog_reasoning_mandatory": False,
+        "resolved_model_id": "deepseek/deepseek-v4-flash-20260423",
+        "context_length": 1_048_576,
+        "finalization_tool_catalog_mode": "omitted",
+        "max_completion_tokens": 65_536, "supports_tool_choice_none": False,
         "upstream_id": "deepinfra/fp8",
     }
 

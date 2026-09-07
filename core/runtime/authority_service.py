@@ -25,6 +25,7 @@ from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.async_runtime import run_runtime_coroutine
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.remote_agentic_admission import require_remote_agentic_authority
 from core.runtime.service import record_runtime_event
 
 if TYPE_CHECKING:
@@ -73,6 +74,15 @@ def resolve_runtime_authority_snapshot(
     binding = session.execution_binding
     if binding is None:
         raise ValueError("Effective authority requires a pinned execution binding.")
+    require_remote_agentic_authority(
+        binding,
+        workspace_id=str(
+            getattr(session, "workspace_id", "")
+            or getattr(binding, "workspace_id", "")
+            or ""
+        ),
+        workspace_store=getattr(state, "workspace_store", None),
+    )
     health = run_runtime_coroutine(adapter.health(RuntimeHealthContext(binding=binding)))
     if currently_authorized_tool_handles is None:
         handle_resolver = getattr(adapter, "currently_authorized_tool_handles", None)
@@ -116,6 +126,15 @@ def revalidate_runtime_authority_snapshot(
         or authority.certificate_id != binding.capability_certificate_id
     ):
         raise CapabilityCertificateError("runtime_authority_unavailable")
+    require_remote_agentic_authority(
+        binding,
+        workspace_id=str(
+            getattr(session, "workspace_id", "")
+            or getattr(binding, "workspace_id", "")
+            or ""
+        ),
+        workspace_store=getattr(state, "workspace_store", None),
+    )
     active_provider_store = provider_store or state.provider_store
     try:
         certificate = active_provider_store.get_capability_certificate(

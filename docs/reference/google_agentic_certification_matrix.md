@@ -1,23 +1,26 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-09-06
-Matrix revision: `2026-09-06-r41-p6-reviewed-gates-tcb31`
+Status date: 2026-09-07
+Matrix revision: `2026-09-07-r42-p6-authoritative-dispatch-tcb32`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==37`
+Adapter: `maverick-hosted-tool-loop==38`
 
 ## P6 candidate checkpoint
 
-Suite 41 / TCB manifest 31 / hosted adapter 37 / recipe 24 bind the P5
+Suite 42 / TCB manifest 32 / hosted adapter 38 / recipe 25 bind the P5
 executable family, native ACP lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and independently observed natural
 conformance before signing. Protocol-only success is not signable evidence. Historical evidence below is
-not evidence for this candidate. No runtime flag, Codex artifact, native
-certificate, or operator binding is changed by this checkpoint.
+not evidence for this candidate. The authoritative attestation implementation is
+available, but the global and Google kill switches still default off and no
+remote certificate or operator binding is enabled. Shared queue/dispatch changes
+are isolated behind Codex candidate revision 15; the running revision-14 process
+is not cut over by this checkpoint.
 
-Suite 41 additionally includes generic continuation repair/multi-hop, explicit
+Suite 42 additionally includes generic continuation repair/multi-hop, explicit
 native identity rejection and the reviewed app-effect delta regressions. Prior
 suite-40 failures are not waived or removed; the corrected fixtures and complete
 inventory must pass on this candidate. See
@@ -30,7 +33,7 @@ inventory must pass on this candidate. See
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `46` (revision `45` suspended) |
+| Immutable profile revision | `47` (revision `46` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
@@ -83,7 +86,7 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v31 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v32 plus six static import-closure contracts and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -105,7 +108,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r40 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total), with exact OpenAPI/model preflight before every generation | manifest step available; not run for r42 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -115,7 +118,7 @@ ordered manifest and canonical command digests, and only then signing and
 publication. Repository checks explicitly select `fixture_contract` and never
 start the retained `live_probe`; a fixture-only result is rejected by signing,
 verification, and publication. Even a valid candidate certificate cannot bypass
-Phase-0 admission.
+the default-off provider kill switches or workspace attestation admission.
 The executable signing and publication workflow is defined in
 `docs/runbooks/agentic_certification_evidence.md`.
 
@@ -472,3 +475,23 @@ binding, actual transport endpoint, and config-owned price policy. The immutable
 definition remains uncertified, unbound, contained, and unavailable; no live
 probe, signed run, provider completion, certificate, canary, or remote
 activation has been performed.
+
+Revision 45 pins hosted adapter 36, governed recipe 23, suite 40, matrix
+`2026-09-06-r40-p6-exact-target-tcb30`, and TCB manifest v30 for the initial P6
+full-family corpus and exact-target evidence boundary. Revision 46 pins adapter
+37, recipe 24, suite 41, matrix
+`2026-09-06-r41-p6-reviewed-gates-tcb31`, and TCB manifest v31 after the
+continuation-fixture and built-in-effect review remediation. Exact-source P6-D
+passed for revision 46 on historical commit `5a7ca45a`; no live/natural probe,
+certificate, or release followed.
+
+Revision 47 pins hosted adapter 38, governed recipe 25, suite 42, matrix
+`2026-09-07-r42-p6-authoritative-dispatch-tcb32`, TCB manifest v32, and Codex
+candidate revision 15 for the shared queue/handoff closure. Server-owned
+workspace attestations are freshly re-read at profile pinning, session/child
+creation, queue, provider handoff, authority refresh, continuation and recovery;
+revocation wins over stale supplied snapshots and blocks before persistence or
+dispatch. This revision remains contained and uncertified until its live and
+natural evidence, trusted review/signature, disposable canary and rollback
+exist. The deployed Codex revision-14 backend is not restarted or migrated by
+the candidate work.

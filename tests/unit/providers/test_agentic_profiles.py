@@ -172,6 +172,35 @@ class AgenticProfilesTest(unittest.TestCase):
                 now=NOW,
             )
 
+    def test_pinning_forwards_authoritative_workspace_store_to_profile_resolution(self) -> None:
+        workspace_store = object()
+        with patch(
+            "core.providers.agentic_profiles.feature_enabled",
+            return_value=True,
+        ), patch(
+            "core.providers.agentic_profiles.resolve_workspace_agentic_profile",
+            side_effect=AgenticProfileError("profile_resolution_stopped"),
+        ) as resolve, self.assertRaisesRegex(
+            AgenticProfileError,
+            "profile_resolution_stopped",
+        ):
+            build_pinned_execution_binding(
+                self.provider_store,
+                self.registry,
+                session_id="session-authoritative-workspace",
+                workspace_id="default",
+                execution_mode="sandbox",
+                workspace_store=workspace_store,
+                now=NOW,
+            )
+
+        resolve.assert_called_once_with(
+            self.provider_store,
+            workspace_id="default",
+            binding_id=None,
+            workspace_store=workspace_store,
+        )
+
     def test_pinning_rejects_every_authorized_profile_identity_drift(self) -> None:
         profile, binding = ensure_codex_workspace_profile(self.provider_store, definition=self.codex, selection=self.selection(), now=NOW)
         changed_definition = replace(profile, revision="changed-definition")

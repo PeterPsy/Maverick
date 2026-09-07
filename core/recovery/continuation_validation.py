@@ -15,6 +15,7 @@ from core.recovery.continuation_compatibility import (
 from core.runtime.continuation_handoff import RuntimeContinuationHandoff
 from core.runtime.authority import validate_live_runtime_binding_governance
 from core.runtime.errors import RuntimeProfileUpgradeRequiredError
+from core.runtime.remote_agentic_admission import require_remote_agentic_authority
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -31,6 +32,17 @@ def revalidate_continuation_handoff(
     if source is None:
         _reject("runtime_continuation_source_binding_missing")
     try:
+        workspace_store = getattr(state, "workspace_store", None)
+        require_remote_agentic_authority(
+            source,
+            workspace_id=predecessor.workspace_id,
+            workspace_store=workspace_store,
+        )
+        require_remote_agentic_authority(
+            target,
+            workspace_id=handoff.workspace_id,
+            workspace_store=workspace_store,
+        )
         adapter = state.provider_registry.get_agentic_runtime_adapter(
             target.runtime_engine_id
         )

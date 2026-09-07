@@ -16,7 +16,9 @@ from core.runtime.hosted_agentic_models import (
 from core.runtime.hosted_context_management import HostedProviderStateCompactor
 from core.runtime.full_workspace_contract import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
-from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
+from core.runtime.remote_agentic_admission import (
+    require_remote_agentic_runtime_availability,
+)
 
 if TYPE_CHECKING:
     from core.providers.maverick_agent_onboarding import MaverickProtocolAdapterManifest
@@ -80,7 +82,7 @@ class HostedProviderRuntimeRegistry:
         return runtime
 
     def resolve(self, binding) -> HostedProviderRuntime:
-        require_remote_agentic_dispatch(binding)
+        require_remote_agentic_runtime_availability(binding)
         identity = (
             binding.model_provider_id,
             binding.provider_protocol,

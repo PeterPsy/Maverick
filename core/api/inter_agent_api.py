@@ -605,6 +605,7 @@ def _spawn_participant(
         child_agent_id=_text(body.get("child_agent_id")) or None,
         owner_user_id=owner_user_id,
         created_by_user_id=context.user.user_id,
+        workspace_store=state.workspace_store,
     )
     return json_response(
         start_response,

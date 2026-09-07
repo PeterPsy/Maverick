@@ -844,6 +844,7 @@ class InterAgentService:
         created_by_user_id: str | None = None,
         now: datetime | None = None,
         expected_recovery_generation: int | None = None,
+        workspace_store: object | None = None,
     ) -> tuple[InterAgentParticipantRecord, RuntimeSessionRecord, bool]:
         """Spawn one hidden runtime session for an existing child participant.
 
@@ -944,6 +945,7 @@ class InterAgentService:
                 created_by_user_id=_clean_optional(created_by_user_id) or run.created_by_user_id,
                 grants=[],
                 now=timestamp,
+                workspace_store=workspace_store,
             )
             child = transition_runtime_session(runtime_store, session_id=child.session_id, target_status="running", now=timestamp)
         except ValueError as error:

@@ -8,6 +8,7 @@ from core.providers.agentic_protocol import (
     HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_REASONING_EFFORTS,
     OpenRouterAgenticProtocolError,
     OpenRouterChatState,
 )
@@ -31,18 +32,6 @@ def openrouter_chat_payload(
     payload: dict[str, object] = {
         "model": request.model_id,
         "messages": messages,
-        "tools": [
-            {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                },
-            }
-            for tool in request.tool_definitions
-        ],
-        "tool_choice": "auto" if request.tool_definitions else "none",
         "stream": True,
         "stream_options": {"include_usage": True},
         "max_tokens": request.max_output_tokens,
@@ -57,9 +46,22 @@ def openrouter_chat_payload(
             ),
         },
     }
+    if request.tool_definitions:
+        payload["tools"] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.input_schema,
+                },
+            }
+            for tool in request.tool_definitions
+        ]
+        payload["tool_choice"] = "auto"
     if request.reasoning_effort is not None:
         effort = request.reasoning_effort.strip().lower()
-        if effort not in {"minimal", "low", "medium", "high"}:
+        if effort not in OPENROUTER_AGENTIC_REASONING_EFFORTS:
             raise OpenRouterAgenticProtocolError("provider_request_invalid")
         payload["reasoning"] = {"effort": effort}
     return payload, new_messages

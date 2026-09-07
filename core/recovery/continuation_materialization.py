@@ -80,6 +80,7 @@ def ensure_successor_session(
             start_path=getattr(state, "repository_root", None),
             observability_store=getattr(state, "observability_store", None),
             execution_binding=handoff.target_execution_binding,
+            workspace_store=getattr(state, "workspace_store", None),
         )
     if (
         successor.predecessor_session_id != predecessor.session_id

@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-06
+Status date: 2026-09-07
 
 Target: Phase 5 runtime-family separation, onboarding, and product taxonomy
 complete; provider certification, security review, canary, and release gates
@@ -11,6 +11,11 @@ tests, zero failures/errors/skips; see
 `docs/development/agentic_p6_deterministic_closeout_2026-09-06.md`.
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
+
+The current contained successor is suite 42 / TCB 32 / hosted adapter 38 /
+recipes 25 / Google profile 47 / OpenRouter profile 46 / Codex candidate 15.
+Its exact-source fixture result is recorded outside the source checkout by the
+operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
@@ -292,8 +297,9 @@ completion claim.
 - [x] OpenRouter's finalization instruction is appended only to the current wire
   payload. It is absent from the encrypted durable history, so a later
   exploration turn receives tools and no stale closed-catalog instruction.
-- [x] OpenRouter serializes `tools: []` and `tool_choice: none`; Google omits
-  `tools`. Both codecs require the exact Core finalization instruction and
+- [x] OpenRouter and Google omit `tools` for finalization; OpenRouter also omits
+  `tool_choice` because its pinned endpoint does not advertise the `none` mode.
+  Both codecs require the exact Core finalization instruction and
   reject phase/catalog mismatches before transport. The operator live probes
   now use the same tool-less final request, but no live probe was run here.
 - [x] Empty or whitespace-only `text_final` is never committed or emitted as a
@@ -423,9 +429,10 @@ completion claim.
   Google validates the current official Interactions OpenAPI operation plus the
   authenticated exact model record, streaming, usage, function-tool, reasoning,
   and token limits; final requests omit `tools`. OpenRouter proves both live
-  model and ZDR catalog records, `tool_choice:none`, context/completion limits
-  and every translated endpoint parameter, then sends `tools: []` and
-  `tool_choice: none` for finalization.
+  main-model, endpoint and ZDR catalog records, the exact resolved model and
+  `xhigh`/`high` reasoning metadata, context/completion limits and every
+  translated endpoint parameter, then omits both `tools` and `tool_choice` for
+  finalization.
 - [x] Transient prompt and agent-instruction admission requires the exact
   content-derived entry from one immutable Core turn-capture manifest;
   composer identity/digest proves integrity but cannot select a class. Marker
@@ -748,24 +755,38 @@ values above; they are not live certification or rollout evidence.
 - [x] Include the SDK display projector and CRM/Mail display schemas in the
   executable TCB; prove that schema drift changes app and TCB identities.
   This does not renew an app effect audit or grant read authority.
-- [ ] Resolve the complete deterministic rerun's legacy native-continuation
+- [x] Resolve the complete deterministic rerun's legacy native-continuation
   fixture conflict and stale built-in app effect audit through their proper
   reviews, without skipping tests, weakening native authority, or automatically
-  authorizing changed app code.
-- [ ] Run each complete provider manifest on an exact clean deployable commit:
-  deterministic fixture, operator-only synthetic live probe, behavioral
-  validation, signing, verification, and immutable certificate publication.
+  authorizing changed app code. The exact remediation is frozen at `5a7ca45a`.
+- [x] Carry the persisted workspace attestation through profile pinning,
+  session/child creation, queue, handoff, authority refresh, continuation,
+  recovery, CLI/MCP and status paths; re-read it before dispatch and let a
+  persisted revocation override stale snapshots.
+- [x] Refresh the OpenRouter exact contract from all three public catalogs:
+  resolved 20260423 slug, `xhigh`/`high` reasoning, DeepInfra FP8/ZDR, and
+  tool-less finalization by omitting both `tools` and `tool_choice`.
+- [x] Run each complete `fixture_contract` provider manifest on the exact clean
+  suite-42 candidate with zero failures/errors/skips, including the append-only
+  Codex revision-15 artifact guard. The operator record is external to the
+  source tree so writing it does not change the verified commit.
+- [ ] On that same exact commit, run the bounded operator-only synthetic live
+  probes, collect/independently review all natural observations, sign with an
+  already trusted key, verify, and publish immutable certificates.
 - [ ] Complete provider onboarding, leakage/security review, one-workspace
   canary, rollback rehearsal, and explicit preview release decision.
 - [ ] Close all production blockers in `SECURITY.md` and
   `docs/security/production_readiness.md` under a separate security review.
 
-`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false. No remote binding,
-profile, or certificate is enabled by these P6 checkpoints; no Google/OpenRouter
-session, provider HTTP/SSE request, live probe, real-store containment/migration apply, canary,
-production release, or push is part of this work. No backend restart or live
-control-plane write was performed for these checkpoints. Exact Codex stays on
-profile revision 14 and its existing artifact digest.
+`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true only because the server-owned
+boundary is implemented. The hosted-runtime and both provider-specific kill
+switches still default off. No remote binding, profile, or certificate is
+enabled by these P6 checkpoints; no Google/OpenRouter generation/SSE request, authenticated live
+probe, real-store containment/migration apply, canary, production release, or
+push is part of this work. Public catalog GETs are compatibility observations,
+not live certification. No backend restart or live control-plane write was
+performed. The running Codex deployment stays on profile revision 14 and its
+existing digest; revision 15 is a separately verified candidate only.
 
 ## Evidence and acceptance links
 
@@ -790,3 +811,17 @@ candidates. No Codex artifact, certificate, binding, release gate or credential
 is changed. Full exact-source verification passed on `5a7ca45a` and closes
 P6-D only; P6-L/S/R and overall P6 remain open until their actual evidence exists.
 The normative plan section 16 now records these separate closure checkpoints.
+
+### P6 authoritative-dispatch candidate — 2026-09-07
+
+Suite 42 and TCB 32 supersede the unreleased suite-41 candidate. Hosted adapter
+38 and recipes 25 bind fresh persisted-attestation reads through every API,
+queue, provider-start, authority and continuation boundary. OpenRouter profile
+46 additionally binds codec 3, the current resolved model/reasoning metadata,
+three-catalog preflight, and final payload omission of unsupported tool controls;
+Google profile 47 inherits the shared admission closure. Shared Codex sources
+produce append-only candidate revision 15 while revision 14 remains retained and
+deployed. This checkpoint can close only P6-D after its exact clean manifest
+runs; credentials, live/natural evidence, trusted signing, publication,
+disposable canary, rollback and production security approval remain separate
+NO-GO gates.

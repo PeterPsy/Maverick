@@ -14,6 +14,7 @@ def require_turn_queue_session_executable(
     session: RuntimeSessionRecord,
     *,
     turn_id: str | None = None,
+    workspace_store: object | None = None,
 ) -> None:
     """Reject turns whose session is stopped or has transferred ownership."""
     if session.status == "recovery_required":
@@ -21,7 +22,11 @@ def require_turn_queue_session_executable(
             f"Cannot queue a runtime turn while session `{session.session_id}` requires recovery.",
             reason_code="runtime_session_recovery_required",
         )
-    containment_reason = remote_agentic_containment_reason(session.execution_binding)
+    containment_reason = remote_agentic_containment_reason(
+        session.execution_binding,
+        workspace_id=session.workspace_id,
+        workspace_store=workspace_store,
+    )
     if containment_reason is not None:
         raise RuntimeTurnQueueRejectedError(
             f"Cannot queue a runtime turn while session `{session.session_id}` is remotely contained.",

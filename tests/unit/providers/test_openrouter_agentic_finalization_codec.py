@@ -41,7 +41,7 @@ def _finalize(request, block_id: str):
 
 
 class OpenRouterAgenticFinalizationCodecTest(unittest.TestCase):
-    def test_finalization_forces_tool_choice_none_after_paired_result(self) -> None:
+    def test_finalization_omits_tool_catalog_after_paired_result(self) -> None:
         transport = _ScriptedTransport(
             [
                 _tool_stream(
@@ -75,8 +75,8 @@ class OpenRouterAgenticFinalizationCodecTest(unittest.TestCase):
 
         self.assertEqual(events[-1].event_type, "completed")
         payload = transport.payloads[1]
-        self.assertEqual(payload["tools"], [])
-        self.assertEqual(payload["tool_choice"], "none")
+        self.assertNotIn("tools", payload)
+        self.assertNotIn("tool_choice", payload)
         self.assertEqual(payload["messages"][-2]["role"], "tool")
         self.assertEqual(
             payload["messages"][-1],

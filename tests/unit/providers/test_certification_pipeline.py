@@ -204,18 +204,18 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "baa9cace62a5d18823d7197b3068ba1eb7300d97e2fd746f72ac1ae7e35e74a5",
-            "openrouter": "2366266162a21d9a5eff6474567313118b82c6b16ef933ce8cc3faba855c8a86",
+            "google-ai-studio": "733fbcceb44031adf88abb6a7a4b2d2b733396209b539d2546603ce1512afbfe",
+            "openrouter": "270499160e31357614f94d861656c606563deed278b402fc70acd12dc8acf7cf",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "41")
+                self.assertEqual(manifest.suite_version, "42")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-06-r41-p6-reviewed-gates-tcb31",
+                    "2026-09-07-r42-p6-authoritative-dispatch-tcb32",
                 )
                 self.assertEqual(
                     manifest.digest,

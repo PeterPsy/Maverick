@@ -14,14 +14,22 @@ from core.providers.agentic_protocol import AgenticModelRequest, EphemeralCreden
 from core.providers.openrouter_agentic_catalog_records import (
     catalog_identity,
     configured_upstream_id,
+    find_model_metadata_record,
     find_model_record,
     find_zdr_record,
+    model_metadata_identity,
     positive_int,
+    supports_tool_choice_auto,
     supports_tool_choice_none,
+    validate_model_metadata_record,
     validate_record,
 )
 from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
     OPENROUTER_AGENTIC_MODEL_ID,
+    OPENROUTER_AGENTIC_MODEL_REVISION,
+    OPENROUTER_AGENTIC_REASONING_EFFORTS,
+    OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
     OpenRouterAgenticProtocolError,
 )
 from core.providers.openrouter_agentic_request import openrouter_chat_payload
@@ -34,6 +42,7 @@ OPENROUTER_AGENTIC_ENDPOINT_CATALOG = (
     "https://openrouter.ai/api/v1/models/"
     f"{OPENROUTER_AGENTIC_MODEL_ID}/endpoints"
 )
+OPENROUTER_AGENTIC_MODELS_CATALOG = "https://openrouter.ai/api/v1/models"
 OPENROUTER_ZDR_ENDPOINT_CATALOG = "https://openrouter.ai/api/v1/endpoints/zdr"
 MAX_OPENROUTER_CATALOG_BYTES = 8 * 1_048_576
 OPENROUTER_CATALOG_TIMEOUT_SECONDS = 5.0
@@ -41,10 +50,15 @@ OPENROUTER_CATALOG_TIMEOUT_SECONDS = 5.0
 
 @dataclass(frozen=True)
 class OpenRouterAgenticCatalogSnapshot:
-    """Redaction-safe identity of the two records accepted by preflight."""
+    """Redaction-safe identity of all three records accepted by preflight."""
 
     upstream_id: str
+    resolved_model_id: str
+    reasoning_efforts: tuple[str, ...]
+    default_reasoning_effort: str
+    reasoning_mandatory: bool
     supported_parameters: tuple[str, ...]
+    model_metadata_record_digest: str
     model_catalog_record_digest: str
     zdr_catalog_record_digest: str
     supports_tool_choice_none: bool
@@ -59,17 +73,22 @@ def preflight_openrouter_agentic_catalog(
     credential: EphemeralCredential,
     upstream_provider_names: tuple[str, ...] = (),
 ) -> OpenRouterAgenticCatalogSnapshot:
-    """Fetch both official catalogs and reject drift before a completion request."""
-    # Both snapshots are part of one pre-dispatch decision. Fetch them in
-    # parallel so two catalog timeouts cannot consume the protected terminal
+    """Fetch all official catalogs and reject drift before a completion request."""
+    # All snapshots are part of one pre-dispatch decision. Fetch them in
+    # parallel so catalog timeouts cannot consume the protected terminal
     # request reserve before completion transport begins.
     with ThreadPoolExecutor(
-        max_workers=2,
+        max_workers=3,
         thread_name_prefix="openrouter-catalog-preflight",
     ) as executor:
-        model_future = executor.submit(
+        endpoint_future = executor.submit(
             _fetch_catalog,
             _model_endpoint_catalog_url(request.model_id),
+            credential,
+        )
+        models_future = executor.submit(
+            _fetch_catalog,
+            OPENROUTER_AGENTIC_MODELS_CATALOG,
             credential,
         )
         zdr_future = executor.submit(
@@ -77,10 +96,12 @@ def preflight_openrouter_agentic_catalog(
             OPENROUTER_ZDR_ENDPOINT_CATALOG,
             credential,
         )
-        model_catalog = model_future.result()
+        model_catalog = endpoint_future.result()
+        models_catalog = models_future.result()
         zdr_catalog = zdr_future.result()
     return validate_openrouter_agentic_catalog(
         request,
+        models_catalog=models_catalog,
         model_catalog=model_catalog,
         zdr_catalog=zdr_catalog,
         upstream_provider_names=upstream_provider_names,
@@ -90,15 +111,16 @@ def preflight_openrouter_agentic_catalog(
 def validate_openrouter_agentic_catalog(
     request: AgenticModelRequest,
     *,
+    models_catalog: object,
     model_catalog: object,
     zdr_catalog: object,
     upstream_provider_names: tuple[str, ...] = (),
 ) -> OpenRouterAgenticCatalogSnapshot:
     """Require the exact configured endpoint and every routed parameter."""
     if (
-        not str(request.model_id or "").strip()
+        request.model_id != OPENROUTER_AGENTIC_MODEL_ID
         or request.model_revision_policy != "provider_alias"
-        or not str(request.model_revision or "").strip()
+        or request.model_revision != OPENROUTER_AGENTIC_MODEL_REVISION
     ):
         raise OpenRouterAgenticProtocolError("provider_request_invalid")
     upstream_id = configured_upstream_id(request)
@@ -116,6 +138,18 @@ def validate_openrouter_agentic_catalog(
     required = _required_supported_parameters(request)
     required_context_tokens = (
         estimate_hosted_request_tokens(request) + request.max_output_tokens
+    )
+    metadata_record = find_model_metadata_record(
+        models_catalog,
+        model_id=request.model_id,
+    )
+    metadata_context = validate_model_metadata_record(
+        metadata_record,
+        resolved_model_id=OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
+        reasoning_efforts=OPENROUTER_AGENTIC_REASONING_EFFORTS,
+        default_reasoning_effort=OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+        request_reasoning_effort=request.reasoning_effort,
+        required_context_tokens=required_context_tokens,
     )
     model_parameters = validate_record(
         model_record,
@@ -139,7 +173,17 @@ def validate_openrouter_agentic_catalog(
         )
     model_none = supports_tool_choice_none(model_record)
     zdr_none = supports_tool_choice_none(zdr_record)
-    if not model_none or not zdr_none:
+    state = decode_openrouter_chat_state(request.provider_private_state)
+    payload, _new_messages = openrouter_chat_payload(request, state)
+    tool_choice = payload.get("tool_choice")
+    if tool_choice == "auto" and (
+        not supports_tool_choice_auto(model_record)
+        or not supports_tool_choice_auto(zdr_record)
+    ):
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    if tool_choice == "none" and (not model_none or not zdr_none):
         raise OpenRouterAgenticProtocolError(
             "provider_endpoint_parameters_unsupported"
         )
@@ -149,15 +193,22 @@ def validate_openrouter_agentic_catalog(
     zdr_completion = positive_int(zdr_record.get("max_completion_tokens"))
     snapshot_payload = {
         "upstream_id": upstream_id,
+        "resolved_model_id": OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
+        "reasoning_efforts": OPENROUTER_AGENTIC_REASONING_EFFORTS,
+        "default_reasoning_effort": OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+        "reasoning_mandatory": False,
         "supported_parameters": tuple(sorted(model_parameters & zdr_parameters)),
+        "model_metadata_record_digest": canonical_digest(
+            model_metadata_identity(metadata_record)
+        ),
         "model_catalog_record_digest": canonical_digest(
             catalog_identity(model_record, model_id=request.model_id)
         ),
         "zdr_catalog_record_digest": canonical_digest(
             catalog_identity(zdr_record, model_id=request.model_id)
         ),
-        "supports_tool_choice_none": True,
-        "context_length": min(model_context, zdr_context),
+        "supports_tool_choice_none": model_none and zdr_none,
+        "context_length": min(metadata_context, model_context, zdr_context),
         "max_completion_tokens": min(model_completion, zdr_completion),
     }
     return OpenRouterAgenticCatalogSnapshot(
@@ -230,6 +281,7 @@ class _RejectRedirects(urllib_request.HTTPRedirectHandler):
 
 
 __all__ = [
+    "OPENROUTER_AGENTIC_MODELS_CATALOG",
     "OpenRouterAgenticCatalogSnapshot",
     "preflight_openrouter_agentic_catalog",
     "validate_openrouter_agentic_catalog",

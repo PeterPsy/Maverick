@@ -159,6 +159,7 @@ def inter_agent_command_specs(
             child_agent_id=_text(arguments.get("child_agent_id")) or None,
             owner_user_id=owner_user_id,
             created_by_user_id=context.user_id,
+            workspace_store=workspace_store,
         )
         return {
             "created": created,

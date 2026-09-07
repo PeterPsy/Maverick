@@ -186,7 +186,7 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertEqual(deepseek.default_reasoning_effort, "high")
         self.assertEqual(
             [option.effort for option in deepseek.supported_reasoning_efforts],
-            ["minimal", "low", "medium", "high"],
+            ["xhigh", "high"],
         )
         self.assertEqual(payload["model_options"][0]["input_modalities"], ["text", "image", "video", "pdf"])
         self.assertEqual(payload["model_options"][0]["upstream_provider_options"][0]["provider_id"], "google-ai-studio")

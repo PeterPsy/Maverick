@@ -8,8 +8,11 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-The subsequent aggregate-budget work is not covered by that historical freeze;
-it requires new exact-source verification before signing or release.
+That pass is historical. The subsequent aggregate-budget and authoritative
+dispatch candidate uses suite 42 / TCB 32 / hosted adapter 38 / recipes 25 /
+Google profile 47 / OpenRouter profile 46 / Codex candidate 15. It requires its
+own exact-source operator record before signing or release. The source tree does
+not treat a mocked probe receipt or this status paragraph as that record.
 
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`, revision read on 2026-09-06 (SHA-256
@@ -52,22 +55,32 @@ retained, never credentials or request bodies. The ledger must remain outside
 tenant/source mounts. Its authority is local spend/quota authority, **not**
 workspace attestation, natural evidence, signer trust or a release permit.
 
-Independent review found that the current session/profile/queue/dispatch chain
-drops authoritative workspace context; flipping the hard availability flag
-alone cannot enable it. A laboratory run of the real hosted loop is not a
-substitute for the full API-to-dispatch canary. The correct full-path fix also
-changes shared queue/handoff files declared in Codex's artifact. Such a change
-requires a separate candidate deployment and explicitly reviewed native
-revision/cutover, not exclusions from artifact hashing or global callbacks to
-smuggle authority. The current Codex 14 deployment must remain untouched until
-its successor is actually verified and approved. Native Gemini CLI still needs
-its own approved connection/artifact path, not an API model certificate.
+Independent review found that the prior session/profile/queue/dispatch chain
+dropped authoritative workspace context. Candidate 42 closes that gap by
+passing the explicit workspace store through profile pinning, session and child
+creation, queue admission, provider handoff, authority refresh, continuation,
+recovery, CLI/MCP and status paths. Every authoritative boundary re-reads the
+typed persisted attestation; a persisted revocation overrides a stale supplied
+snapshot and blocks before persistence, adapter/certificate work, or dispatch.
+The hard attestation implementation is therefore available, but the independent
+global and per-provider kill switches remain default-off. A laboratory run of
+the real hosted loop is still not a substitute for the full API-to-dispatch
+canary.
+
+The shared queue/handoff fix changes files declared in Codex's artifact. It is
+recorded as append-only Codex candidate revision 15 with revision 14 retained,
+not hidden by exclusions or by reusing the old certificate. The running Codex
+14 backend remains untouched until candidate 15 is separately verified and an
+explicit cutover/rollback is approved. Native Gemini CLI still needs its own
+approved connection/artifact path, not an API model certificate.
 
 Certification is per exact API profile (including model, provider config,
 endpoint/routing, recipe, and adapter), or per native runtime/provider
 connection. Native model slugs inherit their connection certificate; a model
-diagnostic must not mint a new connection certificate. Existing Codex revision
-14 and its artifact remain outside the remote candidate revision cycle.
+diagnostic must not mint a new connection certificate. Deployed Codex revision
+14 remains outside the remote candidate revision cycle; revision 15 exists only
+because the shared execution boundary changed and must not inherit revision 14's
+identity.
 
 ### Recovery fixture scope
 
@@ -90,9 +103,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 37,
-   recipe 24, Google profile 46, OpenRouter profile 45, suite 41, and canonical
-   TCB manifest 31. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 38,
+   recipe 25, Google profile 47, OpenRouter profile 46, suite 42, canonical
+   TCB manifest 32, and append-only Codex candidate revision 15. The corpus includes P5 family/pinning/onboarding, native ACP
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural
@@ -160,6 +173,19 @@ profile capacity, snapshot integrity/count and consistency across rounds; it
 rejects the old catalog-free receipt even if its summary is rehashed. The
 receipt's target is derived using the verified API/model observations.
 
+OpenRouter preflight reads three official surfaces in one bounded parallel
+window: `/api/v1/models`, the exact model endpoint catalog, and the ZDR endpoint
+catalog. The main record must resolve to
+`deepseek/deepseek-v4-flash-20260423`, be unexpired, and advertise exactly
+`xhigh`/`high` with default `high` and `mandatory=false`. The DeepInfra FP8
+endpoint must remain active, ZDR-listed, sufficiently large, and support every
+parameter actually sent. Because its current catalog reports
+`supports_tool_choice.none=false`, finalization omits both `tools` and
+`tool_choice`; exploration alone sends a nonempty catalog with `auto`. The live
+receipt binds the third-record digest and observed reasoning fields. With two
+certified efforts, its bounded probe requires eight generations and six real
+filesystem-list results.
+
 The separate natural observation report covers all 14 plan scenarios at each
 claimed effort, with source/projection/effect/trace digests, exact boolean
 checks, profile-specific resource bounds and zero absolute failure counters.
@@ -200,6 +226,8 @@ The subsequent scoped source review and regressions are recorded in
 app/surface pairs, without classifying their content or granting egress.
 
 The general production blockers in `SECURITY.md` require a separate security
-review. Until the relevant evidence and approvals actually exist,
-`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` stays false and Gemini CLI and remote
-API agents remain unavailable. Changing a flag is not certification.
+review. `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true because the persisted
+server boundary is implemented; this is not a release switch. Until the live
+and natural evidence, trusted signature/review, canary, rollback and production
+approvals actually exist, the provider feature flags stay off and Gemini CLI
+and remote API agents remain unavailable. Changing a flag is not certification.

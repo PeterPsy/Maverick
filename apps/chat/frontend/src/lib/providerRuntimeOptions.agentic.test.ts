@@ -14,6 +14,15 @@ const reasoningOptions: ProviderReasoningOption[] = [
   { effort: "high", label: "High", description: null },
 ];
 
+const googleAgenticReasoningOptions: ProviderReasoningOption[] = [
+  { effort: "high", label: "High", description: null },
+];
+
+const openRouterAgenticReasoningOptions: ProviderReasoningOption[] = [
+  { effort: "xhigh", label: "Extra high", description: null },
+  { effort: "high", label: "High", description: null },
+];
+
 function modelProvider(providerId: string, providerLabel: string, modelId: string, modelLabel: string): ProviderItem {
   return {
     provider_id: providerId,
@@ -39,6 +48,7 @@ function agenticProfile(
   providerId: string,
   modelId: string,
   rolloutStatus: AgenticProfileItem["rollout_status"] = "available",
+  supportedReasoningEfforts: ProviderReasoningOption[] = reasoningOptions,
 ): AgenticProfileItem {
   return {
     workspace_profile_binding_id: `binding-${providerId}`,
@@ -88,7 +98,7 @@ function agenticProfile(
       },
     },
     default_reasoning_effort: "high",
-    supported_reasoning_efforts: reasoningOptions,
+    supported_reasoning_efforts: supportedReasoningEfforts,
   };
 }
 
@@ -194,8 +204,18 @@ describe("remote agentic provider runtime options", () => {
       agentic_profiles: {
         default_binding_id: null,
         items: [
-          agenticProfile("google-ai-studio", googleModelId),
-          agenticProfile("openrouter", openRouterModelId),
+          agenticProfile(
+            "google-ai-studio",
+            googleModelId,
+            "available",
+            googleAgenticReasoningOptions,
+          ),
+          agenticProfile(
+            "openrouter",
+            openRouterModelId,
+            "available",
+            openRouterAgenticReasoningOptions,
+          ),
         ],
       },
     };
@@ -214,14 +234,14 @@ describe("remote agentic provider runtime options", () => {
         title: "google-ai-studio · gemini-3.6-flash · fake-data preview",
         subtitle: "Google AI Studio",
         defaultReasoning: "high",
-        reasoning: ["minimal", "low", "medium", "high"],
+        reasoning: ["high"],
       },
       {
         model: openRouterModelId,
         title: "openrouter · deepseek/deepseek-v4-flash · fake-data preview",
         subtitle: "OpenRouter",
         defaultReasoning: "high",
-        reasoning: ["minimal", "low", "medium", "high"],
+        reasoning: ["xhigh", "high"],
       },
     ]);
   });

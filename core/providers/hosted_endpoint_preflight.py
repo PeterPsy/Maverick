@@ -89,19 +89,27 @@ def preflight_openrouter_completion_request(
     *,
     upstream_provider_names: tuple[str, ...] = (),
 ) -> HostedEndpointRequestSnapshot:
-    """Require live catalog support, including the exact `tool_choice: none`."""
+    """Require live support for exploration and tool-less finalization."""
     if credential is None:
         raise OpenRouterAgenticProtocolError("provider_authentication_failed")
     state = decode_openrouter_chat_state(request.provider_private_state)
     payload, _new_messages = openrouter_chat_payload(request, state)
     final = request.request_phase != "exploration"
-    expected_choice = "none" if final else "auto"
     if (
         payload.get("stream") is not True
         or payload.get("stream_options") != {"include_usage": True}
-        or payload.get("tool_choice") != expected_choice
-        or not isinstance(payload.get("tools"), list)
-        or (final and payload["tools"] != [])
+        or (
+            final
+            and ("tool_choice" in payload or "tools" in payload)
+        )
+        or (
+            not final
+            and (
+                payload.get("tool_choice") != "auto"
+                or not isinstance(payload.get("tools"), list)
+                or not payload["tools"]
+            )
+        )
     ):
         raise OpenRouterAgenticProtocolError("provider_endpoint_parameters_unsupported")
     catalog = preflight_openrouter_agentic_catalog(
@@ -109,15 +117,14 @@ def preflight_openrouter_completion_request(
         credential=credential,
         upstream_provider_names=upstream_provider_names,
     )
-    _require_openrouter_none_support(catalog, required=final)
     projection = {
         "model_id": request.model_id,
         "request_phase": request.request_phase,
         "streaming": True,
         "usage_accounting": True,
         "tool_calling": True,
-        "tool_catalog_mode": "empty" if final else "declared",
-        "tool_choice_mode": expected_choice,
+        "tool_catalog_mode": "omitted" if final else "declared",
+        "tool_choice_mode": "provider-default" if final else "auto",
         "reasoning_mode": str(request.reasoning_effort or "default"),
         "max_output_tokens": request.max_output_tokens,
         "live_catalog_snapshot_digest": catalog.catalog_snapshot_digest,
@@ -148,18 +155,6 @@ class OpenRouterCompletionRequestPreflight:
             credential,
             upstream_provider_names=self.upstream_provider_names,
         )
-
-
-def _require_openrouter_none_support(
-    catalog: OpenRouterAgenticCatalogSnapshot,
-    *,
-    required: bool,
-) -> None:
-    if required and not catalog.supports_tool_choice_none:
-        raise OpenRouterAgenticProtocolError(
-            "provider_endpoint_parameters_unsupported"
-        )
-
 
 __all__ = [
     "HostedEndpointRequestSnapshot",

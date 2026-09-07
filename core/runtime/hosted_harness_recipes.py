@@ -14,6 +14,7 @@ from core.providers.google_interactions_client import (
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_MODEL_REVISION,
+    OPENROUTER_AGENTIC_REASONING_EFFORTS,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
 )
 from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
@@ -113,7 +114,7 @@ def hosted_full_context_policy() -> AgenticContextPolicy:
 
 GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-google-interactions-governed-workspace",
-    revision="24",
+    revision="25",
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
     model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
@@ -148,7 +149,7 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-openrouter-chat-governed-workspace",
-    revision="24",
+    revision="25",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
@@ -168,12 +169,12 @@ OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
         usage_accounting=True,
         tool_calling=True,
         supports_empty_tool_catalog=True,
-        supports_tool_choice_none=True,
-        omits_tools_when_empty=False,
+        supports_tool_choice_none=False,
+        omits_tools_when_empty=True,
         parallel_tool_calls=False,
         cooperative_cancellation=True,
         continuation_mode="core-managed-chat-history",
-        reasoning_efforts=("minimal", "low", "medium", "high"),
+        reasoning_efforts=OPENROUTER_AGENTIC_REASONING_EFFORTS,
         attachment_modalities=("file",),
         input_token_limit=1_048_576,
         output_token_limit=65_536,

@@ -13,9 +13,12 @@ _COMMON = {"target_digest", "run_nonce", "succeeded", "request_count", "reasonin
 _GOOGLE_FLAGS = {"saw_streaming", "saw_tool_call", "saw_filesystem_list", "saw_usage", "saw_private_state"}
 _GOOGLE = _COMMON | _GOOGLE_FLAGS | {"reason_code", "test_run_id", "result_summary_digest", "catalog_snapshots"}
 _OPENROUTER = _COMMON | {
-    "catalog_snapshot_digest", "catalog_model_record_digest", "catalog_zdr_record_digest",
+    "catalog_snapshot_digest", "catalog_model_metadata_record_digest",
+    "catalog_model_record_digest", "catalog_zdr_record_digest",
+    "catalog_reasoning_efforts", "catalog_default_reasoning_effort",
+    "catalog_reasoning_mandatory", "resolved_model_id",
     "context_length", "filesystem_result_count", "max_completion_tokens",
-    "supports_tool_choice_none", "upstream_id",
+    "finalization_tool_catalog_mode", "supports_tool_choice_none", "upstream_id",
 }
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -60,14 +63,31 @@ def validate_live_probe_receipt(
         if receipt["result_summary_digest"] != canonical_digest(summary):
             _fail()
     else:
-        if (receipt["supports_tool_choice_none"] is not True or receipt["upstream_id"] != "deepinfra/fp8"
+        from core.providers.openrouter_agentic_models import (
+            OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+            OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
+        )
+
+        if (type(receipt["supports_tool_choice_none"]) is not bool
+                or receipt["finalization_tool_catalog_mode"] != "omitted"
+                or receipt["upstream_id"] != "deepinfra/fp8"
+                or receipt["resolved_model_id"] != OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
+                or receipt["catalog_reasoning_efforts"] != list(efforts)
+                or receipt["catalog_default_reasoning_effort"]
+                != OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
+                or receipt["catalog_reasoning_mandatory"] is not False
                 or type(receipt["filesystem_result_count"]) is not int
                 or receipt["filesystem_result_count"] != rounds * len(efforts)):
             _fail()
         for key in ("context_length", "max_completion_tokens"):
             if type(receipt[key]) is not int or not 16_384 <= receipt[key] <= 100_000_000:
                 _fail()
-        for key in ("catalog_snapshot_digest", "catalog_model_record_digest", "catalog_zdr_record_digest"):
+        for key in (
+            "catalog_snapshot_digest",
+            "catalog_model_metadata_record_digest",
+            "catalog_model_record_digest",
+            "catalog_zdr_record_digest",
+        ):
             if not isinstance(receipt[key], str) or not _DIGEST.fullmatch(receipt[key]):
                 _fail()
     return receipt

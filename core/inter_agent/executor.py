@@ -713,6 +713,7 @@ def _execute_runtime_participant(
             run_id=run.run_id,
             participant_id=participant.participant_id,
             now=clock(),
+            workspace_store=getattr(state, "workspace_store", None),
         )
         runtime_session_id = session.session_id
         _participant, turn, events = service.send_runtime_message(

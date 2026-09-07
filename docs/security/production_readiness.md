@@ -44,11 +44,13 @@ production security gate is approved, remote agentic profiles must remain
 disabled by default, explicitly marked preview, and blocked by the independent
 server-owned availability/admission boundary. P0 material containment is
 recorded in the agentic tasklist; P1 implements the security boundary, P2
-implements journaled recovery, P3 implements governed finalization, and P4
-implements the reviewed semantic/full-workspace/provider closure, but
-`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false and no remote binding,
-profile, or certificate is enabled. Current profile policy lists only
-Core-classified public content. The fake class is not a declaration shortcut:
+implements journaled recovery, P3 implements governed finalization, P4
+implements the reviewed semantic/full-workspace/provider closure, and the P6
+source candidate implements the server-owned attestation/dispatch boundary.
+`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is therefore true in source, but the
+hosted-runtime and provider-specific kill switches still default off and no
+remote binding, profile, or certificate is enabled. Current profile policy
+lists only Core-classified public content. The fake class is not a declaration shortcut:
 it requires exact resource-derived classification, an active scoped
 workspace-matching attestation, and an allowing policy. No current contained
 profile permits it.
@@ -63,8 +65,9 @@ publication, execution binding, and live status recompute/compare the same
 digest; drift or a legacy missing identity fails closed. Effective authority is
 one intersection of certificate, profile, workspace, actor, live catalog,
 feature flags, and provider health and is reused by admission, dispatch, API,
-Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
-not relax containment or any platform launch blocker.
+Chat, and Settings. This closes the P1-P4 repository implementation slices and
+implements the P6 source admission/dispatch slice; it does not relax containment
+or any platform launch blocker.
 
 Manifest v29 makes the known transitive boundary executable through six static
 import contracts and adds the exact executable roots for every built-in app
@@ -74,9 +77,9 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 37 and the Full Workspace result contract
-`codex-baseline-v20` are bound by TCB manifest v31. Google revision 46 and
-OpenRouter revision 45 bind provider-config revision 2 and atomically claim that
+Hosted adapter 38 and the Full Workspace result contract
+`codex-baseline-v20` are bound by TCB manifest v32. Google revision 47 and
+OpenRouter revision 46 bind provider-config revision 2 and atomically claim that
 contract and the `maverick_agent` family because the executable result gate
 reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
@@ -145,9 +148,11 @@ app operations remain denied before effect unless Core can supply the certified
 result guarantee.
 The profile, certificate, execution binding, provider request, recipe, and
 authority snapshot also bind `model_revision` and its policy. Google uses an
-exact catalog revision and compares the live `version`; OpenRouter uses the
-explicit `provider_alias` policy while retaining its exact endpoint/upstream
-catalog checks. A policy or revision mismatch fails before execution.
+exact catalog revision and compares the live `version`; OpenRouter binds the
+exact public-catalog resolved model revision, supported `xhigh`/`high`
+reasoning metadata, and default effort while retaining its exact
+endpoint/upstream/ZDR catalog checks. A policy or revision mismatch fails before
+execution.
 Those definitions remain uncertified, unbound, contained previews; the local
 claim is not live-provider evidence or launch authorization. The adapter places
 all provider-bound context in semantic-envelope schema v1/compiler revision 10,

@@ -95,7 +95,7 @@ class HostedAgenticHarness:
         feature_flags.start()
         test_case.addCleanup(feature_flags.stop)
         dispatch_guard = patch(
-            "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch",
+            "core.runtime.hosted_provider_runtime.require_remote_agentic_runtime_availability",
             return_value=None,
         )
         dispatch_guard.start()

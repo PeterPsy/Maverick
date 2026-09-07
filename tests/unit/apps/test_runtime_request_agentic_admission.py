@@ -58,7 +58,7 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
                 expected = (
                     "remote_data_declaration_not_accepted"
                     if declaration is not None
-                    else "remote_agentic_attestation_unavailable"
+                    else "remote_agentic_attestation_required"
                 )
                 with self.assertRaisesRegex(ProviderError, expected):
                     runtime_requests._preflight_runtime_request_before_persistence(
@@ -124,7 +124,7 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
             runtime_requests,
             "build_pinned_execution_binding",
             return_value=execution_binding,
-        ), patch.object(
+        ) as build_binding, patch.object(
             runtime_requests,
             "preflight_execution_binding_context",
             side_effect=CapabilityCertificateError(
@@ -148,6 +148,10 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
                 )
 
         capability_preflight.assert_called_once()
+        self.assertIs(
+            build_binding.call_args.kwargs["workspace_store"],
+            state.workspace_store,
+        )
         self.assertEqual(state.runtime_store.method_calls, [])
 
     def test_remote_stream_request_is_rejected_before_reservation(self) -> None:
@@ -183,7 +187,7 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
             )
 
         self.assertEqual(result["status"], "failed")
-        self.assertEqual(result["error"], "remote_agentic_attestation_unavailable")
+        self.assertEqual(result["error"], "remote_agentic_attestation_required")
         self.runtime_store.reserve_app_stream.assert_not_called()
 
     def test_profile_mutation_fails_before_app_stream_or_runtime_records(self) -> None:

@@ -32,6 +32,7 @@ from core.providers.maverick_agent_builtins import (
 from core.providers.openrouter_agentic_catalog import (
     OpenRouterAgenticCatalogSnapshot,
 )
+from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError
 from core.providers.openrouter_agentic_profile import (
     openrouter_agentic_preview_policy,
     openrouter_agentic_routing_constraint,
@@ -61,7 +62,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "24")
+                self.assertEqual(recipe.revision, "25")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
                     "10",
@@ -78,7 +79,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
         binding = _binding(GOOGLE_GOVERNED_WORKSPACE_RECIPE)
 
         with patch(
-            "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch"
+            "core.runtime.hosted_provider_runtime.require_remote_agentic_runtime_availability"
         ):
             runtime = registry.resolve(binding)
 
@@ -89,21 +90,21 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             HostedAgenticLoopError,
             "provider_capability_catalog_mismatch",
         ), patch(
-            "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch"
+            "core.runtime.hosted_provider_runtime.require_remote_agentic_runtime_availability"
         ):
             registry.resolve(replace(binding, provider_capability_catalog_digest="f" * 64))
         with self.assertRaisesRegex(
             HostedAgenticLoopError,
             "harness_recipe_mismatch",
         ), patch(
-            "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch"
+            "core.runtime.hosted_provider_runtime.require_remote_agentic_runtime_availability"
         ):
             registry.resolve(replace(binding, context_policy_snapshot=None))
         with self.assertRaisesRegex(
             HostedAgenticLoopError,
             "provider_config_identity_mismatch",
         ), patch(
-            "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch"
+            "core.runtime.hosted_provider_runtime.require_remote_agentic_runtime_availability"
         ):
             registry.resolve(replace(binding, provider_config_digest="f" * 64))
 
@@ -112,7 +113,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
             support_flags=replace(
                 OPENROUTER_GOVERNED_WORKSPACE_RECIPE.support_flags,
-                supports_tool_choice_none=False,
+                omits_tools_when_empty=False,
             ),
         )
 
@@ -160,9 +161,13 @@ class HostedHarnessRecipeTest(unittest.TestCase):
         self.assertEqual(final.tool_choice_mode, "provider-default")
         self.assertNotEqual(exploration.snapshot_digest, final.snapshot_digest)
 
-    def test_openrouter_final_preflight_requires_empty_tools_and_none(self) -> None:
+    def test_openrouter_final_preflight_omits_tools_without_requiring_none(self) -> None:
         catalog = OpenRouterAgenticCatalogSnapshot(
             upstream_id="deepinfra/fp8",
+            resolved_model_id="deepseek/deepseek-v4-flash-20260423",
+            reasoning_efforts=("xhigh", "high"),
+            default_reasoning_effort="high",
+            reasoning_mandatory=False,
             supported_parameters=(
                 "max_tokens",
                 "reasoning",
@@ -170,9 +175,10 @@ class HostedHarnessRecipeTest(unittest.TestCase):
                 "tool_choice",
                 "tools",
             ),
+            model_metadata_record_digest="d" * 64,
             model_catalog_record_digest="a" * 64,
             zdr_catalog_record_digest="b" * 64,
-            supports_tool_choice_none=True,
+            supports_tool_choice_none=False,
             context_length=1_048_576,
             max_completion_tokens=65_536,
             catalog_snapshot_digest="c" * 64,
@@ -193,9 +199,37 @@ class HostedHarnessRecipeTest(unittest.TestCase):
 
         self.assertEqual(exploration.tool_choice_mode, "auto")
         self.assertEqual(exploration.tool_catalog_mode, "declared")
-        self.assertEqual(final.tool_choice_mode, "none")
-        self.assertEqual(final.tool_catalog_mode, "empty")
+        self.assertEqual(final.tool_choice_mode, "provider-default")
+        self.assertEqual(final.tool_catalog_mode, "omitted")
         self.assertNotEqual(exploration.snapshot_digest, final.snapshot_digest)
+
+    def test_openrouter_final_preflight_rejects_legacy_empty_catalog_before_live_catalog(self) -> None:
+        request = _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=True)
+        with patch(
+            "core.providers.hosted_endpoint_preflight.openrouter_chat_payload",
+            return_value=(
+                {
+                    "model": request.model_id,
+                    "messages": [],
+                    "tools": [],
+                    "tool_choice": "none",
+                    "stream": True,
+                    "stream_options": {"include_usage": True},
+                },
+                [],
+            ),
+        ), patch(
+            "core.providers.hosted_endpoint_preflight.preflight_openrouter_agentic_catalog",
+        ) as catalog, self.assertRaisesRegex(
+            OpenRouterAgenticProtocolError,
+            "provider_endpoint_parameters_unsupported",
+        ):
+            preflight_openrouter_completion_request(
+                request,
+                EphemeralCredential("synthetic-openrouter-key"),
+            )
+
+        catalog.assert_not_called()
 
 
 def _binding(recipe):

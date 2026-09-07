@@ -39,6 +39,10 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
         "core.runtime.lifecycle_service_sessions.require_remote_agentic_session_admission",
         return_value=None,
     )
+    @patch(
+        "core.runtime.authority_service.require_remote_agentic_authority",
+        return_value=None,
+    )
     def test_common_lifecycle_executes_non_process_adapter_without_launch_spec(
         self,
         *_containment_guards,

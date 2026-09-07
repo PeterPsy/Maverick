@@ -418,7 +418,13 @@ def runtime_session_payload(
     state: PlatformState | None = None,
 ) -> dict[str, object]:
     """Return public runtime session metadata."""
-    containment_reason = remote_agentic_containment_reason(session.execution_binding)
+    containment_reason = remote_agentic_containment_reason(
+        session.execution_binding,
+        workspace_id=session.workspace_id,
+        workspace_store=(
+            None if state is None else getattr(state, "workspace_store", None)
+        ),
+    )
     payload = {
         "session_id": session.session_id,
         "workspace_id": session.workspace_id,
@@ -521,6 +527,7 @@ def workspace_provider_status(
         workspace_id=workspace_id,
         registry=getattr(state, "provider_registry", None),
         refresh_model_catalog=refresh_model_catalog,
+        workspace_store=getattr(state, "workspace_store", None),
     )
     active_provider = None if status.active_provider is None else provider_payload(status.active_provider)
     registry = effective_provider_registry(
@@ -646,7 +653,11 @@ def workspace_agentic_profile_status(
             binding=binding,
             registry=registry,
         )
-        containment_reason = remote_agentic_containment_reason(definition)
+        containment_reason = remote_agentic_containment_reason(
+            definition,
+            workspace_id=workspace_id,
+            workspace_store=getattr(state, "workspace_store", None),
+        )
         certificate_active = bool(
             certificate_payload and certificate_payload["effective_status"] == "active"
         )
@@ -1026,6 +1037,11 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             binding=binding,
             registry=registry,
         )
+        containment_reason = remote_agentic_containment_reason(
+            definition,
+            workspace_id=workspace_id,
+            workspace_store=getattr(state, "workspace_store", None),
+        )
         reasoning = _agentic_model_reasoning(
             registry,
             definition,
@@ -1040,6 +1056,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             registry=registry,
             family_readiness=family_readiness,
             native_runtime=native_by_engine.get(definition.runtime_engine_id),
+            containment_reason=containment_reason,
         )
         enable_blocked_reason = _agentic_definition_blocked_reason(
             definition=definition,
@@ -1051,6 +1068,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             family_readiness=family_readiness,
             native_runtime=native_by_engine.get(definition.runtime_engine_id),
             require_enabled_binding=False,
+            containment_reason=containment_reason,
         )
         effective_capabilities = (
             blocked_runtime_capability_payload(
@@ -1074,7 +1092,6 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 effective_capabilities.get("reason_code")
                 or "runtime_authority_unavailable"
             )
-        containment_reason = remote_agentic_containment_reason(definition)
         effective_policy = (
             definition.policy_ceiling
             if binding is None
@@ -1233,9 +1250,9 @@ def _agentic_definition_blocked_reason(
     registry,
     family_readiness,
     native_runtime,
+    containment_reason: str | None,
     require_enabled_binding: bool = True,
 ) -> str | None:
-    containment_reason = remote_agentic_containment_reason(definition)
     if containment_reason is not None:
         return containment_reason
     if not family_readiness.complete:
@@ -1384,7 +1401,11 @@ def runtime_session_agentic_governance_payload(
         adapters[runtime_engine_id] = resolved
         return resolved
 
-    containment_reason = remote_agentic_containment_reason(binding)
+    containment_reason = remote_agentic_containment_reason(
+        binding,
+        workspace_id=session.workspace_id,
+        workspace_store=getattr(state, "workspace_store", None),
+    )
     definition = None
     rollout_status = None
     try:
@@ -1711,6 +1732,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 actor_policy=actor_policy,
                 policy_patch=policy_patch,
                 observability_store=state.observability_store,
+                workspace_store=state.workspace_store,
             )
         except (ProviderError, ValueError) as error:
             return json_response(
@@ -1922,6 +1944,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         usages = read_workspace_provider_subscription_usage(
             state.provider_store,
             workspace_id=context.workspace_id,
+            workspace_store=getattr(state, "workspace_store", None),
         )
         with suppress(Exception):
             record_provider_quota_snapshots(

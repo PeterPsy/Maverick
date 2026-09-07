@@ -188,7 +188,11 @@ class AgenticProfileApiTest(unittest.TestCase):
             self.assertEqual(profiles[provider_id]["default_reasoning_effort"], "high")
             self.assertEqual(
                 [option["effort"] for option in profiles[provider_id]["supported_reasoning_efforts"]],
-                ["minimal", "low", "medium", "high"],
+                (
+                    ["minimal", "low", "medium", "high"]
+                    if provider_id == "google-ai-studio"
+                    else ["xhigh", "high"]
+                ),
             )
             self.assertFalse(profiles[provider_id]["selectable"])
             self.assertEqual(profiles[provider_id]["containment_status"], "NO-GO")

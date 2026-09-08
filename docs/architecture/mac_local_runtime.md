@@ -1139,3 +1139,23 @@ Four Swift tests cover fractional output planning and the bounded stability
 sampler; one Python packaging test pins the runtime configuration and label
 **cattura stabile v27**. Signed delivery and physical continuation remain
 pending.
+
+#### v27 validated signed delivery (2026-09-08)
+
+Push run
+[34222521573](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34222521573)
+validated Apple commit **b72c9a4** with **238 Swift tests**, **24 Python tests**,
+release build, credential-free runtime admission, exact observation wiring,
+pinned Peekaboo 4.3.1, Apple Development signing and identity continuity. No
+installation occurred in that run.
+
+With MaverickMac confirmed closed, install run
+[34222938903](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34222938903)
+repeated every gate successfully. The designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`;
+artifact **10054615165** has zip SHA256
+`24579d3c70459c473c1c6aa416846b20eebc0d09c0a73e925ffaa965262bb0bb`.
+The installer updated `~/Applications/MaverickMac.app` at the existing path,
+created no persistent backup and requested launch at **11:55:49 UTC**. Cleanup
+did not terminate the app. Installed label: **b72c9a4 · cattura stabile v27**.
+TCC state and physical behavior remain subject to the next acceptance turn.

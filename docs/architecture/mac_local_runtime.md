@@ -1159,3 +1159,30 @@ The installer updated `~/Applications/MaverickMac.app` at the existing path,
 created no persistent backup and requested launch at **11:55:49 UTC**. Cleanup
 did not terminate the app. Installed label: **b72c9a4 · cattura stabile v27**.
 TCC state and physical behavior remain subject to the next acceptance turn.
+
+### v28 visible display tiling for partially off-screen app scenes
+
+The v27 physical retry passed background Peekaboo and native Notes activation,
+but the immediate native observation again stopped before capture with the
+narrowed **MC-TOOL-31**. MC-TOOL-37 did not fire. Given the v27 invariants, the
+remaining shared boundary was the requirement that display intersections cover
+the complete app-scene union and never overlap. The visible Notes root does not
+distinguish a partially off-screen same-PID helper from an exactly mirrored
+display frame, so v28 handles both cases explicitly.
+
+The AX root must still intersect a valid ScreenCaptureKit display. Every
+non-overlapping visible scene intersection is captured at its verified logical
+coordinates; portions outside all displays remain black in the final image and
+cannot pass the native recipient hit test. Exact duplicate display rectangles
+are deduplicated after placing `CGMainDisplayID()` first. Nonidentical overlaps
+remain refused.
+
+New static diagnostics separate no visible tile (**MC-TOOL-38**), nonidentical
+display overlap (**MC-TOOL-39**) and local/global tile mismatch
+(**MC-TOOL-40**). Invalid/excessive scene geometry remains MC-TOOL-31 and a
+wrong returned pixel extent remains MC-TOOL-37. No approximate mapping,
+post-capture resize, foreign-app capture or weaker lease check is introduced.
+Two additional Swift tests plus the revised coverage fixture target clipping,
+mirror deduplication, overlap refusal and black off-display composition. The
+expected totals are **240 Swift** and **25 Python tests**; label **ritaglio
+visibile v28**. Signed delivery and physical acceptance remain pending.

@@ -1110,3 +1110,32 @@ existing path without a persistent backup and requested launch at **10:05:33
 UTC**; cleanup did not terminate MaverickMac. Installed label: **3162853 ·
 tooltip stabili v26**. Permission state and desktop behavior remain subject to
 the next physical acceptance turn.
+
+### v27 stable native capture after application activation
+
+The first v26 physical continuation passed direct Calendar, Notes and empty
+TextEdit observations plus Peekaboo bundle switching. Native `select_app`
+verified Notes in the foreground, but the immediately following native
+observation stopped with **MC-TOOL-31** before an image was delivered. No mouse
+or keyboard input ran and all later phases were skipped. This differs from
+v25's MC-TOOL-30: AX/window selection succeeded, while the combined capture
+geometry diagnostic does not reveal whether pre-capture tiling or the returned
+pixel extent differed.
+
+V27 requires two consecutive identical complete scene readings before the first
+native screenshot, using at most six read-only samples 80 ms apart. It does not
+repeat activation, capture or input, and rechecks Stop/session authorization
+between samples. Each display tile now has an explicit verified logical
+`sourceRect`, integral full-output `destinationRect`, disabled implicit aspect
+preservation and explicit BGRA pixel format. The returned image must still have
+the requested dimensions exactly; there is no post-capture resize or permissive
+tolerance.
+
+Pre-capture scene/tile failures retain **MC-TOOL-31** with a narrowed message.
+A post-capture pixel-extent mismatch is now independently reported as
+**MC-TOOL-37**. Exact post-capture window identity, app/PID scope, pointer hit
+testing, TCC, secure-input, consent and first-error behavior are unchanged.
+Four Swift tests cover fractional output planning and the bounded stability
+sampler; one Python packaging test pins the runtime configuration and label
+**cattura stabile v27**. Signed delivery and physical continuation remain
+pending.

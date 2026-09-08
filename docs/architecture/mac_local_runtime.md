@@ -1185,4 +1185,20 @@ post-capture resize, foreign-app capture or weaker lease check is introduced.
 Two additional Swift tests plus the revised coverage fixture target clipping,
 mirror deduplication, overlap refusal and black off-display composition. The
 expected totals are **240 Swift** and **25 Python tests**; label **ritaglio
-visibile v28**. Signed delivery and physical acceptance remain pending.
+visibile v28**.
+
+Push run
+[34235072647](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34235072647)
+validated Apple commit **3aa60f0** with all **240 Swift tests** and **25 Python
+tests** passing, together with the release/runtime/admission/wire/catalog and
+Apple signing gates. After the user confirmed MaverickMac was closed, the one
+install run
+[34236241456](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34236241456)
+repeated those gates, kept designated-requirement SHA256
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`, and
+uploaded artifact **10060121857** with zip SHA256
+`91169d7946d2249e36d9222a1391837ff4e8afd4c664a51747c0540b2c087494`.
+It updated `~/Applications/MaverickMac.app` in place without a persistent
+backup and requested launch at **14:11:18 UTC**. Installed label: **3aa60f0 ·
+ritaglio visibile v28**. The exact physical Calendar/Notes/TextEdit continuation
+remains pending.

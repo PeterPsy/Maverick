@@ -15,15 +15,38 @@ NDJSON `user` events and accepts the documented `init`, `step_update`, and
 The candidate model slug is `gemini-3.6-flash-high`; Antigravity's unknown-model
 failure prevents silent fallback.
 
-Headless authentication follows Google's documented API-key path rather than
-copying a desktop login. Core resolves the workspace's provider credential
-binding through the secret service. The launch builder writes a mode-`0600`
-private-home `~/.gemini/antigravity-cli/settings.json` with
-`modelProvider=gemini`, maps the ephemeral generic lease to
-`GEMINI_API_KEY`, and omits `MAVERICK_PROVIDER_SECRET` from the child
-environment. The secret value is never written to settings, workspace files,
-or public events by Maverick. A missing binding or lease fails before process
-creation.
+Headless authentication follows Google's documented cached-login path. An
+operator signs in to Antigravity outside a tenant runtime and provisions only
+the resulting `antigravity-oauth-token` into a Core-owned mode-`0700` source
+directory selected by `MAVERICK_ANTIGRAVITY_HOME`; the token itself must be a
+single-owner, single-link mode-`0600` regular file. Each launch atomically
+copies that one identity file into the session-private home and writes its own
+controlled settings containing only `enableTerminalSandbox=true` and
+`toolPermission=request-review`. The process receives neither
+`GEMINI_API_KEY` nor `MAVERICK_PROVIDER_SECRET`. A provider credential binding,
+API-key lease, symlink, hard link, wrong owner, permissive mode, missing token,
+or changing source fails before process creation. Google AI Studio's API key
+remains a separate credential used only by the Maverick Agent API provider.
+
+Catalog discovery uses a fresh private copy of the same OAuth identity, the
+exact reviewed binary, an allowlisted environment, and a Bubblewrap filesystem
+boundary. Only a successful bounded `agy models` response matching the strict
+two-column catalog contract publishes a five-minute availability snapshot.
+Malformed, duplicate, oversized, unauthenticated, or binary-drifted discovery
+publishes no native model authority. Persisted and fallback model labels remain
+diagnostic metadata and cannot make the candidate selectable.
+
+## Operator provisioning
+
+The hosted Linux service uses
+`/var/lib/maverick/provider-homes/antigravity-cli` as the private source and
+sets that path through a systemd `MAVERICK_ANTIGRAVITY_HOME` environment
+override. Both the directory and copied token are owned by the Core service
+account with modes `0700` and `0600`. Provisioning copies the already cached
+login file without printing it; an interactive authorization code is neither a
+runtime token nor valid configuration. After login rotation, the operator must
+replace the source file atomically and restart or explicitly refresh Core so a
+new catalog epoch is observed. No tenant workspace may be used as the source.
 
 ## Protocol and lifecycle
 
@@ -43,7 +66,10 @@ creation.
   blank output, output/result disagreement, and invalid usage fail closed.
 - Terminal usage is explicitly marked cumulative so persisted accounting
   derives per-turn deltas across process and backend restarts rather than
-  double-counting a warmed conversation.
+  double-counting a warmed conversation. Antigravity reports cache reads
+  independently from uncached input, so cumulative `cache_read_tokens` may be
+  greater than `input_tokens`; `total_tokens` remains the exact sum of input
+  and output, and thinking remains a subset of output.
 - Recovery starts a fresh confined process with `--conversation <id>` and
   requires its new `init` to return that exact id. It never uses the ambiguous
   `--continue` alias or silently creates a replacement conversation.
@@ -61,15 +87,14 @@ the process never inherits the host HOME. `--dangerously-skip-permissions` is
 forbidden. `init.permission_mode` must be `request-review`, so a persisted
 always-proceed setting cannot silently widen authority.
 
-The private runtime home also means Maverick does not copy account credentials,
-settings, conversations, or keyring material from an operator home. Antigravity
-can use cached credentials in headless mode, but Maverick deliberately does not
-inherit them. Its supported server path is the official direct Gemini API-key
-mode described in Google's
-[installation and authentication guide](https://www.antigravity.google/docs/cli/install).
-The credential is resolved for each launch through the same platform boundary
-as other credentialed runtimes. Merely finding a signed-in interactive desktop
-session is not an execution credential.
+The private runtime home means Maverick never mounts or inherits the operator
+home. It copies only the explicitly provisioned cached OAuth identity; operator
+settings, conversations, project history, keyring material, and unrelated
+Google credentials are excluded. Refreshing or revoking that operator login is
+an operational credential action outside tenant execution. The login behavior
+and remote/headless flow are documented in Google's
+[installation and authentication guide](https://www.antigravity.google/docs/cli/install)
+and [headless guide](https://www.antigravity.google/docs/cli/headless/).
 
 Interrupt sends SIGINT to the owned process group and escalates through TERM and
 KILL. Normal idle close first closes stdin, Antigravity's documented graceful
@@ -96,14 +121,17 @@ retirement.
 transport/controller against an actual local NDJSON process. It covers stream
 and final output, cumulative usage, structured tool effects, soft-denied
 permission effects, malformed/oversized/empty/mismatched output, identity drift,
-credential delivery and redaction, private settings, incomplete tool catalogs,
+OAuth boundary rejection and redaction, private settings, incomplete tool catalogs,
 concurrent preparation, interruption, recovery, and process-tree cleanup.
 `test_antigravity_cli_sync_runtime.py` crosses the real synchronous Core
 prepare/turn/cancel/close boundaries and verifies loop/process ownership.
+`test_antigravity_cli_runtime_home.py` covers source and destination filesystem
+fences, while `test_antigravity_cli_discovery.py` covers authenticated private
+catalog discovery, exact-binary gating, and disabled publication.
 
 Those fixtures use explicitly synthetic authority and replace only the OS
 sandbox wrapper. They do not certify Antigravity. The installation remains
-disabled until the bound key works from the confined runtime home, the exact
+disabled until the provisioned OAuth profile works from the confined runtime home, the exact
 model catalog is observed, Full Workspace behavior is proven, an
 independent reviewer approves the evidence, and a trusted connection
 certificate is published. No Google API certificate can authorize this Native

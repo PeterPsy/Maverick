@@ -615,10 +615,15 @@ turns a nominally successful blank result into `agent_final_output_empty`. The
 Antigravity CLI registration owns an executable persistent `stream-json`
 controller and supervised NDJSON transport rather than using the Codex bridge.
 Because that engine owns its process internally, it explicitly requests a
-Core-resolved launch specification: provider credentials are leased through the
-secret boundary, mapped only to Antigravity's documented `GEMINI_API_KEY`, and
-delivered with a private settings/home tree instead of inheriting host login
-state. Engine-owned launch does not bypass credential resolution or audit.
+Core-resolved launch specification. Antigravity uses its own cached OAuth login,
+not the Google AI Studio API key: the host operator provisions only the cached
+identity file into a private `MAVERICK_ANTIGRAVITY_HOME`, and Core copies it into
+each session-private HOME while replacing settings with its controlled sandbox
+and request-review policy. Provider bindings and API-key environments are
+rejected on this path. Authenticated catalog discovery uses another ephemeral,
+confined copy and grants no model availability on binary, auth, or output drift.
+Engine-owned launch does not inherit the host HOME or expose OAuth material
+through public events.
 The obsolete Gemini CLI ACP candidate is retired. Antigravity's lifecycle proof
 and limitations are specified in
 `docs/architecture/antigravity_cli_native.md`.

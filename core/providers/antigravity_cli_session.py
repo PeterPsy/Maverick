@@ -358,7 +358,6 @@ def _usage(value: object) -> dict[str, int]:
         usage[field_name] = count
     if (
         usage["thinking_tokens"] > usage["output_tokens"]
-        or usage["cache_read_tokens"] > usage["input_tokens"]
         or usage["total_tokens"] != usage["input_tokens"] + usage["output_tokens"]
     ):
         raise NativeStructuredCliError("antigravity_usage_invalid")

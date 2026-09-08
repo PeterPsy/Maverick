@@ -11,9 +11,15 @@ from core.providers.builtin_certification import (
     ensure_codex_connection_certificate,
     ensure_codex_preview_certificate,
 )
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import (
+    CapabilityCertificateError,
+    ProviderNotFoundError,
+)
 from core.providers.native_agent_certificates import validate_native_connection_certificate
-from core.providers.native_agent_discovery import discover_codex_native_catalog
+from core.providers.native_agent_discovery import (
+    discover_antigravity_native_catalog,
+    discover_codex_native_catalog,
+)
 
 if TYPE_CHECKING:
     from core.providers.models import ProviderDefinition
@@ -66,6 +72,54 @@ def refresh_codex_native_catalog(
             registry.clear_native_agent_catalog("codex", "codex")
             raise
         registry._native_catalog_reconciliations[("codex", "codex")] = key
+        return True
+
+
+def refresh_antigravity_native_catalog(
+    registry: ProviderRegistry,
+    *,
+    store: ProviderStore | None = None,
+    force: bool = False,
+) -> bool:
+    """Publish authenticated Antigravity catalog metadata without granting use."""
+    with registry.native_catalog_lock:
+        controller = registry.get_native_agent_controller("antigravity-cli")
+        snapshot = discover_antigravity_native_catalog(
+            controller.engine_adapter,
+            force=force,
+        )
+        if snapshot is None:
+            registry.clear_native_agent_catalog("antigravity-cli", "google")
+            return False
+        definition = registry.get_provider_definition("antigravity-cli")
+        model_ids = {model.model_id for model in snapshot.models}
+        default = definition.default_model_family
+        if default not in model_ids:
+            default = (
+                "gemini-3.6-flash-high"
+                if "gemini-3.6-flash-high" in model_ids
+                else snapshot.models[0].model_id
+            )
+        definition = replace(
+            definition,
+            status="disabled",
+            default_model_family=default,
+            model_options=list(snapshot.model_options),
+            updated_at=snapshot.observed_at,
+        )
+        registry.publish_native_agent_catalog(snapshot)
+        registry.register_provider_definition(definition)
+        if store is not None:
+            try:
+                existing = store.get_provider_definition("antigravity-cli")
+            except ProviderNotFoundError:
+                existing = None
+            if existing is not None:
+                definition = replace(
+                    definition,
+                    created_at=existing.created_at,
+                )
+            store.save_provider_definition(definition)
         return True
 
 
@@ -127,4 +181,8 @@ def reconcile_codex_native_models(
     )
 
 
-__all__ = ["refresh_codex_native_catalog", "reconcile_codex_native_models"]
+__all__ = [
+    "refresh_antigravity_native_catalog",
+    "refresh_codex_native_catalog",
+    "reconcile_codex_native_models",
+]

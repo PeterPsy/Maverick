@@ -33,7 +33,15 @@ class AntigravityCliFixture:
         fixture = Path(__file__).resolve().parents[2] / "fixtures/native_antigravity_peer.py"
         command.write_text(f"#!{sys.executable}\n" + fixture.read_text())
         command.chmod(0o755)
-        self.engine = AntigravityCliNativeAdapter(command=str(command))
+        self.auth_home = self.root / "operator-antigravity-home"
+        self.auth_home.mkdir(mode=0o700)
+        self.oauth_token = self.auth_home / "antigravity-oauth-token"
+        self.oauth_token.write_text("fixture-oauth-token", encoding="utf-8")
+        self.oauth_token.chmod(0o600)
+        self.engine = AntigravityCliNativeAdapter(
+            command=str(command),
+            auth_home=self.auth_home,
+        )
         registry = ProviderRegistry()
         registry.register_native_agent_installation(
             build_antigravity_cli_candidate_installation(
@@ -55,7 +63,7 @@ class AntigravityCliFixture:
         self.binding = SimpleNamespace(
             model_id="fixture-model",
             model_provider_id="google",
-            credential_binding_id="fixture-credential-binding",
+            credential_binding_id=None,
             model_revision_policy="provider_alias",
             reasoning_effort=None,
             execution_family="native_agent",
@@ -69,7 +77,7 @@ class AntigravityCliFixture:
                 SimpleNamespace(
                     session=self.session,
                     binding=self.binding,
-                    secret_env={"MAVERICK_PROVIDER_SECRET": "fixture-api-key"},
+                    secret_env={},
                 )
             )
             self.assertEqual(sandbox.call_args.kwargs["workspace_root"], workspace)

@@ -1,14 +1,14 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-09-07
-Matrix revision: `2026-09-07-r46-p6-antigravity-native-tcb36`
+Status date: 2026-09-08
+Matrix revision: `2026-09-08-r47-p6-antigravity-oauth-tcb37`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==42`
+Adapter: `maverick-hosted-tool-loop==43`
 
 ## P6 candidate checkpoint
 
-Suite 46 / TCB manifest 36 / hosted adapter 42 / recipe 25 bind the P5
+Suite 47 / TCB manifest 37 / hosted adapter 43 / recipe 25 bind the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -39,6 +39,13 @@ explicit safe-next-turn steering fallback. This shared TCB change does not
 alter OpenRouter's exact provider/upstream/ZDR/model tuple or authorize another
 OpenRouter request after the prior transport halt.
 
+Suite 47 supersedes that unreleased native credential design. Antigravity uses
+its cached OAuth login through a narrowly provisioned private source and
+per-runtime copy; it rejects Google API-key/provider bindings and discovers its
+catalog through the exact binary in a confined ephemeral home. OpenRouter
+remains a separate Vault-backed API provider, and this shared TCB change does
+not alter its exact route or lift the prior ledger halt.
+
 ## Preview combination
 
 | Field | Pinned value |
@@ -46,7 +53,7 @@ OpenRouter request after the prior transport halt.
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-07`, exact resolved slug `deepseek/deepseek-v4-flash-20260423`, and exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `50` (revision `49` suspended) |
+| Immutable profile revision | `51` (revision `50` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
@@ -583,6 +590,15 @@ canary, or release is implied.
 Effect audit `2026-09-07-p6-builtin-effects-reviewed-v5` also binds the reviewed
 Design Studio CLI operating-group lock handoff already present in the candidate
 source; no descriptor or effect class changed.
+
+Revision 51 pins hosted adapter 43 and governed recipe 25 together with suite
+47, matrix `2026-09-08-r47-p6-antigravity-oauth-tcb37`, and TCB manifest v37.
+It binds Antigravity's corrected cached-OAuth launch and authenticated confined
+catalog discovery. OpenRouter's API-key boundary, request protocol, exact
+provider/upstream/ZDR/model tuple, and durable ledger halt are unchanged.
+Google profile 52 advances with the shared adapter/TCB identity. Codex revision
+15 and hosted recipe 25 remain byte-identical; no certificate, binding, canary,
+or release is implied.
 
 ## Fail-closed conditions
 

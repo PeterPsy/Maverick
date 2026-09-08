@@ -26,8 +26,8 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-Current remote candidates use hosted adapter 42, recipe 25, suite 46 and TCB
-manifest 36 (Google/OpenRouter profiles 51/50). Exact-target live receipts and
+Current remote candidates use hosted adapter 43, recipe 25, suite 47 and TCB
+manifest 37 (Google/OpenRouter profiles 52/51). Exact-target live receipts and
 independently observed natural conformance are required before trusted signing
 and publication; neither step grants release authority. The procedure is in
 `docs/runbooks/agentic_certification_evidence.md`. Historical revision numbers
@@ -89,9 +89,10 @@ no launch specification. The Codex backend currently runs behind the same
 contract through a compatibility bridge while retaining its local lifecycle.
 An engine that owns its process internally may explicitly require a resolved
 launch specification without advertising the split local-process lifecycle.
-Core then resolves and audits the pinned credential binding before calling the
-engine's async launch builder; Antigravity uses this path to create a private
-home and map the ephemeral provider secret only to `GEMINI_API_KEY`.
+Core then resolves any credential required by the selected engine before
+calling its async launch builder. Antigravity explicitly rejects provider/API
+key bindings and instead creates a private home from the operator-provisioned
+cached OAuth identity selected by `MAVERICK_ANTIGRAVITY_HOME`.
 The common turn, prewarm, cancellation, and idle-close paths select behavior by
 adapter capability and contain no Codex-specific dispatch branches.
 
@@ -221,7 +222,7 @@ metadata. Exact legacy Codex identity is the sole safe family inference for
 profiles created before the family field; arbitrary vendor labels and flags are
 never used for that inference. The executable Antigravity CLI candidate
 demonstrates a second native registration through its persistent structured
-stream and official direct Gemini API-key authentication while remaining
+stream and official cached OAuth authentication while remaining
 hard-disabled until full certification.
 
 Legacy Codex default bindings created before the explicit filesystem-list

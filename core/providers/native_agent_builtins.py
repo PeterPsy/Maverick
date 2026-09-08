@@ -41,6 +41,7 @@ from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISIO
 
 
 NATIVE_AGENT_RECIPE_REVISION = "1"
+ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION = "2"
 NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
 ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
 _INSPECTION_CACHE_SECONDS = 5.0
@@ -208,7 +209,8 @@ def build_antigravity_cli_candidate_definition(
         label="Antigravity CLI",
         description=(
             "Pinned Antigravity stream-json native-agent candidate. Execution "
-            "uses a session-scoped Gemini API key and remains disabled until "
+            "uses a session-private copy of an operator-managed OAuth profile "
+            "and remains disabled until "
             "the exact adapter, recipe, model, and certificate are approved."
         ),
         kind="runtime_backend",
@@ -222,13 +224,13 @@ def build_antigravity_cli_candidate_definition(
             supports_skills=False,
             supports_filesystem_access=True,
             supports_remote_execution=False,
-            supports_api_key_auth=True,
+            supports_api_key_auth=False,
             supports_local_binary=True,
             input_modalities=["text"],
             output_modalities=["text", "events"],
         ),
         default_model_family=ANTIGRAVITY_DEFAULT_MODEL,
-        requires_credentials=True,
+        requires_credentials=False,
         supported_execution_modes=["sandbox"],
         created_at=timestamp,
         updated_at=timestamp,
@@ -254,8 +256,9 @@ def build_antigravity_cli_candidate_installation(
     """Return a complete, content-pinned, but uncertified registration."""
     recipe_payload = {
         "recipe_id": "antigravity-cli-native-candidate",
-        "revision": NATIVE_AGENT_RECIPE_REVISION,
+        "revision": ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION,
         "protocol": "antigravity-stream-json-v1",
+        "authentication": "private-cached-oauth-profile-v1",
         "context_owner": "native_runtime",
         "prompt_contract_revision": "antigravity-text-v1",
     }
@@ -263,7 +266,7 @@ def build_antigravity_cli_candidate_installation(
         manifest=NativeAgentAdapterManifest(
             runtime_engine_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
             adapter_id="antigravity-cli-stream-json",
-            adapter_version="1",
+            adapter_version="2",
             protocol_kind="structured_cli",
             protocol_id="antigravity-stream-json",
             protocol_version="1",
@@ -275,7 +278,7 @@ def build_antigravity_cli_candidate_installation(
         ),
         recipe=NativeAgentHarnessRecipe(
             recipe_id=str(recipe_payload["recipe_id"]),
-            revision=NATIVE_AGENT_RECIPE_REVISION,
+            revision=ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION,
             digest=canonical_digest(recipe_payload),
             prompt_contract_revision="antigravity-text-v1",
             context_owner="native_runtime",

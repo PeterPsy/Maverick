@@ -12,8 +12,8 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 46 / TCB 36 / hosted adapter 42 /
-recipes 25 / Google profile 51 / OpenRouter profile 50 / Codex revision 15.
+The current contained successor is suite 47 / TCB 37 / hosted adapter 43 /
+recipe 25 / Google profile 52 / OpenRouter profile 51 / Codex revision 15.
 Its exact-source fixture result is recorded outside the source checkout by the
 operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
 
@@ -897,3 +897,17 @@ The operator confirmed the Google project tier is approved, with no paid
 fallback authorized. This checkpoint does not manufacture Antigravity's native
 connection certificate or close live, independent-review, canary, or rollback
 gates.
+
+### P6 Antigravity OAuth correction — 2026-09-08
+
+The server Antigravity CLI is authenticated by its cached OAuth login, not by
+the Google AI Studio API key. Candidate 47 provisions only that private OAuth
+identity into Core, copies it per runtime, rejects provider/API-key bindings on
+the native path, and performs exact-binary catalog discovery in an ephemeral
+Bubblewrap boundary. Google AI Studio and OpenRouter continue to use their
+Vault-backed API credentials only through Maverick's hosted API adapters.
+Antigravity adapter and recipe advance to revision 2; suite 47, TCB 37, hosted
+adapter 43 and Google/OpenRouter profiles 52/51 bind the shared source change.
+Hosted recipe 25 and Codex revision 15 remain byte-identical. The authenticated
+catalog is readiness evidence only; connection certification, independent
+review, disposable canary, rollback, and release gates remain mandatory.

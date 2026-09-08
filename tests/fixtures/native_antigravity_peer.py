@@ -118,6 +118,10 @@ for line in sys.stdin:
     previous_input = input_tokens
     input_tokens += 10 + len(text)
     cache_read_tokens += previous_input
+    if text == "cache-heavy":
+        # Antigravity reports cache reads independently from uncached input;
+        # the live CLI can therefore report a larger cumulative cache count.
+        cache_read_tokens += input_tokens * 2
     step("user_input")
     if text == "malformed":
         print("human terminal text is not stream-json", flush=True)

@@ -92,16 +92,21 @@ def builtin_provider_registry(*, codex_command: str | None = None, refresh_model
         definition=adapter.provider_definition(),
         runtime_adapter=adapter,
     )
+    antigravity_adapter = AntigravityCliNativeAdapter()
     registry.register_native_agent_installation(
         build_antigravity_cli_candidate_installation(),
         definition=build_antigravity_cli_candidate_definition(),
-        engine_adapter=AntigravityCliNativeAdapter(),
+        engine_adapter=antigravity_adapter,
     )
     for definition in build_hosted_provider_definitions():
         registry.register_provider_definition(definition)
-    from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
+    from core.providers.native_agent_reconciliation import (
+        refresh_antigravity_native_catalog,
+        refresh_codex_native_catalog,
+    )
 
     refresh_codex_native_catalog(registry, force=refresh_model_catalog)
+    refresh_antigravity_native_catalog(registry, force=refresh_model_catalog)
     return registry
 
 
@@ -195,9 +200,17 @@ def effective_provider_registry(
         if is_retired_provider_definition(definition):
             continue
         active_registry.register_provider_definition(definition)
-    from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
+    from core.providers.native_agent_reconciliation import (
+        refresh_antigravity_native_catalog,
+        refresh_codex_native_catalog,
+    )
 
     refresh_codex_native_catalog(active_registry, store=store, force=refresh_model_catalog and not registry_created)
+    refresh_antigravity_native_catalog(
+        active_registry,
+        store=store,
+        force=refresh_model_catalog and not registry_created,
+    )
     return active_registry
 
 

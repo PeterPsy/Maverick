@@ -16,12 +16,13 @@ from core.providers.native_structured_cli_transport import NativeStructuredCliEr
 class AntigravityCliNativeAdapter:
     runtime_engine_id = "antigravity-cli"
     adapter_id = "antigravity-cli-stream-json"
-    adapter_version = "1"
+    adapter_version = "2"
     local_process_lifecycle = None
     requires_resolved_launch_spec = True
 
-    def __init__(self, *, command="agy", dependency_roots=None):
+    def __init__(self, *, command="agy", dependency_roots=None, auth_home=None):
         self.command = command
+        self.auth_home = auth_home
         self.dependency_roots = (
             tuple(dependency_roots)
             if dependency_roots is not None
@@ -45,6 +46,7 @@ class AntigravityCliNativeAdapter:
             context,
             command=self.command,
             dependency_roots=self.dependency_roots,
+            auth_home=self.auth_home,
         )
 
     async def validate(self, context):

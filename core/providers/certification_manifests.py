@@ -46,7 +46,9 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.api.test_provider_execution_families",
     "tests.unit.providers.test_agentic_lineage_admission",
     "tests.unit.providers.test_agentic_launch_secret_resolution",
+    "tests.unit.providers.test_antigravity_cli_discovery",
     "tests.unit.providers.test_antigravity_cli_native",
+    "tests.unit.providers.test_antigravity_cli_runtime_home",
     "tests.unit.providers.test_antigravity_cli_sync_runtime",
     "tests.unit.providers.test_hosted_text_profiles",
     "tests.unit.providers.test_maverick_agent_onboarding",
@@ -163,11 +165,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="46",
+        suite_version="47",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-07-r46-p6-antigravity-native-tcb36"
+            "2026-09-08-r47-p6-antigravity-oauth-tcb37"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

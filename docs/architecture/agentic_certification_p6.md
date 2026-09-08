@@ -8,9 +8,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current Antigravity-native successor uses
-suite 46 / TCB 36 / hosted adapter 42 / recipes 25 / Google profile 51 /
-OpenRouter profile 50 / Codex revision 15. It requires its
+That pass is historical. The current Antigravity OAuth successor uses suite 47 /
+TCB 37 / hosted adapter 43 / recipe 25 / Google profile 52 / OpenRouter
+profile 51 / Codex revision 15. It requires its
 own exact-source operator record before signing or release. The source tree does
 not treat a mocked probe receipt or this status paragraph as that record.
 
@@ -35,6 +35,11 @@ justified one SHA-fenced atomic fallback append of section 19. It records the
 deterministic results and remaining NO-GO gates; the resulting document
 SHA-256 is
 `a27dc7553d5c8aa29739da1c12d51013b4595e2c3e6d6a069f06bcc567418999`.
+After backend authentication recovered, section 20 was appended through the
+official Storage MCP surface with that exact SHA fence. It records the
+API-versus-OAuth correction and authenticated zero-generation Antigravity
+catalog observation; the resulting document SHA-256 is
+`ee71319648126704c089b10695a4426037c0201df1853cf77caf3b8df7dd1c86`.
 Its P5 review checkpoint is `617ed21c39e6111e2bb0c8d102bfa34709312227`.
 
 P6 distinguishes repository conformance, live protocol evidence, natural
@@ -117,6 +122,18 @@ provider wire contracts and recipe 25 do not change. Antigravity remains a
 disabled Native candidate until its separate connection certificate, full
 workspace evidence, trusted review/signature, and canary exist.
 
+Candidate 47 corrects Antigravity's authentication boundary to match the
+installed server runtime: the CLI uses its cached OAuth login, while Google AI
+Studio and OpenRouter remain API providers with their separate Vault-backed API
+keys. Core copies only an explicitly provisioned, private Antigravity OAuth
+identity into each runtime, owns the sandbox settings, rejects API-key/provider
+bindings on the native path, and discovers the live catalog through an
+ephemeral confined copy of the same profile. Antigravity adapter/recipe advance
+to revision 2. The broad shared TCB advances to 37, so suite 47, hosted adapter
+43 and API profiles 52/51 bind the source change; hosted recipe 25 and Codex
+revision 15 remain byte-identical. Catalog/auth readiness is not a connection
+certificate or release approval.
+
 The shared queue/handoff fix changed files declared in Codex's artifact and was
 published append-only as Codex revision 15, with revision 14 retained in
 immutable history rather than hidden by exclusions or reused as a certificate
@@ -153,9 +170,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 42,
-   recipe 25, Google profile 51, OpenRouter profile 50, suite 46, canonical
-   TCB manifest 36, and active Codex revision 15. The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
+1. **Candidate identities and deterministic corpus:** hosted adapter 43,
+   recipe 25, Google profile 52, OpenRouter profile 51, suite 47, canonical
+   TCB manifest 37, and active Codex revision 15. The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural

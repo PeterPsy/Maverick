@@ -102,7 +102,7 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertIn("/usr/local/lib", self.spec.readable_roots)
         self.assertEqual(self.spec.env_overrides["HOME"], str(self.root / "runtime/antigravity-home"))
         self.assertNotEqual(self.spec.env_overrides["HOME"], str(Path.home()))
-        self.assertEqual(self.spec.env_overrides["GEMINI_API_KEY"], "fixture-api-key")
+        self.assertNotIn("GEMINI_API_KEY", self.spec.env_overrides)
         self.assertNotIn("MAVERICK_PROVIDER_SECRET", self.spec.env_overrides)
         settings_path = (
             Path(self.spec.env_overrides["HOME"])
@@ -112,17 +112,20 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
             json.loads(settings_path.read_text(encoding="utf-8")),
             {
                 "enableTerminalSandbox": True,
-                "modelProvider": "gemini",
                 "toolPermission": "request-review",
             },
         )
         self.assertEqual(settings_path.stat().st_mode & 0o777, 0o600)
+        token_path = settings_path.parent / "antigravity-oauth-token"
+        self.assertEqual(token_path.read_text(encoding="utf-8"), "fixture-oauth-token")
+        self.assertEqual(token_path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.spec.resolved_secret_refs, [])
+        self.assertIsNone(self.spec.credential_binding_id)
 
-    async def test_launch_requires_platform_delivered_gemini_credential(self):
+    async def test_launch_requires_private_operator_oauth_profile(self):
         with self.assertRaisesRegex(
             NativeStructuredCliError,
-            "antigravity_credential_missing",
+            "antigravity_oauth_credential_missing",
         ):
             antigravity_stream_launch_spec(
                 SimpleNamespace(
@@ -132,7 +135,38 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
                 ),
                 command=str(self.root / "agy-fixture"),
                 dependency_roots=(),
+                auth_home=self.root / "missing-auth-home",
             )
+
+    async def test_launch_rejects_api_key_or_provider_binding(self):
+        for secret_env, credential_binding_id in (
+            ({"MAVERICK_PROVIDER_SECRET": "wrong-credential-kind"}, None),
+            ({}, "google-api-binding"),
+        ):
+            with self.subTest(
+                secret=bool(secret_env),
+                binding=credential_binding_id,
+            ):
+                binding = SimpleNamespace(
+                    **{
+                        **vars(self.binding),
+                        "credential_binding_id": credential_binding_id,
+                    }
+                )
+                with self.assertRaisesRegex(
+                    NativeStructuredCliError,
+                    "antigravity_oauth_boundary_invalid",
+                ):
+                    antigravity_stream_launch_spec(
+                        SimpleNamespace(
+                            session=self.session,
+                            binding=binding,
+                            secret_env=secret_env,
+                        ),
+                        command=str(self.root / "agy-fixture"),
+                        dependency_roots=(),
+                        auth_home=self.auth_home,
+                    )
 
     async def test_resolved_runtime_requests_the_agentic_launch_builder(self):
         resolved = ResolvedRuntimeEngine(
@@ -204,6 +238,23 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertIsNotNone(client.process.returncode)
         self.assertEqual(self.final_text(await self.collect("second")), "answer:second")
         self.assertTrue((await self.controller.cleanup(self.context)).closed)
+
+    async def test_cache_read_usage_may_exceed_uncached_input(self):
+        events = await self.collect("cache-heavy")
+        usage = next(
+            event.payload
+            for event in events
+            if event.event_type == "provider.usage"
+        )
+
+        self.assertGreater(
+            usage["cached_input_tokens"],
+            usage["input_tokens"],
+        )
+        self.assertEqual(
+            usage["total_tokens"],
+            usage["input_tokens"] + usage["output_tokens"],
+        )
 
     async def test_concurrent_connects_share_one_supervised_process(self):
         first, second = await asyncio.gather(

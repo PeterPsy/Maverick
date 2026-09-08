@@ -106,12 +106,14 @@ class NativeAgentFrameworkTest(unittest.TestCase):
     def test_second_native_candidate_is_onboarded_but_cannot_be_enabled(self) -> None:
         registry = builtin_provider_registry()
         installation = registry.get_native_agent_installation("antigravity-cli")
+        definition = registry.get_provider_definition("antigravity-cli")
 
         self.assertFalse(installation.certification_configured)
-        self.assertEqual(
-            registry.get_provider_definition("antigravity-cli").status,
-            "disabled",
-        )
+        self.assertEqual(definition.status, "disabled")
+        self.assertFalse(definition.requires_credentials)
+        self.assertFalse(definition.capabilities.supports_api_key_auth)
+        self.assertEqual(installation.manifest.adapter_version, "2")
+        self.assertEqual(installation.recipe.revision, "2")
         controller = registry.get_native_agent_controller("antigravity-cli")
         self.assertEqual(controller.adapter_id, "antigravity-cli-stream-json")
         self.assertIsNone(controller.legacy_adapter)

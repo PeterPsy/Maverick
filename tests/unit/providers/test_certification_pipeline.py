@@ -191,31 +191,31 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "6660ce813c99064066b3fca1ed444332c0543e97c0c2796f7423dd2aca5682dc"
+                "521f9840389336ae5823723b1e3161b29fdcbf898cfa8e219413f67fb506165e"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "732836ad8d0a2c3300f7037515a3a68689a7691ea661dde2979a4413bab11811"
+                "2697cbb2f64deee8e610feb293f19d35b5b972c43a35bf22337e418e69260402"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "d1cb248ce662313470223bffa01db585c3f724a3552118d6c869d53985e2a880",
-            "openrouter": "5f36481caf2935450e6d19ad562aa8a79280aa78f89826a9694d79d405bb8c8e",
+            "google-ai-studio": "b5df3b9110a2f2f9efd6ca4be58f46013b602e75f3d1f584d132cc8e8f7772d2",
+            "openrouter": "e8abad2800d1d899279eeaba8aea5408a83665f2b22f9669d19757a510aed08c",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "46")
+                self.assertEqual(manifest.suite_version, "47")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-07-r46-p6-antigravity-native-tcb36",
+                    "2026-09-08-r47-p6-antigravity-oauth-tcb37",
                 )
                 self.assertEqual(
                     manifest.digest,
@@ -234,6 +234,8 @@ class CertificationPipelineTest(unittest.TestCase):
                     "tests.unit.recovery.test_continuation_repair",
                     "tests.unit.recovery.test_continuation_multihop",
                     "tests.unit.recovery.test_continuation_native_identity",
+                    "tests.unit.providers.test_antigravity_cli_discovery",
+                    "tests.unit.providers.test_antigravity_cli_runtime_home",
                     "tests.integration.cli_mcp.test_builtin_surface_effects",
                     "tests.integration.cli_mcp.test_p6_effect_audit_delta",
                 ):

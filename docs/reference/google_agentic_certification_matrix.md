@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-09-07
-Matrix revision: `2026-09-07-r46-p6-antigravity-native-tcb36`
+Status date: 2026-09-08
+Matrix revision: `2026-09-08-r47-p6-antigravity-oauth-tcb37`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==42`
+Adapter: `maverick-hosted-tool-loop==43`
 
 ## P6 candidate checkpoint
 
-Suite 46 / TCB manifest 36 / hosted adapter 42 / recipe 25 bind the P5
+Suite 47 / TCB manifest 37 / hosted adapter 43 / recipe 25 bind the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -41,6 +41,14 @@ Google project tier is approved; this confirmation authorizes no paid fallback
 and does not replace live evidence, trusted signing, independent review, or a
 disposable canary.
 
+Suite 47 supersedes that unreleased native credential design: the installed
+Antigravity runtime uses its cached OAuth login, not Google AI Studio's API
+key. It binds a narrowly provisioned private OAuth source, per-runtime copy,
+Core-owned settings, rejection of API-key/provider bindings, and authenticated
+exact-binary catalog discovery. Google AI Studio remains a distinct hosted API
+target with its Vault-backed key. Neither the authenticated native catalog nor
+this correction grants a native certificate or API release authority.
+
 ## Preview combination
 
 | Field | Pinned value |
@@ -48,7 +56,7 @@ disposable canary.
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `name=models/gemini-3.6-flash`, `version=3.6-flash-07-2026`; an omitted/null `baseModelId` is digest-bound, while any supplied value must equal `gemini-3.6-flash` |
-| Immutable profile revision | `51` (revision `50` suspended) |
+| Immutable profile revision | `52` (revision `51` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
@@ -554,3 +562,13 @@ adapter/TCB identity. Codex candidate 15 and recipe 25 remain byte-identical.
 Effect audit `2026-09-07-p6-builtin-effects-reviewed-v5` also binds the reviewed
 Design Studio CLI operating-group lock handoff already present in the candidate
 source; no descriptor or effect class changed.
+
+Revision 52 pins hosted adapter 43 and governed recipe 25 together with suite
+47, matrix `2026-09-08-r47-p6-antigravity-oauth-tcb37`, and TCB manifest v37.
+It replaces Antigravity's unreleased API-key launch design with the installed
+runtime's cached OAuth profile, private per-runtime materialization, API-key
+boundary rejection, and authenticated exact-binary catalog discovery. The
+hosted Google request protocol and free-tier-only constraint are unchanged.
+OpenRouter profile 51 advances with the shared adapter/TCB identity. Codex
+revision 15 and hosted recipe 25 remain byte-identical; no certificate,
+binding, canary, or release is implied.

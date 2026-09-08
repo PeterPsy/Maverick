@@ -18,8 +18,8 @@ from core.providers.execution_families import (
     execution_family_catalog,
 )
 from core.providers.native_agent_builtins import (
-    build_gemini_cli_candidate_definition,
-    build_gemini_cli_candidate_installation,
+    build_antigravity_cli_candidate_definition,
+    build_antigravity_cli_candidate_installation,
 )
 from core.providers.native_agent_contract import (
     validate_native_agent_installation,
@@ -105,29 +105,29 @@ class NativeAgentFrameworkTest(unittest.TestCase):
 
     def test_second_native_candidate_is_onboarded_but_cannot_be_enabled(self) -> None:
         registry = builtin_provider_registry()
-        installation = registry.get_native_agent_installation("gemini-cli")
+        installation = registry.get_native_agent_installation("antigravity-cli")
 
         self.assertFalse(installation.certification_configured)
         self.assertEqual(
-            registry.get_provider_definition("gemini-cli").status,
+            registry.get_provider_definition("antigravity-cli").status,
             "disabled",
         )
-        controller = registry.get_native_agent_controller("gemini-cli")
-        self.assertEqual(controller.adapter_id, "gemini-cli-acp")
+        controller = registry.get_native_agent_controller("antigravity-cli")
+        self.assertEqual(controller.adapter_id, "antigravity-cli-stream-json")
         self.assertIsNone(controller.legacy_adapter)
 
         persisted_activation = replace(
-            registry.get_provider_definition("gemini-cli"),
+            registry.get_provider_definition("antigravity-cli"),
             status="active",
         )
         registry.register_provider_definition(persisted_activation)
         self.assertEqual(
-            registry.get_provider_definition("gemini-cli").status,
+            registry.get_provider_definition("antigravity-cli").status,
             "disabled",
         )
 
     def test_unstructured_or_unobservable_native_adapter_is_rejected(self) -> None:
-        candidate = build_gemini_cli_candidate_installation()
+        candidate = build_antigravity_cli_candidate_installation()
         with self.assertRaisesRegex(ValueError, "terminal_scraping_forbidden"):
             validate_native_agent_installation(
                 replace(
@@ -177,7 +177,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
 
     def test_registry_rejects_certified_manifest_without_executable_adapter(self) -> None:
         registry = ProviderRegistry()
-        candidate = build_gemini_cli_candidate_installation()
+        candidate = build_antigravity_cli_candidate_installation()
         certified = replace(
             candidate,
             certificate=replace(
@@ -190,12 +190,12 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "certified_adapter_missing"):
             registry.register_native_agent_installation(
                 certified,
-                definition=build_gemini_cli_candidate_definition(NOW),
+                definition=build_antigravity_cli_candidate_definition(NOW),
             )
 
     def test_registry_rejects_present_but_incomplete_native_adapter(self) -> None:
         registry = ProviderRegistry()
-        candidate = build_gemini_cli_candidate_installation()
+        candidate = build_antigravity_cli_candidate_installation()
         certified = replace(
             candidate,
             certificate=replace(
@@ -208,14 +208,14 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "runtime_adapter_incomplete"):
             registry.register_native_agent_installation(
                 certified,
-                definition=build_gemini_cli_candidate_definition(NOW),
+                definition=build_antigravity_cli_candidate_definition(NOW),
                 runtime_adapter=_IncompleteNativeAdapter(),
             )
 
     def test_recovery_contract_validates_the_primitive_used_by_controller(self) -> None:
-        candidate = build_gemini_cli_candidate_installation()
+        candidate = build_antigravity_cli_candidate_installation()
         adapter = SimpleNamespace(
-            provider_definition=lambda: build_gemini_cli_candidate_definition(NOW),
+            provider_definition=lambda: build_antigravity_cli_candidate_definition(NOW),
             validate_backend=lambda: None,
             prepare_runtime_skills=lambda *_args: [],
             build_launch_spec=lambda *_args, **_kwargs: None,
@@ -296,11 +296,11 @@ class NativeAgentFrameworkTest(unittest.TestCase):
 
 
 class _IncompleteNativeAdapter:
-    adapter_id = "gemini-cli-structured-candidate"
+    adapter_id = "antigravity-cli-structured-candidate"
     adapter_version = "0"
 
     def provider_definition(self):
-        return build_gemini_cli_candidate_definition(NOW)
+        return build_antigravity_cli_candidate_definition(NOW)
 
 
 if __name__ == "__main__":

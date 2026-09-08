@@ -31,7 +31,14 @@ class ResolvedRuntimeEngine:
 
     @property
     def requires_local_launch_spec(self) -> bool:
-        return self.agentic_adapter.local_process_lifecycle is not None
+        return bool(
+            self.agentic_adapter.local_process_lifecycle is not None
+            or getattr(
+                self.agentic_adapter,
+                "requires_resolved_launch_spec",
+                False,
+            )
+        )
 
     def provider_state(self, store: RuntimeStore, session: RuntimeSessionRecord) -> RuntimeProviderState | None:
         if session.execution_binding is None:
@@ -103,7 +110,7 @@ def build_optional_local_launch_spec(
     session: RuntimeSessionRecord,
     absent_result: Any = None,
 ) -> Any:
-    """Build launch material only when the adapter declares a local lifecycle."""
+    """Build launch material only when the engine requires a resolved spec."""
     if not engine.requires_local_launch_spec:
         return absent_result
     return builder(
@@ -113,4 +120,5 @@ def build_optional_local_launch_spec(
         provider_definition=engine.provider,
         provider_selection=engine.selection,
         runtime_adapter=engine.legacy_adapter,
+        agentic_adapter=engine.agentic_adapter,
     )

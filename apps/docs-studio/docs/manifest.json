@@ -238,7 +238,7 @@
         },
         {
           "id": "future-providers",
-          "title": "Claude Code, Gemini CLI, OSS, and API-key models",
+          "title": "Claude Code, Antigravity CLI, OSS, and API-key models",
           "icon": "spark",
           "summary": "How future providers fit the same abstraction without changing app architecture.",
           "source_path": "pages/providers/future-providers.md"

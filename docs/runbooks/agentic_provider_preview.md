@@ -15,11 +15,11 @@ Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
-The contained source candidate is hosted adapter 41 / recipes 25 / Google
-profile 50 / OpenRouter profile 49 / suite 45 / TCB 35. Shared queue/handoff
-changes are represented by append-only Codex candidate revision 15; deployed
-revision 14 remains retained and must not be restarted, migrated, or cut over
-as a side effect of remote-provider certification.
+The contained source candidate is hosted adapter 42 / recipes 25 / Google
+profile 51 / OpenRouter profile 50 / suite 46 / TCB 36. Codex revision 15 is
+the active verified profile and revision 14 remains immutable history. Remote
+provider certification must not restart or migrate Codex, alter its artifact,
+or reissue its certificate.
 
 ## Phase-0 containment record and rollback procedure
 

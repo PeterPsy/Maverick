@@ -110,6 +110,7 @@ class RuntimeRecoveryContext:
     binding: RuntimeExecutionBinding
     provider_state: RuntimeProviderState
     trigger: str = "explicit_recovery"
+    local_launch_spec: RuntimeBackendLaunchSpec | None = None
 
 
 @dataclass(frozen=True)

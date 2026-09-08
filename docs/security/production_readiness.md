@@ -77,9 +77,9 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 41 and the Full Workspace result contract
-`codex-baseline-v20` are bound by TCB manifest v35. Google revision 50 and
-OpenRouter revision 49 bind provider-config revision 2 and atomically claim that
+Hosted adapter 42 and the Full Workspace result contract
+`codex-baseline-v20` are bound by TCB manifest v36. Google revision 51 and
+OpenRouter revision 50 bind provider-config revision 2 and atomically claim that
 contract and the `maverick_agent` family because the executable result gate
 reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete

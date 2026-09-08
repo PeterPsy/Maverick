@@ -1,4 +1,4 @@
-"""Gemini's disabled Native candidate, with session-owned ACP loop lifetimes."""
+"""Antigravity CLI native candidate with session-owned process lifetimes."""
 
 import asyncio
 from contextlib import aclosing
@@ -6,30 +6,46 @@ from pathlib import Path
 from threading import Lock
 
 from core.providers.agentic_adapter import RuntimeCancelResult, RuntimeCloseResult, RuntimeHealth
-from core.providers.gemini_cli_sandbox import gemini_acp_launch_spec
-from core.providers.gemini_cli_session import GeminiAcpSession
+from core.providers.antigravity_cli_sandbox import antigravity_stream_launch_spec
+from core.providers.antigravity_cli_session import AntigravityCliSession
 from core.providers.models import RuntimeSteerResult
-from core.providers.native_acp_runtime import NativeAcpRuntime
-from core.providers.native_acp_transport import NativeAcpError
+from core.providers.native_session_runtime import NativeSessionRuntime
+from core.providers.native_structured_cli_transport import NativeStructuredCliError
 
 
-class GeminiCliNativeAdapter:
-    runtime_engine_id = "gemini-cli"
-    adapter_id = "gemini-cli-acp"
+class AntigravityCliNativeAdapter:
+    runtime_engine_id = "antigravity-cli"
+    adapter_id = "antigravity-cli-stream-json"
     adapter_version = "1"
-    local_process_lifecycle = None  # ACP owns its process and protocol connection.
+    local_process_lifecycle = None
+    requires_resolved_launch_spec = True
 
-    def __init__(self, *, command="gemini", dependency_roots=None):
+    def __init__(self, *, command="agy", dependency_roots=None):
         self.command = command
-        self.dependency_roots = tuple(dependency_roots) if dependency_roots is not None else tuple(
-            Path(path) for path in ("/usr/bin", "/usr/lib", "/lib", "/lib64", "/usr/local/lib/node_modules")
+        self.dependency_roots = (
+            tuple(dependency_roots)
+            if dependency_roots is not None
+            else tuple(
+                Path(path)
+                for path in (
+                    "/usr/bin",
+                    "/usr/lib",
+                    "/usr/local/lib",
+                    "/lib",
+                    "/lib64",
+                )
+            )
         )
         self._owners = {}
         self._session_ids = {}
         self._lock = Lock()
 
     async def build_launch_spec(self, context):
-        return gemini_acp_launch_spec(context, command=self.command, dependency_roots=self.dependency_roots)
+        return antigravity_stream_launch_spec(
+            context,
+            command=self.command,
+            dependency_roots=self.dependency_roots,
+        )
 
     async def validate(self, context):
         return await self.health(context)
@@ -37,30 +53,38 @@ class GeminiCliNativeAdapter:
     async def health(self, context):
         from core.providers.native_agent_builtins import CommandNativeRuntimeInspector
 
-        status = await asyncio.to_thread(CommandNativeRuntimeInspector(self.command).inspect)
+        status = await asyncio.to_thread(
+            CommandNativeRuntimeInspector(self.command).inspect
+        )
         return RuntimeHealth(status=status.health, reason_codes=status.reason_codes)
 
     def _owner(self, session_id, *, create=True):
         with self._lock:
             owner = self._owners.get(session_id)
             if owner is None and create:
-                engine = GeminiAcpSession(self.build_launch_spec, provider_thread_id=self._session_ids.get(session_id))
-                owner = self._owners[session_id] = NativeAcpRuntime(session_id, engine)
+                engine = AntigravityCliSession(
+                    self.build_launch_spec,
+                    provider_thread_id=self._session_ids.get(session_id),
+                )
+                owner = self._owners[session_id] = NativeSessionRuntime(
+                    session_id,
+                    engine,
+                )
             if owner is not None and owner.closing:
-                raise NativeAcpError("native_acp_session_closing")
+                raise NativeStructuredCliError("native_session_closing")
             return owner
 
     async def _retire(self, context, owner, *, interrupt=False):
-        sid = context.session.session_id
+        session_id = context.session.session_id
         operation = owner.engine.cancel if interrupt else owner.engine.close
         try:
             return await owner.shutdown(operation(context))
         finally:
             with self._lock:
-                if self._owners.get(sid) is owner:
+                if self._owners.get(session_id) is owner:
                     if owner.engine.provider_thread_id is not None:
-                        self._session_ids[sid] = owner.engine.provider_thread_id
-                    self._owners.pop(sid)
+                        self._session_ids[session_id] = owner.engine.provider_thread_id
+                    self._owners.pop(session_id)
 
     async def prepare(self, context):
         owner = self._owner(context.session.session_id)
@@ -77,8 +101,11 @@ class GeminiCliNativeAdapter:
                 async for event in events:
                     yield event
         except BaseException as error:
-            if isinstance(error, NativeAcpError) and str(error) == "native_acp_turn_already_active":
-                raise  # A rejected competitor must not terminate the active turn.
+            if (
+                isinstance(error, NativeStructuredCliError)
+                and str(error) == "antigravity_turn_already_active"
+            ):
+                raise
             await self._retire(context, owner)
             raise
 
@@ -115,7 +142,10 @@ class GeminiCliNativeAdapter:
         result = await self._retire(context, owner)
         if isinstance(result, RuntimeCloseResult):
             return result
-        return RuntimeCloseResult(closed=True, terminated_processes=int(result.cancelled))
+        return RuntimeCloseResult(
+            closed=True,
+            terminated_processes=int(result.cancelled),
+        )
 
 
-__all__ = ["GeminiCliNativeAdapter"]
+__all__ = ["AntigravityCliNativeAdapter"]

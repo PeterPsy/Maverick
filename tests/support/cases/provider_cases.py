@@ -160,7 +160,7 @@ class ProvidersTestCase(unittest.TestCase):
                 "cartesia",
                 "codex",
                 "deepgram",
-                "gemini-cli",
+                "antigravity-cli",
                 "google-ai-studio",
                 "kokoro-hosted",
                 "maverick-tool-loop",

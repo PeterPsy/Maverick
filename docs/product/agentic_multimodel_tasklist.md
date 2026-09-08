@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-07
+Status date: 2026-09-08
 
 Target: Phase 5 runtime-family separation, onboarding, and product taxonomy
 complete; provider certification, security review, canary, and release gates
@@ -12,8 +12,8 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 45 / TCB 35 / hosted adapter 41 /
-recipes 25 / Google profile 50 / OpenRouter profile 49 / Codex candidate 15.
+The current contained successor is suite 46 / TCB 36 / hosted adapter 42 /
+recipes 25 / Google profile 51 / OpenRouter profile 50 / Codex revision 15.
 Its exact-source fixture result is recorded outside the source checkout by the
 operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
 
@@ -634,9 +634,12 @@ completion claim.
 - [x] Codex now enters the provider registry through the generic native
   contract while its adapter source, profile revision 14, certificate, and
   artifact digest remain unchanged and active.
-- [x] A second Gemini CLI discovery-only candidate exercises the abstraction.
-  It has no executable controller/certificate and is forcibly clamped to
-  `disabled`, even if stale persisted provider metadata requests activation.
+- [x] A second executable Antigravity CLI candidate exercises the abstraction
+  through its documented persistent `stream-json` protocol. Its reviewed 1.1.27
+  binary is content-pinned, the official Gemini API-key launch path is wired
+  through a platform credential binding and private runtime home, and its
+  controller is real, but it has no connection
+  certificate and remains forcibly `disabled`; stale Gemini CLI metadata is retired.
 
 ### 5B — Maverick Agent framework
 
@@ -716,8 +719,8 @@ completion claim.
   reports `persisted_records_mutated=false`, and never rewrites pinned sessions.
   Existing sessions continue from their immutable execution binding rather than
   crossing families implicitly.
-- [x] Exact Codex remains active on profile revision 14 through the generic
-  native readiness projection; the discovery-only Gemini CLI candidate and the
+- [x] Exact Codex remains active on profile revision 15 through the generic
+  native readiness projection; the uncertified Antigravity CLI candidate and the
   Google/OpenRouter agentic previews remain unavailable and cannot be selected.
 - [x] Settings re-enablement is family-neutral and follows `enable_eligible`;
   it no longer relies on a Codex-only exception to an already-blocked effective
@@ -739,7 +742,7 @@ release decision below.
 P6 implementation is tracked in `docs/architecture/agentic_certification_p6.md`.
 The first checkpoint advances the contained hosted candidate to adapter 36,
 recipe 23, Google/OpenRouter profile revisions 45/44, suite 40, and TCB manifest
-30. Suite 40 includes the P5 family, native ACP lifecycle, and text-only
+30. Suite 40 includes the P5 family, native Antigravity stream-json lifecycle, and text-only
 regression corpus. These identities supersede the historical P4/P5 candidate
 values above; they are not live certification or rollout evidence.
 
@@ -880,3 +883,17 @@ TCB 35 also binds intervening Core API/app-hosting changes. Hosted adapter 41
 and Google/OpenRouter profiles 50/49 advance; recipe 25 and Codex candidate 15
 remain byte-identical. The failed r44 provider reservations remain in the one
 external ledger. This correction alone does not close P6-L/S/R.
+
+### P6 Antigravity-native candidate — 2026-09-07
+
+The obsolete Gemini CLI objective is replaced by the installed Antigravity CLI
+1.1.27 binary and its documented persistent `stream-json` contract. Suite 46
+and TCB 36 bind the exact runtime artifact, engine-owned launch resolution,
+official Gemini API-key mode, private settings/HOME, request-review soft-denial
+policy, redacted native tool events, cumulative usage, resume identity, and
+process cleanup. Hosted adapter 42 and Google/OpenRouter profiles 51/50 advance
+with the shared TCB; recipe 25 and Codex candidate 15 remain byte-identical.
+The operator confirmed the Google project tier is approved, with no paid
+fallback authorized. This checkpoint does not manufacture Antigravity's native
+connection certificate or close live, independent-review, canary, or rollback
+gates.

@@ -33,13 +33,13 @@ from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "50"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "49"
+GOOGLE_AGENTIC_PROFILE_REVISION = "51"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "50"
 GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
     "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49",
+    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50",
 )
 GOOGLE_CERTIFIED_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"

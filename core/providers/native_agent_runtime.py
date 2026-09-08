@@ -71,6 +71,9 @@ class NativeAgentRuntimeController:
             if engine_adapter.local_process_lifecycle is not None
             else None
         )
+        self.requires_resolved_launch_spec = bool(
+            getattr(engine_adapter, "requires_resolved_launch_spec", False)
+        )
 
     def discover(self) -> tuple[str, str | None]:
         return self.installation.inspector.discover()

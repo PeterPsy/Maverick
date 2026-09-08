@@ -95,13 +95,16 @@ endpoint/upstream catalog identity.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
-Suite 45 retains that complete corpus and adds authoritative persisted
+Suite 46 retains that complete corpus and adds authoritative persisted
 attestation propagation/revocation at session, queue, dispatch, authority and
 continuation boundaries plus direct-host operator attribution and the refreshed
-Google stable-alias and partial-lifecycle contracts. It binds hosted adapter 41,
-recipes 25, Google profile 50, OpenRouter profile 49, TCB 35 and the append-only Codex candidate artifact
-revision 15. The deployed Codex revision 14 remains retained and must not be
-cut over by a certification worker.
+Google stable-alias and partial-lifecycle contracts. It also replaces the
+retired Gemini CLI fixture objective with Antigravity's content-pinned,
+credentialed `stream-json` lifecycle and public-effect redaction tests. It binds hosted adapter 42,
+recipes 25, Google profile 51, OpenRouter profile 50, TCB 36 and Codex artifact
+revision 15. Codex revision 15 is the active verified profile, revision 14
+remains immutable history, and a remote-provider certification worker must not
+restart, migrate, or reissue the Codex runtime or certificate.
 
 This procedure is the only supported path from an executed provider suite to a
 Google or OpenRouter capability certificate. Bootstrap publishes uncertified,
@@ -116,8 +119,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v45 matrix revision
-  `2026-09-07-r45-p6-google-partial-lifecycle-tcb35` declared by the provider
+- the dated suite-v46 matrix revision
+  `2026-09-07-r46-p6-antigravity-native-tcb36` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -143,7 +146,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 45 \
+  --suite-version 46 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
@@ -160,8 +163,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-Both suite-45 manifests bind matrix revision
-`2026-09-07-r45-p6-google-partial-lifecycle-tcb35`. OpenRouter uses suite id
+Both suite-46 manifests bind matrix revision
+`2026-09-07-r46-p6-antigravity-native-tcb36`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
 collector-generated nonce. Duplicate fields, arbitrary text, extra payload

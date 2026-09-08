@@ -15,7 +15,7 @@ The runtime layer is provider-backed, but providers are not the runtime itself.
 
 | Kind | Examples | Notes |
 | --- | --- | --- |
-| Runtime-style backend | Codex, Claude Code, Gemini CLI, Kimi, local OSS runtime | often runs as a process with session state |
+| Runtime-style backend | Codex, Claude Code, Antigravity CLI, Kimi, local OSS runtime | often runs as a process with session state |
 | Hosted API-style provider | OpenAI-compatible API, Anthropic API, local model gateway | uses API keys and request/response or streaming APIs |
 
 ## Core rule

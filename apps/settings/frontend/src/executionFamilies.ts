@@ -4,7 +4,7 @@ export const EXECUTION_FAMILY_CATALOG: readonly ExecutionFamilyDefinition[] = [
   {
     family_id: 'native_agent',
     label: 'Native Agents (CLI)',
-    description: 'External coding-agent runtimes such as Codex, Claude Code, and Gemini CLI. They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.',
+    description: 'External coding-agent runtimes such as Codex, Claude Code, and Antigravity CLI. They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.',
     workspace_actions: true
   },
   {

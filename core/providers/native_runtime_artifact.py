@@ -25,6 +25,10 @@ CODEX_PACKAGED_RUNTIME_ARTIFACT = NativeRuntimeArtifact(
     "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
     "codex-cli 0.153.4",
 )
+ANTIGRAVITY_CLI_RUNTIME_ARTIFACT = NativeRuntimeArtifact(
+    "93eb2118b778a4005700b54cdd7e08b896fbe665d5ff338e38e9e53da9a091ea",
+    "1.1.27",
+)
 _CACHE = {}
 _LOCK = RLock()
 
@@ -57,4 +61,9 @@ def inspect_native_runtime_artifact(command: str) -> NativeRuntimeArtifact:
         raise CapabilityCertificateError("native_runtime_artifact_unavailable") from error
 
 
-__all__ = ["CODEX_PACKAGED_RUNTIME_ARTIFACT", "NativeRuntimeArtifact", "inspect_native_runtime_artifact"]
+__all__ = [
+    "ANTIGRAVITY_CLI_RUNTIME_ARTIFACT",
+    "CODEX_PACKAGED_RUNTIME_ARTIFACT",
+    "NativeRuntimeArtifact",
+    "inspect_native_runtime_artifact",
+]

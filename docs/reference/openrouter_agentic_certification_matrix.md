@@ -1,24 +1,24 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-09-07
-Matrix revision: `2026-09-07-r45-p6-google-partial-lifecycle-tcb35`
+Matrix revision: `2026-09-07-r46-p6-antigravity-native-tcb36`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==41`
+Adapter: `maverick-hosted-tool-loop==42`
 
 ## P6 candidate checkpoint
 
-Suite 45 / TCB manifest 35 / hosted adapter 41 / recipe 25 bind the P5
-executable family, native ACP lifecycle, catalog/lineage, and text-only
+Suite 46 / TCB manifest 36 / hosted adapter 42 / recipe 25 bind the P5
+executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and independently observed natural
 conformance before signing. Protocol-only success is not signable evidence. Historical evidence below is
 not evidence for this candidate. The authoritative attestation implementation is
 available, but the global and per-provider kill switches still default off and no
-remote certificate or operator binding is enabled. Shared queue/dispatch changes
-are isolated behind Codex candidate revision 15; the running revision-14 process
-is not cut over by this checkpoint.
+remote certificate or operator binding is enabled. Codex revision 15 is the
+active verified profile; this remote candidate does not change its artifact,
+restart or migrate its process, or reissue its certificate.
 
 Suite 45 additionally includes generic continuation repair/multi-hop, explicit
 native identity rejection, the reviewed app-effect delta regressions, and the
@@ -31,6 +31,14 @@ suite-40 failures are not waived or removed; the corrected fixtures and complete
 inventory must pass on this candidate. See
 `docs/development/agentic_p6_effect_audit_2026-09-06.md`.
 
+Suite 46 replaces the retired Gemini CLI objective with the content-pinned
+Antigravity CLI 1.1.27 candidate. It binds the documented persistent
+`stream-json` lifecycle, platform-resolved Gemini API-key delivery, private
+runtime settings/home, redacted native effect projection, process cleanup, and
+explicit safe-next-turn steering fallback. This shared TCB change does not
+alter OpenRouter's exact provider/upstream/ZDR/model tuple or authorize another
+OpenRouter request after the prior transport halt.
+
 ## Preview combination
 
 | Field | Pinned value |
@@ -38,7 +46,7 @@ inventory must pass on this candidate. See
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-07`, exact resolved slug `deepseek/deepseek-v4-flash-20260423`, and exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `49` (revision `48` suspended) |
+| Immutable profile revision | `50` (revision `49` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
@@ -131,7 +139,7 @@ Primary references:
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
-| Certified execution TCB | manifest v35 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-06-p6-builtin-effects-reviewed-v4`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v36 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | Endpoint catalog preflight | main model metadata must pin the exact resolved slug and `xhigh`/`high` reasoning contract; exact model-endpoint and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -562,6 +570,19 @@ failed, non-refundable request in the external operator ledger; that provider
 is halted for this job and is not retried by this revision. Codex candidate 15
 and recipe 25 remain byte-identical; no certificate, binding, canary, or release
 is implied.
+
+Revision 50 pins hosted adapter 42 and governed recipe 25 together with suite
+46, matrix `2026-09-07-r46-p6-antigravity-native-tcb36`, and TCB manifest v36.
+It replaces the obsolete Gemini CLI framework objective with the exact
+Antigravity native candidate and binds its credential, containment, structured
+protocol, effect-redaction, and lifecycle tests. OpenRouter's request protocol
+and exact route are unchanged from revision 49, and the halted provider is not
+retried. Google profile 51 advances with the shared adapter/TCB identity. Codex
+candidate 15 and recipe 25 remain byte-identical; no certificate, binding,
+canary, or release is implied.
+Effect audit `2026-09-07-p6-builtin-effects-reviewed-v5` also binds the reviewed
+Design Studio CLI operating-group lock handoff already present in the candidate
+source; no descriptor or effect class changed.
 
 ## Fail-closed conditions
 

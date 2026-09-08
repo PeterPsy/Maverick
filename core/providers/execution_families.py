@@ -28,7 +28,7 @@ EXECUTION_FAMILIES = (
         label="Native Agents (CLI)",
         description=(
             "External coding-agent runtimes such as Codex, Claude Code, and "
-            "Gemini CLI. They use their own agent loop and tools, while Maverick "
+            "Antigravity CLI. They use their own agent loop and tools, while Maverick "
             "launches, connects to, and supervises them."
         ),
         workspace_actions=True,

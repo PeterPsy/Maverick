@@ -32,9 +32,9 @@ from core.providers.models import (
     WorkspaceProviderStatus,
 )
 from core.providers.native_agent_builtins import (
+    build_antigravity_cli_candidate_definition,
+    build_antigravity_cli_candidate_installation,
     build_codex_native_installation,
-    build_gemini_cli_candidate_definition,
-    build_gemini_cli_candidate_installation,
 )
 from core.providers.provider_codex import CodexProviderAdapter
 from core.providers.provider_codex_reasoning import normalize_codex_model_options
@@ -55,7 +55,7 @@ from core.secrets.store import SecretStore
 from core.skills.models import SkillDefinition, SkillMaterialization
 
 
-RETIRED_PROVIDER_IDS = {"deepseek", "groq"}
+RETIRED_PROVIDER_IDS = {"deepseek", "gemini-cli", "groq"}
 
 
 @dataclass(frozen=True)
@@ -85,7 +85,7 @@ def utcnow() -> datetime:
 def builtin_provider_registry(*, codex_command: str | None = None, refresh_model_catalog: bool = False) -> ProviderRegistry:
     """Build the builtin provider registry shipped by the core."""
     registry = ProviderRegistry()
-    from core.providers.gemini_cli_native import GeminiCliNativeAdapter
+    from core.providers.antigravity_cli_native import AntigravityCliNativeAdapter
     adapter = CodexProviderAdapter(codex_command=codex_command)
     registry.register_native_agent_installation(
         build_codex_native_installation(adapter),
@@ -93,9 +93,9 @@ def builtin_provider_registry(*, codex_command: str | None = None, refresh_model
         runtime_adapter=adapter,
     )
     registry.register_native_agent_installation(
-        build_gemini_cli_candidate_installation(),
-        definition=build_gemini_cli_candidate_definition(),
-        engine_adapter=GeminiCliNativeAdapter(),
+        build_antigravity_cli_candidate_installation(),
+        definition=build_antigravity_cli_candidate_definition(),
+        engine_adapter=AntigravityCliNativeAdapter(),
     )
     for definition in build_hosted_provider_definitions():
         registry.register_provider_definition(definition)
@@ -1037,11 +1037,14 @@ def build_resolved_runtime_backend_launch_spec(
     session: RuntimeSessionRecord,
     definition: ProviderDefinition,
     selection: ProviderSelection | None,
-    runtime_adapter: RuntimeBackendAdapter,
+    runtime_adapter: RuntimeBackendAdapter | None = None,
+    agentic_adapter: AgenticRuntimeEngineAdapter | None = None,
     secret_store: SecretStore | None = None,
     observability_store=None,
 ) -> RuntimeBackendLaunchSpec:
     """Build a launch spec from an already resolved runtime backend."""
+    if (runtime_adapter is None) == (agentic_adapter is None):
+        raise ValueError("Exactly one runtime launch adapter must be provided.")
     secret_env: dict[str, str] = {}
     resolved_secret_refs: list[str] = []
     credential_binding_id: str | None = None
@@ -1073,17 +1076,49 @@ def build_resolved_runtime_backend_launch_spec(
         credential_binding_id = binding.binding_id
         resolved_secret_refs.append(lease.secret_ref)
         secret_env["MAVERICK_PROVIDER_SECRET"] = lease.value
-    launch_kwargs = {
-        "secret_env": secret_env,
-        "credential_binding_id": credential_binding_id,
-        "resolved_secret_refs": resolved_secret_refs,
-    }
-    launch_parameters = signature(runtime_adapter.build_launch_spec).parameters
-    if "model_id" in launch_parameters:
-        launch_kwargs["model_id"] = None if selection is None else selection.model_id
-    if "model_reasoning_effort" in launch_parameters:
-        launch_kwargs["model_reasoning_effort"] = None if selection is None else selection.model_reasoning_effort
-    spec = runtime_adapter.build_launch_spec(session, **launch_kwargs)
+    if runtime_adapter is not None:
+        launch_kwargs = {
+            "secret_env": secret_env,
+            "credential_binding_id": credential_binding_id,
+            "resolved_secret_refs": resolved_secret_refs,
+        }
+        launch_parameters = signature(runtime_adapter.build_launch_spec).parameters
+        if "model_id" in launch_parameters:
+            launch_kwargs["model_id"] = (
+                None if selection is None else selection.model_id
+            )
+        if "model_reasoning_effort" in launch_parameters:
+            launch_kwargs["model_reasoning_effort"] = (
+                None
+                if selection is None
+                else selection.model_reasoning_effort
+            )
+        spec = runtime_adapter.build_launch_spec(session, **launch_kwargs)
+    else:
+        if agentic_adapter is None:
+            raise ValueError("Agentic runtime launch adapter is missing.")
+        binding = session.execution_binding
+        if binding is None:
+            raise ProviderSelectionError("runtime_execution_binding_missing")
+        from core.providers.agentic_adapter import LocalLaunchContext
+        from core.runtime.async_runtime import run_runtime_coroutine
+
+        spec = run_runtime_coroutine(
+            agentic_adapter.build_launch_spec(
+                LocalLaunchContext(
+                    session=session,
+                    binding=binding,
+                    secret_env=secret_env,
+                )
+            )
+        )
+        if spec.provider_id != definition.provider_id:
+            raise ProviderSelectionError("provider_launch_identity_mismatch")
+        spec = replace(
+            spec,
+            credential_binding_id=credential_binding_id,
+            resolved_secret_refs=resolved_secret_refs,
+        )
     if observability_store is not None:
         record_platform_audit(
             observability_store,
@@ -1136,13 +1171,24 @@ def build_runtime_backend_launch_spec(
         registry=active_registry,
         codex_command=codex_command,
     )
-    adapter = active_registry.get_runtime_adapter(definition.provider_id)
+    try:
+        runtime_adapter = active_registry.get_runtime_adapter(
+            definition.provider_id
+        )
+    except ProviderNotFoundError:
+        runtime_adapter = None
+    agentic_adapter = (
+        active_registry.get_agentic_runtime_adapter(definition.provider_id)
+        if runtime_adapter is None
+        else None
+    )
     return build_resolved_runtime_backend_launch_spec(
         store,
         session=session,
         definition=definition,
         selection=selection,
-        runtime_adapter=adapter,
+        runtime_adapter=runtime_adapter,
+        agentic_adapter=agentic_adapter,
         secret_store=secret_store,
         observability_store=observability_store,
     )

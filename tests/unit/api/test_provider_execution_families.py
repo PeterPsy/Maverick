@@ -68,7 +68,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             [item["description"] for item in payload["execution_families"]],
             [
                 "External coding-agent runtimes such as Codex, Claude Code, and "
-                "Gemini CLI. They use their own agent loop and tools, while "
+                "Antigravity CLI. They use their own agent loop and tools, while "
                 "Maverick launches, connects to, and supervises them.",
                 "API models made agentic by Maverick. Maverick provides workspace "
                 "context, tools, the execution loop, approvals, finalization, and "
@@ -181,12 +181,16 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             for item in payload["native_agents"]["items"]
         }
 
-        gemini = candidates["gemini-cli"]
-        self.assertFalse(gemini["selectable"])
-        self.assertEqual(gemini["provider_status"], "disabled")
-        self.assertEqual(gemini["full_workspace_status"], "unavailable")
-        self.assertEqual(gemini["unavailable_reason"], "native_agent_certificate_incomplete")
-        self.assertNotIn("executable_path", gemini)
+        antigravity = candidates["antigravity-cli"]
+        self.assertFalse(antigravity["selectable"])
+        self.assertEqual(antigravity["provider_status"], "disabled")
+        self.assertEqual(antigravity["full_workspace_status"], "unavailable")
+        self.assertEqual(
+            antigravity["unavailable_reason"],
+            "native_agent_certificate_incomplete",
+        )
+        self.assertNotIn("executable_path", antigravity)
+        self.assertNotIn("gemini-cli", candidates)
 
     def test_certified_native_profile_is_unavailable_when_runtime_is_missing(self) -> None:
         state = self.make_state()

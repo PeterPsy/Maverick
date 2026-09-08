@@ -10,7 +10,13 @@ import subprocess
 from threading import Lock
 from typing import Callable
 from time import monotonic
-from core.providers.native_runtime_artifact import CODEX_PACKAGED_RUNTIME_ARTIFACT, inspect_native_runtime_artifact
+from core.providers.native_runtime_artifact import (
+    ANTIGRAVITY_CLI_RUNTIME_ARTIFACT,
+    CODEX_PACKAGED_RUNTIME_ARTIFACT,
+    NativeRuntimeArtifact,
+    inspect_native_runtime_artifact,
+)
+from core.providers.antigravity_cli_sandbox import ANTIGRAVITY_DEFAULT_MODEL
 
 from core.providers.models import (
     ProviderCapabilitySet,
@@ -36,7 +42,7 @@ from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISIO
 
 NATIVE_AGENT_RECIPE_REVISION = "1"
 NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
-GEMINI_CLI_CANDIDATE_PROVIDER_ID = "gemini-cli"
+ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
 _INSPECTION_CACHE_SECONDS = 5.0
 _INSPECTION_CACHE: dict[tuple[str, tuple[str, ...]], tuple[float, NativeRuntimeStatus]] = {}
 _INSPECTION_CACHE_LOCK = Lock()
@@ -192,17 +198,18 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
     )
 
 
-def build_gemini_cli_candidate_definition(
+def build_antigravity_cli_candidate_definition(
     now: datetime | None = None,
 ) -> ProviderDefinition:
-    """Publish the executable ACP candidate; certification still gates execution."""
+    """Publish the executable Antigravity candidate; certification gates use."""
     timestamp = now or datetime.now(tz=UTC)
     return ProviderDefinition(
-        provider_id=GEMINI_CLI_CANDIDATE_PROVIDER_ID,
-        label="Gemini CLI",
+        provider_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
+        label="Antigravity CLI",
         description=(
-            "Structured ACP native-agent candidate. Execution remains disabled "
-            "until an exact adapter, recipe, model, and certificate are approved."
+            "Pinned Antigravity stream-json native-agent candidate. Execution "
+            "uses a session-scoped Gemini API key and remains disabled until "
+            "the exact adapter, recipe, model, and certificate are approved."
         ),
         kind="runtime_backend",
         provider_role="runtime_engine",
@@ -210,66 +217,73 @@ def build_gemini_cli_candidate_definition(
         capabilities=ProviderCapabilitySet(
             supports_interactive_runtime=True,
             supports_streaming=True,
-            supports_tools=False,
+            supports_tools=True,
             supports_mcp=False,
             supports_skills=False,
-            supports_filesystem_access=False,
+            supports_filesystem_access=True,
             supports_remote_execution=False,
-            supports_api_key_auth=False,
+            supports_api_key_auth=True,
             supports_local_binary=True,
             input_modalities=["text"],
             output_modalities=["text", "events"],
         ),
-        default_model_family="provider-default",
-        requires_credentials=False,
+        default_model_family=ANTIGRAVITY_DEFAULT_MODEL,
+        requires_credentials=True,
         supported_execution_modes=["sandbox"],
         created_at=timestamp,
         updated_at=timestamp,
         model_options=[
             ProviderModelOption(
-                model_id="provider-default",
-                label="Provider default (unverified)",
-                description="Candidate alias; no agentic authority is granted.",
+                model_id=ANTIGRAVITY_DEFAULT_MODEL,
+                label="Gemini 3.6 Flash (High)",
+                description=(
+                    "Pinned Antigravity model slug; live account availability "
+                    "and agentic authority are not inferred."
+                ),
                 default_reasoning_effort=None,
             )
         ],
     )
 
 
-def build_gemini_cli_candidate_installation() -> NativeAgentInstallation:
-    """Return a complete but deliberately uncertified native registration."""
+def build_antigravity_cli_candidate_installation(
+    *,
+    command: str = "agy",
+    runtime_artifact: NativeRuntimeArtifact = ANTIGRAVITY_CLI_RUNTIME_ARTIFACT,
+) -> NativeAgentInstallation:
+    """Return a complete, content-pinned, but uncertified registration."""
     recipe_payload = {
-        "recipe_id": "gemini-cli-native-candidate",
+        "recipe_id": "antigravity-cli-native-candidate",
         "revision": NATIVE_AGENT_RECIPE_REVISION,
-        "protocol": "acp-ndjson-v1",
+        "protocol": "antigravity-stream-json-v1",
         "context_owner": "native_runtime",
-        "prompt_contract_revision": "candidate",
+        "prompt_contract_revision": "antigravity-text-v1",
     }
     return NativeAgentInstallation(
         manifest=NativeAgentAdapterManifest(
-            runtime_engine_id=GEMINI_CLI_CANDIDATE_PROVIDER_ID,
-            adapter_id="gemini-cli-acp",
+            runtime_engine_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
+            adapter_id="antigravity-cli-stream-json",
             adapter_version="1",
-            protocol_kind="json_rpc",
-            protocol_id="acp-ndjson",
+            protocol_kind="structured_cli",
+            protocol_id="antigravity-stream-json",
             protocol_version="1",
-            structured_event_schema="acp.session.update.v1",
+            structured_event_schema="antigravity.stream-json.v1",
             lifecycle_operations=tuple(sorted(REQUIRED_NATIVE_OPERATIONS)),
             machine_readable=True,
             human_terminal_scraping=False,
-            trusted_distribution="maverick_candidate_manifest",
+            trusted_distribution="maverick_reviewed_binary",
         ),
         recipe=NativeAgentHarnessRecipe(
             recipe_id=str(recipe_payload["recipe_id"]),
             revision=NATIVE_AGENT_RECIPE_REVISION,
             digest=canonical_digest(recipe_payload),
-            prompt_contract_revision="candidate",
+            prompt_contract_revision="antigravity-text-v1",
             context_owner="native_runtime",
         ),
         model_provider_connections=(
             NativeAgentModelProviderConnection(
                 model_provider_id="google",
-                catalog_provider_id=GEMINI_CLI_CANDIDATE_PROVIDER_ID,
+                catalog_provider_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
             ),
         ),
         effects=NativeAgentEffectContract(
@@ -277,12 +291,13 @@ def build_gemini_cli_candidate_installation() -> NativeAgentInstallation:
             workspace_confined=True,
             process_tree_supervised=True,
             structured_effect_events=True,
-            approval_policy="maverick_common_approval_policy",
+            approval_policy="antigravity_request_review_soft_deny_v1",
             sandbox_policy_revision=NATIVE_AGENT_SANDBOX_POLICY_REVISION,
         ),
         certificate=NativeAgentCertificateReference(
             connection_certificate_ids=(),
             full_workspace_contract_revision=None,
         ),
-        inspector=CommandNativeRuntimeInspector("gemini"),
+        inspector=CommandNativeRuntimeInspector(command),
+        runtime_artifact=runtime_artifact,
     )

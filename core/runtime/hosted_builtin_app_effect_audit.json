@@ -83,7 +83,7 @@
     "design-studio": {
       "cli": {
         "descriptor_sha256": "9e1dec54963878e65e083c20533dbdf5d298edb45e1a0fc3fcf92548b894e83f",
-        "execution_sha256": "c82389092a0cc269ffb98eb7bccf61009bc6f16628ffae2215d0f29e5d32ae13"
+        "execution_sha256": "5cf1239dfe1d9938d32f9dd19a9506a5a1e1e41c56ff4a3e32b8093787b4291a"
       },
       "mcp": {
         "descriptor_sha256": "790083a08c2602cd206d7fb3dc2f2c3223c0a39099762c7885826125017300b3",
@@ -231,6 +231,6 @@
       }
     }
   },
-  "audit_revision": "2026-09-06-p6-builtin-effects-reviewed-v4",
+  "audit_revision": "2026-09-07-p6-builtin-effects-reviewed-v5",
   "schema_version": "2"
 }

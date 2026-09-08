@@ -8,9 +8,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current Google partial-lifecycle successor uses
-suite 45 / TCB 35 / hosted adapter 41 / recipes 25 / Google profile 50 /
-OpenRouter profile 49 / Codex candidate 15. It requires its
+That pass is historical. The current Antigravity-native successor uses
+suite 46 / TCB 36 / hosted adapter 42 / recipes 25 / Google profile 51 /
+OpenRouter profile 50 / Codex revision 15. It requires its
 own exact-source operator record before signing or release. The source tree does
 not treat a mocked probe receipt or this status paragraph as that record.
 
@@ -25,6 +25,16 @@ The subsequent operator budget/candidate-isolation addendum (section 17),
 also guarded through Storage, has SHA-256
 `7fae659a9d903d0f776fb7f87526b8eda348aaa753e01c5ff555999e44990471`.
 It authorizes the bounded operational work, not a release or waiver of evidence.
+Section 18 replaces the prior native objective with Antigravity CLI and records
+the operator's Google-tier approval. The official Storage surface returned
+`authentication_required`, so the update used the documented direct fallback
+only after verifying the section-17 SHA fence; the resulting document SHA-256
+was `ad49b8ffc6c856b5d84393c327951af7ea393a5c1e6ec6fb9d95f99e251f08fa`.
+After the final exact-source runs, the same concrete authentication failure
+justified one SHA-fenced atomic fallback append of section 19. It records the
+deterministic results and remaining NO-GO gates; the resulting document
+SHA-256 is
+`a27dc7553d5c8aa29739da1c12d51013b4595e2c3e6d6a069f06bcc567418999`.
 Its P5 review checkpoint is `617ed21c39e6111e2bb0c8d102bfa34709312227`.
 
 P6 distinguishes repository conformance, live protocol evidence, natural
@@ -42,8 +52,9 @@ The P6 worker defaults to a 4.50 USD non-refundable reservation ceiling, leaving
 requests and at least 15 seconds between reservations. These are conservative
 job limits, not claims about the remaining account balance or Google quota.
 There is no automatic top-up, billing-tier change, quota reset, or paid fallback.
-Google's project tier must be confirmed operationally; a local `free_tier`
-policy is not proof of the provider's billing configuration.
+The operator confirmed on 2026-09-07 that the selected Google project tier is
+approved. That confirmation satisfies the operator tier-approval input but is
+not a provider billing receipt and permits no automatic paid fallback.
 
 Every live protocol transport must open the same private operator-owned SQLite
 ledger with its expected policy digest. It reserves before egress in a durable
@@ -95,20 +106,31 @@ The Google protocol codec advances to revision 4. The shared hosted adapter,
 TCB and both API profiles advance; recipe 25 and the Codex candidate artifact
 remain byte-identical.
 
-The shared queue/handoff fix changes files declared in Codex's artifact. It is
-recorded as append-only Codex candidate revision 15 with revision 14 retained,
-not hidden by exclusions or by reusing the old certificate. The running Codex
-14 backend remains untouched until candidate 15 is separately verified and an
-explicit cutover/rollback is approved. Native Gemini CLI still needs its own
-approved connection/artifact path, not an API model certificate.
+Candidate 46 replaces the retired Gemini CLI objective with the installed,
+content-pinned Antigravity CLI 1.1.27 runtime. Its documented persistent
+`stream-json` protocol now has a supervised engine-owned launch path, exact
+model pinning, private HOME/XDG roots, platform-resolved Gemini API-key
+delivery, request-review soft denial, bounded/redacted tool-effect events,
+resume identity fencing, and process-tree cleanup. The source changes advance
+the shared TCB, hosted adapter, suite, and both API profile identities; hosted
+provider wire contracts and recipe 25 do not change. Antigravity remains a
+disabled Native candidate until its separate connection certificate, full
+workspace evidence, trusted review/signature, and canary exist.
+
+The shared queue/handoff fix changed files declared in Codex's artifact and was
+published append-only as Codex revision 15, with revision 14 retained in
+immutable history rather than hidden by exclusions or reused as a certificate
+identity. Revision 15 is now the active verified Codex profile. This
+Antigravity candidate does not change that artifact, restart or migrate the
+Codex runtime, or reissue its certificate. Native Antigravity CLI still needs
+its own approved connection/artifact path, not an API model certificate.
 
 Certification is per exact API profile (including model, provider config,
 endpoint/routing, recipe, and adapter), or per native runtime/provider
 connection. Native model slugs inherit their connection certificate; a model
-diagnostic must not mint a new connection certificate. Deployed Codex revision
-14 remains outside the remote candidate revision cycle; revision 15 exists only
-because the shared execution boundary changed and must not inherit revision 14's
-identity.
+diagnostic must not mint a new connection certificate. Active Codex revision 15
+remains outside the remote candidate revision cycle; revision 14 remains only
+as immutable history and its identity is not inherited by revision 15.
 
 ### Recovery fixture scope
 
@@ -131,9 +153,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 41,
-   recipe 25, Google profile 50, OpenRouter profile 49, suite 45, canonical
-   TCB manifest 35, and append-only Codex candidate revision 15. The corpus includes P5 family/pinning/onboarding, native ACP
+1. **Candidate identities and deterministic corpus:** hosted adapter 42,
+   recipe 25, Google profile 51, OpenRouter profile 50, suite 46, canonical
+   TCB manifest 36, and active Codex revision 15. The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural
@@ -252,10 +274,18 @@ The subsequent scoped source review and regressions are recorded in
 `docs/development/agentic_p6_effect_audit_2026-09-06.md`. Audit revision
 `2026-09-06-p6-builtin-effects-reviewed-v4` renews only its ten reviewed
 app/surface pairs, without classifying their content or granting egress.
+Audit revision `2026-09-07-p6-builtin-effects-reviewed-v5` additionally renews
+only the Design Studio CLI pair after review of the setgid operating-group lock
+handoff added by `e5e6ec2e`. The handoff accepts only a regular, single-link
+inode in the explicitly trusted operating group, fences the observed inode,
+installs a new private `0600` inode atomically, and retains the existing lock
+and race regressions. The scoped record is
+`docs/development/agentic_p6_effect_audit_2026-09-07.md`. No descriptor or
+effect classification changed.
 
 The general production blockers in `SECURITY.md` require a separate security
 review. `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true because the persisted
 server boundary is implemented; this is not a release switch. Until the live
 and natural evidence, trusted signature/review, canary, rollback and production
-approvals actually exist, the provider feature flags stay off and Gemini CLI
+approvals actually exist, the provider feature flags stay off and Antigravity CLI
 and remote API agents remain unavailable. Changing a flag is not certification.

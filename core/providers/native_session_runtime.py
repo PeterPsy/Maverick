@@ -1,14 +1,14 @@
-"""One supervised ACP session loop, independent of short-lived Core callers."""
+"""One supervised native session loop, independent of short-lived callers."""
 
 import asyncio
 from contextlib import aclosing
 from threading import Lock, Thread
 
-from core.providers.native_acp_transport import NativeAcpError
+from core.providers.native_structured_cli_transport import NativeStructuredCliError
 
 
 class _EventStream:
-    """Pull one event at a time, keeping the generator in one owner-loop task."""
+    """Pull one event at a time while retaining generator task ownership."""
 
     def __init__(self, iterator):
         self._requests = asyncio.Queue(maxsize=1)
@@ -32,7 +32,7 @@ class _EventStream:
 
     async def next(self):
         if self._task.done() and self._results.empty():
-            raise NativeAcpError("native_acp_stream_closed")
+            raise NativeStructuredCliError("native_session_stream_closed")
         self._requests.put_nowait(None)
         event, error = await self._results.get()
         if error is not None:
@@ -44,15 +44,15 @@ class _EventStream:
         await asyncio.gather(self._task, return_exceptions=True)
 
 
-class NativeAcpRuntime:
-    """Own all process transports, tasks and locks until explicit session close."""
+class NativeSessionRuntime:
+    """Own all process transports, tasks, and locks until explicit close."""
 
     def __init__(self, session_id, engine):
         self.engine = engine
         self._lock = Lock()
         self._shutdown = None
         self.loop = asyncio.new_event_loop()
-        self.thread = Thread(target=self._run, name=f"maverick-acp-{session_id}")
+        self.thread = Thread(target=self._run, name=f"maverick-native-{session_id}")
         try:
             self.thread.start()
         except BaseException:
@@ -85,7 +85,7 @@ class NativeAcpRuntime:
         with self._lock:
             if self._shutdown is not None:
                 coroutine.close()
-                raise NativeAcpError("native_acp_session_closing")
+                raise NativeStructuredCliError("native_session_closing")
             future = asyncio.run_coroutine_threadsafe(coroutine, self.loop)
         return await asyncio.wrap_future(future)
 
@@ -98,8 +98,6 @@ class NativeAcpRuntime:
             while (event := await self.call(channel.next())) is not None:
                 yield event
         finally:
-            # Shutdown already drains every owner task. Never submit cleanup to
-            # a closed loop, nor advance a generator from a different task.
             if not self.closing:
                 await self.call(channel.close())
 
@@ -107,18 +105,19 @@ class NativeAcpRuntime:
         with self._lock:
             if self._shutdown is None:
                 self._shutdown = asyncio.run_coroutine_threadsafe(coroutine, self.loop)
-                self._shutdown.add_done_callback(lambda _done: self.loop.call_soon_threadsafe(self.loop.stop))
+                self._shutdown.add_done_callback(
+                    lambda _done: self.loop.call_soon_threadsafe(self.loop.stop)
+                )
             else:
                 coroutine.close()
             future = self._shutdown
+
         async def finish():
             try:
                 return await asyncio.wrap_future(future)
             finally:
                 await asyncio.to_thread(self.thread.join)
 
-        # Repeated caller cancellation cannot publish a retired session while
-        # its worker is still draining process transports and async generators.
         waiter = asyncio.create_task(finish())
         cancelled = False
         while not waiter.done():
@@ -131,4 +130,4 @@ class NativeAcpRuntime:
         return waiter.result()
 
 
-__all__ = ["NativeAcpRuntime"]
+__all__ = ["NativeSessionRuntime"]

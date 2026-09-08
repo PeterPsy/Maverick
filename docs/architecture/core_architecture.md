@@ -612,9 +612,16 @@ builder. `get_agentic_runtime_adapter()` returns that controller on the
 production path. The controller delegates the supervised local-process
 lifecycle, validates structured final events, and the provider-neutral executor
 turns a nominally successful blank result into `agent_final_output_empty`. The
-Gemini CLI registration now owns an executable ACP v1 controller and supervised
-NDJSON transport rather than using the Codex bridge. Its lifecycle proof and
-candidate limitations are specified in `docs/architecture/gemini_cli_native.md`.
+Antigravity CLI registration owns an executable persistent `stream-json`
+controller and supervised NDJSON transport rather than using the Codex bridge.
+Because that engine owns its process internally, it explicitly requests a
+Core-resolved launch specification: provider credentials are leased through the
+secret boundary, mapped only to Antigravity's documented `GEMINI_API_KEY`, and
+delivered with a private settings/home tree instead of inheriting host login
+state. Engine-owned launch does not bypass credential resolution or audit.
+The obsolete Gemini CLI ACP candidate is retired. Antigravity's lifecycle proof
+and limitations are specified in
+`docs/architecture/antigravity_cli_native.md`.
 It remains disabled without any release authority or connection certificate.
 
 Maverick Agent onboarding is likewise composition-driven. A trusted protocol
@@ -3368,7 +3375,7 @@ Enabled workspace-owned skills from the runtime session's selected `skill.catalo
 
 How those skill assets are installed into a runtime home is provider-specific.
 
-That installation strategy belongs to the selected provider adapter, because different backends such as Codex, Claude Code, or Gemini CLI may require different runtime-home layouts or sync behavior.
+That installation strategy belongs to the selected provider adapter, because different backends such as Codex, Claude Code, or Antigravity CLI may require different runtime-home layouts or sync behavior.
 
 Visible runtime skill ids are plain workspace skill ids, for example `maverick-code-skill` or `chat-ops`. They are intentionally not namespaced by core or source app. The selected `skill.catalog` provider owns the editable runtime catalog for that session and must prevent or resolve name collisions before saving a skill.
 

@@ -279,7 +279,7 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("Text-only Models (API)", family_source)
         self.assertIn("No workspace tools or actions.", family_source)
         self.assertIn(
-            "External coding-agent runtimes such as Codex, Claude Code, and Gemini CLI. "
+            "External coding-agent runtimes such as Codex, Claude Code, and Antigravity CLI. "
             "They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.",
             family_source,
         )

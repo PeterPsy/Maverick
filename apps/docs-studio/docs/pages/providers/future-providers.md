@@ -1,4 +1,4 @@
-# Claude Code, Gemini CLI, OSS, and API-key models
+# Claude Code, Antigravity CLI, OSS, and API-key models
 
 Maverick should be able to support multiple provider families without changing app contracts or workspace data layout.
 
@@ -7,7 +7,7 @@ Maverick should be able to support multiple provider families without changing a
 | Provider | Expected shape |
 | --- | --- |
 | Claude Code | local CLI/process adapter with provider-specific session handling |
-| Gemini CLI | local CLI/process adapter with streaming and tool-event translation |
+| Antigravity CLI | local CLI/process adapter with streaming and tool-event translation |
 | Kimi or other coding CLIs | runtime-style backend with model capability metadata |
 | Local OSS runtime | local server or process adapter, possibly OpenAI-compatible |
 

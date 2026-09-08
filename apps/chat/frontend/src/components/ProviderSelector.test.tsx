@@ -274,7 +274,7 @@ describe("ProviderSelector", () => {
     const familyDescriptions = Array.from(element.querySelectorAll(".chatapp-provider-menu__family-heading span"))
       .map((node) => node.textContent);
     expect(familyDescriptions).toEqual([
-      "External coding-agent runtimes such as Codex, Claude Code, and Gemini CLI. They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.",
+      "External coding-agent runtimes such as Codex, Claude Code, and Antigravity CLI. They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.",
       "API models made agentic by Maverick. Maverick provides workspace context, tools, the execution loop, approvals, finalization, and recovery.",
       "API models without workspace tools or an action loop. They generate text from the context provided by Maverick but cannot perform workspace actions.",
     ]);

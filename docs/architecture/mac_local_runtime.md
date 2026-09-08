@@ -1088,3 +1088,25 @@ cross-app fallback or broader input authority is introduced. Four Swift tests
 cover the positive overlay cases and both ambiguity boundaries; a Python
 packaging test pins the new contract and label **tooltip stabili v26**. Signed
 delivery and physical continuation remain pending gates.
+
+#### v26 validated signed delivery (2026-09-08)
+
+Push run
+[34165656754](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34165656754)
+failed before checkout: the self-hosted runner remained in `Set up job` for ten
+minutes and emitted no build logs, so no v26 code or installer ran.
+
+After MaverickMac was confirmed closed, the single full install run
+[34213286165](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34213286165)
+validated Apple commit **3162853** with **234 Swift tests** and **23 Python
+tests**, release build, credential-free runtime admission, exact observation
+wire, real pinned Peekaboo 4.3.1 MCP catalog, Apple Development signing and
+identity continuity. Designated requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+Artifact **10050792172** (zip SHA256
+`dbd42f2a8d0ec3d1ac798318c120272089e348220fa566b3900e67df614410b7`)
+was uploaded. The installer updated `~/Applications/MaverickMac.app` at the
+existing path without a persistent backup and requested launch at **10:05:33
+UTC**; cleanup did not terminate MaverickMac. Installed label: **3162853 ·
+tooltip stabili v26**. Permission state and desktop behavior remain subject to
+the next physical acceptance turn.

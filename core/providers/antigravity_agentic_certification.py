@@ -48,9 +48,9 @@ from core.runtime.full_workspace_contract import (
 ANTIGRAVITY_CERTIFICATION_SUITE_ID = (
     "maverick-antigravity-native-agentic-contract"
 )
-ANTIGRAVITY_CERTIFICATION_SUITE_VERSION = "48"
+ANTIGRAVITY_CERTIFICATION_SUITE_VERSION = "49"
 ANTIGRAVITY_CERTIFICATION_MATRIX_REVISION = (
-    "2026-09-09-r48-p6-native-certification-tcb38"
+    "2026-09-09-r49-p6-collector-isolation-tcb39"
 )
 ANTIGRAVITY_CERTIFICATION_VALIDITY_DAYS = 45
 

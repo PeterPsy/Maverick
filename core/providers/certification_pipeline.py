@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 from typing import Mapping, Sequence
 from uuid import uuid4
 
@@ -39,6 +40,11 @@ from core.providers.certification_validation import (
     validate_completed_run, _sha256, _required, _require_aware,
 )
 from core.providers.certification_summary import certification_result_summary
+from core.providers.certification_step_execution import (
+    fixture_contract_environment,
+    validate_failure_artifact_path,
+    write_step_failure_artifact,
+)
 from core.providers.certification_fixture_receipt import fixture_receipt
 from core.providers.certification_live_receipt import (
     decode_certification_json, validate_live_probe_receipt,
@@ -66,10 +72,12 @@ def execute_certification_suite(
     started_at: datetime | None = None,
     environment: Mapping[str, str] | None = None,
     step_kinds: Sequence[str] | None = None,
+    failure_artifact_path: Path | None = None,
 ) -> CertificationRunResult:
     """Run selected code-owned steps; only a complete run is certificate evidence."""
     manifest = get_certification_manifest(suite_id, suite_version)
     selected_steps = _selected_manifest_steps(manifest, step_kinds=step_kinds)
+    validate_failure_artifact_path(failure_artifact_path, source_root=cwd)
     _require_clean_checkout(cwd)
     start = started_at or datetime.now(tz=UTC)
     _require_aware(start)
@@ -83,12 +91,49 @@ def execute_certification_suite(
     child_environment["MAVERICK_CERTIFICATION_RUN_NONCE"] = collection_nonce
     step_results: list[dict[str, object]] = []
     for step in selected_steps:
-        completed = subprocess.run(
-            step.command, cwd=cwd,
-            env=child_environment,
-            capture_output=True, check=False,
-            timeout=1_800 if step.kind == "fixture_contract" else 900,
-        )
+        try:
+            if step.kind == "fixture_contract":
+                with tempfile.TemporaryDirectory(
+                    prefix="maverick-certification-fixture-"
+                ) as private_root:
+                    completed = _run_certification_step(
+                        step,
+                        cwd=cwd,
+                        environment=fixture_contract_environment(
+                            child_environment,
+                            run_nonce=collection_nonce,
+                            private_root=Path(private_root),
+                        ),
+                    )
+            else:
+                completed = _run_certification_step(
+                    step,
+                    cwd=cwd,
+                    environment=child_environment,
+                )
+        except subprocess.TimeoutExpired as error:
+            stdout = _subprocess_output_bytes(error.stdout)
+            stderr = _subprocess_output_bytes(error.stderr)
+            write_step_failure_artifact(
+                failure_artifact_path,
+                source_root=cwd,
+                suite_id=suite_id,
+                suite_version=suite_version,
+                source_commit=source_commit,
+                target_digest=target_digest,
+                tcb_manifest_version=tcb_identity.manifest_version,
+                tcb_live_digest=tcb_identity.live_digest,
+                step_id=step.step_id,
+                step_kind=step.kind,
+                command_digest=canonical_digest(step.command),
+                exit_code=None,
+                failure_reason=f"certification_step_timeout:{step.step_id}",
+                stdout=stdout,
+                stderr=stderr,
+            )
+            raise CapabilityCertificateError(
+                f"certification_step_timeout:{step.step_id}"
+            ) from error
         step_results.append({
             "step_id": step.step_id,
             "kind": step.kind,
@@ -99,15 +144,52 @@ def execute_certification_suite(
             "outcome": "passed" if completed.returncode == 0 else "failed",
         })
         if completed.returncode != 0:
-            raise CapabilityCertificateError(f"certification_step_failed:{step.step_id}")
-        if step.kind == "fixture_contract":
-            step_results[-1]["fixture_receipt"] = fixture_receipt(completed.stderr)
-        if step.kind == "live_probe":
-            step_results[-1]["live_receipt"] = validate_live_probe_receipt(
-                decode_certification_json(completed.stdout, max_bytes=16_384),
-                provider_id=manifest.provider_id, target_digest=target_digest,
-                run_nonce=collection_nonce,
+            write_step_failure_artifact(
+                failure_artifact_path,
+                source_root=cwd,
+                suite_id=suite_id,
+                suite_version=suite_version,
+                source_commit=source_commit,
+                target_digest=target_digest,
+                tcb_manifest_version=tcb_identity.manifest_version,
+                tcb_live_digest=tcb_identity.live_digest,
+                step_id=step.step_id,
+                step_kind=step.kind,
+                command_digest=canonical_digest(step.command),
+                exit_code=completed.returncode,
+                failure_reason=f"certification_step_failed:{step.step_id}",
+                stdout=completed.stdout,
+                stderr=completed.stderr,
             )
+            raise CapabilityCertificateError(f"certification_step_failed:{step.step_id}")
+        try:
+            if step.kind == "fixture_contract":
+                step_results[-1]["fixture_receipt"] = fixture_receipt(completed.stderr)
+            if step.kind == "live_probe":
+                step_results[-1]["live_receipt"] = validate_live_probe_receipt(
+                    decode_certification_json(completed.stdout, max_bytes=16_384),
+                    provider_id=manifest.provider_id, target_digest=target_digest,
+                    run_nonce=collection_nonce,
+                )
+        except CapabilityCertificateError as error:
+            write_step_failure_artifact(
+                failure_artifact_path,
+                source_root=cwd,
+                suite_id=suite_id,
+                suite_version=suite_version,
+                source_commit=source_commit,
+                target_digest=target_digest,
+                tcb_manifest_version=tcb_identity.manifest_version,
+                tcb_live_digest=tcb_identity.live_digest,
+                step_id=step.step_id,
+                step_kind=step.kind,
+                command_digest=canonical_digest(step.command),
+                exit_code=completed.returncode,
+                failure_reason=error.reason_code,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+            raise
     _require_clean_checkout(cwd)
     if _git_commit(cwd) != source_commit:
         raise CapabilityCertificateError("certification_source_commit_changed")
@@ -164,6 +246,30 @@ def execute_certification_suite(
         target_digest=target_digest,
         collection_nonce=collection_nonce,
     )
+
+
+def _run_certification_step(
+    step: CertificationStepManifest,
+    *,
+    cwd: Path,
+    environment: Mapping[str, str],
+):
+    return subprocess.run(
+        step.command,
+        cwd=cwd,
+        env=dict(environment),
+        capture_output=True,
+        check=False,
+        timeout=1_800 if step.kind == "fixture_contract" else 900,
+    )
+
+
+def _subprocess_output_bytes(value: bytes | str | None) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode("utf-8", errors="replace")
+    return b""
 
 
 def attach_behavioral_evidence(run: CertificationRunResult, report: object, *, cwd: Path) -> CertificationRunResult:

@@ -28,6 +28,7 @@ class AgenticCertificationRunnerTest(unittest.TestCase):
                 self.assertEqual(runner.main(self.arguments(output)), 0)
                 self.assertEqual(execute.call_args.kwargs["step_kinds"], ("fixture_contract",))
                 self.assertEqual(execute.call_args.kwargs["environment"]["MAVERICK_CERTIFICATION_ALLOW_LIVE"], "0")
+                self.assertEqual(execute.call_args.kwargs["failure_artifact_path"], output)
                 sign.assert_not_called()
             self.assertFalse(json.loads(output.read_text())["signed"])
 

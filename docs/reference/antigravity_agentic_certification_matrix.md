@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-09-r48-p6-native-certification-tcb38`
+Revision: `2026-09-09-r49-p6-collector-isolation-tcb39`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through
@@ -30,8 +30,8 @@ init identity, at least one structured event, exact usage, one non-empty final,
 and process cleanup. It reserves Google free-tier quota in the shared durable
 P6 ledger before provider egress.
 
-The live smoke is only protocol evidence. Before signing, an independent
-operator must execute and review all 14 scenarios defined in
+The live smoke is only protocol evidence. Before signing, the authorized
+`autonomous_post_evidence_review` role must review all 14 executed scenarios defined in
 `certification_behavior.py` under the `native_connection` scope, with the
 `default` effort dimension, the exact source/TCB/target, bounded resources, and
 all absolute failure counters at zero.
@@ -39,7 +39,7 @@ all absolute failure counters at zero.
 ## Publication and release
 
 `publish_antigravity_connection_certificate` accepts only the complete signed
-suite-48 run from an already trusted Ed25519 signer and rechecks deployed
+suite-49 run from an already trusted Ed25519 signer and rechecks deployed
 source, TCB, matrix, target, adapter bytes, and installed runtime artifact. A
 valid root permits catalog projection but does not activate the provider or a
 workspace binding. Provider activation is an explicit operator action; global

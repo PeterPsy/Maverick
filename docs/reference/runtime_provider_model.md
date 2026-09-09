@@ -26,8 +26,8 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-Current remote candidates use hosted adapter 44, recipe 25, suite 48 and TCB
-manifest 38 (Google/OpenRouter profiles 53/52 and Antigravity native
+Current remote candidates use hosted adapter 44, recipe 25, suite 49 and TCB
+manifest 39 (Google/OpenRouter profiles 53/52 and Antigravity native
 adapter/recipe 3). Exact-target live receipts and independently observed natural
 conformance are required before trusted signing and publication; neither step
 grants release authority. The procedure is in
@@ -121,7 +121,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v38 also
+status, workspace binding, and upstream constraint. TCB manifest v39 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance, and hashes the exact executable roots of every built-in app surface
@@ -225,7 +225,7 @@ never used for that inference. The executable Antigravity CLI candidate
 demonstrates a second native registration through its persistent structured
 stream and official cached OAuth authentication while remaining
 hard-disabled until full certification and explicit operator activation. Its
-suite-48 certificate target binds the exact runtime/provider connection and
+suite-49 certificate target binds the exact runtime/provider connection and
 installed artifact, not a model slug. Current authenticated catalog models
 receive evidence-preserving projections; removed models become unavailable and
 superseded projection revisions are suspended. Native tools see the workspace read-only, selected workspace

@@ -95,7 +95,7 @@ endpoint/upstream catalog identity.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
-Suite 48 retains that complete corpus and adds authoritative persisted
+Suite 49 retains that complete corpus and adds authoritative persisted
 attestation propagation/revocation at session, queue, dispatch, authority and
 continuation boundaries plus direct-host operator attribution and the refreshed
 Google stable-alias and partial-lifecycle contracts. It also replaces the
@@ -105,7 +105,7 @@ catalog-discovery tests, public-effect redaction tests, connection-scoped
 certification/publication, read-only native workspace confinement, exact skill
 materialization, Core-governed mutations, and catalog projection retirement. It
 binds hosted adapter 44, recipe 25, Google profile 53, OpenRouter profile 52,
-Antigravity adapter/recipe 3, TCB 38 and Codex artifact
+Antigravity adapter/recipe 3, TCB 39 and Codex artifact
 revision 15. Codex revision 15 is the active verified profile, revision 14
 remains immutable history, and a remote-provider certification worker must not
 restart, migrate, or reissue the Codex runtime or certificate.
@@ -123,8 +123,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v48 matrix revision
-  `2026-09-09-r48-p6-native-certification-tcb38` declared by the provider
+- the dated suite-v49 matrix revision
+  `2026-09-09-r49-p6-collector-isolation-tcb39` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -179,8 +179,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-48 manifests bind matrix revision
-`2026-09-09-r48-p6-native-certification-tcb38`. OpenRouter uses suite id
+All suite-49 manifests bind matrix revision
+`2026-09-09-r49-p6-collector-isolation-tcb39`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
@@ -395,7 +395,7 @@ live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
 separate local identity. Since manifest v9 the transitive inventory is executable;
-manifest v38 is the current native-certification candidate:
+manifest v39 is the current collector-isolated native-certification candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

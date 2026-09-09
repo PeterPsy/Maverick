@@ -67,6 +67,7 @@ def main(argv=None) -> int:
             adapter_artifact_digest=args.adapter_artifact_digest,
             evidence_refs=tuple(args.evidence_ref), environment=environment,
             step_kinds=None if args.live_probe else ("fixture_contract",),
+            failure_artifact_path=args.output,
         )
         serialized = collection_to_json(run)
     else:

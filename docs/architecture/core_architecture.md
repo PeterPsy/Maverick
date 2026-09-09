@@ -632,7 +632,7 @@ events.
 The obsolete Gemini CLI ACP candidate is retired. Antigravity's lifecycle proof
 and limitations are specified in
 `docs/architecture/antigravity_cli_native.md`.
-Suite 48 can certify the exact `antigravity-cli` to `google` connection through
+Suite 49 can certify the exact `antigravity-cli` to `google` connection through
 a strict bounded live receipt and independently reviewed natural Full Workspace
 evidence. Only an already trusted signature may publish the root connection
 certificate; catalog slugs receive evidence-preserving projections, removed

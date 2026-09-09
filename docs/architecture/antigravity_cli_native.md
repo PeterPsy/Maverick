@@ -149,7 +149,7 @@ fences plus bounded no-symlink skill replacement, while
 catalog discovery, exact-binary gating, and disabled publication.
 
 Those fixtures use explicitly synthetic authority and replace only the OS
-sandbox wrapper. They do not certify Antigravity. Suite 48 adds a strict
+sandbox wrapper. They do not certify Antigravity. Suite 49 retains the strict
 `native_connection` target and bounded one-turn live receipt. Only
 `publish_antigravity_connection_certificate` may convert a complete natural,
 signed run from an already trusted signer into the root
@@ -159,8 +159,9 @@ that root.
 
 The installation remains disabled until the provisioned OAuth profile works
 from the confined runtime home, the exact model catalog is observed, all 14
-natural Full Workspace scenarios pass, an independent reviewer approves the
-evidence, and the trusted connection certificate is published. Even then,
+natural Full Workspace scenarios pass, the authorized
+`autonomous_post_evidence_review` role approves the evidence, and the trusted
+connection certificate is published. Even then,
 `core.providers.native.activate` is a separate operator-only action and creates
 no workspace binding. Global and Antigravity-specific kill switches, current
 workspace attestation, disposable canary, rollback and production-security

@@ -12,7 +12,7 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 48 / TCB 38 / hosted adapter 44 /
+The current contained successor is suite 49 / TCB 39 / hosted adapter 44 /
 recipe 25 / Google profile 53 / OpenRouter profile 52 / Antigravity native
 adapter/recipe 3 / Codex revision 15.
 Its exact-source fixture result is recorded outside the source checkout by the
@@ -791,9 +791,9 @@ values above; they are not live certification or rollout evidence.
   `provider_response_invalid`; neither attempt is a passing probe and neither
   reservation is refunded or retried automatically.
 - [ ] Re-run all three complete `fixture_contract` manifests on the exact clean
-  suite-48/TCB-38 successor, including the Antigravity connection-scoped suite;
+  suite-49/TCB-39 successor, including the Antigravity connection-scoped suite;
   preserve the record outside the source tree.
-- [ ] On that same exact suite-48 commit, run the bounded operator-only synthetic live
+- [ ] On that same exact suite-49 commit, run the bounded operator-only synthetic live
   probes, collect and independently review all natural observations, sign with an
   already trusted key, verify, and publish immutable certificates.
 - [ ] Complete provider onboarding, leakage/security review, one-workspace

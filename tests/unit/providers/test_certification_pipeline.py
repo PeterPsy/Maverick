@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import json
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -79,20 +82,119 @@ class CertificationPipelineTest(unittest.TestCase):
             )
 
     def test_failed_suite_emits_no_run_result(self) -> None:
-        failed = mock.Mock(returncode=2, stdout=b"", stderr=b"failed")
+        secret = "sk-live-secret-must-not-be-retained"
+        failed = mock.Mock(
+            returncode=2,
+            stdout=b'{"reason_code":"provider_authentication_failed","request_count":0}',
+            stderr=(
+                "Traceback\nCapabilityCertificateError: provider_authentication_failed\n"
+                f"Authorization: Bearer {secret}\n"
+            ).encode(),
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            failure_artifact = Path(folder) / "failed.json"
+            with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
+                "core.providers.certification_pipeline._git_commit", return_value="a" * 40
+            ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=failed):
+                with self.assertRaisesRegex(CapabilityCertificateError, "certification_step_failed"):
+                    self._execute_unpatched(failure_artifact_path=failure_artifact)
+
+            payload = json.loads(failure_artifact.read_text())
+            self.assertEqual(payload["schema_version"], "maverick.agentic-certification-failure.v1")
+            self.assertEqual(payload["step_id"], "contract-suite")
+            self.assertEqual(payload["exit_code"], 2)
+            self.assertEqual(
+                payload["diagnostic"]["reason_codes"],
+                ["provider_authentication_failed"],
+            )
+            self.assertNotIn(secret, failure_artifact.read_text())
+            self.assertNotIn("stdout", payload)
+            self.assertNotIn("stderr", payload)
+
+    def test_fixture_environment_is_synthetic_and_live_environment_is_explicit(self) -> None:
+        captured_environments = []
+
+        def capture(*args, **kwargs):
+            captured_environments.append(dict(kwargs["env"]))
+            return fixture_step_process(args[0], **kwargs)
+
+        supplied = {
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+            "HOME": "/production/home",
+            "MAVERICK_CONTROL_STORE": "json",
+            "MAVERICK_JSON_CONTROL_STORE_ROOT": "/production/control-plane",
+            "MAVERICK_GOOGLE_CERTIFICATION_API_KEY": "google-secret",
+            "OPENROUTER_API_KEY": "openrouter-secret",
+            "MAVERICK_CERTIFICATION_ALLOW_LIVE": "1",
+        }
         with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
             "core.providers.certification_pipeline._git_commit", return_value="a" * 40
-        ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=failed):
-            with self.assertRaisesRegex(CapabilityCertificateError, "certification_step_failed"):
-                self._execute_unpatched()
+        ), mock.patch(
+            "core.providers.certification_pipeline.subprocess.run", side_effect=capture
+        ):
+            execute_certification_suite(
+                cwd=self.root,
+                suite_id=self.suite_id,
+                suite_version=self.suite_version,
+                adapter_artifact_digest=self.digest,
+                evidence_refs=("platform-evidence:test-run:result",),
+                started_at=self.started_at,
+                environment=supplied,
+            )
+
+        fixture_environment, live_environment = captured_environments
+        self.assertEqual(fixture_environment["MAVERICK_CERTIFICATION_ALLOW_LIVE"], "0")
+        self.assertEqual(fixture_environment["MAVERICK_CONTROL_STORE"], "json")
+        self.assertNotEqual(
+            fixture_environment["MAVERICK_JSON_CONTROL_STORE_ROOT"],
+            supplied["MAVERICK_JSON_CONTROL_STORE_ROOT"],
+        )
+        self.assertNotEqual(fixture_environment["HOME"], supplied["HOME"])
+        self.assertFalse(Path(fixture_environment["HOME"]).exists())
+        self.assertNotIn("MAVERICK_GOOGLE_CERTIFICATION_API_KEY", fixture_environment)
+        self.assertNotIn("OPENROUTER_API_KEY", fixture_environment)
+        self.assertEqual(
+            live_environment["MAVERICK_GOOGLE_CERTIFICATION_API_KEY"],
+            "google-secret",
+        )
+        self.assertEqual(live_environment["OPENROUTER_API_KEY"], "openrouter-secret")
+        self.assertEqual(live_environment["MAVERICK_CERTIFICATION_ALLOW_LIVE"], "1")
 
     def test_green_process_without_live_receipt_is_not_evidence(self) -> None:
         green = mock.Mock(returncode=0, stdout=b"passed", stderr=b"Ran 1 test in 0.1s\n\nOK\n")
-        with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
-            "core.providers.certification_pipeline._git_commit", return_value="a" * 40
-        ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=green):
-            with self.assertRaisesRegex(CapabilityCertificateError, "certification_json_invalid"):
-                self._execute_unpatched()
+        with tempfile.TemporaryDirectory() as folder:
+            failure_artifact = Path(folder) / "failed.json"
+            with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
+                "core.providers.certification_pipeline._git_commit", return_value="a" * 40
+            ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=green):
+                with self.assertRaisesRegex(CapabilityCertificateError, "certification_json_invalid"):
+                    self._execute_unpatched(failure_artifact_path=failure_artifact)
+
+            payload = json.loads(failure_artifact.read_text())
+            self.assertEqual(payload["step_id"], "live-synthetic-probe")
+            self.assertEqual(payload["failure_reason"], "certification_json_invalid")
+
+    def test_timed_out_step_writes_hash_only_failure_artifact(self) -> None:
+        timeout = subprocess.TimeoutExpired(
+            cmd=("python3", "fixture.py"),
+            timeout=1800,
+            output=b"partial-sensitive-output",
+            stderr=b"CapabilityCertificateError: provider_timeout\n",
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            failure_artifact = Path(folder) / "failed.json"
+            with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
+                "core.providers.certification_pipeline._git_commit", return_value="a" * 40
+            ), mock.patch(
+                "core.providers.certification_pipeline.subprocess.run", side_effect=timeout
+            ):
+                with self.assertRaisesRegex(CapabilityCertificateError, "certification_step_timeout"):
+                    self._execute_unpatched(failure_artifact_path=failure_artifact)
+
+            payload = json.loads(failure_artifact.read_text())
+            self.assertIsNone(payload["exit_code"])
+            self.assertEqual(payload["diagnostic"]["reason_codes"], ["provider_timeout"])
+            self.assertNotIn("partial-sensitive-output", failure_artifact.read_text())
 
     def test_protocol_success_without_natural_behavior_cannot_be_signed(self) -> None:
         run = self._execute(complete_behavior=False)
@@ -215,9 +317,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "2598c7da794717b9f58cc906765fe016a8b0bf3397a16c1de893d31c274a9848",
-            "openrouter": "e886daf554dc97d3b37a2e2a0070cf349362a3ca1c632ca00158b4d1d8038d54",
-            "antigravity-cli": "b5fba1f32969280877def292b1e12ee9e077a2701651d69663ee43535cadc060",
+            "google-ai-studio": "b708784c4734869b224a63630887350090e9123a2df99c1e6410d562bcbe4152",
+            "openrouter": "64a289a95d32c3bcd882a120185f8867d96c55a5c157e5df6245d9f1c25ec180",
+            "antigravity-cli": "10b049f5f4c9c5691816c3c0ee1e6c74e2a0864e67711fd3e77cc4612cba5964",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -225,10 +327,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "48")
+                self.assertEqual(manifest.suite_version, "49")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-09-r48-p6-native-certification-tcb38",
+                    "2026-09-09-r49-p6-collector-isolation-tcb39",
                 )
                 self.assertEqual(
                     manifest.digest,
@@ -283,13 +385,19 @@ class CertificationPipelineTest(unittest.TestCase):
         )
         return with_fixture_behavior(result) if step_kinds is None and complete_behavior else result
 
-    def _execute_unpatched(self, *, step_kinds: tuple[str, ...] | None = None):
+    def _execute_unpatched(
+        self,
+        *,
+        step_kinds: tuple[str, ...] | None = None,
+        failure_artifact_path: Path | None = None,
+    ):
         return execute_certification_suite(
             cwd=self.root, suite_id=self.suite_id, suite_version=self.suite_version,
             adapter_artifact_digest=self.digest,
             evidence_refs=("platform-evidence:test-run:result",),
             started_at=self.started_at,
             step_kinds=step_kinds,
+            failure_artifact_path=failure_artifact_path,
         )
 
 

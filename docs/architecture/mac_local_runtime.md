@@ -1331,3 +1331,18 @@ One Swift regression covers exact request construction and invalid window IDs;
 one Python packaging regression pins the route and label **cattura Peekaboo
 classica v31**. Expected totals are **248 Swift tests** and **28 Python tests**;
 signed validation, installation and physical acceptance remain separate gates.
+
+#### v31 validated build (2026-09-09)
+
+Push run
+[34391078231](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34391078231)
+validated Apple commit **aa73be7** with all **248 Swift tests** and **28 Python
+tests** passing, together with release/runtime admission, the real pinned
+Peekaboo 4.3.1 MCP catalog, Apple Development signing and two-way identity
+continuity. The designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+Artifact **10119759130** has zip SHA256
+`2593b0580c2ab99a7f56df5bd2c897021a26e5534cffa9458e144937ea5ac64b`.
+The push run did not install or launch MaverickMac; permission state and exact
+physical acceptance remain separate gates.

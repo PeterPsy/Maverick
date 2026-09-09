@@ -1304,3 +1304,30 @@ The installer updated `~/Applications/MaverickMac.app` in place without a
 persistent backup and requested launch at **18:06:04 UTC**. Installed label:
 **e3a4154 · refresh finestra sicuro v30**. Permission state, persistent
 visibility and exact physical acceptance remain separate gates.
+
+### v31 deterministic classic capture for embedded Peekaboo
+
+The installed v30 rerun stopped before Calendar's first Peekaboo image with the
+new precise cause `refusal_reason=runtime_incompatible`; its preceding window
+list succeeded and no input was dispatched. This excludes the stale target
+handled by v30.
+
+At the pinned upstream 4.3.1 tag, Peekaboo's
+[`see` contract](https://github.com/openclaw/Peekaboo/blob/v4.3.1/Core/PeekabooCore/Sources/PeekabooAgentRuntime/MCP/Tools/SeeTool.swift)
+offers `classic` specifically as safe recovery from ScreenCaptureKit owner
+refusal. Its
+[`capture preflight policy`](https://github.com/openclaw/Peekaboo/blob/v4.3.1/Core/PeekabooCore/Sources/PeekabooAgentRuntime/MCP/MCPToolSnapshotMutation.swift)
+exempts that route from the ScreenCaptureKit-owner preflight.
+
+V31 sends embedded Peekaboo observations through a single explicit
+`capture_engine=classic` request from the outset. It does not dispatch and retry,
+silently switch engines, activate the app or broaden the target. The approved
+PID, exact window ID, background observation, snapshot and AX element map,
+receipt binding, authorization and input confirmation remain unchanged. Native
+`mac_computer` still uses the modern ScreenCaptureKit scene pipeline with its
+existing identity, geometry, pixel and recipient checks.
+
+One Swift regression covers exact request construction and invalid window IDs;
+one Python packaging regression pins the route and label **cattura Peekaboo
+classica v31**. Expected totals are **248 Swift tests** and **28 Python tests**;
+signed validation, installation and physical acceptance remain separate gates.

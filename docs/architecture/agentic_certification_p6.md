@@ -1,9 +1,13 @@
 # P6 certification and release boundary
 
-Status: **P6-D passed** on frozen commit `5a7ca45a` (635 Google / 644
-OpenRouter tests, zero failures/errors/skips). P6-L/S/R and complete
-certification/remote release remain **NO-GO**; see
-`docs/development/agentic_p6_deterministic_closeout_2026-09-06.md`.
+Status: the autonomous Candidate 48 execution reached the live boundary and
+ended in the required **NO-GO** after provider transport failures. The remote
+flags remain off, no remote binding is enabled, and no new certificate was
+published. Codex revision 15 remains active and unchanged. See
+`docs/development/agentic_p6_autonomous_execution_2026-09-09.md` for the
+current operational record and
+`docs/development/agentic_p6_deterministic_closeout_2026-09-06.md` for the
+historical deterministic closeout.
 The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
@@ -15,8 +19,12 @@ own exact-source operator record before signing or release. The source tree does
 not treat a mocked probe receipt or this status paragraph as that record.
 
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
-in workspace `default`, revision read on 2026-09-06 (SHA-256
-`482566795fa8ac3737c1a7c0c0413aaa62ff380bd19bc2fd724027a42ee715de`).
+in workspace `default`. Section 21 accepts one autonomous operator mandate
+without waiving technical gates. Section 22 records the resulting automatic
+NO-GO. The current Storage-owned revision has SHA-256
+`1ac15097561a06e19138167e12337a0f3772cbb025fc050d74659b2de4eea7a2`.
+The plan revision read on 2026-09-06 had SHA-256
+`482566795fa8ac3737c1a7c0c0413aaa62ff380bd19bc2fd724027a42ee715de`.
 Its authorized operational addendum (section 16), written through Storage with
 that SHA fence on 2026-09-06, has SHA-256
 `0c8796ded071189b315982cd17596f001e02062c550c3be3f57b203f920069e9`.
@@ -42,9 +50,24 @@ catalog observation; the resulting document SHA-256 is
 `ee71319648126704c089b10695a4426037c0201df1853cf77caf3b8df7dd1c86`.
 Its P5 review checkpoint is `617ed21c39e6111e2bb0c8d102bfa34709312227`.
 
+Section 21 was later appended through the official Storage surface and made
+`VIA P6 AUTONOMO` the only remaining organizational input. It permits one
+agent to collect, review after evidence, sign, canary and release, but only
+when all existing technical gates are green. Section 22 records the actual
+run against frozen commit `b5aa07dd1b83bf179ae8766c0f74293dfb087473`:
+all three deterministic suites reached their live step, the live steps failed,
+the successor ledger halted, and the downstream gates therefore did not run.
+The private final record is
+`/var/tmp/maverick/maverick-p6-autonomous-r48-68zsX93m/autonomous-execution-final.json`
+with SHA-256
+`24f38befc518f4097267eb3c8fd0d7f5665d37d64070e802aa182e203e4506d0`.
+This is an operational NO-GO record, not certification evidence.
+
 P6 distinguishes repository conformance, live protocol evidence, natural
-behavioral evidence, independent security review, certificate publication,
-disposable full-workspace canary, and an explicit release decision. A passed
+behavioral evidence, post-evidence security review, certificate publication,
+disposable full-workspace canary, and an explicit release decision. Under the
+section-21 mandate that review is autonomous and must never be described as
+independent. A passed
 fixture or a subprocess exit code alone is not a release approval. Synthetic
 protocol probes are not natural behavioral conformance.
 

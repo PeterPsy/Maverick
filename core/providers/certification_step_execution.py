@@ -49,19 +49,28 @@ def fixture_contract_environment(
         for key, value in source.items()
         if key in _SAFE_HOST_ENVIRONMENT_KEYS or key.startswith("LC_")
     }
-    root = str(private_root)
+    home = private_root / "home"
+    temporary = private_root / "tmp"
+    for directory in (
+        home / ".codex",
+        temporary,
+        private_root / "cache",
+        private_root / "config",
+        private_root / "data",
+    ):
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     environment.update(
         {
-            "HOME": root,
-            "TMPDIR": root,
-            "TMP": root,
-            "TEMP": root,
+            "HOME": str(home),
+            "TMPDIR": str(temporary),
+            "TMP": str(temporary),
+            "TEMP": str(temporary),
             "XDG_CACHE_HOME": str(private_root / "cache"),
             "XDG_CONFIG_HOME": str(private_root / "config"),
             "XDG_DATA_HOME": str(private_root / "data"),
             "PYTHONDONTWRITEBYTECODE": "1",
             "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
-            "MAVERICK_ADMIN_USERNAME": "certification-fixture-admin",
+            "MAVERICK_ADMIN_USERNAME": "admin",
             "MAVERICK_CONTROL_STORE": "json",
             "MAVERICK_JSON_CONTROL_STORE_ROOT": str(private_root / "control-plane"),
             "MAVERICK_LOCAL_STATE_ROOT": str(private_root / "control-plane"),

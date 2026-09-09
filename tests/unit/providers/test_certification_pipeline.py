@@ -164,6 +164,9 @@ class CertificationPipelineTest(unittest.TestCase):
             supplied["MAVERICK_JSON_CONTROL_STORE_ROOT"],
         )
         self.assertNotEqual(fixture_environment["HOME"], supplied["HOME"])
+        self.assertNotEqual(
+            fixture_environment["TMPDIR"], fixture_environment["HOME"]
+        )
         self.assertFalse(Path(fixture_environment["HOME"]).exists())
         self.assertNotIn("MAVERICK_GOOGLE_CERTIFICATION_API_KEY", fixture_environment)
         self.assertNotIn("OPENROUTER_API_KEY", fixture_environment)

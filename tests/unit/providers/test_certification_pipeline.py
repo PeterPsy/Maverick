@@ -87,8 +87,11 @@ class CertificationPipelineTest(unittest.TestCase):
             returncode=2,
             stdout=b'{"reason_code":"provider_authentication_failed","request_count":0}',
             stderr=(
+                "FAIL: test_rejects_missing_certificate "
+                "(tests.unit.providers.test_example.ExampleTest.test_rejects_missing_certificate)\n"
                 "Traceback\nCapabilityCertificateError: provider_authentication_failed\n"
                 f"Authorization: Bearer {secret}\n"
+                "Ran 12 tests in 0.1s\n\nFAILED (failures=1, skipped=2)\n"
             ).encode(),
         )
         with tempfile.TemporaryDirectory() as folder:
@@ -106,6 +109,17 @@ class CertificationPipelineTest(unittest.TestCase):
             self.assertEqual(
                 payload["diagnostic"]["reason_codes"],
                 ["provider_authentication_failed"],
+            )
+            self.assertEqual(
+                payload["diagnostic"]["failed_tests"],
+                [
+                    "tests.unit.providers.test_example.ExampleTest."
+                    "test_rejects_missing_certificate"
+                ],
+            )
+            self.assertEqual(
+                payload["diagnostic"]["unittest_summary"],
+                {"failures": 1, "skipped": 2, "tests": 12},
             )
             self.assertNotIn(secret, failure_artifact.read_text())
             self.assertNotIn("stdout", payload)

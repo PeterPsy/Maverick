@@ -22,10 +22,19 @@ _REASON_CODE_PATTERN = re.compile(
 _EXCEPTION_TYPE_PATTERN = re.compile(
     r"(?m)^([A-Za-z_][A-Za-z0-9_.]{0,127}(?:Error|Exception))(?::|$)"
 )
+_FAILED_TEST_PATTERN = re.compile(
+    r"(?m)^(?:FAIL|ERROR): [^\r\n]{1,256} "
+    r"\(((?:[A-Za-z_][A-Za-z0-9_]*\.){2,}[A-Za-z_][A-Za-z0-9_]*)\)$"
+)
+_RAN_TESTS_PATTERN = re.compile(r"(?m)^Ran ([0-9]{1,7}) tests? in ")
+_UNITTEST_FAILURE_COUNTS_PATTERN = re.compile(
+    r"(?:^|, )(failures|errors|skipped)=([0-9]{1,7})(?=,|$)"
+)
 _SAFE_DIAGNOSTIC_FIELDS = frozenset(
     {"reason_code", "request_count", "filesystem_result_count", "succeeded"}
 )
 _MAX_DIAGNOSTIC_INPUT_BYTES = 16_384
+_MAX_DIAGNOSTIC_SCAN_BYTES = 65_536
 
 
 def fixture_contract_environment(
@@ -150,12 +159,13 @@ def _validated_new_artifact_path(path: Path, *, source_root: Path) -> Path:
 def _safe_diagnostic(*, stdout: bytes, stderr: bytes) -> dict[str, object]:
     reason_codes: set[str] = set()
     exception_types: set[str] = set()
+    failed_tests: set[str] = set()
     safe_json: dict[str, object] = {}
     bounded_stdout = stdout[:_MAX_DIAGNOSTIC_INPUT_BYTES]
     if len(stdout) <= _MAX_DIAGNOSTIC_INPUT_BYTES:
         try:
             value = json.loads(bounded_stdout.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (UnicodeDecodeError, ValueError):
             value = None
         if isinstance(value, dict):
             for key in _SAFE_DIAGNOSTIC_FIELDS:
@@ -167,7 +177,8 @@ def _safe_diagnostic(*, stdout: bytes, stderr: bytes) -> dict[str, object]:
                     safe_json[key] = field
                 elif key == "succeeded" and type(field) is bool:
                     safe_json[key] = field
-    for raw in (bounded_stdout, stderr[:_MAX_DIAGNOSTIC_INPUT_BYTES]):
+    unittest_summary: dict[str, int] = {}
+    for raw in (_diagnostic_scan(stdout), _diagnostic_scan(stderr)):
         text = raw.decode("utf-8", errors="replace")
         reason_codes.update(
             match.group(1) for match in _REASON_CODE_PATTERN.finditer(text)
@@ -176,17 +187,35 @@ def _safe_diagnostic(*, stdout: bytes, stderr: bytes) -> dict[str, object]:
         exception_types.update(
             match.group(1) for match in _EXCEPTION_TYPE_PATTERN.finditer(text)
         )
+        failed_tests.update(
+            match.group(1) for match in _FAILED_TEST_PATTERN.finditer(text)
+        )
+        ran = tuple(_RAN_TESTS_PATTERN.finditer(text))
+        if ran:
+            unittest_summary["tests"] = int(ran[-1].group(1))
+        for line in re.findall(r"(?m)^FAILED \(([^\r\n]{1,256})\)$", text):
+            for match in _UNITTEST_FAILURE_COUNTS_PATTERN.finditer(line):
+                unittest_summary[match.group(1)] = int(match.group(2))
     return {
         "reason_codes": sorted(reason_codes),
         "exception_types": sorted(exception_types),
+        "failed_tests": sorted(failed_tests),
         "safe_json": safe_json,
-        "stdout_truncated": len(stdout) > _MAX_DIAGNOSTIC_INPUT_BYTES,
-        "stderr_truncated": len(stderr) > _MAX_DIAGNOSTIC_INPUT_BYTES,
+        "unittest_summary": unittest_summary,
+        "stdout_truncated": len(stdout) > _MAX_DIAGNOSTIC_SCAN_BYTES,
+        "stderr_truncated": len(stderr) > _MAX_DIAGNOSTIC_SCAN_BYTES,
     }
 
 
 def _safe_reason_code(value: str) -> bool:
     return bool(re.fullmatch(r"[a-z][a-z0-9_]{1,95}", value))
+
+
+def _diagnostic_scan(value: bytes) -> bytes:
+    if len(value) <= _MAX_DIAGNOSTIC_SCAN_BYTES:
+        return value
+    half = _MAX_DIAGNOSTIC_SCAN_BYTES // 2
+    return value[:half] + b"\n" + value[-half:]
 
 
 __all__ = [

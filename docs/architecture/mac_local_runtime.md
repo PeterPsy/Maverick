@@ -1202,3 +1202,27 @@ It updated `~/Applications/MaverickMac.app` in place without a persistent
 backup and requested launch at **14:11:18 UTC**. Installed label: **3aa60f0 ·
 ritaglio visibile v28**. The exact physical Calendar/Notes/TextEdit continuation
 remains pending.
+
+### v29 stable AX main root across transient hover focus
+
+The autonomous v28 continuation passed native Notes activation/capture, global
+search and the TextEdit click/type/double/right/middle-click path. Its first
+observation after a toolbar hover then stopped before capture with MC-TOOL-30,
+reproducing the tooltip boundary that v26 only partially addressed.
+
+V26 required `AXFocusedWindow` to equal `AXMainWindow` before its singleton
+layer-0 fallback. V29 instead samples and rechecks the two explicit AX objects
+independently. A stable AX main window is the preferred scene root: an exact
+main-frame match selects that layer-0 window even when a transient same-PID
+overlay is focused. If exact geometry is temporarily unavailable, the fallback
+still requires one and only one layer-0 candidate. Ambiguous exact matches,
+multiple fallback candidates, invalid geometry, foreign ownership and changed
+AX objects remain refused with MC-TOOL-30.
+
+Only bounded same-PID surfaces in front of that root enter the ScreenCaptureKit
+whitelist. Post-capture identity, leases, TCC/secure-input checks and native
+recipient hit testing are unchanged. Three Swift tests cover hover focus,
+multiple layer-0 surfaces with one exact AX-main match, and invalid main
+geometry. Expected totals are **243 Swift** and **26 Python tests**; label
+**radice AX principale v29**. Signed delivery and physical continuation remain
+pending.

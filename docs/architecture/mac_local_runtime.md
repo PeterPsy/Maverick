@@ -1268,3 +1268,22 @@ unchanged.
 Four Swift regressions and one Python packaging test set expected totals to
 **247 Swift** and **27 Python tests** and label **refresh finestra sicuro v30**.
 Signed validation, installation and physical acceptance remain pending.
+
+#### v30 validated build (2026-09-09)
+
+Initial push run
+[34379280080](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34379280080)
+passed all 27 Python tests but exposed an overly private initializer during
+Swift compilation; it produced no release package or installation. The
+corrective change restored the prior module-level construction boundary without
+altering recovery policy.
+
+Push run
+[34379536209](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34379536209)
+then validated Apple commit **e3a4154** with all **247 Swift tests** and **27
+Python tests** passing, together with release/runtime/admission/wire/catalog,
+Apple Development signing and identity-continuity gates. Artifact
+**10115394041** has zip SHA256
+`73eecd435afb13b8747168994f87332b9074a55a0e30a47f3835815a5b8af086`.
+The push run did not install or launch MaverickMac. Physical permission state,
+the exact refresh behavior and complete desktop acceptance remain pending.

@@ -1240,3 +1240,31 @@ The installer updated `~/Applications/MaverickMac.app` in place without a
 persistent backup and requested launch at **12:35:14 UTC**. Installed label:
 **18b2d12 · radice AX principale v29**. Physical hover and remaining input
 acceptance are still pending.
+
+### v30 safe refresh of an expired read-only window target
+
+The first v29 physical run listed Calendar windows, then Peekaboo refused the
+first exact-window observation before capture with MC-PEEKABOO-24. No input was
+sent. The existing canonical decoder retained only `state=refused`, discarding
+the bounded `refusal_reason`; consequently the diagnostic could neither identify
+the cause nor distinguish the one safe recovery from blocking engine failures.
+The run itself does not establish which refusal reason occurred.
+
+V30 preserves the canonical reason only as the validated eight-value enum and
+never emits provider or Accessibility text. Permission, transport, cancellation,
+runtime compatibility, foreground consent, unsupported operation and invalid
+request remain blocking MC-PEEKABOO-24 cases with a precise enum cause. Input
+actions also remain blocking when their exact target disappears.
+
+The sole recoverable failure is `observe + target_unavailable`, reported as
+**MC-PEEKABOO-25**. Because the refusal occurred before a read-only capture and
+sent no input, the agent may autonomously call `list_windows` again for the same
+approved bundle and continue from a current exact ID. It cannot reuse the stale
+ID, replay input, switch engines or widen scope. This is an explicit model-visible
+recovery path, not an internal retry. All Stop/session, TCC, secure-input,
+confirmation, exact PID/app scope, receipt and uncertain-dispatch boundaries are
+unchanged.
+
+Four Swift regressions and one Python packaging test set expected totals to
+**247 Swift** and **27 Python tests** and label **refresh finestra sicuro v30**.
+Signed validation, installation and physical acceptance remain pending.

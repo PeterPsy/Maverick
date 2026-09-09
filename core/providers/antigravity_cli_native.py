@@ -7,6 +7,9 @@ from threading import Lock
 
 from core.providers.agentic_adapter import RuntimeCancelResult, RuntimeCloseResult, RuntimeHealth
 from core.providers.antigravity_cli_sandbox import antigravity_stream_launch_spec
+from core.providers.antigravity_cli_runtime_home import (
+    prepare_antigravity_runtime_skills,
+)
 from core.providers.antigravity_cli_session import AntigravityCliSession
 from core.providers.models import RuntimeSteerResult
 from core.providers.native_session_runtime import NativeSessionRuntime
@@ -16,9 +19,27 @@ from core.providers.native_structured_cli_transport import NativeStructuredCliEr
 class AntigravityCliNativeAdapter:
     runtime_engine_id = "antigravity-cli"
     adapter_id = "antigravity-cli-stream-json"
-    adapter_version = "2"
+    adapter_version = "3"
     local_process_lifecycle = None
     requires_resolved_launch_spec = True
+
+    @property
+    def artifact_components(self):
+        """Return every module able to change the native runtime wire behavior."""
+        from importlib import import_module
+
+        return tuple(
+            import_module(module_name)
+            for module_name in (
+                "core.providers.antigravity_cli_event_projection",
+                "core.providers.antigravity_cli_runtime_home",
+                "core.providers.antigravity_cli_sandbox",
+                "core.providers.antigravity_cli_session",
+                "core.providers.native_session_runtime",
+                "core.providers.native_structured_cli_transport",
+                "core.providers.provider_codex_wrappers",
+            )
+        )
 
     def __init__(self, *, command="agy", dependency_roots=None, auth_home=None):
         self.command = command
@@ -39,6 +60,7 @@ class AntigravityCliNativeAdapter:
         )
         self._owners = {}
         self._session_ids = {}
+        self._skill_digests = {}
         self._lock = Lock()
 
     async def build_launch_spec(self, context):
@@ -89,6 +111,19 @@ class AntigravityCliNativeAdapter:
                     self._owners.pop(session_id)
 
     async def prepare(self, context):
+        skill_digest = await asyncio.to_thread(
+            prepare_antigravity_runtime_skills,
+            Path(context.session.runtime_root),
+            getattr(context, "invoked_skills", ()),
+        )
+        session_id = context.session.session_id
+        with self._lock:
+            existing = self._owners.get(session_id)
+            previous_digest = self._skill_digests.get(session_id)
+        if existing is not None and previous_digest != skill_digest:
+            await self._retire(context, existing)
+        with self._lock:
+            self._skill_digests[session_id] = skill_digest
         owner = self._owner(context.session.session_id)
         try:
             return await owner.call(owner.engine.prepare(context))

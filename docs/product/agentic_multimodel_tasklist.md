@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-08
+Status date: 2026-09-09
 
 Target: Phase 5 runtime-family separation, onboarding, and product taxonomy
 complete; provider certification, security review, canary, and release gates
@@ -12,8 +12,9 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 47 / TCB 37 / hosted adapter 43 /
-recipe 25 / Google profile 52 / OpenRouter profile 51 / Codex revision 15.
+The current contained successor is suite 48 / TCB 38 / hosted adapter 44 /
+recipe 25 / Google profile 53 / OpenRouter profile 52 / Antigravity native
+adapter/recipe 3 / Codex revision 15.
 Its exact-source fixture result is recorded outside the source checkout by the
 operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
 
@@ -789,11 +790,11 @@ values above; they are not live certification or rollout evidence.
   Google request matched the exact target but failed closed as
   `provider_response_invalid`; neither attempt is a passing probe and neither
   reservation is refunded or retried automatically.
-- [ ] Re-run each complete `fixture_contract` provider manifest on the exact
-  clean suite-45/TCB-35 successor after the Google partial-lifecycle fix and
-  intervening TCB changes; preserve its record outside the source tree.
-- [ ] On that same exact suite-45 commit, run the bounded operator-only synthetic live
-  probes, collect/independently review all natural observations, sign with an
+- [ ] Re-run all three complete `fixture_contract` manifests on the exact clean
+  suite-48/TCB-38 successor, including the Antigravity connection-scoped suite;
+  preserve the record outside the source tree.
+- [ ] On that same exact suite-48 commit, run the bounded operator-only synthetic live
+  probes, collect and independently review all natural observations, sign with an
   already trusted key, verify, and publish immutable certificates.
 - [ ] Complete provider onboarding, leakage/security review, one-workspace
   canary, rollback rehearsal, and explicit preview release decision.
@@ -801,7 +802,7 @@ values above; they are not live certification or rollout evidence.
   `docs/security/production_readiness.md` under a separate security review.
 
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true only because the server-owned
-boundary is implemented. The hosted-runtime and both provider-specific kill
+boundary is implemented. The hosted-runtime and all three provider-specific kill
 switches still default off. No remote binding, profile, or certificate is
 enabled by these P6 checkpoints. The bounded r44 live attempts above are failed
 observations, not certification; no certificate publication, canary, production
@@ -911,3 +912,23 @@ adapter 43 and Google/OpenRouter profiles 52/51 bind the shared source change.
 Hosted recipe 25 and Codex revision 15 remain byte-identical. The authenticated
 catalog is readiness evidence only; connection certification, independent
 review, disposable canary, rollback, and release gates remain mandatory.
+
+### P6 Antigravity certification path — 2026-09-09
+
+Candidate 48 adds a connection-scoped Antigravity certification manifest,
+strict live receipt, trusted publication path, catalog-derived immutable model
+projections, explicit operator-only provider activation, and an independent
+default-off kill switch. Native workspace access is read-only; exact selected
+skills are copied into the private CLI home and workspace mutations must cross
+Core's runtime-local `maverick` CLI/MCP boundary. A changed skill set retires
+the previous session process before reuse. Removed catalog models become
+unavailable, while superseded projection revisions are suspended. No
+certificate, activation, binding, canary, or release is
+created by bootstrap or by repository tests.
+
+The same candidate adds a successor budget ledger that requires a distinct
+recorded authorization, seals the already halted predecessor, carries consumed
+requests and list-price exposure forward, and cannot expand limits or weaken
+pacing. No successor job is authorized by this repository change. The shared
+source advance moves hosted adapter/profile/suite/TCB identities to
+44/53/52/48/38 while preserving Codex revision 15 and its artifact identity.

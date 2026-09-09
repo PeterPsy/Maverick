@@ -18,6 +18,7 @@ from core.providers.certification_pipeline import (
 from core.providers.errors import CapabilityCertificateError
 from core.providers.google_agentic_certification import GOOGLE_CERTIFICATION_SUITE_VERSION
 from core.providers.certification_manifests import (
+    ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
     GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
     OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
 )
@@ -188,34 +189,46 @@ class CertificationPipelineTest(unittest.TestCase):
                 "python3",
                 "scripts/run_openrouter_agentic_probe.py",
             ),
+            "antigravity-cli": (
+                "python3",
+                "scripts/run_antigravity_native_probe.py",
+            ),
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "521f9840389336ae5823723b1e3161b29fdcbf898cfa8e219413f67fb506165e"
+                "8e717ababbd48b03e46a72ab7c9681e865761506c745ff01097be3ec32e442c2"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "2697cbb2f64deee8e610feb293f19d35b5b972c43a35bf22337e418e69260402"
+                "a9fcbadde0689d798a2a7baf5f9374958b135d59a7a18925d171120aa60f424c"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
+            ("antigravity-cli", "fixture_contract"): (
+                "c880b1a84274af0240d24bd2fc69465e2c8f3751e22d611040ef356351df38f1"
+            ),
+            ("antigravity-cli", "live_probe"): (
+                "0dfccc774ce0bb02dfa12244512748e2e85b8c913d975fd23c6d02cbe9284b63"
+            ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "b5df3b9110a2f2f9efd6ca4be58f46013b602e75f3d1f584d132cc8e8f7772d2",
-            "openrouter": "e8abad2800d1d899279eeaba8aea5408a83665f2b22f9669d19757a510aed08c",
+            "google-ai-studio": "2598c7da794717b9f58cc906765fe016a8b0bf3397a16c1de893d31c274a9848",
+            "openrouter": "e886daf554dc97d3b37a2e2a0070cf349362a3ca1c632ca00158b4d1d8038d54",
+            "antigravity-cli": "b5fba1f32969280877def292b1e12ee9e077a2701651d69663ee43535cadc060",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
+            ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "47")
+                self.assertEqual(manifest.suite_version, "48")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-08-r47-p6-antigravity-oauth-tcb37",
+                    "2026-09-09-r48-p6-native-certification-tcb38",
                 )
                 self.assertEqual(
                     manifest.digest,
@@ -236,6 +249,7 @@ class CertificationPipelineTest(unittest.TestCase):
                     "tests.unit.recovery.test_continuation_native_identity",
                     "tests.unit.providers.test_antigravity_cli_discovery",
                     "tests.unit.providers.test_antigravity_cli_runtime_home",
+                    "tests.unit.scripts.test_antigravity_native_probe",
                     "tests.integration.cli_mcp.test_builtin_surface_effects",
                     "tests.integration.cli_mcp.test_p6_effect_audit_delta",
                 ):

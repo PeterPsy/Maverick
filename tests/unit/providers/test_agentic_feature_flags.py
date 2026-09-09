@@ -10,12 +10,16 @@ from unittest.mock import patch
 
 from core.providers.agentic_models import codex_runtime_policy
 from core.providers.errors import CapabilityCertificateError
-from core.runtime.authority import intersect_runtime_policies
+from core.runtime.authority import (
+    intersect_runtime_policies,
+    runtime_feature_flag_revision,
+)
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
     MAVERICK_FEATURE_AGENTIC_PROFILES,
     MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
@@ -39,6 +43,7 @@ _NORMATIVE_FLAGS = (
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_PARALLEL_TOOL_CALLS,
 )
 
@@ -59,6 +64,7 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
                 MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
                 MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
                 MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+                MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
             ):
                 with self.subTest(name=name):
                     self.assertFalse(feature_enabled(name))
@@ -132,6 +138,22 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
             with self.assertRaises(HostedAgenticLoopError) as raised:
                 HostedProviderRuntimeRegistry().resolve(binding)
         self.assertEqual(raised.exception.reason_code, "openrouter_agentic_preview_disabled")
+
+    def test_antigravity_flag_is_bound_into_live_authority_revision(self) -> None:
+        binding = SimpleNamespace(
+            runtime_engine_id="antigravity-cli",
+            model_provider_id="google",
+        )
+        environment = {
+            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: "0",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            disabled = runtime_feature_flag_revision(binding)
+        environment[MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW] = "1"
+        with patch.dict(os.environ, environment, clear=True):
+            enabled = runtime_feature_flag_revision(binding)
+        self.assertNotEqual(disabled, enabled)
 
     def test_parallel_policy_requires_its_independent_flag(self) -> None:
         policy = replace(codex_runtime_policy(), max_parallel_tool_calls=2)

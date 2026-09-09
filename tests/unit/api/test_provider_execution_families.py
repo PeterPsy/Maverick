@@ -187,7 +187,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertEqual(antigravity["full_workspace_status"], "unavailable")
         self.assertEqual(
             antigravity["unavailable_reason"],
-            "native_agent_certificate_incomplete",
+            "native_agent_connection_certificate_missing",
         )
         self.assertNotIn("executable_path", antigravity)
         self.assertNotIn("gemini-cli", candidates)

@@ -65,6 +65,7 @@ class RuntimePrepareContext:
     binding: RuntimeExecutionBinding
     provider_state: RuntimeProviderState
     local_launch_spec: RuntimeBackendLaunchSpec | None = None
+    invoked_skills: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)

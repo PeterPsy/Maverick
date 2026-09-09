@@ -619,15 +619,27 @@ Core-resolved launch specification. Antigravity uses its own cached OAuth login,
 not the Google AI Studio API key: the host operator provisions only the cached
 identity file into a private `MAVERICK_ANTIGRAVITY_HOME`, and Core copies it into
 each session-private HOME while replacing settings with its controlled sandbox
-and request-review policy. Provider bindings and API-key environments are
-rejected on this path. Authenticated catalog discovery uses another ephemeral,
-confined copy and grants no model availability on binary, auth, or output drift.
-Engine-owned launch does not inherit the host HOME or expose OAuth material
-through public events.
+and `proceed-in-sandbox` policy. The outer Bubblewrap mount keeps the workspace
+read-only to native tools and leaves only the private runtime subtree writable;
+confirmed mutations cross Core through the runtime-token `maverick` CLI/MCP
+wrapper. Exact selected workspace skills are copied into a read-only subtree of the private
+Antigravity home, and a changed skill digest retires the old process before
+reuse. Provider bindings and API-key environments are rejected on this path.
+Authenticated catalog discovery uses another ephemeral, confined copy and
+grants no model availability on binary, auth, or output drift. Engine-owned
+launch does not inherit the host HOME or expose OAuth material through public
+events.
 The obsolete Gemini CLI ACP candidate is retired. Antigravity's lifecycle proof
 and limitations are specified in
 `docs/architecture/antigravity_cli_native.md`.
-It remains disabled without any release authority or connection certificate.
+Suite 48 can certify the exact `antigravity-cli` to `google` connection through
+a strict bounded live receipt and independently reviewed natural Full Workspace
+evidence. Only an already trusted signature may publish the root connection
+certificate; catalog slugs receive evidence-preserving projections, removed
+models become unavailable, and superseded revisions are suspended. Provider activation is a distinct operator-only write
+that creates no workspace binding. It therefore remains disabled without that
+certificate, explicit activation, default-off global/provider flags, current
+workspace attestation, canary and release authority.
 
 Maverick Agent onboarding is likewise composition-driven. A trusted protocol
 adapter manifest owns transport, request/response codec, private state, usage,

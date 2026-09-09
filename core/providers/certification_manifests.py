@@ -22,6 +22,10 @@ class CertificationSuiteManifest:
     suite_id: str
     suite_version: str
     provider_id: str
+    target_scope: str
+    model_provider_id: str | None
+    behavioral_reasoning_efforts: tuple[str, ...]
+    behavioral_resource_limits: tuple[tuple[str, int], ...]
     matrix_path: str
     matrix_revision: str
     tcb_manifest_id: str
@@ -41,6 +45,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.providers.test_certification_behavior",
     "tests.unit.providers.test_certification_probe_budget",
     "tests.unit.scripts.test_agentic_probe_fail_closed",
+    "tests.unit.scripts.test_antigravity_native_probe",
     "tests.unit.scripts.test_google_probe_catalog_receipt",
     "tests.unit.scripts.test_agentic_certification_runner",
     "tests.unit.api.test_provider_execution_families",
@@ -50,6 +55,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.providers.test_antigravity_cli_native",
     "tests.unit.providers.test_antigravity_cli_runtime_home",
     "tests.unit.providers.test_antigravity_cli_sync_runtime",
+    "tests.unit.providers.test_antigravity_agentic_certification",
     "tests.unit.providers.test_hosted_text_profiles",
     "tests.unit.providers.test_maverick_agent_onboarding",
     "tests.unit.providers.test_maverick_agent_runtime_composition",
@@ -165,11 +171,15 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="47",
+        suite_version="48",
         provider_id=provider_id,
+        target_scope="api_profile",
+        model_provider_id=None,
+        behavioral_reasoning_efforts=(),
+        behavioral_resource_limits=(),
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-08-r47-p6-antigravity-oauth-tcb37"
+            "2026-09-09-r48-p6-native-certification-tcb38"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
@@ -230,11 +240,48 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = _suite(
 )
 
 
+ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
+    suite_id="maverick-antigravity-native-agentic-contract",
+    suite_version="48",
+    provider_id="antigravity-cli",
+    target_scope="native_connection",
+    model_provider_id="google",
+    behavioral_reasoning_efforts=("default",),
+    behavioral_resource_limits=(
+        ("input_tokens", 262_144),
+        ("output_tokens", 16_384),
+        ("tool_calls", 48),
+        ("provider_steps", 64),
+        ("wall_time_ms", 900_000),
+        ("cost_microusd", 3_500_000),
+    ),
+    matrix_path="docs/reference/antigravity_agentic_certification_matrix.md",
+    matrix_revision="2026-09-09-r48-p6-native-certification-tcb38",
+    tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
+    tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
+    tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,
+    artifact_paths=CERTIFIED_EXECUTION_TCB.artifact_paths,
+    steps=(
+        CertificationStepManifest(
+            step_id="contract-suite",
+            kind="fixture_contract",
+            command=("python3", "-m", "unittest", *_SHARED_FIXTURE_TESTS),
+        ),
+        CertificationStepManifest(
+            step_id="live-native-smoke",
+            kind="live_probe",
+            command=("python3", "scripts/run_antigravity_native_probe.py"),
+        ),
+    ),
+)
+
+
 _MANIFESTS = {
     (item.suite_id, item.suite_version): item
     for item in (
         GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
         OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
+        ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
     )
 }
 

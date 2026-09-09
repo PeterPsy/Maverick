@@ -22,7 +22,12 @@ from core.providers.agentic_containment import (
 )
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
-from core.providers.service import activate_hosted_model_provider, effective_provider_registry, is_retired_provider_definition
+from core.providers.service import (
+    activate_hosted_model_provider,
+    activate_native_agent_provider,
+    effective_provider_registry,
+    is_retired_provider_definition,
+)
 from core.providers.store import ProviderStore
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.store import RuntimeStore
@@ -131,6 +136,41 @@ def runtime_provider_command_specs(
             "credential_binding": _provider_credential_binding_payload(activation.credential_binding),
             "hosted_selection": hosted_provider_selection_payload(activation.hosted_selection),
             "preflight": routing_decision_payload(activation.routing_decision),
+        }
+
+    def _providers_native_activate_handler(
+        arguments: dict[str, Any],
+        context: CliInvocationContext,
+    ) -> dict[str, Any]:
+        command_id = "core.providers.native.activate"
+        if provider_store is None:
+            return {"command_id": command_id, "error": "provider_store_unavailable"}
+        provider_id = str(arguments.get("provider_id") or "").strip()
+        if not provider_id:
+            return {"command_id": command_id, "error": "provider_id_required"}
+        if arguments.get("confirmation") != "native-certificate-reviewed":
+            return {
+                "command_id": command_id,
+                "error": "native_activation_confirmation_required",
+            }
+        try:
+            activation = activate_native_agent_provider(
+                provider_store,
+                provider_id=provider_id,
+                registry=provider_registry,
+                observability_store=observability_store,
+            )
+        except Exception as error:
+            return {
+                "command_id": command_id,
+                "error": "native_provider_activation_failed",
+                "error_type": type(error).__name__,
+            }
+        return {
+            "command_id": command_id,
+            "provider": provider_payload(activation.definition),
+            "connection_certificate_id": activation.connection_certificate_id,
+            "profile_count": activation.profile_count,
         }
 
     def _remote_agentic_containment_dry_run_handler(
@@ -344,6 +384,36 @@ def runtime_provider_command_specs(
                 },
             ),
             _providers_hosted_activate_handler,
+        ),
+        (
+            replace(
+                core_cli_command(
+                    command_id="core.providers.native.activate",
+                    path_segments=["core", "providers", "native", "activate"],
+                    description=(
+                        "Activate one already-certified native provider without "
+                        "creating a workspace binding."
+                    ),
+                    owner_id="providers",
+                    invocation_policy=OPERATOR_ONLY,
+                    argument_schema={
+                        "type": "object",
+                        "properties": {
+                            "provider_id": {"type": "string"},
+                            "confirmation": {
+                                "type": "string",
+                                "enum": ["native-certificate-reviewed"],
+                            },
+                        },
+                        "required": ["provider_id", "confirmation"],
+                        "additionalProperties": False,
+                    },
+                ),
+                effect_class="mutating",
+                supports_idempotency=False,
+                safe_to_retry=False,
+            ),
+            _providers_native_activate_handler,
         ),
         (
             replace(

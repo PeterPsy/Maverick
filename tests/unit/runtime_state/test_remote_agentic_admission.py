@@ -13,6 +13,7 @@ from core.recovery.continuation_admission import assess_runtime_session_admissio
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
@@ -120,6 +121,32 @@ def _remote_environment(provider_id: str) -> dict[str, str]:
 
 
 class RemoteAgenticAdmissionTest(unittest.TestCase):
+    def test_antigravity_requires_its_independent_preview_flag(self) -> None:
+        identity = SimpleNamespace(
+            runtime_engine_id="antigravity-cli",
+            adapter_id="antigravity-cli-stream-json",
+            model_provider_id="google",
+            provider_protocol="antigravity-cli-stream-json",
+        )
+        environment = {
+            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: "0",
+        }
+        with patch.dict("os.environ", environment, clear=True):
+            with self.assertRaisesRegex(
+                AgenticProfileError,
+                "antigravity_agentic_preview_disabled",
+            ):
+                require_remote_agentic_session_admission(identity)
+
+        environment[MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW] = "1"
+        with patch.dict("os.environ", environment, clear=True):
+            with self.assertRaisesRegex(
+                AgenticProfileError,
+                "remote_agentic_attestation_required",
+            ):
+                require_remote_agentic_session_admission(identity)
+
     def test_google_and_openrouter_sessions_fail_before_any_store_call(self) -> None:
         for provider_id in ("google-ai-studio", "openrouter"):
             with self.subTest(provider_id=provider_id), patch.dict("os.environ", {}, clear=True):

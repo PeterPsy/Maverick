@@ -1,6 +1,6 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-09-07
+Status date: 2026-09-09
 
 Scope: trusted CI or operator-controlled certification worker
 
@@ -95,21 +95,24 @@ endpoint/upstream catalog identity.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
-Suite 47 retains that complete corpus and adds authoritative persisted
+Suite 48 retains that complete corpus and adds authoritative persisted
 attestation propagation/revocation at session, queue, dispatch, authority and
 continuation boundaries plus direct-host operator attribution and the refreshed
 Google stable-alias and partial-lifecycle contracts. It also replaces the
 retired Gemini CLI fixture objective with Antigravity's content-pinned,
 OAuth-authenticated `stream-json` lifecycle, private credential-copy and
-catalog-discovery tests, and public-effect redaction tests. It binds hosted adapter 43,
-recipe 25, Google profile 52, OpenRouter profile 51, TCB 37 and Codex artifact
+catalog-discovery tests, public-effect redaction tests, connection-scoped
+certification/publication, read-only native workspace confinement, exact skill
+materialization, Core-governed mutations, and catalog projection retirement. It
+binds hosted adapter 44, recipe 25, Google profile 53, OpenRouter profile 52,
+Antigravity adapter/recipe 3, TCB 38 and Codex artifact
 revision 15. Codex revision 15 is the active verified profile, revision 14
 remains immutable history, and a remote-provider certification worker must not
 restart, migrate, or reissue the Codex runtime or certificate.
 
 This procedure is the only supported path from an executed provider suite to a
-Google or OpenRouter capability certificate. Bootstrap publishes uncertified,
-unbound Full Workspace preview definitions only. Test source files, fixture
+Google, OpenRouter, or Antigravity capability certificate. Bootstrap publishes
+uncertified, unbound Full Workspace preview definitions only. Test source files, fixture
 names, matrix rows, or a locally fabricated run id are not evidence.
 
 ## Trust and input gate
@@ -120,8 +123,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v47 matrix revision
-  `2026-09-08-r47-p6-antigravity-oauth-tcb37` declared by the provider
+- the dated suite-v48 matrix revision
+  `2026-09-09-r48-p6-native-certification-tcb38` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -147,10 +150,22 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 47 \
+  --suite-version 48 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
+```
+
+The connection-scoped deterministic Antigravity collection uses the same
+runner but its own exact adapter bundle and suite id:
+
+```bash
+python3 scripts/run_agentic_certification.py collect \
+  --suite-id maverick-antigravity-native-agentic-contract \
+  --suite-version 48 \
+  --adapter-artifact-digest "$ANTIGRAVITY_ADAPTER_ARTIFACT_SHA256" \
+  --evidence-ref "$PLATFORM_EVIDENCE_REF" \
+  --output "$CERTIFICATION_OUTPUT/antigravity-fixtures.json"
 ```
 
 Only an authorized operator with explicitly scoped test credentials and a cost
@@ -164,9 +179,10 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-Both suite-47 manifests bind matrix revision
-`2026-09-08-r47-p6-antigravity-oauth-tcb37`. OpenRouter uses suite id
-`maverick-openrouter-agentic-contract`. The live step must return a bounded,
+All suite-48 manifests bind matrix revision
+`2026-09-09-r48-p6-native-certification-tcb38`. OpenRouter uses suite id
+`maverick-openrouter-agentic-contract`; the native connection uses
+`maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
 collector-generated nonce. Duplicate fields, arbitrary text, extra payload
 fields, missing observations, stale receipts and false counters fail closed,
@@ -180,8 +196,8 @@ report schema and required checks are code-owned in
 prompt/trace/source/projection/effect digests, exact booleans and bounded
 resource counters. Each absolute failure counter must be the integer zero.
 Record native observations per approved runtime/provider connection, not per
-model slug. This API signing runner does **not** implement or approve a new
-native connection.
+model slug. The Antigravity run uses the single `default` behavioral dimension;
+Google and OpenRouter retain their exact certificate-bound effort dimensions.
 
 The report must be later than the protocol collection. It is an operator
 observation record, not an executable behavioral runner or a self-authenticating
@@ -280,6 +296,25 @@ stops that provider for the job. No reset/refund/resume operation exists.
 These commands do not retrieve credentials, classify a workspace, approve
 natural traces, issue certificates, or activate a runtime.
 
+If and only if a **new, separately recorded** operator authorization exists
+after a durable provider halt, create an append-only successor instead of
+resetting the old ledger:
+
+```bash
+python3 scripts/manage_agentic_certification_budget.py \
+  --ledger /private/operator-job/successor-budget.sqlite3 create-successor \
+  --predecessor-ledger /private/operator-job/budget.sqlite3 \
+  --predecessor-policy-digest <PREDECESSOR_POLICY_DIGEST> \
+  --authorization-ref <sha256-of-new-recorded-authorization> \
+  --confirmation successor-job-authorized
+```
+
+The predecessor is sealed first. The successor carries forward requests and
+list-price exposure, must keep the same providers, cannot expand any request or
+cost ceiling, and cannot weaken pacing. Creation failure leaves the predecessor
+halted. This operation does not refund, resume, or silently authorize the
+existing job.
+
 Before any live schema-7 certificate/evidence/profile/binding write, deploy the
 reviewed source, restart the backend and verify health. Do not let a new writer
 publish these records while an older in-memory reader is serving them. Offline
@@ -335,7 +370,9 @@ signature against its configured trusted public keys, and call exactly one of:
 - `publish_google_preview_certificate` in
   `core/providers/google_agentic_certification.py`;
 - `publish_openrouter_preview_certificate` in
-  `core/providers/openrouter_agentic_certification.py`.
+  `core/providers/openrouter_agentic_certification.py`;
+- `publish_antigravity_connection_certificate` in
+  `core/providers/antigravity_agentic_certification.py`.
 
 Those functions recheck the deployed source commit, suite manifest and step
 command digests, matrix bytes, complete artifact bundle, deployed adapter
@@ -358,7 +395,7 @@ live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
 separate local identity. Since manifest v9 the transitive inventory is executable;
-manifest v35 is the current Google partial-lifecycle candidate:
+manifest v38 is the current native-certification candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

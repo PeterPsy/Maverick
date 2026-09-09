@@ -94,6 +94,20 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
 
     async def test_launch_is_pinned_machine_readable_and_never_bypasses_permissions(self):
         command = self.spec.command
+        sandboxed = self.sandboxed_spec.command
+        workspace = str(Path(self.session.workspace_root))
+        self.assertIn(
+            ["--ro-bind", workspace, workspace],
+            [sandboxed[index : index + 3] for index in range(len(sandboxed) - 2)],
+        )
+        skills_root = str(
+            self.root
+            / "runtime/antigravity-home/.gemini/antigravity-cli/skills"
+        )
+        self.assertIn(
+            ["--ro-bind", skills_root, skills_root],
+            [sandboxed[index : index + 3] for index in range(len(sandboxed) - 2)],
+        )
         self.assertEqual(command.count("stream-json"), 2)
         self.assertIn("--sandbox", command)
         self.assertIn("--disable-slash-commands", command)
@@ -111,8 +125,15 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertEqual(
             json.loads(settings_path.read_text(encoding="utf-8")),
             {
+                "artifactReviewPolicy": "asks-for-review",
                 "enableTerminalSandbox": True,
-                "toolPermission": "request-review",
+                "permissions": {
+                    "allow": [
+                        "command(maverick)",
+                        "unsandboxed(maverick)",
+                    ],
+                },
+                "toolPermission": "proceed-in-sandbox",
             },
         )
         self.assertEqual(settings_path.stat().st_mode & 0o777, 0o600)
@@ -121,6 +142,16 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertEqual(token_path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.spec.resolved_secret_refs, [])
         self.assertIsNone(self.spec.credential_binding_id)
+        self.assertEqual(self.spec.writable_roots, [str(self.root / "runtime")])
+        self.assertTrue(
+            (self.root / "runtime/bin/maverick").is_file()
+        )
+        self.assertIn("MAVERICK_RUNTIME_API_TOKEN", self.spec.env_overrides)
+        self.assertTrue(
+            self.spec.env_overrides["PATH"].startswith(
+                str(self.root / "runtime/bin")
+            )
+        )
 
     async def test_launch_requires_private_operator_oauth_profile(self):
         with self.assertRaisesRegex(
@@ -238,6 +269,38 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertIsNotNone(client.process.returncode)
         self.assertEqual(self.final_text(await self.collect("second")), "answer:second")
         self.assertTrue((await self.controller.cleanup(self.context)).closed)
+
+    async def test_changed_skill_set_restarts_the_session_owner(self):
+        source = self.root / "skill"
+        source.mkdir()
+        (source / "SKILL.md").write_text("# Fixture skill\n", encoding="utf-8")
+        skill = SimpleNamespace(
+            skill_id="workspace:fixture",
+            source_root=str(source),
+        )
+        with_skill = SimpleNamespace(
+            **vars(self.context),
+            invoked_skills=(skill,),
+        )
+        await self.controller.connect(with_skill)
+        first_owner = self.engine._owners[self.session.session_id]
+
+        await self.controller.connect(with_skill)
+        self.assertIs(
+            self.engine._owners[self.session.session_id],
+            first_owner,
+        )
+
+        without_skill = SimpleNamespace(
+            **vars(self.context),
+            invoked_skills=(),
+        )
+        await self.controller.connect(without_skill)
+        self.assertIsNot(
+            self.engine._owners[self.session.session_id],
+            first_owner,
+        )
+        self.assertFalse(first_owner.thread.is_alive())
 
     async def test_cache_read_usage_may_exceed_uncached_input(self):
         events = await self.collect("cache-heavy")

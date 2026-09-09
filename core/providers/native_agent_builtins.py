@@ -41,9 +41,15 @@ from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISIO
 
 
 NATIVE_AGENT_RECIPE_REVISION = "1"
-ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION = "2"
+ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION = "3"
 NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
+ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION = (
+    "maverick-antigravity-native-sandbox-v2"
+)
 ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
+ANTIGRAVITY_NATIVE_CONNECTION_CERTIFICATE_ID = (
+    "native-connection:antigravity-cli:google:3"
+)
 _INSPECTION_CACHE_SECONDS = 5.0
 _INSPECTION_CACHE: dict[tuple[str, tuple[str, ...]], tuple[float, NativeRuntimeStatus]] = {}
 _INSPECTION_CACHE_LOCK = Lock()
@@ -220,8 +226,8 @@ def build_antigravity_cli_candidate_definition(
             supports_interactive_runtime=True,
             supports_streaming=True,
             supports_tools=True,
-            supports_mcp=False,
-            supports_skills=False,
+            supports_mcp=True,
+            supports_skills=True,
             supports_filesystem_access=True,
             supports_remote_execution=False,
             supports_api_key_auth=False,
@@ -266,7 +272,7 @@ def build_antigravity_cli_candidate_installation(
         manifest=NativeAgentAdapterManifest(
             runtime_engine_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
             adapter_id="antigravity-cli-stream-json",
-            adapter_version="2",
+            adapter_version="3",
             protocol_kind="structured_cli",
             protocol_id="antigravity-stream-json",
             protocol_version="1",
@@ -294,12 +300,17 @@ def build_antigravity_cli_candidate_installation(
             workspace_confined=True,
             process_tree_supervised=True,
             structured_effect_events=True,
-            approval_policy="antigravity_request_review_soft_deny_v1",
-            sandbox_policy_revision=NATIVE_AGENT_SANDBOX_POLICY_REVISION,
+            approval_policy="antigravity_core_governed_mutations_v2",
+            sandbox_policy_revision=(
+                ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION
+            ),
         ),
         certificate=NativeAgentCertificateReference(
-            connection_certificate_ids=(),
-            full_workspace_contract_revision=None,
+            connection_certificate_ids=((
+                "google",
+                ANTIGRAVITY_NATIVE_CONNECTION_CERTIFICATE_ID,
+            ),),
+            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         ),
         inspector=CommandNativeRuntimeInspector(command),
         runtime_artifact=runtime_artifact,

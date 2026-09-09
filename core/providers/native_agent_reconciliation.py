@@ -81,7 +81,7 @@ def refresh_antigravity_native_catalog(
     store: ProviderStore | None = None,
     force: bool = False,
 ) -> bool:
-    """Publish authenticated Antigravity catalog metadata without granting use."""
+    """Publish catalog metadata and certified projections without auto-activation."""
     with registry.native_catalog_lock:
         controller = registry.get_native_agent_controller("antigravity-cli")
         snapshot = discover_antigravity_native_catalog(
@@ -89,7 +89,29 @@ def refresh_antigravity_native_catalog(
             force=force,
         )
         if snapshot is None:
+            registry.revoke_native_agent_activation("antigravity-cli")
             registry.clear_native_agent_catalog("antigravity-cli", "google")
+            timestamp = datetime.now(tz=UTC)
+            definition = registry.get_provider_definition("antigravity-cli")
+            registry.register_provider_definition(
+                replace(definition, status="disabled", updated_at=timestamp)
+            )
+            if store is not None:
+                try:
+                    persisted = store.get_provider_definition(
+                        "antigravity-cli"
+                    )
+                except ProviderNotFoundError:
+                    pass
+                else:
+                    if persisted.status != "disabled":
+                        store.save_provider_definition(
+                            replace(
+                                persisted,
+                                status="disabled",
+                                updated_at=timestamp,
+                            )
+                        )
             return False
         definition = registry.get_provider_definition("antigravity-cli")
         model_ids = {model.model_id for model in snapshot.models}
@@ -100,27 +122,129 @@ def refresh_antigravity_native_catalog(
                 if "gemini-3.6-flash-high" in model_ids
                 else snapshot.models[0].model_id
             )
+        existing = None
+        if store is not None:
+            try:
+                existing = store.get_provider_definition("antigravity-cli")
+            except ProviderNotFoundError:
+                pass
+        connection_ready = _antigravity_connection_ready(
+            store,
+            controller,
+        )
+        connection_active = bool(
+            connection_ready
+            and existing is not None
+            and existing.status == "active"
+        )
+        if connection_active:
+            registry.authorize_native_agent_activation("antigravity-cli")
+        else:
+            registry.revoke_native_agent_activation("antigravity-cli")
         definition = replace(
             definition,
-            status="disabled",
+            status="active" if connection_active else "disabled",
             default_model_family=default,
             model_options=list(snapshot.model_options),
             updated_at=snapshot.observed_at,
         )
         registry.publish_native_agent_catalog(snapshot)
-        registry.register_provider_definition(definition)
         if store is not None:
-            try:
-                existing = store.get_provider_definition("antigravity-cli")
-            except ProviderNotFoundError:
-                existing = None
             if existing is not None:
                 definition = replace(
                     definition,
                     created_at=existing.created_at,
                 )
-            store.save_provider_definition(definition)
+            try:
+                if connection_ready:
+                    _reconcile_antigravity_native_models(
+                        store,
+                        controller,
+                        snapshot,
+                    )
+                store.save_provider_definition(definition)
+            except Exception:
+                registry.revoke_native_agent_activation("antigravity-cli")
+                registry.clear_native_agent_catalog(
+                    "antigravity-cli",
+                    "google",
+                )
+                registry.register_provider_definition(
+                    replace(definition, status="disabled")
+                )
+                raise
+        registry.register_provider_definition(definition)
         return True
+
+
+def _antigravity_connection_ready(store, controller) -> bool:
+    if store is None:
+        return False
+    from core.providers.native_agent_certificates import (
+        native_connection_reference,
+    )
+
+    try:
+        certificate = store.get_capability_certificate(
+            native_connection_reference(controller.installation, "google")
+        )
+        validate_native_connection_certificate(
+            store,
+            certificate,
+            installation=controller.installation,
+        )
+    except (ProviderNotFoundError, CapabilityCertificateError):
+        return False
+    return True
+
+
+def _reconcile_antigravity_native_models(store, controller, snapshot) -> None:
+    """Project slugs from one still-valid connection without renewing evidence."""
+    from core.providers.antigravity_agentic_certification import (
+        publish_antigravity_model_certificate,
+    )
+    from core.providers.antigravity_agentic_profile import (
+        publish_antigravity_agentic_profile,
+    )
+
+    current_profiles: set[tuple[str, str]] = set()
+    for model in snapshot.models:
+        profile = publish_antigravity_agentic_profile(
+            store,
+            installation=controller.installation,
+            model=model,
+            now=snapshot.observed_at,
+        )
+        current_profiles.add((profile.definition_id, profile.revision))
+        publish_antigravity_model_certificate(
+            store,
+            profile=profile,
+            adapter=controller,
+            now=snapshot.observed_at,
+        )
+    current_definition_ids = {
+        definition_id for definition_id, _revision in current_profiles
+    }
+    for profile in store.list_agentic_profile_definitions():
+        identity = (profile.definition_id, profile.revision)
+        if (
+            profile.runtime_engine_id != "antigravity-cli"
+            or identity in current_profiles
+            or profile.definition_id not in current_definition_ids
+        ):
+            continue
+        status = store.get_agentic_profile_definition_status(*identity)
+        if status is None or status.rollout_status in {"disabled", "suspended"}:
+            continue
+        store.save_agentic_profile_definition_status(
+            replace(
+                status,
+                rollout_status="suspended",
+                revision=status.revision + 1,
+                updated_at=snapshot.observed_at,
+            ),
+            expected_revision=status.revision,
+        )
 
 
 def _adopt_existing_codex_connection(store: ProviderStore, registry: ProviderRegistry) -> None:

@@ -1,22 +1,23 @@
 # Agentic provider preview operations
 
-Status date: 2026-09-08
+Status date: 2026-09-09
 
 Scope: operator runbook
 
 Production status: **NO-GO; all remote agentic execution contained**
 
-This runbook governs the Google Gemini and fixed-upstream OpenRouter agentic
-profiles. A capability certificate proves one exact implementation and provider
-combination. It is not approval for customer data, arbitrary workspace data, or
-production exposure.
+This runbook governs the Google Gemini and fixed-upstream OpenRouter API
+profiles plus the Antigravity Native connection. A capability certificate
+proves one exact implementation and provider combination. It is not approval
+for customer data, arbitrary workspace data, or production exposure.
 
 Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
-The contained source candidate is hosted adapter 43 / recipe 25 / Google
-profile 52 / OpenRouter profile 51 / suite 47 / TCB 37. Codex revision 15 is
+The contained source candidate is hosted adapter 44 / recipe 25 / Google
+profile 53 / OpenRouter profile 52 / Antigravity adapter/recipe 3 / suite 48 /
+TCB 38. Codex revision 15 is
 the active verified profile and revision 14 remains immutable history. Remote
 provider certification must not restart or migrate Codex, alter its artifact,
 or reissue its certificate.
@@ -101,6 +102,11 @@ operation.
   collection, required ZDR, and verified router metadata. Its main catalog must
   resolve `deepseek/deepseek-v4-flash-20260423` and advertise exactly
   `xhigh`/`high`, default `high`, and non-mandatory reasoning.
+- Antigravity authority is connection-scoped to the exact installed artifact,
+  adapter/recipe revision 3 and `google` connection. Catalog slugs inherit that
+  evidence through immutable projections; missing and retired slugs never
+  inherit availability. Native workspace access is read-only, while mutations
+  cross Core's governed runtime CLI/MCP boundary.
 - Tool execution is sequential. Google and OpenRouter preserve and journal
   every indexed proposal, including later OpenRouter indices and calls decoded
   before a terminal stream error. A multi-call response is denied and paired
@@ -143,7 +149,7 @@ operation.
   the executable roots of every built-in app surface admitted as a hosted read;
   a reached local dependency or app-code drift outside the artifact set makes
   identity/authority calculation fail. Manifest v32 is the current
-  authoritative-dispatch candidate.
+  native-certification candidate at manifest v38.
 - Hosted shell/process sandboxes use an immutable descriptor-confined workspace
   snapshot that excludes every `.git` component; the live workspace namespace
   is never bound into the sandbox. Inter-agent CLI/MCP tools carry explicit
@@ -166,11 +172,18 @@ binding:
    expose `exact` and the same authenticated live catalog version; OpenRouter
    must expose `provider_alias`, resolved 20260423 slug, exact `xhigh`/`high`
    reasoning contract, and the pinned endpoint/upstream catalog identity.
+   Antigravity must expose the exact installed runtime artifact and a current
+   authenticated catalog inherited from its active connection-scoped
+   certificate. A missing or retired slug is unavailable; a superseded revision
+   of a current slug is suspended.
 2. The current matrices in
    `docs/reference/google_agentic_certification_matrix.md` or
-   `docs/reference/openrouter_agentic_certification_matrix.md` match the
+   `docs/reference/openrouter_agentic_certification_matrix.md`, or the native
+   `docs/reference/antigravity_agentic_certification_matrix.md`, match the
    deployed code and dated provider catalog.
-3. A provider credential is delivered by a Core credential binding. No raw key
+3. Google AI Studio and OpenRouter credentials are delivered by Core credential
+   bindings. Antigravity instead requires the operator-provisioned private
+   cached-OAuth source and forbids provider/API-key bindings. No raw credential
    is present in a workspace record, environment file, request body, or log.
 4. The active revision-bound server attestation is actor-attributed, scoped,
    unrevoked, workspace-matching, and matched to exact Core resource
@@ -190,6 +203,25 @@ binding:
 7. Open platform security blockers in `SECURITY.md` remain acknowledged. Do not
    relabel the profile `available` or production-ready as part of preview
    activation.
+
+For Antigravity only, after the root certificate and all current catalog
+projections have been read back and independently reviewed, activate the
+provider definition without creating a workspace binding:
+
+```bash
+maverick core cli run core.providers.native.activate \
+  --operator \
+  --provider-id antigravity-cli \
+  --confirmation native-certificate-reviewed \
+  --json
+```
+
+This command fails unless the exact runtime artifact, root certificate, current
+catalog and each current model projection validate. It does not enable or make
+default any workspace binding. Remote admission additionally requires
+`MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME=1` and the independent default-off
+`MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW=1`; flags are kill switches, not
+certification or attestation authority.
 
 Use Settings as the normal control surface. Its agentic panel reads:
 

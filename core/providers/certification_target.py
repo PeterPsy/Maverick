@@ -19,6 +19,53 @@ def builtin_api_certification_target(provider_id: str) -> str:
     return api_profile_target_digest(builtin_api_certification_profile(provider_id))
 
 
+def certification_manifest_target(manifest) -> str:
+    """Resolve the code-owned target for either supported certificate scope."""
+    if manifest.target_scope == "api_profile":
+        return builtin_api_certification_target(manifest.provider_id)
+    if manifest.target_scope == "native_connection":
+        from core.providers.native_agent_builtins import (
+            build_antigravity_cli_candidate_installation,
+        )
+
+        if (
+            manifest.provider_id != "antigravity-cli"
+            or manifest.model_provider_id != "google"
+        ):
+            raise CapabilityCertificateError("certification_target_unknown")
+        return native_connection_target_digest(
+            build_antigravity_cli_candidate_installation(),
+            model_provider_id=manifest.model_provider_id,
+        )
+    raise CapabilityCertificateError("certification_target_family_invalid")
+
+
+def certification_manifest_reasoning_efforts(manifest) -> tuple[str, ...]:
+    if manifest.target_scope == "api_profile":
+        return builtin_api_reasoning_efforts(manifest.provider_id)
+    efforts = tuple(manifest.behavioral_reasoning_efforts)
+    if not efforts:
+        raise CapabilityCertificateError("certification_behavior_reasoning_mismatch")
+    return efforts
+
+
+def certification_manifest_resource_limits(manifest) -> dict[str, int]:
+    if manifest.target_scope == "api_profile":
+        return api_certification_resource_limits(
+            builtin_api_certification_profile(manifest.provider_id)
+        )
+    limits = dict(manifest.behavioral_resource_limits)
+    if not limits or any(
+        not isinstance(key, str)
+        or not key
+        or type(value) is not int
+        or value < 1
+        for key, value in limits.items()
+    ):
+        raise CapabilityCertificateError("certification_behavior_resource_invalid")
+    return limits
+
+
 def builtin_api_certification_profile(provider_id: str):
     from core.providers.maverick_agent_builtins import builtin_maverick_agent_publications
 

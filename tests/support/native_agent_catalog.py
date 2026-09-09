@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from core.providers.native_agent_catalog import NativeAgentCatalogModel, NativeAgentCatalogSnapshot
 from core.providers.provider_codex_models import build_codex_definition
+from core.providers.models import ProviderModelOption
 
 
 def codex_snapshot(*model_ids, reasoning=("low", "medium", "high", "xhigh", "max"), revision=None):
@@ -25,3 +26,40 @@ def codex_snapshot(*model_ids, reasoning=("low", "medium", "high", "xhigh", "max
     ) for model in models)
     return NativeAgentCatalogSnapshot("codex", "codex", "codex", "trusted-test-cli", now,
                                       now + timedelta(minutes=5), models, options)
+
+
+def antigravity_snapshot(*model_ids, revision=None):
+    now = datetime.now(tz=UTC)
+    models = tuple(
+        NativeAgentCatalogModel(
+            model_provider_id="google",
+            model_id=model_id,
+            model_revision=revision,
+            revision_policy="exact" if revision else "provider_alias",
+        )
+        for model_id in model_ids
+    )
+    options = tuple(
+        ProviderModelOption(
+            model_id=model.model_id,
+            label=model.model_id,
+            description="Authenticated Antigravity test model.",
+            default_reasoning_effort=None,
+            metadata={
+                "model_revision": revision,
+                "model_revision_policy": model.revision_policy,
+                "native_model_catalog_digest": model.digest,
+            },
+        )
+        for model in models
+    )
+    return NativeAgentCatalogSnapshot(
+        "antigravity-cli",
+        "google",
+        "antigravity-cli",
+        "authenticated-antigravity-cli-models-v1",
+        now,
+        now + timedelta(minutes=5),
+        models,
+        options,
+    )

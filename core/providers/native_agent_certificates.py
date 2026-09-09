@@ -93,6 +93,18 @@ def validate_native_connection_certificate(
         )
     ):
         raise CapabilityCertificateError("native_agent_connection_identity_mismatch")
+    if installation is not None and root.execution_family == "native_agent":
+        from core.providers.certification_target import (
+            native_connection_target_digest,
+        )
+
+        if root.certification_target_digest != native_connection_target_digest(
+            installation,
+            model_provider_id=certificate.model_provider_id,
+        ):
+            raise CapabilityCertificateError(
+                "native_agent_connection_target_mismatch"
+            )
     timestamp = now or datetime.now(tz=UTC)
     status = store.get_capability_certificate_status(root.certificate_id)
     if status is None or status.status != "active":

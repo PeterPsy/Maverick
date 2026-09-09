@@ -77,6 +77,15 @@ class SpeechProviderActivation:
     speech_selection: ProviderSpeechSelection | None
 
 
+@dataclass(frozen=True)
+class NativeAgentProviderActivation:
+    """Store-validated native provider activation without a workspace binding."""
+
+    definition: ProviderDefinition
+    connection_certificate_id: str
+    profile_count: int
+
+
 def utcnow() -> datetime:
     """Return the current UTC timestamp."""
     return datetime.now(tz=UTC)
@@ -309,6 +318,148 @@ def activate_hosted_model_provider(
         credential_binding=binding,
         hosted_selection=hosted_selection,
         routing_decision=decision,
+    )
+
+
+def activate_native_agent_provider(
+    store: ProviderStore,
+    *,
+    provider_id: str,
+    registry: ProviderRegistry | None = None,
+    observability_store=None,
+    now: datetime | None = None,
+) -> NativeAgentProviderActivation:
+    """Activate a native provider only after its root and model pins validate."""
+    from core.providers.native_agent_certificates import (
+        native_connection_reference,
+        validate_native_connection_certificate,
+    )
+
+    timestamp = now or utcnow()
+    active_registry = effective_provider_registry(
+        store,
+        registry=registry,
+        refresh_model_catalog=True,
+    )
+    definition = active_registry.get_provider_definition(provider_id)
+    installation = active_registry.get_native_agent_installation(provider_id)
+    if provider_id == "codex" or not installation.certification_configured:
+        raise ProviderCapabilityError("native_agent_activation_unsupported")
+    if len(installation.model_provider_connections) != 1:
+        raise ProviderCapabilityError("native_agent_connection_ambiguous")
+    model_provider_id = installation.model_provider_connections[0].model_provider_id
+    certificate_id = native_connection_reference(
+        installation,
+        model_provider_id,
+    )
+    try:
+        certificate = store.get_capability_certificate(certificate_id)
+    except ProviderNotFoundError as error:
+        raise ProviderCapabilityError(
+            "native_agent_connection_certificate_missing"
+        ) from error
+    validate_native_connection_certificate(
+        store,
+        certificate,
+        installation=installation,
+        now=timestamp,
+    )
+    from core.providers.native_agent_catalog import native_agent_catalog_models
+
+    catalog_models = {
+        (model.model_id, model.digest)
+        for model in native_agent_catalog_models(active_registry, installation)
+        if model.model_provider_id == model_provider_id
+    }
+    profiles = [
+        profile
+        for profile in store.list_agentic_profile_definitions()
+        if profile.runtime_engine_id == provider_id
+        and profile.model_provider_id == model_provider_id
+        and (profile.model_id, profile.native_model_catalog_digest)
+        in catalog_models
+    ]
+    if not profiles:
+        raise ProviderCapabilityError("native_agent_model_projection_missing")
+    from core.providers.certificate_service import (
+        validate_profile_certificate_execution_contract,
+    )
+    from core.providers.native_agent_catalog import require_native_agent_model_available
+
+    for profile in profiles:
+        profile_status = store.get_agentic_profile_definition_status(
+            profile.definition_id,
+            profile.revision,
+        )
+        if (
+            profile_status is None
+            or profile_status.rollout_status in {"disabled", "suspended"}
+        ):
+            raise ProviderCapabilityError(
+                "native_agent_model_projection_missing"
+            )
+        projection = store.get_capability_certificate(
+            profile.capability_certificate_id
+        )
+        projection_status = store.get_capability_certificate_status(
+            projection.certificate_id
+        )
+        if projection_status is None or projection_status.status != "active":
+            raise ProviderCapabilityError(
+                "native_agent_model_projection_missing"
+            )
+        validate_native_connection_certificate(
+            store,
+            projection,
+            installation=installation,
+            now=timestamp,
+        )
+        validate_profile_certificate_execution_contract(
+            profile=profile,
+            certificate=projection,
+        )
+        require_native_agent_model_available(
+            active_registry,
+            profile,
+            certificate=projection,
+        )
+    active_definition = replace(
+        definition,
+        status="active",
+        updated_at=timestamp,
+    )
+    stored = store.save_provider_definition(active_definition)
+    active_registry.authorize_native_agent_activation(provider_id)
+    stored = active_registry.register_provider_definition(stored)
+    if observability_store is not None:
+        payload = {
+            "provider_id": provider_id,
+            "connection_certificate_id": certificate_id,
+            "profile_count": len(profiles),
+        }
+        record_platform_audit(
+            observability_store,
+            action="provider.native_agent.activate",
+            status="succeeded",
+            source_domain="providers",
+            detail=f"Activated certified native provider `{provider_id}`.",
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="provider.native_agent.activated",
+            event_plane="platform",
+            source_domain="providers",
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+    return NativeAgentProviderActivation(
+        definition=stored,
+        connection_certificate_id=certificate_id,
+        profile_count=len(profiles),
     )
 
 
@@ -1232,6 +1383,8 @@ def prepare_runtime_skills(
 
 __all__ = [
     "HostedModelProviderActivation",
+    "NativeAgentProviderActivation",
+    "activate_native_agent_provider",
     "activate_hosted_model_provider",
     "bind_provider_credential",
     "builtin_provider_registry",

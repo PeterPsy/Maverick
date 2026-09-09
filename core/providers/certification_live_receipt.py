@@ -20,6 +20,20 @@ _OPENROUTER = _COMMON | {
     "context_length", "filesystem_result_count", "max_completion_tokens",
     "finalization_tool_catalog_mode", "supports_tool_choice_none", "upstream_id",
 }
+_ANTIGRAVITY_FLAGS = {
+    "saw_init",
+    "saw_structured_event",
+    "saw_usage",
+    "saw_nonempty_final",
+    "cleanup_verified",
+}
+_ANTIGRAVITY = _COMMON | _ANTIGRAVITY_FLAGS | {
+    "runtime_artifact_digest",
+    "catalog_snapshot_digest",
+    "catalog_model_count",
+    "provider_thread_digest",
+    "output_digest",
+}
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -41,17 +55,30 @@ def validate_live_probe_receipt(
     """Return only reviewed counter/digest metadata from the exact probe run."""
     from core.providers.certification_target import builtin_api_reasoning_efforts
 
-    expected_fields = {"google-ai-studio": _GOOGLE, "openrouter": _OPENROUTER}.get(provider_id)
+    expected_fields = {
+        "google-ai-studio": _GOOGLE,
+        "openrouter": _OPENROUTER,
+        "antigravity-cli": _ANTIGRAVITY,
+    }.get(provider_id)
     if not isinstance(receipt, dict) or expected_fields is None or set(receipt) != expected_fields:
         _fail()
-    efforts = builtin_api_reasoning_efforts(provider_id)
+    efforts = (
+        ("default",)
+        if provider_id == "antigravity-cli"
+        else builtin_api_reasoning_efforts(provider_id)
+    )
     if (receipt["target_digest"] != target_digest or receipt["run_nonce"] != run_nonce
             or not re.fullmatch(r"[0-9a-f]{32}", run_nonce)
             or receipt["succeeded"] is not True
             or receipt["reasoning_efforts"] != list(efforts)):
         _fail()
     rounds = 2 if provider_id == "google-ai-studio" else 3
-    if type(receipt["request_count"]) is not int or receipt["request_count"] != (rounds + 1) * len(efforts):
+    expected_requests = (
+        1
+        if provider_id == "antigravity-cli"
+        else (rounds + 1) * len(efforts)
+    )
+    if type(receipt["request_count"]) is not int or receipt["request_count"] != expected_requests:
         _fail()
     if provider_id == "google-ai-studio":
         if (receipt["reason_code"] != "ok" or any(receipt[key] is not True for key in _GOOGLE_FLAGS)
@@ -62,7 +89,7 @@ def validate_live_probe_receipt(
         summary = {key: receipt[key] for key in (*_GOOGLE_FLAGS, "reason_code", "request_count", "reasoning_efforts", "catalog_snapshots")}
         if receipt["result_summary_digest"] != canonical_digest(summary):
             _fail()
-    else:
+    elif provider_id == "openrouter":
         from core.providers.openrouter_agentic_models import (
             OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
             OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
@@ -87,6 +114,21 @@ def validate_live_probe_receipt(
             "catalog_model_metadata_record_digest",
             "catalog_model_record_digest",
             "catalog_zdr_record_digest",
+        ):
+            if not isinstance(receipt[key], str) or not _DIGEST.fullmatch(receipt[key]):
+                _fail()
+    else:
+        if (
+            any(receipt[key] is not True for key in _ANTIGRAVITY_FLAGS)
+            or type(receipt["catalog_model_count"]) is not int
+            or not 0 < receipt["catalog_model_count"] <= 200
+        ):
+            _fail()
+        for key in (
+            "runtime_artifact_digest",
+            "catalog_snapshot_digest",
+            "provider_thread_digest",
+            "output_digest",
         ):
             if not isinstance(receipt[key], str) or not _DIGEST.fullmatch(receipt[key]):
                 _fail()

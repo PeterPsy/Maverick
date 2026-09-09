@@ -34,7 +34,7 @@ from core.providers.certification_records import (
     CertificationRunResult, SignedCertificationRun, signed_run_from_json, signed_run_to_json,
 )
 from core.providers.errors import CapabilityCertificateError
-from core.providers.certification_target import builtin_api_certification_target
+from core.providers.certification_target import certification_manifest_target
 from core.providers.certification_validation import (
     validate_completed_run, _sha256, _required, _require_aware,
 )
@@ -77,7 +77,7 @@ def execute_certification_suite(
     tcb_identity = certified_tcb_identity(cwd)
     matrix_bytes = resolve_manifest_path(cwd, manifest.matrix_path).read_bytes()
     bundle_digest = tcb_identity.live_digest
-    target_digest = builtin_api_certification_target(manifest.provider_id)
+    target_digest = certification_manifest_target(manifest)
     collection_nonce = uuid4().hex
     child_environment = dict(os.environ if environment is None else environment)
     child_environment["MAVERICK_CERTIFICATION_RUN_NONCE"] = collection_nonce
@@ -232,7 +232,7 @@ def validate_run_against_manifest(
 ) -> CertificationSuiteManifest:
     """Recompute publisher-owned identities instead of trusting signed CLI inputs."""
     manifest = get_certification_manifest(run.suite_id, run.suite_version)
-    if run.target_digest != builtin_api_certification_target(manifest.provider_id):
+    if run.target_digest != certification_manifest_target(manifest):
         raise CapabilityCertificateError("certification_target_mismatch")
     if run.manifest_digest != manifest.digest:
         raise CapabilityCertificateError("certification_manifest_mismatch")

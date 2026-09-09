@@ -8,9 +8,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current Antigravity OAuth successor uses suite 47 /
-TCB 37 / hosted adapter 43 / recipe 25 / Google profile 52 / OpenRouter
-profile 51 / Codex revision 15. It requires its
+That pass is historical. The current contained successor uses suite 48 / TCB
+38 / hosted adapter 44 / recipe 25 / Google profile 53 / OpenRouter profile 52,
+plus Antigravity native adapter/recipe 3 and Codex revision 15. It requires its
 own exact-source operator record before signing or release. The source tree does
 not treat a mocked probe receipt or this status paragraph as that record.
 
@@ -134,6 +134,28 @@ to revision 2. The broad shared TCB advances to 37, so suite 47, hosted adapter
 revision 15 remain byte-identical. Catalog/auth readiness is not a connection
 certificate or release approval.
 
+Candidate 48 adds the missing independently certifiable Antigravity Native
+connection path without manufacturing its evidence. The suite and behavior
+schemas now support a `native_connection` target; a bounded live probe uses the
+installed, content-pinned CLI and cached OAuth profile for one structured turn,
+reserving Google free-tier quota in the shared durable ledger before egress.
+Full Workspace execution gives Antigravity's native tools read-only workspace
+access inside the outer Bubblewrap boundary. Selected workspace-owned skills
+are copied into its private runtime home, while all mutations cross the
+runtime-local `maverick` CLI/MCP boundary and therefore retain Core policy and
+confirmation enforcement. A trusted signed suite-48 run may publish one root
+connection certificate; current catalog slugs receive evidence-preserving
+projections, and an operator must still explicitly activate the provider before
+any separately governed workspace binding can exist. Removed catalog models are
+unavailable; superseded projection revisions are suspended. The global and Antigravity-specific kill
+switches remain default-off.
+
+Candidate 48 also introduces an append-only successor-ledger operation for a
+separately recorded operator authorization. It seals the halted predecessor,
+carries all request and list-price exposure forward, and rejects expanded cost,
+request, or pacing authority. It is not a reset/resume mechanism and no
+successor has been created merely by adding the operation.
+
 The shared queue/handoff fix changed files declared in Codex's artifact and was
 published append-only as Codex revision 15, with revision 14 retained in
 immutable history rather than hidden by exclusions or reused as a certificate
@@ -170,9 +192,10 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 43,
-   recipe 25, Google profile 52, OpenRouter profile 51, suite 47, canonical
-   TCB manifest 37, and active Codex revision 15. The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
+1. **Candidate identities and deterministic corpus:** hosted adapter 44,
+   recipe 25, Google profile 53, OpenRouter profile 52, suite 48, canonical
+   TCB manifest 38, Antigravity adapter/recipe 3, and active Codex revision 15.
+   The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed
    evidence must distinguish protocol smoke from the complete natural
@@ -272,10 +295,13 @@ A different API tuple cannot inherit a certificate; targetless API certificates
 fail closed and are not backfilled. Workspace ceilings remain separately governed
 and can narrow authority.
 
-This extension is API-scoped: native certificates keep an empty API target.
-An empty target is omitted from the evidence hash domain so existing Codex
-evidence and connection attestations remain byte-identical; a nonempty target
-is always hashed and cannot use the historical evidence-validation path.
+This extension now has two explicit scopes. API profiles bind their exact
+immutable API target. A non-Codex Native candidate binds an exact
+runtime/provider connection target including its installation, runtime artifact
+and Full Workspace declaration; the model slug is deliberately excluded.
+Historical exact Codex evidence keeps its legacy target shape and remains
+byte-identical. A nonempty target is always hashed and cannot use the historical
+evidence-validation path.
 The source
 TCB also includes the collection/signing entrypoint. This implementation does
 not provide missing live credentials, trust a new signing key, approve native

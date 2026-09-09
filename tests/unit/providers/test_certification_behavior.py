@@ -84,8 +84,22 @@ class CertificationBehaviorTest(unittest.TestCase):
     def test_native_target_requires_approved_runtime_and_full_workspace_connection(self):
         from core.providers.native_agent_builtins import build_antigravity_cli_candidate_installation
 
-        with self.assertRaisesRegex(CapabilityCertificateError, "native_target_incomplete"):
-            native_connection_target_digest(build_antigravity_cli_candidate_installation(), model_provider_id="google")
+        installation = build_antigravity_cli_candidate_installation()
+        self.assertEqual(
+            len(native_connection_target_digest(installation, model_provider_id="google")),
+            64,
+        )
+        with self.assertRaisesRegex(ValueError, "certificate_contract_incomplete"):
+            native_connection_target_digest(
+                replace(
+                    installation,
+                    certificate=replace(
+                        installation.certificate,
+                        full_workspace_contract_revision=None,
+                    ),
+                ),
+                model_provider_id="google",
+            )
 
     def test_live_receipts_reject_green_text_false_counts_payloads_and_replay(self):
         for provider in ("google-ai-studio", "openrouter"):

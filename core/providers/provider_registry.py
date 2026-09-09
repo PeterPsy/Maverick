@@ -116,6 +116,19 @@ class ProviderRegistry:
         self.native_catalog_lock = RLock()
         self._native_agent_catalogs = {}
         self._native_catalog_reconciliations = {}
+        self._authorized_native_agent_activations: set[str] = set()
+
+    def authorize_native_agent_activation(self, provider_id: str) -> None:
+        """Permit an already store-validated native connection to become active."""
+        if provider_id not in self._native_agent_installations:
+            raise ProviderNotFoundError(
+                f"Native agent installation `{provider_id}` is not registered."
+            )
+        self._authorized_native_agent_activations.add(provider_id)
+
+    def revoke_native_agent_activation(self, provider_id: str) -> None:
+        """Remove ephemeral registry authority after store/catalog drift."""
+        self._authorized_native_agent_activations.discard(provider_id)
 
     def get_native_agent_catalog(self, runtime_engine_id: str, model_provider_id: str):
         """Read only snapshots published by the trusted discovery/reconcile path."""
@@ -140,7 +153,15 @@ class ProviderRegistry:
         """Register one provider definition without a runtime adapter."""
         with self.native_catalog_lock:
             installation = self._native_agent_installations.get(definition.provider_id)
-            if installation is not None and not installation.certification_configured:
+            if (
+                installation is not None
+                and definition.provider_id != "codex"
+                and (
+                    not installation.certification_configured
+                    or definition.provider_id
+                    not in self._authorized_native_agent_activations
+                )
+            ):
                 definition = replace(definition, status="disabled")
             self._definitions[definition.provider_id] = definition
             return definition

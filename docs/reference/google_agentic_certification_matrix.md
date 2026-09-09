@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-09-08
-Matrix revision: `2026-09-08-r47-p6-antigravity-oauth-tcb37`
+Status date: 2026-09-09
+Matrix revision: `2026-09-09-r48-p6-native-certification-tcb38`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==43`
+Adapter: `maverick-hosted-tool-loop==44`
 
 ## P6 candidate checkpoint
 
-Suite 47 / TCB manifest 37 / hosted adapter 43 / recipe 25 bind the P5
+Suite 48 / TCB manifest 38 / hosted adapter 44 / recipe 25 bind the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -56,7 +56,7 @@ this correction grants a native certificate or API release authority.
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `name=models/gemini-3.6-flash`, `version=3.6-flash-07-2026`; an omitted/null `baseModelId` is digest-bound, while any supplied value must equal `gemini-3.6-flash` |
-| Immutable profile revision | `52` (revision `51` suspended) |
+| Immutable profile revision | `53` (revision `52` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
@@ -110,7 +110,7 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v36 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v38 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures accept only the documented omission of `model` on partial lifecycle resources and reject supplied mismatches | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -572,3 +572,14 @@ hosted Google request protocol and free-tier-only constraint are unchanged.
 OpenRouter profile 51 advances with the shared adapter/TCB identity. Codex
 revision 15 and hosted recipe 25 remain byte-identical; no certificate,
 binding, canary, or release is implied.
+
+Revision 53 pins hosted adapter 44 and governed recipe 25 together with suite
+48, matrix `2026-09-09-r48-p6-native-certification-tcb38`, and TCB manifest
+v38. It adds the independent Antigravity connection certificate/live-receipt
+path, read-only native workspace plus Core-governed mutation boundary, exact
+skill materialization, catalog projection retirement, provider-specific kill
+switch, and append-only successor-ledger authority. The hosted Google request
+protocol, exact catalog target, free-tier-only constraint, and recipe 25 are
+unchanged. OpenRouter profile 52 advances with the shared adapter/TCB identity.
+Codex revision 15 remains byte-identical; no live evidence, trusted signature,
+certificate, activation, binding, canary, or release is implied.

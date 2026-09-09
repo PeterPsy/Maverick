@@ -84,9 +84,11 @@ class ProviderApiTest(unittest.TestCase):
         status, payload = self.invoke("/api/providers")
 
         self.assertEqual(status, "200 OK")
-        self.assertEqual(payload["items"][0]["provider_id"], "codex")
-        self.assertEqual(payload["items"][0]["provider_role"], "runtime_engine")
-        self.assertIn("capabilities", payload["items"][0])
+        codex = next(
+            item for item in payload["items"] if item["provider_id"] == "codex"
+        )
+        self.assertEqual(codex["provider_role"], "runtime_engine")
+        self.assertIn("capabilities", codex)
         self.assertNotIn("secret_ref", str(payload))
 
     def test_provider_route_returns_redaction_safe_decision(self) -> None:

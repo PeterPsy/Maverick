@@ -303,7 +303,18 @@ def build_pinned_execution_binding(
         authorized_definition=authorized_definition_snapshot,
         authorized_binding=authorized_workspace_binding_snapshot,
     )
-    model_provider = registry.get_provider_definition(definition.model_provider_id)
+    try:
+        model_provider = registry.get_provider_definition(
+            definition.model_provider_id
+        )
+    except ProviderNotFoundError:
+        if definition.execution_family != "native_agent":
+            raise
+        # Native connection ids need not be separately selectable provider
+        # definitions; their runtime owns authentication and routing.
+        model_provider = registry.get_provider_definition(
+            definition.runtime_engine_id
+        )
     if model_provider.requires_credentials and not binding.credential_binding_id:
         raise ProviderCredentialBindingError("credential_binding_unavailable")
     provider = registry.get_provider_definition(definition.runtime_engine_id)

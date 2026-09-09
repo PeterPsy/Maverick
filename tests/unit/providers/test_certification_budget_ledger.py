@@ -93,6 +93,61 @@ os._exit(19)
             self.reserve(reopened)
         self.assertEqual(reopened.status()["openrouter"]["requests"], 0)
 
+    def test_separately_authorized_successor_carries_usage_and_seals_predecessor(self):
+        self.reserve(cost=1_000_000, now=100)
+        self.ledger.halt("openrouter", reason="provider_transport_error")
+        successor_path = self.path.with_name("successor.sqlite3")
+
+        successor = CertificationBudgetLedger.create_successor(
+            successor_path,
+            predecessor=self.ledger,
+            limits=self.limits,
+            authorization_ref="d" * 64,
+        )
+
+        status = successor.status()
+        self.assertEqual(status["openrouter"]["requests"], 1)
+        self.assertEqual(status["openrouter"]["carried_requests"], 1)
+        self.assertEqual(status["openrouter"]["reserved_microusd"], 1_000_000)
+        self.assertEqual(
+            status["openrouter"]["predecessor_policy_digest"],
+            self.ledger.policy_digest,
+        )
+        self.reserve(successor, cost=3_000_000, now=101)
+        with self.assertRaisesRegex(CapabilityCertificateError, "budget_exceeded"):
+            self.reserve(successor, cost=1_000_000, now=102)
+        for provider in ("openrouter", "google-ai-studio"):
+            with self.assertRaisesRegex(CapabilityCertificateError, "budget_halted"):
+                self.reserve(self.ledger, provider=provider, cost=1, now=1_000)
+
+    def test_successor_requires_halt_new_authority_and_non_expanding_limits(self):
+        for authorization_ref, limits, reason in (
+            ("a" * 64, self.limits, "policy_invalid"),
+            ("d" * 64, self.limits, "predecessor_not_halted"),
+        ):
+            with self.subTest(reason=reason), self.assertRaisesRegex(
+                CapabilityCertificateError,
+                reason,
+            ):
+                CertificationBudgetLedger.create_successor(
+                    self.path.with_name(f"{reason}.sqlite3"),
+                    predecessor=self.ledger,
+                    limits=limits,
+                    authorization_ref=authorization_ref,
+                )
+        self.ledger.halt("openrouter", reason="provider_transport_error")
+        expanded = (
+            CertificationBudgetLimit("openrouter", "paid", 5_000_000, 200, 0),
+            self.limits[1],
+        )
+        with self.assertRaisesRegex(CapabilityCertificateError, "policy_invalid"):
+            CertificationBudgetLedger.create_successor(
+                self.path.with_name("expanded.sqlite3"),
+                predecessor=self.ledger,
+                limits=expanded,
+                authorization_ref="d" * 64,
+            )
+
     def test_policy_mismatch_missing_corrupt_or_shared_ledger_fail_closed(self):
         with self.assertRaisesRegex(CapabilityCertificateError, "ledger_invalid"):
             CertificationBudgetLedger(self.path, policy_digest="c" * 64)

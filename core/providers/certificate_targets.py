@@ -1,19 +1,29 @@
 """Enforce the immutable API-profile target after certificate publication."""
 
 from core.providers.capability_models import CapabilityCertificate
+from core.providers.certified_execution_tcb import is_exact_codex_identity
 from core.providers.certification_target import api_profile_target_digest
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 
 
 def validate_api_certificate_target_shape(certificate: CapabilityCertificate) -> None:
     target = certificate.certification_target_digest
-    if certificate.execution_family == "maverick_agent":
+    requires_target = certificate.execution_family == "maverick_agent" or (
+        certificate.execution_family == "native_agent"
+        and not is_exact_codex_identity(
+            runtime_engine_id=certificate.runtime_engine_id,
+            adapter_id=certificate.adapter_id,
+            model_provider_id=certificate.model_provider_id,
+            provider_protocol=certificate.provider_protocol,
+        )
+    )
+    if requires_target:
         if not isinstance(target, str) or len(target) != 64 or any(
             character not in "0123456789abcdef" for character in target
         ):
             raise CapabilityCertificateError("certificate_target_missing_or_invalid")
     elif target:
-        # Native certificates are connection-scoped, never API-profile-scoped.
+        # Legacy/local certificates have no executed certification target.
         raise CapabilityCertificateError("certificate_target_family_invalid")
 
 

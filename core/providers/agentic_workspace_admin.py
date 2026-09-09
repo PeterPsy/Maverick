@@ -219,7 +219,16 @@ def save_workspace_agentic_binding(
 
         require_native_agent_model_available(registry, definition)
 
-    model_provider = registry.get_provider_definition(definition.model_provider_id)
+    try:
+        model_provider = registry.get_provider_definition(
+            definition.model_provider_id
+        )
+    except ProviderNotFoundError:
+        if definition.execution_family != "native_agent":
+            raise
+        model_provider = registry.get_provider_definition(
+            definition.runtime_engine_id
+        )
     normalized_credential_id = str(credential_binding_id or "").strip() or None
     if normalized_credential_id:
         credential = resolve_provider_binding(

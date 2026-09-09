@@ -26,15 +26,16 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-Current remote candidates use hosted adapter 43, recipe 25, suite 47 and TCB
-manifest 37 (Google/OpenRouter profiles 52/51). Exact-target live receipts and
-independently observed natural conformance are required before trusted signing
-and publication; neither step grants release authority. The procedure is in
+Current remote candidates use hosted adapter 44, recipe 25, suite 48 and TCB
+manifest 38 (Google/OpenRouter profiles 53/52 and Antigravity native
+adapter/recipe 3). Exact-target live receipts and independently observed natural
+conformance are required before trusted signing and publication; neither step
+grants release authority. The procedure is in
 `docs/runbooks/agentic_certification_evidence.md`. Historical revision numbers
 below describe earlier implementation checkpoints, not current certification.
-The deployed backend retains Codex revision-14 artifact and connection
-authority. Shared queue/handoff changes are represented by a separate,
-append-only revision-15 candidate and do not authorize an automatic cutover.
+The deployed backend retains active Codex revision-15 artifact and connection
+authority; revision 14 remains immutable history. The remote/native-candidate
+changes do not authorize a Codex restart, migration or certificate reissue.
 
 ## Pinned Agentic Session Identity
 
@@ -120,7 +121,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v30 also
+status, workspace binding, and upstream constraint. TCB manifest v38 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance, and hashes the exact executable roots of every built-in app surface
@@ -223,7 +224,15 @@ profiles created before the family field; arbitrary vendor labels and flags are
 never used for that inference. The executable Antigravity CLI candidate
 demonstrates a second native registration through its persistent structured
 stream and official cached OAuth authentication while remaining
-hard-disabled until full certification.
+hard-disabled until full certification and explicit operator activation. Its
+suite-48 certificate target binds the exact runtime/provider connection and
+installed artifact, not a model slug. Current authenticated catalog models
+receive evidence-preserving projections; removed models become unavailable and
+superseded projection revisions are suspended. Native tools see the workspace read-only, selected workspace
+skills are copied into a read-only private runtime subtree, and mutations must cross the
+Core-governed runtime-token CLI/MCP boundary. Neither catalog discovery,
+bootstrap, a persisted `active` value, nor a feature flag can mint certificate
+authority or create a workspace binding.
 
 Legacy Codex default bindings created before the explicit filesystem-list
 policy bit are repaired during normal profile bootstrap only when they still

@@ -122,7 +122,7 @@ class AntigravityCliSession:
             raise NativeStructuredCliError("antigravity_init_invalid")
         if not _REQUIRED_NATIVE_TOOLS.issubset(tools):
             raise NativeStructuredCliError("antigravity_toolset_incomplete")
-        if payload.get("permission_mode") != "request-review":
+        if payload.get("permission_mode") != "proceed-in-sandbox":
             raise NativeStructuredCliError("antigravity_permission_mode_untrusted")
         expected_model = str(context.binding.model_id or "").strip()
         if payload.get("model") != expected_model:

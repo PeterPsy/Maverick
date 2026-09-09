@@ -1,4 +1,4 @@
-# Antigravity CLI: executable Native candidate
+# Antigravity CLI: certifiable Native candidate
 
 Maverick registers `AntigravityCliNativeAdapter` through the generic Native
 Agent engine contract. It does not inherit Codex code and does not use
@@ -21,8 +21,9 @@ the resulting `antigravity-oauth-token` into a Core-owned mode-`0700` source
 directory selected by `MAVERICK_ANTIGRAVITY_HOME`; the token itself must be a
 single-owner, single-link mode-`0600` regular file. Each launch atomically
 copies that one identity file into the session-private home and writes its own
-controlled settings containing only `enableTerminalSandbox=true` and
-`toolPermission=request-review`. The process receives neither
+controlled settings with `enableTerminalSandbox=true`,
+`toolPermission=proceed-in-sandbox`, artifact review enabled, and allow rules
+limited to the runtime-local `maverick` command. The process receives neither
 `GEMINI_API_KEY` nor `MAVERICK_PROVIDER_SECRET`. A provider credential binding,
 API-key lease, symlink, hard link, wrong owner, permissive mode, missing token,
 or changing source fails before process creation. Google AI Studio's API key
@@ -52,7 +53,7 @@ new catalog epoch is observed. No tenant workspace may be used as the source.
 
 - Preparation starts one supervised process, requires exactly one valid `init`,
   and verifies the conversation id, working directory, model, tool list, and
-  `request-review` permission mode before publishing a prepared handle.
+  `proceed-in-sandbox` permission mode before publishing a prepared handle.
 - Consecutive turns use one process. Each turn sends one text-only `user` event,
   consumes ordered `step_update` events, and requires exactly one terminal
   `SUCCESS` result with a nonblank response and structurally valid cumulative
@@ -80,12 +81,29 @@ new catalog epoch is observed. No tenant workspace may be used as the source.
 ## Containment and permissions
 
 Launch is accepted only for sandbox-mode sessions whose workdir is the exact
-workspace root. Maverick's Bubblewrap boundary exposes the workspace/runtime
-write roots and declared runtime dependencies only. The CLI also receives its
-documented `--sandbox` flag. Its HOME and every XDG root are private per runtime;
-the process never inherits the host HOME. `--dangerously-skip-permissions` is
-forbidden. `init.permission_mode` must be `request-review`, so a persisted
-always-proceed setting cannot silently widen authority.
+workspace root. The outer Maverick Bubblewrap boundary mounts the workspace
+read-only, overlays only the session runtime root as writable, and exposes
+declared runtime dependencies read-only. The CLI also receives its documented
+`--sandbox` flag. Its HOME and every XDG root are private per runtime; the
+process never inherits the host HOME. `--dangerously-skip-permissions` is
+forbidden. `init.permission_mode` must be `proceed-in-sandbox`; this permits the
+CLI's sandboxed internal work while the outer boundary still prevents direct
+workspace writes.
+
+Core installs its runtime-token `maverick` wrapper in the private runtime bin
+directory. Direct native shell/filesystem tools can inspect the workspace but
+cannot mutate it. Mutating and destructive work must cross that exact CLI/MCP
+boundary, where Core owns policy, effect classification, durable confirmation,
+CAS and audit. Antigravity's inner permission setting therefore cannot grant
+authority beyond the outer OS boundary or Core APIs.
+
+For each prepare, Core copies only the exact selected workspace-owned skill
+trees into `.gemini/antigravity-cli/skills` under the private home and shadows
+that subtree read-only inside the native sandbox. The copy is
+bounded by file count and bytes, rejects symlinks and duplicate identities, and
+uses private modes. A changed skill-set digest retires the old process owner
+before a new process is prepared; an empty set atomically removes old skill
+content.
 
 The private runtime home means Maverick never mounts or inherits the operator
 home. It copies only the explicitly provisioned cached OAuth identity; operator
@@ -126,13 +144,25 @@ concurrent preparation, interruption, recovery, and process-tree cleanup.
 `test_antigravity_cli_sync_runtime.py` crosses the real synchronous Core
 prepare/turn/cancel/close boundaries and verifies loop/process ownership.
 `test_antigravity_cli_runtime_home.py` covers source and destination filesystem
-fences, while `test_antigravity_cli_discovery.py` covers authenticated private
+fences plus bounded no-symlink skill replacement, while
+`test_antigravity_cli_discovery.py` covers authenticated private
 catalog discovery, exact-binary gating, and disabled publication.
 
 Those fixtures use explicitly synthetic authority and replace only the OS
-sandbox wrapper. They do not certify Antigravity. The installation remains
-disabled until the provisioned OAuth profile works from the confined runtime home, the exact
-model catalog is observed, Full Workspace behavior is proven, an
-independent reviewer approves the evidence, and a trusted connection
-certificate is published. No Google API certificate can authorize this Native
+sandbox wrapper. They do not certify Antigravity. Suite 48 adds a strict
+`native_connection` target and bounded one-turn live receipt. Only
+`publish_antigravity_connection_certificate` may convert a complete natural,
+signed run from an already trusted signer into the root
+`native-connection:antigravity-cli:google:3`; catalog model certificates merely
+project its unchanged evidence and expiry. Bootstrap and discovery cannot mint
+that root.
+
+The installation remains disabled until the provisioned OAuth profile works
+from the confined runtime home, the exact model catalog is observed, all 14
+natural Full Workspace scenarios pass, an independent reviewer approves the
+evidence, and the trusted connection certificate is published. Even then,
+`core.providers.native.activate` is a separate operator-only action and creates
+no workspace binding. Global and Antigravity-specific kill switches, current
+workspace attestation, disposable canary, rollback and production-security
+review remain mandatory. No Google API certificate can authorize this Native
 CLI connection.

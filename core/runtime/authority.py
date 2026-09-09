@@ -24,6 +24,7 @@ from core.runtime.full_workspace_contract import (
     validate_full_workspace_live_authority,
 )
 from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
     MAVERICK_FEATURE_AGENTIC_PROFILES,
@@ -780,6 +781,13 @@ def _runtime_feature_flags(
         provider_flag = provider_preview_feature(binding.model_provider_id)
         if provider_flag is not None:
             resolved[provider_flag[0]] = feature_enabled(provider_flag[0])
+    elif binding.runtime_engine_id == "antigravity-cli":
+        remote_names = (
+            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+            MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+        )
+        resolved.update({name: feature_enabled(name) for name in remote_names})
     return resolved
 
 

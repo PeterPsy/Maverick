@@ -55,6 +55,7 @@ class AntigravityCliFixture:
         self.assertIsNone(self.controller.legacy_adapter)
         self.session = SimpleNamespace(
             session_id="test",
+            workspace_id="default",
             workspace_root=str(workspace),
             workdir=str(workspace),
             runtime_root=str(self.root / "runtime"),
@@ -71,7 +72,14 @@ class AntigravityCliFixture:
         self.state = SimpleNamespace(provider_thread_id=None)
         with patch(
             "core.providers.antigravity_cli_sandbox.build_bwrap_command",
-            side_effect=lambda **kwargs: kwargs["command"],
+            side_effect=lambda **kwargs: [
+                "fake-bwrap",
+                "--bind",
+                str(kwargs["workspace_root"]),
+                str(kwargs["workspace_root"]),
+                "--",
+                *kwargs["command"],
+            ],
         ) as sandbox:
             spec = await self.controller.launch(
                 SimpleNamespace(
@@ -81,8 +89,10 @@ class AntigravityCliFixture:
                 )
             )
             self.assertEqual(sandbox.call_args.kwargs["workspace_root"], workspace)
+        self.sandboxed_spec = spec
         self.spec = replace(
             spec,
+            command=spec.command[spec.command.index("--") + 1 :],
             env_overrides={
                 **spec.env_overrides,
                 "ANTIGRAVITY_FIXTURE_TRACE": str(self.trace),

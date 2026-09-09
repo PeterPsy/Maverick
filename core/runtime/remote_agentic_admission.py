@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from core.providers.errors import AgenticProfileError
 from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
@@ -14,6 +15,10 @@ from core.workspaces.data_governance import WorkspaceDataAttestation
 
 
 REMOTE_AGENTIC_PROVIDER_FLAGS = {
+    "antigravity-cli": (
+        MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
+        "antigravity_agentic_preview_disabled",
+    ),
     "google-ai-studio": (
         MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
         "google_agentic_preview_disabled",
@@ -92,8 +97,14 @@ def remote_agentic_availability_reason(
         environment=environment,
     ):
         return "hosted_agent_runtime_disabled"
+    runtime_engine_id = str(
+        getattr(binding_or_definition, "runtime_engine_id", "")
+    )
     provider_id = str(getattr(binding_or_definition, "model_provider_id", ""))
-    provider_flag = REMOTE_AGENTIC_PROVIDER_FLAGS.get(provider_id)
+    provider_flag = REMOTE_AGENTIC_PROVIDER_FLAGS.get(
+        runtime_engine_id,
+        REMOTE_AGENTIC_PROVIDER_FLAGS.get(provider_id),
+    )
     if provider_flag is None:
         return "remote_agentic_provider_unapproved"
     if not feature_enabled(provider_flag[0], environment=environment):

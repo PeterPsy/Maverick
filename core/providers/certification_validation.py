@@ -6,8 +6,9 @@ import re
 from core.providers.certification_records import CertificationRunResult
 from core.providers.certification_manifests import get_certification_manifest
 from core.providers.certification_target import (
-    api_certification_resource_limits, builtin_api_certification_profile,
-    builtin_api_certification_target, builtin_api_reasoning_efforts,
+    certification_manifest_reasoning_efforts,
+    certification_manifest_resource_limits,
+    certification_manifest_target,
 )
 from core.providers.certification_behavior import validate_behavioral_evidence
 from core.providers.certification_live_receipt import validate_live_probe_receipt
@@ -51,7 +52,7 @@ def validate_completed_run(run: CertificationRunResult) -> None:
     }:
         raise CapabilityCertificateError("certification_required_steps_missing")
     manifest = get_certification_manifest(run.suite_id, run.suite_version)
-    if run.target_digest != builtin_api_certification_target(manifest.provider_id):
+    if run.target_digest != certification_manifest_target(manifest):
         raise CapabilityCertificateError("certification_target_mismatch")
     if run.manifest_digest != manifest.digest:
         raise CapabilityCertificateError("certification_manifest_mismatch")
@@ -106,8 +107,9 @@ def validate_completed_run(run: CertificationRunResult) -> None:
         run.behavioral_evidence, target_digest=run.target_digest,
         source_commit=run.source_commit, tcb_live_digest=run.tcb_live_digest,
         not_before=run.completed_at, now=datetime.now(tz=UTC),
-        reasoning_efforts=builtin_api_reasoning_efforts(manifest.provider_id),
-        resource_limits=api_certification_resource_limits(builtin_api_certification_profile(manifest.provider_id)),
+        reasoning_efforts=certification_manifest_reasoning_efforts(manifest),
+        resource_limits=certification_manifest_resource_limits(manifest),
+        scope=manifest.target_scope,
     )
 
 

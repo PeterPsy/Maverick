@@ -11,40 +11,81 @@ from core.providers.certification_behavior import BEHAVIORAL_SCENARIOS, ZERO_TOL
 from core.providers.certification_target import (
     api_certification_resource_limits, builtin_api_certification_profile,
     builtin_api_certification_target, builtin_api_reasoning_efforts,
+    certification_manifest_reasoning_efforts,
+    certification_manifest_resource_limits,
+    certification_manifest_target,
 )
 from core.runtime.execution_binding import canonical_digest
 
 
 def fixture_live_receipt(provider_id, *, nonce):
-    efforts = builtin_api_reasoning_efforts(provider_id)
+    if provider_id == "antigravity-cli":
+        from core.providers.certification_manifests import (
+            ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
+        )
+
+        manifest = ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST
+        efforts = certification_manifest_reasoning_efforts(manifest)
+        target_digest = certification_manifest_target(manifest)
+    else:
+        efforts = builtin_api_reasoning_efforts(provider_id)
+        target_digest = builtin_api_certification_target(provider_id)
     common = {
-        "target_digest": builtin_api_certification_target(provider_id),
+        "target_digest": target_digest,
         "run_nonce": nonce, "succeeded": True, "reasoning_efforts": list(efforts),
     }
     if provider_id == "google-ai-studio":
         summary = {
-            "reason_code": "ok", "request_count": 3, "saw_streaming": True,
-            "saw_tool_call": True, "saw_filesystem_list": True, "saw_usage": True,
-            "saw_private_state": True, "reasoning_efforts": list(efforts),
-            "catalog_snapshots": [asdict(fixture_google_catalog_snapshot()) for _ in range(3)],
+            "reason_code": "ok",
+            "request_count": 3,
+            "saw_streaming": True,
+            "saw_tool_call": True,
+            "saw_filesystem_list": True,
+            "saw_usage": True,
+            "saw_private_state": True,
+            "reasoning_efforts": list(efforts),
+            "catalog_snapshots": [
+                asdict(fixture_google_catalog_snapshot()) for _ in range(3)
+            ],
         }
         return {
-            **common, **summary, "result_summary_digest": canonical_digest(summary),
+            **common,
+            **summary,
+            "result_summary_digest": canonical_digest(summary),
             "test_run_id": "google-interactions-live:00000000-0000-0000-0000-000000000000",
         }
+    if provider_id == "openrouter":
+        return {
+            **common,
+            "request_count": 8,
+            "filesystem_result_count": 6,
+            "catalog_snapshot_digest": "a" * 64,
+            "catalog_model_record_digest": "b" * 64,
+            "catalog_model_metadata_record_digest": "d" * 64,
+            "catalog_zdr_record_digest": "c" * 64,
+            "catalog_reasoning_efforts": list(efforts),
+            "catalog_default_reasoning_effort": "high",
+            "catalog_reasoning_mandatory": False,
+            "resolved_model_id": "deepseek/deepseek-v4-flash-20260423",
+            "context_length": 1_048_576,
+            "finalization_tool_catalog_mode": "omitted",
+            "max_completion_tokens": 65_536,
+            "supports_tool_choice_none": False,
+            "upstream_id": "deepinfra/fp8",
+        }
     return {
-        **common, "request_count": 8, "filesystem_result_count": 6,
-        "catalog_snapshot_digest": "a" * 64, "catalog_model_record_digest": "b" * 64,
-        "catalog_model_metadata_record_digest": "d" * 64,
-        "catalog_zdr_record_digest": "c" * 64,
-        "catalog_reasoning_efforts": list(efforts),
-        "catalog_default_reasoning_effort": "high",
-        "catalog_reasoning_mandatory": False,
-        "resolved_model_id": "deepseek/deepseek-v4-flash-20260423",
-        "context_length": 1_048_576,
-        "finalization_tool_catalog_mode": "omitted",
-        "max_completion_tokens": 65_536, "supports_tool_choice_none": False,
-        "upstream_id": "deepinfra/fp8",
+        **common,
+        "request_count": 1,
+        "saw_init": True,
+        "saw_structured_event": True,
+        "saw_usage": True,
+        "saw_nonempty_final": True,
+        "cleanup_verified": True,
+        "runtime_artifact_digest": "a" * 64,
+        "catalog_snapshot_digest": "b" * 64,
+        "catalog_model_count": 2,
+        "provider_thread_digest": "c" * 64,
+        "output_digest": "d" * 64,
     }
 
 
@@ -65,7 +106,8 @@ def fixture_google_catalog_snapshot():
 
 def fixture_step_process(command, **kwargs):
     providers = {"scripts/run_google_interactions_probe.py": "google-ai-studio",
-                 "scripts/run_openrouter_agentic_probe.py": "openrouter"}
+                 "scripts/run_openrouter_agentic_probe.py": "openrouter",
+                 "scripts/run_antigravity_native_probe.py": "antigravity-cli"}
     provider = providers.get(command[-1])
     stdout = b"passed" if provider is None else json.dumps(fixture_live_receipt(
         provider, nonce=kwargs["env"]["MAVERICK_CERTIFICATION_RUN_NONCE"],
@@ -74,8 +116,19 @@ def fixture_step_process(command, **kwargs):
 
 
 def fixture_behavior_report(run, *, provider_id):
-    efforts = builtin_api_reasoning_efforts(provider_id)
-    limits = api_certification_resource_limits(builtin_api_certification_profile(provider_id))
+    if hasattr(run, "suite_id"):
+        from core.providers.certification_manifests import get_certification_manifest
+
+        manifest = get_certification_manifest(run.suite_id, run.suite_version)
+        efforts = certification_manifest_reasoning_efforts(manifest)
+        limits = certification_manifest_resource_limits(manifest)
+        scope = manifest.target_scope
+    else:
+        efforts = builtin_api_reasoning_efforts(provider_id)
+        limits = api_certification_resource_limits(
+            builtin_api_certification_profile(provider_id)
+        )
+        scope = "api_profile"
     started = datetime.now(tz=UTC)
     observations = [
         {
@@ -88,7 +141,8 @@ def fixture_behavior_report(run, *, provider_id):
         for effort in efforts for scenario, checks in BEHAVIORAL_SCENARIOS.items()
     ]
     return {
-        "schema": "maverick-agentic-natural-conformance.v1", "scope": "api_profile",
+        "schema": "maverick-agentic-natural-conformance.v1",
+        "scope": scope,
         "target_digest": run.target_digest, "source_commit": run.source_commit,
         "tcb_live_digest": run.tcb_live_digest, "reviewer_ref": "6" * 64,
         "started_at": started.isoformat(), "completed_at": datetime.now(tz=UTC).isoformat(),

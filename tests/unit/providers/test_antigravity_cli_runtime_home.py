@@ -10,7 +10,9 @@ from unittest.mock import patch
 from core.providers.antigravity_cli_runtime_home import (
     ANTIGRAVITY_OAUTH_TOKEN_FILENAME,
     ANTIGRAVITY_PROFILE_RELATIVE_PATH,
+    ANTIGRAVITY_RUNTIME_SETTINGS,
     prepare_antigravity_runtime_home,
+    prepare_antigravity_runtime_skills,
     resolve_antigravity_source_home,
     validate_antigravity_oauth_source,
 )
@@ -44,10 +46,7 @@ class AntigravityCliRuntimeHomeTest(unittest.TestCase):
         self.assertEqual(home.stat().st_mode & 0o777, 0o700)
         self.assertEqual(
             json.loads(settings.read_text(encoding="utf-8")),
-            {
-                "enableTerminalSandbox": True,
-                "toolPermission": "request-review",
-            },
+            ANTIGRAVITY_RUNTIME_SETTINGS,
         )
         self.assertNotIn("modelProvider", settings.read_text(encoding="utf-8"))
         self.assertEqual(
@@ -164,6 +163,78 @@ class AntigravityCliRuntimeHomeTest(unittest.TestCase):
         ):
             self.assertEqual(resolve_antigravity_source_home(), self.source)
             validate_antigravity_oauth_source()
+
+    def test_materializes_exact_skills_and_replaces_the_previous_set(self) -> None:
+        first = self.root / "skills" / "first"
+        nested = first / "references"
+        nested.mkdir(parents=True)
+        (first / "SKILL.md").write_text("# First\n", encoding="utf-8")
+        (nested / "guide.md").write_text("bounded\n", encoding="utf-8")
+        skill = type(
+            "Skill",
+            (),
+            {"skill_id": "workspace:first", "source_root": str(first)},
+        )()
+
+        first_digest = prepare_antigravity_runtime_skills(
+            self.runtime,
+            (skill,),
+        )
+        destination = (
+            self.runtime
+            / "antigravity-home"
+            / ANTIGRAVITY_PROFILE_RELATIVE_PATH
+            / "skills"
+        )
+        materialized = next(destination.iterdir())
+        self.assertEqual(
+            (materialized / "SKILL.md").read_text(encoding="utf-8"),
+            "# First\n",
+        )
+        self.assertEqual(
+            (materialized / "references/guide.md").stat().st_mode & 0o777,
+            0o600,
+        )
+        self.assertEqual(
+            first_digest,
+            prepare_antigravity_runtime_skills(self.runtime, (skill,)),
+        )
+
+        empty_digest = prepare_antigravity_runtime_skills(self.runtime, ())
+        self.assertNotEqual(first_digest, empty_digest)
+        self.assertEqual(list(destination.iterdir()), [])
+
+    def test_skill_symlinks_and_duplicate_identities_fail_closed(self) -> None:
+        valid = self.root / "skills" / "valid"
+        valid.mkdir(parents=True)
+        (valid / "SKILL.md").write_text("# Valid\n", encoding="utf-8")
+        outside = self.root / "outside.md"
+        outside.write_text("outside", encoding="utf-8")
+        (valid / "linked.md").symlink_to(outside)
+        linked = type(
+            "Skill",
+            (),
+            {"skill_id": "linked", "source_root": str(valid)},
+        )()
+        with self.assertRaisesRegex(
+            NativeStructuredCliError,
+            "antigravity_skill_source_invalid",
+        ):
+            prepare_antigravity_runtime_skills(self.runtime, (linked,))
+
+        duplicate = type(
+            "Skill",
+            (),
+            {"skill_id": "duplicate", "source_root": str(valid)},
+        )()
+        with self.assertRaisesRegex(
+            NativeStructuredCliError,
+            "antigravity_skill_identity_invalid",
+        ):
+            prepare_antigravity_runtime_skills(
+                self.runtime,
+                (duplicate, duplicate),
+            )
 
 
 if __name__ == "__main__":

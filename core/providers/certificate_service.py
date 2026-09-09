@@ -58,7 +58,11 @@ _EXECUTED_EVIDENCE_FIELDS = (
 
 def runtime_adapter_artifact_digest(adapter: object) -> str:
     """Hash every declared class, function, and module in the adapter bundle."""
-    concrete = getattr(adapter, "legacy_adapter", adapter)
+    concrete = (
+        getattr(adapter, "legacy_adapter", None)
+        or getattr(adapter, "engine_adapter", None)
+        or adapter
+    )
     digest = hashlib.sha256()
     source_count = 0
     seen_paths: set[Path] = set()

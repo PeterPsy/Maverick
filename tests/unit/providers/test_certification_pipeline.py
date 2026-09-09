@@ -158,11 +158,10 @@ class CertificationPipelineTest(unittest.TestCase):
 
         fixture_environment, live_environment = captured_environments
         self.assertEqual(fixture_environment["MAVERICK_CERTIFICATION_ALLOW_LIVE"], "0")
-        self.assertEqual(fixture_environment["MAVERICK_CONTROL_STORE"], "json")
-        self.assertNotEqual(
-            fixture_environment["MAVERICK_JSON_CONTROL_STORE_ROOT"],
-            supplied["MAVERICK_JSON_CONTROL_STORE_ROOT"],
-        )
+        self.assertNotIn("MAVERICK_CONTROL_STORE", fixture_environment)
+        self.assertNotIn("MAVERICK_JSON_CONTROL_STORE_ROOT", fixture_environment)
+        self.assertNotIn("MAVERICK_LOCAL_STATE_ROOT", fixture_environment)
+        self.assertNotIn("MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT", fixture_environment)
         self.assertNotEqual(fixture_environment["HOME"], supplied["HOME"])
         self.assertNotEqual(
             fixture_environment["TMPDIR"], fixture_environment["HOME"]

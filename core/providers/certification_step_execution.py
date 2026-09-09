@@ -71,10 +71,6 @@ def fixture_contract_environment(
             "PYTHONDONTWRITEBYTECODE": "1",
             "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
             "MAVERICK_ADMIN_USERNAME": "admin",
-            "MAVERICK_CONTROL_STORE": "json",
-            "MAVERICK_JSON_CONTROL_STORE_ROOT": str(private_root / "control-plane"),
-            "MAVERICK_LOCAL_STATE_ROOT": str(private_root / "control-plane"),
-            "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": str(private_root / "bootstrap-secrets"),
             "MAVERICK_CERTIFICATION_ALLOW_LIVE": "0",
             "MAVERICK_CERTIFICATION_RUN_NONCE": run_nonce,
         }

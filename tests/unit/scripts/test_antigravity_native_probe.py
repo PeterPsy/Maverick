@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+import tempfile
 from unittest import mock
 import unittest
 
@@ -14,6 +16,14 @@ from tests.support.certification_budget import fixture_budget_environment
 
 
 class AntigravityNativeProbeTest(unittest.TestCase):
+    def test_default_command_is_resolved_from_path(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            binary = Path(folder) / "agy"
+            binary.write_bytes(b"fixture")
+            binary.chmod(0o700)
+            with mock.patch.dict("os.environ", {"PATH": folder}, clear=True):
+                self.assertEqual(probe._resolve_command("agy"), str(binary.resolve()))
+
     def test_live_opt_in_is_required_before_local_or_provider_work(self) -> None:
         with mock.patch.dict("os.environ", {}, clear=True), mock.patch.object(
             probe,
@@ -47,6 +57,10 @@ class AntigravityNativeProbeTest(unittest.TestCase):
             return None
 
         with mock.patch.dict("os.environ", environment, clear=True), mock.patch.object(
+            probe,
+            "_resolve_command",
+            return_value="/opt/agy",
+        ), mock.patch.object(
             probe,
             "inspect_native_runtime_artifact",
             return_value=ANTIGRAVITY_CLI_RUNTIME_ARTIFACT,
@@ -99,6 +113,10 @@ class AntigravityNativeProbeTest(unittest.TestCase):
             "os.environ",
             environment,
             clear=True,
+        ), mock.patch.object(
+            probe,
+            "_resolve_command",
+            return_value="/opt/agy",
         ), mock.patch.object(
             probe,
             "CertificationBudgetLedger",

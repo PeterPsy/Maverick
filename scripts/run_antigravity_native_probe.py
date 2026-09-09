@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -67,7 +68,9 @@ async def _probe() -> dict[str, object]:
             "MAVERICK_CERTIFICATION_BUDGET_POLICY_DIGEST"
         ],
     )
-    command = str(environment.get("MAVERICK_ANTIGRAVITY_COMMAND") or "agy")
+    command = _resolve_command(
+        str(environment.get("MAVERICK_ANTIGRAVITY_COMMAND") or "agy")
+    )
     observed_artifact = inspect_native_runtime_artifact(command)
     if observed_artifact != ANTIGRAVITY_CLI_RUNTIME_ARTIFACT:
         raise CapabilityCertificateError("native_runtime_artifact_mismatch")
@@ -214,6 +217,18 @@ async def _probe() -> dict[str, object]:
             ).hexdigest(),
             "output_digest": hashlib.sha256(finals[0].encode()).hexdigest(),
         }
+
+
+def _resolve_command(command: str) -> str:
+    resolved = shutil.which(command)
+    if resolved is None:
+        raise CapabilityCertificateError("native_runtime_artifact_unavailable")
+    try:
+        return str(Path(resolved).resolve(strict=True))
+    except OSError as error:
+        raise CapabilityCertificateError(
+            "native_runtime_artifact_unavailable"
+        ) from error
 
 
 def main() -> int:

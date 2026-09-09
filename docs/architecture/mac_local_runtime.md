@@ -1224,5 +1224,19 @@ whitelist. Post-capture identity, leases, TCC/secure-input checks and native
 recipient hit testing are unchanged. Three Swift tests cover hover focus,
 multiple layer-0 surfaces with one exact AX-main match, and invalid main
 geometry. Expected totals are **243 Swift** and **26 Python tests**; label
-**radice AX principale v29**. Signed delivery and physical continuation remain
-pending.
+**radice AX principale v29**.
+
+Push run
+[34341935968](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34341935968)
+validated Apple commit **18b2d12** with all **243 Swift tests** and **26 Python
+tests** passing, together with release/runtime/admission/wire/catalog and Apple
+signing gates. After explicit closure of MaverickMac, the single install run
+[34351515010](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34351515010)
+repeated those gates and retained designated-requirement SHA256
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+Artifact **10104031849** has zip SHA256
+`1432760903e877ff19920b0251f7dc4f9188e4d25a22c1f707bb7460150cdbbb`.
+The installer updated `~/Applications/MaverickMac.app` in place without a
+persistent backup and requested launch at **12:35:14 UTC**. Installed label:
+**18b2d12 · radice AX principale v29**. Physical hover and remaining input
+acceptance are still pending.

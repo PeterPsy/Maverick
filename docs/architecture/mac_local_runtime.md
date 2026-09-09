@@ -1287,3 +1287,20 @@ Apple Development signing and identity-continuity gates. Artifact
 `73eecd435afb13b8747168994f87332b9074a55a0e30a47f3835815a5b8af086`.
 The push run did not install or launch MaverickMac. Physical permission state,
 the exact refresh behavior and complete desktop acceptance remain pending.
+
+#### v30 validated signed delivery (2026-09-09)
+
+After explicit closure of MaverickMac, install run
+[34386544711](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34386544711)
+repeated all **247 Swift tests** and **27 Python tests** successfully on Apple
+commit **e3a4154**, together with release/runtime/admission/wire/catalog,
+Apple Development signing and identity-continuity gates. The designated
+requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+Artifact **10118048483** has zip SHA256
+`f350ee768c24ce057e84f24392151928d129ab961c4eff7cd41957c14827afa7`.
+The installer updated `~/Applications/MaverickMac.app` in place without a
+persistent backup and requested launch at **18:06:04 UTC**. Installed label:
+**e3a4154 · refresh finestra sicuro v30**. Permission state, persistent
+visibility and exact physical acceptance remain separate gates.

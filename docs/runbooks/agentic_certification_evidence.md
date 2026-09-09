@@ -150,7 +150,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 48 \
+  --suite-version 49 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
@@ -162,7 +162,7 @@ runner but its own exact adapter bundle and suite id:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-antigravity-native-agentic-contract \
-  --suite-version 48 \
+  --suite-version 49 \
   --adapter-artifact-digest "$ANTIGRAVITY_ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/antigravity-fixtures.json"

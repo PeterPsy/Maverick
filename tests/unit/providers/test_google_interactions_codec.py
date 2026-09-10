@@ -275,6 +275,24 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         self.assertEqual(diagnostics, ["step_delta_unknown_invalid"])
         self.assertNotIn("secret", repr(diagnostics))
 
+    def test_created_model_diagnostic_compares_without_copying_identity(self) -> None:
+        events = _tool_stream("interaction-model-resource")
+        events[0]["interaction"]["model"] = "models/gemini-3.6-flash"
+        diagnostics = []
+        client = GoogleInteractionsAgenticClient(
+            transport=_ScriptedTransport([events]),
+            response_failure_diagnostic=diagnostics.append,
+        )
+
+        result = asyncio.run(_events(client, _request("request-model-resource")))
+
+        self.assertEqual(result[-1].error_code, "provider_response_invalid")
+        self.assertEqual(
+            diagnostics,
+            ["interaction_created_model_resource_name_invalid"],
+        )
+        self.assertNotIn("gemini", repr(diagnostics))
+
     def test_provider_error_before_acceptance_is_normalized(self) -> None:
         for code, reason_code in (
             ("quota_exceeded", "provider_quota_exceeded"),

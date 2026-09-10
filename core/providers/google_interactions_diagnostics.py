@@ -25,7 +25,7 @@ def google_response_failure_diagnostic(payload: object, decoder: object) -> str:
         return "event_payload_invalid"
     event_type = payload.get("event_type")
     if event_type == "interaction.created":
-        return "interaction_created_invalid"
+        return _created_failure_diagnostic(payload, decoder)
     if event_type == "interaction.status_update":
         return "interaction_status_update_invalid"
     if event_type == "step.start":
@@ -69,6 +69,31 @@ def google_response_failure_diagnostic(payload: object, decoder: object) -> str:
     if event_type == "error":
         return "error_event_invalid"
     return "event_type_unknown_invalid"
+
+
+def _created_failure_diagnostic(payload: dict, decoder: object) -> str:
+    if getattr(decoder, "interaction_id", None) is not None:
+        return "interaction_created_duplicate_invalid"
+    interaction = payload.get("interaction")
+    if not isinstance(interaction, dict):
+        return "interaction_created_payload_invalid"
+    interaction_id = interaction.get("id")
+    if (
+        not isinstance(interaction_id, str)
+        or not interaction_id
+        or len(interaction_id) > 4096
+    ):
+        return "interaction_created_id_invalid"
+    request = getattr(decoder, "request", None)
+    expected_model = getattr(request, "model_id", None)
+    observed_model = interaction.get("model")
+    if "model" not in interaction or observed_model == expected_model:
+        return "interaction_created_other_invalid"
+    if observed_model == f"models/{expected_model}":
+        return "interaction_created_model_resource_name_invalid"
+    if observed_model == getattr(request, "model_revision", None):
+        return "interaction_created_model_revision_invalid"
+    return "interaction_created_model_mismatch_invalid"
 
 
 def _completed_failure_diagnostic(payload: dict, decoder: object) -> str:

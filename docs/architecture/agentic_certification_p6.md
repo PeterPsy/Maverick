@@ -14,11 +14,12 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current contained successor uses suite 50 / TCB
-40 / hosted adapter 44 / recipe 25 / Google profile 54 / OpenRouter profile 53,
-plus Antigravity native adapter/recipe 3 and Codex revision 15. It requires its
-own exact-source operator record before signing or release. The source tree does
-not treat a mocked probe receipt or this status paragraph as that record.
+That pass is historical. The current contained successor uses suite 51 / TCB
+41 / hosted adapter 44 / recipe 25 / Google profile 55 / OpenRouter profile 54,
+plus Antigravity native adapter 4, native recipe 3, and Codex revision 15. It
+requires its own exact-source operator record before signing or release. The
+source tree does not treat a mocked probe receipt or this status paragraph as
+that record.
 
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`. Section 21 accepts one autonomous operator mandate
@@ -211,6 +212,20 @@ than reactivating revisions 53/52. Hosted adapter 44, recipe 25, Antigravity
 adapter/recipe 3, its pinned runtime artifact, and Codex revision 15 remain
 byte-identical.
 
+Candidate 51 fixes the same-session preparation race exposed by the suite-50
+successor before Google transport. Concurrent Antigravity `connect` calls had
+materialized the same private skills directory in separate worker threads; the
+second removal could therefore fail after the first had already replaced the
+directory. The adapter now serializes the complete prepare boundary per
+session, including skill materialization, digest comparison, owner retirement,
+and native connection. A deterministic rendezvous regression proves that two
+connects share one preparation and one supervised process. This runtime change
+advances Antigravity adapter/profile/root-connection identity to 4, the suite to
+51, and the broad TCB to manifest 41. Google/OpenRouter advance immutably to
+profiles 55/54 because they require new exact-TCB certificates. Hosted adapter
+44, hosted recipe 25, Antigravity recipe 3, its pinned CLI artifact, and Codex
+revision 15 remain byte-identical.
+
 The shared queue/handoff fix changed files declared in Codex's artifact and was
 published append-only as Codex revision 15, with revision 14 retained in
 immutable history rather than hidden by exclusions or reused as a certificate
@@ -248,8 +263,9 @@ merely because a generic handoff fixture passes.
 ## Checkpoints
 
 1. **Candidate identities and deterministic corpus:** hosted adapter 44,
-   recipe 25, Google profile 54, OpenRouter profile 53, suite 50, canonical
-   TCB manifest 40, Antigravity adapter/recipe 3, and active Codex revision 15.
+   recipe 25, Google profile 55, OpenRouter profile 54, suite 51, canonical
+   TCB manifest 41, Antigravity adapter 4 / recipe 3, and active Codex revision
+   15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed

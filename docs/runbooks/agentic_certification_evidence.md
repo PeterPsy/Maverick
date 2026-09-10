@@ -95,7 +95,7 @@ endpoint/upstream catalog identity.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
-Suite 50 retains that complete corpus and adds authoritative persisted
+Suite 51 retains that complete corpus and adds authoritative persisted
 attestation propagation/revocation at session, queue, dispatch, authority and
 continuation boundaries plus direct-host operator attribution and the refreshed
 Google stable-alias and partial-lifecycle contracts. It also replaces the
@@ -106,8 +106,10 @@ certification/publication, read-only native workspace confinement, exact skill
 materialization, Core-governed mutations, and catalog projection retirement. It
 also isolates every fixture subprocess and reduces Antigravity live failures
 to bounded stage-specific diagnostics while preserving the primary failure
-across cleanup. It binds hosted adapter 44, recipe 25, Google profile 54,
-OpenRouter profile 53, Antigravity adapter/recipe 3, TCB 40 and Codex artifact
+across cleanup. It also serializes same-session Antigravity preparation so
+concurrent connects cannot race while replacing the private skills tree. It
+binds hosted adapter 44, recipe 25, Google profile 55, OpenRouter profile 54,
+Antigravity adapter 4 / recipe 3, TCB 41 and Codex artifact
 revision 15. Codex revision 15 is the active verified profile, revision 14
 remains immutable history, and a remote-provider certification worker must not
 restart, migrate, or reissue the Codex runtime or certificate.
@@ -125,8 +127,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v50 matrix revision
-  `2026-09-10-r50-p6-antigravity-live-diagnostics-tcb40` declared by the provider
+- the dated suite-v51 matrix revision
+  `2026-09-10-r51-p6-antigravity-connect-race-tcb41` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -152,7 +154,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 49 \
+  --suite-version 51 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
@@ -164,7 +166,7 @@ runner but its own exact adapter bundle and suite id:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-antigravity-native-agentic-contract \
-  --suite-version 49 \
+  --suite-version 51 \
   --adapter-artifact-digest "$ANTIGRAVITY_ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/antigravity-fixtures.json"
@@ -181,8 +183,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-50 manifests bind matrix revision
-`2026-09-10-r50-p6-antigravity-live-diagnostics-tcb40`. OpenRouter uses suite id
+All suite-51 manifests bind matrix revision
+`2026-09-10-r51-p6-antigravity-connect-race-tcb41`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the

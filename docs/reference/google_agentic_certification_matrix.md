@@ -1,19 +1,19 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-10
-Matrix revision: `2026-09-10-r50-p6-antigravity-live-diagnostics-tcb40`
+Matrix revision: `2026-09-10-r51-p6-antigravity-connect-race-tcb41`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==44`
 
 ## P6 candidate checkpoint
 
-Suite 50 / TCB manifest 40 / hosted adapter 44 / recipe 25 retain the P5
+Suite 51 / TCB manifest 41 / hosted adapter 44 / recipe 25 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and independently observed natural
-conformance before signing. Suite 50 additionally runs every fixture-contract
+conformance before signing. Suite 51 additionally runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. Historical evidence below is
@@ -156,6 +156,14 @@ The Antigravity live probe now preserves its primary stage failure across
 cleanup and emits only a bounded safe reason. Google wire behavior is
 unchanged; this new immutable profile replaces suspended revision 53 without
 reactivating it. Codex revision 15 remains byte-identical.
+
+Revision 55 retains hosted adapter 44 and governed recipe 25 while advancing
+to suite 51, matrix
+`2026-09-10-r51-p6-antigravity-connect-race-tcb41`, and TCB manifest v41.
+Antigravity same-session preparation is now serialized across private skill
+materialization and native connection. Google wire behavior is unchanged; the
+new profile requires fresh exact-TCB evidence rather than reusing revision 54.
+Codex revision 15 remains byte-identical.
 
 ## Fail-closed conditions
 

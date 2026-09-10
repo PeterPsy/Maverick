@@ -78,7 +78,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "53")
+        self.assertEqual(profile.revision, "54")
         self.assertEqual(profile.adapter_version_constraint, "==44")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,

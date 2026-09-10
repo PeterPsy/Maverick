@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import replace
 import json
 from pathlib import Path
-from threading import Event
+from threading import Barrier, BrokenBarrierError, Event, Lock
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -320,11 +320,39 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         )
 
     async def test_concurrent_connects_share_one_supervised_process(self):
-        first, second = await asyncio.gather(
-            self.controller.connect(self.context),
-            self.controller.connect(self.context),
-        )
+        rendezvous = Barrier(2)
+        counter_lock = Lock()
+        active_preparations = 0
+        maximum_active_preparations = 0
+
+        def observed_skill_preparation(_runtime_root, _skills):
+            nonlocal active_preparations, maximum_active_preparations
+            with counter_lock:
+                active_preparations += 1
+                maximum_active_preparations = max(
+                    maximum_active_preparations,
+                    active_preparations,
+                )
+            try:
+                try:
+                    rendezvous.wait(timeout=0.1)
+                except BrokenBarrierError:
+                    pass
+                return "fixture-skill-digest"
+            finally:
+                with counter_lock:
+                    active_preparations -= 1
+
+        with patch(
+            "core.providers.antigravity_cli_native.prepare_antigravity_runtime_skills",
+            side_effect=observed_skill_preparation,
+        ):
+            first, second = await asyncio.gather(
+                self.controller.connect(self.context),
+                self.controller.connect(self.context),
+            )
         self.assertIs(first.prepared_handle, second.prepared_handle)
+        self.assertEqual(maximum_active_preparations, 1)
         self.assertEqual(
             sum("startup" in message for message in self.messages()),
             1,

@@ -333,9 +333,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "5c7a98b0f3343bbe798a6cfa5ce956988819a07b9286e5f8f6fc7ee12a00667c",
-            "openrouter": "adbd64cc998d5f9f92b03309c6b7c408bf2662bb4bc2c97f5236ae0211f47b62",
-            "antigravity-cli": "47a579f0181fad4d58434083326e3b50d9531b790ea7a83514c03bdf076c17c7",
+            "google-ai-studio": "c1323cd6b22f7213764037dbfaa4ef060ce70c91a6bb38f4efed1a9469afe04e",
+            "openrouter": "ce69e4664612bf8b500d844adba53c8279e632a2f5c39171284516bbfeff802e",
+            "antigravity-cli": "063f95fb3130fe99ed23fe6d781b76ab8cae682ff06e691681f5bcc190a355c5",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -343,10 +343,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "50")
+                self.assertEqual(manifest.suite_version, "51")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-10-r50-p6-antigravity-live-diagnostics-tcb40",
+                    "2026-09-10-r51-p6-antigravity-connect-race-tcb41",
                 )
                 self.assertEqual(
                     manifest.digest,

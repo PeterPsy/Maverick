@@ -28,7 +28,7 @@ from core.runtime.full_workspace_contract import (
 )
 
 
-ANTIGRAVITY_PROFILE_REVISION = "3"
+ANTIGRAVITY_PROFILE_REVISION = "4"
 ANTIGRAVITY_CONTEXT_POLICY = AgenticContextPolicy(
     revision="antigravity-native-context-v1",
     max_request_input_tokens=262_144,

@@ -19,7 +19,7 @@ from core.providers.native_structured_cli_transport import NativeStructuredCliEr
 class AntigravityCliNativeAdapter:
     runtime_engine_id = "antigravity-cli"
     adapter_id = "antigravity-cli-stream-json"
-    adapter_version = "3"
+    adapter_version = "4"
     local_process_lifecycle = None
     requires_resolved_launch_spec = True
 
@@ -61,6 +61,7 @@ class AntigravityCliNativeAdapter:
         self._owners = {}
         self._session_ids = {}
         self._skill_digests = {}
+        self._preparation_locks = {}
         self._lock = Lock()
 
     async def build_launch_spec(self, context):
@@ -111,6 +112,16 @@ class AntigravityCliNativeAdapter:
                     self._owners.pop(session_id)
 
     async def prepare(self, context):
+        session_id = context.session.session_id
+        with self._lock:
+            preparation_lock = self._preparation_locks.get(session_id)
+            if preparation_lock is None:
+                preparation_lock = asyncio.Lock()
+                self._preparation_locks[session_id] = preparation_lock
+        async with preparation_lock:
+            return await self._prepare(context)
+
+    async def _prepare(self, context):
         skill_digest = await asyncio.to_thread(
             prepare_antigravity_runtime_skills,
             Path(context.session.runtime_root),

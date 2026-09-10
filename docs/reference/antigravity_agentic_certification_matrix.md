@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-10-r50-p6-antigravity-live-diagnostics-tcb40`
+Revision: `2026-09-10-r51-p6-antigravity-connect-race-tcb41`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through
@@ -11,7 +11,7 @@ readiness, or a successful process exit cannot create this authority.
 
 - Antigravity CLI runtime artifact: reviewed version `1.1.27` and its exact
   content digest from `native_runtime_artifact.py`.
-- Adapter and harness recipe: revision `3`, structured persistent
+- Adapter revision `4` and harness recipe revision `3`, structured persistent
   `stream-json`, machine-readable events, no terminal scraping.
 - Authentication: a session-private copy of the operator-managed cached OAuth
   identity; no API key or workspace credential binding is accepted.
@@ -29,6 +29,9 @@ must observe the authenticated catalog and one real structured turn, including
 init identity, at least one structured event, exact usage, one non-empty final,
 and process cleanup. It reserves Google free-tier quota in the shared durable
 P6 ledger before provider egress.
+Same-session preparations are serialized across skill materialization, owner
+selection, and connection; concurrent callers must share one preparation and
+one supervised process.
 Any prepare, execute, or close failure is reduced to a bounded stage-specific
 reason without raw provider output. A close failure cannot replace an earlier
 turn failure, and incomplete process cleanup is never accepted as success.
@@ -42,7 +45,7 @@ all absolute failure counters at zero.
 ## Publication and release
 
 `publish_antigravity_connection_certificate` accepts only the complete signed
-suite-50 run from an already trusted Ed25519 signer and rechecks deployed
+suite-51 run from an already trusted Ed25519 signer and rechecks deployed
 source, TCB, matrix, target, adapter bytes, and installed runtime artifact. A
 valid root permits catalog projection but does not activate the provider or a
 workspace binding. Provider activation is an explicit operator action; global

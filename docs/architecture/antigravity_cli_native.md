@@ -140,7 +140,7 @@ transport/controller against an actual local NDJSON process. It covers stream
 and final output, cumulative usage, structured tool effects, soft-denied
 permission effects, malformed/oversized/empty/mismatched output, identity drift,
 OAuth boundary rejection and redaction, private settings, incomplete tool catalogs,
-concurrent preparation, interruption, recovery, and process-tree cleanup.
+same-session serialized preparation, interruption, recovery, and process-tree cleanup.
 `test_antigravity_cli_sync_runtime.py` crosses the real synchronous Core
 prepare/turn/cancel/close boundaries and verifies loop/process ownership.
 `test_antigravity_cli_runtime_home.py` covers source and destination filesystem
@@ -149,11 +149,11 @@ fences plus bounded no-symlink skill replacement, while
 catalog discovery, exact-binary gating, and disabled publication.
 
 Those fixtures use explicitly synthetic authority and replace only the OS
-sandbox wrapper. They do not certify Antigravity. Suite 49 retains the strict
+sandbox wrapper. They do not certify Antigravity. Suite 51 retains the strict
 `native_connection` target and bounded one-turn live receipt. Only
 `publish_antigravity_connection_certificate` may convert a complete natural,
 signed run from an already trusted signer into the root
-`native-connection:antigravity-cli:google:3`; catalog model certificates merely
+`native-connection:antigravity-cli:google:4`; catalog model certificates merely
 project its unchanged evidence and expiry. Bootstrap and discovery cannot mint
 that root.
 

@@ -48,7 +48,7 @@ ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION = (
 )
 ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
 ANTIGRAVITY_NATIVE_CONNECTION_CERTIFICATE_ID = (
-    "native-connection:antigravity-cli:google:3"
+    "native-connection:antigravity-cli:google:4"
 )
 _INSPECTION_CACHE_SECONDS = 5.0
 _INSPECTION_CACHE: dict[tuple[str, tuple[str, ...]], tuple[float, NativeRuntimeStatus]] = {}
@@ -272,7 +272,7 @@ def build_antigravity_cli_candidate_installation(
         manifest=NativeAgentAdapterManifest(
             runtime_engine_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
             adapter_id="antigravity-cli-stream-json",
-            adapter_version="3",
+            adapter_version="4",
             protocol_kind="structured_cli",
             protocol_id="antigravity-stream-json",
             protocol_version="1",

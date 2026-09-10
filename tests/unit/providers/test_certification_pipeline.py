@@ -341,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "0f3731b6ea86436affcdaf5e8283a0e49acccee8fb57e50d55d1ddf099444c8e",
-            "openrouter": "0794bbfb6d720df4e47dca73624317d5057f5c378e8acc085b04439d51ea1915",
-            "antigravity-cli": "e9c0197179b55f98ea4c01b968493fed50fd3a74d823185fe79ff051d907cdd9",
+            "google-ai-studio": "05aca2bc9d17043ce9d7d6be22deb53a4006224d4fa4f83883809ee71b74806c",
+            "openrouter": "750a5a3dac1896e97f01c938b3cbd977465e456cc2f558277ca5b1c989deb905",
+            "antigravity-cli": "75061a8248e2f8eb8a38810425f47427b9d49f3dcfe881aabf895285e7aa9bf0",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "54")
+                self.assertEqual(manifest.suite_version, "55")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-10-r54-p6-google-created-id-diagnostics-tcb44",
+                    "2026-09-10-r55-p6-google-stateless-empty-id-tcb45",
                 )
                 self.assertEqual(
                     manifest.digest,

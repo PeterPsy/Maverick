@@ -124,7 +124,10 @@ class GoogleInteractionStreamDecoder:
         if self.interaction_id is not None:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         interaction = _dict(payload.get("interaction"))
-        interaction_id = _required_text(interaction.get("id"))
+        interaction_id = _interaction_id(
+            interaction.get("id"),
+            allow_empty=self.state.mode == "stateless",
+        )
         if (
             "model" in interaction
             and interaction.get("model") != self.request.model_id
@@ -133,7 +136,7 @@ class GoogleInteractionStreamDecoder:
         self.interaction_id = interaction_id
         return self._event(
             "accepted",
-            provider_response_id=interaction_id,
+            provider_response_id=interaction_id or None,
         )
 
     def _status_update(self, payload: dict[str, object]) -> None:
@@ -400,6 +403,16 @@ def _index(value: object) -> int:
 
 def _required_text(value: object) -> str:
     if not isinstance(value, str) or not value or len(value) > 4096:
+        raise GoogleInteractionsProtocolError("provider_response_invalid")
+    return value
+
+
+def _interaction_id(value: object, *, allow_empty: bool) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) > 4096
+        or (not value and not allow_empty)
+    ):
         raise GoogleInteractionsProtocolError("provider_response_invalid")
     return value
 

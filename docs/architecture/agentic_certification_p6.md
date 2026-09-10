@@ -14,8 +14,8 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current contained successor uses suite 54 / TCB
-44 / hosted adapter 47 / recipe 25 / Google profile 58 / OpenRouter profile 57,
+That pass is historical. The current contained successor uses suite 55 / TCB
+45 / hosted adapter 48 / recipe 25 / Google profile 59 / OpenRouter profile 58,
 plus Antigravity native adapter 4, native recipe 3, and Codex revision 15. It
 requires its own exact-source operator record before signing or release. The
 source tree does not treat a mocked probe receipt or this status paragraph as
@@ -258,6 +258,15 @@ hosted adapter 47, suite 54, shared TCB 44, and API profiles 58/57. Hosted
 recipe 25, Google codec 4, Antigravity adapter/profile 4 and recipe 3, the
 native artifact, and Codex revision 15 are unchanged.
 
+Candidate 55 accepts Google's observed empty lifecycle ID only for the
+certified stateless `store=false` path. That ID is not exposed as a provider
+response identity and is never persisted for continuation; stateful execution,
+non-string/oversized IDs, mismatched completion IDs, model drift, and every
+other invalid event still fail closed. This codec change advances Google codec
+5, hosted adapter 48, suite 55, shared TCB 45, and API profiles 59/58. Hosted
+recipe 25, Antigravity adapter/profile 4 and recipe 3, the native artifact, and
+Codex revision 15 are unchanged.
+
 The shared queue/handoff fix changed files declared in Codex's artifact and was
 published append-only as Codex revision 15, with revision 14 retained in
 immutable history rather than hidden by exclusions or reused as a certificate
@@ -294,9 +303,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 47,
-   recipe 25, Google profile 58, OpenRouter profile 57, suite 54, canonical
-   TCB manifest 44, Antigravity adapter 4 / recipe 3, and active Codex revision
+1. **Candidate identities and deterministic corpus:** hosted adapter 48,
+   recipe 25, Google profile 59, OpenRouter profile 58, suite 55, canonical
+   TCB manifest 45, Antigravity adapter 4 / recipe 3, and active Codex revision
    15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.

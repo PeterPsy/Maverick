@@ -192,6 +192,25 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         self.assertEqual(payload["input"][3]["call_id"], "call-1")
         self.assertEqual(payload["input"][3]["name"], "fixture_read")
 
+    def test_stateless_stream_accepts_empty_unstored_interaction_id(self) -> None:
+        client = GoogleInteractionsAgenticClient(
+            state_mode="stateless",
+            transport=_ScriptedTransport([_tool_stream("")]),
+        )
+
+        events = asyncio.run(_events(client, _request("request-empty-id")))
+
+        self.assertEqual(
+            [event.event_type for event in events],
+            ["accepted", "tool_call", "provider_state", "usage", "completed"],
+        )
+        self.assertIsNone(events[0].provider_response_id)
+        state = decode_google_interaction_state(
+            events[2].provider_private_state,
+            default_mode="stateless",
+        )
+        self.assertIsNone(state.previous_interaction_id)
+
     def test_mismatched_function_result_fails_before_transport(self) -> None:
         transport = _ScriptedTransport([_tool_stream("interaction-pairing")])
         client = GoogleInteractionsAgenticClient(state_mode="stateful", transport=transport)

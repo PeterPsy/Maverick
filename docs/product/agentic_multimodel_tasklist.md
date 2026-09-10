@@ -12,8 +12,8 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 54 / TCB 44 / hosted adapter 47 /
-recipe 25 / Google profile 58 / OpenRouter profile 57 / Antigravity native
+The current contained successor is suite 55 / TCB 45 / hosted adapter 48 /
+recipe 25 / Google profile 59 / OpenRouter profile 58 / Antigravity native
 adapter 4 / native recipe 3 / Codex revision 15.
 Its exact-source fixture result must be recorded outside the source checkout;
 it does not inherit Candidate-49 or historical P6-D evidence or close P6-L/S/R.

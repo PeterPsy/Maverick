@@ -95,7 +95,7 @@ endpoint/upstream catalog identity.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
-Suite 54 retains that complete corpus and adds authoritative persisted
+Suite 55 retains that complete corpus and adds authoritative persisted
 attestation propagation/revocation at session, queue, dispatch, authority and
 continuation boundaries plus direct-host operator attribution and the refreshed
 Google stable-alias and partial-lifecycle contracts. It also replaces the
@@ -112,8 +112,11 @@ also reduces a Google decoder rejection to a closed-set structural stage for
 failed operator-only collection without changing public errors or accepting a
 new wire shape. The created-event stage is further divided into closed-set
 identity/payload cases, including absent, null, non-string, empty, and
-oversized ID shapes. It binds hosted adapter 47, recipe 25, Google profile
-58, OpenRouter profile 57, Antigravity adapter 4 / recipe 3, TCB 44 and Codex artifact
+oversized ID shapes. The stateless `store=false` codec accepts an empty
+lifecycle ID without exposing or persisting it, while the stateful path and
+every other invalid identity remain fail-closed. It binds hosted adapter 48,
+recipe 25, Google profile 59, OpenRouter profile 58, Antigravity adapter 4 /
+recipe 3, TCB 45 and Codex artifact
 revision 15. Codex revision 15 is the active verified profile, revision 14
 remains immutable history, and a remote-provider certification worker must not
 restart, migrate, or reissue the Codex runtime or certificate.
@@ -131,8 +134,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v54 matrix revision
-  `2026-09-10-r54-p6-google-created-id-diagnostics-tcb44` declared by the provider
+- the dated suite-v55 matrix revision
+  `2026-09-10-r55-p6-google-stateless-empty-id-tcb45` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -158,7 +161,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 54 \
+  --suite-version 55 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
@@ -170,7 +173,7 @@ runner but its own exact adapter bundle and suite id:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-antigravity-native-agentic-contract \
-  --suite-version 54 \
+  --suite-version 55 \
   --adapter-artifact-digest "$ANTIGRAVITY_ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/antigravity-fixtures.json"
@@ -187,8 +190,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-54 manifests bind matrix revision
-`2026-09-10-r54-p6-google-created-id-diagnostics-tcb44`. OpenRouter uses suite id
+All suite-55 manifests bind matrix revision
+`2026-09-10-r55-p6-google-stateless-empty-id-tcb45`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the

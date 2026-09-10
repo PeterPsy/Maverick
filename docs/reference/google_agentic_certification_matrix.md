@@ -1,19 +1,19 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-10
-Matrix revision: `2026-09-10-r54-p6-google-created-id-diagnostics-tcb44`
+Matrix revision: `2026-09-10-r55-p6-google-stateless-empty-id-tcb45`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==47`
+Adapter: `maverick-hosted-tool-loop==48`
 
 ## P6 candidate checkpoint
 
-Suite 54 / TCB manifest 44 / hosted adapter 47 / recipe 25 retain the P5
+Suite 55 / TCB manifest 45 / hosted adapter 48 / recipe 25 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and independently observed natural
-conformance before signing. Suite 54 additionally runs every fixture-contract
+conformance before signing. Suite 55 additionally runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. Historical evidence below is
@@ -189,6 +189,14 @@ non-string, empty, and oversized cases without retaining provider values.
 Decoder acceptance and public errors are unchanged. OpenRouter profile 57
 advances with the shared adapter/TCB identity. Codex revision 15 remains
 byte-identical.
+
+Revision 59 pins hosted adapter 48 and governed recipe 25 while advancing to
+suite 55, matrix `2026-09-10-r55-p6-google-stateless-empty-id-tcb45`, and TCB
+manifest v45. Google codec 5 accepts the observed empty interaction lifecycle
+ID only for the certified stateless `store=false` path; it neither exposes nor
+persists that empty value. Stateful execution and every other invalid or
+mismatched identity remain fail-closed. OpenRouter profile 58 advances with
+the shared adapter/TCB identity. Codex revision 15 remains byte-identical.
 
 ## Fail-closed conditions
 

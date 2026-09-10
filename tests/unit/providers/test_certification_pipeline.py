@@ -341,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "9bab1739f431d0b1d5fb77e5f69d974bb744ef841fa603835fae80e27fe5d062",
-            "openrouter": "9a19dba3a0839f693fa40c25565bce501453600a127cd03c7e675be46522886a",
-            "antigravity-cli": "15cb5eaac45febfc696bfe3434c7ee3e0d50878a99a4662630165cbba699685e",
+            "google-ai-studio": "8b8cc3ca0521817447173bbeb4ab88ad88069c3a9e9b3fa7bc9ef2316e89114c",
+            "openrouter": "edefa772cfe8e521bc9891f16c25c0e5583e0cd42d3667c822a6322c3b4c009f",
+            "antigravity-cli": "a338d459c7cd2590658dff5ea8c4cdda43c4c37d1e7a9738011465cf08501293",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "57")
+                self.assertEqual(manifest.suite_version, "58")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-10-r57-p6-schema-integrity-tcb47",
+                    "2026-09-10-r58-p6-workspace-runtime-root-tcb48",
                 )
                 self.assertEqual(
                     manifest.digest,

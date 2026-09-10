@@ -31,6 +31,58 @@ DIGEST_WITH_LUHN_SUBSEQUENCE = (
 
 
 class HostedAgenticFactoryDispatchTest(unittest.TestCase):
+    def test_tool_surfaces_use_workspace_runtime_not_private_session_root(self) -> None:
+        root = make_temp_repo_root(self)
+        workspace_root = root / "workspaces" / "default"
+        session_runtime_root = workspace_root / "runtime" / "sessions" / "hosted-session"
+        session_runtime_root.mkdir(parents=True)
+        with patch.dict(
+            os.environ,
+            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            clear=False,
+        ):
+            state = bootstrap_platform_state(
+                start_path=root,
+                now=NOW,
+                install_builtin_apps=False,
+            )
+        actor = RuntimeToolActorContext(
+            workspace_id="default",
+            actor_id="admin",
+            agent_id="chat",
+            platform_role="admin",
+            workspace_role="owner",
+            session_id="hosted-session",
+            execution_mode="full-access",
+        )
+        context = SimpleNamespace(
+            session=SimpleNamespace(
+                session_id="hosted-session",
+                workspace_id="default",
+                workspace_root=str(workspace_root),
+                runtime_root=str(session_runtime_root),
+            ),
+            input_sources=(),
+        )
+
+        with patch(
+            "core.runtime.hosted_agentic_factory.build_core_runtime_tool_capabilities",
+            return_value=(),
+        ) as build_capabilities:
+            _tool_orchestrator(
+                context,
+                actor=actor,
+                state=state,
+                ledger=state.runtime_tool_ledger,
+                workspace_store=state.workspace_store,
+                process_registry=HostedToolProcessRegistry(store=state.runtime_store),
+            )
+
+        self.assertEqual(
+            build_capabilities.call_args.kwargs["runtime_root"],
+            workspace_root / "runtime",
+        )
+
     def test_denied_tool_bytes_are_paired_as_public_error_next_request(self) -> None:
         harness = HostedAgenticHarness(self)
         harness.read_result = {"result_summary": "customer SSN 123-45-6789"}

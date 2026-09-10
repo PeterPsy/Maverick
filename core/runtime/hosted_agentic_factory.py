@@ -374,7 +374,7 @@ def _tool_orchestrator(
             core_capabilities=build_core_runtime_tool_capabilities(
                 workspace_id=context.session.workspace_id,
                 workspace_root=root,
-                runtime_root=Path(context.session.runtime_root),
+                runtime_root=root / "runtime",
                 process_registry=process_registry,
                 cli_registry=cli_registry,
                 mcp_registry=mcp_registry,

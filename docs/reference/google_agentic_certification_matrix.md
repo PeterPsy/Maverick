@@ -1,19 +1,19 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-10
-Matrix revision: `2026-09-10-r57-p6-schema-integrity-tcb47`
+Matrix revision: `2026-09-10-r58-p6-workspace-runtime-root-tcb48`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==50`
+Adapter: `maverick-hosted-tool-loop==51`
 
 ## P6 candidate checkpoint
 
-Suite 57 / TCB manifest 47 / hosted adapter 50 / recipe 25 retain the P5
+Suite 58 / TCB manifest 48 / hosted adapter 51 / recipe 25 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and operator-observed natural
-conformance before signing. Suite 57 additionally runs every fixture-contract
+conformance before signing. Suite 58 runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. The signed natural-lab permit is not a capability
@@ -220,6 +220,14 @@ such as `invocation_token` remain schema objects instead of being mistaken for
 runtime secret values. Ordinary input, result, state, and non-schema JSON
 redaction is unchanged. OpenRouter profile 60 advances with the shared
 adapter/TCB identity. Codex revision 15 remains byte-identical.
+
+Revision 62 pins hosted adapter 51 and governed recipe 25 while advancing to
+suite 58, matrix `2026-09-10-r58-p6-workspace-runtime-root-tcb48`, and TCB
+manifest v48. The hosted tool factory now gives confined shell and managed
+process capabilities the workspace-level private `runtime/` root required by
+their contract, instead of the individual provider session root. Provider
+conversation state remains session-scoped. OpenRouter profile 61 advances with
+the shared adapter/TCB identity. Codex revision 15 remains byte-identical.
 
 ## Fail-closed conditions
 

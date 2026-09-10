@@ -322,6 +322,12 @@ So the distinction is:
 - `runtime/` = runtime-local temporary and operational state, not the provider process cwd
 - `runtime/sessions/<runtime_session_id>/` = one physical agent session's mutable runtime records; a compatible Codex continuation child explicitly inherits its fenced lineage root's provider home
 
+The hosted tool factory therefore gives confined shell and managed-process
+capabilities the workspace-level `runtime/` root used for private scratch and
+process control. It must not pass a session's private
+`runtime/sessions/<runtime_session_id>/` root into that workspace-level
+contract; provider conversation state continues to use the session root.
+
 Full-workspace access never makes `runtime/` agent-owned workspace content.
 Core filesystem capabilities reject that top-level component, omit it from
 recursive listing/search, and use it only for platform-private process output,

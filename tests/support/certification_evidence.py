@@ -37,6 +37,7 @@ def fixture_live_receipt(provider_id, *, nonce):
     if provider_id == "google-ai-studio":
         summary = {
             "reason_code": "ok",
+            "failure_diagnostic": "",
             "request_count": 3,
             "saw_streaming": True,
             "saw_tool_call": True,

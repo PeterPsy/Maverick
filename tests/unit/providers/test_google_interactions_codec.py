@@ -260,6 +260,21 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         )
         self.assertEqual(result[-2].text, "done")
 
+    def test_invalid_stream_reports_only_a_bounded_private_diagnostic(self) -> None:
+        events = _tool_stream("interaction-diagnostic")
+        events[2]["delta"] = {"type": "undocumented_delta", "private": "secret"}
+        diagnostics = []
+        client = GoogleInteractionsAgenticClient(
+            transport=_ScriptedTransport([events]),
+            response_failure_diagnostic=diagnostics.append,
+        )
+
+        result = asyncio.run(_events(client, _request("request-diagnostic")))
+
+        self.assertEqual(result[-1].error_code, "provider_response_invalid")
+        self.assertEqual(diagnostics, ["step_delta_unknown_invalid"])
+        self.assertNotIn("secret", repr(diagnostics))
+
     def test_provider_error_before_acceptance_is_normalized(self) -> None:
         for code, reason_code in (
             ("quota_exceeded", "provider_quota_exceeded"),

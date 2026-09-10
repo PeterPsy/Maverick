@@ -14,8 +14,8 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current contained successor uses suite 51 / TCB
-41 / hosted adapter 44 / recipe 25 / Google profile 55 / OpenRouter profile 54,
+That pass is historical. The current contained successor uses suite 52 / TCB
+42 / hosted adapter 45 / recipe 25 / Google profile 56 / OpenRouter profile 55,
 plus Antigravity native adapter 4, native recipe 3, and Codex revision 15. It
 requires its own exact-source operator record before signing or release. The
 source tree does not treat a mocked probe receipt or this status paragraph as
@@ -226,6 +226,20 @@ profiles 55/54 because they require new exact-TCB certificates. Hosted adapter
 44, hosted recipe 25, Antigravity recipe 3, its pinned CLI artifact, and Codex
 revision 15 remain byte-identical.
 
+Candidate 52 makes Google's live rejection diagnosable without retaining a
+provider response, prompt, credential, identifier, text, arguments, or raw
+error. The first suite-51 Google transport returned
+`provider_response_invalid`; it consumed one reservation and the provider was
+stopped without retry. The client now sends only a closed-set structural stage
+to the operator-only probe when the existing decoder rejects an event. Failed
+collection may retain that bounded stage together with its existing hashes and
+counters. Public runtime errors remain `provider_response_invalid`, and no
+previously rejected wire shape becomes accepted. This source-byte change
+advances the shared hosted adapter to 45, the suite to 52, the broad TCB to 42,
+and Google/OpenRouter profiles to 56/55. Hosted recipe 25, Google codec 4,
+Antigravity adapter/profile 4 and recipe 3, the installed native artifact, and
+Codex revision 15 remain unchanged.
+
 The shared queue/handoff fix changed files declared in Codex's artifact and was
 published append-only as Codex revision 15, with revision 14 retained in
 immutable history rather than hidden by exclusions or reused as a certificate
@@ -262,9 +276,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 44,
-   recipe 25, Google profile 55, OpenRouter profile 54, suite 51, canonical
-   TCB manifest 41, Antigravity adapter 4 / recipe 3, and active Codex revision
+1. **Candidate identities and deterministic corpus:** hosted adapter 45,
+   recipe 25, Google profile 56, OpenRouter profile 55, suite 52, canonical
+   TCB manifest 42, Antigravity adapter 4 / recipe 3, and active Codex revision
    15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.

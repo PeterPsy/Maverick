@@ -1,19 +1,19 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-10
-Matrix revision: `2026-09-10-r51-p6-antigravity-connect-race-tcb41`
+Matrix revision: `2026-09-10-r52-p6-google-live-diagnostics-tcb42`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==44`
+Adapter: `maverick-hosted-tool-loop==45`
 
 ## P6 candidate checkpoint
 
-Suite 51 / TCB manifest 41 / hosted adapter 44 / recipe 25 retain the P5
+Suite 52 / TCB manifest 42 / hosted adapter 45 / recipe 25 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and independently observed natural
-conformance before signing. Suite 51 additionally runs every fixture-contract
+conformance before signing. Suite 52 additionally runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. Historical evidence below is
@@ -163,6 +163,14 @@ to suite 51, matrix
 Antigravity same-session preparation is now serialized across private skill
 materialization and native connection. Google wire behavior is unchanged; the
 new profile requires fresh exact-TCB evidence rather than reusing revision 54.
+Codex revision 15 remains byte-identical.
+
+Revision 56 pins hosted adapter 45 and governed recipe 25 while advancing to
+suite 52, matrix `2026-09-10-r52-p6-google-live-diagnostics-tcb42`, and TCB
+manifest v42. A rejected Google stream now yields only a closed-set structural
+failure stage to the operator-only probe; no provider content is retained, the
+public error remains `provider_response_invalid`, and decoder acceptance is
+unchanged. OpenRouter profile 55 advances with the shared adapter/TCB identity.
 Codex revision 15 remains byte-identical.
 
 ## Fail-closed conditions

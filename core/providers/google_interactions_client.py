@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 
+import core.providers.google_interactions_diagnostics as google_interactions_diagnostics_module
 import core.providers.google_interactions_models as google_interactions_models_module
 import core.providers.google_interactions_request as google_interactions_request_module
 import core.providers.google_interactions_state as google_interactions_state_module
@@ -16,6 +17,9 @@ from core.providers.agentic_protocol import (
     EphemeralCredential,
 )
 from core.providers.agentic_models import RoutingConstraint
+from core.providers.google_interactions_diagnostics import (
+    google_response_failure_diagnostic,
+)
 from core.providers.google_interactions_models import (
     GoogleInteractionStateMode,
     GoogleInteractionsProtocolError,
@@ -48,6 +52,7 @@ class GoogleInteractionsAgenticClient:
         allowed_upstream_ids: tuple[str, ...] | None = None,
         upstream_provider_names: tuple[str, ...] | None = None,
         resolved_model_ids: tuple[str, ...] | None = None,
+        response_failure_diagnostic: Callable[[str], None] | None = None,
     ) -> None:
         if state_mode not in {"stateful", "stateless"}:
             raise ValueError("Unsupported Google Interactions state mode.")
@@ -97,6 +102,7 @@ class GoogleInteractionsAgenticClient:
                 () if builtin_config is None else builtin_config.resolved_model_ids
             )
         )
+        self._response_failure_diagnostic = response_failure_diagnostic
         self._validate_runtime_config()
 
     @property
@@ -129,6 +135,7 @@ class GoogleInteractionsAgenticClient:
         """Expose codec and transport modules included in capability evidence."""
         return (
             google_interactions_models_module,
+            google_interactions_diagnostics_module,
             google_interactions_request_module,
             google_interactions_state_module,
             google_interactions_stream_module,
@@ -143,6 +150,8 @@ class GoogleInteractionsAgenticClient:
     ) -> AsyncIterator[AgenticModelEvent]:
         decoder = None
         failure: GoogleInteractionsProtocolError | None = None
+        failure_diagnostic_recorded = False
+        failure_context = "response_before_transport_invalid"
         try:
             if request.model_id != self.model_id:
                 raise GoogleInteractionsProtocolError("provider_request_rejected")
@@ -168,6 +177,7 @@ class GoogleInteractionsAgenticClient:
                 new_input=new_input,
                 usage_cost=self._usage_cost,
             )
+            failure_context = "transport_response_invalid"
             async for raw_event in self.transport.stream(payload=payload, credential=credential):
                 if failure is not None:
                     for event in decoder.failure_telemetry(raw_event):
@@ -177,6 +187,11 @@ class GoogleInteractionsAgenticClient:
                     events = decoder.feed(raw_event)
                 except GoogleInteractionsProtocolError as error:
                     failure = error
+                    if error.reason_code == "provider_response_invalid":
+                        self._record_response_failure(
+                            google_response_failure_diagnostic(raw_event, decoder)
+                        )
+                        failure_diagnostic_recorded = True
                     for event in decoder.failure_telemetry(raw_event):
                         yield event
                     continue
@@ -203,8 +218,14 @@ class GoogleInteractionsAgenticClient:
                     error_code=failure.reason_code,
                 )
                 return
+            failure_context = "stream_finish_invalid"
             decoder.finish()
         except GoogleInteractionsProtocolError as error:
+            if (
+                error.reason_code == "provider_response_invalid"
+                and not failure_diagnostic_recorded
+            ):
+                self._record_response_failure(failure_context)
             ordinal = 1 if decoder is None else decoder.ordinal + 1
             yield AgenticModelEvent(
                 event_type="error",
@@ -224,6 +245,16 @@ class GoogleInteractionsAgenticClient:
                     else "provider_unavailable"
                 ),
             )
+
+    def _record_response_failure(self, code: str) -> None:
+        callback = self._response_failure_diagnostic
+        if callback is None:
+            return
+        try:
+            callback(code)
+        except Exception:
+            # Diagnostics are non-authoritative and cannot change execution.
+            return
 
     def _usage_cost(self, input_tokens: int, output_tokens: int) -> int | None:
         estimator = getattr(self.token_cost_policy, "usage_cost_microusd", None)

@@ -31,7 +31,13 @@ _UNITTEST_FAILURE_COUNTS_PATTERN = re.compile(
     r"(?:^|, )(failures|errors|skipped)=([0-9]{1,7})(?=,|$)"
 )
 _SAFE_DIAGNOSTIC_FIELDS = frozenset(
-    {"reason_code", "request_count", "filesystem_result_count", "succeeded"}
+    {
+        "reason_code",
+        "failure_diagnostic",
+        "request_count",
+        "filesystem_result_count",
+        "succeeded",
+    }
 )
 _MAX_DIAGNOSTIC_INPUT_BYTES = 16_384
 _MAX_DIAGNOSTIC_SCAN_BYTES = 65_536
@@ -177,6 +183,12 @@ def _safe_diagnostic(*, stdout: bytes, stderr: bytes) -> dict[str, object]:
                 field = value.get(key)
                 if key == "reason_code" and isinstance(field, str) and _safe_reason_code(field):
                     reason_codes.add(field)
+                    safe_json[key] = field
+                elif (
+                    key == "failure_diagnostic"
+                    and isinstance(field, str)
+                    and _safe_reason_code(field)
+                ):
                     safe_json[key] = field
                 elif key in {"request_count", "filesystem_result_count"} and type(field) is int:
                     safe_json[key] = field

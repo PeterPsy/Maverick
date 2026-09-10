@@ -71,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="41",
+    manifest_version="42",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",

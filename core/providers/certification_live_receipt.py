@@ -11,7 +11,13 @@ from core.runtime.execution_binding import canonical_digest
 
 _COMMON = {"target_digest", "run_nonce", "succeeded", "request_count", "reasoning_efforts"}
 _GOOGLE_FLAGS = {"saw_streaming", "saw_tool_call", "saw_filesystem_list", "saw_usage", "saw_private_state"}
-_GOOGLE = _COMMON | _GOOGLE_FLAGS | {"reason_code", "test_run_id", "result_summary_digest", "catalog_snapshots"}
+_GOOGLE = _COMMON | _GOOGLE_FLAGS | {
+    "reason_code",
+    "failure_diagnostic",
+    "test_run_id",
+    "result_summary_digest",
+    "catalog_snapshots",
+}
 _OPENROUTER = _COMMON | {
     "catalog_snapshot_digest", "catalog_model_metadata_record_digest",
     "catalog_model_record_digest", "catalog_zdr_record_digest",
@@ -81,12 +87,23 @@ def validate_live_probe_receipt(
     if type(receipt["request_count"]) is not int or receipt["request_count"] != expected_requests:
         _fail()
     if provider_id == "google-ai-studio":
-        if (receipt["reason_code"] != "ok" or any(receipt[key] is not True for key in _GOOGLE_FLAGS)
+        if (receipt["reason_code"] != "ok" or receipt["failure_diagnostic"] != ""
+                or any(receipt[key] is not True for key in _GOOGLE_FLAGS)
                 or not isinstance(receipt["test_run_id"], str)
                 or not re.fullmatch(r"google-interactions-live:[0-9a-f-]{36}", receipt["test_run_id"])):
             _fail()
         validate_google_probe_catalog_receipt(receipt)
-        summary = {key: receipt[key] for key in (*_GOOGLE_FLAGS, "reason_code", "request_count", "reasoning_efforts", "catalog_snapshots")}
+        summary = {
+            key: receipt[key]
+            for key in (
+                *_GOOGLE_FLAGS,
+                "reason_code",
+                "failure_diagnostic",
+                "request_count",
+                "reasoning_efforts",
+                "catalog_snapshots",
+            )
+        }
         if receipt["result_summary_digest"] != canonical_digest(summary):
             _fail()
     elif provider_id == "openrouter":

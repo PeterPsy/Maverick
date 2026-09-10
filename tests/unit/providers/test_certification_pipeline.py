@@ -85,7 +85,11 @@ class CertificationPipelineTest(unittest.TestCase):
         secret = "sk-live-secret-must-not-be-retained"
         failed = mock.Mock(
             returncode=2,
-            stdout=b'{"reason_code":"provider_authentication_failed","request_count":0}',
+            stdout=(
+                b'{"reason_code":"provider_authentication_failed",'
+                b'"request_count":0,'
+                b'"failure_diagnostic":"transport_response_invalid"}'
+            ),
             stderr=(
                 "FAIL: test_rejects_missing_certificate "
                 "(tests.unit.providers.test_example.ExampleTest.test_rejects_missing_certificate)\n"
@@ -120,6 +124,10 @@ class CertificationPipelineTest(unittest.TestCase):
             self.assertEqual(
                 payload["diagnostic"]["unittest_summary"],
                 {"failures": 1, "skipped": 2, "tests": 12},
+            )
+            self.assertEqual(
+                payload["diagnostic"]["safe_json"]["failure_diagnostic"],
+                "transport_response_invalid",
             )
             self.assertNotIn(secret, failure_artifact.read_text())
             self.assertNotIn("stdout", payload)
@@ -333,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "c1323cd6b22f7213764037dbfaa4ef060ce70c91a6bb38f4efed1a9469afe04e",
-            "openrouter": "ce69e4664612bf8b500d844adba53c8279e632a2f5c39171284516bbfeff802e",
-            "antigravity-cli": "063f95fb3130fe99ed23fe6d781b76ab8cae682ff06e691681f5bcc190a355c5",
+            "google-ai-studio": "2203269995d3e2ceaf710194fa718f94acb5c83b51dc8a198f9419fa291cbb14",
+            "openrouter": "83905ad0b8c41d85dd9be73c7042c971c6a9a6df161cfdf09ac9bcd85239a34e",
+            "antigravity-cli": "1cbf9be6175c1c676d25193eb19a512960f7d4ddf6808439e346060a255d1142",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -343,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "51")
+                self.assertEqual(manifest.suite_version, "52")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-10-r51-p6-antigravity-connect-race-tcb41",
+                    "2026-09-10-r52-p6-google-live-diagnostics-tcb42",
                 )
                 self.assertEqual(
                     manifest.digest,

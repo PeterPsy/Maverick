@@ -22,13 +22,19 @@ from tests.unit.providers.test_google_interactions_codec import _ScriptedTranspo
 
 class GoogleProbeCatalogReceiptTest(TestCase):
     def run_probe(self, *, fault=None, fault_request=0):
-        transport = _ScriptedTransport([
+        scripts = [
             *[_tool_stream(
                 f"interaction-{ordinal}", tool_name=PROBE_TOOL_NAME, call_id=f"call-{ordinal}",
                 arguments={"path": ".", "max_depth": 1, "max_results": 10},
             ) for ordinal in (1, 2)],
             _text_stream("interaction-3", "OK"),
-        ])
+        ]
+        if fault == "invalid_delta":
+            scripts[0][2]["delta"] = {
+                "type": "undocumented_delta",
+                "private": "must-not-escape",
+            }
+        transport = _ScriptedTransport(scripts)
         transport.endpoint = GOOGLE_INTERACTIONS_ENDPOINT
         catalog_calls = []
 
@@ -113,6 +119,19 @@ class GoogleProbeCatalogReceiptTest(TestCase):
                 self.assertEqual(len(calls), (ordinal + 1) * 2)
                 with self.assertRaises(CapabilityCertificateError):
                     self.validate(receipt)
+
+    def test_invalid_live_stream_emits_only_a_bounded_failure_diagnostic(self) -> None:
+        receipt, transport, _ = self.run_probe(fault="invalid_delta")
+
+        self.assertFalse(receipt["succeeded"])
+        self.assertEqual(len(transport.payloads), 1)
+        self.assertEqual(
+            receipt["failure_diagnostic"],
+            "step_delta_unknown_invalid",
+        )
+        self.assertNotIn("must-not-escape", json.dumps(receipt))
+        with self.assertRaises(CapabilityCertificateError):
+            self.validate(receipt)
 
     def test_rehashed_receipts_cannot_omit_relabel_or_mix_catalog_observations(self):
         receipt, _, _ = self.run_probe()

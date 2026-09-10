@@ -171,7 +171,7 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="51",
+        suite_version="52",
         provider_id=provider_id,
         target_scope="api_profile",
         model_provider_id=None,
@@ -179,7 +179,7 @@ def _suite(
         behavioral_resource_limits=(),
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-10-r51-p6-antigravity-connect-race-tcb41"
+            "2026-09-10-r52-p6-google-live-diagnostics-tcb42"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
@@ -242,7 +242,7 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = _suite(
 
 ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_id="maverick-antigravity-native-agentic-contract",
-    suite_version="51",
+    suite_version="52",
     provider_id="antigravity-cli",
     target_scope="native_connection",
     model_provider_id="google",
@@ -256,7 +256,7 @@ ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
         ("cost_microusd", 3_500_000),
     ),
     matrix_path="docs/reference/antigravity_agentic_certification_matrix.md",
-    matrix_revision="2026-09-10-r51-p6-antigravity-connect-race-tcb41",
+    matrix_revision="2026-09-10-r52-p6-google-live-diagnostics-tcb42",
     tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
     tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
     tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

@@ -35,6 +35,7 @@ async def probe_google_interactions(
     efforts = tuple(str(value).strip().lower() for value in reasoning_efforts)
     events = []
     snapshots = []
+    failure_diagnostics: list[str] = []
     request_count = 0
     filesystem_result_count = 0
 
@@ -42,6 +43,7 @@ async def probe_google_interactions(
         return google_probe_result(
             test_run_id, events, reason, request_count, efforts,
             filesystem_result_count, tuple(snapshots),
+            failure_diagnostic=(failure_diagnostics[-1] if failure_diagnostics else ""),
         )
 
     if efforts != CERTIFIED_REASONING_EFFORTS:
@@ -50,9 +52,14 @@ async def probe_google_interactions(
         from core.providers.certification_probe_budget import CertificationProbeTransport
         from core.providers.google_interactions_transport import GoogleInteractionsHttpTransport
 
-        client = GoogleInteractionsAgenticClient(state_mode="stateless", transport=CertificationProbeTransport(
-            GoogleInteractionsHttpTransport(), provider_id="google-ai-studio",
-        ))
+        client = GoogleInteractionsAgenticClient(
+            state_mode="stateless",
+            transport=CertificationProbeTransport(
+                GoogleInteractionsHttpTransport(),
+                provider_id="google-ai-studio",
+            ),
+            response_failure_diagnostic=failure_diagnostics.append,
+        )
     with tempfile.TemporaryDirectory(prefix="maverick-google-agentic-probe-") as temp_dir:
         filesystem_probe = AgenticFilesystemListProbe.create(Path(temp_dir))
         for effort in efforts:

@@ -15,9 +15,9 @@ Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
-The contained source candidate is hosted adapter 44 / recipe 25 / Google
-profile 55 / OpenRouter profile 54 / Antigravity adapter 4 / native recipe 3 /
-suite 51 / TCB 41. Codex revision 15 is
+The contained source candidate is hosted adapter 45 / recipe 25 / Google
+profile 56 / OpenRouter profile 55 / Antigravity adapter 4 / native recipe 3 /
+suite 52 / TCB 42. Codex revision 15 is
 the active verified profile and revision 14 remains immutable history. Remote
 provider certification must not restart or migrate Codex, alter its artifact,
 or reissue its certificate.

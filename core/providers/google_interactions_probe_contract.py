@@ -24,6 +24,7 @@ CERTIFICATION_PROBE_TOOL_ROUNDS = 2
 class GoogleInteractionsProbeResult:
     succeeded: bool
     reason_code: str
+    failure_diagnostic: str
     test_run_id: str
     result_summary_digest: str
     request_count: int
@@ -118,9 +119,11 @@ def google_probe_result(
     reasoning_efforts: tuple[str, ...],
     filesystem_result_count: int,
     catalog_snapshots: tuple[GoogleInteractionsCatalogSnapshot, ...] = (),
+    failure_diagnostic: str = "",
 ):
     summary = {
         "reason_code": reason,
+        "failure_diagnostic": failure_diagnostic,
         "request_count": request_count,
         "saw_streaming": sum(event.event_type == "text_delta" for event in events) > 0,
         "saw_tool_call": any(event.event_type == "tool_call" for event in events),
@@ -159,4 +162,3 @@ def google_probe_result(
         result_summary_digest=canonical_digest(summary),
         **summary,
     )
-

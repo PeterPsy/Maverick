@@ -1,19 +1,19 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-09-10
-Matrix revision: `2026-09-10-r56-p6-signed-natural-lab-tcb46`
+Matrix revision: `2026-09-10-r57-p6-schema-integrity-tcb47`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==49`
+Adapter: `maverick-hosted-tool-loop==50`
 
 ## P6 candidate checkpoint
 
-Suite 56 / TCB manifest 46 / hosted adapter 49 / recipe 25 retain the P5
+Suite 57 / TCB manifest 47 / hosted adapter 50 / recipe 25 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and operator-observed natural
-conformance before signing. Suite 56 additionally runs every fixture-contract
+conformance before signing. Suite 57 additionally runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. The signed natural-lab permit is not a capability
@@ -681,6 +681,15 @@ ledger. Production bootstrap cannot select this authority. The ordinary hosted
 loop, semantic projection, egress, tool ledger, confirmation, provider state,
 recovery and cleanup remain in the measured path; raw HTTP is reservation-
 before-egress fenced. Google profile 60 advances with the shared adapter/TCB
+identity. Codex revision 15 remains byte-identical.
+
+Revision 60 pins hosted adapter 50 and governed recipe 25 while advancing to
+suite 57, matrix `2026-09-10-r57-p6-schema-integrity-tcb47`, and TCB manifest
+v47. The egress boundary now preserves only Core-certified public
+`trusted_platform` tool schemas after canonical JSON validation, so field names
+such as `invocation_token` remain schema objects instead of being mistaken for
+runtime secret values. Ordinary input, result, state, and non-schema JSON
+redaction is unchanged. Google profile 61 advances with the shared adapter/TCB
 identity. Codex revision 15 remains byte-identical.
 
 ## Fail-closed conditions

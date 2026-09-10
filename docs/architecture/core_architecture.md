@@ -899,7 +899,16 @@ Before egress, that loop compiles a Core-owned semantic-envelope schema. Its
 ordered blocks preserve platform, runtime/capability, workspace, agent, user,
 governed-context, attachment, app-reference, skill, tool, result, and
 provider-state provenance instead of flattening them into one prompt. The
-attachment projection carries the exact server-observed resource identity,
+egress boundary preserves a public `trusted_platform` tool-schema block
+byte-for-byte after canonical JSON validation. Such a block describes runtime
+argument fields and contains no argument values; generic value redaction must
+not replace schema members such as `invocation_token` with redaction strings.
+All actor input, tool output, provider state, and every non-schema JSON block
+continue through the ordinary sensitive-value redactor. Tool-schema
+preservation is reachable only after the catalog has proved Core ownership and
+certified-TCB membership for the descriptor.
+
+The attachment projection carries the exact server-observed resource identity,
 revision, and digest plus its required UTF-8 or base64 encoding. Those
 server-owned fences are injected into every `filesystem.read` for that path,
 including the first chunk; caller omission or equivalent path spelling cannot

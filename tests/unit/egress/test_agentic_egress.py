@@ -379,6 +379,65 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
             1,
         )
 
+    def test_certified_tool_schema_preserves_sensitive_property_names(self) -> None:
+        schema = {
+            "name": "mav_core_capability_cli_run_fixture",
+            "description": "Run one discovered Core command.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "invocation_token": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4096,
+                    },
+                    "arguments": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": True,
+                    },
+                },
+                "required": ["invocation_token", "arguments"],
+                "additionalProperties": False,
+            },
+        }
+
+        trusted_schema = self.evaluator.evaluate(
+            block=self.block(
+                content_block_id="block-tool-schema",
+                provenance="tool_schema",
+                trust_level="trusted_platform",
+                content_type="application/json",
+            ),
+            content=schema,
+            destination_provider_id="fixture-provider",
+            destination_upstream_id=None,
+            policy=self.policy,
+            now=NOW,
+        )
+        ordinary_json = self.evaluator.evaluate(
+            block=self.block(
+                content_block_id="block-ordinary-json",
+                content_type="application/json",
+            ),
+            content={"invocation_token": "provider-e2e-secret-json"},
+            destination_provider_id="fixture-provider",
+            destination_upstream_id=None,
+            policy=self.policy,
+            now=NOW,
+        )
+
+        self.assertTrue(trusted_schema.decision.export_allowed)
+        self.assertIsNone(trusted_schema.decision.transformation)
+        self.assertEqual(
+            json.loads(trusted_schema.exported_content or b"{}"),
+            schema,
+        )
+        self.assertEqual(
+            ordinary_json.exported_content,
+            b'{"invocation_token":"<redacted>"}',
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

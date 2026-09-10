@@ -40,6 +40,7 @@ def transform_exportable_content(
     workspace_root: Path | None,
     allow_sensitive_transform: bool,
     allow_host_path_transform: bool,
+    preserve_trusted_json_schema: bool = False,
 ) -> tuple[bytes | None, str | None, str | None]:
     """Rewrite workspace paths and redact known secret patterns in memory."""
     if not content_type.startswith("text/") and content_type != "application/json":
@@ -64,7 +65,16 @@ def transform_exportable_content(
             structured = json.loads(text)
         except json.JSONDecodeError:
             return None, None, "egress_json_invalid"
-        redacted_value = redact_payload(structured)
+        # A certified Core tool schema describes fields; it does not contain
+        # their runtime values.  Applying value redaction to a property name
+        # such as ``invocation_token`` replaces its schema object with a string
+        # and produces an invalid provider contract.  The caller grants this
+        # narrow preservation only to public, trusted-platform tool schemas.
+        redacted_value = (
+            structured
+            if preserve_trusted_json_schema
+            else redact_payload(structured)
+        )
         redacted = json.dumps(
             redacted_value,
             ensure_ascii=False,

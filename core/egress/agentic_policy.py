@@ -122,6 +122,12 @@ class AgenticEgressEvaluator:
                 workspace_id=block.workspace_id,
                 workspace_root=workspace_root,
                 allow_sensitive_transform=policy.transform_sensitive_text,
+                preserve_trusted_json_schema=(
+                    block.data_class == "public"
+                    and block.provenance == "tool_schema"
+                    and block.trust_level == "trusted_platform"
+                    and block.content_type == "application/json"
+                ),
                 allow_host_path_transform=(
                     policy.transform_sensitive_text
                     and block.provenance == "tool_result"

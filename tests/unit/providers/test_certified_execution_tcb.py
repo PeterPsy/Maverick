@@ -31,10 +31,10 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
 
     def test_every_suite_derives_artifacts_and_identity_from_one_manifest(self) -> None:
         identity = certified_tcb_identity(self.root)
-        self.assertEqual(identity.manifest_version, "43")
+        self.assertEqual(identity.manifest_version, "44")
         self.assertEqual(
             identity.structure_digest,
-            "53f36adde016e1da734f5c64cebfa05f2829c103e40223147b8306527cb70992",
+            "d9a535938fc7ffa2f9d4cba6ef0c24399c3626d250aa0ed00efa0253ac31345d",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",

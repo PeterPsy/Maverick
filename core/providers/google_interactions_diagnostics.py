@@ -77,13 +77,17 @@ def _created_failure_diagnostic(payload: dict, decoder: object) -> str:
     interaction = payload.get("interaction")
     if not isinstance(interaction, dict):
         return "interaction_created_payload_invalid"
+    if "id" not in interaction:
+        return "interaction_created_id_missing_invalid"
     interaction_id = interaction.get("id")
-    if (
-        not isinstance(interaction_id, str)
-        or not interaction_id
-        or len(interaction_id) > 4096
-    ):
-        return "interaction_created_id_invalid"
+    if interaction_id is None:
+        return "interaction_created_id_null_invalid"
+    if not isinstance(interaction_id, str):
+        return "interaction_created_id_type_invalid"
+    if not interaction_id:
+        return "interaction_created_id_empty_invalid"
+    if len(interaction_id) > 4096:
+        return "interaction_created_id_oversize_invalid"
     request = getattr(decoder, "request", None)
     expected_model = getattr(request, "model_id", None)
     observed_model = interaction.get("model")

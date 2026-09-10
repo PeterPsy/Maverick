@@ -293,6 +293,35 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         )
         self.assertNotIn("gemini", repr(diagnostics))
 
+    def test_created_id_diagnostic_uses_only_safe_structural_cases(self) -> None:
+        cases = (
+            ({}, "interaction_created_id_missing_invalid"),
+            ({"id": None}, "interaction_created_id_null_invalid"),
+            ({"id": 7}, "interaction_created_id_type_invalid"),
+            ({"id": ""}, "interaction_created_id_empty_invalid"),
+            ({"id": "x" * 4097}, "interaction_created_id_oversize_invalid"),
+        )
+        for interaction, expected in cases:
+            with self.subTest(expected=expected):
+                events = _tool_stream("interaction-id-diagnostic")
+                events[0]["interaction"] = interaction
+                diagnostics = []
+                client = GoogleInteractionsAgenticClient(
+                    transport=_ScriptedTransport([events]),
+                    response_failure_diagnostic=diagnostics.append,
+                )
+
+                result = asyncio.run(
+                    _events(client, _request(f"request-{expected}"))
+                )
+
+                self.assertEqual(
+                    result[-1].error_code,
+                    "provider_response_invalid",
+                )
+                self.assertEqual(diagnostics, [expected])
+                self.assertNotIn("4097", repr(diagnostics))
+
     def test_provider_error_before_acceptance_is_normalized(self) -> None:
         for code, reason_code in (
             ("quota_exceeded", "provider_quota_exceeded"),

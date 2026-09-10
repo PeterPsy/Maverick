@@ -1,19 +1,19 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-10
-Matrix revision: `2026-09-10-r53-p6-google-created-diagnostics-tcb43`
+Matrix revision: `2026-09-10-r54-p6-google-created-id-diagnostics-tcb44`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==46`
+Adapter: `maverick-hosted-tool-loop==47`
 
 ## P6 candidate checkpoint
 
-Suite 53 / TCB manifest 43 / hosted adapter 46 / recipe 25 retain the P5
+Suite 54 / TCB manifest 44 / hosted adapter 47 / recipe 25 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and independently observed natural
-conformance before signing. Suite 53 additionally runs every fixture-contract
+conformance before signing. Suite 54 additionally runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. Historical evidence below is
@@ -178,6 +178,15 @@ suite 53, matrix `2026-09-10-r53-p6-google-created-diagnostics-tcb43`, and TCB
 manifest v43. The content-free created-event diagnostic distinguishes only
 duplicate, payload/id, resource-name, exact-revision, and mismatch cases.
 Decoder acceptance and public errors are unchanged. OpenRouter profile 56
+advances with the shared adapter/TCB identity. Codex revision 15 remains
+byte-identical.
+
+Revision 58 pins hosted adapter 47 and governed recipe 25 while advancing to
+suite 54, matrix
+`2026-09-10-r54-p6-google-created-id-diagnostics-tcb44`, and TCB manifest
+v44. The content-free created-event ID diagnostic distinguishes absent, null,
+non-string, empty, and oversized cases without retaining provider values.
+Decoder acceptance and public errors are unchanged. OpenRouter profile 57
 advances with the shared adapter/TCB identity. Codex revision 15 remains
 byte-identical.
 

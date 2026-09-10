@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-09
+Status date: 2026-09-10
 
 Target: Phase 5 runtime-family separation, onboarding, and product taxonomy
 complete; provider certification, security review, canary, and release gates
@@ -12,11 +12,11 @@ tests, zero failures/errors/skips; see
 P6-L/S/R remain open. Historical P0–P5 checkboxes and this deterministic
 checkpoint do not substitute for live evidence, signing or canary approval.
 
-The current contained successor is suite 49 / TCB 39 / hosted adapter 44 /
-recipe 25 / Google profile 53 / OpenRouter profile 52 / Antigravity native
+The current contained successor is suite 50 / TCB 40 / hosted adapter 44 /
+recipe 25 / Google profile 54 / OpenRouter profile 53 / Antigravity native
 adapter/recipe 3 / Codex revision 15.
-Its exact-source fixture result is recorded outside the source checkout by the
-operator; it does not inherit the historical P6-D evidence or close P6-L/S/R.
+Its exact-source fixture result must be recorded outside the source checkout;
+it does not inherit Candidate-49 or historical P6-D evidence or close P6-L/S/R.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
@@ -791,9 +791,9 @@ values above; they are not live certification or rollout evidence.
   `provider_response_invalid`; neither attempt is a passing probe and neither
   reservation is refunded or retried automatically.
 - [ ] Re-run all three complete `fixture_contract` manifests on the exact clean
-  suite-49/TCB-39 successor, including the Antigravity connection-scoped suite;
+  suite-50/TCB-40 successor, including the Antigravity connection-scoped suite;
   preserve the record outside the source tree.
-- [ ] On that same exact suite-49 commit, run the bounded operator-only synthetic live
+- [ ] On that same exact suite-50 commit, run the bounded operator-only synthetic live
   probes, collect and independently review all natural observations, sign with an
   already trusted key, verify, and publish immutable certificates.
 - [ ] Complete provider onboarding, leakage/security review, one-workspace

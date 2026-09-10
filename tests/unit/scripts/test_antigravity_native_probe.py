@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import redirect_stdout
+from io import StringIO
+import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 from unittest import mock
 import unittest
 
@@ -143,6 +147,110 @@ class AntigravityNativeProbeTest(unittest.TestCase):
         self.assertEqual(
             order,
             ["reserve", "sleep", "reserve", "catalog", "halt"],
+        )
+
+    def test_execute_failure_survives_a_secondary_close_failure(self) -> None:
+        class FailingController:
+            async def prepare(self, _context):
+                return SimpleNamespace(ready=True)
+
+            async def execute(self, _context):
+                if False:
+                    yield None
+                raise RuntimeError("native_agent_final_output_invalid")
+
+            async def close(self, _context):
+                raise RuntimeError("private close detail")
+
+        ledger = mock.Mock()
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "antigravity_live_execute_native_agent_final_output_invalid",
+        ):
+            asyncio.run(
+                probe._run_native_turn(
+                    FailingController(),
+                    prepare_context=object(),
+                    turn_context=object(),
+                    close_context=object(),
+                    ledger=ledger,
+                )
+            )
+        ledger.halt.assert_called_once_with(
+            "google-ai-studio",
+            reason="provider_transport_error",
+        )
+
+    def test_close_failure_is_stage_specific_and_redaction_safe(self) -> None:
+        class FailingController:
+            async def prepare(self, _context):
+                return SimpleNamespace(ready=True)
+
+            async def execute(self, _context):
+                if False:
+                    yield None
+
+            async def close(self, _context):
+                raise RuntimeError("secret close detail")
+
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "antigravity_live_close_failed",
+        ):
+            asyncio.run(
+                probe._run_native_turn(
+                    FailingController(),
+                    prepare_context=object(),
+                    turn_context=object(),
+                    close_context=object(),
+                    ledger=mock.Mock(),
+                )
+            )
+
+    def test_incomplete_close_result_is_not_success(self) -> None:
+        class IncompleteCloseController:
+            async def prepare(self, _context):
+                return SimpleNamespace(ready=True)
+
+            async def execute(self, _context):
+                if False:
+                    yield None
+
+            async def close(self, _context):
+                return SimpleNamespace(closed=False)
+
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "antigravity_live_close_cleanup_invalid",
+        ):
+            asyncio.run(
+                probe._run_native_turn(
+                    IncompleteCloseController(),
+                    prepare_context=object(),
+                    turn_context=object(),
+                    close_context=object(),
+                    ledger=mock.Mock(),
+                )
+            )
+
+    def test_main_emits_only_safe_json_for_unexpected_failure(self) -> None:
+        def fail_without_leaking(coroutine):
+            coroutine.close()
+            raise RuntimeError("credential-shaped private detail")
+
+        output = StringIO()
+        with mock.patch.object(
+            probe.asyncio,
+            "run",
+            side_effect=fail_without_leaking,
+        ), redirect_stdout(output):
+            self.assertEqual(probe.main(), 1)
+        self.assertEqual(
+            json.loads(output.getvalue()),
+            {
+                "reason_code": "antigravity_live_unexpected_failure",
+                "succeeded": False,
+            },
         )
 
 

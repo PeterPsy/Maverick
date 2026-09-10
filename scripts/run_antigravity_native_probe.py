@@ -37,8 +37,20 @@ from core.providers.native_runtime_artifact import (
     ANTIGRAVITY_CLI_RUNTIME_ARTIFACT,
     inspect_native_runtime_artifact,
 )
+from core.providers.native_structured_cli_transport import (
+    NativeStructuredCliError,
+)
 from core.providers.provider_registry import ProviderRegistry
 from core.runtime.execution_binding import canonical_digest
+
+
+_SAFE_REASON_CODE = re.compile(r"[a-z][a-z0-9_]{1,71}")
+_SAFE_RUNTIME_FAILURES = frozenset(
+    {
+        "agent_final_output_empty",
+        "native_agent_final_output_invalid",
+    }
+)
 
 
 async def _probe() -> dict[str, object]:
@@ -104,9 +116,9 @@ async def _probe() -> dict[str, object]:
         await asyncio.sleep(delay)
     try:
         snapshot = discover_antigravity_native_catalog(adapter, force=True)
-    except BaseException:
+    except BaseException as error:
         ledger.halt("google-ai-studio", reason="provider_transport_error")
-        raise
+        raise _stage_failure("catalog", error) from error
     if (
         snapshot is None
         or not snapshot.models
@@ -158,29 +170,23 @@ async def _probe() -> dict[str, object]:
             binding=binding,
             provider_state=state,
         )
-        try:
-            prepared = await controller.prepare(prepare_context)
-            events = [
-                event
-                async for event in controller.execute(
-                    RuntimeTurnContext(
-                        session=session,
-                        binding=binding,
-                        provider_state=state,
-                        input_text=(
-                            f"Reply with exactly {marker} and nothing else. "
-                            "Do not call any tool."
-                        ),
-                        correlation_id=f"probe-{nonce}",
-                        timeout_seconds=300,
-                    )
-                )
-            ]
-        except BaseException:
-            ledger.halt("google-ai-studio", reason="provider_transport_error")
-            raise
-        finally:
-            closed = await controller.close(close_context)
+        prepared, events, closed = await _run_native_turn(
+            controller,
+            prepare_context=prepare_context,
+            turn_context=RuntimeTurnContext(
+                session=session,
+                binding=binding,
+                provider_state=state,
+                input_text=(
+                    f"Reply with exactly {marker} and nothing else. "
+                    "Do not call any tool."
+                ),
+                correlation_id=f"probe-{nonce}",
+                timeout_seconds=300,
+            ),
+            close_context=close_context,
+            ledger=ledger,
+        )
         finals = [
             str(event.payload.get("text") or "")
             for event in events
@@ -190,6 +196,11 @@ async def _probe() -> dict[str, object]:
             ledger.halt("google-ai-studio", reason="provider_response_invalid")
             raise CapabilityCertificateError(
                 "certification_live_response_invalid"
+            )
+        if not closed.closed or adapter._owners:
+            ledger.halt("google-ai-studio", reason="provider_transport_error")
+            raise CapabilityCertificateError(
+                "antigravity_live_close_cleanup_invalid"
             )
         provider_thread = str(
             prepared.provider_state_updates.get("provider_thread_id") or ""
@@ -219,6 +230,60 @@ async def _probe() -> dict[str, object]:
         }
 
 
+async def _run_native_turn(
+    controller,
+    *,
+    prepare_context,
+    turn_context,
+    close_context,
+    ledger,
+):
+    """Run and close one turn while preserving its primary safe failure."""
+    prepared = None
+    events = None
+    primary_failure: CapabilityCertificateError | None = None
+    failure_stage = "prepare"
+    try:
+        prepared = await controller.prepare(prepare_context)
+        failure_stage = "execute"
+        events = [event async for event in controller.execute(turn_context)]
+    except BaseException as error:
+        primary_failure = _stage_failure(failure_stage, error)
+
+    close_failure = None
+    try:
+        closed = await controller.close(close_context)
+    except BaseException as error:
+        close_failure = _stage_failure("close", error)
+        closed = None
+
+    failure = primary_failure or close_failure
+    if failure is None and not getattr(closed, "closed", False):
+        failure = CapabilityCertificateError(
+            "antigravity_live_close_cleanup_invalid"
+        )
+    if failure is not None:
+        ledger.halt("google-ai-studio", reason="provider_transport_error")
+        raise failure
+    return prepared, events, closed
+
+
+def _stage_failure(stage: str, error: BaseException) -> CapabilityCertificateError:
+    """Map only code-owned diagnostics into a bounded public reason code."""
+    detail = None
+    if isinstance(error, CapabilityCertificateError):
+        detail = error.reason_code
+    elif isinstance(error, NativeStructuredCliError):
+        detail = str(error)
+    elif isinstance(error, RuntimeError) and str(error) in _SAFE_RUNTIME_FAILURES:
+        detail = str(error)
+    if detail is not None and _SAFE_REASON_CODE.fullmatch(detail):
+        reason = f"antigravity_live_{stage}_{detail}"
+        if len(reason) <= 96:
+            return CapabilityCertificateError(reason)
+    return CapabilityCertificateError(f"antigravity_live_{stage}_failed")
+
+
 def _resolve_command(command: str) -> str:
     resolved = shutil.which(command)
     if resolved is None:
@@ -232,8 +297,20 @@ def _resolve_command(command: str) -> str:
 
 
 def main() -> int:
-    print(json.dumps(asyncio.run(_probe()), sort_keys=True))
-    return 0
+    try:
+        result = asyncio.run(_probe())
+    except CapabilityCertificateError as error:
+        result = {
+            "reason_code": error.reason_code,
+            "succeeded": False,
+        }
+    except Exception:
+        result = {
+            "reason_code": "antigravity_live_unexpected_failure",
+            "succeeded": False,
+        }
+    print(json.dumps(result, sort_keys=True))
+    return 0 if result.get("succeeded") is True else 1
 
 
 if __name__ == "__main__":

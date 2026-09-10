@@ -1,9 +1,11 @@
 # P6 certification and release boundary
 
-Status: the autonomous Candidate 48 execution reached the live boundary and
-ended in the required **NO-GO** after provider transport failures. The remote
-flags remain off, no remote binding is enabled, and no new certificate was
-published. Codex revision 15 remains active and unchanged. See
+Status: the autonomous Candidate 49 execution reached the live boundary and
+ended in the required **NO-GO** after the Antigravity live smoke failed; the
+Google/OpenRouter live steps did not run on that halted job. The rollback
+suspended API profiles 53/52, the remote flags remain off, no remote binding is
+enabled, and no new certificate was published. Codex revision 15 remains
+active and unchanged. See
 `docs/development/agentic_p6_autonomous_execution_2026-09-09.md` for the
 current operational record and
 `docs/development/agentic_p6_deterministic_closeout_2026-09-06.md` for the
@@ -12,8 +14,8 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current contained successor uses suite 49 / TCB
-39 / hosted adapter 44 / recipe 25 / Google profile 53 / OpenRouter profile 52,
+That pass is historical. The current contained successor uses suite 50 / TCB
+40 / hosted adapter 44 / recipe 25 / Google profile 54 / OpenRouter profile 53,
 plus Antigravity native adapter/recipe 3 and Codex revision 15. It requires its
 own exact-source operator record before signing or release. The source tree does
 not treat a mocked probe receipt or this status paragraph as that record.
@@ -22,7 +24,7 @@ The normative plan is `storage/generated/piano-definitivo-parita-agentica-modell
 in workspace `default`. Section 21 accepts one autonomous operator mandate
 without waiving technical gates. Section 22 records the resulting automatic
 NO-GO. The current Storage-owned revision has SHA-256
-`1ac15097561a06e19138167e12337a0f3772cbb025fc050d74659b2de4eea7a2`.
+`8d2a029c85fd0270a9cda395806582b4e18a5a9525cf8510fa422afbe4215aa0`.
 The plan revision read on 2026-09-06 had SHA-256
 `482566795fa8ac3737c1a7c0c0413aaa62ff380bd19bc2fd724027a42ee715de`.
 Its authorized operational addendum (section 16), written through Storage with
@@ -62,6 +64,15 @@ The private final record is
 with SHA-256
 `24f38befc518f4097267eb3c8fd0d7f5665d37d64070e802aa182e203e4506d0`.
 This is an operational NO-GO record, not certification evidence.
+
+Section 23 records the contained Candidate-49 successor. Its exact-source
+fixture suites passed with zero skips, but the Antigravity live smoke failed
+after quota reservation, so API live collection and every downstream gate
+were skipped and rollback was applied. The private final record is
+`/var/tmp/maverick/maverick-p6-remediation-r49-indSclEi/autonomous-execution-final-r49.json`
+with SHA-256
+`b868ef9e1ea766bdc97c10b10a4cb640553d0dc50f2abc303f69497536b95979`.
+This record grants no authority to Candidate 50.
 
 P6 distinguishes repository conformance, live protocol evidence, natural
 behavioral evidence, post-evidence security review, certificate publication,
@@ -189,6 +200,17 @@ This collector change advances the suite to 49 and the broad TCB to manifest
 39; hosted adapter 44, recipe 25, API profiles 53/52, Antigravity adapter/recipe
 3, and the Codex revision-15 artifact remain unchanged.
 
+Candidate 50 makes the Antigravity live boundary diagnosable without exposing
+provider output or credentials. It preserves the primary prepare/execute
+failure when cleanup also fails, maps only code-owned failures to bounded stage
+reason codes, emits one redaction-safe JSON failure object, and treats an
+incomplete close as a failed live observation. The suite advances to 50 and
+the broad TCB to manifest 40. Because the Candidate-49 rollback suspended the
+API definitions, Google/OpenRouter advance immutably to profiles 54/53 rather
+than reactivating revisions 53/52. Hosted adapter 44, recipe 25, Antigravity
+adapter/recipe 3, its pinned runtime artifact, and Codex revision 15 remain
+byte-identical.
+
 The shared queue/handoff fix changed files declared in Codex's artifact and was
 published append-only as Codex revision 15, with revision 14 retained in
 immutable history rather than hidden by exclusions or reused as a certificate
@@ -226,8 +248,8 @@ merely because a generic handoff fixture passes.
 ## Checkpoints
 
 1. **Candidate identities and deterministic corpus:** hosted adapter 44,
-   recipe 25, Google profile 53, OpenRouter profile 52, suite 49, canonical
-   TCB manifest 39, Antigravity adapter/recipe 3, and active Codex revision 15.
+   recipe 25, Google profile 54, OpenRouter profile 53, suite 50, canonical
+   TCB manifest 40, Antigravity adapter/recipe 3, and active Codex revision 15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
 2. **Evidence boundary:** exact-target, bounded, redaction-safe observed

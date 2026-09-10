@@ -1,6 +1,6 @@
 # Agentic provider preview operations
 
-Status date: 2026-09-09
+Status date: 2026-09-10
 
 Scope: operator runbook
 
@@ -16,8 +16,8 @@ Certificate evidence must be produced and published through
 runbook begins. This runbook never manufactures or repairs a certificate.
 
 The contained source candidate is hosted adapter 44 / recipe 25 / Google
-profile 53 / OpenRouter profile 52 / Antigravity adapter/recipe 3 / suite 49 /
-TCB 39. Codex revision 15 is
+profile 54 / OpenRouter profile 53 / Antigravity adapter/recipe 3 / suite 50 /
+TCB 40. Codex revision 15 is
 the active verified profile and revision 14 remains immutable history. Remote
 provider certification must not restart or migrate Codex, alter its artifact,
 or reissue its certificate.
@@ -148,8 +148,8 @@ operation.
   `core/inter_agent/generalist_context.py` content-composition path, and hashes
   the executable roots of every built-in app surface admitted as a hosted read;
   a reached local dependency or app-code drift outside the artifact set makes
-  identity/authority calculation fail. Manifest v39 is the current
-  collector-isolated native-certification candidate.
+  identity/authority calculation fail. Manifest v40 is the current
+  collector-isolated, stage-diagnostic native-certification candidate.
 - Hosted shell/process sandboxes use an immutable descriptor-confined workspace
   snapshot that excludes every `.git` component; the live workspace namespace
   is never bound into the sandbox. Inter-agent CLI/MCP tools carry explicit

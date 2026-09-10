@@ -322,28 +322,28 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "8e717ababbd48b03e46a72ab7c9681e865761506c745ff01097be3ec32e442c2"
+                "51ab7b3c460985819cf73afc67ab1a9372448e534f4b344786d474deaabc9afe"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "a9fcbadde0689d798a2a7baf5f9374958b135d59a7a18925d171120aa60f424c"
+                "d0f5e97479d89ec71155e3a55bec3b8baf95f72fc0ad7de468779623b11d4582"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
             ("antigravity-cli", "fixture_contract"): (
-                "c880b1a84274af0240d24bd2fc69465e2c8f3751e22d611040ef356351df38f1"
+                "f0e39c7b766f4d3d47e0ab521050ae0a3f671f28441db6795d313aa585c88328"
             ),
             ("antigravity-cli", "live_probe"): (
                 "0dfccc774ce0bb02dfa12244512748e2e85b8c913d975fd23c6d02cbe9284b63"
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "05aca2bc9d17043ce9d7d6be22deb53a4006224d4fa4f83883809ee71b74806c",
-            "openrouter": "750a5a3dac1896e97f01c938b3cbd977465e456cc2f558277ca5b1c989deb905",
-            "antigravity-cli": "75061a8248e2f8eb8a38810425f47427b9d49f3dcfe881aabf895285e7aa9bf0",
+            "google-ai-studio": "3a9648c9e426d3f2293ece56ccdba8fe7fbfd26c8b7d50fcfb0373031898bca5",
+            "openrouter": "47427dfa4d18cb98113e43bfb870381bd0a181c6caa1a4ab23131cba88b4c47e",
+            "antigravity-cli": "8fd73c30da5abb021af1f6bb8446beef5167e79687f8424ab323999ff6343541",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "55")
+                self.assertEqual(manifest.suite_version, "56")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-10-r55-p6-google-stateless-empty-id-tcb45",
+                    "2026-09-10-r56-p6-signed-natural-lab-tcb46",
                 )
                 self.assertEqual(
                     manifest.digest,

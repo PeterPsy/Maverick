@@ -1,22 +1,25 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-10
-Matrix revision: `2026-09-10-r55-p6-google-stateless-empty-id-tcb45`
+Matrix revision: `2026-09-10-r56-p6-signed-natural-lab-tcb46`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==48`
+Adapter: `maverick-hosted-tool-loop==49`
 
 ## P6 candidate checkpoint
 
-Suite 55 / TCB manifest 45 / hosted adapter 48 / recipe 25 retain the P5
+Suite 56 / TCB manifest 46 / hosted adapter 49 / recipe 25 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
-receipts, explicit budgeted transport opt-in, and independently observed natural
-conformance before signing. Suite 55 additionally runs every fixture-contract
+receipts, explicit budgeted transport opt-in, and operator-observed natural
+conformance before signing. Suite 56 additionally runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
-is not signable evidence. Historical evidence below is
+is not signable evidence. The signed natural-lab permit is not a capability
+certificate: it is accepted only by an explicitly injected adapter in an
+isolated installation, and every HTTP generation is fenced by the shared
+operator ledger. Historical evidence below is
 not evidence for this candidate. The authoritative attestation implementation is
 available, but the global and Google kill switches still default off and no
 remote certificate or operator binding is enabled. Codex revision 15 is the
@@ -197,6 +200,17 @@ ID only for the certified stateless `store=false` path; it neither exposes nor
 persists that empty value. Stateful execution and every other invalid or
 mismatched identity remain fail-closed. OpenRouter profile 58 advances with
 the shared adapter/TCB identity. Codex revision 15 remains byte-identical.
+
+Revision 60 pins hosted adapter 49 and governed recipe 25 while advancing to
+suite 56, matrix `2026-09-10-r56-p6-signed-natural-lab-tcb46`, and TCB
+manifest v46. The code-owned laboratory accepts only a signed, expiring permit
+for the exact source, TCB, adapter, profile, synthetic workspace, actor,
+credential binding, reasoning effort, reviewer reference, and successor
+ledger. Production bootstrap cannot select this authority. The ordinary hosted
+loop, semantic projection, egress, tool ledger, confirmation, provider state,
+recovery and cleanup remain in the measured path; raw HTTP is reservation-
+before-egress fenced. OpenRouter profile 59 advances with the shared
+adapter/TCB identity. Codex revision 15 remains byte-identical.
 
 ## Fail-closed conditions
 

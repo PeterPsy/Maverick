@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-10-r55-p6-google-stateless-empty-id-tcb45`
+Revision: `2026-09-10-r56-p6-signed-natural-lab-tcb46`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through
@@ -45,10 +45,10 @@ all absolute failure counters at zero.
 ## Publication and release
 
 `publish_antigravity_connection_certificate` accepts only the complete signed
-suite-55 run from an already trusted Ed25519 signer and rechecks deployed
+suite-56 run from an already trusted Ed25519 signer and rechecks deployed
 source, TCB, matrix, target, adapter bytes, and installed runtime artifact. A
 valid root permits catalog projection but does not activate the provider or a
 workspace binding. Provider activation is an explicit operator action; global
 and Antigravity-specific kill switches, current workspace attestation, a
-disposable canary, rollback rehearsal, and the independent production-security
+disposable canary, rollback rehearsal, and the autonomous post-evidence security
 gate remain mandatory.

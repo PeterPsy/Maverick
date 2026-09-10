@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import core.providers.certification_natural_lab as certification_natural_lab_module
+
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
 from core.egress.agentic_transforms import canonical_egress_content
@@ -82,6 +84,8 @@ def build_hosted_agentic_engine_adapter(
     provider_registry: ProviderRegistry,
     classifier: HostedContentClassifier | None = None,
     onboarding_catalog: MaverickAgentOnboardingCatalog | None = None,
+    certification_lab_authority=None,
+    certification_lab_runtime_registry=None,
 ) -> HostedAgenticEngineAdapter:
     """Compose the hosted loop from live Core-owned policy and storage surfaces."""
     if (
@@ -90,8 +94,21 @@ def build_hosted_agentic_engine_adapter(
         or state.agentic_egress_evaluator is None
     ):
         raise RuntimeError("Hosted agentic runtime dependencies are unavailable.")
-    provider_runtimes = build_hosted_provider_runtime_registry(
-        onboarding_catalog=onboarding_catalog,
+    if (certification_lab_authority is None) != (
+        certification_lab_runtime_registry is None
+    ):
+        raise RuntimeError("Certification lab authority and runtime must be paired.")
+    if certification_lab_authority is not None and not isinstance(
+        certification_lab_authority,
+        certification_natural_lab_module.CertificationNaturalLabAuthority,
+    ):
+        raise RuntimeError("Certification lab authority is invalid.")
+    provider_runtimes = (
+        certification_lab_runtime_registry
+        if certification_lab_runtime_registry is not None
+        else build_hosted_provider_runtime_registry(
+            onboarding_catalog=onboarding_catalog,
+        )
     )
     process_registry = HostedToolProcessRegistry(store=state.runtime_store)
     adapter_holder: dict[str, HostedAgenticEngineAdapter] = {}
@@ -114,6 +131,8 @@ def build_hosted_agentic_engine_adapter(
             raise HostedAgenticLoopError("runtime_policy_unavailable") from error
 
     def authority_refresher(context):
+        if certification_lab_authority is not None:
+            return certification_lab_authority.resolve(context)
         try:
             return resolve_runtime_authority_snapshot(
                 state,
@@ -126,6 +145,8 @@ def build_hosted_agentic_engine_adapter(
             raise HostedAgenticLoopError(error.reason_code) from error
 
     def authority_revalidator(context, authority):
+        if certification_lab_authority is not None:
+            return certification_lab_authority.revalidate(context, authority)
         try:
             return revalidate_runtime_authority_snapshot(
                 state,
@@ -215,10 +236,13 @@ def build_hosted_agentic_engine_adapter(
             build_hosted_agentic_engine_adapter,
             build_hosted_provider_runtime_registry,
             resolve_filesystem_mutation_lineage,
+            certification_natural_lab_module,
         ),
         process_registry=process_registry,
     )
     adapter_holder["adapter"] = adapter
+    if certification_lab_authority is not None:
+        certification_lab_authority.bind_adapter(adapter)
     provider_registry.register_agentic_runtime_adapter(adapter)
     return adapter
 

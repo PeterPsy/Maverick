@@ -131,6 +131,23 @@ class HostedProviderRuntimeRegistry:
                 components.append(runtime.cost_estimator)
         return tuple(components)
 
+    def runtimes(self) -> tuple[HostedProviderRuntime, ...]:
+        """Return the registered runtimes in the same deterministic order."""
+        return tuple(
+            runtime
+            for identity in sorted(
+                self._runtimes,
+                key=lambda item: tuple(str(value) for value in item),
+            )
+            for runtime in sorted(
+                self._runtimes[identity],
+                key=lambda item: (
+                    "" if item.recipe is None else item.recipe.recipe_id,
+                    "" if item.recipe is None else item.recipe.revision,
+                ),
+            )
+        )
+
     @staticmethod
     def _validate_recipe_binding(runtime: HostedProviderRuntime, binding) -> None:
         recipe = runtime.recipe

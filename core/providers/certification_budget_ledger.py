@@ -209,6 +209,12 @@ class CertificationBudgetLedger:
         with self._connection():
             pass
 
+    @property
+    def authorization_ref(self) -> str:
+        """Return the exact authorization bound into the immutable policy."""
+        with self._connection() as (_connection, _limits, metadata):
+            return metadata["authorization_ref"]
+
     @contextmanager
     def _connection(self):
         connection = None

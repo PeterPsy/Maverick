@@ -861,6 +861,24 @@ catalog and encrypted invocation ledger. Provider-private protocol bytes remain
 behind the matching codec service and public events are bounded, normalized,
 and private-field-free.
 
+Pre-certificate natural conformance uses a distinct, code-owned laboratory
+authority rather than fabricating a capability certificate. Production
+bootstrap never constructs or selects it. An operator must explicitly inject
+both a laboratory authority and a matching runtime registry into a disposable
+installation. The authority accepts only a trusted Ed25519-signed, expiring
+permit bound to the exact authorization reference, clean source commit,
+repository/workspace filesystem identities, TCB, adapter artifact, API-profile
+target, actor, credential binding, reasoning effort, reviewer reference, and
+durable budget-ledger policy. The normal hosted semantic, egress, tool,
+confirmation, provider-state, journal, recovery, and cleanup implementations
+remain in the path. A separate raw-transport fence reserves every generation
+before egress, revalidates the permit and current credential before and after
+pacing and during streaming, never refunds ambiguous calls, and halts the
+provider ledger on transport or provider-stream failure. Laboratory evidence
+can support the later behavioral report and autonomous post-evidence review;
+the permit itself grants no production admission, publication, or rollout
+authority.
+
 Provider preflight is not the final authority boundary. After preflight and
 before the staged egress CAS, one shared last-mile guard re-resolves the full
 certificate/binding/feature/actor/health/Full Workspace authority, rechecks the

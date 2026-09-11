@@ -8,7 +8,7 @@ import json
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
 
 
-_STEP_STATES = frozenset({"ACTIVE", "DONE"})
+_STEP_STATES = frozenset({"ACTIVE", "DONE", "ERROR"})
 
 
 def project_antigravity_step(update: object) -> tuple[str, dict[str, object]]:
@@ -22,6 +22,8 @@ def project_antigravity_step(update: object) -> tuple[str, dict[str, object]]:
     state = update.get("state")
     step_type = update.get("step_type")
     if state not in _STEP_STATES or not isinstance(step_type, str) or not step_type:
+        raise NativeStructuredCliError("antigravity_step_invalid")
+    if state == "ERROR" and step_type != "tool":
         raise NativeStructuredCliError("antigravity_step_invalid")
 
     common: dict[str, object] = {
@@ -82,6 +84,8 @@ def _project_tool_step(
         "arguments_sha256": _json_digest(parameters),
     }
     if common["provider_step_state"] == "ACTIVE":
+        if info.get("error") is not None or info.get("output") is not None:
+            raise NativeStructuredCliError("antigravity_tool_step_invalid")
         return "runtime.tool_call.started", payload
     error = info.get("error")
     output = info.get("output")
@@ -102,6 +106,8 @@ def _project_tool_step(
             raise NativeStructuredCliError("antigravity_tool_step_invalid")
         payload["error_type"] = error_type or "tool_error"
         return "runtime.tool_call.failed", payload
+    if common["provider_step_state"] == "ERROR":
+        raise NativeStructuredCliError("antigravity_tool_step_invalid")
     encoded_output = (output or "").encode("utf-8")
     payload["output_bytes"] = len(encoded_output)
     payload["output_sha256"] = hashlib.sha256(encoded_output).hexdigest()

@@ -53,6 +53,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.api.test_provider_execution_families",
     "tests.unit.providers.test_agentic_lineage_admission",
     "tests.unit.providers.test_agentic_launch_secret_resolution",
+    "tests.unit.providers.test_antigravity_cli_concurrency",
     "tests.unit.providers.test_antigravity_cli_discovery",
     "tests.unit.providers.test_antigravity_cli_native",
     "tests.unit.providers.test_antigravity_cli_runtime_home",
@@ -173,7 +174,7 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="58",
+        suite_version="59",
         provider_id=provider_id,
         target_scope="api_profile",
         model_provider_id=None,
@@ -181,7 +182,7 @@ def _suite(
         behavioral_resource_limits=(),
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-10-r58-p6-workspace-runtime-root-tcb48"
+            "2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
@@ -244,7 +245,7 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = _suite(
 
 ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_id="maverick-antigravity-native-agentic-contract",
-    suite_version="58",
+    suite_version="59",
     provider_id="antigravity-cli",
     target_scope="native_connection",
     model_provider_id="google",
@@ -258,7 +259,7 @@ ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
         ("cost_microusd", 3_500_000),
     ),
     matrix_path="docs/reference/antigravity_agentic_certification_matrix.md",
-    matrix_revision="2026-09-10-r58-p6-workspace-runtime-root-tcb48",
+    matrix_revision="2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49",
     tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
     tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
     tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

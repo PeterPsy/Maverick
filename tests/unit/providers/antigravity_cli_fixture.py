@@ -22,6 +22,43 @@ from core.runtime.execution_binding import canonical_digest
 
 
 class AntigravityCliFixture:
+    async def asyncSetUp(self):
+        await self.setup_fixture()
+
+    async def asyncTearDown(self):
+        await self.controller.close(self.context)
+
+    async def collect(self, text, *, started=None, timeout=3):
+        context = SimpleNamespace(
+            session=self.session,
+            binding=self.binding,
+            provider_state=self.state,
+            input_text=text,
+            correlation_id="turn",
+            timeout_seconds=timeout,
+        )
+        events = []
+        async for event in self.controller.execute(context):
+            events.append(event)
+            if started is not None and event.event_type == "provider.accepted":
+                started.set()
+        return events
+
+    def final_text(self, events):
+        finals = [
+            event
+            for event in events
+            if event.event_type == "runtime.output.final"
+        ]
+        self.assertEqual(len(finals), 1)
+        self.assertEqual(
+            [event.ordinal for event in events],
+            list(range(1, len(events) + 1)),
+        )
+        self.assertEqual(events[-1].event_type, "provider.execution.completed")
+        self.assertEqual(events[-1].payload["exit_code"], 0)
+        return finals[0].payload["text"]
+
     async def setup_fixture(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)

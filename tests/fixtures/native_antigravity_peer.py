@@ -204,6 +204,29 @@ for line in sys.stdin:
         step("agent_response", text_delta="Permission denied")
         output_tokens += 2
         result("Permission denied")
+    elif text == "tool-error-state":
+        step(
+            "tool",
+            state="ACTIVE",
+            tool_name="run_command",
+            tool_info={
+                "name": "run_command",
+                "parameters": {"CommandLine": "false"},
+            },
+        )
+        step(
+            "tool",
+            state="ERROR",
+            tool_name="run_command",
+            tool_info={
+                "name": "run_command",
+                "parameters": {"CommandLine": "false"},
+                "error": {"type": "TOOL_ERROR", "message": "fixture failure"},
+            },
+        )
+        step("agent_response", text_delta="Tool failed safely")
+        output_tokens += 2
+        result("Tool failed safely")
     else:
         response = "answer:" + text
         step("agent_response", state="ACTIVE", text_delta="answer:")

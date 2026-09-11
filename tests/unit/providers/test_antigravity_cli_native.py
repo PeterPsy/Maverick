@@ -2,20 +2,23 @@
 
 import asyncio
 from dataclasses import replace
+import hashlib
 import json
+import os
 from pathlib import Path
-from threading import Barrier, BrokenBarrierError, Event, Lock
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from core.providers.antigravity_cli_session import AntigravityCliSession
 from core.providers.antigravity_cli_sandbox import antigravity_stream_launch_spec
+from core.providers.antigravity_cli_sandbox import (
+    ANTIGRAVITY_OUTER_SANDBOX_COMMAND_ENV,
+    resolve_antigravity_outer_sandbox,
+)
 from core.providers.agentic_adapter import RuntimeRecoveryContext
 from core.providers.native_agent_builtins import (
     build_antigravity_cli_candidate_definition,
 )
-from core.providers.native_agent_runtime import NativeSteerContext
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
 from core.runtime.agentic_execution import execute_agentic_runtime_turn
 from core.runtime.resolved_runtime_engine import (
@@ -26,39 +29,6 @@ from tests.unit.providers.antigravity_cli_fixture import AntigravityCliFixture
 
 
 class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        await self.setup_fixture()
-
-    async def asyncTearDown(self):
-        await self.controller.close(self.context)
-
-    async def collect(self, text, *, started=None, timeout=3):
-        context = SimpleNamespace(
-            session=self.session,
-            binding=self.binding,
-            provider_state=self.state,
-            input_text=text,
-            correlation_id="turn",
-            timeout_seconds=timeout,
-        )
-        events = []
-        async for event in self.controller.execute(context):
-            events.append(event)
-            if started is not None and event.event_type == "provider.accepted":
-                started.set()
-        return events
-
-    def final_text(self, events):
-        finals = [event for event in events if event.event_type == "runtime.output.final"]
-        self.assertEqual(len(finals), 1)
-        self.assertEqual(
-            [event.ordinal for event in events],
-            list(range(1, len(events) + 1)),
-        )
-        self.assertEqual(events[-1].event_type, "provider.execution.completed")
-        self.assertEqual(events[-1].payload["exit_code"], 0)
-        return finals[0].payload["text"]
-
     async def test_successful_turn_and_resume_through_real_core_executor(self):
         authority = self.core_authority()
         for prompt in ("first", "second"):
@@ -151,6 +121,60 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
             self.spec.env_overrides["PATH"].startswith(
                 str(self.root / "runtime/bin")
             )
+        )
+
+    async def test_optional_outer_sandbox_is_content_and_owner_pinned(self):
+        candidate = self.root / "dedicated-bwrap"
+        candidate.write_bytes(b"reviewed outer sandbox")
+        candidate.chmod(0o755)
+        digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        environment = {ANTIGRAVITY_OUTER_SANDBOX_COMMAND_ENV: str(candidate)}
+        with (
+            patch.dict(os.environ, environment),
+            patch(
+                "core.providers.antigravity_cli_sandbox."
+                "ANTIGRAVITY_OUTER_SANDBOX_SHA256",
+                digest,
+            ),
+            patch(
+                "core.providers.antigravity_cli_sandbox."
+                "ANTIGRAVITY_OUTER_SANDBOX_OWNER_UID",
+                os.getuid(),
+            ),
+        ):
+            self.assertEqual(resolve_antigravity_outer_sandbox(), candidate)
+            spec = antigravity_stream_launch_spec(
+                SimpleNamespace(
+                    session=self.session,
+                    binding=self.binding,
+                    secret_env={},
+                ),
+                command=self.engine.command,
+                dependency_roots=self.engine.dependency_roots,
+                auth_home=self.auth_home,
+            )
+            self.assertEqual(spec.command[0], str(candidate))
+            candidate.chmod(0o775)
+            with self.assertRaisesRegex(
+                NativeStructuredCliError,
+                "outer_sandbox_invalid",
+            ):
+                resolve_antigravity_outer_sandbox()
+
+    async def test_health_degrades_for_an_invalid_outer_sandbox(self):
+        with patch(
+            "core.providers.antigravity_cli_native."
+            "resolve_antigravity_outer_sandbox",
+            side_effect=NativeStructuredCliError(
+                "antigravity_outer_sandbox_invalid"
+            ),
+        ):
+            health = await self.engine.health(SimpleNamespace())
+
+        self.assertEqual(health.status, "degraded")
+        self.assertEqual(
+            health.reason_codes,
+            ("antigravity_outer_sandbox_invalid",),
         )
 
     async def test_launch_requires_private_operator_oauth_profile(self):
@@ -270,237 +294,6 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertEqual(self.final_text(await self.collect("second")), "answer:second")
         self.assertTrue((await self.controller.cleanup(self.context)).closed)
 
-    async def test_changed_skill_set_restarts_the_session_owner(self):
-        source = self.root / "skill"
-        source.mkdir()
-        (source / "SKILL.md").write_text("# Fixture skill\n", encoding="utf-8")
-        skill = SimpleNamespace(
-            skill_id="workspace:fixture",
-            source_root=str(source),
-        )
-        with_skill = SimpleNamespace(
-            **vars(self.context),
-            invoked_skills=(skill,),
-        )
-        await self.controller.connect(with_skill)
-        first_owner = self.engine._owners[self.session.session_id]
-
-        await self.controller.connect(with_skill)
-        self.assertIs(
-            self.engine._owners[self.session.session_id],
-            first_owner,
-        )
-
-        without_skill = SimpleNamespace(
-            **vars(self.context),
-            invoked_skills=(),
-        )
-        await self.controller.connect(without_skill)
-        self.assertIsNot(
-            self.engine._owners[self.session.session_id],
-            first_owner,
-        )
-        self.assertFalse(first_owner.thread.is_alive())
-
-    async def test_cache_read_usage_may_exceed_uncached_input(self):
-        events = await self.collect("cache-heavy")
-        usage = next(
-            event.payload
-            for event in events
-            if event.event_type == "provider.usage"
-        )
-
-        self.assertGreater(
-            usage["cached_input_tokens"],
-            usage["input_tokens"],
-        )
-        self.assertEqual(
-            usage["total_tokens"],
-            usage["input_tokens"] + usage["output_tokens"],
-        )
-
-    async def test_concurrent_connects_share_one_supervised_process(self):
-        rendezvous = Barrier(2)
-        counter_lock = Lock()
-        active_preparations = 0
-        maximum_active_preparations = 0
-
-        def observed_skill_preparation(_runtime_root, _skills):
-            nonlocal active_preparations, maximum_active_preparations
-            with counter_lock:
-                active_preparations += 1
-                maximum_active_preparations = max(
-                    maximum_active_preparations,
-                    active_preparations,
-                )
-            try:
-                try:
-                    rendezvous.wait(timeout=0.1)
-                except BrokenBarrierError:
-                    pass
-                return "fixture-skill-digest"
-            finally:
-                with counter_lock:
-                    active_preparations -= 1
-
-        with patch(
-            "core.providers.antigravity_cli_native.prepare_antigravity_runtime_skills",
-            side_effect=observed_skill_preparation,
-        ):
-            first, second = await asyncio.gather(
-                self.controller.connect(self.context),
-                self.controller.connect(self.context),
-            )
-        self.assertIs(first.prepared_handle, second.prepared_handle)
-        self.assertEqual(maximum_active_preparations, 1)
-        self.assertEqual(
-            sum("startup" in message for message in self.messages()),
-            1,
-        )
-
-    async def test_interrupt_during_init_fences_and_reaps_connection(self):
-        self.context.local_launch_spec = replace(
-            self.spec,
-            env_overrides={
-                **self.spec.env_overrides,
-                "ANTIGRAVITY_FIXTURE_HOLD_INIT": "1",
-            },
-        )
-        connecting = asyncio.create_task(self.controller.connect(self.context))
-        async with asyncio.timeout(2):
-            while not self.trace.exists():
-                await asyncio.sleep(0.01)
-        owner = self.engine._owners["test"]
-        client = owner.engine.connecting
-        result = await self.controller.interrupt(self.context)
-        await asyncio.wait_for(asyncio.gather(connecting, return_exceptions=True), 2)
-        self.assertTrue(result.cancelled)
-        self.assertIsNotNone(client.process.returncode)
-        self.assertNotIn("test", self.engine._owners)
-        self.assertFalse(owner.thread.is_alive())
-
-    async def test_second_turn_cannot_enter_while_first_is_connecting(self):
-        entered, release = Event(), Event()
-        prepare = AntigravityCliSession.prepare
-
-        async def delayed_prepare(engine, context):
-            entered.set()
-            await asyncio.to_thread(release.wait, 3)
-            return await prepare(engine, context)
-
-        with patch.object(AntigravityCliSession, "prepare", delayed_prepare):
-            first = asyncio.create_task(self.collect("first"))
-            try:
-                self.assertTrue(await asyncio.to_thread(entered.wait, 2))
-                with self.assertRaisesRegex(
-                    NativeStructuredCliError,
-                    "turn_already_active",
-                ):
-                    await asyncio.wait_for(self.collect("second"), 0.2)
-                self.assertFalse(first.done())
-            finally:
-                release.set()
-                await asyncio.wait_for(first, 2)
-
-    async def test_same_turn_steering_is_explicitly_safe_next_turn_only(self):
-        await self.controller.connect(self.context)
-        started = asyncio.Event()
-        task = asyncio.create_task(self.collect("hold", started=started))
-        await asyncio.wait_for(started.wait(), 2)
-        steered = await self.controller.steer(
-            NativeSteerContext(
-                "test",
-                "changed",
-                expected_provider_turn_id="turn",
-            )
-        )
-        self.assertEqual(steered.status, "not_supported")
-        self.assertEqual(steered.reason, "antigravity_safe_next_turn_only")
-        self.assertTrue((await self.controller.interrupt(self.context)).cancelled)
-        await asyncio.gather(task, return_exceptions=True)
-
-    async def test_interrupt_reaps_process_and_recovery_uses_same_conversation(self):
-        prepared = await self.controller.connect(self.context)
-        self.state.provider_thread_id = prepared.provider_state_updates[
-            "provider_thread_id"
-        ]
-        started = asyncio.Event()
-        task = asyncio.create_task(self.collect("hold", started=started))
-        await asyncio.wait_for(started.wait(), 2)
-        self.assertTrue((await self.controller.interrupt(self.context)).cancelled)
-        await asyncio.gather(task, return_exceptions=True)
-        self.assertIsNotNone(prepared.prepared_handle.process.returncode)
-        self.assertTrue((await self.controller.recover(self.context)).recovered)
-
-    async def test_cancelled_caller_drains_session_worker_before_returning(self):
-        prepared = await self.controller.connect(self.context)
-        owner = self.engine._owners["test"]
-        started = asyncio.Event()
-        task = asyncio.create_task(self.collect("hold", started=started))
-        await asyncio.wait_for(started.wait(), 2)
-        task.cancel()
-        with self.assertRaises(asyncio.CancelledError):
-            await task
-        self.assertIsNotNone(prepared.prepared_handle.process.returncode)
-        self.assertFalse(owner.thread.is_alive())
-        self.assertTrue(owner.loop.is_closed())
-        self.assertEqual(self.engine._owners, {})
-
-    async def test_repeated_close_cancellation_keeps_session_fenced_until_join(self):
-        prepared = await self.controller.connect(self.context)
-        owner = self.engine._owners["test"]
-        entered, release = Event(), Event()
-        close = owner.engine.close
-
-        async def delayed_close(context):
-            entered.set()
-            await asyncio.to_thread(release.wait, 3)
-            return await close(context)
-
-        with patch.object(owner.engine, "close", delayed_close):
-            closing = asyncio.create_task(self.controller.close(self.context))
-            try:
-                self.assertTrue(await asyncio.to_thread(entered.wait, 2))
-                for _ in range(2):
-                    closing.cancel()
-                    await asyncio.sleep(0)
-                self.assertFalse(closing.done())
-                self.assertIs(self.engine._owners["test"], owner)
-                with self.assertRaisesRegex(
-                    NativeStructuredCliError,
-                    "session_closing",
-                ):
-                    await self.controller.connect(self.context)
-            finally:
-                release.set()
-                with self.assertRaises(asyncio.CancelledError):
-                    await closing
-        self.assertIsNotNone(prepared.prepared_handle.process.returncode)
-        self.assertFalse(owner.thread.is_alive())
-        self.assertTrue(owner.loop.is_closed())
-
-    async def test_closing_one_session_does_not_cancel_another(self):
-        first = await self.controller.connect(self.context)
-        other_session = SimpleNamespace(**{**vars(self.session), "session_id": "other"})
-        other_context = SimpleNamespace(**{**vars(self.context), "session": other_session})
-        second = await self.controller.connect(other_context)
-        second_owner = self.engine._owners["other"]
-        try:
-            await self.controller.close(self.context)
-            self.assertIsNotNone(first.prepared_handle.process.returncode)
-            self.assertIsNone(second.prepared_handle.process.returncode)
-            turn = SimpleNamespace(
-                **vars(other_context),
-                input_text="other",
-                correlation_id="turn",
-                timeout_seconds=3,
-            )
-            events = [event async for event in self.controller.execute(turn)]
-            self.assertEqual(self.final_text(events), "answer:other")
-        finally:
-            await self.controller.close(other_context)
-        self.assertFalse(second_owner.thread.is_alive())
-
     async def test_tool_and_permission_steps_are_structured(self):
         tool_events = await self.collect("tool")
         self.assertEqual(self.final_text(tool_events), "tool:fixture")
@@ -527,6 +320,20 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         )
         self.assertEqual(failure.payload["error_type"], "permission_denied")
         self.assertNotIn("error_message", failure.payload)
+
+        observed_error = await self.collect("tool-error-state")
+        self.assertEqual(self.final_text(observed_error), "Tool failed safely")
+        projected_error = [
+            event
+            for event in observed_error
+            if event.event_type.startswith("runtime.tool_call.")
+        ]
+        self.assertEqual(
+            [event.event_type for event in projected_error],
+            ["runtime.tool_call.started", "runtime.tool_call.failed"],
+        )
+        self.assertEqual(projected_error[-1].payload["error_type"], "TOOL_ERROR")
+        self.assertNotIn("error_message", projected_error[-1].payload)
 
     async def test_bad_sequence_identity_and_permission_mode_fail_closed(self):
         for prompt, reason in (

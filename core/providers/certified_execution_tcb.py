@@ -71,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="48",
+    manifest_version="49",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -207,6 +207,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "scripts/run_antigravity_native_probe.py",
                 "scripts/run_google_interactions_probe.py",
                 "scripts/run_openrouter_agentic_probe.py",
+                "scripts/deploy/apparmor/maverick-antigravity-bwrap",
             ),
         ),
         CertifiedTcbComponent(

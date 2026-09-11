@@ -49,13 +49,27 @@ runtime token nor valid configuration. After login rotation, the operator must
 replace the source file atomically and restart or explicitly refresh Core so a
 new catalog epoch is observed. No tenant workspace may be used as the source.
 
+On AppArmor-restricted Ubuntu deployments, the operator also installs an exact
+copy of the reviewed `/usr/bin/bwrap` artifact at
+`/usr/local/libexec/maverick/antigravity-bwrap`, installs
+`scripts/deploy/apparmor/maverick-antigravity-bwrap` as the matching AppArmor
+profile, reloads that profile, and sets
+`MAVERICK_ANTIGRAVITY_BWRAP_COMMAND` in the Core service environment. The
+installed copy must hash to
+`41c26bc2e4130e32bcf7cbb304f2686343e1aa657b98226e3daafddf0b21322f`.
+Core refuses a symlink, hard link, non-root owner, writable file,
+non-executable file, or digest mismatch. A different Bubblewrap build requires
+an explicit source review, identity bump, and recertification; it must not be
+accepted by changing only deployment configuration.
+
 ## Protocol and lifecycle
 
 - Preparation starts one supervised process, requires exactly one valid `init`,
   and verifies the conversation id, working directory, model, tool list, and
   `proceed-in-sandbox` permission mode before publishing a prepared handle.
 - Consecutive turns use one process. Each turn sends one text-only `user` event,
-  consumes ordered `step_update` events, and requires exactly one terminal
+  consumes ordered `step_update` events, including the provider-observed
+  terminal `ERROR` state for failed tool steps, and requires exactly one terminal
   `SUCCESS` result with a nonblank response and structurally valid cumulative
   token usage.
 - Agent response deltas become `runtime.output.delta`. Structured tool steps
@@ -89,6 +103,21 @@ process never inherits the host HOME. `--dangerously-skip-permissions` is
 forbidden. `init.permission_mode` must be `proceed-in-sandbox`; this permits the
 CLI's sandboxed internal work while the outer boundary still prevents direct
 workspace writes.
+
+On Ubuntu hosts that restrict unprivileged user namespaces through AppArmor,
+the ordinary distro `bwrap` profile strips `CAP_SYS_ADMIN` from every child.
+That prevents Antigravity from creating its documented nested terminal
+sandbox. Maverick therefore supports a dedicated, reviewed outer Bubblewrap
+copy selected by `MAVERICK_ANTIGRAVITY_BWRAP_COMMAND`. The configured file must
+be a root-owned, single-link, non-writable regular executable with the exact
+reviewed SHA-256 pinned in `antigravity_cli_sandbox.py`; any drift fails before
+launch. Its AppArmor source is
+`scripts/deploy/apparmor/maverick-antigravity-bwrap` and is part of the
+certified-execution TCB. It retains namespace capabilities only inside the
+outer user namespace, while the Bubblewrap mount/PID boundary and
+Antigravity's nested no-network sandbox remain independently enforced. This
+dedicated profile does not alter the distro `bwrap` profile used by Codex or
+other Maverick processes.
 
 Core installs its runtime-token `maverick` wrapper in the private runtime bin
 directory. Direct native shell/filesystem tools can inspect the workspace but
@@ -153,7 +182,7 @@ sandbox wrapper. They do not certify Antigravity. Suite 51 retains the strict
 `native_connection` target and bounded one-turn live receipt. Only
 `publish_antigravity_connection_certificate` may convert a complete natural,
 signed run from an already trusted signer into the root
-`native-connection:antigravity-cli:google:4`; catalog model certificates merely
+`native-connection:antigravity-cli:google:5`; catalog model certificates merely
 project its unchanged evidence and expiry. Bootstrap and discovery cannot mint
 that root.
 

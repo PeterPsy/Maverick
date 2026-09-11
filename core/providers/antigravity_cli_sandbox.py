@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 import shutil
+import stat
 
 from core.providers.antigravity_cli_runtime_home import (
     ensure_antigravity_runtime_skills_root,
@@ -20,6 +22,11 @@ from core.runtime.workspace_api_token import issue_workspace_api_token
 
 
 ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.6-flash-high"
+ANTIGRAVITY_OUTER_SANDBOX_COMMAND_ENV = "MAVERICK_ANTIGRAVITY_BWRAP_COMMAND"
+ANTIGRAVITY_OUTER_SANDBOX_SHA256 = (
+    "41c26bc2e4130e32bcf7cbb304f2686343e1aa657b98226e3daafddf0b21322f"
+)
+ANTIGRAVITY_OUTER_SANDBOX_OWNER_UID = 0
 
 
 def antigravity_stream_launch_spec(
@@ -80,6 +87,7 @@ def antigravity_stream_launch_spec(
         argv.extend(["--effort", reasoning_effort])
 
     dependencies = [executable_path.parent, *dependency_roots]
+    outer_sandbox = resolve_antigravity_outer_sandbox()
     sandboxed = build_bwrap_command(
         workspace_root=workspace,
         runtime_root=runtime,
@@ -87,6 +95,8 @@ def antigravity_stream_launch_spec(
         dependency_roots=dependencies,
         command=argv,
     )
+    if outer_sandbox is not None:
+        sandboxed[0] = str(outer_sandbox)
     sandboxed = _readonly_workspace_command(
         sandboxed,
         workspace=workspace,
@@ -134,6 +144,37 @@ def antigravity_stream_launch_spec(
         readable_roots=[str(workspace), str(runtime), *map(os.fspath, dependencies)],
         writable_roots=[str(runtime)],
     )
+
+
+def resolve_antigravity_outer_sandbox() -> Path | None:
+    """Validate the optional reviewed launcher for nested Linux sandboxing."""
+    configured = str(
+        os.environ.get(ANTIGRAVITY_OUTER_SANDBOX_COMMAND_ENV) or ""
+    ).strip()
+    if not configured:
+        return None
+    candidate = Path(configured)
+    try:
+        details = candidate.stat(follow_symlinks=False)
+        resolved = candidate.resolve(strict=True)
+        with candidate.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+    except OSError as error:
+        raise NativeStructuredCliError(
+            "antigravity_outer_sandbox_invalid"
+        ) from error
+    if (
+        not candidate.is_absolute()
+        or resolved != candidate
+        or not stat.S_ISREG(details.st_mode)
+        or details.st_nlink != 1
+        or details.st_uid != ANTIGRAVITY_OUTER_SANDBOX_OWNER_UID
+        or details.st_mode & 0o022
+        or not details.st_mode & 0o111
+        or digest != ANTIGRAVITY_OUTER_SANDBOX_SHA256
+    ):
+        raise NativeStructuredCliError("antigravity_outer_sandbox_invalid")
+    return candidate
 
 
 def _readonly_workspace_command(
@@ -186,4 +227,10 @@ def _readonly_skills_command(
     return result
 
 
-__all__ = ["ANTIGRAVITY_DEFAULT_MODEL", "antigravity_stream_launch_spec"]
+__all__ = [
+    "ANTIGRAVITY_DEFAULT_MODEL",
+    "ANTIGRAVITY_OUTER_SANDBOX_COMMAND_ENV",
+    "ANTIGRAVITY_OUTER_SANDBOX_SHA256",
+    "antigravity_stream_launch_spec",
+    "resolve_antigravity_outer_sandbox",
+]

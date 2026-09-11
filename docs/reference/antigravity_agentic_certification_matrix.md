@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-10-r58-p6-workspace-runtime-root-tcb48`
+Revision: `2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through
@@ -11,7 +11,7 @@ readiness, or a successful process exit cannot create this authority.
 
 - Antigravity CLI runtime artifact: reviewed version `1.1.27` and its exact
   content digest from `native_runtime_artifact.py`.
-- Adapter revision `4` and harness recipe revision `3`, structured persistent
+- Adapter revision `5` and harness recipe revision `4`, structured persistent
   `stream-json`, machine-readable events, no terminal scraping.
 - Authentication: a session-private copy of the operator-managed cached OAuth
   identity; no API key or workspace credential binding is accepted.
@@ -45,7 +45,7 @@ all absolute failure counters at zero.
 ## Publication and release
 
 `publish_antigravity_connection_certificate` accepts only the complete signed
-suite-58 run from an already trusted Ed25519 signer and rechecks deployed
+suite-59 run from an already trusted Ed25519 signer and rechecks deployed
 source, TCB, matrix, target, adapter bytes, and installed runtime artifact. A
 valid root permits catalog projection but does not activate the provider or a
 workspace binding. Provider activation is an explicit operator action; global

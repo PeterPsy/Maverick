@@ -6,7 +6,10 @@ from pathlib import Path
 from threading import Lock
 
 from core.providers.agentic_adapter import RuntimeCancelResult, RuntimeCloseResult, RuntimeHealth
-from core.providers.antigravity_cli_sandbox import antigravity_stream_launch_spec
+from core.providers.antigravity_cli_sandbox import (
+    antigravity_stream_launch_spec,
+    resolve_antigravity_outer_sandbox,
+)
 from core.providers.antigravity_cli_runtime_home import (
     prepare_antigravity_runtime_skills,
 )
@@ -19,7 +22,7 @@ from core.providers.native_structured_cli_transport import NativeStructuredCliEr
 class AntigravityCliNativeAdapter:
     runtime_engine_id = "antigravity-cli"
     adapter_id = "antigravity-cli-stream-json"
-    adapter_version = "4"
+    adapter_version = "5"
     local_process_lifecycle = None
     requires_resolved_launch_spec = True
 
@@ -78,6 +81,10 @@ class AntigravityCliNativeAdapter:
     async def health(self, context):
         from core.providers.native_agent_builtins import CommandNativeRuntimeInspector
 
+        try:
+            resolve_antigravity_outer_sandbox()
+        except NativeStructuredCliError as error:
+            return RuntimeHealth(status="degraded", reason_codes=(str(error),))
         status = await asyncio.to_thread(
             CommandNativeRuntimeInspector(self.command).inspect
         )

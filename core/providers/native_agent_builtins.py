@@ -41,14 +41,14 @@ from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISIO
 
 
 NATIVE_AGENT_RECIPE_REVISION = "1"
-ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION = "3"
+ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION = "4"
 NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
 ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION = (
-    "maverick-antigravity-native-sandbox-v2"
+    "maverick-antigravity-native-sandbox-v3"
 )
 ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
 ANTIGRAVITY_NATIVE_CONNECTION_CERTIFICATE_ID = (
-    "native-connection:antigravity-cli:google:4"
+    "native-connection:antigravity-cli:google:5"
 )
 _INSPECTION_CACHE_SECONDS = 5.0
 _INSPECTION_CACHE: dict[tuple[str, tuple[str, ...]], tuple[float, NativeRuntimeStatus]] = {}
@@ -272,7 +272,7 @@ def build_antigravity_cli_candidate_installation(
         manifest=NativeAgentAdapterManifest(
             runtime_engine_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
             adapter_id="antigravity-cli-stream-json",
-            adapter_version="4",
+            adapter_version="5",
             protocol_kind="structured_cli",
             protocol_id="antigravity-stream-json",
             protocol_version="1",

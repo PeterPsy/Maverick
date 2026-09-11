@@ -73,7 +73,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                 OPENROUTER_ZDR_ENDPOINT_CATALOG,
             },
         )
-        self.assertEqual(snapshot.upstream_id, "deepinfra/fp4")
+        self.assertEqual(snapshot.upstream_id, "relace/fp4")
 
     def test_exact_model_and_zdr_records_support_the_request(self) -> None:
         zdr_catalog = _zdr_catalog()
@@ -85,7 +85,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
             zdr_catalog=zdr_catalog,
         )
 
-        self.assertEqual(snapshot.upstream_id, "deepinfra/fp4")
+        self.assertEqual(snapshot.upstream_id, "relace/fp4")
         self.assertEqual(
             snapshot.resolved_model_id,
             OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
@@ -426,8 +426,8 @@ def _final_request() -> AgenticModelRequest:
 def _record() -> dict[str, object]:
     return {
         "model_id": "z-ai/glm-5.3-flash",
-        "provider_name": "DeepInfra",
-        "tag": "deepinfra/fp4",
+        "provider_name": "Relace",
+        "tag": "relace/fp4",
         "quantization": "fp4",
         "context_length": 1_048_576,
         "max_completion_tokens": 131_072,

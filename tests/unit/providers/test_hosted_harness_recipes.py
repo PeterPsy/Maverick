@@ -27,7 +27,7 @@ from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
+    OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_catalog import (
     OpenRouterAgenticCatalogSnapshot,
@@ -163,7 +163,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
 
     def test_openrouter_final_preflight_omits_tools_without_requiring_none(self) -> None:
         catalog = OpenRouterAgenticCatalogSnapshot(
-            upstream_id="deepinfra/fp4",
+            upstream_id="relace/fp4",
             resolved_model_id="z-ai/glm-5.3-flash-20260826",
             reasoning_efforts=("max", "high", "low"),
             default_reasoning_effort="max",
@@ -250,7 +250,7 @@ def _binding(recipe):
         )
         if recipe.model_provider_id == "google-ai-studio"
         else (
-            OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
+            OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
             OPENROUTER_CHAT_PROTOCOL_ADAPTER,
         )
     )

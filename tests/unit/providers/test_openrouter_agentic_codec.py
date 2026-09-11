@@ -94,7 +94,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         self.assertEqual(
             payload["provider"],
             {
-                "only": ["deepinfra/fp4"],
+                "only": ["relace/fp4"],
                 "allow_fallbacks": False,
                 "require_parameters": True,
                 "data_collection": "deny",
@@ -155,7 +155,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
     def test_runtime_config_requires_one_executable_upstream(self) -> None:
         routing = replace(
             openrouter_agentic_routing_constraint(),
-            allowed_upstream_ids=("deepinfra/fp4", "another/fp8"),
+            allowed_upstream_ids=("relace/fp4", "another/fp8"),
         )
 
         with self.assertRaisesRegex(ValueError, "routing config is unsupported"):
@@ -347,7 +347,7 @@ def _identity(generation_id: str) -> dict[str, object]:
         "id": generation_id,
         "object": "chat.completion.chunk",
         "model": OPENROUTER_AGENTIC_MODEL_ID,
-        "provider": "DeepInfra",
+        "provider": "Relace",
     }
 
 
@@ -357,12 +357,12 @@ def _metadata() -> dict[str, object]:
         "strategy": "direct",
         "attempt": 1,
         "endpoints": {"total": 1, "available": [{
-            "provider": "DeepInfra",
+            "provider": "Relace",
             "model": OPENROUTER_AGENTIC_MODEL_ID,
             "selected": True,
         }]},
         "attempts": [{
-            "provider": "DeepInfra",
+            "provider": "Relace",
             "model": OPENROUTER_AGENTIC_MODEL_ID,
             "status": 200,
         }],

@@ -19,7 +19,7 @@ from core.providers.openrouter_agentic_client import (
 )
 from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
-    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
+    OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
@@ -40,7 +40,7 @@ GOOGLE_REQUEST_COST_ESTIMATOR = (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 OPENROUTER_REQUEST_COST_ESTIMATOR = (
-    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+    OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 
 
@@ -360,13 +360,13 @@ def _openrouter_identity(generation_id: str):
         "id": generation_id,
         "object": "chat.completion.chunk",
         "model": OPENROUTER_AGENTIC_MODEL_ID,
-        "provider": "DeepInfra",
+        "provider": "Relace",
     }
 
 
 def _openrouter_metadata():
     endpoint = {
-        "provider": "DeepInfra",
+        "provider": "Relace",
         "model": OPENROUTER_AGENTIC_MODEL_ID,
     }
     return {

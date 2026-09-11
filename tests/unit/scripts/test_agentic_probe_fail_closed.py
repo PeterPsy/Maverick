@@ -92,7 +92,7 @@ class AgenticProbeFailClosedTest(unittest.TestCase):
                 "MAVERICK_CERTIFICATION_MAX_COST_MICROUSD": "1000000",
         }), patch.object(openrouter, "OpenRouterAgenticClient", return_value=client), patch.object(
             openrouter, "preflight_openrouter_agentic_catalog", return_value=SimpleNamespace(
-                upstream_id="deepinfra/fp4",
+                upstream_id="relace/fp4",
                 resolved_model_id="z-ai/glm-5.3-flash-20260826",
                 reasoning_efforts=("max", "high", "low"),
                 default_reasoning_effort="max", reasoning_mandatory=True,

@@ -48,9 +48,9 @@ from core.runtime.full_workspace_contract import (
 ANTIGRAVITY_CERTIFICATION_SUITE_ID = (
     "maverick-antigravity-native-agentic-contract"
 )
-ANTIGRAVITY_CERTIFICATION_SUITE_VERSION = "61"
+ANTIGRAVITY_CERTIFICATION_SUITE_VERSION = "62"
 ANTIGRAVITY_CERTIFICATION_MATRIX_REVISION = (
-    "2026-09-11-r61-openrouter-glm-5-3-flash-tcb51"
+    "2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52"
 )
 ANTIGRAVITY_CERTIFICATION_VALIDITY_DAYS = 45
 

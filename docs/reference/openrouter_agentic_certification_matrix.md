@@ -1,10 +1,10 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-11
-Matrix revision: `2026-09-11-r61-openrouter-glm-5-3-flash-tcb51`
+Matrix revision: `2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==54`
+Adapter: `maverick-hosted-tool-loop==55`
 
 ## Scope
 
@@ -26,16 +26,16 @@ reconfigured by this work.
 | Resolved model | `z-ai/glm-5.3-flash-20260826` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-11` |
 | Catalog expiration | exact `2098-12-31` observation; any drift fails closed |
-| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-deepinfra-fp4@1` |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@1` |
 | Execution family | `maverick_agent` |
 | Full Workspace contract | `codex-baseline-v20` |
 | Protocol | OpenAI-compatible streaming Chat Completions v1 |
 | Protocol adapter | `openrouter-chat-completions-protocol@4` |
-| Runtime adapter | `maverick-hosted-tool-loop==54` |
+| Runtime adapter | `maverick-hosted-tool-loop==55` |
 | Harness recipe | `maverick-openrouter-chat-governed-workspace@27` |
-| Provider config | `openrouter-deepinfra-glm-5-3-flash-fp4@1` |
+| Provider config | `openrouter-relace-glm-5-3-flash-fp4@1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
-| Effective upstream | `DeepInfra`; exact tag `deepinfra/fp4` |
+| Effective upstream | `Relace`; exact tag `relace/fp4` |
 | Quantization | `fp4` |
 | Fallback | disabled |
 | Required parameters | enabled |
@@ -46,12 +46,12 @@ reconfigured by this work.
 | Tools | `tools` and `tool_choice` supported; sequential execution only |
 | Empty tool catalog | omitted |
 | Finalization | exact Core finalization instruction; `tools` and `tool_choice` omitted |
-| Accounting | `openrouter-deepinfra-glm-5-3-flash-public-list-price@1`; conservative list prices 150,000 / 500,000 micro-USD per million input/output tokens |
+| Accounting | `openrouter-relace-glm-5-3-flash-public-list-price@1`; public list prices 90,000 / 300,000 micro-USD per million input/output tokens |
 | Remote data | Core-classified `public` only |
 | Certificate lifetime | 30 days after a successful signed run |
 
 The public OpenRouter catalogs observed on 2026-09-11 report that GLM 5.3 Flash
-accepts text, image, and video input and returns text. The exact DeepInfra FP4
+accepts text, image, and video input and returns text. The exact Relace FP4
 endpoint advertises `tools`, `tool_choice`, `reasoning`, `reasoning_effort`, and
 `max_tokens`, supports `tool_choice.auto` and `tool_choice.none`, and appears in
 the ZDR catalog. These mutable observations grant no authority by themselves;
@@ -62,7 +62,7 @@ Every request carries this non-permissive router object:
 ```json
 {
   "provider": {
-    "only": ["deepinfra/fp4"],
+    "only": ["relace/fp4"],
     "allow_fallbacks": false,
     "require_parameters": true,
     "data_collection": "deny",
@@ -74,8 +74,8 @@ Every request carries this non-permissive router object:
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@61` and the certified
-execution TCB is manifest 51. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@62` and the certified
+execution TCB is manifest 52. The exact checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |
@@ -83,7 +83,7 @@ this table summarizes its security objectives.
 | Model identity | alias, resolved slug, expiration, reasoning metadata, endpoint and ZDR identities match the exact candidate |
 | Request translation | exact model/routing/reasoning values; unsupported or relaxed controls rejected before transport |
 | Streaming | bounded SSE ordering, terminal usage, finish reason and router metadata validated |
-| Effective upstream | response provider and terminal attempt metadata prove one successful DeepInfra route |
+| Effective upstream | response provider and terminal attempt metadata prove one successful Relace route |
 | Tool calls | fragmented arguments, ids, names and every contiguous index retained and validated |
 | Parallel proposals | every proposal journaled and paired; no parallel execution |
 | Continuation | assistant tool-call messages and matching results retained in encrypted provider-private state |
@@ -120,7 +120,7 @@ The receipt must bind:
 - exact target digest and run nonce;
 - main-model, endpoint, ZDR and combined catalog digests;
 - resolved model and reasoning observations;
-- DeepInfra FP4 identity and capacity;
+- Relace FP4 identity and capacity;
 - request/result counts;
 - usage and private-state events for every generation;
 - absence of normalized provider errors.

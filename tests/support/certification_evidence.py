@@ -72,7 +72,7 @@ def fixture_live_receipt(provider_id, *, nonce):
             "finalization_tool_catalog_mode": "omitted",
             "max_completion_tokens": 131_072,
             "supports_tool_choice_none": True,
-            "upstream_id": "deepinfra/fp4",
+            "upstream_id": "relace/fp4",
         }
     return {
         **common,

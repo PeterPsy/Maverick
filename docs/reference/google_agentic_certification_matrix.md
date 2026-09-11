@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-11
-Matrix revision: `2026-09-11-r61-openrouter-glm-5-3-flash-tcb51`
+Matrix revision: `2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==54`
+Adapter: `maverick-hosted-tool-loop==55`
 
 ## P6 candidate checkpoint
 
-Suite 61 / TCB manifest 51 / hosted adapter 54 / recipe 26 retain the P5
+Suite 62 / TCB manifest 52 / hosted adapter 55 / recipe 26 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -685,9 +685,9 @@ hashes plus allowlisted diagnostics. This collector hardening does not change
 the hosted adapter artifact or Codex revision-15 artifact. No certificate,
 activation, binding, canary, or release is implied by the identity advance.
 
-Revision 65 pins hosted adapter 54 and governed recipe 26 while advancing to
-suite 61, matrix `2026-09-11-r61-openrouter-glm-5-3-flash-tcb51`, and TCB
-manifest v51. The provider-step output allowance is now 4,096 tokens, while
+Revision 66 pins hosted adapter 55 and governed recipe 26 while advancing to
+suite 62, matrix `2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52`, and TCB
+manifest v52. The provider-step output allowance is now 4,096 tokens, while
 the 16,384-token turn ceiling still protects both the finalization attempt and
 its sole recovery. This removes the artificial 2,048-token ceiling observed
 to exhaust a reasoning-heavy hosted response before it could finalize. The

@@ -701,14 +701,14 @@ second model on an existing adapter is a config/recipe/profile registration,
 not a model-specific factory, decoder, or router-code change.
 
 The contained OpenRouter preview uses Chat Completions v1, GLM 5.3 Flash,
-and the exact `deepinfra/fp4` endpoint. Request routing uses the endpoint
+and the exact `relace/fp4` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
 accepted as complete. The current contained P6 candidate definitions are Google
-revision 65 and OpenRouter GLM revision 1. They use
-`maverick-hosted-tool-loop==54`; the GLM profile is bound to
-`openrouter-deepinfra-glm-5-3-flash-fp4@1`. Historical profiles for other
-targets grant no authority. Their suite-61 certification manifests retain distinct
+revision 66 and OpenRouter GLM revision 1. They use
+`maverick-hosted-tool-loop==55`; the GLM profile is bound to
+`openrouter-relace-glm-5-3-flash-fp4@1`. Historical profiles for other
+targets grant no authority. Their suite-62 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 

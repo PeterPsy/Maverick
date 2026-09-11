@@ -22,7 +22,7 @@ from core.providers.openrouter_agentic_models import (
 )
 from core.providers.maverick_agent_builtins import (
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
+    OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
 from core.providers.maverick_agent_onboarding import (
     MaverickAgentProfilePublication,
@@ -38,7 +38,7 @@ from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = (
-    "agentic-profile-openrouter-glm-5-3-flash-deepinfra-fp4"
+    "agentic-profile-openrouter-glm-5-3-flash-relace-fp4"
 )
 OPENROUTER_AGENTIC_PROFILE_REVISION = "1"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ()
@@ -81,7 +81,7 @@ def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
 
 def openrouter_agentic_routing_constraint() -> RoutingConstraint:
     """Pin every OpenRouter router control used by the certified profile."""
-    return OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.routing_constraint
+    return OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.routing_constraint
 
 
 def openrouter_agentic_preview_publication(
@@ -93,7 +93,7 @@ def openrouter_agentic_preview_publication(
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
-        display_name="OpenRouter GLM 5.3 Flash · DeepInfra FP4 · Full Workspace preview",
+        display_name="OpenRouter GLM 5.3 Flash · Relace FP4 · Full Workspace preview",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,
@@ -126,9 +126,9 @@ def openrouter_agentic_preview_publication(
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE.tool_contract_revision
         ),
         context_policy=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.context_policy,
-        provider_config_id=OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.config_id,
-        provider_config_revision=OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.revision,
-        provider_config_digest=OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.digest,
+        provider_config_id=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.config_id,
+        provider_config_revision=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.revision,
+        provider_config_digest=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.digest,
         protocol_adapter_id=OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_id,
         protocol_adapter_version=(
             OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_version
@@ -136,7 +136,7 @@ def openrouter_agentic_preview_publication(
     )
     return MaverickAgentProfilePublication(
         adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-        provider_config=OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
+        provider_config=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
         recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         profile=definition,
         rollout_status="preview",

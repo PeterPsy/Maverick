@@ -118,8 +118,8 @@ every other invalid identity remain fail-closed. It also binds Antigravity's
 provider-observed tool `ERROR` state and the exact, dedicated AppArmor profile
 plus root-owned Bubblewrap digest needed for its nested terminal sandbox,
 without changing Codex's sandbox launcher. The current successor binds hosted
-adapter 54, Google recipe 26/profile 65, OpenRouter GLM recipe 27/profile 1,
-Antigravity adapter 5 / recipe 4, TCB 51 and Codex artifact revision 15. Codex revision 15 is the active verified
+adapter 55, Google recipe 26/profile 66, OpenRouter GLM recipe 27/profile 1,
+Antigravity adapter 5 / recipe 4, TCB 52 and Codex artifact revision 15. Codex revision 15 is the active verified
 profile, revision 14 remains immutable history, and a remote-provider
 certification worker must not restart, migrate, or reissue the Codex runtime or
 certificate.
@@ -137,8 +137,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v61 matrix revision
-  `2026-09-11-r61-openrouter-glm-5-3-flash-tcb51` declared by the provider
+- the dated suite-v62 matrix revision
+  `2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -193,8 +193,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-61 manifests bind matrix revision
-`2026-09-11-r61-openrouter-glm-5-3-flash-tcb51`. OpenRouter uses suite id
+All suite-62 manifests bind matrix revision
+`2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
@@ -340,7 +340,7 @@ model catalog, official model endpoint catalog, and ZDR endpoint catalog in one
 bounded parallel window. It fails closed unless the main record resolves to
 `z-ai/glm-5.3-flash-20260826`, has exact catalog expiration `2098-12-31`, and
 advertises exactly `max`/`high`/`low` with default `max` and
-`mandatory=true`. The exact `deepinfra/fp4` record must be active, FP4,
+`mandatory=true`. The exact `relace/fp4` record must be active, FP4,
 ZDR-listed, have enough completion
 and total input-plus-output context capacity, and support every endpoint-gated
 translated parameter actually present. The current record reports

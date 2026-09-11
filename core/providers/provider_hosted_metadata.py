@@ -205,8 +205,8 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                 output_modalities=["text"],
                 upstream_provider_options=[
                     _openrouter_upstream(
-                        "deepinfra/fp4",
-                        "DeepInfra",
+                        "relace/fp4",
+                        "Relace",
                         quantization="fp4",
                         context_length=1048576,
                         max_completion_tokens=131072,

@@ -497,7 +497,7 @@ request object.
 
 OpenRouter also has one separate contained, uncertified Full Workspace agentic
 preview. It pins
-`z-ai/glm-5.3-flash` to `deepinfra/fp4` through
+`z-ai/glm-5.3-flash` to `relace/fp4` through
 `openrouter-chat-completions` v1 and the shared `maverick-tool-loop`. Unlike
 plain hosted chat, this profile does not inherit workspace OpenRouter routing
 preferences: its immutable routing constraint always disables fallback,

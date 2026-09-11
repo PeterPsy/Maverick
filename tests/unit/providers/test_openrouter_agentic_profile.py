@@ -33,7 +33,7 @@ from core.providers.openrouter_agentic_profile import (
 from core.providers.openrouter_agentic_models import OPENROUTER_AGENTIC_MODEL_REVISION
 from core.providers.maverick_agent_builtins import (
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
+    OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
@@ -77,7 +77,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
 
         self.assertEqual(status.rollout_status, "preview")
         self.assertEqual(profile.revision, "1")
-        self.assertEqual(profile.adapter_version_constraint, "==54")
+        self.assertEqual(profile.adapter_version_constraint, "==55")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
             ("cli", "mcp", "app-interface", "core-capability"),
@@ -94,9 +94,9 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 profile.provider_config_digest,
             ),
             (
-                OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.config_id,
-                OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.revision,
-                OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.digest,
+                OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.config_id,
+                OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.revision,
+                OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.digest,
             ),
         )
         self.assertEqual(
@@ -109,8 +109,16 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_version,
             ),
         )
+        self.assertEqual(
+            OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.token_cost_policy.input_microusd_per_million_tokens,
+            90_000,
+        )
+        self.assertEqual(
+            OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.token_cost_policy.output_microusd_per_million_tokens,
+            300_000,
+        )
         routing = profile.routing_constraint
-        self.assertEqual(routing.allowed_upstream_ids, ("deepinfra/fp4",))
+        self.assertEqual(routing.allowed_upstream_ids, ("relace/fp4",))
         self.assertFalse(routing.allow_fallbacks)
         self.assertTrue(routing.require_parameters)
         self.assertEqual(routing.data_collection_policy, "deny")

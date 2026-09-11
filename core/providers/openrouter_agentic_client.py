@@ -57,10 +57,10 @@ class OpenRouterAgenticClient:
             or resolved_model_ids is None
         ):
             from core.providers.maverick_agent_builtins import (
-                OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
+                OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
             )
 
-            builtin_config = OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG
+            builtin_config = OPENROUTER_RELACE_GLM_PROVIDER_CONFIG
         self.transport = transport or OpenRouterAgenticHttpTransport()
         self.token_cost_policy = token_cost_policy or (
             None if builtin_config is None else builtin_config.token_cost_policy

@@ -74,7 +74,7 @@ The nested-terminal follow-up passed the 16 ledger/transport tests separately.
 The original diagnostic in this dated note has been superseded by the
 2026-09-11 GLM 5.3 Flash target. A credential-free GET of the official
 [OpenRouter model endpoint catalog](https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flash/endpoints)
-reports the exact DeepInfra FP4 endpoint with 1,048,576 context, 131,072
+reports the exact Relace FP4 endpoint with 1,048,576 context, 131,072
 completion capacity, tool calling, `tool_choice.none=true`, and ZDR listing.
 The main catalog resolves the alias to `z-ai/glm-5.3-flash-20260826` and
 advertises mandatory `max`/`high`/`low` reasoning with default `max`.

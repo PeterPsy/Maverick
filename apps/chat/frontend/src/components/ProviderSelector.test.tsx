@@ -73,7 +73,7 @@ const providerOptions: ProviderItem[] = [
     workspace_profile_binding_id: "binding-openrouter",
     execution_family: "maverick_agent",
     selectable: true,
-    provider_detail: "Provider: OpenRouter · Destination: OpenRouter via DeepInfra FP4",
+    provider_detail: "Provider: OpenRouter · Destination: OpenRouter via Relace FP4",
     profile_detail: "Profile: openrouter@1 · Recipe: openrouter@1 · Full Workspace: codex-baseline-v20",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [

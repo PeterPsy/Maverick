@@ -98,7 +98,7 @@ operation.
 - Live certificate, credential, definition, workspace binding, execution mode,
   health, and egress state may only narrow authority.
 - OpenRouter remains pinned to `z-ai/glm-5.3-flash` through
-  `deepinfra/fp4`, with fallback disabled, required parameters, denied data
+  `relace/fp4`, with fallback disabled, required parameters, denied data
   collection, required ZDR, and verified router metadata. Its main catalog must
   resolve `z-ai/glm-5.3-flash-20260826`, retain catalog expiration
   `2098-12-31`, and advertise exactly `max`/`high`/`low`, default `max`, and

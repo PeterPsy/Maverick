@@ -1346,3 +1346,21 @@ Artifact **10119759130** has zip SHA256
 `2593b0580c2ab99a7f56df5bd2c897021a26e5534cffa9458e144937ea5ac64b`.
 The push run did not install or launch MaverickMac; permission state and exact
 physical acceptance remain separate gates.
+
+#### v31 storage-neutral install delivery (2026-09-11)
+
+Before installation, GitHub reported that the account had consumed 100% of its
+0.5 GB included Actions storage. Although the Mac runner is self-hosted, the
+existing install dispatch still created and uploaded a redundant 140+ MB ZIP
+before consuming the signed local `.app`.
+
+An `install_and_open=true` dispatch now skips ZIP packaging and artifact upload.
+Push validations and manual build-only dispatches continue to publish the
+normal artifact. The full release build, test, runtime-catalog, signing and
+bidirectional identity gates still precede installation, and only an explicit
+workflow dispatch can reach the unchanged install step.
+
+A Python workflow regression raises the expected install-run total to **29
+Python tests**. The workflow-only publishing commit skips its automatic push
+run to avoid the storage use it is intended to remove; the following explicit
+install run is the authoritative validation gate.

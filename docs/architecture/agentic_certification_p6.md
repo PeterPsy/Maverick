@@ -12,8 +12,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current contained successor uses suite 60 / TCB
-50 / hosted adapter 53 / recipe 26 / Google profile 64 / OpenRouter profile 63,
+That pass is historical. The current contained successor uses suite 61 / TCB
+51 / hosted adapter 54 / Google recipe 26 and profile 65 / OpenRouter GLM
+recipe 27 and profile 1,
 plus Antigravity native adapter 5, native recipe 4, and Codex revision 15. It
 requires its own exact-source operator record before signing or release. The
 source tree does not treat a mocked probe receipt or this status paragraph as
@@ -313,9 +314,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 53,
-   recipe 26, Google profile 64, OpenRouter profile 63, suite 60, canonical
-   TCB manifest 50, Antigravity adapter 5 / recipe 4, and active Codex revision
+1. **Candidate identities and deterministic corpus:** hosted adapter 54,
+   Google recipe 26/profile 65, OpenRouter GLM recipe 27/profile 1, suite 61,
+   canonical TCB manifest 51, Antigravity adapter 5 / recipe 4, and active Codex revision
    15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.
@@ -388,14 +389,15 @@ receipt's target is derived using the verified API/model observations.
 OpenRouter preflight reads three official surfaces in one bounded parallel
 window: `/api/v1/models`, the exact model endpoint catalog, and the ZDR endpoint
 catalog. The main record must resolve to
-`deepseek/deepseek-v4-flash-20260423`, be unexpired, and advertise exactly
-`xhigh`/`high` with default `high` and `mandatory=false`. The DeepInfra FP8
+`z-ai/glm-5.3-flash-20260826`, retain the exact `2098-12-31` catalog expiration,
+and advertise exactly `max`/`high`/`low` with default `max` and
+`mandatory=true`. The DeepInfra FP4
 endpoint must remain active, ZDR-listed, sufficiently large, and support every
-parameter actually sent. Because its current catalog reports
-`supports_tool_choice.none=false`, finalization omits both `tools` and
+parameter actually sent. Its current catalog reports
+`supports_tool_choice.none=true`; finalization nevertheless omits both `tools` and
 `tool_choice`; exploration alone sends a nonempty catalog with `auto`. The live
-receipt binds the third-record digest and observed reasoning fields. With two
-certified efforts, its bounded probe requires eight generations and six real
+receipt binds the third-record digest and observed reasoning fields. With three
+certified efforts, its bounded probe requires twelve generations and nine real
 filesystem-list results.
 
 The separate natural observation report covers all 14 plan scenarios at each

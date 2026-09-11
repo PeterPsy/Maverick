@@ -23,11 +23,11 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
     const onSelectProvider = vi.fn();
     const provider: ProviderItem = {
       provider_id: "contained-session:binding-openrouter",
-      label: "OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · fake-data preview",
-      description: "openrouter → deepinfra/fp8 · openrouter-chat-completions-v1",
+      label: "OpenRouter GLM 5.3 Flash · DeepInfra FP4 · fake-data preview",
+      description: "openrouter → deepinfra/fp4 · openrouter-chat-completions-v1",
       provider_role: "runtime_engine",
       status: "contained",
-      default_model_family: "deepseek/deepseek-v4-flash",
+      default_model_family: "z-ai/glm-5.3-flash",
       workspace_profile_binding_id: "binding-openrouter",
       agentic_containment_status: "NO-GO",
       agentic_containment_reason: "remote_agentic_attestation_unavailable",
@@ -35,8 +35,8 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
       agentic_data_destination: {
         provider_id: "openrouter",
         endpoint_id: "openrouter-chat-completions-v1",
-        upstream_provider_ids: ["deepinfra/fp8"],
-        display_label: "openrouter → deepinfra/fp8 · openrouter-chat-completions-v1",
+        upstream_provider_ids: ["deepinfra/fp4"],
+        display_label: "openrouter → deepinfra/fp4 · openrouter-chat-completions-v1",
       },
       agentic_egress_policy: {
         policy_id: "remote-agentic-contained",
@@ -83,7 +83,7 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
     });
 
     const selector = container.querySelector<HTMLButtonElement>(
-      '[aria-label^="Model: OpenRouter DeepSeek V4 Flash"]',
+      '[aria-label^="Model: OpenRouter GLM 5.3 Flash"]',
     );
     expect(selector).toBeInstanceOf(HTMLButtonElement);
     expect(selector?.disabled).toBe(true);
@@ -92,7 +92,7 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
       '[aria-label^="NO-GO agentic profile"]',
     );
     expect(governance?.textContent).toContain("NO-GO");
-    expect(governance?.textContent).toContain("openrouter → deepinfra/fp8");
+    expect(governance?.textContent).toContain("openrouter → deepinfra/fp4");
     expect(governance?.title).toContain("remote-agentic-contained@2");
     expect(governance?.title).toContain("data collection deny · ZDR required");
     expect(governance?.title).toContain("certificate revoked");

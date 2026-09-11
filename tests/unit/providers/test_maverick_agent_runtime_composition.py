@@ -85,7 +85,7 @@ class MaverickAgentRuntimeCompositionTest(unittest.TestCase):
         self.assertEqual(len(publications), 2)
         self.assertEqual(
             {publication.profile.model_id for publication in publications},
-            {"gemini-3.6-flash", "deepseek/deepseek-v4-flash"},
+            {"gemini-3.6-flash", "z-ai/glm-5.3-flash"},
         )
         for publication in publications:
             with self.subTest(profile=publication.profile.definition_id):

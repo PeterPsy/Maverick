@@ -185,13 +185,16 @@ class AgenticProfileApiTest(unittest.TestCase):
             for profile in payload["agentic_profiles"]["items"]
         }
         for provider_id in ("google-ai-studio", "openrouter"):
-            self.assertEqual(profiles[provider_id]["default_reasoning_effort"], "high")
+            self.assertEqual(
+                profiles[provider_id]["default_reasoning_effort"],
+                "high" if provider_id == "google-ai-studio" else "max",
+            )
             self.assertEqual(
                 [option["effort"] for option in profiles[provider_id]["supported_reasoning_efforts"]],
                 (
                     ["minimal", "low", "medium", "high"]
                     if provider_id == "google-ai-studio"
-                    else ["xhigh", "high"]
+                    else ["max", "high", "low"]
                 ),
             )
             self.assertFalse(profiles[provider_id]["selectable"])

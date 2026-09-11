@@ -159,7 +159,7 @@ class ProviderSchemaTest(unittest.TestCase):
     def test_openrouter_metadata_exposes_requested_models_without_secret_refs(self) -> None:
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 23, 12, 0, tzinfo=UTC))
         openrouter = next(definition for definition in definitions if definition.provider_id == "openrouter")
-        deepseek = next(model for model in openrouter.model_options if model.model_id == "deepseek/deepseek-v4-flash")
+        glm = next(model for model in openrouter.model_options if model.model_id == "z-ai/glm-5.3-flash")
         payload = provider_payload(openrouter)
 
         self.assertEqual(openrouter.label, "OpenRouter")
@@ -169,30 +169,32 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertEqual([option.model_id for option in openrouter.model_options], [
             "google/gemma-4-31b-it:free",
             "nvidia/nemotron-3-ultra-550b-a55b:free",
-            "deepseek/deepseek-v4-flash",
+            "z-ai/glm-5.3-flash",
             "hexgrad/kokoro-82m",
         ])
         self.assertEqual([option.label for option in openrouter.model_options], [
             "Gemma 4 31B (free)",
             "Nemotron 3 Ultra (free)",
-            "DeepSeek V4 Flash",
+            "GLM 5.3 Flash",
             "Kokoro 82M",
         ])
         self.assertEqual(openrouter.model_options[0].input_modalities, ["text", "image", "video", "pdf"])
         self.assertEqual(openrouter.model_options[1].input_modalities, ["text", "pdf"])
-        self.assertEqual(openrouter.model_options[2].input_modalities, ["text", "pdf"])
+        self.assertEqual(
+            openrouter.model_options[2].input_modalities,
+            ["text", "image", "video"],
+        )
         self.assertEqual(openrouter.model_options[3].input_modalities, ["text"])
         self.assertEqual(openrouter.model_options[3].output_modalities, ["speech"])
-        self.assertEqual(deepseek.default_reasoning_effort, "high")
+        self.assertEqual(glm.default_reasoning_effort, "max")
         self.assertEqual(
-            [option.effort for option in deepseek.supported_reasoning_efforts],
-            ["xhigh", "high"],
+            [option.effort for option in glm.supported_reasoning_efforts],
+            ["max", "high", "low"],
         )
         self.assertEqual(payload["model_options"][0]["input_modalities"], ["text", "image", "video", "pdf"])
         self.assertEqual(payload["model_options"][0]["upstream_provider_options"][0]["provider_id"], "google-ai-studio")
         self.assertEqual(payload["model_options"][1]["upstream_provider_options"][0]["provider_id"], "nvidia")
-        self.assertEqual(payload["model_options"][2]["upstream_provider_options"][0]["provider_id"], "digitalocean")
-        self.assertEqual(payload["model_options"][2]["upstream_provider_options"][1]["provider_id"], "deepinfra/fp8")
+        self.assertEqual(payload["model_options"][2]["upstream_provider_options"][0]["provider_id"], "deepinfra/fp4")
         self.assertEqual(payload["model_options"][3]["upstream_provider_options"][0]["provider_id"], "deepinfra")
         self.assertEqual(openrouter.credential_requirements[0].secret_alias_or_logical_name, "openrouter_api_key")
         self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])

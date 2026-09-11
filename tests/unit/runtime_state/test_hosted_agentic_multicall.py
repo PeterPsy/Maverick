@@ -19,7 +19,7 @@ from core.providers.openrouter_agentic_client import (
 )
 from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
@@ -40,7 +40,7 @@ GOOGLE_REQUEST_COST_ESTIMATOR = (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 OPENROUTER_REQUEST_COST_ESTIMATOR = (
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 
 

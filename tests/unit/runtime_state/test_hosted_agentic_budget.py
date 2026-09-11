@@ -15,7 +15,7 @@ from core.providers.google_agentic_profile import (
 )
 from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_state import (
     encode_openrouter_chat_state,
@@ -33,14 +33,14 @@ from core.runtime.hosted_harness_recipes import (
 )
 
 GOOGLE_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(GOOGLE_INTERACTIONS_PROVIDER_CONFIG, GOOGLE_GOVERNED_WORKSPACE_RECIPE)
-OPENROUTER_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(OPENROUTER_DEEPINFRA_PROVIDER_CONFIG, OPENROUTER_GOVERNED_WORKSPACE_RECIPE)
+OPENROUTER_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG, OPENROUTER_GOVERNED_WORKSPACE_RECIPE)
 
 
 GOOGLE_REQUEST_COST_ESTIMATOR = (
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 OPENROUTER_REQUEST_COST_ESTIMATOR = (
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 
 
@@ -273,8 +273,8 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 )
 
     def test_data_driven_pricing_can_finalize_above_the_old_fixed_reserve(self) -> None:
-        config = replace(OPENROUTER_DEEPINFRA_PROVIDER_CONFIG, token_cost_policy=replace(
-            OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy,
+        config = replace(OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG, token_cost_policy=replace(
+            OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.token_cost_policy,
             input_microusd_per_million_tokens=3_000_000,
             output_microusd_per_million_tokens=5_000_000,
         ))
@@ -293,8 +293,8 @@ class HostedAgenticBudgetTest(unittest.TestCase):
         from core.providers.errors import AgenticProfileError
         from core.runtime.hosted_finalization_policy import validate_finalization_resources
 
-        config = replace(OPENROUTER_DEEPINFRA_PROVIDER_CONFIG, token_cost_policy=replace(
-            OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy,
+        config = replace(OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG, token_cost_policy=replace(
+            OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.token_cost_policy,
             input_microusd_per_million_tokens=3_000_000,
         ))
         with self.assertRaisesRegex(AgenticProfileError, "finalization_budget_insufficient"):

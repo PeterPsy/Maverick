@@ -114,9 +114,9 @@ class CertificationBehaviorTest(unittest.TestCase):
                     )
                 for field, value in (
                     ("catalog_reasoning_efforts", ["minimal", "low", "medium", "high"]),
-                    ("catalog_default_reasoning_effort", "xhigh"),
-                    ("catalog_reasoning_mandatory", True),
-                    ("resolved_model_id", "deepseek/deepseek-v4-flash"),
+                    ("catalog_default_reasoning_effort", "high"),
+                    ("catalog_reasoning_mandatory", False),
+                    ("resolved_model_id", "z-ai/glm-5.3-flash"),
                 ):
                     with self.subTest(field=field), self.assertRaises(
                         CapabilityCertificateError

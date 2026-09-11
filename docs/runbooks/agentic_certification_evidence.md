@@ -118,8 +118,8 @@ every other invalid identity remain fail-closed. It also binds Antigravity's
 provider-observed tool `ERROR` state and the exact, dedicated AppArmor profile
 plus root-owned Bubblewrap digest needed for its nested terminal sandbox,
 without changing Codex's sandbox launcher. The current successor binds hosted
-adapter 53, recipe 26, Google profile 64, OpenRouter profile 63, Antigravity
-adapter 5 / recipe 4, TCB 50 and Codex artifact revision 15. Codex revision 15 is the active verified
+adapter 54, Google recipe 26/profile 65, OpenRouter GLM recipe 27/profile 1,
+Antigravity adapter 5 / recipe 4, TCB 51 and Codex artifact revision 15. Codex revision 15 is the active verified
 profile, revision 14 remains immutable history, and a remote-provider
 certification worker must not restart, migrate, or reissue the Codex runtime or
 certificate.
@@ -137,8 +137,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v60 matrix revision
-  `2026-09-11-r60-p6-hosted-finalization-runway-tcb50` declared by the provider
+- the dated suite-v61 matrix revision
+  `2026-09-11-r61-openrouter-glm-5-3-flash-tcb51` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -164,7 +164,7 @@ The default is fixture-only, even if ambient environment enables live probes:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 59 \
+  --suite-version 61 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/google-fixtures.json"
@@ -176,7 +176,7 @@ runner but its own exact adapter bundle and suite id:
 ```bash
 python3 scripts/run_agentic_certification.py collect \
   --suite-id maverick-antigravity-native-agentic-contract \
-  --suite-version 59 \
+  --suite-version 61 \
   --adapter-artifact-digest "$ANTIGRAVITY_ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --output "$CERTIFICATION_OUTPUT/antigravity-fixtures.json"
@@ -193,8 +193,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-60 manifests bind matrix revision
-`2026-09-11-r60-p6-hosted-finalization-runway-tcb50`. OpenRouter uses suite id
+All suite-61 manifests bind matrix revision
+`2026-09-11-r61-openrouter-glm-5-3-flash-tcb51`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
@@ -251,8 +251,9 @@ probe requires two sequential tool rounds plus a final response at its single
 certified effort, for exactly three provider requests. For both providers the
 last request must carry the exact Core finalization instruction and no callable
 tool catalog: OpenRouter omits both `tools` and `tool_choice`, while Google
-omits `tools`. OpenRouter covers exactly `xhigh` and `high`, for eight provider
-requests and six filesystem results. A whitespace-only final fails the probe. Requests are
+omits `tools`. OpenRouter covers exactly `max`, `high`, and `low`, for twelve
+provider requests and nine filesystem results. A whitespace-only final fails
+the probe. Requests are
 paced (one second by default) so the probe itself does not justify diagnosing a
 quota incident. A Google failure must preserve the redaction-safe distinction
 among `quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not
@@ -337,14 +338,14 @@ fixture verification neither performs this deployment nor authorizes live writes
 Before its first completion request, the OpenRouter probe must fetch the main
 model catalog, official model endpoint catalog, and ZDR endpoint catalog in one
 bounded parallel window. It fails closed unless the main record resolves to
-`deepseek/deepseek-v4-flash-20260423`, is unexpired, and advertises exactly
-`xhigh`/`high` with default `high` and `mandatory=false`. The exact
-`deepinfra/fp8` record must be active, FP8, ZDR-listed, have enough completion
+`z-ai/glm-5.3-flash-20260826`, has exact catalog expiration `2098-12-31`, and
+advertises exactly `max`/`high`/`low` with default `max` and
+`mandatory=true`. The exact `deepinfra/fp4` record must be active, FP4,
+ZDR-listed, have enough completion
 and total input-plus-output context capacity, and support every endpoint-gated
 translated parameter actually present. The current record reports
-`supports_tool_choice.none=false`; that observation is retained, but it is not
-misrepresented as a capability because finalization sends neither tool-control
-field. The request must not reintroduce `parallel_tool_calls` while the endpoint
+`supports_tool_choice.none=true`; finalization still sends neither tool-control
+field. The request must not introduce `parallel_tool_calls` while the endpoint
 does not declare it. The required set is derived from the translated completion
 payload rather than maintained as a second hard-coded parameter list.
 OpenRouter may stream more than one indexed proposal despite that omission. The
@@ -409,7 +410,7 @@ live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
 separate local identity. Since manifest v9 the transitive inventory is executable;
-manifest v50 is the current collector-isolated, stage-diagnostic,
+manifest v51 is the current collector-isolated, stage-diagnostic,
 nested-sandbox-bound and hosted-finalization-runway candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package

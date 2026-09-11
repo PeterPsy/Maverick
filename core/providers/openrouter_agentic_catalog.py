@@ -26,9 +26,11 @@ from core.providers.openrouter_agentic_catalog_records import (
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+    OPENROUTER_AGENTIC_MODEL_EXPIRATION_DATE,
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_MODEL_REVISION,
     OPENROUTER_AGENTIC_REASONING_EFFORTS,
+    OPENROUTER_AGENTIC_REASONING_MANDATORY,
     OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
     OpenRouterAgenticProtocolError,
 )
@@ -146,8 +148,10 @@ def validate_openrouter_agentic_catalog(
     metadata_context = validate_model_metadata_record(
         metadata_record,
         resolved_model_id=OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
+        expiration_date=OPENROUTER_AGENTIC_MODEL_EXPIRATION_DATE,
         reasoning_efforts=OPENROUTER_AGENTIC_REASONING_EFFORTS,
         default_reasoning_effort=OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+        reasoning_mandatory=OPENROUTER_AGENTIC_REASONING_MANDATORY,
         request_reasoning_effort=request.reasoning_effort,
         required_context_tokens=required_context_tokens,
     )
@@ -196,7 +200,7 @@ def validate_openrouter_agentic_catalog(
         "resolved_model_id": OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
         "reasoning_efforts": OPENROUTER_AGENTIC_REASONING_EFFORTS,
         "default_reasoning_effort": OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
-        "reasoning_mandatory": False,
+        "reasoning_mandatory": OPENROUTER_AGENTIC_REASONING_MANDATORY,
         "supported_parameters": tuple(sorted(model_parameters & zdr_parameters)),
         "model_metadata_record_digest": canonical_digest(
             model_metadata_identity(metadata_record)

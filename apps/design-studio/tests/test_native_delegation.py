@@ -212,7 +212,7 @@ class NativeDelegationTests(unittest.TestCase):
             arguments = {
                 "brief": "Create a calm portfolio landing page.",
                 "idempotency_key": "portfolio-v1",
-                "model": "openrouter/deepseek-v4-flash",
+                "model": "openrouter/glm-5.3-flash",
                 "attachments": [{
                     "name": "logo.svg",
                     "media_type": "image/svg+xml",
@@ -230,7 +230,7 @@ class NativeDelegationTests(unittest.TestCase):
             self.assertEqual(client.put_calls[0]["body"]["content"], visible)
             self.assertEqual(client.run_calls[0]["message"], visible)
             self.assertEqual(client.run_calls[0]["currentPrompt"], visible)
-            self.assertEqual(client.run_calls[0]["model"], "openrouter/deepseek-v4-flash")
+            self.assertEqual(client.run_calls[0]["model"], "openrouter/glm-5.3-flash")
             self.assertNotIn("history", client.run_calls[0])
             self.assertNotIn("system", client.run_calls[0])
             self.assertNotIn("runtime_session_id", client.run_calls[0])
@@ -245,7 +245,7 @@ class NativeDelegationTests(unittest.TestCase):
                 "Create a calm portfolio",
                 "authorized",
                 "content_base64",
-                "openrouter/deepseek",
+                "openrouter/glm",
                 "runtime_session",
             ):
                 self.assertNotIn(forbidden, persisted)

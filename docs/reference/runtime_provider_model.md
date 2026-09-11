@@ -445,8 +445,8 @@ The latency report also exposes an overlapping `prepared_ready` cohort for turns
 ## Hosted Model Providers And Plain Hosted Chat
 
 Provider records distinguish `provider_role` from the lower-level provider `kind`.
-Codex is a `runtime_engine` and remains the default agentic runtime. Groq,
-DeepSeek, and OpenRouter are `model_provider` records for hosted text
+Codex is a `runtime_engine` and remains the default agentic runtime. OpenRouter
+is a `model_provider` record for hosted text
 generation; they are not runtime backends and must not be configured through
 the workspace runtime provider selection path.
 
@@ -459,7 +459,7 @@ Maverick exposes these OpenRouter model options:
 
 - `google/gemma-4-31b-it:free` as `Gemma 4 31B (free)`, with text, image, video, and PDF input metadata
 - `nvidia/nemotron-3-ultra-550b-a55b:free` as `Nemotron 3 Ultra (free)`, with text and PDF input metadata
-- `deepseek/deepseek-v4-flash` as `DeepSeek V4 Flash`, with text and PDF input metadata and paid OpenRouter pricing
+- `z-ai/glm-5.3-flash` as `GLM 5.3 Flash`, with text, image, and video input metadata and paid OpenRouter pricing
 - `hexgrad/kokoro-82m` as `Kokoro 82M`, with text-to-speech metadata and paid OpenRouter pricing
 
 Hosted text providers are enabled through an operator-only hosted activation
@@ -497,15 +497,15 @@ request object.
 
 OpenRouter also has one separate contained, uncertified Full Workspace agentic
 preview. It pins
-`deepseek/deepseek-v4-flash` to `deepinfra/fp8` through
+`z-ai/glm-5.3-flash` to `deepinfra/fp4` through
 `openrouter-chat-completions` v1 and the shared `maverick-tool-loop`. Unlike
 plain hosted chat, this profile does not inherit workspace OpenRouter routing
 preferences: its immutable routing constraint always disables fallback,
 requires parameter support, denies data collection, requires ZDR, and requires
-FP8. It preserves tool-call and reasoning continuation only in encrypted
+FP4. It preserves tool-call and reasoning continuation only in encrypted
 provider-private state. Before transport it checks the main model, exact
-endpoint and ZDR catalogs; the main record must resolve the 20260423 slug and
-advertise exactly `xhigh`/`high` with default `high`. The exact dated evidence and promotion requirements
+endpoint and ZDR catalogs; the main record must resolve the 20260826 slug and
+advertise exactly `max`/`high`/`low` with default `max` and mandatory reasoning. The exact dated evidence and promotion requirements
 are in `docs/reference/openrouter_agentic_certification_matrix.md`.
 
 Speech-output OpenRouter models such as `hexgrad/kokoro-82m` are cataloged in

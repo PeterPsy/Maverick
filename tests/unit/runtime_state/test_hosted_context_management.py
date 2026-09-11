@@ -257,7 +257,7 @@ class HostedContextManagementTest(unittest.TestCase):
             schema_version="1",
             request_id="context-reserve",
             correlation_id="turn-context-reserve",
-            model_id="deepseek/deepseek-v4-flash",
+            model_id="z-ai/glm-5.3-flash",
             reasoning_effort="high",
             content_blocks=(
                 AgenticRequestContentBlock(

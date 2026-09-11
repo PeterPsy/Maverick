@@ -71,19 +71,17 @@ The nested-terminal follow-up passed the 16 ledger/transport tests separately.
 
 ## Public catalog diagnostic, not authenticated live evidence
 
-At `2026-09-06T14:00:15.578253Z`, a credential-free GET of the official
-[OpenRouter model endpoint catalog](https://openrouter.ai/api/v1/models/deepseek/deepseek-v4-flash/endpoints)
-returned DeepInfra FP8 with 1,048,576 context, 65,536 completion capacity and
-USD 0.09/0.18 per million input/output tokens, matching the configured prices.
-However, its `supports_tool_choice.none` is **false**. The existing explicit-none
-catalog contract must reject that record. Do not relabel it supported or remove
-the check solely to obtain success. A tools-omitted finalization design, if
-adopted, needs an explicit protocol-contract change, negative tests, new exact
-candidate identities and real validation.
+The original diagnostic in this dated note has been superseded by the
+2026-09-11 GLM 5.3 Flash target. A credential-free GET of the official
+[OpenRouter model endpoint catalog](https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flash/endpoints)
+reports the exact DeepInfra FP4 endpoint with 1,048,576 context, 131,072
+completion capacity, tool calling, `tool_choice.none=true`, and ZDR listing.
+The main catalog resolves the alias to `z-ai/glm-5.3-flash-20260826` and
+advertises mandatory `max`/`high`/`low` reasoning with default `max`.
 
-Raw public response retained in the private job as
-`openrouter-public-model-catalog.json`, SHA-256
-`5319e9b091a91d36a71654553d669ee5285521edd94b0a244e3e4458d023f716`.
+The response is only mutable public-catalog input. The certification preflight
+must re-fetch and digest the exact main-model, endpoint, and ZDR records before
+every live candidate run.
 This does not establish authenticated routing/ZDR, remaining credit, a provider
 generation, or a successful protocol probe. Pricing observations can expire;
 the worker still needs an effective provider-side price fence before spending.

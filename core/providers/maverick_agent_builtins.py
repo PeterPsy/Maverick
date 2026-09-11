@@ -30,7 +30,7 @@ from core.providers.openrouter_agentic_models import (
 
 
 HOSTED_TOOL_LOOP_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_TOOL_LOOP_ADAPTER_VERSION = "53"
+HOSTED_TOOL_LOOP_ADAPTER_VERSION = "54"
 
 GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
     protocol_adapter_id="google-interactions-protocol",
@@ -93,9 +93,9 @@ GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
     ),
 )
 
-OPENROUTER_DEEPINFRA_PROVIDER_CONFIG = MaverickProviderConfig(
-    config_id="openrouter-deepinfra-fp8",
-    revision="2",
+OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG = MaverickProviderConfig(
+    config_id="openrouter-deepinfra-glm-5-3-flash-fp4",
+    revision="1",
     model_provider_id="openrouter",
     provider_protocol="openrouter-chat-completions",
     provider_api_version="v1",
@@ -106,17 +106,17 @@ OPENROUTER_DEEPINFRA_PROVIDER_CONFIG = MaverickProviderConfig(
         require_parameters=True,
         data_collection_policy="deny",
         require_zdr=True,
-        allowed_quantizations=("fp8",),
+        allowed_quantizations=("fp4",),
     ),
     endpoint_url=OPENROUTER_AGENTIC_ENDPOINT,
     credential_logical_name="openrouter_api_key",
-    data_destination="OpenRouter via DeepInfra FP8",
+    data_destination="OpenRouter via DeepInfra FP4",
     retention_policy="zdr_required",
     token_cost_policy=MaverickTokenCostPolicy(
-        policy_id="openrouter-deepinfra-deepseek-v4-flash-public-list-price",
+        policy_id="openrouter-deepinfra-glm-5-3-flash-public-list-price",
         revision="1",
-        input_microusd_per_million_tokens=90_000,
-        output_microusd_per_million_tokens=180_000,
+        input_microusd_per_million_tokens=150_000,
+        output_microusd_per_million_tokens=500_000,
     ),
     upstream_provider_names=(OPENROUTER_AGENTIC_PROVIDER_NAME,),
     resolved_model_ids=(OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,),
@@ -138,7 +138,7 @@ def builtin_maverick_provider_configs() -> tuple[MaverickProviderConfig, ...]:
     """Return provider endpoint/policy records in deterministic order."""
     return (
         GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
-        OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+        OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
     )
 
 
@@ -166,7 +166,7 @@ __all__ = [
     "HOSTED_TOOL_LOOP_ADAPTER_ID",
     "HOSTED_TOOL_LOOP_ADAPTER_VERSION",
     "OPENROUTER_CHAT_PROTOCOL_ADAPTER",
-    "OPENROUTER_DEEPINFRA_PROVIDER_CONFIG",
+    "OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG",
     "builtin_maverick_agent_publications",
     "builtin_maverick_protocol_adapters",
     "builtin_maverick_provider_configs",

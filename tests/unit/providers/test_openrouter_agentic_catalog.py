@@ -73,7 +73,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                 OPENROUTER_ZDR_ENDPOINT_CATALOG,
             },
         )
-        self.assertEqual(snapshot.upstream_id, "deepinfra/fp8")
+        self.assertEqual(snapshot.upstream_id, "deepinfra/fp4")
 
     def test_exact_model_and_zdr_records_support_the_request(self) -> None:
         zdr_catalog = _zdr_catalog()
@@ -85,7 +85,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
             zdr_catalog=zdr_catalog,
         )
 
-        self.assertEqual(snapshot.upstream_id, "deepinfra/fp8")
+        self.assertEqual(snapshot.upstream_id, "deepinfra/fp4")
         self.assertEqual(
             snapshot.resolved_model_id,
             OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
@@ -94,15 +94,15 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
             snapshot.reasoning_efforts,
             OPENROUTER_AGENTIC_REASONING_EFFORTS,
         )
-        self.assertEqual(snapshot.default_reasoning_effort, "high")
-        self.assertFalse(snapshot.reasoning_mandatory)
+        self.assertEqual(snapshot.default_reasoning_effort, "max")
+        self.assertTrue(snapshot.reasoning_mandatory)
         self.assertEqual(snapshot.supported_parameters, tuple(sorted(SUPPORTED)))
         self.assertEqual(len(snapshot.model_metadata_record_digest), 64)
         self.assertEqual(len(snapshot.model_catalog_record_digest), 64)
         self.assertEqual(len(snapshot.zdr_catalog_record_digest), 64)
-        self.assertFalse(snapshot.supports_tool_choice_none)
+        self.assertTrue(snapshot.supports_tool_choice_none)
         self.assertEqual(snapshot.context_length, 1_048_576)
-        self.assertEqual(snapshot.max_completion_tokens, 65_536)
+        self.assertEqual(snapshot.max_completion_tokens, 131_072)
         self.assertEqual(len(snapshot.catalog_snapshot_digest), 64)
 
     def test_catalog_requires_a_pinned_alias_policy_revision(self) -> None:
@@ -123,9 +123,13 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
 
     def test_model_metadata_pins_resolved_revision_and_reasoning_contract(self) -> None:
         accepted = _models_catalog()
-        accepted["data"][0]["reasoning"]["supported_efforts"] = ["high", "xhigh"]
+        accepted["data"][0]["reasoning"]["supported_efforts"] = [
+            "low",
+            "max",
+            "high",
+        ]
         snapshot = validate_openrouter_agentic_catalog(
-            replace(_request(), reasoning_effort="xhigh"),
+            replace(_request(), reasoning_effort="low"),
             models_catalog=accepted,
             model_catalog=_model_catalog(),
             zdr_catalog=_zdr_catalog(),
@@ -141,14 +145,14 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
             lambda record: record.update(expiration_date="2026-09-08"),
             lambda record: record.pop("expiration_date"),
             lambda record: record.update(reasoning=None),
-            lambda record: record["reasoning"].update(mandatory=True),
+            lambda record: record["reasoning"].update(mandatory=False),
             lambda record: record["reasoning"].update(
                 supported_efforts=["minimal", "low", "medium", "high"]
             ),
             lambda record: record["reasoning"].update(
-                supported_efforts=["xhigh", "high", "high"]
+                supported_efforts=["max", "high", "high"]
             ),
-            lambda record: record["reasoning"].update(default_effort="xhigh"),
+            lambda record: record["reasoning"].update(default_effort="high"),
         )
         for mutate in mutations:
             catalog = _models_catalog()
@@ -245,7 +249,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
             {"tag": "another/fp8"},
             {"model_id": "another/model"},
             {"provider_name": "Another"},
-            {"quantization": "fp4"},
+            {"quantization": "fp8"},
             {"status": None},
             {"status": False},
             {"status": 1},
@@ -347,7 +351,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
             models_catalog=_models_catalog(),
             model_catalog={
                 "data": {
-                    "id": "deepseek/deepseek-v4-flash",
+                    "id": "z-ai/glm-5.3-flash",
                     "endpoints": [model_record],
                 }
             },
@@ -369,7 +373,7 @@ def _request() -> AgenticModelRequest:
         schema_version="1",
         request_id="catalog-preflight",
         correlation_id="catalog-preflight",
-        model_id="deepseek/deepseek-v4-flash",
+        model_id="z-ai/glm-5.3-flash",
         model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
         model_revision_policy="provider_alias",
         reasoning_effort="high",
@@ -421,14 +425,14 @@ def _final_request() -> AgenticModelRequest:
 
 def _record() -> dict[str, object]:
     return {
-        "model_id": "deepseek/deepseek-v4-flash",
+        "model_id": "z-ai/glm-5.3-flash",
         "provider_name": "DeepInfra",
-        "tag": "deepinfra/fp8",
-        "quantization": "fp8",
+        "tag": "deepinfra/fp4",
+        "quantization": "fp4",
         "context_length": 1_048_576,
-        "max_completion_tokens": 65_536,
+        "max_completion_tokens": 131_072,
         "supported_parameters": list(SUPPORTED),
-        "supports_tool_choice": {"auto": True, "none": False},
+        "supports_tool_choice": {"auto": True, "none": True},
         "status": 0,
     }
 
@@ -438,7 +442,7 @@ def _model_catalog() -> dict[str, object]:
     record.pop("model_id")
     return {
         "data": {
-            "id": "deepseek/deepseek-v4-flash",
+            "id": "z-ai/glm-5.3-flash",
             "endpoints": [record],
         }
     }
@@ -448,14 +452,14 @@ def _models_catalog() -> dict[str, object]:
     return {
         "data": [
             {
-                "id": "deepseek/deepseek-v4-flash",
+                "id": "z-ai/glm-5.3-flash",
                 "canonical_slug": OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
-                "context_length": 1_048_576,
-                "expiration_date": None,
+                "context_length": 1_310_720,
+                "expiration_date": "2098-12-31",
                 "reasoning": {
-                    "mandatory": False,
-                    "supported_efforts": ["xhigh", "high"],
-                    "default_effort": "high",
+                    "mandatory": True,
+                    "supported_efforts": ["max", "high", "low"],
+                    "default_effort": "max",
                 },
             }
         ]

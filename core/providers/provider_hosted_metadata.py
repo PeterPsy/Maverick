@@ -185,51 +185,31 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                 ],
             ),
             ProviderModelOption(
-                model_id="deepseek/deepseek-v4-flash",
-                label="DeepSeek V4 Flash",
-                description="OpenRouter paid text model candidate for high-throughput fast_model routing.",
+                model_id="z-ai/glm-5.3-flash",
+                label="GLM 5.3 Flash",
+                description="OpenRouter multimodal model for efficient coding and long-horizon agent tasks.",
                 default_reasoning_effort=OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
                 supported_reasoning_efforts=[
                     ProviderReasoningOption(
                         effort=effort,
-                        label={"xhigh": "Extra high", "high": "High"}[effort],
+                        label={"max": "Maximum", "high": "High", "low": "Low"}[effort],
                         description={
-                            "xhigh": "Maximum supported reasoning depth",
-                            "high": "Default deep reasoning",
+                            "max": "Default maximum reasoning depth",
+                            "high": "High reasoning depth",
+                            "low": "Low reasoning depth",
                         }[effort],
                     )
                     for effort in OPENROUTER_AGENTIC_REASONING_EFFORTS
                 ],
-                input_modalities=["text", "pdf"],
+                input_modalities=["text", "image", "video"],
                 output_modalities=["text"],
                 upstream_provider_options=[
                     _openrouter_upstream(
-                        "digitalocean",
-                        "DigitalOcean",
-                        quantization="unknown",
-                        context_length=1048576,
-                        max_completion_tokens=65536,
-                    ),
-                    _openrouter_upstream(
-                        "deepinfra/fp8",
+                        "deepinfra/fp4",
                         "DeepInfra",
-                        quantization="fp8",
+                        quantization="fp4",
                         context_length=1048576,
-                        max_completion_tokens=65536,
-                    ),
-                    _openrouter_upstream(
-                        "siliconflow/fp8",
-                        "SiliconFlow",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=65536,
-                    ),
-                    _openrouter_upstream(
-                        "venice",
-                        "Venice",
-                        quantization="unknown",
-                        context_length=1048576,
-                        max_completion_tokens=65536,
+                        max_completion_tokens=131072,
                     ),
                 ],
             ),

@@ -28,6 +28,7 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_MODEL_REVISION,
+    OPENROUTER_AGENTIC_REASONING_MANDATORY,
     OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
 )
 from core.providers.openrouter_agentic_profile import (
@@ -233,7 +234,7 @@ def _finish(events, request_count: int, filesystem_result_count: int, catalog, *
         and catalog.reasoning_efforts == CERTIFIED_REASONING_EFFORTS
         and catalog.default_reasoning_effort
         == OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
-        and catalog.reasoning_mandatory is False
+        and catalog.reasoning_mandatory is OPENROUTER_AGENTIC_REASONING_MANDATORY
     )
     print(json.dumps({
         "target_digest": builtin_api_certification_target("openrouter"),

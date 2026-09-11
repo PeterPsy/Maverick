@@ -393,13 +393,13 @@ const openrouterModels = [
     ]
   },
   {
-    model_id: 'deepseek/deepseek-v4-flash',
-    label: 'DeepSeek V4 Flash',
+    model_id: 'z-ai/glm-5.3-flash',
+    label: 'GLM 5.3 Flash',
     description: null,
     default_reasoning_effort: null,
     supported_reasoning_efforts: [],
     upstream_provider_options: [
-      { provider_id: 'deepinfra/fp8', label: 'DeepInfra', tag: 'deepinfra/fp8', quantization: 'fp8' }
+      { provider_id: 'deepinfra/fp4', label: 'DeepInfra', tag: 'deepinfra/fp4', quantization: 'fp4' }
     ]
   },
   {
@@ -675,7 +675,7 @@ assert.ok(html.includes('Inactive provider'));
 assert.ok(html.includes('OpenRouter'));
 assert.ok(html.includes('Gemma 4 31B (free)'));
 assert.ok(html.includes('Nemotron 3 Ultra (free)'));
-assert.ok(html.includes('DeepSeek V4 Flash - OpenRouter'));
+assert.ok(html.includes('GLM 5.3 Flash - OpenRouter'));
 assert.ok(html.includes('Gemini 3.5 Flash - Google AI Studio'));
 assert.ok(html.includes('Gemini 3.1 Flash-Lite - Google AI Studio'));
 assert.ok(!html.includes('<span class="settings-pill">Inactive</span>'));
@@ -692,7 +692,7 @@ const speechSection = html.slice(
   html.indexOf('settings-speech-model-settings-card'),
   html.indexOf('settings-runtime-settings-card')
 );
-assert.ok(hostedTextSection.includes('DeepSeek V4 Flash - OpenRouter'));
+assert.ok(hostedTextSection.includes('GLM 5.3 Flash - OpenRouter'));
 assert.ok(!hostedTextSection.includes('Kokoro 82M'));
 assert.ok(speechSection.includes('Kokoro 82M - OpenRouter'));
 assert.ok(speechSection.includes('data-hosted-provider-group="openrouter"'));
@@ -709,7 +709,7 @@ assert.equal((html.match(/<span class="settings-pill">Active provider<\/span>/g)
 assert.equal((html.match(/<span class="settings-pill">Inactive provider<\/span>/g) || []).length, 1);
 assert.ok(html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
 assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
-assert.ok(html.includes('data-hosted-provider-save="deepseek/deepseek-v4-flash"'));
+assert.ok(html.includes('data-hosted-provider-save="z-ai/glm-5.3-flash"'));
 assert.ok(html.includes('data-hosted-provider-save="hexgrad/kokoro-82m"'));
 assert.ok(html.includes('data-hosted-provider-save="gemini-3.5-flash"'));
 assert.ok(html.includes('data-hosted-provider-save="gemini-3.1-flash-lite"'));

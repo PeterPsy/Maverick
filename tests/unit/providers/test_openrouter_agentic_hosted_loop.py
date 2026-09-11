@@ -10,7 +10,7 @@ from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
 )
 from core.providers.maverick_agent_builtins import (
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
@@ -31,7 +31,7 @@ from tests.unit.providers.test_openrouter_agentic_codec import (
 
 
 OPENROUTER_REQUEST_COST_ESTIMATOR = (
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.token_cost_policy.request_ceiling_microusd
 )
 
 
@@ -84,7 +84,7 @@ class OpenRouterAgenticHostedLoopTest(unittest.TestCase):
             harness.filesystem_list_tool_name,
         )
         self.assertIn(harness.filesystem_marker, json.dumps(transport.payloads[1]))
-        self.assertEqual(transport.payloads[1]["provider"]["only"], ["deepinfra/fp8"])
+        self.assertEqual(transport.payloads[1]["provider"]["only"], ["deepinfra/fp4"])
         serialized = json.dumps([event.payload for event in public_events], default=str)
         self.assertNotIn("private fixture reasoning", serialized)
         self.assertNotIn("private-signature", serialized)

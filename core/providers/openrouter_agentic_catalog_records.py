@@ -119,8 +119,10 @@ def validate_model_metadata_record(
     record: dict[str, object],
     *,
     resolved_model_id: str,
+    expiration_date: str | None,
     reasoning_efforts: tuple[str, ...],
     default_reasoning_effort: str,
+    reasoning_mandatory: bool,
     request_reasoning_effort: str | None,
     required_context_tokens: int,
 ) -> int:
@@ -134,9 +136,8 @@ def validate_model_metadata_record(
     normalized_request_effort = str(request_reasoning_effort or "").strip().lower()
     if (
         record.get("canonical_slug") != resolved_model_id
-        or "expiration_date" not in record
-        or record.get("expiration_date") is not None
-        or reasoning.get("mandatory") is not False
+        or record.get("expiration_date") != expiration_date
+        or reasoning.get("mandatory") is not reasoning_mandatory
         or not isinstance(advertised, list)
         or any(not isinstance(value, str) for value in advertised)
         or len(advertised) != len(reasoning_efforts)

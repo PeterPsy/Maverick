@@ -66,14 +66,14 @@ const providerOptions: ProviderItem[] = [
   },
   {
     provider_id: "agentic:binding-openrouter",
-    label: "DeepSeek V4 Flash",
+    label: "GLM 5.3 Flash",
     description: "OpenRouter",
     status: "active",
-    default_model_family: "deepseek/deepseek-v4-flash",
+    default_model_family: "z-ai/glm-5.3-flash",
     workspace_profile_binding_id: "binding-openrouter",
     execution_family: "maverick_agent",
     selectable: true,
-    provider_detail: "Provider: OpenRouter · Destination: OpenRouter via DeepInfra FP8",
+    provider_detail: "Provider: OpenRouter · Destination: OpenRouter via DeepInfra FP4",
     profile_detail: "Profile: openrouter@1 · Recipe: openrouter@1 · Full Workspace: codex-baseline-v20",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
@@ -167,7 +167,7 @@ describe("ProviderSelector", () => {
 
     expect(element.querySelector('[aria-label="Reasoning for Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
     const openRouterReasoning = element.querySelector<HTMLSelectElement>(
-      '[aria-label="Reasoning for DeepSeek V4 Flash"]',
+      '[aria-label="Reasoning for GLM 5.3 Flash"]',
     );
     expect(openRouterReasoning).toBeInstanceOf(HTMLSelectElement);
 

@@ -97,11 +97,12 @@ operation.
   and policy ceilings once. Existing bindings are never rewritten in place.
 - Live certificate, credential, definition, workspace binding, execution mode,
   health, and egress state may only narrow authority.
-- OpenRouter remains pinned to `deepseek/deepseek-v4-flash` through
-  `deepinfra/fp8`, with fallback disabled, required parameters, denied data
+- OpenRouter remains pinned to `z-ai/glm-5.3-flash` through
+  `deepinfra/fp4`, with fallback disabled, required parameters, denied data
   collection, required ZDR, and verified router metadata. Its main catalog must
-  resolve `deepseek/deepseek-v4-flash-20260423` and advertise exactly
-  `xhigh`/`high`, default `high`, and non-mandatory reasoning.
+  resolve `z-ai/glm-5.3-flash-20260826`, retain catalog expiration
+  `2098-12-31`, and advertise exactly `max`/`high`/`low`, default `max`, and
+  mandatory reasoning.
 - Antigravity authority is connection-scoped to the exact installed artifact,
   adapter/recipe revision 3 and `google` connection. Catalog slugs inherit that
   evidence through immutable projections; missing and retired slugs never

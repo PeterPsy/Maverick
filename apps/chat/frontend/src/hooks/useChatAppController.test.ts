@@ -269,27 +269,27 @@ describe("selectedProviderForSession", () => {
         execution_binding: {
           workspace_binding_id: "binding-remote",
           model_provider_id: "openrouter",
-          model_id: "deepseek/deepseek-v4-flash",
+          model_id: "z-ai/glm-5.3-flash",
           runtime_engine_id: "maverick-tool-loop",
           binding_digest: "remote-digest",
         },
         agentic_containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
         agentic_governance: {
-          display_name: "OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · fake-data preview",
+          display_name: "OpenRouter GLM 5.3 Flash · DeepInfra FP4 · fake-data preview",
           profile_definition_id: "profile-openrouter",
           profile_definition_revision: "12",
           workspace_binding_id: "binding-remote",
           workspace_binding_revision: 4,
           runtime_engine_id: "maverick-tool-loop",
           model_provider_id: "openrouter",
-          model_id: "deepseek/deepseek-v4-flash",
+          model_id: "z-ai/glm-5.3-flash",
           rollout_status: "suspended",
           containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
           data_destination: {
             provider_id: "openrouter",
             endpoint_id: "openrouter-chat-completions-v1",
-            upstream_provider_ids: ["deepinfra/fp8"],
-            display_label: "openrouter → deepinfra/fp8 · openrouter-chat-completions-v1",
+            upstream_provider_ids: ["deepinfra/fp4"],
+            display_label: "openrouter → deepinfra/fp4 · openrouter-chat-completions-v1",
           },
           egress_policy: {
             policy_id: "remote-agentic-contained",
@@ -347,8 +347,8 @@ describe("selectedProviderForSession", () => {
     });
 
     expect(selected?.provider_id).toBe("contained-session:binding-remote");
-    expect(selected?.label).toBe("OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · fake-data preview");
-    expect(selected?.description).toBe("openrouter → deepinfra/fp8 · openrouter-chat-completions-v1");
+    expect(selected?.label).toBe("OpenRouter GLM 5.3 Flash · DeepInfra FP4 · fake-data preview");
+    expect(selected?.description).toBe("openrouter → deepinfra/fp4 · openrouter-chat-completions-v1");
     expect(selected?.agentic_containment_reason).toBe("hosted_agent_runtime_disabled");
     expect(selected?.agentic_certificate_status).toBe("revoked");
     expect(selected?.agentic_certificate_posture?.eligibility).toBe("ineligible");

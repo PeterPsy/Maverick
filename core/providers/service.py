@@ -55,7 +55,7 @@ from core.secrets.store import SecretStore
 from core.skills.models import SkillDefinition, SkillMaterialization
 
 
-RETIRED_PROVIDER_IDS = {"deepseek", "gemini-cli", "groq"}
+RETIRED_PROVIDER_IDS = {"gemini-cli", "groq"}
 
 
 @dataclass(frozen=True)

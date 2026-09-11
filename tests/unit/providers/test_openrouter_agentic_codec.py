@@ -94,12 +94,12 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         self.assertEqual(
             payload["provider"],
             {
-                "only": ["deepinfra/fp8"],
+                "only": ["deepinfra/fp4"],
                 "allow_fallbacks": False,
                 "require_parameters": True,
                 "data_collection": "deny",
                 "zdr": True,
-                "quantizations": ["fp8"],
+                "quantizations": ["fp4"],
             },
         )
         self.assertEqual(payload["reasoning"], {"effort": "high"})
@@ -107,7 +107,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         self.assertNotIn("parallel_tool_calls", payload)
 
     def test_request_accepts_only_catalog_advertised_reasoning_efforts(self) -> None:
-        for effort in ("xhigh", "high"):
+        for effort in ("max", "high", "low"):
             with self.subTest(effort=effort):
                 transport = _ScriptedTransport([
                     _text_stream(f"generation-reasoning-{effort}", "answer")
@@ -119,7 +119,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
                 self.assertEqual(events[-1].event_type, "completed")
                 self.assertEqual(transport.payloads[0]["reasoning"], {"effort": effort})
 
-        for effort in ("minimal", "low", "medium"):
+        for effort in ("minimal", "medium", "xhigh"):
             with self.subTest(effort=effort):
                 transport = _ScriptedTransport([])
                 events = asyncio.run(_events(
@@ -155,7 +155,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
     def test_runtime_config_requires_one_executable_upstream(self) -> None:
         routing = replace(
             openrouter_agentic_routing_constraint(),
-            allowed_upstream_ids=("deepinfra/fp8", "another/fp8"),
+            allowed_upstream_ids=("deepinfra/fp4", "another/fp8"),
         )
 
         with self.assertRaisesRegex(ValueError, "routing config is unsupported"):
@@ -181,7 +181,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         )
         usage = next(event.usage for event in events if event.event_type == "usage")
         self.assertEqual((usage.input_tokens, usage.output_tokens), (120, 12))
-        self.assertEqual(usage.estimated_cost_microusd, 13)
+        self.assertEqual(usage.estimated_cost_microusd, 24)
         private = next(
             event.provider_private_state
             for event in events

@@ -109,17 +109,20 @@ def validate_live_probe_receipt(
     elif provider_id == "openrouter":
         from core.providers.openrouter_agentic_models import (
             OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
+            OPENROUTER_AGENTIC_REASONING_MANDATORY,
             OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
+            OPENROUTER_AGENTIC_UPSTREAM_ID,
         )
 
         if (type(receipt["supports_tool_choice_none"]) is not bool
                 or receipt["finalization_tool_catalog_mode"] != "omitted"
-                or receipt["upstream_id"] != "deepinfra/fp8"
+                or receipt["upstream_id"] != OPENROUTER_AGENTIC_UPSTREAM_ID
                 or receipt["resolved_model_id"] != OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
                 or receipt["catalog_reasoning_efforts"] != list(efforts)
                 or receipt["catalog_default_reasoning_effort"]
                 != OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
-                or receipt["catalog_reasoning_mandatory"] is not False
+                or receipt["catalog_reasoning_mandatory"]
+                is not OPENROUTER_AGENTIC_REASONING_MANDATORY
                 or type(receipt["filesystem_result_count"]) is not int
                 or receipt["filesystem_result_count"] != rounds * len(efforts)):
             _fail()

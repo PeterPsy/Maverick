@@ -1,757 +1,189 @@
-# OpenRouter DeepSeek agentic certification matrix
+# OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-11
-Matrix revision: `2026-09-11-r60-p6-hosted-finalization-runway-tcb50`
+Matrix revision: `2026-09-11-r61-openrouter-glm-5-3-flash-tcb51`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==53`
+Adapter: `maverick-hosted-tool-loop==54`
 
-## P6 candidate checkpoint
+## Scope
 
-Suite 60 / TCB manifest 50 / hosted adapter 53 / recipe 26 retain the P5
-executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
-non-regression corpus in addition to the P0–P4 fixtures. The new API profile
-revision is immutable, unbound, and uncertified. P6 also binds exact-target live
-receipts, explicit budgeted transport opt-in, and operator-observed natural
-conformance before signing. Suite 60 runs every fixture-contract
-step in a disposable synthetic environment with no production authority and
-emits only bounded, redaction-safe failure diagnostics. Protocol-only success
-is not signable evidence. The signed natural-lab permit is not a capability
-certificate: it is accepted only by an explicitly injected adapter in an
-isolated installation, and every HTTP generation is fenced by the shared
-operator ledger. Historical evidence below is
-not evidence for this candidate. The authoritative attestation implementation is
-available, but the global and per-provider kill switches still default off and no
-remote certificate or operator binding is enabled. Codex revision 15 is the
-active verified profile; this remote candidate does not change its artifact,
-restart or migrate its process, or reissue its certificate.
+This matrix replaces the retired OpenRouter model target. Historical evidence,
+profiles, certificates, traces, budgets, and catalog observations for the prior
+target do not authorize this model and must not be projected onto it.
 
-Suite 45 additionally includes generic continuation repair/multi-hop, explicit
-native identity rejection, the reviewed app-effect delta regressions, and the
-effective-uid-attributed direct-host operator path. Runtime-token trusted
-contexts cannot self-elevate with `--operator`, and the complete wrapper path is
-inside TCB 35. The shared identity also records Google's refreshed exact
-stable-alias and partial-lifecycle contracts; OpenRouter's provider tuple is
-unchanged. Prior
-suite-40 failures are not waived or removed; the corrected fixtures and complete
-inventory must pass on this candidate. See
-`docs/development/agentic_p6_effect_audit_2026-09-06.md`.
+The release objective is intentionally limited to the OpenRouter API target.
+Google AI Studio and Antigravity remain contained and are not part of this
+promotion decision. Codex remains the active native agent and must not be
+reconfigured by this work.
 
-Suite 46 replaces the retired Gemini CLI objective with the content-pinned
-Antigravity CLI 1.1.27 candidate. It binds the documented persistent
-`stream-json` lifecycle, platform-resolved Gemini API-key delivery, private
-runtime settings/home, redacted native effect projection, process cleanup, and
-explicit safe-next-turn steering fallback. This shared TCB change does not
-alter OpenRouter's exact provider/upstream/ZDR/model tuple or authorize another
-OpenRouter request after the prior transport halt.
-
-Suite 47 supersedes that unreleased native credential design. Antigravity uses
-its cached OAuth login through a narrowly provisioned private source and
-per-runtime copy; it rejects Google API-key/provider bindings and discovers its
-catalog through the exact binary in a confined ephemeral home. OpenRouter
-remains a separate Vault-backed API provider, and this shared TCB change does
-not alter its exact route or lift the prior ledger halt.
-
-## Preview combination
+## Exact candidate
 
 | Field | Pinned value |
 | --- | --- |
 | Model provider | `openrouter` |
-| Model | `deepseek/deepseek-v4-flash` |
-| Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-07`, exact resolved slug `deepseek/deepseek-v4-flash-20260423`, and exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `62` (revision `61` suspended) |
-| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v20` |
-| Protocol | OpenAI-compatible streaming Chat Completions |
-| API version | `v1` |
-| Protocol adapter | `openrouter-chat-completions-protocol@3` |
-| Provider config | `openrouter-deepinfra-fp8@2`; digest `5ed02612baa9f19b1af3f361ff7fbf4d9f943fe1d03a32a23c210935dc92c66e` |
+| Model | `z-ai/glm-5.3-flash` |
+| Resolved model | `z-ai/glm-5.3-flash-20260826` |
+| Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-11` |
+| Catalog expiration | exact `2098-12-31` observation; any drift fails closed |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-deepinfra-fp4@1` |
+| Execution family | `maverick_agent` |
+| Full Workspace contract | `codex-baseline-v20` |
+| Protocol | OpenAI-compatible streaming Chat Completions v1 |
+| Protocol adapter | `openrouter-chat-completions-protocol@4` |
+| Runtime adapter | `maverick-hosted-tool-loop==54` |
+| Harness recipe | `maverick-openrouter-chat-governed-workspace@27` |
+| Provider config | `openrouter-deepinfra-glm-5-3-flash-fp4@1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
-| Upstream endpoint tag | `deepinfra/fp8` |
-| Effective provider identity | `DeepInfra` |
-| Quantization | `fp8` |
-| Context / endpoint completion limit | 1,048,576 / 65,536 tokens |
-| Tool calls | every indexed call is retained; execution remains sequential, so a multi-call response is denied and paired in full |
-| Parallel request control | parameter omitted because the certified endpoint catalog does not declare it; Core journals every returned call before `parallel_denied` |
-| Private codec | `openrouter-chat-completions@3`, schema `2`; ordered plural pending calls and no silent migration |
-| Mixed response handling | provisional text plus one tool call is retained privately and continued |
-| Reasoning levels | exact live model-catalog tuple `xhigh`, `high`; deployed default `high`; `mandatory=false` |
-| Router controls | fallback off, parameters required, collection denied, ZDR required |
-| Accounting policy | `openrouter-deepinfra-deepseek-v4-flash-public-list-price@1`; 90,000 / 180,000 micro-USD per million input/output tokens |
-| Finalization reserve | one 2,048-token / 35,000-micro-USD / 20-second final request plus one equal recovery |
-| Turn cost ceiling | 250,000 micro-USD; 70,000 remains protected for the two terminal attempts |
-| Final request | exact Core finalization instruction; both `tools` and `tool_choice` omitted |
-| Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Policy surfaces | exact `cli`, `mcp`, `app-interface`, and `core-capability` set plus every Full Workspace wrapper handle; the public resolver must produce complete live authority |
-| Tool handles | Full Workspace `codex-baseline-v20` surface: all 24 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result projection; only complete probe evidence is cached, while transient/partial results remain retryable; app reads require a Core-audited descriptor plus executable closure and are rechecked at dispatch, inter-agent CLI/MCP operations have exact effects and content-dropping projections, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates authority plus the freshly read nonnumeric policy before every stream advance, and shell/process effects remain rollbackable over an immutable `.git`-excluding snapshot in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
-| Certificate lifetime after a successful signed run | 30 days |
+| Effective upstream | `DeepInfra`; exact tag `deepinfra/fp4` |
+| Quantization | `fp4` |
+| Fallback | disabled |
+| Required parameters | enabled |
+| Provider data collection | denied |
+| ZDR | required; exact endpoint must remain in the ZDR catalog |
+| Context / completion | endpoint minimum 1,048,576 / 131,072 tokens |
+| Reasoning | exact tuple `max`, `high`, `low`; default `max`; mandatory |
+| Tools | `tools` and `tool_choice` supported; sequential execution only |
+| Empty tool catalog | omitted |
+| Finalization | exact Core finalization instruction; `tools` and `tool_choice` omitted |
+| Accounting | `openrouter-deepinfra-glm-5-3-flash-public-list-price@1`; conservative list prices 150,000 / 500,000 micro-USD per million input/output tokens |
+| Remote data | Core-classified `public` only |
+| Certificate lifetime | 30 days after a successful signed run |
 
-Historical P5: revision 43 and provider-config revision 2 add the exact executable
-config/protocol-adapter identity and config-owned endpoint, upstream/provider/
-resolved-model, quantization, and accounting data. They have no signed suite-39
-result; the unchanged matrix revision describes the required rerun, not
-certification evidence. The preview remains contained and unavailable.
+The public OpenRouter catalogs observed on 2026-09-11 report that GLM 5.3 Flash
+accepts text, image, and video input and returns text. The exact DeepInfra FP4
+endpoint advertises `tools`, `tool_choice`, `reasoning`, `reasoning_effort`, and
+`max_tokens`, supports `tool_choice.auto` and `tool_choice.none`, and appears in
+the ZDR catalog. These mutable observations grant no authority by themselves;
+they are revalidated immediately before live transport.
 
-The current OpenRouter catalogs list `deepinfra/fp8` as active for DeepSeek V4
-Flash, with `tools`, `tool_choice`, `reasoning`, `max_tokens`, and
-`reasoning_effort` support, and report `supports_tool_choice.none=false`.
-The main model catalog resolves the alias to
-`deepseek/deepseek-v4-flash-20260423` and advertises only `xhigh` and `high`,
-with default `high` and non-mandatory reasoning. Neither endpoint catalog
-declares `parallel_tool_calls`. The endpoint exposes FP8
-quantization; the recorded list price is $0.09 per million input tokens and
-$0.18 per million output tokens.
-The certification preflight fetches the main model catalog, exact endpoint
-catalog, and ZDR catalog in parallel immediately before transport. It fails
-unless the resolved slug and reasoning contract match, the exact endpoint is
-active and ZDR-listed, capacity is sufficient, and both endpoint records support
-every routed parameter actually present in the translated payload. Exploration
-sends a declared tool catalog and `tool_choice:auto`; finalization sends neither
-field, so it does not claim or require the catalog-denied `none` mode. A changed
-model contract, endpoint, or upstream requires a new recipe/catalog digest and
-immutable profile revision.
-
-Every agentic request sends this router object without a permissive default.
-It intentionally omits `parallel_tool_calls`, because `require_parameters=true`
-would otherwise make every currently catalogued endpoint ineligible:
+Every request carries this non-permissive router object:
 
 ```json
 {
   "provider": {
-    "only": ["deepinfra/fp8"],
+    "only": ["deepinfra/fp4"],
     "allow_fallbacks": false,
     "require_parameters": true,
     "data_collection": "deny",
     "zdr": true,
-    "quantizations": ["fp8"]
+    "quantizations": ["fp4"]
   }
 }
 ```
 
-The transport opts into OpenRouter router metadata. The codec requires the
-response provider to be `DeepInfra`, then requires terminal metadata to show
-the requested model, one successful attempt, and `DeepInfra` as the selected
-provider. Only after those checks can the exact requested endpoint tag be
-normalized as the certified upstream. Missing metadata, a different provider,
-an extra attempt, or an unavailable endpoint fails closed.
+## Required deterministic evidence
 
-Primary references:
+The suite is `maverick-openrouter-agentic-contract@61` and the certified
+execution TCB is manifest 51. The exact checked-in manifest is authoritative;
+this table summarizes its security objectives.
 
-- [DeepSeek V4 Flash model](https://openrouter.ai/deepseek/deepseek-v4-flash/api)
+| Contract | Required result |
+| --- | --- |
+| Model identity | alias, resolved slug, expiration, reasoning metadata, endpoint and ZDR identities match the exact candidate |
+| Request translation | exact model/routing/reasoning values; unsupported or relaxed controls rejected before transport |
+| Streaming | bounded SSE ordering, terminal usage, finish reason and router metadata validated |
+| Effective upstream | response provider and terminal attempt metadata prove one successful DeepInfra route |
+| Tool calls | fragmented arguments, ids, names and every contiguous index retained and validated |
+| Parallel proposals | every proposal journaled and paired; no parallel execution |
+| Continuation | assistant tool-call messages and matching results retained in encrypted provider-private state |
+| Semantic envelope | source classifications and projection digests preserved across every provider step |
+| Tool authority | current binding, certificate, actor, TCB, egress and tool authority revalidated before effects and transport |
+| Full Workspace | all required filesystem, shell/process, CLI, MCP, app and collaboration behaviors pass |
+| Confirmation | mutating and destructive work resumes only from persisted grants |
+| Journal/recovery | no ambiguous replay after cancellation, crash or restart; exact pairing lineage retained |
+| Context | bounded compaction preserves tool pairing and finalization reserve |
+| Final output | durable outbox and terminal delivery remain idempotent |
+| Failure paths | auth, rate limit, timeout, catalog drift, malformed stream and endpoint mismatch fail closed |
+| UI governance | Settings and Chat expose the model only with current signed authority and an enabled binding |
+
+Fixture success is necessary but is not certificate evidence. It must be
+collected from one clean commit with zero skipped cases and without live
+credentials in the fixture process.
+
+## Required live probe
+
+The operator-only probe first reads in one bounded parallel window:
+
+1. `https://openrouter.ai/api/v1/models`;
+2. the exact GLM model endpoint catalog;
+3. the OpenRouter ZDR endpoint catalog.
+
+It then performs three sequential real filesystem-list tool rounds followed by
+one explicitly tool-less finalization request at each certified reasoning
+effort: `max`, `high`, and `low`. A complete probe therefore contains exactly
+12 provider generations and 9 governed filesystem results. Catalog reads are
+not counted as generations but remain receipt-bound.
+
+The receipt must bind:
+
+- exact target digest and run nonce;
+- main-model, endpoint, ZDR and combined catalog digests;
+- resolved model and reasoning observations;
+- DeepInfra FP4 identity and capacity;
+- request/result counts;
+- usage and private-state events for every generation;
+- absence of normalized provider errors.
+
+A retry after an ambiguous request is forbidden. Catalog drift, missing ZDR,
+changed reasoning, an ineligible endpoint, unexpected fallback, or a different
+resolved slug ends the candidate run.
+
+## Natural conformance
+
+All 14 behavioral scenarios must pass at each of `max`, `high`, and `low` on
+the same source commit, adapter digest, target digest and TCB identity:
+
+- identity;
+- repository orientation;
+- nested instructions;
+- explicit skill;
+- targeted edit;
+- shell test;
+- large output;
+- long process and interrupt;
+- safe-next-turn steering fallback;
+- attachment reference;
+- finalization reserve;
+- prompt-injection containment;
+- restart recovery;
+- next-turn continuation.
+
+Steering, restart and next-turn scenarios include their required second turns.
+Every trace must bind prompts, outputs, public events, tool invocations,
+provider-step journals, source/projection/effect digests, resource accounting,
+and zero absolute failure counters. Execution and post-evidence review are
+separate operations; a runner cannot manufacture its own green review.
+
+## Publication and rollout
+
+A certificate may be signed only after the deterministic suite, exact live
+probe and complete natural report all pass for the same immutable candidate.
+Publication must revalidate the profile target and TCB and then read back the
+stored certificate.
+
+Rollout is OpenRouter-only and proceeds in a disposable public-synthetic
+workspace:
+
+1. create one disabled, non-default binding;
+2. verify the profile remains unavailable before feature enablement;
+3. enable only the OpenRouter hosted-agent feature;
+4. run one full-workspace canary, denial, confirmation, interrupt, restart and
+   rollback exercise;
+5. verify zero absolute failure counters and no credential leakage;
+6. enable the binding and make it default only after the canary is green;
+7. confirm Settings and Chat show GLM 5.3 Flash and no retired target;
+8. retain an immediately tested kill switch and rollback path.
+
+Any source or TCB change after evidence collection invalidates the run. Google
+and Antigravity remain disabled even if this target reaches GO.
+
+## Primary references
+
+- [GLM 5.3 Flash model](https://openrouter.ai/z-ai/glm-5.3-flash)
 - [Main model catalog](https://openrouter.ai/api/v1/models)
-- [Model endpoint catalog](https://openrouter.ai/api/v1/models/deepseek/deepseek-v4-flash/endpoints)
+- [GLM endpoint catalog](https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flash/endpoints)
 - [ZDR endpoint catalog](https://openrouter.ai/api/v1/endpoints/zdr)
-- [Provider selection](https://openrouter.ai/docs/guides/routing/provider-selection)
+- [Provider routing](https://openrouter.ai/docs/guides/routing/provider-selection)
 - [Zero data retention](https://openrouter.ai/docs/guides/features/zdr)
-- [Router metadata](https://openrouter.ai/docs/guides/features/router-metadata)
-- [Reasoning preservation](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens)
 - [Tool calling](https://openrouter.ai/docs/guides/features/tool-calling)
-
-## Evidence matrix
-
-| Contract | Required evidence | Current certification result |
-| --- | --- | --- |
-| Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
-| Certified execution TCB | manifest v50 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, collector isolation/failure-record path, stage-safe Antigravity live diagnostics, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
-| Endpoint catalog preflight | main model metadata must pin the exact resolved slug and `xhigh`/`high` reasoning contract; exact model-endpoint and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
-| SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
-| Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
-| No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
-| Tool call id/name/count | fragmented/malformed arguments, all contiguous indices, preliminary persistence, exact replay/divergence, duplicate-id rejection, full parallel denial, and ordered plural pairing | not certified |
-| Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
-| Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
-| Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, pairing-safe semantic history compaction, request-scoped authority replacement, bounded byte-correct tool-result artifacts, explicit attachment workspace references, and safe-next-turn steering fallback | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v20` executes 16 concrete filesystem, shell/process, and CLI/MCP capability paths, one production-composed inter-agent CLI-create/MCP-wait workflow, plus seven security probes covering raw/base64/chunk marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation, full-authority/credential/policy revocation at the transport boundary, revoke-between-provider-events, overlay-commit rollback, and concurrent shell/process `.git` snapshots; incomplete or transient probe evidence is never cached | repository gate complete: 24/24 behaviors; signed provider certification not run |
-| Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
-| Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
-| Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
-| Failure propagation | distinct mixed/parallel/index codes, safe public message, diagnostic reference, and nonnumeric Chat UX | not certified |
-| Shared tool loop | real OpenRouter codec through deterministic hosted-loop E2E | not certified |
-| Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
-| Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
-| Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
-| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a complete terminal request at the hosted input ceiling; request-specific staged preflight with tool-less fallback before egress commit; tool-call and cumulative result-byte exhaustion, including live tightening after preparation, rebuild finalization without exposing tools; persisted execution lease whose live deadline is part of the terminal success CAS; omission of both `tools` and `tool_choice`; exact request-scoped final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
-| Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
-| Outage after acceptance | terminal normalized failure with no blind retry | not certified |
-| Revocation and egress drift | complete authority refresh after endpoint preflight and before lazy transport open; the request's data classes, catalog handles, surfaces, filesystem/shell flags, and complete semantic capability projection are then revalidated against the freshly policy-narrowed live authority, including skill/app-reference blocks without tools; the endpoint snapshot and transport share one process-local redaction-safe credential fingerprint; live policy tightens the active reservation and checks its finalization deadline at every boundary; later SSE advances use a lightweight certificate/binding/actor/feature/health/TCB/classification/credential revocation fence instead of rerunning the full TCB and behavior gates | not certified |
-| Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
-| Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
-| Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only three-catalog preflight binding exact model metadata, resolved slug, reasoning contract, DeepInfra/ZDR identity and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at each of `xhigh` and `high` | manifest step available; not run for r59 |
-
-The table defines required coverage and does not report a completed run.
-Bootstrap publishes only the uncertified preview profile and never manufactures a
-certificate. Certification requires deterministic fixture conformance, the
-operator-only synthetic live probe with fresh main-model/endpoint/ZDR reconfirmation,
-behavioral validation of the complete ordered manifest and canonical command
-digests, and only then an immutable signed result and publication. Repository
-checks explicitly select `fixture_contract` and never start the retained
-`live_probe`; fixture-only output is rejected by signing, verification, and
-publication.
-The executable signing and publication workflow is defined in
-`docs/runbooks/agentic_certification_evidence.md`.
-
-The operator probe on 2026-08-19 exposed the revision-8 contract defect: it sent
-`parallel_tool_calls:false` while `require_parameters:true` excluded every
-endpoint that did not declare that parameter, producing the expected
-`provider_no_eligible_endpoint`. Revision 9 removes only the unsupported
-parameter, retains strict routing, and keeps sequential execution fail-closed
-in the decoder.
-
-A real revision-9 canary on 2026-08-20 exposed a second interoperability edge:
-DeepInfra occasionally streamed an additional tool proposal as a later array
-index even though the shared runtime permits only one sequential execution per
-step. Revision 10 retains only the fully validated index-0 call in private
-continuation state. Later indexed proposals are neither emitted nor executed;
-after the primary result is replayed, the model can request remaining work in a
-new sequential step. A missing index-0 call or a conflicting second index-0
-identity still fails closed. Revision 10 is historical and suspended.
-
-Revision 11 carries the corrected shared hosted-loop budget accounting and
-egress transformation contract. A provider request keeps a conservative
-reservation until priced usage replaces it; missing usage remains charged at
-the worst case. Absolute host paths found inside untrusted tool output are
-redacted after exact workspace-root rewriting, while host paths from every
-other provenance remain denied. Revision 11 is historical and suspended.
-
-Revision 12 retained the exact `fake-data preview` warning label but removed fake
-classification authority: its policy lists only Core-classified `public`, its
-egress id is `remote-agentic-contained@2`, and central admission remains
-NO-GO. It is now historical and suspended. A future policy could consider
-`workspace_internal_fake` only with the
-exact resource-derived classification and an active scoped workspace
-attestation; neither declaration alone can create that class. Its suite-v9
-manifest retained both `fixture_contract` and `live_probe`; the live step was
-not run.
-
-Revision 13 pinned adapter 6 and codec/schema 2 for the Phase-2 provider-step
-journal, preliminary proposal ledger, staged-state promotion, complete indexed
-call accounting, reconstructible plural pairing, effect ordering, and
-productive recovery. Suite 10 and matrix `2026-08-27-r10-p2-tcb3` add the
-JSON/document parity and Google/OpenRouter crash matrices to
-`fixture_contract` and bind TCB manifest v3. Its retained `live_probe` was not
-selected or run, and revision 13 is historical and suspended.
-
-Revision 14 pins adapter 7, suite 11, matrix
-`2026-08-27-r11-p2-tcb4`, and TCB manifest v4 for the terminal Phase-2 closure:
-same-turn pairing ownership and input lineage, containment-first quarantine,
-and private final-output outbox delivery across commit/restart crashes. The
-retained `live_probe` was not selected or run, no behavioral evidence was
-created, and this revision is now suspended and uncertified.
-
-Revision 15 pins adapter 8, suite 12, matrix
-`2026-08-27-r12-p3-tcb5`, and TCB manifest v5 for the Phase-3 finalization
-closure: restart-safe provider/tool budgets, protected final/recovery
-step-output-cost-deadline capacity, exact `tools: []` plus
-`tool_choice: none`, whitespace rejection, journaled denial of unexpected final
-calls, and at most one paired recovery. The retained `live_probe` was updated
-to exercise the tool-less final request but was not selected or run. No
-behavioral evidence or certificate was created; revision 15 is suspended and
-uncertified.
-
-Revision 16 pins adapter 9, suite 13, matrix
-`2026-08-28-r13-p3-review-tcb5`, and TCB manifest v5 for the Phase-3 review
-closure. The finalization instruction is wire-only and cannot contaminate a
-later turn's private history; candidate egress decisions remain staged until
-request-specific cost eligibility succeeds; unaffordable exploration falls
-back to tool-less finalization; synchronous tools are deadline-fenced; and the
-cost reserve covers a maximum policy-admitted result. No live or behavioral
-run was performed; revision 16 is suspended and uncertified.
-
-Revision 17 pins adapter 10, suite 14, matrix
-`2026-08-28-r14-p3-review2-tcb5`, and TCB manifest v5 for the second Phase-3
-review closure. Timeout publishes the deterministic terminal error by ledger
-CAS before private result I/O, success rechecks its lease after that I/O, and
-the per-attempt allocation covers a complete terminal request at the hosted
-input ceiling. No live or behavioral run has been performed; revision 17
-is suspended and uncertified.
-
-Revision 18 pins adapter 11, suite 15, matrix
-`2026-08-28-r15-p3-review3-tcb5`, and TCB manifest v5 for the third Phase-3
-review closure. The `executing` ledger state persists a unique lease id and UTC
-expiry; terminal success atomically requires the expected revision, the same
-lease, and a future deadline. Local JSON rechecks immediately before atomic
-replacement and Mongo uses server `$$NOW`. Deterministic coverage pauses the
-worker after its final cooperative check while delaying the timeout CAS, and
-proves that expired success cannot become authoritative. No live or behavioral
-run has been performed; revision 18 remains a contained, uncertified preview.
-
-Revision 19 pins adapter 12, suite 16, matrix
-`2026-08-28-r16-p4a-semantic-envelope-tcb6`, and TCB manifest v6 for Phase 4A.
-Every request is compiled from a Core-owned semantic envelope v1 with distinct
-platform, runtime, workspace, agent, user, governed-context, attachment, app,
-skill, tool, and provider-state blocks. Complete bounded `AGENTS.md` and
-`SKILL.md` materialization is descriptor-confined and version-fenced; source
-snapshot and exact egress projection evidence are persisted in provider-step
-journal schema v4. No live or behavioral run has been performed; revision 19
-remains a contained, uncertified preview.
-
-Revision 20 pins adapter 13, suite 17, matrix
-`2026-08-28-r17-p4b-full-workspace-tcb7`, and TCB manifest v7 for Phase 4B.
-The adapter now contains the complete code-owned Full Workspace tool surface,
-descriptor/race confinement, platform-runtime masking, managed-process
-lifecycle, official discovery-first CLI/MCP registries, and shared result
-compaction. This contained profile deliberately retains only list/read handles
-and does not claim `full_workspace_contract_revision`; Phase 4D must create a
-new full revision after exact endpoint and interaction closure. No live or
-behavioral run has been performed; revision 20 remains an uncertified preview.
-
-Revision 21 pins adapter 14, suite 18, matrix
-`2026-08-28-r18-p4-context-provider-closure-tcb8`, and TCB manifest v8 for
-Phase 4C-D. It is a new, uncertified full-workspace candidate rather than a
-promotion of revision 20. The immutable recipe selects the exact OpenRouter
-Chat/DeepInfra FP8 composition, compiler revision 2, `codex-baseline-v2`, an
-independent context reserve and pairing-safe compaction, bounded
-artifact-backed tool results, explicit attachment references and
-safe-next-turn steering fallback. Every request performs the exact live
-catalog/ZDR and wire preflight before egress commit; final requests require
-`tools: []` and `tool_choice: none`. No live or behavioral run, certificate,
-binding, provider request, canary, or remote activation has been performed.
-
-Revision 22 pins adapter 15, recipe 2, suite 19, matrix
-`2026-08-28-r19-p4-review-closure-tcb9`, and TCB manifest v9. It closes the P4
-review findings with production request/result classification, mandatory
-commit-bound `AGENTS.md` guards, request-scoped system/developer reinjection,
-truthful persisted projection evidence, semantic compaction schema 2, and
-binary attachment reads. Compiler revision 3 and `codex-baseline-v3` bind the
-behavior changes. This remains an uncertified, unbound, unavailable candidate;
-no live probe, behavioral run, provider completion, certificate, canary, or
-remote activation has been performed.
-
-Revision 23 pins adapter 16, recipe 3, suite 20, matrix
-`2026-08-29-r20-p4-adversarial-closure-tcb10`, and TCB manifest v10. Prompt,
-governed-context, and instruction classes now require exact server-owned
-admission observations; generic CLI, MCP, shell, and process results remain
-`unclassified` unless their concrete source supplies a canonical class.
-Shell and managed-process writes run in a private overlay and cross into the
-workspace only after complete bounded diff validation, declared-scope
-selection, nested `AGENTS.md` revalidation, and guarded per-file commit.
-Compaction schema 3 preserves every semantic entry until the real byte limit,
-marks any required middle truncation explicitly, and retains tool arguments.
-Compiler revision 4 and `codex-baseline-v4` bind these changes. This candidate
-is still uncertified, unbound, and unavailable; no live probe, behavioral run,
-provider completion, certificate, canary, or remote activation has been
-performed.
-
-Revision 24 pins adapter 17, recipe 4, suite 21, matrix
-`2026-08-29-r21-p4-composite-atomic-closure-tcb11`, and TCB manifest v11.
-Compiler revision 5 binds semantic classes to exact projected bytes, joins
-attachment metadata with the referenced resource, and projects exact skill
-documents. `codex-baseline-v5` adds rollback-safe multi-file overlay commit,
-explicit directory-effect rejection, and mutating/non-retry-safe terminal
-process polling. This candidate remains uncertified, unbound, and unavailable;
-no live probe, behavioral run, provider completion, certificate, canary, or
-remote activation has been performed.
-
-Revision 25 pins adapter 18, recipe 5, suite 22, matrix
-`2026-08-29-r22-p4-metadata-appref-closure-tcb12`, and TCB manifest v12.
-`codex-baseline-v6` preserves mode/ownership/ACL/xattrs for content-only
-replacement, rejects unrepresented xattr/timestamp/overlay-root metadata, and
-wires exact app-reference resource classification into production bootstrap.
-This candidate remains uncertified, unbound, and unavailable; no live probe,
-behavioral run, provider completion, certificate, canary, or remote activation
-has been performed.
-
-Revision 26 pins adapter 19, recipe 6, suite 23, matrix
-`2026-08-29-r23-p4-cow-fidelity-closure-tcb13`, and TCB manifest v13.
-`codex-baseline-v7` descriptor-pins every retained pre-image and compares its
-complete metadata/xattr snapshot around exchange, applies exact file
-atime/mtime for content effects, admits ordinary read-modify-write, and rejects
-new or existing hardlinks plus non-representable directory/root metadata. This
-candidate remains uncertified, unbound, and unavailable; no live probe,
-behavioral run, provider completion, certificate, canary, or remote activation
-has been performed.
-
-Revision 27 pins adapter 20, recipe 7, suite 24, matrix
-`2026-08-30-r24-p4-agentic-parity-closure-tcb14`, and TCB manifest v14.
-`codex-baseline-v8` installs production transient-input admission, safe
-action-result projection and pre-image taint, byte-correct artifact summaries,
-cancellation-quiescent copy-on-write execution, adapter-owned process cleanup,
-and a complete-request compaction retry. This candidate remains uncertified,
-unbound, and unavailable; no live probe, behavioral run, provider completion,
-certificate, canary, or remote activation has been performed.
-
-Revision 29 pins adapter 22, governed recipe 9, suite 26, matrix
-`2026-08-30-r26-p4-agentic-review-closure-tcb16`, and TCB manifest v16.
-Production now atomically captures content-derived transient/governed-context
-classification, preserves complete read-only variable results with public error
-pairing on egress denial, denies unguaranteed mutations before effect, awaits all
-synchronous workers on cancellation, and performs repeated post-SIGTERM process
-sweeps. `codex-baseline-v10` reports the remaining mutating result scenarios as
-incomplete, so this profile does not claim Full Workspace. It remains
-uncertified, unbound, and unavailable; no live probe, behavioral run, provider
-completion, certificate, canary, or remote activation has been performed.
-
-Revision 30 pins adapter 23, governed recipe 10, suite 27, matrix
-`2026-08-31-r27-p4-agentic-closure-tcb17`, and TCB manifest v17. Content
-classification no longer promotes marker-free bytes to public; direct
-replace/edit/patch preserves mode and ACL/xattrs and carries exact pre-image
-taint through read-after-write; move rebinds it; failed parent creation is
-rolled back; and skill aliases fail closed. `codex-baseline-v12` names and
-executes every filesystem mutation workflow, while creation and variable
-shell/process and CLI/MCP results remain incomplete without authoritative
-classification. The definition is explicitly
-`maverick_agent_candidate`, not `maverick_agent`, and does not claim Full
-Workspace. It remains uncertified, unbound, and unavailable; no live probe,
-behavioral run, provider completion, certificate, canary, or remote activation
-has been performed.
-
-Revision 32 pins adapter 25, governed recipe 12, suite 29, matrix
-`2026-08-31-r29-p4-authority-revalidation-tcb19`, and TCB manifest v19. The
-operator-owned runtime-public classification policy supplies explicit,
-revocable server authority for exact prompt/result identities and canonical
-digests; certified Core result contracts cover schema-owned results; and
-shell/process mutations admit the exact private-overlay result before commit.
-The executable `codex-baseline-v12` gate returns all 16 required behaviors,
-including create/read-after-create across orchestrator rebuild, CLI/MCP
-list/run/call, sensitive-marker narrowing, revoke-then-rebuild denial, and
-delayed-egress denial after revocation. The immutable definition therefore atomically pins
-`execution_family=maverick_agent` and the Full Workspace contract. It remains
-uncertified, unbound, contained, and unavailable; no live probe, signed run,
-provider completion, certificate, canary, or remote activation has been
-performed.
-
-Revision 33 pins adapter 26, governed recipe 13, suite 30, matrix
-`2026-09-01-r30-p4-transport-effect-atomicity-tcb20`, and TCB manifest v20.
-Prepared request authority is revalidated after endpoint preflight and in the
-task that advances the lazy provider stream. Filesystem results scan bounded
-complete raw bytes before base64 and retain their class across version-bound
-chunks. Shell/process overlay batches revalidate exact-result authority before
-and after materialization and restore every pre-image on drift. Runtime-public
-issue/revoke uses pending audit, classification CAS, and terminal audit CAS, so
-a losing concurrent mutation is recorded as failure rather than success. The
-production-composed `codex-baseline-v13` gate returns all 18 required behaviors.
-The immutable definition remains uncertified, unbound, contained, and
-unavailable; no live probe, signed run, provider completion, certificate,
-canary, or remote activation has been performed.
-
-Revision 34 pins adapter 27, governed recipe 14, suite 31, matrix
-`2026-09-01-r31-p4-review-closure-model-revision-tcb21`, and TCB manifest v21.
-The explicit OpenRouter provider-alias model revision policy is now carried by
-the profile, certificate, binding, recipe, request, and authority while exact
-endpoint/upstream catalog constraints remain mandatory. Every built-in app
-CLI/MCP surface has conservative effect metadata and real Storage read probes;
-shell and managed processes mask `.git`; mutable authority is checked before
-every provider-stream advance; and the oversized P4 tests are split and
-retained in the certification manifest. The production-composed
-`codex-baseline-v14` gate returns all 20 required behaviors. The immutable
-definition remains uncertified, unbound, contained, and unavailable; no live
-probe, signed run, provider completion, certificate, canary, or remote
-activation has been performed.
-
-Revision 35 pins adapter 28, governed recipe 15, suite 32, matrix
-`2026-09-02-r32-p4-git-effect-authority-tcb22`, and TCB manifest v22. Core now
-recursively masks root and nested Git directories/worktree pointers in shell
-and managed-process read-only and overlay mounts. Hosted built-in app reads
-require the exact Core-owned descriptor audit; Website Studio preview creation
-and document caching are mutating, while persistent pre/post tests cover every
-remaining declared read. The strengthened `codex-baseline-v15` gate remains
-20/20. The immutable definition remains uncertified, unbound, contained, and
-unavailable; no live probe, signed run, provider completion, certificate,
-canary, or remote activation has been performed.
-
-Revision 36 pins adapter 29, governed recipe 16, suite 33, matrix
-`2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23`, and TCB manifest
-v23. Shell and managed processes now use an immutable descriptor-confined
-workspace snapshot that excludes `.git` and remains isolated from post-spawn
-create/rename races. Hosted built-in app reads bind descriptor metadata and the
-exact executable closure, with a second check at dispatch. Every inter-agent
-CLI/MCP operation has an exact effect and reviewed content-dropping public
-projection, and `codex-baseline-v16` adds a real CLI-create/MCP-wait workflow to
-the 21/21 behavior gate. The immutable definition remains uncertified, unbound,
-contained, and unavailable; no live probe, signed run, provider completion,
-certificate, canary, or remote activation has been performed.
-
-Revision 37 pinned adapter 30, governed recipe 17, semantic compiler 9, suite
-34, matrix `2026-09-03-r34-p4-last-mile-attachment-process-tcb24`, and TCB
-manifest v24. Attachment reads received immutable server-observed fences, and
-`codex-baseline-v17` replaced synthetic shell/process/CLI/MCP claims with 16
-concrete capability paths, one inter-agent workflow, and seven security probes
-for a 24/24 repository gate.
-
-Revision 38 pinned adapter 31, governed recipe 18, semantic compiler 10, suite
-35, matrix `2026-09-03-r35-p4-policy-credential-stream-fence-tcb25`, and TCB
-manifest v25. The last-mile guard tightened live policy and active deadlines,
-bound endpoint discovery to the transport credential fingerprint, and separated
-full request/open checks from the cheaper per-event revocation fence.
-
-Revision 39 pins adapter 32, governed recipe 19, semantic compiler 10, suite
-36, matrix `2026-09-03-r36-p4-policy-egress-probe-cache-tcb26`, and TCB
-manifest v26. The last-mile guard validates request data classes and the exact
-catalog/surface capability set against the policy read after each authority
-refresh, including the refresh inside lazy transport opening. Full Workspace
-behavior probes cache only complete successful evidence; transient, empty, or
-partial results remain retryable. The immutable definition remains uncertified,
-unbound, contained, and unavailable; no live probe, signed run, provider
-completion, certificate, canary, or remote activation has been performed.
-
-Revision 40 pins adapter 33, governed recipe 20, semantic compiler 10, suite
-37, matrix `2026-09-03-r37-p4-semantic-budget-authority-tcb27`, and TCB
-manifest v27. Live policy is projected over every semantic capability, including
-app references and skills on tool-less requests; tool-call and cumulative
-result-byte exhaustion rebuild an uncommitted request as finalization; and the
-profile plus Full Workspace contract require the distinct CLI, MCP,
-app-interface, and Core-capability surfaces. Built-in effect audit
-`2026-09-06-p6-builtin-effects-reviewed-v4` binds the reviewed Fitness Coach,
-Storage, and Website Studio read-model closure updates. The immutable definition
-remains uncertified, unbound, contained, and unavailable; no live probe, signed
-run, provider completion, certificate, canary, or remote activation has been
-performed.
-
-Revision 41 pins adapter 34, governed recipe 21, semantic compiler 10, suite
-38, matrix `2026-09-04-r38-p4-pan-classification-determinism-tcb28`, and TCB
-manifest v28. The generic scanner no longer exempts long hexadecimal tokens,
-and regression coverage keeps embedded PANs sensitive for raw text, JSON,
-runtime-public input, and declared-public tool output. Only exact typed
-attachment-fence identity is removed from the scan surface. Runtime-public
-policy v3 invalidates older mutable-authority lineage, while the hosted
-finalization deadline fixture now uses controlled time and leaves no delayed
-worker behind. The immutable definition remains uncertified, unbound,
-contained, and unavailable; no live probe, signed run, provider completion,
-certificate, canary, or remote activation has been performed.
-
-Revision 42 pins adapter 35, governed recipe 22, semantic compiler 10, suite
-39, matrix `2026-09-04-r39-p4-typed-result-classification-tcb29`, and TCB
-manifest v29. Exact Core filesystem, instruction, process, discovery, artifact,
-certified inter-agent, and compactor metadata now use typed classification
-projections bound to the complete unmodified result. This removes accidental
-Luhn matches from server-owned digests without restoring a lexical hex bypass;
-paths, content, shell output, discovery descriptions, and arbitrary tool values
-remain conservatively scanned. The immutable definition remains uncertified,
-unbound, contained, and unavailable; no live probe, signed run, provider
-completion, certificate, canary, or remote activation has been performed.
-
-Revision 43 retains adapter 35, governed recipe 22, semantic compiler 10, suite
-39, matrix `2026-09-04-r39-p4-typed-result-classification-tcb29`, and TCB
-manifest v29. It additionally binds provider config
-`openrouter-deepinfra-fp8@2` and protocol adapter
-`openrouter-chat-completions-protocol@2` in the profile, future certificate,
-execution binding, actual transport route, upstream/provider/resolved-model
-checks, and config-owned price policy. The immutable definition remains
-uncertified, unbound, contained, and unavailable; no live probe, signed run,
-provider completion, certificate, canary, or remote activation has been
-performed.
-
-Revision 44 pins hosted adapter 36, governed recipe 23, suite 40, matrix
-`2026-09-06-r40-p6-exact-target-tcb30`, and TCB manifest v30 for the initial P6
-full-family corpus and exact-target evidence boundary. Revision 45 pins adapter
-37, recipe 24, suite 41, matrix
-`2026-09-06-r41-p6-reviewed-gates-tcb31`, and TCB manifest v31 after the
-continuation-fixture and built-in-effect review remediation. Exact-source P6-D
-passed for revision 45 on historical commit `5a7ca45a`; no live/natural probe,
-certificate, or release followed.
-
-Revision 46 pins hosted adapter 38, governed recipe 25, suite 42, matrix
-`2026-09-07-r42-p6-authoritative-dispatch-tcb32`, TCB manifest v32, and Codex
-candidate revision 15 for the shared queue/handoff closure. Server-owned
-workspace attestations are freshly re-read at profile pinning, session/child
-creation, queue, provider handoff, authority refresh, continuation and recovery;
-revocation wins over stale supplied snapshots and blocks before persistence or
-dispatch. OpenRouter finalization omits its tool catalog instead of claiming the
-unsupported `tool_choice:none` mode. The main model catalog additionally pins
-the resolved 20260423 slug and exact `xhigh`/`high` reasoning metadata; the
-bounded synthetic probe therefore requires eight generation requests and six
-filesystem results. This revision remains contained and uncertified until its
-live/natural evidence, trusted review/signature, disposable canary and rollback
-exist. The deployed Codex revision-14 backend is not restarted or migrated by
-the candidate work.
-
-Revision 47 pins hosted adapter 39 and governed recipe 25 together with
-suite 43, matrix `2026-09-07-r43-p6-host-operator-attribution-tcb33`, and TCB
-manifest v33. Adapter 39 records the post-r42 preflight source-byte revision
-instead of silently reusing adapter 38. The direct host `--operator` context is now attributed to the
-effective OS uid, the runtime-token context remains non-elevatable, and the
-complete wrapper chain is TCB-covered. Codex candidate 15 remains byte-identical
-and no live probe, certificate, binding, canary, or release is implied.
-
-Revision 48 pins hosted adapter 40 and governed recipe 25 together with suite
-44, matrix `2026-09-07-r44-p6-google-catalog-refresh-tcb34`, and TCB manifest
-v34. OpenRouter's exact provider/upstream/ZDR/model contract is unchanged; the
-profile advances because the shared hosted adapter and certified TCB now include
-Google's refreshed stable-alias catalog identity. Codex candidate 15 and recipe
-25 remain byte-identical, and no live probe, certificate, binding, canary, or
-release is implied.
-
-Revision 49 pins hosted adapter 41 and governed recipe 25 together with suite
-45, matrix `2026-09-07-r45-p6-google-partial-lifecycle-tcb35`, and TCB manifest
-v35. OpenRouter's exact provider/upstream/ZDR/model contract is unchanged. The
-profile advances because the shared adapter now handles Google's documented
-partial lifecycle identity and the broad TCB binds intervening Core
-API/app-hosting source changes. The r44 OpenRouter live attempt remains a
-failed, non-refundable request in the external operator ledger; that provider
-is halted for this job and is not retried by this revision. Codex candidate 15
-and recipe 25 remain byte-identical; no certificate, binding, canary, or release
-is implied.
-
-Revision 50 pins hosted adapter 42 and governed recipe 25 together with suite
-46, matrix `2026-09-07-r46-p6-antigravity-native-tcb36`, and TCB manifest v36.
-It replaces the obsolete Gemini CLI framework objective with the exact
-Antigravity native candidate and binds its credential, containment, structured
-protocol, effect-redaction, and lifecycle tests. OpenRouter's request protocol
-and exact route are unchanged from revision 49, and the halted provider is not
-retried. Google profile 51 advances with the shared adapter/TCB identity. Codex
-candidate 15 and recipe 25 remain byte-identical; no certificate, binding,
-canary, or release is implied.
-Effect audit `2026-09-07-p6-builtin-effects-reviewed-v5` also binds the reviewed
-Design Studio CLI operating-group lock handoff already present in the candidate
-source; no descriptor or effect class changed.
-
-Revision 51 pins hosted adapter 43 and governed recipe 25 together with suite
-47, matrix `2026-09-08-r47-p6-antigravity-oauth-tcb37`, and TCB manifest v37.
-It binds Antigravity's corrected cached-OAuth launch and authenticated confined
-catalog discovery. OpenRouter's API-key boundary, request protocol, exact
-provider/upstream/ZDR/model tuple, and durable ledger halt are unchanged.
-Google profile 52 advances with the shared adapter/TCB identity. Codex revision
-15 and hosted recipe 25 remain byte-identical; no certificate, binding, canary,
-or release is implied.
-
-Revision 52 pins hosted adapter 44 and governed recipe 25 together with suite
-48, matrix `2026-09-09-r48-p6-native-certification-tcb38`, and TCB manifest
-v38. It adds the independent Antigravity connection certificate/live-receipt
-path, read-only native workspace plus Core-governed mutation boundary, exact
-skill materialization, catalog projection retirement, provider-specific kill
-switch, and append-only successor-ledger authority. OpenRouter's API-key
-boundary, exact provider/upstream/ZDR/model tuple, durable predecessor-ledger
-halt, and recipe 25 are unchanged. Google profile 53 advances with the shared
-adapter/TCB identity. Codex revision 15 remains byte-identical; no live
-evidence, trusted signature, certificate, activation, binding, canary, or
-release is implied.
-
-Candidate 49 retains hosted adapter 44, governed recipe 25, OpenRouter profile
-52, and its exact route/provider target while advancing the suite to 49 and the
-shared TCB to manifest v39. It isolates fixture-contract subprocesses from
-production credentials and control-plane paths and records failed collection
-steps only as hashes plus allowlisted diagnostics. This collector hardening
-does not change the hosted adapter artifact or Codex revision-15 artifact. No
-certificate, activation, binding, canary, or release is implied by the identity
-advance.
-
-Revision 53 retains hosted adapter 44 and governed recipe 25 while advancing
-to suite 50, matrix
-`2026-09-10-r50-p6-antigravity-live-diagnostics-tcb40`, and TCB manifest v40.
-The Antigravity live probe now preserves its primary stage failure across
-cleanup and emits only a bounded safe reason. OpenRouter wire behavior is
-unchanged; this new immutable profile replaces suspended revision 52 without
-reactivating it. Codex revision 15 remains byte-identical.
-
-Revision 54 retains hosted adapter 44 and governed recipe 25 while advancing
-to suite 51, matrix
-`2026-09-10-r51-p6-antigravity-connect-race-tcb41`, and TCB manifest v41.
-Antigravity same-session preparation is now serialized across private skill
-materialization and native connection. OpenRouter wire behavior is unchanged;
-the new profile requires fresh exact-TCB evidence rather than reusing revision
-53. Codex revision 15 remains byte-identical.
-
-Revision 55 pins hosted adapter 45 and governed recipe 25 while advancing to
-suite 52, matrix `2026-09-10-r52-p6-google-live-diagnostics-tcb42`, and TCB
-manifest v42. A rejected Google stream now yields only a closed-set structural
-failure stage to the operator-only probe; no provider content is retained, the
-public error remains `provider_response_invalid`, and decoder acceptance is
-unchanged. OpenRouter wire and route behavior are unchanged. Codex revision 15
-remains byte-identical.
-
-Revision 56 pins hosted adapter 46 and governed recipe 25 while advancing to
-suite 53, matrix `2026-09-10-r53-p6-google-created-diagnostics-tcb43`, and TCB
-manifest v43. The content-free Google created-event diagnostic distinguishes
-only duplicate, payload/id, resource-name, exact-revision, and mismatch cases.
-OpenRouter wire and route behavior are unchanged. Codex revision 15 remains
-byte-identical.
-
-Revision 57 pins hosted adapter 47 and governed recipe 25 while advancing to
-suite 54, matrix
-`2026-09-10-r54-p6-google-created-id-diagnostics-tcb44`, and TCB manifest
-v44. The content-free Google created-event ID diagnostic distinguishes absent,
-null, non-string, empty, and oversized cases without retaining provider
-values. OpenRouter wire and route behavior are unchanged. Codex revision 15
-remains byte-identical.
-
-Revision 58 pins hosted adapter 48 and governed recipe 25 while advancing to
-suite 55, matrix `2026-09-10-r55-p6-google-stateless-empty-id-tcb45`, and TCB
-manifest v45. Google codec 5 accepts the observed empty interaction lifecycle
-ID only for the certified stateless `store=false` path; OpenRouter wire and
-route behavior are unchanged. Codex revision 15 remains byte-identical.
-
-Revision 59 pins hosted adapter 49 and governed recipe 25 while advancing to
-suite 56, matrix `2026-09-10-r56-p6-signed-natural-lab-tcb46`, and TCB
-manifest v46. The code-owned laboratory accepts only a signed, expiring permit
-for the exact source, TCB, adapter, profile, synthetic workspace, actor,
-credential binding, reasoning effort, reviewer reference, and successor
-ledger. Production bootstrap cannot select this authority. The ordinary hosted
-loop, semantic projection, egress, tool ledger, confirmation, provider state,
-recovery and cleanup remain in the measured path; raw HTTP is reservation-
-before-egress fenced. Google profile 60 advances with the shared adapter/TCB
-identity. Codex revision 15 remains byte-identical.
-
-Revision 60 pins hosted adapter 50 and governed recipe 25 while advancing to
-suite 57, matrix `2026-09-10-r57-p6-schema-integrity-tcb47`, and TCB manifest
-v47. The egress boundary now preserves only Core-certified public
-`trusted_platform` tool schemas after canonical JSON validation, so field names
-such as `invocation_token` remain schema objects instead of being mistaken for
-runtime secret values. Ordinary input, result, state, and non-schema JSON
-redaction is unchanged. Google profile 61 advances with the shared adapter/TCB
-identity. Codex revision 15 remains byte-identical.
-
-Revision 61 pins hosted adapter 51 and governed recipe 25 while advancing to
-suite 58, matrix `2026-09-10-r58-p6-workspace-runtime-root-tcb48`, and TCB
-manifest v48. Confined shell and managed-process tools now receive the
-workspace-level private `runtime/` root required by their snapshot contract,
-not the provider session's private state directory. OpenRouter wire and route
-behavior are unchanged. Google profile 62 advances with the shared adapter/TCB
-identity. Codex revision 15 remains byte-identical.
-
-Revision 62 pins hosted adapter 52 and governed recipe 25 while advancing to
-suite 59, matrix
-`2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49`, and TCB manifest
-v49. The shared TCB now binds the exact dedicated AppArmor profile used only
-for Antigravity's nested sandbox and the adapter validates its root-owned,
-non-writable Bubblewrap artifact by digest before launch. OpenRouter hosted
-wire behavior and exact provider route are unchanged. Google profile 63
-advances with the shared adapter/TCB identity. Codex revision 15 remains
-byte-identical; its active authority must still pass the post-restart contract
-check.
-
-Revision 63 pins hosted adapter 53 and governed recipe 26 while advancing to
-suite 60, matrix `2026-09-11-r60-p6-hosted-finalization-runway-tcb50`, and TCB
-manifest v50. A retained natural trace proved that the former 2,048-token
-provider-step ceiling could be consumed entirely by `xhigh` reasoning after a
-large compacted tool result, even though the profile advertises a 16,384-token
-turn budget. The recipe now permits 4,096 tokens per provider step and still
-reserves two terminal attempts. The finalization policy module is included in
-the hosted adapter artifact digest. Google profile 64 advances with the shared
-identity. Codex revision 15 remains byte-identical and separately active.
-
-## Fail-closed conditions
-
-- Any model, provider-alias revision policy, protocol, API-version,
-  protocol-adapter, provider-config, endpoint, accounting policy, effective
-  provider/resolved model, quantization, or upstream mismatch is rejected.
-- `allow_fallbacks=true`, missing parameter enforcement, collection other than
-  `deny`, or missing ZDR enforcement is rejected before transport.
-- Sending `parallel_tool_calls` while the pinned endpoint does not declare it is
-  a request-contract and catalog-preflight failure.
-- A 404/no-eligible-provider result is terminal and never falls back.
-- Missing, expired, revoked, or digest-mismatched certificates prevent authority.
-- Missing or disabled credential bindings prevent session pinning.
-- Unknown data classification is denied before transport.
-- Unknown app CLI/MCP effect discriminators are `unclassified`; app mutations
-  without a certified pre-effect result guarantee are denied.
-- Function results with a different id or name are rejected before transport.
-- Every contiguous indexed tool call is persisted. Duplicate ids, missing
-  indices, or conflicting fragments fail closed. A multi-call response is
-  completely dispositioned: calls inside the remaining budget receive
-  `parallel_denied`, overflow receives `budget_denied`, and no call executes.
-- Finalization must carry no tool definitions and the exact Core instruction;
-  both `tools` and `tool_choice` must be absent from the wire payload. Any
-  mismatch fails before transport. Empty/whitespace output is rolled back, and only one paired
-  recovery follows an unexpected journaled finalization call.
-- A requested reasoning effort outside the immutable `xhigh`/`high` certificate
-  tuple, a main-catalog reasoning/default/resolved-slug mismatch, or a
-  certificate/binding reasoning-contract mismatch is rejected before use.
-- A single tool call preceded by text is accepted; that text remains
-  provisional, is stored with the assistant tool call in private continuation
-  state, and is not duplicated in the final answer.
-- Redirects, unexpected paths, non-SSE responses, oversized data, incomplete
-  streams, and missing terminal routing metadata are rejected.
-- Credentials, raw errors, router payloads, and reasoning details never enter
-  public runtime events.

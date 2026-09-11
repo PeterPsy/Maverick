@@ -27,7 +27,7 @@ from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
 )
 from core.providers.openrouter_agentic_catalog import (
     OpenRouterAgenticCatalogSnapshot,
@@ -57,12 +57,12 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 
 class HostedHarnessRecipeTest(unittest.TestCase):
     def test_review_closure_publishes_new_immutable_recipe_identities(self) -> None:
-        for recipe in (
-            GOOGLE_GOVERNED_WORKSPACE_RECIPE,
-            OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
+        for recipe, expected_revision in (
+            (GOOGLE_GOVERNED_WORKSPACE_RECIPE, "26"),
+            (OPENROUTER_GOVERNED_WORKSPACE_RECIPE, "27"),
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "26")
+                self.assertEqual(recipe.revision, expected_revision)
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
                     "10",
@@ -163,11 +163,11 @@ class HostedHarnessRecipeTest(unittest.TestCase):
 
     def test_openrouter_final_preflight_omits_tools_without_requiring_none(self) -> None:
         catalog = OpenRouterAgenticCatalogSnapshot(
-            upstream_id="deepinfra/fp8",
-            resolved_model_id="deepseek/deepseek-v4-flash-20260423",
-            reasoning_efforts=("xhigh", "high"),
-            default_reasoning_effort="high",
-            reasoning_mandatory=False,
+            upstream_id="deepinfra/fp4",
+            resolved_model_id="z-ai/glm-5.3-flash-20260826",
+            reasoning_efforts=("max", "high", "low"),
+            default_reasoning_effort="max",
+            reasoning_mandatory=True,
             supported_parameters=(
                 "max_tokens",
                 "reasoning",
@@ -178,9 +178,9 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             model_metadata_record_digest="d" * 64,
             model_catalog_record_digest="a" * 64,
             zdr_catalog_record_digest="b" * 64,
-            supports_tool_choice_none=False,
+            supports_tool_choice_none=True,
             context_length=1_048_576,
-            max_completion_tokens=65_536,
+            max_completion_tokens=131_072,
             catalog_snapshot_digest="c" * 64,
         )
         with patch(
@@ -250,7 +250,7 @@ def _binding(recipe):
         )
         if recipe.model_provider_id == "google-ai-studio"
         else (
-            OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+            OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
             OPENROUTER_CHAT_PROTOCOL_ADAPTER,
         )
     )

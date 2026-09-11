@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 import os
 from pathlib import Path
 from unittest import mock
@@ -29,14 +29,12 @@ from core.providers.openrouter_agentic_profile import (
     OPENROUTER_AGENTIC_PROFILE_ID,
     OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
     OPENROUTER_AGENTIC_PROFILE_REVISION,
-    ensure_openrouter_agentic_preview_profile,
 )
 from core.providers.openrouter_agentic_models import OPENROUTER_AGENTIC_MODEL_REVISION
 from core.providers.maverick_agent_builtins import (
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
-    OPENROUTER_DEEPINFRA_PROVIDER_CONFIG,
+    OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG,
 )
-from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
@@ -78,14 +76,14 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "63")
-        self.assertEqual(profile.adapter_version_constraint, "==53")
+        self.assertEqual(profile.revision, "1")
+        self.assertEqual(profile.adapter_version_constraint, "==54")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
             ("cli", "mcp", "app-interface", "core-capability"),
         )
         self.assertEqual(profile.model_provider_id, "openrouter")
-        self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
+        self.assertEqual(profile.model_id, "z-ai/glm-5.3-flash")
         self.assertEqual(profile.model_revision, OPENROUTER_AGENTIC_MODEL_REVISION)
         self.assertEqual(profile.model_revision_policy, "provider_alias")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
@@ -96,9 +94,9 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 profile.provider_config_digest,
             ),
             (
-                OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.config_id,
-                OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.revision,
-                OPENROUTER_DEEPINFRA_PROVIDER_CONFIG.digest,
+                OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.config_id,
+                OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.revision,
+                OPENROUTER_DEEPINFRA_GLM_PROVIDER_CONFIG.digest,
             ),
         )
         self.assertEqual(
@@ -112,12 +110,12 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             ),
         )
         routing = profile.routing_constraint
-        self.assertEqual(routing.allowed_upstream_ids, ("deepinfra/fp8",))
+        self.assertEqual(routing.allowed_upstream_ids, ("deepinfra/fp4",))
         self.assertFalse(routing.allow_fallbacks)
         self.assertTrue(routing.require_parameters)
         self.assertEqual(routing.data_collection_policy, "deny")
         self.assertTrue(routing.require_zdr)
-        self.assertEqual(routing.allowed_quantizations, ("fp8",))
+        self.assertEqual(routing.allowed_quantizations, ("fp4",))
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
         self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
         self.assertEqual(profile.egress_policy_revision, "2")
@@ -283,33 +281,12 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
         self.assertEqual(
             certificate.certified_reasoning_efforts,
-            ("xhigh", "high"),
+            ("max", "high", "low"),
         )
-        self.assertEqual(certificate.default_reasoning_effort, "high")
+        self.assertEqual(certificate.default_reasoning_effort, "max")
         self.assertEqual(evidence.matrix_revision, OPENROUTER_CERTIFICATION_MATRIX_REVISION)
 
-        previous_revision = OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS[-1]
-        state.provider_store.save_agentic_profile_definition_status(
-            AgenticProfileDefinitionStatus(
-                definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
-                definition_revision=previous_revision,
-                rollout_status="preview",
-                revision=0,
-                updated_at=NOW,
-            ),
-            expected_revision=None,
-        )
-        ensure_openrouter_agentic_preview_profile(
-            state.provider_store,
-            adapter=adapter,
-            now=NOW + timedelta(seconds=1),
-        )
-        previous = state.provider_store.get_agentic_profile_definition_status(
-            OPENROUTER_AGENTIC_PROFILE_ID,
-            previous_revision,
-        )
-        self.assertEqual(previous.rollout_status, "suspended")
-        self.assertEqual(previous.revision, 1)
+        self.assertEqual(OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS, ())
 
 
 if __name__ == "__main__":

@@ -19,8 +19,9 @@ const googleAgenticReasoningOptions: ProviderReasoningOption[] = [
 ];
 
 const openRouterAgenticReasoningOptions: ProviderReasoningOption[] = [
-  { effort: "xhigh", label: "Extra high", description: null },
+  { effort: "max", label: "Maximum", description: null },
   { effort: "high", label: "High", description: null },
+  { effort: "low", label: "Low", description: null },
 ];
 
 function modelProvider(providerId: string, providerLabel: string, modelId: string, modelLabel: string): ProviderItem {
@@ -49,6 +50,7 @@ function agenticProfile(
   modelId: string,
   rolloutStatus: AgenticProfileItem["rollout_status"] = "available",
   supportedReasoningEfforts: ProviderReasoningOption[] = reasoningOptions,
+  defaultReasoningEffort = "high",
 ): AgenticProfileItem {
   return {
     workspace_profile_binding_id: `binding-${providerId}`,
@@ -97,7 +99,7 @@ function agenticProfile(
         confirmations: true,
       },
     },
-    default_reasoning_effort: "high",
+    default_reasoning_effort: defaultReasoningEffort,
     supported_reasoning_efforts: supportedReasoningEfforts,
   };
 }
@@ -193,13 +195,13 @@ describe("remote agentic provider runtime options", () => {
 
   it("uses reasoning choices pinned on the certified agentic profiles", () => {
     const googleModelId = "gemini-3.6-flash";
-    const openRouterModelId = "deepseek/deepseek-v4-flash";
+    const openRouterModelId = "z-ai/glm-5.3-flash";
     const payload: ProviderPayload = {
       workspace_id: "default",
       active_provider: null,
       available_providers: [
         modelProvider("google-ai-studio", "Google AI Studio", googleModelId, "Gemini 3.6 Flash"),
-        modelProvider("openrouter", "OpenRouter", openRouterModelId, "DeepSeek V4 Flash"),
+        modelProvider("openrouter", "OpenRouter", openRouterModelId, "GLM 5.3 Flash"),
       ],
       agentic_profiles: {
         default_binding_id: null,
@@ -215,6 +217,7 @@ describe("remote agentic provider runtime options", () => {
             openRouterModelId,
             "available",
             openRouterAgenticReasoningOptions,
+            "max",
           ),
         ],
       },
@@ -238,10 +241,10 @@ describe("remote agentic provider runtime options", () => {
       },
       {
         model: openRouterModelId,
-        title: "openrouter · deepseek/deepseek-v4-flash · fake-data preview",
+        title: "openrouter · z-ai/glm-5.3-flash · fake-data preview",
         subtitle: "OpenRouter",
-        defaultReasoning: "high",
-        reasoning: ["xhigh", "high"],
+        defaultReasoning: "max",
+        reasoning: ["max", "high", "low"],
       },
     ]);
   });

@@ -18,6 +18,7 @@ import core.runtime.hosted_agentic_budget as hosted_agentic_budget_module
 import core.runtime.hosted_agentic_budget_models as hosted_agentic_budget_models_module
 import core.runtime.hosted_agentic_budget_recovery as hosted_agentic_budget_recovery_module
 import core.runtime.hosted_agentic_finalization_budget as hosted_agentic_finalization_budget_module
+import core.runtime.hosted_finalization_policy as hosted_finalization_policy_module
 import core.runtime.hosted_agentic_policy as hosted_agentic_policy_module
 import core.runtime.hosted_agentic_request as hosted_agentic_request_module
 import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
@@ -185,6 +186,7 @@ class HostedAgenticLoop:
             hosted_agentic_budget_models_module,
             hosted_agentic_budget_recovery_module,
             hosted_agentic_finalization_budget_module,
+            hosted_finalization_policy_module,
             hosted_agentic_policy_module,
             hosted_agentic_request_module,
             hosted_agentic_recovery_module,

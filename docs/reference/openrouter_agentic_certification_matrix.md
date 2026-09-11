@@ -1,19 +1,19 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-09-11
-Matrix revision: `2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49`
+Matrix revision: `2026-09-11-r60-p6-hosted-finalization-runway-tcb50`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==52`
+Adapter: `maverick-hosted-tool-loop==53`
 
 ## P6 candidate checkpoint
 
-Suite 59 / TCB manifest 49 / hosted adapter 52 / recipe 25 retain the P5
+Suite 60 / TCB manifest 50 / hosted adapter 53 / recipe 26 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and operator-observed natural
-conformance before signing. Suite 59 runs every fixture-contract
+conformance before signing. Suite 60 runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. The signed natural-lab permit is not a capability
@@ -152,7 +152,7 @@ Primary references:
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
-| Certified execution TCB | manifest v49 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, collector isolation/failure-record path, stage-safe Antigravity live diagnostics, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v50 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, collector isolation/failure-record path, stage-safe Antigravity live diagnostics, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | Endpoint catalog preflight | main model metadata must pin the exact resolved slug and `xhigh`/`high` reasoning contract; exact model-endpoint and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -710,6 +710,16 @@ wire behavior and exact provider route are unchanged. Google profile 63
 advances with the shared adapter/TCB identity. Codex revision 15 remains
 byte-identical; its active authority must still pass the post-restart contract
 check.
+
+Revision 63 pins hosted adapter 53 and governed recipe 26 while advancing to
+suite 60, matrix `2026-09-11-r60-p6-hosted-finalization-runway-tcb50`, and TCB
+manifest v50. A retained natural trace proved that the former 2,048-token
+provider-step ceiling could be consumed entirely by `xhigh` reasoning after a
+large compacted tool result, even though the profile advertises a 16,384-token
+turn budget. The recipe now permits 4,096 tokens per provider step and still
+reserves two terminal attempts. The finalization policy module is included in
+the hosted adapter artifact digest. Google profile 64 advances with the shared
+identity. Codex revision 15 remains byte-identical and separately active.
 
 ## Fail-closed conditions
 

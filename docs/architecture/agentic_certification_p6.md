@@ -1,11 +1,9 @@
 # P6 certification and release boundary
 
-Status: the autonomous Candidate 49 execution reached the live boundary and
-ended in the required **NO-GO** after the Antigravity live smoke failed; the
-Google/OpenRouter live steps did not run on that halted job. The rollback
-suspended API profiles 53/52, the remote flags remain off, no remote binding is
-enabled, and no new certificate was published. Codex revision 15 remains
-active and unchanged. See
+Status: P6 remains **NO-GO** while the current contained successor is
+recertified. The earlier Candidate 49 rollback remains historical; no remote
+binding is enabled and no new certificate has been published. Codex revision
+15 remains active and unchanged. See
 `docs/development/agentic_p6_autonomous_execution_2026-09-09.md` for the
 current operational record and
 `docs/development/agentic_p6_deterministic_closeout_2026-09-06.md` for the
@@ -14,9 +12,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current contained successor uses suite 55 / TCB
-45 / hosted adapter 48 / recipe 25 / Google profile 59 / OpenRouter profile 58,
-plus Antigravity native adapter 4, native recipe 3, and Codex revision 15. It
+That pass is historical. The current contained successor uses suite 60 / TCB
+50 / hosted adapter 53 / recipe 26 / Google profile 64 / OpenRouter profile 63,
+plus Antigravity native adapter 5, native recipe 4, and Codex revision 15. It
 requires its own exact-source operator record before signing or release. The
 source tree does not treat a mocked probe receipt or this status paragraph as
 that record.
@@ -267,6 +265,18 @@ other invalid event still fail closed. This codec change advances Google codec
 recipe 25, Antigravity adapter/profile 4 and recipe 3, the native artifact, and
 Codex revision 15 are unchanged.
 
+Candidate 60 corrects a resource handicap exposed by retained natural
+OpenRouter traces. After successful 108,219-byte shell output compaction, the
+`xhigh` model consumed the former 2,048-token provider-step ceiling before it
+could emit a terminal response, despite the profile's 16,384-token turn
+ceiling. The data-derived finalization policy now permits 4,096 tokens per
+provider step while preserving a final attempt and one recovery inside that
+same turn ceiling. The policy module is added to the hosted adapter artifact
+closure, hosted recipe advances to 26, hosted adapter to 53, Google/OpenRouter
+profiles to 64/63, suite to 60, and the broad TCB to manifest 50. Antigravity
+adapter/recipe/runtime target and the Codex revision-15 artifact are unchanged;
+all remote evidence bound to the older TCB remains ineligible for publication.
+
 The shared queue/handoff fix changed files declared in Codex's artifact and was
 published append-only as Codex revision 15, with revision 14 retained in
 immutable history rather than hidden by exclusions or reused as a certificate
@@ -303,9 +313,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 48,
-   recipe 25, Google profile 59, OpenRouter profile 58, suite 55, canonical
-   TCB manifest 45, Antigravity adapter 4 / recipe 3, and active Codex revision
+1. **Candidate identities and deterministic corpus:** hosted adapter 53,
+   recipe 26, Google profile 64, OpenRouter profile 63, suite 60, canonical
+   TCB manifest 50, Antigravity adapter 5 / recipe 4, and active Codex revision
    15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.

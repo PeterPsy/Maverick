@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49`
+Revision: `2026-09-11-r60-p6-hosted-finalization-runway-tcb50`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through
@@ -45,10 +45,16 @@ all absolute failure counters at zero.
 ## Publication and release
 
 `publish_antigravity_connection_certificate` accepts only the complete signed
-suite-59 run from an already trusted Ed25519 signer and rechecks deployed
+suite-60 run from an already trusted Ed25519 signer and rechecks deployed
 source, TCB, matrix, target, adapter bytes, and installed runtime artifact. A
 valid root permits catalog projection but does not activate the provider or a
 workspace binding. Provider activation is an explicit operator action; global
 and Antigravity-specific kill switches, current workspace attestation, a
 disposable canary, rollback rehearsal, and the autonomous post-evidence security
 gate remain mandatory.
+
+Suite 60 / TCB manifest 50 advances the native evidence identity because the
+broad certified TCB now includes the hosted finalization-runway correction.
+Antigravity adapter 5, native recipe 4, installed CLI artifact, OAuth boundary,
+and native target digest are unchanged. Its earlier suite-59 live receipt
+cannot be reused across the new TCB identity.

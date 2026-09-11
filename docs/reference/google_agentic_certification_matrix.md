@@ -1,19 +1,19 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-11
-Matrix revision: `2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49`
+Matrix revision: `2026-09-11-r60-p6-hosted-finalization-runway-tcb50`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==52`
+Adapter: `maverick-hosted-tool-loop==53`
 
 ## P6 candidate checkpoint
 
-Suite 59 / TCB manifest 49 / hosted adapter 52 / recipe 25 retain the P5
+Suite 60 / TCB manifest 50 / hosted adapter 53 / recipe 26 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
 receipts, explicit budgeted transport opt-in, and operator-observed natural
-conformance before signing. Suite 59 runs every fixture-contract
+conformance before signing. Suite 60 runs every fixture-contract
 step in a disposable synthetic environment with no production authority and
 emits only bounded, redaction-safe failure diagnostics. Protocol-only success
 is not signable evidence. The signed natural-lab permit is not a capability
@@ -116,7 +116,7 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v49 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, collector isolation/failure-record path, stage-safe Antigravity live diagnostics, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v50 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, collector isolation/failure-record path, stage-safe Antigravity live diagnostics, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures accept only the documented omission of `model` on partial lifecycle resources and reject supplied mismatches | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -684,3 +684,13 @@ credentials and control-plane paths and records failed collection steps only as
 hashes plus allowlisted diagnostics. This collector hardening does not change
 the hosted adapter artifact or Codex revision-15 artifact. No certificate,
 activation, binding, canary, or release is implied by the identity advance.
+
+Revision 64 pins hosted adapter 53 and governed recipe 26 while advancing to
+suite 60, matrix `2026-09-11-r60-p6-hosted-finalization-runway-tcb50`, and TCB
+manifest v50. The provider-step output allowance is now 4,096 tokens, while
+the 16,384-token turn ceiling still protects both the finalization attempt and
+its sole recovery. This removes the artificial 2,048-token ceiling observed
+to exhaust a reasoning-heavy hosted response before it could finalize. The
+policy builder is now explicitly part of the hosted adapter artifact digest.
+OpenRouter profile 63 advances with the same adapter/recipe/TCB identity.
+Codex revision 15 remains byte-identical and separately authoritative.

@@ -341,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "b23169b85ef9ffca0093abd3921a48b013b5672ecd0cac9b57837a588aa7ab64",
-            "openrouter": "0148799bedce4aa0056d4954bdbb375463b9b9c76930a6dfc43ad7df69b86690",
-            "antigravity-cli": "667af53643aac6d23cb3a0dbe705b18f95e361f72803d08ebd859402a900daf5",
+            "google-ai-studio": "1c5153fa0c9b2371d10218cdc328b26a62667f75ba57fafd2ebb243e02cec8d0",
+            "openrouter": "ad023460248b44e3837b9a2ab16a9fc958e3828b8ff31bc004f6a31f6c76bc89",
+            "antigravity-cli": "9d8dae1f2ead900b11df439b68b29087bd6c543576138a86e7e53e8a87e06497",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "59")
+                self.assertEqual(manifest.suite_version, "60")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49",
+                    "2026-09-11-r60-p6-hosted-finalization-runway-tcb50",
                 )
                 self.assertEqual(
                     manifest.digest,

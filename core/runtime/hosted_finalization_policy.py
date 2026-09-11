@@ -6,6 +6,9 @@ from core.providers.errors import AgenticProfileError
 from core.runtime.hosted_agentic_models import HostedFinalizationPolicy
 
 
+HOSTED_PROVIDER_STEP_OUTPUT_TOKENS = 4_096
+
+
 def provider_finalization_policy(config, recipe) -> HostedFinalizationPolicy:
     """Cover every request admitted by the recipe's input-byte token bound.
 
@@ -13,7 +16,10 @@ def provider_finalization_policy(config, recipe) -> HostedFinalizationPolicy:
     use a different bytes/token assumption. Convert that bound before pricing
     so the reserve cannot be smaller than the actual request estimator.
     """
-    output_tokens = min(2_048, recipe.support_flags.output_token_limit)
+    output_tokens = min(
+        HOSTED_PROVIDER_STEP_OUTPUT_TOKENS,
+        recipe.support_flags.output_token_limit,
+    )
     input_limit = min(recipe.context_policy.max_request_input_tokens, recipe.support_flags.input_token_limit)
     pricing = config.token_cost_policy
     input_tokens = math.ceil(4 * input_limit / pricing.estimated_input_bytes_per_token)
@@ -37,4 +43,8 @@ def validate_finalization_resources(policy, reserve) -> None:
         raise AgenticProfileError("maverick_profile_finalization_budget_insufficient")
 
 
-__all__ = ["provider_finalization_policy", "validate_finalization_resources"]
+__all__ = [
+    "HOSTED_PROVIDER_STEP_OUTPUT_TOKENS",
+    "provider_finalization_policy",
+    "validate_finalization_resources",
+]

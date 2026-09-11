@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import core.runtime.hosted_finalization_policy as hosted_finalization_policy_module
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.certificate_service import (
     revoke_capability_certificate,
@@ -295,6 +296,14 @@ class CapabilityCertificateTest(unittest.TestCase):
 
                 with patch.object(Path, "read_bytes", modified_read_bytes):
                     self.assertNotEqual(runtime_adapter_artifact_digest(adapter), baseline)
+
+    def test_hosted_finalization_policy_is_part_of_adapter_artifact(self) -> None:
+        loop = object.__new__(HostedAgenticLoop)
+
+        self.assertIn(
+            hosted_finalization_policy_module,
+            loop.artifact_components,
+        )
 
     def test_effective_upstream_must_be_certified(self) -> None:
         routing = replace(

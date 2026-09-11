@@ -125,6 +125,15 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                     finalization.reserved_time_seconds,
                 )
 
+    def test_production_profiles_reserve_reasoning_adequate_output_per_step(self) -> None:
+        for finalization in (
+            GOOGLE_HOSTED_FINALIZATION_POLICY,
+            OPENROUTER_HOSTED_FINALIZATION_POLICY,
+        ):
+            with self.subTest(finalization=finalization):
+                self.assertEqual(finalization.exploration_max_output_tokens, 4_096)
+                self.assertEqual(finalization.finalization_max_output_tokens, 4_096)
+
     def test_production_cost_reserves_cover_reachable_terminal_requests(self) -> None:
         cases = (
             (
@@ -274,7 +283,7 @@ class HostedAgenticBudgetTest(unittest.TestCase):
         request = replace(self.request, request_phase="finalization", max_output_tokens=reserve.finalization_max_output_tokens,
                           content_blocks=(replace(self.request.content_blocks[0], content=b"x" * 100_002),))
         cost = config.token_cost_policy.request_ceiling_microusd(request)
-        self.assertEqual(cost, 110_242)
+        self.assertEqual(cost, 120_482)
         self.assertGreater(cost, 35_000)
         budget = HostedAgenticBudget(policy, reserve, monotonic=_Clock())
         budget.begin_step(request, cost, phase="finalization")

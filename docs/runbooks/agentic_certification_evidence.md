@@ -4,7 +4,7 @@ Status date: 2026-09-11
 
 Scope: trusted CI or operator-controlled certification worker
 
-Production status: **NO-GO; no P6 live/natural evidence or release approval recorded**
+Production status: **NO-GO; no complete current-candidate P6 evidence or release approval recorded**
 
 The following coverage inventory is historical P4 evidence, not a P6 run.
 P6 collection/signing below supersedes its former two-step signing procedure.
@@ -117,9 +117,9 @@ lifecycle ID without exposing or persisting it, while the stateful path and
 every other invalid identity remain fail-closed. It also binds Antigravity's
 provider-observed tool `ERROR` state and the exact, dedicated AppArmor profile
 plus root-owned Bubblewrap digest needed for its nested terminal sandbox,
-without changing Codex's sandbox launcher. It binds hosted adapter 52, recipe
-25, Google profile 63, OpenRouter profile 62, Antigravity adapter 5 / recipe 4,
-TCB 49 and Codex artifact revision 15. Codex revision 15 is the active verified
+without changing Codex's sandbox launcher. The current successor binds hosted
+adapter 53, recipe 26, Google profile 64, OpenRouter profile 63, Antigravity
+adapter 5 / recipe 4, TCB 50 and Codex artifact revision 15. Codex revision 15 is the active verified
 profile, revision 14 remains immutable history, and a remote-provider
 certification worker must not restart, migrate, or reissue the Codex runtime or
 certificate.
@@ -137,8 +137,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v59 matrix revision
-  `2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49` declared by the provider
+- the dated suite-v60 matrix revision
+  `2026-09-11-r60-p6-hosted-finalization-runway-tcb50` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -193,8 +193,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-59 manifests bind matrix revision
-`2026-09-11-r59-p6-antigravity-nested-sandbox-tcb49`. OpenRouter uses suite id
+All suite-60 manifests bind matrix revision
+`2026-09-11-r60-p6-hosted-finalization-runway-tcb50`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
@@ -409,8 +409,8 @@ live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
 separate local identity. Since manifest v9 the transitive inventory is executable;
-manifest v49 is the current collector-isolated, stage-diagnostic,
-nested-sandbox-bound native-certification candidate:
+manifest v50 is the current collector-isolated, stage-diagnostic,
+nested-sandbox-bound and hosted-finalization-runway candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

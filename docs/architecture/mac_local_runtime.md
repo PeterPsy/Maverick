@@ -1364,3 +1364,19 @@ A Python workflow regression raises the expected install-run total to **29
 Python tests**. The workflow-only publishing commit skips its automatic push
 run to avoid the storage use it is intended to remove; the following explicit
 install run is the authoritative validation gate.
+
+GitHub refused publication of the workflow change with `403 Resource not
+accessible by integration` because the installed GitHub App lacks workflow-file
+write permission; the remote branch was not updated. Install run
+[34646745873](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34646745873)
+therefore used the prior workflow. It passed all **248 Swift tests**, **28
+Python tests**, release/runtime/catalog, signing and identity gates, then failed
+at artifact creation with `Artifact storage quota has been hit`. Installation
+did not execute.
+
+Read-only inventory showed five live MaverickMac artifacts of about 141 MB each
+(about 707 MB total), all expiring on 2026-09-12. Since GitHub recalculates
+storage every 6–12 hours, no destructive cleanup or repeated install was issued.
+Publishing the storage-neutral workflow requires the GitHub App's workflow-file
+write permission; deleting bounded older artifacts requires separate explicit
+operator authorization.

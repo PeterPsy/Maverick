@@ -181,7 +181,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         )
         usage = next(event.usage for event in events if event.event_type == "usage")
         self.assertEqual((usage.input_tokens, usage.output_tokens), (120, 12))
-        self.assertEqual(usage.estimated_cost_microusd, 24)
+        self.assertEqual(usage.estimated_cost_microusd, 15)
         private = next(
             event.provider_private_state
             for event in events

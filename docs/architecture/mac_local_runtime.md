@@ -1560,3 +1560,24 @@ No package or artifact-upload step ran. The app was updated in place without a
 persistent backup and launch was requested at **11:08:54 UTC**. Installed
 label: **6be87b3 · verifica esito Peekaboo v34**. Permission retention and
 complete physical GUI acceptance remain separate facts.
+
+### v35 — Secure Input gates only effectful Peekaboo actions
+
+Physical v34 acceptance stopped before its first observation because
+`mac_peekaboo list_windows` incorrectly inherited the Secure Event Input check
+used for effectful Peekaboo actions. The returned **MC-TOOL-21** described a
+write prohibition even though window listing is read-only.
+
+V35 moves that decision into an explicit integrated-tool policy. Peekaboo
+`list_windows` and `observe` remain available while Secure Event Input is
+active; mouse, typing, key and scroll routes still require the security state
+to be clear. EventKit keeps its existing independent authorization path. This
+preserves the security boundary while ensuring it cannot blind background
+inspection or prevent Maverick from diagnosing the visible state.
+
+One Swift regression enumerates the Peekaboo schema and pins the two read-only
+exceptions while requiring clearance for every input action. The Python
+integration contract pins the policy call site and label **visione durante
+input sicuro v35**. Expected totals are **255 Swift tests** and **31 Python
+tests**; signed validation, installation and physical acceptance remain
+separate.

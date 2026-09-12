@@ -1581,3 +1581,18 @@ integration contract pins the policy call site and label **visione durante
 input sicuro v35**. Expected totals are **255 Swift tests** and **31 Python
 tests**; signed validation, installation and physical acceptance remain
 separate.
+
+#### v35 validated storage-neutral installation (2026-09-12)
+
+Install run
+[34699214339](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34699214339)
+validated remote commit **d975d82** with **255 Swift tests** and **31 Python
+tests** passing. Release, credential-free admission/image transport, the real
+pinned Peekaboo 4.3.1 catalog, Apple Development signing and bidirectional
+identity continuity all passed. Designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+No package or artifact-upload step ran. The app was updated in place without a
+persistent backup and launch was requested at **14:26:23 UTC**. Installed
+label: **d975d82 · visione durante input sicuro v35**. Permission retention and
+complete physical GUI acceptance remain separate facts.

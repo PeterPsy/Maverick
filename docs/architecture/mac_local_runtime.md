@@ -1508,3 +1508,33 @@ installer updated `~/Applications/MaverickMac.app` in place without a
 persistent backup and requested launch at **10:15:05 UTC**. Installed label:
 **c23116d · recupero hover nativo v33**. Permission retention and complete GUI
 acceptance remain physical facts.
+
+### v34 same-turn read-only verification of uncertain Peekaboo input
+
+Physical v33 acceptance passed background observation of Calendar, Notes and
+TextEdit. TextEdit had no empty document and exposed its Open panel. Peekaboo
+sent the exact New Document click, then returned MC-PEEKABOO-20 because the
+effect could not be confirmed. The existing hard turn boundary correctly
+prevented a duplicate click but also prevented the read-only observation needed
+to determine whether the document had appeared.
+
+V34 adds a narrow outcome-verification state for canonical
+`dispatched_unverified`, `indeterminate` and `suspected_noop` input outcomes.
+Until a fresh observation succeeds, only Peekaboo `list_windows` and `observe`
+for the same approved bundle are admitted. Every input, different app,
+Calendar route and native-computer route is rejected locally with
+MC-PEEKABOO-26. Old snapshots are invalidated. The existing bounded per-task
+consent is preserved because this state permits no further effect.
+
+After the same-bundle observation succeeds, Maverick may continue from the
+newly visible state only if the attached image clearly demonstrates the
+original effect. It must stop rather than replay the uncertain operation when
+the effect is absent or ambiguous. Partial effects, denials, unclassified
+outcomes and permission/security failures retain the hard failure boundary.
+
+One added Swift state-machine regression covers the exact allowed and denied
+routes plus consent-preserving diagnostics; existing outcome tests now pin the
+new classification. The Python integration contract pins implementation,
+guidance and label **verifica esito Peekaboo v34**. Expected totals are **254
+Swift tests** and **30 Python tests**; signed validation, installation and
+physical acceptance remain separate.

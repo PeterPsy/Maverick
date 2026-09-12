@@ -1783,3 +1783,53 @@ artifact-upload step. At **17:34:47 UTC** it updated
 verified identity continuity and requested launch. Installed label:
 **57e4738 · editor multilinea visibile v39**. Physical acceptance remains a
 separate fact.
+
+### v40 read-only verification after task-input expiry
+
+Physical v39 acceptance passed background observation, Notes search, all
+requested TextEdit mouse/hover/drag and keyboard operations, 30-line scrolling
+in both directions, and native switching across Calendar, Notes and TextEdit.
+The clipped multiline-editor correction passed without MC-FOCUS-15. A
+recoverable MC-TOOL-14 caused by a disappearing transient surface was resolved
+from a fresh observation with unchanged text.
+
+The final direct Peekaboo verification succeeded for Calendar and Notes, then
+`mac_peekaboo list_windows` for TextEdit returned MC-TOOL-15. `list_windows`
+does not request or consume an input confirmation. The shared runtime check was
+instead requiring the five-minute per-task input lease for read-only calls, and
+the long acceptance had crossed that deadline. Exhausting the 40-action budget
+cannot produce this exact read failure because lease `isCurrent` does not inspect
+the remaining-action counter.
+
+V40 separates session/turn/app-scope validity from input authority. Native
+observation and bounded wait, Peekaboo `list_windows`/`observe`, and EventKit
+reads continue after input-lease expiry under the existing session screen-share
+consent. They still enforce active desktop/session, exact approved app/PID/window,
+capture and image-delivery boundaries. Stop, lock/sleep, scope or turn change,
+and hard failures continue to stop every tool.
+
+Activations, mouse/drag/scroll, text and key events, Peekaboo input and EventKit
+mutations still require current per-action or bounded-task input authorization.
+Read-only continuation never renews the five-minute deadline, replenishes the
+40-action budget or permits replay. UI and model guidance now describe that
+boundary explicitly. Two Swift regressions pin exhaustive action classification
+and session-only checks after expiry; one Python contract pins implementation
+and visible label **verifica sola lettura v40**. Expected totals are **261 Swift
+tests** and **34 Python tests**. Signed validation, installation and physical
+acceptance remain separate gates.
+
+#### v40 signed validation
+
+Remote source commit `0d46fa2c97235bbb0aa0af08ead56a4ef7eaaacd`
+passed **261 Swift tests** and **34 Python tests** on the self-hosted
+Apple-silicon runner. Release, credential-free Codex/image admission, same-turn
+observation delivery, pinned Peekaboo 4.3.1, Apple Development signing and
+bidirectional identity continuity all passed. The designated-requirement
+SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+Push run
+[`34711039729`](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34711039729)
+is red only because its optional artifact upload hit the existing GitHub
+storage quota after all authoritative gates completed. It did not install or
+open the app. Installation and physical acceptance remain pending.

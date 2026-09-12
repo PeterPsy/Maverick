@@ -1682,3 +1682,41 @@ No package or artifact-upload step ran. The app was updated in place without a
 persistent backup and launch was requested at **15:36:21 UTC**. Installed
 label: **c0edf9b · tooltip livello help v37**. Permission retention and the
 complete physical hover acceptance remain separate facts.
+
+### v38 complete approved-app window scene and precise read recovery
+
+Physical v37 acceptance showed that the one-level tooltip fix was too narrow.
+Native observation returned MC-TOOL-30 both after selecting Notes search and
+after hovering TextEdit's Bold control. Peekaboo then listed an untitled
+TextEdit auxiliary window (ID 1996) near the hovered control; observing only
+that window returned unclassified MC-PEEKABOO-01. The auxiliary proves a
+separate app-owned surface exists, but its exact window class is not known, and
+the Notes reproduction proves this is not exclusively a tooltip issue.
+
+V38 defines the native scene by the authorization boundary rather than a UI
+widget allowlist. Every non-desktop standard Core Graphics level through
+`maximumWindow` may join only when it has the approved PID, exact current Core
+Graphics window ID/frame, ScreenCaptureKit eligibility, on-screen visibility,
+positive alpha and valid bounded geometry. Existing front-to-back ordering,
+the eight-surface ceiling, stable sampling, fresh receipt equality and native
+event-recipient hit testing remain mandatory. No foreign, hidden, stale or
+approximately matched window becomes visible or actionable.
+
+An elevated focused auxiliary never displaces a layer-zero document root. A
+unique primary remains root; multiple primaries without exact AX-main proof
+still fail closed. Only a standalone auxiliary scene with no primary may use
+that exact auxiliary as root. This permits genuine dialogs while retaining a
+deterministic document boundary.
+
+MC-TOOL-30 now carries a fixed `window_match` reason that identifies the exact
+failed stage without exposing titles, AX content or system errors. Generic
+Peekaboo observation failures become MC-PEEKABOO-27: because observe cannot
+send input or mutate content, Maverick may refresh the same approved bundle's
+window list and continue from a new exact ID. Unclassified errors from input
+actions remain hard MC-PEEKABOO-01 and never gain this recovery.
+
+Swift regressions cover the generalized auxiliary scene, ambiguous roots,
+static match diagnostics and read-only-only Peekaboo recovery. The Python
+contract pins those behaviors and label **tutte le finestre app v38**. Expected
+totals are **258 Swift tests** and **32 Python tests**; signed validation,
+installation and physical acceptance remain separate gates.

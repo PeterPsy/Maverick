@@ -20,8 +20,8 @@ Certificate evidence must be produced and published through
 runbook begins. This runbook never manufactures or repairs a certificate.
 
 The current source candidate is hosted adapter 58 / Google recipe 26 and
-profile 69 / OpenRouter GLM recipe 29 and profile 4 / Antigravity adapter 5 and
-native recipe 4 / suite 65 / TCB 55. Codex revision 15 is
+profile 69 / OpenRouter GLM recipe 29 and profile 5 / Antigravity adapter 5 and
+native recipe 4 / suite 66 / TCB 56. Codex revision 15 is
 the active verified profile and revision 14 remains immutable history. Remote
 provider certification must not restart or migrate Codex, alter its artifact,
 or reissue its certificate.
@@ -88,7 +88,7 @@ operation.
 
 ## Invariants
 
-- OpenRouter GLM profile 4 uses `remote-agentic-full-workspace@1` and may carry
+- OpenRouter GLM profile 5 uses `remote-agentic-full-workspace@1` and may carry
   Core-classified real workspace, personal, and regulated/customer data to the
   exact ZDR Relace route. It never accepts client-supplied classification or
   fake/public attestations as authority.
@@ -122,7 +122,7 @@ operation.
   every indexed proposal, including later OpenRouter indices and calls decoded
   before a terminal stream error. A multi-call response is denied and paired
   in full; no call is discarded or executed. Google retains persisted
-  confirmation; OpenRouter profile 4 does not require it. Ambiguous side effects become
+  confirmation; OpenRouter profile 5 does not require it. Ambiguous side effects become
   `execution_unknown` and are not replayed automatically.
 - Provider-step and tool-call budgets are distinct and restart-safe. One final
   request plus at most one recovery retain full output/cost/deadline reserves.

@@ -1,7 +1,7 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-12-r65-openrouter-glm-workspace-instruction-redaction-tcb55`
+Matrix revision: `2026-09-12-r66-openrouter-glm-http-finalization-tcb56`
 Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==58`
@@ -17,6 +17,11 @@ Google AI Studio and Antigravity remain contained and are not part of this
 promotion decision. Codex remains the active native agent and must not be
 reconfigured by this work.
 
+Profile revision 5 and TCB manifest 56 bind HTTP/background finalization to the
+model-provider identity pinned in the immutable execution binding. This keeps a
+durable OpenRouter final outbox delivery from conflicting with the shared
+`maverick-tool-loop` runtime-engine identity after successful execution.
+
 ## Exact candidate
 
 | Field | Pinned value |
@@ -26,7 +31,7 @@ reconfigured by this work.
 | Resolved model | `z-ai/glm-5.3-flash-20260826` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-12` |
 | Catalog expiration | exact absence (`null`); any drift fails closed |
-| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@4` |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@5` |
 | Execution family | `maverick_agent` |
 | Full Workspace contract | `codex-baseline-v21` |
 | Protocol | OpenAI-compatible streaming Chat Completions v1 |
@@ -78,8 +83,8 @@ Every request carries this non-permissive router object:
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@65` and the certified
-execution TCB is manifest 55. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@66` and the certified
+execution TCB is manifest 56. The exact checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |
@@ -98,7 +103,7 @@ this table summarizes its security objectives.
 | Workspace effects | shell/process mutations commit only after exact-byte result classification is inside the live allowed class set; denied results roll back |
 | Journal/recovery | no ambiguous replay after cancellation, crash or restart; exact pairing lineage retained |
 | Context | bounded compaction preserves tool pairing and finalization reserve |
-| Final output | durable outbox and terminal delivery remain idempotent |
+| Final output | durable outbox and terminal delivery remain idempotent; HTTP/background finalization preserves the pinned model-provider identity |
 | Failure paths | auth, rate limit, timeout, catalog drift, malformed stream and endpoint mismatch fail closed |
 | UI governance | Settings and Chat expose the model only with current signed authority and an enabled binding |
 

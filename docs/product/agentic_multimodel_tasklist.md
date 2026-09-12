@@ -197,7 +197,10 @@ completion claim.
   locator and attached to the journal before stream completion or commit.
   `runtime.output.final` and `provider.execution.completed` use stable delivery
   identities and independent durable acknowledgements; recovery drains the
-  same bytes without a second provider request.
+  same bytes without a second provider request. The final-output and terminal
+  event identity is the model provider pinned in the agentic execution binding,
+  not the shared hosted runtime-engine id, so outer HTTP finalization cannot
+  relabel or reject an already committed provider outbox delivery.
 - [x] Runtime tool events enforce persisted proposal → proposed event →
   validation/disposition → started event → effect boundary → persisted result
   → completed/failed event. An ambiguous mutating boundary becomes

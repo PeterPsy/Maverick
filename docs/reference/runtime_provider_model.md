@@ -26,8 +26,8 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-The current OpenRouter target uses hosted adapter 58, GLM recipe 29, suite 65,
-TCB manifest 55, and profile 4. Google profile 69 and Antigravity remain
+The current OpenRouter target uses hosted adapter 58, GLM recipe 29, suite 66,
+TCB manifest 56, and profile 5. Google profile 69 and Antigravity remain
 contained. Exact-target live receipts and operator-reviewed natural
 conformance are required before trusted signing and publication; neither step
 grants release authority. The procedure is in
@@ -739,7 +739,7 @@ Unknown data class, provenance, trust, provider, or upstream fails closed.
 resource/version carries that Core-owned classification, an active scoped
 attestation matches the workspace and covers the resource, and the policy
 allows the class and destination. Attestation does not supply classification.
-OpenRouter profile 4 allows `public`, `workspace_internal`, `personal_data`,
+OpenRouter profile 5 allows `public`, `workspace_internal`, `personal_data`,
 and `regulated_or_customer_data` through its exact binding. Secret,
 host-operational, and unclassified content is always denied. Workspace paths are rewritten to
 `workspace://` references. Remaining host paths in descriptor-resolved,
@@ -799,7 +799,7 @@ filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes; only a complete successful
 result is cached, while transient, empty, and partial probe evidence is retried;
 their policy ceilings retain `cli`, `mcp`, `app-interface`, and
-`core-capability`. Google remains contained; OpenRouter profile 4 uses the
+`core-capability`. Google remains contained; OpenRouter profile 5 uses the
 exact administrator binding as real-data authority. Direct replacement
 and move propagate exact version-bound pre-image taint for read-after-write
 through authenticated same-session mutation records, even when the next tool

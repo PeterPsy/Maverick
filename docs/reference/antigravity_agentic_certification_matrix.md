@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-12-r65-openrouter-glm-workspace-instruction-redaction-tcb55`
+Revision: `2026-09-12-r66-openrouter-glm-http-finalization-tcb56`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through
@@ -45,7 +45,7 @@ all absolute failure counters at zero.
 ## Publication and release
 
 `publish_antigravity_connection_certificate` accepts only the complete signed
-suite-65 run from an already trusted Ed25519 signer and rechecks deployed
+suite-66 run from an already trusted Ed25519 signer and rechecks deployed
 source, TCB, matrix, target, adapter bytes, and installed runtime artifact. A
 valid root permits catalog projection but does not activate the provider or a
 workspace binding. Provider activation is an explicit operator action; global

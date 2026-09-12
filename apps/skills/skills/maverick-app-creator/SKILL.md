@@ -1,6 +1,6 @@
 ---
 name: maverick-app-creator
-description: "Use when planning or implementing a brand-new Maverick app in the current workspace/repository. Enforces clean-slate app design, app-agnostic core boundaries, contract-first implementation, workspace-owned data under data/<app_id>, declared frontend/backend/MCP/CLI/skills/hooks surfaces, tests, docs, tasklist updates, final review, and checkpoint commits."
+description: "Use when planning or implementing a brand-new Maverick app in the current workspace/repository. Enforces clean-slate app design, app-agnostic core boundaries, contract-first implementation, deliberate app icon design, workspace-owned data under data/<app_id>, declared frontend/backend/MCP/CLI/skills/hooks surfaces, tests, docs, tasklist updates, final review, and checkpoint commits."
 ---
 
 # Maverick App Creator
@@ -41,6 +41,7 @@ Clarify or infer these before implementation. If any requirement is still produc
 
 - app id, using canonical lowercase kebab-case
 - app purpose and user workflow
+- visual identity and a deliberate compact icon for every user-facing app
 - app kind: `frontend-only`, `backend-only`, `frontend+backend`, `mcp/cli-only`, `shell/host app`, or mixed
 - distribution mode: `sealed`, `source_available`, or `workspace_local`
 - source access: `none`, `read_only`, `forkable`, or `editable`
@@ -50,6 +51,22 @@ Clarify or infer these before implementation. If any requirement is still produc
 - permissions or execution policy expectations
 - expected verification: unit tests, frontend build, smoke tests, CLI/MCP invocation, runtime checks
 - whether the official App SDK template should be used: `minimal`, `frontend-backend`, `agent-tool`, `data-app`, or `widget`
+
+## App Icon Is Part Of The App
+
+The icon is part of a user-facing app's product quality, not optional polish. Do not ship a new frontend app with Maverick's generic fallback icon.
+
+For an app with a mounted frontend:
+
+- design one compact, recognizable icon that communicates the app's purpose at a glance
+- match the established Maverick rail and App Store visual language: simple geometry, rounded Material Symbols-style strokes, monochrome or restrained color, and balanced optical weight
+- make the source asset a square transparent PNG, normally 512×512, with centered artwork and enough clear padding to remain legible at 24–32 px
+- do not bake in a tile, container, text, gradient, drop shadow, or detailed illustration that conflicts with the shell-owned icon frame
+- save the app-owned source asset as `frontend/public/maverick-icon-compact.png`; the frontend build must publish it as `frontend/dist/maverick-icon-compact.png`
+- prefer a unique, semantically appropriate symbol over reusing an unrelated app's icon
+- do not add the new app id to a hardcoded core, base-shell, or App Store icon map; app identity must remain app-owned and removable with the app
+
+After the official frontend build, verify that the icon appears consistently in the desktop rail, mobile app controls, app panels, App Store rows/folders, and pinned shortcuts. Check both dark and light themes when available, and confirm the `/api/apps` registry item exposes the app-owned image logo rather than relying on a fallback glyph.
 
 ## Core Boundary Rules
 
@@ -541,6 +558,7 @@ A new Maverick app is done when:
 - app-owned data is under `data/<app_id>`
 - install and health behavior are idempotent
 - frontend builds use `maverick app <app_id> frontend build --json` for every app with a declared frontend
+- every user-facing app has a deliberate `maverick-icon-compact.png` that is visually consistent and verified across Maverick surfaces
 - backend/MCP/CLI use shared service logic where applicable
 - tests cover stable contract and storage behavior
 - docs are updated

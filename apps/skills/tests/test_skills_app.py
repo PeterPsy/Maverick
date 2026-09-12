@@ -140,6 +140,17 @@ class SkillsAppTestCase(unittest.TestCase):
                 self.assertNotIn("app_contract_architecture", content)
                 self.assertNotIn("app_sdk_architecture", content)
 
+    def test_app_creator_requires_an_app_owned_compact_icon(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        content = (app_root / "skills" / "maverick-app-creator" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("## App Icon Is Part Of The App", content)
+        self.assertIn("frontend/public/maverick-icon-compact.png", content)
+        self.assertIn("frontend/dist/maverick-icon-compact.png", content)
+        self.assertIn("desktop rail", content)
+        self.assertIn("App Store", content)
+        self.assertIn("do not add the new app id to a hardcoded core", content)
+
     def test_service_creates_updates_and_deletes_skill(self) -> None:
         service, _store = load_skills_backend_modules()
         with tempfile.TemporaryDirectory() as temp:

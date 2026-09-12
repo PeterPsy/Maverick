@@ -4,21 +4,21 @@ import type { Candidate } from '../types';
 
 type Props = {
   candidates: Candidate[]; selectedIds: Set<string>; onSelect:(candidate:Candidate)=>void;
-  onToggle:(id:string,checked:boolean)=>void; onUpdate:(id:string,payload:Partial<Candidate>)=>void;
+  onToggle:(id:string,checked:boolean)=>void; onUpdate:(id:string,payload:Partial<Candidate>)=>void; showRanking:boolean;
 };
 const score = (value:number|null) => value == null ? '—' : value.toFixed(1);
 const validUrl = (value:string) => /^https?:\/\//i.test(value) ? value : `https://${value}`;
 function PipelineSelect({value,items,onChange,label}:{value:string;items:Array<{value:string;label:string}>;onChange:(value:string)=>void;label:string}) {
   return <select aria-label={label} className={`pipeline-select status-${value}`} value={value} onClick={event=>event.stopPropagation()} onChange={event=>onChange(event.target.value)}>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select>;
 }
-export default function CandidateTable({candidates,selectedIds,onSelect,onToggle,onUpdate}:Props) {
+export default function CandidateTable({candidates,selectedIds,onSelect,onToggle,onUpdate,showRanking}:Props) {
   return <>
     <div className="candidate-table-wrap"><table className="candidate-table">
       <thead><tr><th className="check-cell"><span className="sr-only">Seleziona</span></th><th>Candidato</th><th>Valutazione</th><th>Decisione</th><th>Email</th><th>Call</th><th>POC</th><th></th></tr></thead>
-      <tbody>{candidates.map(candidate=><tr key={candidate.id} className={selectedIds.has(candidate.id)?'is-checked':''} onClick={()=>onSelect(candidate)}>
+      <tbody>{candidates.map((candidate,index)=><tr key={candidate.id} className={selectedIds.has(candidate.id)?'is-checked':''} onClick={()=>onSelect(candidate)}>
         <td className="check-cell"><button aria-label={`Seleziona ${candidate.name}`} className={`check-box ${selectedIds.has(candidate.id)?'is-active':''}`} onClick={event=>{event.stopPropagation();onToggle(candidate.id,!selectedIds.has(candidate.id));}} type="button">{selectedIds.has(candidate.id)?<Check size={13}/>:null}</button></td>
         <td><div className="identity"><span className="avatar">{candidate.name.split(/\s+/).slice(0,2).map(part=>part[0]).join('').toUpperCase()}</span><div><strong>{candidate.name}</strong><small>{candidate.city || candidate.email}</small><span className="identity-meta">{candidate.profile_code || '—'}{candidate.specialty?` · ${candidate.specialty}`:''}</span></div>{candidate.favorite?<Star className="favorite-mark" size={13} fill="currentColor"/>:null}</div></td>
-        <td><div className="score-cell"><strong>{score(candidate.review_score)}</strong><span>/ 10</span></div><small>{candidate.review_rank?`Rank #${candidate.review_rank} · `:''}Form {score(candidate.form_fit_score)}</small></td>
+        <td><div className="score-cell"><strong>{score(candidate.review_score)}</strong><span>/ 10</span></div><small>{showRanking?`Pos. #${index+1} · `:''}Form {score(candidate.form_fit_score)}</small></td>
         <td><PipelineSelect label={`Decisione per ${candidate.name}`} value={candidate.decision} items={DECISIONS} onChange={value=>onUpdate(candidate.id,{decision:value as Candidate['decision']})}/></td>
         <td><PipelineSelect label={`Email per ${candidate.name}`} value={candidate.email_status} items={EMAIL_STATUSES} onChange={value=>onUpdate(candidate.id,{email_status:value as Candidate['email_status']})}/></td>
         <td><PipelineSelect label={`Call per ${candidate.name}`} value={candidate.call_status} items={CALL_STATUSES} onChange={value=>onUpdate(candidate.id,{call_status:value as Candidate['call_status']})}/></td>

@@ -8,7 +8,7 @@ from typing import Any
 from candidate_store import candidate_from_row
 
 SORTS = {
-    "review": "reviewed DESC, (score_portfolio IS NOT NULL AND score_budget IS NOT NULL AND score_test IS NOT NULL) DESC, (review_rank IS NULL), review_rank ASC, review_score DESC, form_fit_score DESC, name COLLATE NOCASE",
+    "review": "reviewed DESC, (score_portfolio IS NOT NULL AND score_budget IS NOT NULL AND score_test IS NOT NULL) DESC, review_score DESC, form_fit_score DESC, name COLLATE NOCASE",
     "form": "form_fit_score DESC, reviewed DESC, review_score DESC, name COLLATE NOCASE",
     "name": "name COLLATE NOCASE",
     "newest": "COALESCE(source_response_number, 0) DESC, created_at DESC",

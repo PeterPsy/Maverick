@@ -37,10 +37,15 @@ class CandidateCatalogTest(unittest.TestCase):
                     "profileCode": "P",
                     "area": "Short form",
                     "scores": {"portfolio": 8, "budget": 7, "test": 9},
+                    "reviewRank": 99,
                     "reviewed": True,
                     "decision": "da_valutare",
                 },
-                {"id": "candidate_luca", "name": "Luca Neri", "email": "luca@example.test", "decision": "scartato"},
+                {
+                    "id": "candidate_luca", "name": "Luca Neri", "email": "luca@example.test",
+                    "scores": {"portfolio": 7, "budget": 7, "test": 7}, "reviewRank": 1,
+                    "reviewed": True, "decision": "scartato"
+                },
             ],
         )["import"]
         self.assertEqual(imported["created"], 2)
@@ -49,6 +54,7 @@ class CandidateCatalogTest(unittest.TestCase):
 
         listed = self.call("list", sort="review")["items"]
         self.assertEqual([item["id"] for item in listed], ["candidate_anna", "candidate_luca"])
+        self.assertEqual([item["review_rank"] for item in listed], [99, 1], "Historical rank must not control score sorting")
         self.assertEqual(listed[0]["review_score"], 8.0)
         updated = self.call(
             "update", id="candidate_anna", payload={"decision": "selezionato", "email_status": "email_inviata", "score_test": 10}

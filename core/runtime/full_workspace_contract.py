@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v20"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v21"
 MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
 MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY = "maverick_agent_candidate"
 
@@ -102,8 +102,6 @@ def inspect_full_workspace_contract(
         "app_references": capabilities.app_references,
         "confirmations": capabilities.confirmations,
         "attachment:file": "file" in capabilities.attachment_modalities,
-        "policy:confirm_mutating": policy.require_confirmation_for_mutating,
-        "policy:confirm_destructive": policy.require_confirmation_for_destructive,
         "policy:core_capability_surface": (
             "core-capability" in policy.allowed_surface_kinds
         ),

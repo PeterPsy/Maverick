@@ -37,7 +37,7 @@ from core.runtime.tool_result_classification import (
 from core.shared.tool_effects import resolve_tool_effect_class
 
 
-HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 5
+HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 6
 
 _ACTION_METADATA_FIELDS: dict[str, tuple[str, ...]] = {
     "core-capability:process.start": (
@@ -65,11 +65,15 @@ def build_hosted_tool_result_admission_resolver(
     cli_registry,
     mcp_registry,
     public_content_authority_resolver=None,
+    allowed_remote_data_classes: tuple[str, ...] | None = None,
+    live_allowed_remote_data_classes_resolver=None,
 ) -> Callable[
     [str, dict[str, object], dict[str, object], RuntimeToolActorContext],
     CanonicalSourceClassification | RuntimeToolSurfaceResult | None,
 ]:
     """Build the closed production policy for result bytes shown to a model."""
+    admitted_data_classes = tuple(allowed_remote_data_classes or ("public",))
+    workspace_internal_default = "workspace_internal" in admitted_data_classes
 
     def resolve(handle, arguments, result, context):
         if handle in _ACTION_METADATA_FIELDS:
@@ -108,6 +112,7 @@ def build_hosted_tool_result_admission_resolver(
                     public_content_authority_resolver,
                     context,
                 ),
+                workspace_internal_default=workspace_internal_default,
             )
         if handle in {
             "core-capability:cli.list",
@@ -134,6 +139,7 @@ def build_hosted_tool_result_admission_resolver(
                     public_content_authority_resolver,
                     context,
                 ),
+                workspace_internal_default=workspace_internal_default,
             )
         if handle == "core-capability:cli.run" or handle.startswith("cli:"):
             command_id = (
@@ -175,6 +181,7 @@ def build_hosted_tool_result_admission_resolver(
                     public_content_authority_resolver,
                     context,
                 ),
+                workspace_internal_default=workspace_internal_default,
             )
         if handle == "core-capability:mcp.call" or handle.startswith("mcp:"):
             tool_name = (
@@ -216,9 +223,14 @@ def build_hosted_tool_result_admission_resolver(
                     public_content_authority_resolver,
                     context,
                 ),
+                workspace_internal_default=workspace_internal_default,
             )
         return None
 
+    resolve.allowed_remote_data_classes = admitted_data_classes
+    resolve.live_allowed_remote_data_classes_resolver = (
+        live_allowed_remote_data_classes_resolver
+    )
     return resolve
 
 
@@ -228,26 +240,49 @@ def build_hosted_tool_result_preflight_resolver(
     mcp_registry,
     process_registry=None,
     public_content_authority_resolver=None,
+    allowed_remote_data_classes: tuple[str, ...] | None = None,
+    live_allowed_remote_data_classes_resolver=None,
 ):
     """Fence variable-result mutations that cannot guarantee safe pairing."""
     admitted_read = RuntimeToolResultPreflightDecision(True)
     admitted_public = RuntimeToolResultPreflightDecision(True, "public")
-    admitted_guarded = RuntimeToolResultPreflightDecision(True)
+    admitted_public_guarded = RuntimeToolResultPreflightDecision(True, "public")
+    admitted_workspace_guarded = RuntimeToolResultPreflightDecision(
+        True,
+        "regulated_or_customer_data",
+    )
     denied = RuntimeToolResultPreflightDecision(False)
+    admitted_data_classes = tuple(allowed_remote_data_classes or ("public",))
+
+    def current_data_classes() -> set[str]:
+        return set(
+            _resolve_allowed_data_classes(
+                admitted_data_classes,
+                live_allowed_remote_data_classes_resolver,
+            )
+        )
+
+    def guarded_result(context):
+        current = current_data_classes()
+        if (
+            _public_authority(public_content_authority_resolver, context)
+            is not None
+            and "public" in current
+        ):
+            return admitted_public_guarded
+        if {
+            "workspace_internal",
+            "personal_data",
+            "regulated_or_customer_data",
+        }.issubset(current):
+            return admitted_workspace_guarded
+        return denied
 
     def resolve(handle, arguments, context):
         if handle == "core-capability:shell.run":
             if not arguments.get("mutation_scopes"):
                 return admitted_read
-            return (
-                admitted_guarded
-                if _public_authority(
-                    public_content_authority_resolver,
-                    context,
-                )
-                is not None
-                else denied
-            )
+            return guarded_result(context)
         if handle == "core-capability:process.start":
             return admitted_public
         if handle == "core-capability:process.status":
@@ -260,15 +295,7 @@ def build_hosted_tool_result_preflight_resolver(
             )
             if not pending:
                 return admitted_read
-            return (
-                admitted_guarded
-                if _public_authority(
-                    public_content_authority_resolver,
-                    context,
-                )
-                is not None
-                else denied
-            )
+            return guarded_result(context)
         if handle in {
             "core-capability:process.input",
             "core-capability:process.interrupt",
@@ -310,6 +337,35 @@ def build_hosted_tool_result_preflight_resolver(
         return None
 
     return resolve
+
+
+def hosted_result_allowed_data_classes(resolver) -> tuple[str, ...]:
+    """Return the exact result classes bound into a production resolver."""
+    return _resolve_allowed_data_classes(
+        getattr(resolver, "allowed_remote_data_classes", ("public",)),
+        getattr(resolver, "live_allowed_remote_data_classes_resolver", None),
+    )
+
+
+def _resolve_allowed_data_classes(value, live_resolver) -> tuple[str, ...]:
+    if not isinstance(value, tuple) or any(
+        not isinstance(item, str) for item in value
+    ):
+        return ()
+    if live_resolver is None:
+        return value
+    if not callable(live_resolver):
+        return ()
+    try:
+        live = live_resolver()
+    except Exception:
+        return ()
+    if not isinstance(live, tuple) or any(
+        not isinstance(item, str) for item in live
+    ):
+        return ()
+    live_set = set(live)
+    return tuple(item for item in value if item in live_set)
 
 
 def _definition_preflight(
@@ -422,4 +478,5 @@ __all__ = [
     "HOSTED_TOOL_RESULT_PREFLIGHT_REVISION",
     "build_hosted_tool_result_admission_resolver",
     "build_hosted_tool_result_preflight_resolver",
+    "hosted_result_allowed_data_classes",
 ]

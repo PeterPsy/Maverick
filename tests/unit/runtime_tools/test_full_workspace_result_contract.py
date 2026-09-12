@@ -254,7 +254,7 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
                 policy=policy,
                 allowed_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES[:-1],
             )
-        self.assertFalse(
+        self.assertTrue(
             inspect_full_workspace_contract(
                 capabilities=capabilities,
                 policy=replace(

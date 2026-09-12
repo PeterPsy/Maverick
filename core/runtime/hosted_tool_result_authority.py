@@ -24,7 +24,7 @@ from core.runtime.tool_result_classification import (
 )
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 10
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 11
 _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
 
 
@@ -36,6 +36,7 @@ def _content_derived_surface(
     classification_projection: RuntimeToolClassificationProjection | None = None,
     declared_public: bool = False,
     public_content_authority=None,
+    workspace_internal_default: bool = False,
 ) -> RuntimeToolSurfaceResult:
     classification_payload = (
         classification_projection.resolve(payload)
@@ -82,6 +83,9 @@ def _content_derived_surface(
     elif detected == "unclassified" and declared_public:
         data_class = "public"
         authority_ref = ":core-result-contract"
+    elif detected == "unclassified" and workspace_internal_default:
+        data_class = "workspace_internal"
+        authority_ref = ":exact-workspace-result"
     return _admitted_surface(
         source_handle,
         payload,

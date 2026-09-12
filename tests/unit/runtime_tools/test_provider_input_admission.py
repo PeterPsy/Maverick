@@ -94,7 +94,7 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         entry = manifest["sources"][
             "runtime-turn:turn-sensitive:attachment:0:metadata"
         ]
-        self.assertEqual(entry["data_class"], "unclassified")
+        self.assertEqual(entry["data_class"], "workspace_internal")
         self.assertEqual(
             manifest["classifier_id"],
             RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID,
@@ -172,7 +172,7 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         self.assertFalse(egress.decision.export_allowed)
         self.assertIsNone(egress.exported_content)
 
-    def test_unmarked_prompt_is_captured_as_unclassified(self) -> None:
+    def test_unmarked_prompt_is_captured_as_workspace_internal(self) -> None:
         harness, state = self._state_with_turn(
             input_text="Summarize the public fixture.",
         )
@@ -186,7 +186,10 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
             attachments=None,
         )
 
-        self.assertEqual(sources[0].classification.data_class, "unclassified")
+        self.assertEqual(
+            sources[0].classification.data_class,
+            "workspace_internal",
+        )
         self.assertEqual(
             sources[0].classification.classification_revision,
             RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
@@ -279,7 +282,7 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
             authority.classification_id,
         )
 
-    def test_content_scanning_never_promotes_benign_looking_text_to_public(
+    def test_content_scanning_defaults_benign_exact_input_to_workspace_internal(
         self,
     ) -> None:
         for content in (
@@ -293,7 +296,7 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
                         content,
                         content_type="text/plain",
                     ),
-                    "unclassified",
+                    "workspace_internal",
                 )
 
     def test_governed_context_restrictively_joins_captured_source_bytes(
@@ -329,10 +332,12 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
             if source.source_id == "generalist-orchestration"
         )
 
-        # The sensitive chunk is detected, but benign-looking sibling chunks
-        # remain unclassified and the restrictive aggregate cannot promote
-        # them merely because no marker was found.
-        self.assertEqual(classification.data_class, "unclassified")
+        # Exact benign chunks are workspace-internal while sensitive chunks
+        # monotonically narrow the aggregate to the stricter real-data class.
+        self.assertEqual(
+            classification.data_class,
+            "regulated_or_customer_data",
+        )
         self.assertEqual(classification.trust_level, "untrusted_external")
 
     def test_missing_or_conflicting_capture_fails_closed(self) -> None:

@@ -26,9 +26,9 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-Current remote candidates use hosted adapter 44, recipe 25, suite 49 and TCB
-manifest 39 (Google/OpenRouter profiles 53/52 and Antigravity native
-adapter/recipe 3). Exact-target live receipts and independently observed natural
+The current OpenRouter target uses hosted adapter 56, GLM recipe 28, suite 63,
+TCB manifest 53, and profile 2. Google profile 67 and Antigravity remain
+contained. Exact-target live receipts and operator-reviewed natural
 conformance are required before trusted signing and publication; neither step
 grants release authority. The procedure is in
 `docs/runbooks/agentic_certification_evidence.md`. Historical revision numbers
@@ -301,12 +301,11 @@ narrowed state is `unavailable`; it is never silently offered as a lesser
 agent.
 
 For remote API profiles, availability and workspace authority are distinct.
-The attestation implementation is present, while the global and provider kill
-switches default off. When they are deliberately enabled, Core re-reads the
-typed persisted workspace attestation during definition resolution, binding
-pinning, session/child creation, queue, provider-start handoff, authority
-refresh, continuation and recovery. Missing, malformed, mismatched or revoked
-records fail closed; persisted state overrides any older supplied snapshot.
+Contained Google/Antigravity policies still re-read the typed fake-data
+attestation. OpenRouter GLM's full-workspace policy derives authority from the
+exact enabled administrator binding instead; no fake/public attestation is
+required. Every path still revalidates feature flags, binding, certificate,
+TCB, actor, and egress policy before dispatch or effects.
 
 Settings renders family and Full Workspace state as derived information. It
 does not expose capability tiers, a `Full/Read-only` switch, per-agent controls
@@ -716,8 +715,9 @@ encrypted store with a separate namespace and integrity binding.
 
 `AgenticEgressEvaluator` evaluates every Core-classified content block against its
 exact provider/upstream and policy revision before returning bytes to a request
-builder. Attestation/declaration, effective resource classification, and this
-decision are separate records. The workspace attestation is an actor-attributed,
+builder. Binding/attestation, effective resource classification, and this
+decision are separate records. The legacy fake-data workspace attestation is
+an actor-attributed,
 timestamped, scoped, revocable CAS record exposed for mutation only through
 governed Core operator/admin surfaces; Settings may show its read-only safe
 projection. It can narrow policy but cannot promote real, secret,
@@ -729,42 +729,49 @@ Every platform/finalization instruction, prompt, orchestration block, skill,
 attachment, app reference, tool schema/result, and private-state source retains
 distinct canonical provenance,
 trust, and data class. Filesystem and tool-result sources inherit the exact
-resource identity, revision, digest, and matching classification record. A
-missing/incoherent match becomes `unclassified`, and the restrictive source
+resource identity, revision, digest, and matching classification record. Exact
+Core-composed input and exact observed workspace resources without a
+conflicting stored record default to `workspace_internal`; missing identity or
+an incoherent existing record becomes `unclassified`, and the restrictive source
 join cannot be weakened by an attestation or a less-sensitive sibling.
 Unknown data class, provenance, trust, provider, or upstream fails closed.
 `workspace_internal_fake` can pass this stage only when the exact observed
 resource/version carries that Core-owned classification, an active scoped
 attestation matches the workspace and covers the resource, and the policy
 allows the class and destination. Attestation does not supply classification.
-Current contained revisions list only `public`, remain disabled and NO-GO, and
-no client or egress-policy id is attestation. Secret, host-operational, and
-unclassified content is always denied. Workspace paths are rewritten to
+OpenRouter profile 2 allows `public`, `workspace_internal`, `personal_data`,
+and `regulated_or_customer_data` through its exact binding. Secret,
+host-operational, and unclassified content is always denied. Workspace paths are rewritten to
 `workspace://` references, other host paths are denied, and recognizable
 sensitive text must be redacted.
 
 For app references, Core hashes the complete server-materialized payload into
 the observed revision/digest and hashes its stable app/entity key into the
 resource identity. The production resolver reads the same revisioned workspace
-classification store used by other resource observations. Absent evidence or
-any identity/version mismatch stays `unclassified`.
+classification store used by other resource observations. An exact
+server-materialized workspace reference with no stored override is
+`workspace_internal`; any identity/version mismatch stays `unclassified`.
 
 Production bootstrap also installs the closed transient-input admission
 resolver and its Core-owned production writer. Before dispatch, one turn CAS
 persists a revisioned content-derived manifest for the exact prompt, agent
 instruction, reference metadata, and each governed orchestration control,
-summary, task/result, and artifact chunk. Integrity-bound source ids never imply
-`public`; marker absence remains `unclassified` unless a current operator-owned
-runtime-public classification policy explicitly authorizes Core to classify
-the exact source identity/revision/digest. Admission revalidates the policy's
+summary, task/result, and artifact chunk. Marker absence on this exact Core
+boundary means `workspace_internal`; sensitive markers monotonically narrow
+the class. A current operator-owned runtime-public classification policy may
+instead authorize `public` for the exact source identity/revision/digest.
+Admission revalidates the policy's
 self-digest, CAS revision, workspace identity, and revocation state against the
 immutable manifest. Governed
 context restrictively joins its entries while retaining untrusted provenance.
 
-Tool results do not receive a generic public fallback. Exact resource
+Tool results do not receive a generic public fallback. Under the OpenRouter
+full-workspace policy, exact Core-admitted ordinary results default to
+`workspace_internal` and marker scanning may only narrow them. Exact resource
 observations and edit pre-images retain their taint; shell/process streams and
-CLI/MCP discovery/read results are classified from exact bytes under an active
-runtime-public policy or an explicit certified Core result contract and remain
+CLI/MCP discovery/read results are classified from exact bytes under the live
+data-class policy, an active runtime-public policy, or an explicit certified
+Core result contract and remain
 complete through the common compactor. A denied private result becomes only a
 public call-paired error on the next request. Workspace-mutating shell/process
 runs classify their exact private-overlay result before commit and discard the
@@ -785,18 +792,17 @@ immutable workspace snapshot that omits every `.git` component, so post-spawn
 live create/rename races remain invisible to shell and managed processes, with
 or without a mutation overlay.
 Current Google/OpenRouter definitions use `maverick_agent` and pin
-`codex-baseline-v20` only because the executable 24-behavior gate runs 16 real
+`codex-baseline-v21` because the executable 24-behavior gate runs 16 real
 filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes; only a complete successful
 result is cached, while transient, empty, and partial probe evidence is retried;
 their policy ceilings retain `cli`, `mcp`, `app-interface`, and
-`core-capability`, and the public resolver proves the complete live authority
-from each exact profile. They are still uncertified, unbound, contained
-previews. Direct replacement
+`core-capability`. Google remains contained; OpenRouter profile 2 uses the
+exact administrator binding as real-data authority. Direct replacement
 and move propagate exact version-bound pre-image taint for read-after-write
 through authenticated same-session mutation records, even when the next tool
-step rebuilds its orchestrator, while creation remains unclassified without
-authoritative source taint. Mutable classification authority is stored as the
+step rebuilds its orchestrator, while an exact workspace creation defaults to
+`workspace_internal`. Mutable classification authority is stored as the
 exact id, kind, ref, revision, digest, and policy revision on tool and
 provider-state lineage, then checked against the current audit-backed authority
 before result reuse, continuation, request commit, and every actual lazy-stream
@@ -821,7 +827,8 @@ authority before use, and only Core-generated compactor metadata is added on a
 derived payload. User-controlled attachment metadata, filesystem paths/content,
 shell output, discovery text, and arbitrary result fields remain scanned, while
 classification evidence still binds the complete unmodified bytes. Classifier
-revision 4, hosted result-admission revision 10, and runtime-public policy v3
+revision 5, hosted result-admission revision 11, result-preflight revision 6,
+and runtime-public policy v3
 invalidate older vulnerable manifests and mutable-authority lineage.
 
 Google profile/binding/certificate/request identity uses the `exact` revision

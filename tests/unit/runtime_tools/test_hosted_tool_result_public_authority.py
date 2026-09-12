@@ -82,6 +82,73 @@ class HostedToolResultPublicAuthorityTest(unittest.TestCase):
         )
         self._assert_digest_matches(ordinary)
 
+    def test_full_workspace_policy_classifies_real_results_without_attestation(
+        self,
+    ) -> None:
+        allowed = (
+            "public",
+            "workspace_internal",
+            "personal_data",
+            "regulated_or_customer_data",
+        )
+        current = {"allowed": allowed}
+        resolve = build_hosted_tool_result_admission_resolver(
+            cli_registry=self.cli,
+            mcp_registry=self.mcp,
+            allowed_remote_data_classes=allowed,
+            live_allowed_remote_data_classes_resolver=lambda: current[
+                "allowed"
+            ],
+        )
+        preflight = build_hosted_tool_result_preflight_resolver(
+            cli_registry=self.cli,
+            mcp_registry=self.mcp,
+            allowed_remote_data_classes=allowed,
+            live_allowed_remote_data_classes_resolver=lambda: current[
+                "allowed"
+            ],
+        )
+
+        ordinary = resolve(
+            "core-capability:shell.run",
+            {"argv": ["printf", "workspace output"]},
+            {"exit_code": 0, "output": "workspace output"},
+            self.actor,
+        )
+        personal = resolve(
+            "core-capability:shell.run",
+            {"argv": ["printf", "contact"]},
+            {"exit_code": 0, "output": "owner@example.com"},
+            self.actor,
+        )
+        secret = resolve(
+            "core-capability:shell.run",
+            {"argv": ["printf", "secret"]},
+            {"exit_code": 0, "output": "OPENROUTER_API_KEY=private"},
+            self.actor,
+        )
+        mutation = preflight(
+            "core-capability:shell.run",
+            {"argv": ["touch", "real.txt"], "mutation_scopes": [{"path": "."}]},
+            self.actor,
+        )
+
+        self.assertEqual(ordinary.classification.data_class, "workspace_internal")
+        self.assertEqual(personal.classification.data_class, "personal_data")
+        self.assertEqual(secret.classification.data_class, "credential_or_secret")
+        self.assertTrue(mutation.admitted_before_effect)
+        self.assertEqual(
+            mutation.guaranteed_data_class,
+            "regulated_or_customer_data",
+        )
+        current["allowed"] = ("public",)
+        tightened = preflight(
+            "core-capability:shell.run",
+            {"argv": ["touch", "real.txt"], "mutation_scopes": [{"path": "."}]},
+            self.actor,
+        )
+        self.assertFalse(tightened.admitted_before_effect)
+
     def test_certified_core_result_contract_is_an_explicit_public_authority(
         self,
     ) -> None:

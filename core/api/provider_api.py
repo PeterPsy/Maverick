@@ -25,6 +25,9 @@ from core.providers.agentic_workspace_admin import (
     save_workspace_agentic_binding,
 )
 from core.providers.agentic_workspace_policy import human_actor_selection_allowed
+from core.providers.agentic_data_policies import (
+    remote_data_policy_requires_fake_data_attestation,
+)
 from core.providers.certificate_projection import certificate_profile_status
 from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.providers.execution_families import (
@@ -515,6 +518,8 @@ def _agentic_egress_policy_payload(
 def _agentic_data_policy_payload(
     routing_constraint,
     *,
+    egress_policy_id: str,
+    egress_policy_revision: str,
     state: PlatformState | None = None,
     workspace_id: str | None = None,
 ) -> dict[str, object]:
@@ -525,6 +530,10 @@ def _agentic_data_policy_payload(
         if callable(get_attestation) and workspace_id
         else None
     )
+    attestation_required = remote_data_policy_requires_fake_data_attestation(
+        egress_policy_id,
+        egress_policy_revision,
+    )
     return {
         "collection": routing_constraint.data_collection_policy,
         "require_zdr": routing_constraint.require_zdr,
@@ -533,6 +542,12 @@ def _agentic_data_policy_payload(
             if routing_constraint.require_zdr
             else "provider_contract"
         ),
+        "authority_mode": (
+            "fake_data_attestation"
+            if attestation_required
+            else "workspace_binding"
+        ),
+        "attestation_required": attestation_required,
         "attestation_state": attestation["state"],
         "attestation": attestation,
     }
@@ -831,6 +846,8 @@ def workspace_agentic_profile_status(
                 ),
                 "data_policy": _agentic_data_policy_payload(
                     definition.routing_constraint,
+                    egress_policy_id=binding.egress_policy_id,
+                    egress_policy_revision=binding.egress_policy_revision,
                     state=state,
                     workspace_id=workspace_id,
                 ),
@@ -1223,6 +1240,8 @@ def workspace_agentic_admin_status(
                 ),
                 "data_policy": _agentic_data_policy_payload(
                     definition.routing_constraint,
+                    egress_policy_id=effective_egress_policy_id,
+                    egress_policy_revision=effective_egress_policy_revision,
                     state=state,
                     workspace_id=workspace_id,
                 ),
@@ -1698,6 +1717,8 @@ def runtime_session_agentic_governance_payload(
         ),
         "data_policy": _agentic_data_policy_payload(
             binding.routing_constraint_snapshot,
+            egress_policy_id=binding.egress_policy_id,
+            egress_policy_revision=binding.egress_policy_revision,
             state=state,
             workspace_id=session.workspace_id,
         ),

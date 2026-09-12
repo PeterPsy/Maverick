@@ -8,6 +8,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_data_policies import (
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
+)
 from core.providers.errors import AgenticProfileError, CapabilityCertificateError
 from core.recovery.continuation_admission import assess_runtime_session_admission
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
@@ -121,6 +125,28 @@ def _remote_environment(provider_id: str) -> dict[str, str]:
 
 
 class RemoteAgenticAdmissionTest(unittest.TestCase):
+    def test_openrouter_full_workspace_policy_needs_no_fake_attestation(self) -> None:
+        identity = SimpleNamespace(
+            **vars(_identity("openrouter")),
+            egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+            egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
+        )
+        workspace_store = Mock()
+        with patch.dict(
+            "os.environ",
+            _remote_environment("openrouter"),
+            clear=True,
+        ), patch(
+            "core.runtime.remote_agentic_admission.REMOTE_AGENTIC_ATTESTATION_AVAILABLE",
+            False,
+        ):
+            require_remote_agentic_session_admission(
+                identity,
+                workspace_id="workspace-1",
+                workspace_store=workspace_store,
+            )
+        workspace_store.get_data_attestation.assert_not_called()
+
     def test_antigravity_requires_its_independent_preview_flag(self) -> None:
         identity = SimpleNamespace(
             runtime_engine_id="antigravity-cli",

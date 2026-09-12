@@ -1,4 +1,4 @@
-"""Immutable contained preview for certified OpenRouter agentic execution."""
+"""Immutable full-workspace profile for certified OpenRouter execution."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from core.providers.agentic_models import (
     AgenticRuntimePolicy,
     RoutingConstraint,
 )
-from core.providers.agentic_workspace_policy import (
-    REMOTE_PREVIEW_EGRESS_POLICY_ID,
-    REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+from core.providers.agentic_data_policies import (
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
 from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.providers.openrouter_agentic_models import (
@@ -30,18 +30,15 @@ from core.providers.maverick_agent_onboarding import (
     validate_maverick_runtime_adapter,
 )
 from core.providers.store import ProviderStore
-from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
-    FULL_WORKSPACE_CORE_TOOL_HANDLES,
-)
+from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = (
     "agentic-profile-openrouter-glm-5-3-flash-relace-fp4"
 )
-OPENROUTER_AGENTIC_PROFILE_REVISION = "1"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ()
+OPENROUTER_AGENTIC_PROFILE_REVISION = "2"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ("1",)
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = OPENROUTER_AGENTIC_REASONING_EFFORTS
 OPENROUTER_DEFAULT_REASONING_EFFORT = OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
 OPENROUTER_AGENTIC_CERTIFICATE_ID = (
@@ -50,32 +47,37 @@ OPENROUTER_AGENTIC_CERTIFICATE_ID = (
 
 
 def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
-    """Return the contained governed-workspace preview resource ceiling."""
+    """Return the Codex-equivalent real-workspace resource ceiling."""
     return AgenticRuntimePolicy(
-        max_steps_per_turn=32,
-        max_tool_calls_per_turn=24,
+        max_steps_per_turn=256,
+        max_tool_calls_per_turn=256,
         max_parallel_tool_calls=0,
-        max_wall_time_seconds=900,
-        max_tool_result_bytes=1_500_000,
-        max_total_tool_result_bytes=8_000_000,
-        max_input_tokens=262_144,
-        max_output_tokens=16_384,
-        max_estimated_cost_microusd=250_000,
+        max_wall_time_seconds=86_400,
+        max_tool_result_bytes=1_048_576,
+        max_total_tool_result_bytes=16_777_216,
+        max_input_tokens=1_000_000,
+        max_output_tokens=128_000,
+        max_estimated_cost_microusd=None,
         allowed_surface_kinds=(
             "cli",
             "mcp",
             "app-interface",
             "core-capability",
         ),
-        tool_handle_mode="exact",
-        allowed_tool_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES,
+        tool_handle_mode="all_currently_authorized",
+        allowed_tool_handles=(),
         allow_filesystem_list=True,
         allow_filesystem_read=True,
         allow_filesystem_write=True,
         allow_shell=True,
-        require_confirmation_for_mutating=True,
-        require_confirmation_for_destructive=True,
-        allowed_remote_data_classes=("public",),
+        require_confirmation_for_mutating=False,
+        require_confirmation_for_destructive=False,
+        allowed_remote_data_classes=(
+            "public",
+            "workspace_internal",
+            "personal_data",
+            "regulated_or_customer_data",
+        ),
     )
 
 
@@ -93,7 +95,7 @@ def openrouter_agentic_preview_publication(
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
-        display_name="OpenRouter GLM 5.3 Flash · Relace FP4 · Full Workspace preview",
+        display_name="OpenRouter GLM 5.3 Flash · Relace FP4 · Full Workspace",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,
@@ -109,8 +111,8 @@ def openrouter_agentic_preview_publication(
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
-        egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
-        egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+        egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+        egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
         full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         execution_family=MAVERICK_AGENT_EXECUTION_FAMILY,
         harness_recipe_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_id,
@@ -139,7 +141,7 @@ def openrouter_agentic_preview_publication(
         provider_config=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
         recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         profile=definition,
-        rollout_status="preview",
+        rollout_status="available",
         superseded_profile_revisions=OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
     )
 

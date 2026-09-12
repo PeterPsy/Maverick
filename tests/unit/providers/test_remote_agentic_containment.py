@@ -141,6 +141,8 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                     "collection": "provider_contract",
                     "require_zdr": False,
                     "retention": "provider_contract",
+                    "authority_mode": "fake_data_attestation",
+                    "attestation_required": True,
                     "attestation_state": "not_attested",
                     "attestation": {
                         "state": "not_attested",
@@ -223,6 +225,8 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 "collection": "provider_contract",
                 "require_zdr": False,
                 "retention": "provider_contract",
+                "authority_mode": "fake_data_attestation",
+                "attestation_required": True,
                 "attestation_state": "not_attested",
                 "attestation": {
                     "state": "not_attested",

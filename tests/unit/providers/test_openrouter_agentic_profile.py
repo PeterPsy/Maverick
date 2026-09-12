@@ -37,7 +37,6 @@ from core.providers.maverick_agent_builtins import (
 )
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
-    FULL_WORKSPACE_CORE_TOOL_HANDLES,
     MAVERICK_AGENT_EXECUTION_FAMILY,
 )
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
@@ -50,7 +49,7 @@ NOW = datetime(2026, 8, 17, tzinfo=UTC)
 from tests.support.certification_evidence import fixture_step_process, with_fixture_behavior
 
 class OpenRouterAgenticProfileTest(unittest.TestCase):
-    def test_bootstrap_publishes_exact_expiring_unbound_preview(self) -> None:
+    def test_bootstrap_publishes_exact_expiring_unbound_full_workspace_profile(self) -> None:
         root = make_temp_repo_root(self)
         with mock.patch.dict(
             os.environ,
@@ -75,9 +74,9 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             profile.runtime_engine_id
         )
 
-        self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "1")
-        self.assertEqual(profile.adapter_version_constraint, "==55")
+        self.assertEqual(status.rollout_status, "available")
+        self.assertEqual(profile.revision, "2")
+        self.assertEqual(profile.adapter_version_constraint, "==56")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
             ("cli", "mcp", "app-interface", "core-capability"),
@@ -124,9 +123,20 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(routing.data_collection_policy, "deny")
         self.assertTrue(routing.require_zdr)
         self.assertEqual(routing.allowed_quantizations, ("fp4",))
-        self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
-        self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
-        self.assertEqual(profile.egress_policy_revision, "2")
+        self.assertEqual(
+            profile.policy_ceiling.allowed_remote_data_classes,
+            (
+                "public",
+                "workspace_internal",
+                "personal_data",
+                "regulated_or_customer_data",
+            ),
+        )
+        self.assertEqual(
+            profile.egress_policy_id,
+            "remote-agentic-full-workspace",
+        )
+        self.assertEqual(profile.egress_policy_revision, "1")
         self.assertEqual(
             profile.full_workspace_contract_revision,
             FULL_WORKSPACE_CONTRACT_REVISION,
@@ -150,8 +160,25 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         with self.assertRaises(ProviderNotFoundError):
             state.provider_store.get_capability_certificate(profile.capability_certificate_id)
         self.assertEqual(
-            profile.policy_ceiling.allowed_tool_handles,
-            FULL_WORKSPACE_CORE_TOOL_HANDLES,
+            profile.policy_ceiling.tool_handle_mode,
+            "all_currently_authorized",
+        )
+        self.assertEqual(profile.policy_ceiling.allowed_tool_handles, ())
+        self.assertEqual(profile.policy_ceiling.max_steps_per_turn, 256)
+        self.assertEqual(profile.policy_ceiling.max_tool_calls_per_turn, 256)
+        self.assertEqual(profile.policy_ceiling.max_wall_time_seconds, 86_400)
+        self.assertEqual(profile.policy_ceiling.max_input_tokens, 1_000_000)
+        self.assertEqual(profile.policy_ceiling.max_output_tokens, 128_000)
+        self.assertIsNone(profile.policy_ceiling.max_estimated_cost_microusd)
+        self.assertFalse(
+            profile.policy_ceiling.require_confirmation_for_mutating
+        )
+        self.assertFalse(
+            profile.policy_ceiling.require_confirmation_for_destructive
+        )
+        self.assertEqual(
+            profile.context_policy.max_request_input_tokens,
+            1_000_000,
         )
         self.assertFalse(
             any(
@@ -240,7 +267,6 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 profile.policy_ceiling,
                 max_steps_per_turn=profile.policy_ceiling.max_steps_per_turn * 2,
                 max_tool_calls_per_turn=profile.policy_ceiling.max_tool_calls_per_turn * 2,
-                max_estimated_cost_microusd=profile.policy_ceiling.max_estimated_cost_microusd * 2,
             ),
         )
         state.provider_store.save_agentic_profile_definition(revised)
@@ -294,7 +320,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(certificate.default_reasoning_effort, "max")
         self.assertEqual(evidence.matrix_revision, OPENROUTER_CERTIFICATION_MATRIX_REVISION)
 
-        self.assertEqual(OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS, ())
+        self.assertEqual(OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS, ("1",))
 
 
 if __name__ == "__main__":

@@ -116,10 +116,11 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                     policy.max_output_tokens,
                     finalization.reserved_output_tokens,
                 )
-                self.assertGreaterEqual(
-                    policy.max_estimated_cost_microusd,
-                    finalization.reserved_cost_microusd,
-                )
+                if policy.max_estimated_cost_microusd is not None:
+                    self.assertGreaterEqual(
+                        policy.max_estimated_cost_microusd,
+                        finalization.reserved_cost_microusd,
+                    )
                 self.assertGreaterEqual(
                     policy.max_wall_time_seconds,
                     finalization.reserved_time_seconds,
@@ -267,10 +268,11 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                     estimator(maximal_request),
                     phase="finalization",
                 )
-                self.assertLessEqual(
-                    finalization.reserved_cost_microusd,
-                    policy.max_estimated_cost_microusd,
-                )
+                if policy.max_estimated_cost_microusd is not None:
+                    self.assertLessEqual(
+                        finalization.reserved_cost_microusd,
+                        policy.max_estimated_cost_microusd,
+                    )
 
     def test_data_driven_pricing_can_finalize_above_the_old_fixed_reserve(self) -> None:
         config = replace(OPENROUTER_RELACE_GLM_PROVIDER_CONFIG, token_cost_policy=replace(
@@ -279,7 +281,10 @@ class HostedAgenticBudgetTest(unittest.TestCase):
             output_microusd_per_million_tokens=5_000_000,
         ))
         reserve = provider_finalization_policy(config, OPENROUTER_GOVERNED_WORKSPACE_RECIPE)
-        policy = replace(openrouter_agentic_preview_policy(), max_estimated_cost_microusd=3_000_000)
+        policy = replace(
+            openrouter_agentic_preview_policy(),
+            max_estimated_cost_microusd=reserve.reserved_cost_microusd,
+        )
         request = replace(self.request, request_phase="finalization", max_output_tokens=reserve.finalization_max_output_tokens,
                           content_blocks=(replace(self.request.content_blocks[0], content=b"x" * 100_002),))
         cost = config.token_cost_policy.request_ceiling_microusd(request)
@@ -298,8 +303,16 @@ class HostedAgenticBudgetTest(unittest.TestCase):
             input_microusd_per_million_tokens=3_000_000,
         ))
         with self.assertRaisesRegex(AgenticProfileError, "finalization_budget_insufficient"):
-            validate_finalization_resources(openrouter_agentic_preview_policy(),
-                                            provider_finalization_policy(config, OPENROUTER_GOVERNED_WORKSPACE_RECIPE))
+            validate_finalization_resources(
+                replace(
+                    openrouter_agentic_preview_policy(),
+                    max_estimated_cost_microusd=1,
+                ),
+                provider_finalization_policy(
+                    config,
+                    OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
+                ),
+            )
 
 
 class _Clock:

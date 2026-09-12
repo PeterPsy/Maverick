@@ -34,8 +34,11 @@ def provider_finalization_policy(config, recipe) -> HostedFinalizationPolicy:
 
 def validate_finalization_resources(policy, reserve) -> None:
     if (
-        policy.max_estimated_cost_microusd is None
-        or policy.max_estimated_cost_microusd < reserve.reserved_cost_microusd
+        (
+            policy.max_estimated_cost_microusd is not None
+            and policy.max_estimated_cost_microusd
+            < reserve.reserved_cost_microusd
+        )
         or policy.max_steps_per_turn < reserve.reserved_provider_steps
         or policy.max_output_tokens < reserve.reserved_output_tokens
         or policy.max_wall_time_seconds < reserve.reserved_time_seconds

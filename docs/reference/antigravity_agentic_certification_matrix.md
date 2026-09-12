@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52`
+Revision: `2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through
@@ -18,7 +18,7 @@ readiness, or a successful process exit cannot create this authority.
 - Workspace boundary: outer Bubblewrap confinement, native workspace access
   read-only, writable private runtime state, and Core-governed mutations through
   the runtime-local `maverick` wrapper.
-- Full Workspace contract: `codex-baseline-v20`, exact CLI/MCP/app/capability
+- Full Workspace contract: `codex-baseline-v21`, exact CLI/MCP/app/capability
   surfaces, explicit mutating/destructive confirmation, bounded context and
   safe-next-turn steering.
 
@@ -45,7 +45,7 @@ all absolute failure counters at zero.
 ## Publication and release
 
 `publish_antigravity_connection_certificate` accepts only the complete signed
-suite-62 run from an already trusted Ed25519 signer and rechecks deployed
+suite-63 run from an already trusted Ed25519 signer and rechecks deployed
 source, TCB, matrix, target, adapter bytes, and installed runtime artifact. A
 valid root permits catalog projection but does not activate the provider or a
 workspace binding. Provider activation is an explicit operator action; global

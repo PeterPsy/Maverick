@@ -99,10 +99,7 @@ def plan_hosted_step(
         0 if phase == "exploration" else cost_per_attempt
     )
     remaining_cost = budget.remaining_cost_microusd
-    if remaining_cost is None:
-        if required_cost:
-            raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
-    elif remaining_cost < required_cost:
+    if remaining_cost is not None and remaining_cost < required_cost:
         raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
     time_per_attempt = (
         budget.finalization_policy.finalization_time_reserve_seconds_per_attempt
@@ -153,7 +150,7 @@ def hosted_budget_snapshot(
         >= protected_attempts
         * budget.finalization_policy.finalization_time_reserve_seconds_per_attempt
         and (
-            (remaining_cost is None and reserve_cost == 0)
+            remaining_cost is None
             or (
                 remaining_cost is not None
                 and remaining_cost >= protected_attempts * reserve_cost
@@ -179,7 +176,6 @@ def _exploration_must_stop(budget: HostedAgenticBudget) -> bool:
         or budget.remaining_provider_steps <= reserve.reserved_provider_steps
         or budget.remaining_output_tokens <= reserve.reserved_output_tokens
         or budget.remaining_wall_time_seconds <= reserve.reserved_time_seconds
-        or (remaining_cost is None and reserve.reserved_cost_microusd > 0)
         or (
             remaining_cost is not None
             and remaining_cost <= reserve.reserved_cost_microusd

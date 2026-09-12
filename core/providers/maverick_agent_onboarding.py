@@ -427,9 +427,14 @@ def _validate_maverick_family(
         or not flags.usage_accounting
         or not flags.tool_calling
         or not flags.cooperative_cancellation
-        or policy.tool_handle_mode != "exact"
-        or not set(FULL_WORKSPACE_CORE_TOOL_HANDLES).issubset(
-            policy.allowed_tool_handles
+        or not (
+            policy.tool_handle_mode == "all_currently_authorized"
+            or (
+                policy.tool_handle_mode == "exact"
+                and set(FULL_WORKSPACE_CORE_TOOL_HANDLES).issubset(
+                    policy.allowed_tool_handles
+                )
+            )
         )
         or not policy.allow_filesystem_list
         or not policy.allow_filesystem_read

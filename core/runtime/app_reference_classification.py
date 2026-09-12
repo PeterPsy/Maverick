@@ -13,6 +13,9 @@ from core.egress.classification import (
     join_classifications,
 )
 from core.workspaces.data_governance import resource_classification_for_observation
+from core.runtime.workspace_content_classification import (
+    exact_workspace_resource_classification,
+)
 
 
 @dataclass(frozen=True)
@@ -100,12 +103,22 @@ def build_workspace_app_reference_classification_resolver(
         observation: RuntimeAppReferenceObservation,
         _reference: dict[str, object],
     ) -> CanonicalSourceClassification:
+        record = workspace_store.get_resource_classification(
+            workspace_id=observation.workspace_id,
+            resource_kind=observation.resource_kind,
+            resource_ref=observation.resource_ref,
+        )
+        if record is None:
+            return exact_workspace_resource_classification(
+                provenance="app_reference",
+                trust_level="untrusted_external",
+                source_ref=observation.resource_ref,
+                source_revision=observation.resource_revision,
+                source_digest=observation.resource_digest,
+                resource_identity=observation.resource_identity,
+            )
         return resource_classification_for_observation(
-            workspace_store.get_resource_classification(
-                workspace_id=observation.workspace_id,
-                resource_kind=observation.resource_kind,
-                resource_ref=observation.resource_ref,
-            ),
+            record,
             workspace_id=observation.workspace_id,
             resource_kind=observation.resource_kind,
             resource_ref=observation.resource_ref,

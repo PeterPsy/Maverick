@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from core.providers.agentic_models import AgenticProfileDefinition
-from core.providers.agentic_workspace_policy import (
+from core.providers.agentic_data_policies import (
     REMOTE_PREVIEW_EGRESS_POLICY_ID,
     REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
 )

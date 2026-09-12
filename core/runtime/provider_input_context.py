@@ -33,6 +33,9 @@ from core.runtime.provider_input_capture_manifest import (
     persist_runtime_provider_input_capture,
 )
 from core.workspaces.data_governance import resource_classification_for_observation
+from core.runtime.workspace_content_classification import (
+    exact_workspace_resource_classification,
+)
 
 
 @dataclass(frozen=True)
@@ -556,12 +559,22 @@ def _attachment_filesystem(
         return None
 
     def resolve(observation, provenance: str) -> CanonicalSourceClassification:
+        record = get_classification(
+            workspace_id=observation.workspace_id,
+            resource_kind=observation.resource_kind,
+            resource_ref=observation.resource_ref,
+        )
+        if record is None:
+            return exact_workspace_resource_classification(
+                provenance=provenance,
+                trust_level="untrusted_external",
+                source_ref=observation.resource_ref,
+                source_revision=observation.resource_revision,
+                source_digest=observation.resource_digest,
+                resource_identity=observation.resource_identity,
+            )
         return resource_classification_for_observation(
-            get_classification(
-                workspace_id=observation.workspace_id,
-                resource_kind=observation.resource_kind,
-                resource_ref=observation.resource_ref,
-            ),
+            record,
             workspace_id=observation.workspace_id,
             resource_kind=observation.resource_kind,
             resource_ref=observation.resource_ref,

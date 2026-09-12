@@ -377,11 +377,12 @@ class HostedAgenticLoop:
             turn_id=context.correlation_id,
         )
         if pairing_source is not None:
+            effective_context = replace(context, effective_authority=authority)
             for invocation in self.recovery.pairing_results(pairing_source):
                 result, is_error = normalized_tool_result(
                     self.tool_orchestrator_resolver(
-                        context,
-                        self.actor_context_resolver(context),
+                        effective_context,
+                        self.actor_context_resolver(effective_context),
                     ),
                     RuntimeToolInvocationOutcome(invocation),
                     context_policy=context_policy,
@@ -425,7 +426,10 @@ class HostedAgenticLoop:
                     ),
                 )
             )
-            tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
+            tool_orchestrator = self.tool_orchestrator_resolver(
+                effective_context,
+                actor_context,
+            )
             phase = budget.select_phase(
                 pairing_source=pairing_source,
                 existing_records=existing_turn_steps,
@@ -895,7 +899,7 @@ class HostedAgenticLoop:
                             replace(context, effective_authority=authority)
                         )
                         tool_orchestrator = self.tool_orchestrator_resolver(
-                            context,
+                            replace(context, effective_authority=authority),
                             actor_context,
                         )
                         tool_policy = hosted_tool_policy(authority, budget.policy)
@@ -1081,7 +1085,10 @@ class HostedAgenticLoop:
                     actor_context = self.actor_context_resolver(
                         replace(context, effective_authority=authority)
                     )
-                    orchestrator = self.tool_orchestrator_resolver(context, actor_context)
+                    orchestrator = self.tool_orchestrator_resolver(
+                        replace(context, effective_authority=authority),
+                        actor_context,
+                    )
                     resumed = orchestrator.authorize_confirmed(
                         invocation_id=invocation_id,
                         grant_id=record.confirmation_grant_id,

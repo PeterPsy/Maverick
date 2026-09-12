@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from core.providers.agentic_data_policies import (
+    remote_profile_requires_fake_data_attestation,
+)
 from core.providers.errors import AgenticProfileError
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
@@ -66,6 +69,10 @@ def remote_agentic_containment_reason(
         return reason
     if not is_remote_agentic_identity(binding_or_definition):
         return None
+    if not remote_profile_requires_fake_data_attestation(binding_or_definition):
+        return None
+    if not REMOTE_AGENTIC_ATTESTATION_AVAILABLE:
+        return "remote_agentic_attestation_unavailable"
     if workspace_store is not None:
         workspace_attestation = _resolve_workspace_attestation(
             workspace_store,
@@ -109,8 +116,6 @@ def remote_agentic_availability_reason(
         return "remote_agentic_provider_unapproved"
     if not feature_enabled(provider_flag[0], environment=environment):
         return provider_flag[1]
-    if not REMOTE_AGENTIC_ATTESTATION_AVAILABLE:
-        return "remote_agentic_attestation_unavailable"
     return None
 
 

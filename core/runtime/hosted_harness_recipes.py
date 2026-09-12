@@ -112,6 +112,24 @@ def hosted_full_context_policy() -> AgenticContextPolicy:
     )
 
 
+def openrouter_full_context_policy() -> AgenticContextPolicy:
+    """Use GLM's certified million-token window with Codex-equivalent limits."""
+    return AgenticContextPolicy(
+        revision="openrouter-full-context-v1",
+        max_request_input_tokens=1_000_000,
+        context_reserve_tokens=128_000,
+        compaction_mode="provider_history",
+        compaction_trigger_tokens=750_000,
+        max_compacted_state_bytes=1_048_576,
+        summary_max_bytes=8_192,
+        tool_result_inline_bytes=16_384,
+        tool_result_summary_bytes=8_192,
+        attachment_projection_mode="workspace_reference",
+        steering_delivery_mode="safe_next_turn",
+        max_same_turn_steering_messages=0,
+    )
+
+
 GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-google-interactions-governed-workspace",
     revision="26",
@@ -149,7 +167,7 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-openrouter-chat-governed-workspace",
-    revision="27",
+    revision="28",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
@@ -163,7 +181,7 @@ OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
         HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION
     ),
     tool_contract_revision=HOSTED_TOOL_CONTRACT_REVISION,
-    context_policy=hosted_full_context_policy(),
+    context_policy=openrouter_full_context_policy(),
     support_flags=HostedProviderSupportFlags(
         streaming=True,
         usage_accounting=True,
@@ -202,4 +220,5 @@ __all__ = [
     "HostedProviderSupportFlags",
     "OPENROUTER_GOVERNED_WORKSPACE_RECIPE",
     "hosted_full_context_policy",
+    "openrouter_full_context_policy",
 ]

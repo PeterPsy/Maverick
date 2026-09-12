@@ -20,6 +20,9 @@ from core.runtime.hosted_workspace_snapshot import HostedWorkspaceSnapshot
 from core.runtime.hosted_result_authority_guard import (
     HostedResultAuthorityGuard,
 )
+from core.runtime.hosted_tool_result_admission import (
+    hosted_result_allowed_data_classes,
+)
 from core.runtime.hosted_process_termination import terminate_hosted_process
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_catalog import RuntimeToolSurfaceResult
@@ -210,6 +213,9 @@ def run_hosted_workspace_command(
                 **expected_evidence,
             }
             if result_classification_resolver is not None:
+                allowed_result_data_classes = hosted_result_allowed_data_classes(
+                    result_classification_resolver
+                )
                 try:
                     resolved = result_classification_resolver(
                         "core-capability:shell.run",
@@ -225,7 +231,8 @@ def run_hosted_workspace_command(
                 if (
                     not isinstance(resolved, RuntimeToolSurfaceResult)
                     or resolved.payload != intended
-                    or resolved.classification.data_class != "public"
+                    or resolved.classification.data_class
+                    not in allowed_result_data_classes
                 ):
                     prepared.effect_overlay.discard()
                     raise RuntimeToolError(
@@ -239,6 +246,12 @@ def run_hosted_workspace_command(
                     payload=intended,
                     context=result_context,
                     expected_classification=resolved.classification,
+                    allowed_data_classes=allowed_result_data_classes,
+                    allowed_data_classes_resolver=lambda: (
+                        hosted_result_allowed_data_classes(
+                            result_classification_resolver
+                        )
+                    ),
                 )
             effect_evidence = (
                 execution_control.run_if_active(

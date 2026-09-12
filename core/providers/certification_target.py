@@ -49,7 +49,9 @@ def certification_manifest_reasoning_efforts(manifest) -> tuple[str, ...]:
     return efforts
 
 
-def certification_manifest_resource_limits(manifest) -> dict[str, int]:
+def certification_manifest_resource_limits(
+    manifest,
+) -> dict[str, int | None]:
     if manifest.target_scope == "api_profile":
         return api_certification_resource_limits(
             builtin_api_certification_profile(manifest.provider_id)
@@ -84,7 +86,7 @@ def builtin_api_reasoning_efforts(provider_id: str) -> tuple[str, ...]:
                 if publication.profile.model_provider_id == provider_id)
 
 
-def api_certification_resource_limits(definition) -> dict[str, int]:
+def api_certification_resource_limits(definition) -> dict[str, int | None]:
     policy = definition.policy_ceiling
     return {
         "input_tokens": policy.max_input_tokens,

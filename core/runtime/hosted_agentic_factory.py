@@ -53,6 +53,9 @@ from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_preflight_resolver,
     build_hosted_tool_result_admission_resolver,
 )
+from core.runtime.workspace_content_classification import (
+    exact_workspace_resource_classification,
+)
 from core.runtime.public_content_classification import (
     resolve_runtime_public_resource_classification,
 )
@@ -175,12 +178,13 @@ def build_hosted_agentic_engine_adapter(
         )
 
     def classify_resource(observation, provenance):
+        record = state.workspace_store.get_resource_classification(
+            workspace_id=observation.workspace_id,
+            resource_kind=observation.resource_kind,
+            resource_ref=observation.resource_ref,
+        )
         authoritative = resource_classification_for_observation(
-            state.workspace_store.get_resource_classification(
-                workspace_id=observation.workspace_id,
-                resource_kind=observation.resource_kind,
-                resource_ref=observation.resource_ref,
-            ),
+            record,
             workspace_id=observation.workspace_id,
             resource_kind=observation.resource_kind,
             resource_ref=observation.resource_ref,
@@ -189,12 +193,22 @@ def build_hosted_agentic_engine_adapter(
             resource_digest=observation.resource_digest,
             provenance=provenance,
         )
-        return resolve_runtime_public_resource_classification(
+        authoritative = resolve_runtime_public_resource_classification(
             state.workspace_store,
             observation=observation,
             provenance=provenance,
             authoritative=authoritative,
         )
+        if record is None and authoritative.classification_revision is None:
+            return exact_workspace_resource_classification(
+                provenance=provenance,
+                trust_level="untrusted_external",
+                source_ref=observation.resource_ref,
+                source_revision=observation.resource_revision,
+                source_digest=observation.resource_digest,
+                resource_identity=observation.resource_identity,
+            )
+        return authoritative
 
     loop = HostedAgenticLoop(
         provider_runtimes=provider_runtimes,
@@ -217,6 +231,9 @@ def build_hosted_agentic_engine_adapter(
             ledger=state.runtime_tool_ledger,
             workspace_store=state.workspace_store,
             process_registry=process_registry,
+            live_allowed_remote_data_classes_resolver=lambda: tuple(
+                authority_refresher(context).allowed_remote_data_classes
+            ),
         ),
         tool_ledger=state.runtime_tool_ledger,
         private_state_service=state.provider_private_state_service,
@@ -278,6 +295,7 @@ def _tool_orchestrator(
     ledger,
     workspace_store,
     process_registry,
+    live_allowed_remote_data_classes_resolver=None,
 ) -> RuntimeToolOrchestrator:
     # Registry builders load app-hosting integration, which depends on the API
     # platform state.  Keep these imports on the post-bootstrap path to avoid a
@@ -315,6 +333,10 @@ def _tool_orchestrator(
         **common_registry_arguments,
         context=mcp_context,
     )
+    effective_authority = getattr(context, "effective_authority", None)
+    allowed_remote_data_classes = tuple(
+        getattr(effective_authority, "allowed_remote_data_classes", ()) or ()
+    )
     result_admission_resolver = build_hosted_tool_result_admission_resolver(
         cli_registry=cli_registry,
         mcp_registry=mcp_registry,
@@ -323,6 +345,10 @@ def _tool_orchestrator(
                 workspace_store,
                 workspace_id,
             )
+        ),
+        allowed_remote_data_classes=allowed_remote_data_classes,
+        live_allowed_remote_data_classes_resolver=(
+            live_allowed_remote_data_classes_resolver
         ),
     )
     result_preflight_resolver = build_hosted_tool_result_preflight_resolver(
@@ -335,15 +361,20 @@ def _tool_orchestrator(
                 workspace_id,
             )
         ),
+        allowed_remote_data_classes=allowed_remote_data_classes,
+        live_allowed_remote_data_classes_resolver=(
+            live_allowed_remote_data_classes_resolver
+        ),
     )
 
     def classify_resource(observation, provenance):
+        record = workspace_store.get_resource_classification(
+            workspace_id=observation.workspace_id,
+            resource_kind=observation.resource_kind,
+            resource_ref=observation.resource_ref,
+        )
         authoritative = resource_classification_for_observation(
-            workspace_store.get_resource_classification(
-                workspace_id=observation.workspace_id,
-                resource_kind=observation.resource_kind,
-                resource_ref=observation.resource_ref,
-            ),
+            record,
             workspace_id=observation.workspace_id,
             resource_kind=observation.resource_kind,
             resource_ref=observation.resource_ref,
@@ -358,6 +389,15 @@ def _tool_orchestrator(
             provenance=provenance,
             authoritative=authoritative,
         )
+        if record is None and authoritative.classification_revision is None:
+            authoritative = exact_workspace_resource_classification(
+                provenance=provenance,
+                trust_level="untrusted_external",
+                source_ref=observation.resource_ref,
+                source_revision=observation.resource_revision,
+                source_digest=observation.resource_digest,
+                resource_identity=observation.resource_identity,
+            )
         return resolve_filesystem_mutation_lineage(
             observation=observation,
             provenance=provenance,

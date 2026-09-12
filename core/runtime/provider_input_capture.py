@@ -22,8 +22,8 @@ from core.runtime.provider_input_governed_sources import (
 
 
 RUNTIME_PROVIDER_INPUT_CAPTURE_REVISION = 1
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 4
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v4"
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 5
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v5"
 RUNTIME_PROVIDER_INPUT_RESOURCE_KIND = "runtime_input"
 GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND = "inter_agent_governed_context"
 _INDEXED_SOURCE = re.compile(r"^(app-reference|attachment):(\d+):metadata$")
@@ -265,11 +265,9 @@ def classify_runtime_provider_input_content(
         resource_identity=resource_identity,
         detected_data_class=detected,
     )
-    return (
-        authority.data_class
-        if authority.classification_revision is not None
-        else detected
-    )
+    if authority.classification_revision is not None:
+        return authority.data_class
+    return "workspace_internal" if detected == "unclassified" else detected
 
 
 def runtime_provider_input_source_contract(

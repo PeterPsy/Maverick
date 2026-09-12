@@ -1,10 +1,10 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
-Status date: 2026-09-11
-Matrix revision: `2026-09-11-r62-openrouter-glm-5-3-flash-relace-tcb52`
-Rollout: Full Workspace preview, not certified
+Status date: 2026-09-12
+Matrix revision: `2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53`
+Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==55`
+Adapter: `maverick-hosted-tool-loop==56`
 
 ## Scope
 
@@ -26,13 +26,13 @@ reconfigured by this work.
 | Resolved model | `z-ai/glm-5.3-flash-20260826` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-11` |
 | Catalog expiration | exact `2098-12-31` observation; any drift fails closed |
-| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@1` |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@2` |
 | Execution family | `maverick_agent` |
-| Full Workspace contract | `codex-baseline-v20` |
+| Full Workspace contract | `codex-baseline-v21` |
 | Protocol | OpenAI-compatible streaming Chat Completions v1 |
 | Protocol adapter | `openrouter-chat-completions-protocol@4` |
-| Runtime adapter | `maverick-hosted-tool-loop==55` |
-| Harness recipe | `maverick-openrouter-chat-governed-workspace@27` |
+| Runtime adapter | `maverick-hosted-tool-loop==56` |
+| Harness recipe | `maverick-openrouter-chat-governed-workspace@28` |
 | Provider config | `openrouter-relace-glm-5-3-flash-fp4@1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 | Effective upstream | `Relace`; exact tag `relace/fp4` |
@@ -41,13 +41,16 @@ reconfigured by this work.
 | Required parameters | enabled |
 | Provider data collection | denied |
 | ZDR | required; exact endpoint must remain in the ZDR catalog |
-| Context / completion | endpoint minimum 1,048,576 / 131,072 tokens |
+| Context / completion | certified endpoint 1,048,576 / 131,072; profile aggregate 1,000,000 / 128,000 tokens |
 | Reasoning | exact tuple `max`, `high`, `low`; default `max`; mandatory |
-| Tools | `tools` and `tool_choice` supported; sequential execution only |
+| Tools | every currently authorized Full Workspace Core handle; `tools` and `tool_choice` supported; sequential execution only |
 | Empty tool catalog | omitted |
 | Finalization | exact Core finalization instruction; `tools` and `tool_choice` omitted |
 | Accounting | `openrouter-relace-glm-5-3-flash-public-list-price@1`; public list prices 90,000 / 300,000 micro-USD per million input/output tokens |
-| Remote data | Core-classified `public` only |
+| Remote data | `public`, `workspace_internal`, `personal_data`, and `regulated_or_customer_data`; exact binding authority, no fake/public attestation |
+| Always denied | `credential_or_secret`, `host_operational_metadata`, `unclassified`, and legacy `workspace_internal_fake` |
+| Turn ceilings | 256 provider steps, 256 tool calls, 86,400 seconds, 16 MiB aggregate tool results; no explicit cost ceiling |
+| Confirmations | disabled in the profile, matching the local Codex operating ceiling |
 | Certificate lifetime | 30 days after a successful signed run |
 
 The public OpenRouter catalogs observed on 2026-09-11 report that GLM 5.3 Flash
@@ -74,8 +77,8 @@ Every request carries this non-permissive router object:
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@62` and the certified
-execution TCB is manifest 52. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@63` and the certified
+execution TCB is manifest 53. The exact checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |
@@ -90,7 +93,7 @@ this table summarizes its security objectives.
 | Semantic envelope | source classifications and projection digests preserved across every provider step |
 | Tool authority | current binding, certificate, actor, TCB, egress and tool authority revalidated before effects and transport |
 | Full Workspace | all required filesystem, shell/process, CLI, MCP, app and collaboration behaviors pass |
-| Confirmation | mutating and destructive work resumes only from persisted grants |
+| Workspace effects | shell/process mutations commit only after exact-byte result classification is inside the live allowed class set; denied results roll back |
 | Journal/recovery | no ambiguous replay after cancellation, crash or restart; exact pairing lineage retained |
 | Context | bounded compaction preserves tool pairing and finalization reserve |
 | Final output | durable outbox and terminal delivery remain idempotent |
@@ -162,16 +165,17 @@ probe and complete natural report all pass for the same immutable candidate.
 Publication must revalidate the profile target and TCB and then read back the
 stored certificate.
 
-Rollout is OpenRouter-only and proceeds in a disposable public-synthetic
-workspace:
+Rollout is OpenRouter-only and first proceeds in a disposable real-data
+workspace with synthetic credentials:
 
 1. create one disabled, non-default binding;
 2. verify the profile remains unavailable before feature enablement;
 3. enable only the OpenRouter hosted-agent feature;
-4. run one full-workspace canary, denial, confirmation, interrupt, restart and
+4. run one full-workspace canary, sensitive-data denial, interrupt, restart and
    rollback exercise;
 5. verify zero absolute failure counters and no credential leakage;
-6. enable the binding and make it default only after the canary is green;
+6. enable the binding after the canary is green; changing the workspace default
+   remains a separate operator choice;
 7. confirm Settings and Chat show GLM 5.3 Flash and no retired target;
 8. retain an immediately tested kill switch and rollback path.
 

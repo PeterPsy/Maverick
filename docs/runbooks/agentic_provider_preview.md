@@ -1,23 +1,27 @@
 # Agentic provider preview operations
 
-Status date: 2026-09-10
+Status date: 2026-09-12
 
 Scope: operator runbook
 
-Production status: **NO-GO; all remote agentic execution contained**
+Production status: **OpenRouter GLM is the only release target; Google and
+Antigravity remain contained**
 
 This runbook governs the Google Gemini and fixed-upstream OpenRouter API
 profiles plus the Antigravity Native connection. A capability certificate
-proves one exact implementation and provider combination. It is not approval
-for customer data, arbitrary workspace data, or production exposure.
+proves one exact implementation and provider combination. For OpenRouter
+profile 2, an enabled administrator binding is the explicit authority for real
+workspace data; fake/public attestation is not a release prerequisite.
+Credential/secret, host-operational, and unclassified egress remains
+prohibited.
 
 Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
-The contained source candidate is hosted adapter 48 / recipe 25 / Google
-profile 59 / OpenRouter profile 58 / Antigravity adapter 4 / native recipe 3 /
-suite 55 / TCB 45. Codex revision 15 is
+The current source candidate is hosted adapter 56 / Google recipe 26 and
+profile 67 / OpenRouter GLM recipe 28 and profile 2 / Antigravity adapter 5 and
+native recipe 4 / suite 63 / TCB 53. Codex revision 15 is
 the active verified profile and revision 14 remains immutable history. Remote
 provider certification must not restart or migrate Codex, alter its artifact,
 or reissue its certificate.
@@ -84,8 +88,13 @@ operation.
 
 ## Invariants
 
-- Remote profiles are disabled, non-selectable NO-GO records. Current profile
-  policy lists only Core-classified `public`. The evaluator can consider
+- OpenRouter GLM profile 2 uses `remote-agentic-full-workspace@1` and may carry
+  Core-classified real workspace, personal, and regulated/customer data to the
+  exact ZDR Relace FP4 route. It never accepts client-supplied classification or
+  fake/public attestations as authority.
+
+- Google and Antigravity remain disabled, non-selectable NO-GO records whose
+  current policy lists only Core-classified `public`. The evaluator can consider
   `workspace_internal_fake` only when the exact resource/version has that
   Core-owned classification, an active workspace-matching attestation covers
   its scope, and the selected policy allows that class and destination; none of
@@ -102,7 +111,9 @@ operation.
   collection, required ZDR, and verified router metadata. Its main catalog must
   resolve `z-ai/glm-5.3-flash-20260826`, retain catalog expiration
   `2098-12-31`, and advertise exactly `max`/`high`/`low`, default `max`, and
-  mandatory reasoning.
+  mandatory reasoning. Profile 2 exposes the same 256-step/tool-call,
+  86,400-second, million-input/128k-output, no-confirmation operating ceiling
+  as Codex, with no explicit per-turn cost ceiling.
 - Antigravity authority is connection-scoped to the exact installed artifact,
   adapter/recipe revision 3 and `google` connection. Catalog slugs inherit that
   evidence through immutable projections; missing and retired slugs never
@@ -111,8 +122,8 @@ operation.
 - Tool execution is sequential. Google and OpenRouter preserve and journal
   every indexed proposal, including later OpenRouter indices and calls decoded
   before a terminal stream error. A multi-call response is denied and paired
-  in full; no call is discarded or executed. Mutating and destructive work
-  requires persisted confirmation. Ambiguous side effects become
+  in full; no call is discarded or executed. Google retains persisted
+  confirmation; OpenRouter profile 2 does not require it. Ambiguous side effects become
   `execution_unknown` and are not replayed automatically.
 - Provider-step and tool-call budgets are distinct and restart-safe. One final
   request plus at most one recovery retain full output/cost/deadline reserves.
@@ -186,24 +197,28 @@ binding:
    bindings. Antigravity instead requires the operator-provisioned private
    cached-OAuth source and forbids provider/API-key bindings. No raw credential
    is present in a workspace record, environment file, request body, or log.
-4. The active revision-bound server attestation is actor-attributed, scoped,
+4. For the contained Google and Antigravity policies, the active
+   revision-bound server attestation is actor-attributed, scoped,
    unrevoked, workspace-matching, and matched to exact Core resource
    classifications. `workspace_internal_fake` additionally requires that the
    selected policy allow that class and destination. Attestation may only narrow
    policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile and retains
-   the complete `codex-baseline-v20` handle set and all four `cli`, `mcp`,
-   `app-interface`, and `core-capability` surfaces atomically, bounded
-   steps/tokens/cost, and confirmation for mutating/destructive classes. A
-   partial read-only binding is not a Maverick Agent fallback.
+   the complete `codex-baseline-v21` handle set and all four `cli`, `mcp`,
+   `app-interface`, and `core-capability` surfaces atomically. OpenRouter
+   profile 2 deliberately has no explicit per-turn cost ceiling and does not
+   require mutating/destructive confirmation; Google and Antigravity retain
+   their contained bounded/confirmed policies. A partial read-only binding is
+   not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the
    trust order: deterministic conformance, operator-only synthetic live probe,
    behavioral conformance validation, then certificate publication. Ordinary
    repository checks explicitly select the fixture step and never run the live
    step; fixture-only evidence is rejected for signing and promotion.
-7. Open platform security blockers in `SECURITY.md` remain acknowledged. Do not
-   relabel the profile `available` or production-ready as part of preview
-   activation.
+7. Open platform security blockers in `SECURITY.md` remain acknowledged.
+   `available` is only the immutable definition's rollout eligibility; do not
+   call the provider active or production-ready until the current certificate,
+   binding, canary, and rollback checks all pass.
 
 For Antigravity only, after the root certificate and all current catalog
 projections have been read back and independently reviewed, activate the

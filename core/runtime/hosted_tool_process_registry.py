@@ -22,6 +22,9 @@ from core.runtime.hosted_workspace_snapshot import HostedWorkspaceSnapshot
 from core.runtime.hosted_result_authority_guard import (
     HostedResultAuthorityGuard,
 )
+from core.runtime.hosted_tool_result_admission import (
+    hosted_result_allowed_data_classes,
+)
 from core.runtime.hosted_process_output import HostedProcessOutputCapture
 from core.runtime.hosted_process_termination import terminate_hosted_process
 from core.runtime.lifecycle_service_turns import (
@@ -500,7 +503,7 @@ class HostedToolProcessRegistry:
                 if reason is None and exit_code == 0:
                     try:
                         expected_evidence = live.effect_overlay.preview_commit()
-                        result_authority_guard = self._public_precommit_guard(
+                        result_authority_guard = self._result_precommit_guard(
                             process_id=process_id,
                             live=live,
                             exit_code=exit_code,
@@ -551,7 +554,7 @@ class HostedToolProcessRegistry:
             raise RuntimeToolError(effect_failure)
 
     @staticmethod
-    def _public_precommit_guard(
+    def _result_precommit_guard(
         *,
         process_id: str,
         live: _LiveHostedToolProcess,
@@ -580,6 +583,9 @@ class HostedToolProcessRegistry:
             "workspace_effects": expected_evidence,
         }
         try:
+            allowed_result_data_classes = hosted_result_allowed_data_classes(
+                resolver
+            )
             resolved = resolver(
                 "core-capability:process.status",
                 {"process_id": process_id, "output_offset": 0},
@@ -593,7 +599,8 @@ class HostedToolProcessRegistry:
         if (
             not isinstance(resolved, RuntimeToolSurfaceResult)
             or resolved.payload != candidate
-            or resolved.classification.data_class != "public"
+            or resolved.classification.data_class
+            not in allowed_result_data_classes
         ):
             raise RuntimeToolError("tool_result_egress_not_guaranteed")
         return HostedResultAuthorityGuard(
@@ -603,6 +610,10 @@ class HostedToolProcessRegistry:
             payload=candidate,
             context=live.result_context,
             expected_classification=resolved.classification,
+            allowed_data_classes=allowed_result_data_classes,
+            allowed_data_classes_resolver=lambda: (
+                hosted_result_allowed_data_classes(resolver)
+            ),
         )
 
     def _close_live(

@@ -719,6 +719,9 @@ function agenticCapabilityStateHtml(item: AgenticAdminItem): string {
 }
 
 function agenticWorkspaceDeclarationHtml(item: AgenticAdminItem): string {
+  if (item.data_policy.attestation_required === false) {
+    return '<small>Workspace data authority: enabled by the exact administrator binding; fake/public attestation is not required.</small>';
+  }
   const attestation = item.data_policy.attestation;
   const state = item.data_policy.attestation_state || attestation?.state || 'unavailable';
   const revision = attestation?.revision == null ? '' : ` · revision ${attestation.revision}`;

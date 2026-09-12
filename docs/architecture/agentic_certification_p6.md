@@ -1,8 +1,9 @@
 # P6 certification and release boundary
 
-Status: P6 remains **NO-GO** while the current contained successor is
-recertified. The earlier Candidate 49 rollback remains historical; no remote
-binding is enabled and no new certificate has been published. Codex revision
+Status: P6 is recertifying the OpenRouter-only real-workspace successor. Google
+and Antigravity remain **NO-GO**. Until suite 63 is published and its binding is
+enabled, OpenRouter also remains unavailable. The earlier Candidate 49 rollback
+remains historical; no new remote certificate has yet been published. Codex revision
 15 remains active and unchanged. See
 `docs/development/agentic_p6_autonomous_execution_2026-09-09.md` for the
 current operational record and
@@ -12,9 +13,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current contained successor uses suite 62 / TCB
-52 / hosted adapter 55 / Google recipe 26 and profile 66 / OpenRouter GLM
-recipe 27 and profile 1,
+That pass is historical. The current successor uses suite 63 / TCB 53 / hosted
+adapter 56 / Google recipe 26 and profile 67 / OpenRouter GLM recipe 28 and
+profile 2,
 plus Antigravity native adapter 5, native recipe 4, and Codex revision 15. It
 requires its own exact-source operator record before signing or release. The
 source tree does not treat a mocked probe receipt or this status paragraph as
@@ -23,8 +24,9 @@ that record.
 The normative plan is `storage/generated/piano-definitivo-parita-agentica-modelli-hosted-maverick.md`
 in workspace `default`. Section 21 accepts one autonomous operator mandate
 without waiving technical gates. Section 22 records the resulting automatic
-NO-GO. The current Storage-owned revision has SHA-256
-`8d2a029c85fd0270a9cda395806582b4e18a5a9525cf8510fa422afbe4215aa0`.
+NO-GO. The current Storage-owned revision before the OpenRouter-only successor
+has SHA-256
+`5a28030cc1cc116e9806697dec96e220f9fd1dfb6bf0994ab0703ecd4f76f6cf`.
 The plan revision read on 2026-09-06 had SHA-256
 `482566795fa8ac3737c1a7c0c0413aaa62ff380bd19bc2fd724027a42ee715de`.
 Its authorized operational addendum (section 16), written through Storage with
@@ -74,6 +76,14 @@ with SHA-256
 `b868ef9e1ea766bdc97c10b10a4cb640553d0dc50f2abc303f69497536b95979`.
 This record grants no authority to Candidate 50.
 
+The final Candidate-60 rollback record is
+`/var/tmp/maverick/maverick-p6-remediation-r50-yxYYWR2i/autonomous-execution-final-r60.json`
+with SHA-256
+`72e266b3a2795fe3c4c76b61b9b368c3454085d95d6169e49b4066d8c200562d`.
+It records the aggregate Google quota shortfall and the complete remote
+rollback. The present work does not raise or consume that Google ledger; it
+supersedes only the OpenRouter release objective.
+
 P6 distinguishes repository conformance, live protocol evidence, natural
 behavioral evidence, post-evidence security review, certificate publication,
 disposable full-workspace canary, and an explicit release decision. Under the
@@ -84,8 +94,16 @@ protocol probes are not natural behavioral conformance.
 
 ## Operator budget and remaining full-path work
 
-The operator's updated authorization on 2026-09-06 supersedes the proposed
-100 USD allowance: **OpenRouter at most 5 USD total; Google free tier only**.
+The operator's updated authorization on 2026-09-12 removes the OpenRouter
+implementation/certification ceiling and narrows this release to OpenRouter;
+Google and Antigravity calls are not required or authorized by this work.
+Earlier bounded ledgers remain immutable historical records, not the live
+provider bill. The supplied OpenRouter dashboard screenshots show 308 GLM 5.3
+Flash requests and a dashboard-rounded actual spend of **$0.10**. The earlier
+`$0.562362` figure was a conservative reserved ledger allowance, not charged
+spend.
+
+The older 2026-09-06 plan used **OpenRouter at most 5 USD total; Google free tier only**.
 The P6 worker defaults to a 4.50 USD non-refundable reservation ceiling, leaving
 0.50 USD headroom, and 200 OpenRouter requests; Google has 80 generation
 requests and at least 15 seconds between reservations. These are conservative
@@ -314,9 +332,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 55,
-   Google recipe 26/profile 66, OpenRouter GLM recipe 27/profile 1, suite 62,
-   canonical TCB manifest 52, Antigravity adapter 5 / recipe 4, and active Codex revision
+1. **Candidate identities and deterministic corpus:** hosted adapter 56,
+   Google recipe 26/profile 67, OpenRouter GLM recipe 28/profile 2, suite 63,
+   canonical TCB manifest 53, Antigravity adapter 5 / recipe 4, and active Codex revision
    15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.

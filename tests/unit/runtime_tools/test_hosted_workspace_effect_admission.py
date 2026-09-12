@@ -130,6 +130,65 @@ class HostedWorkspaceEffectAdmissionTest(unittest.TestCase):
             self.fail("sensitive process output did not stop overlay commit")
         self.assertFalse((self.workspace / "blocked-process.txt").exists())
 
+    def test_real_workspace_policy_commits_internal_and_personal_results(self) -> None:
+        allowed = (
+            "public",
+            "workspace_internal",
+            "personal_data",
+            "regulated_or_customer_data",
+        )
+        resolver = build_hosted_tool_result_admission_resolver(
+            cli_registry=CliCommandRegistry(),
+            mcp_registry=McpToolRegistry(),
+            allowed_remote_data_classes=allowed,
+        )
+        capabilities = self._capabilities(resolver)
+        scope_digest = self._scope_digest(capabilities)
+
+        for path, output, expected_class in (
+            ("internal.txt", "workspace output", "workspace_internal"),
+            ("personal.txt", "owner@example.com", "personal_data"),
+        ):
+            with self.subTest(data_class=expected_class):
+                result = capabilities["core-capability:shell.run"].handler(
+                    {
+                        "argv": [
+                            "/bin/sh",
+                            "-c",
+                            f"printf committed > {path}; printf '{output}'",
+                        ],
+                        "mutation_scopes": [self._mutation_scope(scope_digest)],
+                    },
+                    self.context,
+                    None,
+                )
+                self.assertEqual(result.classification.data_class, expected_class)
+                self.assertEqual(
+                    (self.workspace / path).read_text(encoding="utf-8"),
+                    "committed",
+                )
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "tool_result_egress_not_guaranteed",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        (
+                            "printf blocked > secret.txt; "
+                            "printf 'OPENROUTER_API_KEY=private'"
+                        ),
+                    ],
+                    "mutation_scopes": [self._mutation_scope(scope_digest)],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((self.workspace / "secret.txt").exists())
+
     def test_revocation_after_result_classification_discards_shell_and_process_overlays(
         self,
     ) -> None:

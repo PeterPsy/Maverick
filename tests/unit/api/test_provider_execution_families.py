@@ -83,7 +83,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertEqual(profile["full_workspace_status"], "certified")
         self.assertEqual(
             profile["full_workspace_contract_revision"],
-            "codex-baseline-v20",
+            "codex-baseline-v21",
         )
         self.assertEqual(profile["harness_recipe"]["id"], "codex-native-app-server")
         self.assertTrue(profile["selectable"])

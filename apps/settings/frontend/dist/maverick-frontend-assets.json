@@ -1,5 +1,5 @@
 {
-  "build_id": "1779ef31b6a5604b2d28704a42e2b14550d1e5bd9525c252eba0ac58d2da1871",
+  "build_id": "7452cfd0048e8188c45ab8e92373035aa8cbaa7113ea385a10e47072cc7a9225",
   "entrypoints": [
     "index.html",
     "widgets/settings-sidebar/index.html"
@@ -7,9 +7,9 @@
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/app-D7aN6Twp.js",
-      "sha256": "bdb0356d08e9c6b2947ab989afaf046d5ff9db4c1ef5c2e848e8a20e29ab285a",
-      "size_bytes": 323515
+      "path": "assets/app-CCK04WSv.js",
+      "sha256": "e3c277d9874b290f9e6bd58119ad13ed830efd4af8a70e169654f6798b48bee9",
+      "size_bytes": 323692
     },
     {
       "path": "assets/app-JYxV99mV.css",
@@ -33,7 +33,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "e7dd20db0ad986ed372eb20c67593c231920f8a01a3f962a582c6eeffb4e5ed0",
+      "sha256": "a388abf0dcd54d7b0d24f25091c491634afef14908963e04e0aa25bed4cc7067",
       "size_bytes": 691
     },
     {

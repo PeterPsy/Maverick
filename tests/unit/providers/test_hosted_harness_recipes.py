@@ -57,9 +57,13 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 
 class HostedHarnessRecipeTest(unittest.TestCase):
     def test_review_closure_publishes_new_immutable_recipe_identities(self) -> None:
-        for recipe, expected_revision in (
-            (GOOGLE_GOVERNED_WORKSPACE_RECIPE, "26"),
-            (OPENROUTER_GOVERNED_WORKSPACE_RECIPE, "27"),
+        for recipe, expected_revision, expected_context_revision in (
+            (GOOGLE_GOVERNED_WORKSPACE_RECIPE, "26", "p4-context-v4"),
+            (
+                OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
+                "28",
+                "openrouter-full-context-v1",
+            ),
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
                 self.assertEqual(recipe.revision, expected_revision)
@@ -71,7 +75,10 @@ class HostedHarnessRecipeTest(unittest.TestCase):
                     recipe.tool_contract_revision,
                     FULL_WORKSPACE_CONTRACT_REVISION,
                 )
-                self.assertEqual(recipe.context_policy.revision, "p4-context-v4")
+                self.assertEqual(
+                    recipe.context_policy.revision,
+                    expected_context_revision,
+                )
         self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "3")
 
     def test_registry_resolves_only_the_exact_recipe_and_catalog_identity(self) -> None:

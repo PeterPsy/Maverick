@@ -212,6 +212,18 @@ class AgenticProfileApiTest(unittest.TestCase):
                 for value in effective["capabilities"].values()
                 if isinstance(value, bool)
             ))
+        self.assertTrue(
+            profiles["google-ai-studio"]["data_policy"][
+                "attestation_required"
+            ]
+        )
+        self.assertFalse(
+            profiles["openrouter"]["data_policy"]["attestation_required"]
+        )
+        self.assertEqual(
+            profiles["openrouter"]["data_policy"]["authority_mode"],
+            "workspace_binding",
+        )
 
     def test_status_only_projects_profiles_selectable_by_the_human_actor(self) -> None:
         provider_store = ProviderDocumentStore(

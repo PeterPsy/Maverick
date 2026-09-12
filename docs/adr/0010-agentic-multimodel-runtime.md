@@ -648,23 +648,29 @@ resource-returning tool classification comes from the exact resource identity,
 revision, and digest observed by Core. Transient prompt, agent-instruction, and
 governed-context blocks receive a canonical classification only from a trusted
 server-owned admission resolver bound to their exact workspace/session/turn,
-source identity and digest. Hashing the bytes and recognizing a Core composer
-id establish integrity, not a data class. Production bootstrap resolves prompt,
+source identity and digest. Production bootstrap resolves prompt,
 agent-instruction, and reference-metadata classes through the Core content
 classifier and atomically persists their exact digest-bound entries in one
 immutable turn manifest. Governed context cannot use one aggregate promotion:
 the same writer classifies its exact control, summary, task/result, and artifact
 chunks, which are restrictively joined and forced to untrusted trust. Unknown
-identities or missing source evidence remain `unclassified`. For tool results,
-resource reads keep exact observed taint and mutations persist their exact
+identities or missing source evidence remain `unclassified`. Exact
+server-composed actor input defaults to `workspace_internal`; content markers
+monotonically narrow it to personal, regulated/customer, or secret. An exact
+workspace resource with no persisted classification record likewise defaults
+to `workspace_internal`, while an existing mismatched record still fails
+closed as `unclassified`. For tool results, resource reads keep exact observed
+taint and mutations persist their exact
 post-image lineage in the authenticated session tool ledger, so a rebuilt
 orchestrator can recover read-after-write taint without trusting path text.
 Shell/process streams and CLI/MCP discovery/results remain complete through the
 shared compactor and are classified from their exact bytes. A remotely denied
 private result remains in the ledger while a public call-paired error preserves
 the next request's tool protocol. Shell/process operations with workspace
-mutation scopes and mutating/destructive CLI/MCP definitions are denied before
-their handler while no pre-effect result guarantee exists. App surfaces remain
+mutation scopes use a rollback-safe pre-effect/result guard: their overlay
+commits only if exact result bytes are classified inside the live policy set.
+Mutating/destructive CLI/MCP definitions remain denied while no equivalent
+result/effect guarantee exists. App surfaces remain
 discoverable, but app declarations cannot promote their result. Model or browser
 declarations, generic hashing, and redaction cannot select, infer, or widen a
 class. A missing or incoherent source classification produces `unclassified`,
@@ -672,15 +678,17 @@ and the restrictive join prevents an attestation or less-sensitive sibling
 block from promoting it.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
-`workspace_internal_fake` is eligible for evaluation only when the exact
-resource/version was independently classified as such by Core, an active
+`workspace_internal_fake` remains eligible for legacy contained-policy
+evaluation only when the exact resource/version was independently classified
+as such by Core, an active
 workspace-matching attestation covers that resource, and the selected policy
 explicitly allows the class and destination. The attestation cannot create or
-promote the resource classification. Current contained profile revisions list
-only Core-classified `public` content, remain disabled and non-selectable, and
-the independent central availability barrier still makes remote agentic
-execution NO-GO. The historical `fake-data preview` display label is retained
-verbatim as a warning, not an attestation or authority grant. Secrets, bearer
+promote the resource classification. Google and Antigravity remain on that
+contained path.
+OpenRouter GLM profile 2 instead uses `remote-agentic-full-workspace@1`: an
+enabled exact administrator binding authorizes real workspace, personal, and
+regulated/customer classes without a fake-data or public-data attestation.
+Secrets, bearer
 authority, host operational metadata, unclassified content, and client-supplied
 classification are never remotely exportable.
 
@@ -700,19 +708,19 @@ reservation and decoded usage use the policy from that config. Consequently a
 second model on an existing adapter is a config/recipe/profile registration,
 not a model-specific factory, decoder, or router-code change.
 
-The contained OpenRouter preview uses Chat Completions v1, GLM 5.3 Flash,
+The OpenRouter Full Workspace profile uses Chat Completions v1, GLM 5.3 Flash,
 and the exact `relace/fp4` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained P6 candidate definitions are Google
-revision 66 and OpenRouter GLM revision 1. They use
-`maverick-hosted-tool-loop==55`; the GLM profile is bound to
+accepted as complete. The current definitions are Google revision 67 and
+OpenRouter GLM revision 2. They use `maverick-hosted-tool-loop==56`; the GLM
+profile is bound to
 `openrouter-relace-glm-5-3-flash-fp4@1`. Historical profiles for other
-targets grant no authority. Their suite-62 certification manifests retain distinct
+targets grant no authority. Their suite-63 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v20` requires executable create, replace, edit, patch, move,
+`codex-baseline-v21` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
 than a mode string. The executable repository gate now proves all 24 required
 behaviors: 16 concrete filesystem, shell/process, and CLI/MCP capability

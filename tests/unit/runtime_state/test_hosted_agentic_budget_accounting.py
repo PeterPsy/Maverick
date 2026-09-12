@@ -136,7 +136,7 @@ class HostedAgenticBudgetAccountingTest(unittest.TestCase):
         with self.assertRaisesRegex(HostedAgenticLoopError, "reserve_unavailable"):
             final_budget.plan_step("finalization_recovery")
 
-    def test_cost_ceiling_requires_an_upper_bound_before_request(self) -> None:
+    def test_finite_cost_ceiling_requires_an_estimate_but_unlimited_does_not(self) -> None:
         budget = self.budget()
 
         with self.assertRaisesRegex(HostedAgenticLoopError, "estimate_unavailable"):
@@ -147,8 +147,14 @@ class HostedAgenticBudgetAccountingTest(unittest.TestCase):
         unbounded = self.budget(
             replace(self.policy, max_estimated_cost_microusd=None),
         )
-        with self.assertRaisesRegex(HostedAgenticLoopError, "reserve_unavailable"):
-            unbounded.plan_step("exploration")
+        plan = unbounded.plan_step("exploration")
+        self.assertEqual(plan.phase, "exploration")
+        reservation = unbounded.begin_step(
+            self.request,
+            None,
+            phase="exploration",
+        )
+        self.assertIsNone(reservation.estimated_cost_microusd)
 
     def test_reported_usage_replaces_active_request_reservations(self) -> None:
         budget = self.budget()

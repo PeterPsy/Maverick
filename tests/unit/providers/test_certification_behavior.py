@@ -50,8 +50,23 @@ class CertificationBehaviorTest(unittest.TestCase):
             elif change == "extra_payload":
                 report["observations"][0]["prompt"] = "private prompt must never be signed"
             else:
-                report["observations"][0]["resources"]["cost_microusd"] = 10**15
+                report["observations"][0]["resources"]["input_tokens"] = 10**15
             with self.subTest(change=change), self.assertRaises(CapabilityCertificateError):
+                self.validate(report)
+
+    def test_unlimited_profile_cost_still_requires_a_nonnegative_integer(self):
+        self.assertIsNone(
+            api_certification_resource_limits(self.profile)["cost_microusd"]
+        )
+        report = deepcopy(self.report)
+        report["observations"][0]["resources"]["cost_microusd"] = 10**15
+        self.assertEqual(len(self.validate(report)), 64)
+        for invalid in (-1, True, None):
+            report = deepcopy(self.report)
+            report["observations"][0]["resources"]["cost_microusd"] = invalid
+            with self.subTest(invalid=invalid), self.assertRaises(
+                CapabilityCertificateError
+            ):
                 self.validate(report)
 
     def test_identity_timing_and_every_absolute_counter_fail_closed(self):

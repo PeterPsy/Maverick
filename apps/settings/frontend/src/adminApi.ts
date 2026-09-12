@@ -624,6 +624,8 @@ export type AgenticAdminItem = {
     collection: string;
     require_zdr: boolean;
     retention?: string;
+    authority_mode?: 'fake_data_attestation' | 'workspace_binding';
+    attestation_required?: boolean;
     attestation_state: 'unavailable' | 'not_attested' | 'active' | 'revoked' | 'invalid';
     attestation?: {
       state: 'not_attested' | 'active' | 'revoked' | 'invalid';

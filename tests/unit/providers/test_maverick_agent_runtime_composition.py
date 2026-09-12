@@ -428,7 +428,10 @@ class MaverickAgentRuntimeCompositionTest(unittest.TestCase):
         profile = replace(
             base.profile,
             definition_id="agentic-profile-openrouter-data-only-model",
-            policy_ceiling=replace(base.profile.policy_ceiling, max_estimated_cost_microusd=3_000_000),
+            policy_ceiling=replace(
+                base.profile.policy_ceiling,
+                max_estimated_cost_microusd=None,
+            ),
             revision="data-2",
             model_id=recipe.model_id,
             model_revision=recipe.model_revision,

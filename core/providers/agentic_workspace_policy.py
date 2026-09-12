@@ -14,10 +14,6 @@ from core.runtime.authority import intersect_runtime_policies
 from core.runtime.execution_binding import canonical_digest
 
 
-REMOTE_PREVIEW_EGRESS_POLICY_ID = "remote-agentic-contained"
-REMOTE_PREVIEW_EGRESS_POLICY_REVISION = "2"
-
-
 def actor_selection_allowed(
     binding: WorkspaceAgenticProfileBinding,
     *,

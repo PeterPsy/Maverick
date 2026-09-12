@@ -45,7 +45,8 @@ _OBSERVATION_FIELDS = {
 def validate_behavioral_evidence(
     report: object, *, target_digest: str, source_commit: str, tcb_live_digest: str,
     not_before: datetime, now: datetime,
-    reasoning_efforts: tuple[str, ...], resource_limits: dict[str, int],
+    reasoning_efforts: tuple[str, ...],
+    resource_limits: dict[str, int | None],
     scope: str = "api_profile",
 ) -> str:
     """Validate an operator-observed report before the trusted signer attests it.
@@ -98,8 +99,15 @@ def validate_behavioral_evidence(
             _digest(observation[key])
         resources = observation["resources"]
         _shape(resources, set(resource_limits))
-        if any(type(value) is not int or not 0 <= value <= resource_limits[key]
-               for key, value in resources.items()):
+        if any(
+            type(value) is not int
+            or value < 0
+            or (
+                resource_limits[key] is not None
+                and value > resource_limits[key]
+            )
+            for key, value in resources.items()
+        ):
             _fail("resource_limit_exceeded")
     counters = report["counters"]
     _shape(counters, set(ZERO_TOLERANCE_COUNTERS))

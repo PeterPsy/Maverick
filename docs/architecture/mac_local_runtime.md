@@ -1667,3 +1667,18 @@ the document remains root. One Python integration contract pins the exact
 level and label **tooltip livello help v37**. Expected totals are **256 Swift
 tests** and **32 Python tests**; signed validation, installation and physical
 acceptance remain separate.
+
+#### v37 validated storage-neutral installation (2026-09-12)
+
+Install run
+[34702652560](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34702652560)
+validated remote commit **c0edf9b** with **256 Swift tests** and **32 Python
+tests** passing. Release, credential-free admission/image transport, the real
+pinned Peekaboo 4.3.1 catalog, Apple Development signing and bidirectional
+identity continuity all passed. Designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+No package or artifact-upload step ran. The app was updated in place without a
+persistent backup and launch was requested at **15:36:21 UTC**. Installed
+label: **c0edf9b · tooltip livello help v37**. Permission retention and the
+complete physical hover acceptance remain separate facts.

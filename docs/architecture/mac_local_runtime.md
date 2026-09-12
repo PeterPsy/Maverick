@@ -1763,3 +1763,23 @@ search/single-line fields and fully outside text areas still fail. Expected
 totals are **259 Swift tests** and **33 Python tests**; visible label is
 **editor multilinea visibile v39**. Signed validation, installation and
 physical acceptance remain separate gates.
+
+#### Signed validation and installation
+
+Remote source commit `57e473888a62a8b4009ee3504d35429db34d8fcd`
+passed **259 Swift tests** and **33 Python tests** on the self-hosted
+Apple-silicon runner. Release build, pinned Codex and Peekaboo checks, Apple
+Development signing and code-identity continuity all passed; the designated
+requirement remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+The source-push run was marked failed only after those gates because the
+optional artifact upload hit the GitHub storage quota.
+
+Install run
+[`34708559947`](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34708559947)
+repeated the same gates successfully and, as intended, ran no package or
+artifact-upload step. At **17:34:47 UTC** it updated
+`~/Applications/MaverickMac.app` in place without a persistent backup,
+verified identity continuity and requested launch. Installed label:
+**57e4738 · editor multilinea visibile v39**. Physical acceptance remains a
+separate fact.

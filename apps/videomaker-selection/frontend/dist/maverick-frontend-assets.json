@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "bf22ff91eed12f088ea1792e641e7b739e8f53cf53e7cecd622141eff9f9897b",
+  "build_id": "e3546528973fbc7d1ec7b8006de1cfa4541aa90b4e97772ece0b99a8953749ca",
   "entrypoints": [
     "index.html",
     "widgets/videomaker-sidebar/index.html",
@@ -8,9 +8,14 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-BqPqMQte.js",
-      "sha256": "8ca009ee17bfd06103dc01021152dade5ccc26a700c5379b7bbfe606ddef193f",
-      "size_bytes": 29828
+      "path": "assets/api-D2g8oc58.js",
+      "sha256": "07cd93280680f8ebbca12c6aec49d6615db19420e35c64c701121cc77e652a5d",
+      "size_bytes": 1784
+    },
+    {
+      "path": "assets/app-DrJKzUaX.js",
+      "sha256": "cb8e2142fece1ee57add1cbf794a691896edebedf883f5ba91451cbc9c0e7f0f",
+      "size_bytes": 29626
     },
     {
       "path": "assets/app-FNgO0Uto.css",
@@ -18,45 +23,40 @@
       "size_bytes": 16404
     },
     {
-      "path": "assets/constants-R4moO5r_.js",
-      "sha256": "90b2481cbc2b5dc615585570262b78f1426092d2ff395a49cb0e5401d0dce534",
-      "size_bytes": 3048
-    },
-    {
       "path": "assets/createLucideIcon-BGrHN7i2.js",
       "sha256": "d26482e9a41ddeac5a6372ee1e6eb98ff0b1a024eab1be2f1397bc69bf15af94",
       "size_bytes": 225604
     },
     {
-      "path": "assets/widgets/videomaker-sidebar/index-Bm74tEUU.js",
-      "sha256": "e6e8ec6b9464d4c2ed3ddc78b01240d11f5120f805f0859b688256920ff7cab6",
-      "size_bytes": 3376
+      "path": "assets/widgets/videomaker-sidebar/index-BiTrrctI.js",
+      "sha256": "01601381543489ee73248081213afcdc5fba84c4db003b81467d3108b14ff097",
+      "size_bytes": 3647
     },
     {
-      "path": "assets/widgets/videomaker-sidebar-footer/index-hBQkRBQp.js",
-      "sha256": "a2be571b3e2fdbd9ec8597a7ac2e5b7d317d88cf6fd0b1603cedc2464e22a9b7",
-      "size_bytes": 1558
+      "path": "assets/widgets/videomaker-sidebar-footer/index-DaqJK9-i.js",
+      "sha256": "35f4bb2044d2d7301475908db262ba4d2ce12ed678058241231b98c312e3e533",
+      "size_bytes": 1700
     }
   ],
   "revalidated": [
     {
-      "path": "assets/sidebar-widget-C4pXte6Z.css",
-      "sha256": "47951fc6776e46fa11eee53530f8239184928ee27b345bc1a864b89eb65c9125",
-      "size_bytes": 3001
+      "path": "assets/sidebar-widget-M2fKceNx.css",
+      "sha256": "c680a5a7a5f726103518b1c34c8622f09b24749443f5a4ece7d603500a1b281a",
+      "size_bytes": 3935
     },
     {
       "path": "index.html",
-      "sha256": "a03e3c43c8cd6b6e5826eb6393e4409b2e88c7081e3f068ae83f948fac1f38d3",
-      "size_bytes": 688
+      "sha256": "f4b51c07c1d457cc6fefa4d567846b79681dd2de0d4ca7cb2466b24f57165ff8",
+      "size_bytes": 682
     },
     {
       "path": "widgets/videomaker-sidebar/index.html",
-      "sha256": "50ce5296528b855480d2f3c5275bc661ceec0cbf23c28f69578bad7fd8bbd454",
-      "size_bytes": 703
+      "sha256": "5a757916a2a741976f670047d13171e9e651c46622f07f461eac79b6bb7caa80",
+      "size_bytes": 697
     },
     {
       "path": "widgets/videomaker-sidebar-footer/index.html",
-      "sha256": "08afa2e8bb72c1c9291fa5b0a1a61bccef4b1ddd46f0ad056c887cd7c3535f8a",
+      "sha256": "231c8b7019b23e6a7f9a4d7a0b2dd06c51537586a484b7a367a31b51a1f06f24",
       "size_bytes": 608
     }
   ]

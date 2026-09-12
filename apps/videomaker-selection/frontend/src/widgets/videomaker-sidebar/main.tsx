@@ -1,20 +1,126 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Search, Star, Users } from 'lucide-react';
-import { listCandidates, readViewState, saveViewState } from '../../api';
-import { DECISIONS, labelFor } from '../../constants';
-import type { Candidate, Filters } from '../../types';
+import { BriefcaseBusiness, CheckCircle2, CircleUserRound, MailCheck, Users } from 'lucide-react';
+import { readStats, readViewState, saveViewState } from '../../api';
+import type { Stats, ViewState } from '../../types';
 import '../../styles/sidebar-widget.css';
-const APP_ID='videomaker-selection'; const MOBILE='(max-width:979px)';
-const baseFilters:Filters={query:'',decision:'all',email_status:'all',call_status:'all',poc_status:'all',reviewed:'all',work:'all',archived:'active',sort:'review',favorite:false};
-function open(candidate:Candidate){window.parent?.postMessage({type:'maverick.widget.open-app',app_id:APP_ID,params:{app_page:`candidates/${candidate.id}`,candidate_id:candidate.id}},'*');if(window.matchMedia(MOBILE).matches)window.parent?.postMessage({type:'maverick.shell.sidebar.close'},'*')}
-function Sidebar(){
- const [items,setItems]=useState<Candidate[]>([]);const [query,setQuery]=useState('');const [decision,setDecision]=useState('all');const [selected,setSelected]=useState('');const [loading,setLoading]=useState(true);const [error,setError]=useState('');
- const visible=useMemo(()=>items.slice(0,100),[items]);
- const load=async(q=query,d=decision)=>{try{setItems(await listCandidates({...baseFilters,query:q,decision:d}));setError('')}catch(e){setError(e instanceof Error?e.message:'Errore caricamento')}finally{setLoading(false)}};
- useEffect(()=>{void (async()=>{try{const view=await readViewState();setQuery(view.query||'');setDecision(view.decision||'all');await load(view.query||'',view.decision||'all')}catch(e){setError(e instanceof Error?e.message:'Errore caricamento');setLoading(false)}})()},[]);
- useEffect(()=>{const timer=window.setTimeout(()=>{void saveViewState(query.trim(),decision).then(()=>load(query.trim(),decision)).catch(e=>setError(e.message))},300);return()=>clearTimeout(timer)},[query,decision]);
- useEffect(()=>{const handler=(event:MessageEvent)=>{if(event.origin!==location.origin||!event.data||typeof event.data!=='object')return;const data=event.data as {type?:string;owner_app_id?:string;selection?:{candidate_id?:string};resource?:string};if(data.type==='maverick.app.selection-changed'&&data.owner_app_id===APP_ID&&data.selection?.candidate_id)setSelected(data.selection.candidate_id);if((data.type==='maverick.app.data-changed'||data.type==='maverick.widget.data-changed')&&data.owner_app_id===APP_ID)void load()};window.addEventListener('message',handler);return()=>window.removeEventListener('message',handler)},[query,decision]);
- return <main className="vm-sidebar"><div className="vm-sidebar-title"><Users size={15}/><strong>Candidati</strong><span>{items.length}</span></div><label className="vm-sidebar-search"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cerca…" aria-label="Cerca candidati"/></label><div className="vm-sidebar-tabs">{[{value:'all',label:'Tutti'},...DECISIONS].map(item=><button className={decision===item.value?'is-active':''} onClick={()=>setDecision(item.value)} type="button" key={item.value}>{item.label==='Scartato con riserva'?'Riserva':item.label}</button>)}</div>{error?<p className="vm-sidebar-empty">{error}</p>:null}<div className="vm-sidebar-list">{loading?<div className="vm-sidebar-loading"><span/><span/><span/><span/></div>:visible.length?visible.map(candidate=><button className={`vm-sidebar-row ${selected===candidate.id?'is-active':''}`} key={candidate.id} onClick={()=>{setSelected(candidate.id);open(candidate)}} type="button"><span className="vm-avatar">{candidate.name.split(/\s+/).slice(0,2).map(p=>p[0]).join('').toUpperCase()}</span><span><strong>{candidate.name}</strong><small>{candidate.city||candidate.specialty||candidate.email}</small></span>{candidate.favorite?<Star size={11} fill="currentColor"/>:<em>{candidate.review_score?.toFixed(1)??'—'}</em>}<i className={`vm-dot dot-${candidate.decision}`} title={labelFor(DECISIONS,candidate.decision)}/></button>):<p className="vm-sidebar-empty">Nessun candidato</p>}</div></main>
+
+const APP_ID = 'videomaker-selection';
+const EMPTY_STATS: Stats = {
+  total: 0,
+  reviewed: 0,
+  favorites: 0,
+  due_actions: 0,
+  decision: {},
+  email: {},
+  call: {},
+  poc: {}
+};
+
+type FilterId = 'all' | 'da_valutare' | 'riserva' | 'selezionato' | 'email_inviata';
+
+function activeFilter(view: ViewState): FilterId | '' {
+  if (view.email_status === 'email_inviata' && view.decision === 'all') return 'email_inviata';
+  if (view.email_status !== 'all') return '';
+  if (view.decision === 'da_valutare' || view.decision === 'riserva' || view.decision === 'selezionato') {
+    return view.decision;
+  }
+  return view.decision === 'all' ? 'all' : '';
 }
-createRoot(document.getElementById('videomaker-sidebar-root') as HTMLElement).render(<Sidebar/>);
+
+function SidebarFilters() {
+  const [stats, setStats] = useState<Stats>(EMPTY_STATS);
+  const [view, setView] = useState<ViewState>({
+    mode: 'search', query: '', decision: 'all', email_status: 'all', title: '', refs: []
+  });
+  const [saving, setSaving] = useState<FilterId | ''>('');
+  const [error, setError] = useState('');
+
+  async function refreshStats() {
+    try {
+      setStats(await readStats());
+      setError('');
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Impossibile caricare i filtri.');
+    }
+  }
+
+  async function refreshView() {
+    try {
+      setView(await readViewState());
+      setError('');
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Impossibile caricare i filtri.');
+    }
+  }
+
+  useEffect(() => {
+    void Promise.all([refreshStats(), refreshView()]);
+  }, []);
+
+  useEffect(() => {
+    function handleShellMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+      const payload = event.data as { type?: string; owner_app_id?: string; resource?: string };
+      if (
+        (payload.type !== 'maverick.app.data-changed' && payload.type !== 'maverick.widget.data-changed') ||
+        payload.owner_app_id !== APP_ID
+      ) return;
+      if (!payload.resource || payload.resource === 'candidates') void refreshStats();
+      if (!payload.resource || payload.resource === 'view-state') void refreshView();
+    }
+    window.addEventListener('message', handleShellMessage);
+    return () => window.removeEventListener('message', handleShellMessage);
+  }, []);
+
+  async function applyFilter(filter: FilterId) {
+    setSaving(filter);
+    const decision = filter === 'email_inviata' ? 'all' : filter;
+    const emailStatus = filter === 'email_inviata' ? 'email_inviata' : 'all';
+    try {
+      const next = await saveViewState(view.query, decision, emailStatus);
+      setView(next);
+      setError('');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Filtro non applicato.');
+    } finally {
+      setSaving('');
+    }
+  }
+
+  const selected = activeFilter(view);
+  const filters = [
+    { id: 'all' as const, label: 'Candidature', value: stats.total, icon: Users },
+    { id: 'da_valutare' as const, label: 'Da valutare', value: stats.decision.da_valutare || 0, icon: CircleUserRound },
+    { id: 'riserva' as const, label: 'In riserva', value: stats.decision.riserva || 0, icon: BriefcaseBusiness },
+    { id: 'selezionato' as const, label: 'Selezionati', value: stats.decision.selezionato || 0, icon: CheckCircle2 },
+    { id: 'email_inviata' as const, label: 'Email inviate', value: stats.email.email_inviata || 0, icon: MailCheck }
+  ];
+
+  return (
+    <main className="vm-sidebar vm-sidebar--filters-only">
+      <div className="vm-sidebar-filter-list" aria-label="Filtra candidature">
+        {filters.map((filter) => (
+          <button
+            aria-pressed={selected === filter.id}
+            className={`vm-sidebar-filter-card ${selected === filter.id ? 'is-active' : ''}`}
+            disabled={Boolean(saving)}
+            key={filter.id}
+            onClick={() => void applyFilter(filter.id)}
+            type="button"
+          >
+            <span className="vm-sidebar-filter-icon"><filter.icon size={18} /></span>
+            <span className="vm-sidebar-filter-copy">
+              <strong>{filter.value}</strong>
+              <small>{filter.label}</small>
+            </span>
+            <span className="vm-sidebar-filter-state" aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      {error ? <p className="vm-sidebar-empty" role="status">{error}</p> : null}
+    </main>
+  );
+}
+
+createRoot(document.getElementById('videomaker-sidebar-root') as HTMLElement).render(<SidebarFilters />);

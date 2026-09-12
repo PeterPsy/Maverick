@@ -339,6 +339,16 @@
           },
           "decision": {
             "type": "string"
+          },
+          "email_status": {
+            "type": "string",
+            "enum": [
+              "all",
+              "da_contattare",
+              "email_inviata",
+              "risposta_ricevuta",
+              "nessuna_risposta"
+            ]
           }
         },
         "additionalProperties": false
@@ -367,6 +377,16 @@
             "items": {
               "type": "object"
             }
+          },
+          "email_status": {
+            "type": "string",
+            "enum": [
+              "all",
+              "da_contattare",
+              "email_inviata",
+              "risposta_ricevuta",
+              "nessuna_risposta"
+            ]
           }
         },
         "additionalProperties": false,

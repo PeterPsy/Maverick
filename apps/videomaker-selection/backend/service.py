@@ -43,6 +43,7 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str) -
                     view = read_view_state(connection)
                     options.setdefault("query", view.get("query"))
                     options.setdefault("decision", view.get("decision"))
+                    options.setdefault("email_status", view.get("email_status"))
                     if view.get("mode") == "custom":
                         options["ids"] = [ref["entity_id"] for ref in view.get("refs", [])]
                 items, pagination = list_candidates(connection, options)
@@ -80,9 +81,9 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str) -
                 return 200, {"view_state": read_view_state(connection)}
             if action == "set_view_filter":
                 current = read_view_state(connection)
-                return 200, {"view_state": write_view_state(connection, {**current, "mode": "search", "query": body.get("query", current["query"]), "decision": body.get("decision", current["decision"]), "title": "", "refs": []})}
+                return 200, {"view_state": write_view_state(connection, {**current, "mode": "search", "query": body.get("query", current["query"]), "decision": body.get("decision", current["decision"]), "email_status": body.get("email_status", current["email_status"]), "title": "", "refs": []})}
             if action == "set_custom_view":
-                return 200, {"view_state": write_view_state(connection, {"mode": "custom", "title": body.get("title") or "Candidate selection", "query": body.get("query") or "", "decision": body.get("decision") or "all", "refs": body.get("refs") or []})}
+                return 200, {"view_state": write_view_state(connection, {"mode": "custom", "title": body.get("title") or "Candidate selection", "query": body.get("query") or "", "decision": body.get("decision") or "all", "email_status": body.get("email_status") or "all", "refs": body.get("refs") or []})}
             if action == "clear_custom_view":
                 return 200, {"view_state": write_view_state(connection, DEFAULT_VIEW)}
     except sqlite3.IntegrityError as error:

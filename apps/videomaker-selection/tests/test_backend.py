@@ -63,9 +63,10 @@ class CandidateCatalogTest(unittest.TestCase):
         self.assertEqual(stats["total"], 2)
         self.assertEqual(stats["decision"]["selezionato"], 1)
 
-        self.call("set_view_filter", query="Anna", decision="selezionato")
+        self.call("set_view_filter", query="Anna", decision="selezionato", email_status="email_inviata")
         state = self.call("view_filter")["view_state"]
         self.assertEqual((state["query"], state["decision"]), ("Anna", "selezionato"))
+        self.assertEqual(state["email_status"], "email_inviata")
         filtered = self.call("list", apply_view_state=True)["items"]
         self.assertEqual([item["id"] for item in filtered], ["candidate_anna"])
         self.call("set_custom_view", title="Empty shortlist", refs=[])

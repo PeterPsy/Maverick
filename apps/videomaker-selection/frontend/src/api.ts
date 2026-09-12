@@ -36,6 +36,6 @@ export async function exportCatalog(): Promise<Record<string,unknown>> {
 export async function readViewState(): Promise<ViewState> {
   const data=await request<{view_state:ViewState}>({action:'view_filter'}); return data.view_state;
 }
-export async function saveViewState(query:string,decision:string): Promise<ViewState> {
-  const data=await request<{view_state:ViewState}>({action:'set_view_filter',query,decision}); return data.view_state;
+export async function saveViewState(query:string,decision:string,emailStatus:string='all'): Promise<ViewState> {
+  const data=await request<{view_state:ViewState}>({action:'set_view_filter',query,decision,email_status:emailStatus}); return data.view_state;
 }

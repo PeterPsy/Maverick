@@ -26,4 +26,4 @@ export interface Filters {
   query: string; decision: string; email_status: string; call_status: string; poc_status: string;
   reviewed: string; work: string; archived:string; sort: string; favorite: boolean;
 }
-export interface ViewState { mode: string; query: string; decision: string; title: string; refs: Array<{entity_type:string;entity_id:string}>; updated_at?: string }
+export interface ViewState { mode: string; query: string; decision: string; email_status:string; title: string; refs: Array<{entity_type:string;entity_id:string}>; updated_at?: string }

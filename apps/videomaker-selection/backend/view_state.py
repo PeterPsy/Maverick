@@ -8,7 +8,7 @@ from typing import Any
 
 from schema import utcnow
 
-DEFAULT_VIEW = {"mode": "search", "query": "", "decision": "all", "title": "", "refs": []}
+DEFAULT_VIEW = {"mode": "search", "query": "", "decision": "all", "email_status": "all", "title": "", "refs": []}
 
 
 def read_view_state(connection: sqlite3.Connection) -> dict[str, Any]:
@@ -26,10 +26,14 @@ def write_view_state(connection: sqlite3.Connection, value: dict[str, Any]) -> d
     decision = str(value.get("decision") or "all").strip()[:100]
     if decision not in {"all", "da_valutare", "scartato", "riserva", "selezionato"}:
         raise ValueError(f"Unsupported decision filter: {decision}")
+    email_status = str(value.get("email_status") or "all").strip()[:100]
+    if email_status not in {"all", "da_contattare", "email_inviata", "risposta_ricevuta", "nessuna_risposta"}:
+        raise ValueError(f"Unsupported email filter: {email_status}")
     state = {
         "mode": "custom" if value.get("mode") == "custom" else "search",
         "query": str(value.get("query") or "").strip()[:500],
         "decision": decision,
+        "email_status": email_status,
         "title": str(value.get("title") or "").strip()[:500],
         "refs": normalize_refs(value.get("refs")),
     }

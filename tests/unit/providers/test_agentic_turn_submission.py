@@ -60,7 +60,10 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             )
         )
         timestamp = datetime(2026, 8, 16, tzinfo=UTC)
-        adapter = FakeHostedAgenticAdapter(output_text="common lifecycle answer")
+        adapter = FakeHostedAgenticAdapter(
+            output_text="common lifecycle answer",
+            durable_final=True,
+        )
         evidence = fake_capability_evidence(adapter, now=timestamp)
         binding = build_runtime_execution_binding(
             session_id="session-fake-hosted",
@@ -166,8 +169,21 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
         )
         event_types = [event.event_type for event in runtime_store.list_events(session.session_id)]
         self.assertIn("runtime.output.final", event_types)
+        self.assertEqual(event_types.count("runtime.output.final"), 1)
         self.assertIn("runtime.authority.prewarm_evaluated", event_types)
         self.assertIn("runtime.authority.evaluated", event_types)
+        final_event = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.output.final"
+        )
+        terminal_event = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.completed"
+        )
+        self.assertEqual(final_event.payload["provider_id"], "fake-model-provider")
+        self.assertEqual(terminal_event.payload["provider_id"], "fake-model-provider")
         authority_event = next(
             event for event in runtime_store.list_events(session.session_id)
             if event.event_type == "runtime.authority.evaluated"

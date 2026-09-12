@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 import os
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.service import create_runtime_session, queue_runtime_turn
-from core.runtime.turn_submission_service_events import _record_final_output
+from core.runtime.turn_submission_service_events import (
+    _execution_provider_id,
+    _record_final_output,
+)
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 
 
@@ -81,6 +86,44 @@ class FinalOutputDeliveryTest(unittest.TestCase):
         ]
         self.assertEqual(event_types.count("runtime.output.final"), 1)
         self.assertEqual(event_types.count("provider.execution.completed"), 1)
+
+    def test_hosted_agentic_finalization_preserves_model_provider_identity(self) -> None:
+        state, session = self._state_and_session()
+        session = replace(
+            session,
+            execution_binding=SimpleNamespace(model_provider_id="openrouter"),
+        )
+        queue_runtime_turn(
+            state.runtime_store,
+            turn_id="turn-hosted-agentic-final",
+            session_id=session.session_id,
+            input_text="ordinary workspace input",
+        )
+        payload = {
+            "text": "agentic answer",
+            "complete_text": "agentic answer",
+            "provider_id": "openrouter",
+            "exit_code": 0,
+            "delivery_id": "delivery-hosted-agentic-final",
+        }
+        recorded = _RuntimeTurnOutputRecorder(
+            state,
+            session_id=session.session_id,
+            turn_id="turn-hosted-agentic-final",
+        ).record(RuntimeExecutionEvent("runtime.output.final", payload))
+
+        completed = _record_final_output(
+            state,
+            session_id=session.session_id,
+            turn_id="turn-hosted-agentic-final",
+            provider_id=_execution_provider_id(session, "maverick-tool-loop"),
+            output_text="agentic answer",
+            complete_text="agentic answer",
+            exit_code=0,
+        )
+
+        self.assertEqual(_execution_provider_id(session, "maverick-tool-loop"), "openrouter")
+        self.assertEqual(completed, recorded)
 
     @staticmethod
     def _record(state, session_id: str, payload: dict[str, object]):

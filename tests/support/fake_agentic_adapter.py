@@ -41,8 +41,14 @@ class FakeHostedAgenticAdapter:
     adapter_version = "1"
     local_process_lifecycle = None
 
-    def __init__(self, *, output_text: str = "fake hosted answer") -> None:
+    def __init__(
+        self,
+        *,
+        output_text: str = "fake hosted answer",
+        durable_final: bool = False,
+    ) -> None:
         self.output_text = output_text
+        self.durable_final = durable_final
         self.cancelled = False
         self.closed = False
         self.recovered = False
@@ -60,13 +66,26 @@ class FakeHostedAgenticAdapter:
 
     async def execute(self, context: RuntimeTurnContext) -> AsyncIterator[RuntimeProviderEvent]:
         self.execute_calls += 1
+        delivery_id = f"delivery:{context.correlation_id}"
+        final_payload = {"text": self.output_text}
+        completion_payload = {"output_text": self.output_text, "exit_code": 0}
+        if self.durable_final:
+            final_payload.update(
+                {
+                    "complete_text": self.output_text,
+                    "provider_id": "fake-model-provider",
+                    "exit_code": 0,
+                    "delivery_id": delivery_id,
+                }
+            )
+            completion_payload["delivery_id"] = delivery_id
         events = (
             ("provider.accepted", {"request_id": f"request:{context.correlation_id}"}),
             ("provider.state.update", {"continuation_id": "fake-continuation"}),
             ("runtime.output.delta", {"text": self.output_text[:5]}),
             ("runtime.output.delta", {"text": self.output_text[5:]}),
-            ("runtime.output.final", {"text": self.output_text}),
-            ("provider.execution.completed", {"output_text": self.output_text, "exit_code": 0}),
+            ("runtime.output.final", final_payload),
+            ("provider.execution.completed", completion_payload),
         )
         for ordinal, (event_type, payload) in enumerate(events, start=1):
             yield RuntimeProviderEvent(

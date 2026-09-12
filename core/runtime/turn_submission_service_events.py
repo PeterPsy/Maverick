@@ -35,6 +35,20 @@ _SESSION_EXECUTION_LOCKS_LOCK = Lock()
 _ACTIVE_TURN_STATUSES = {"queued", "active", "waiting_for_tool_confirmation"}
 
 
+def _execution_provider_id(
+    session: RuntimeSessionRecord,
+    fallback_provider_id: str,
+) -> str:
+    """Return the model provider that owns agentic execution output."""
+    binding = session.execution_binding
+    provider_id = (
+        None if binding is None else getattr(binding, "model_provider_id", None)
+    )
+    if isinstance(provider_id, str) and provider_id.strip():
+        return provider_id.strip()
+    return fallback_provider_id
+
+
 def _record_final_output(
     state: PlatformState,
     *,

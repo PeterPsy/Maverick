@@ -28,6 +28,7 @@ from core.runtime.service import transition_runtime_turn
 from core.runtime.turn_submission_service_events import (
     _complete_turn_from_exit_code,
     _debug_log_runtime_turn,
+    _execution_provider_id,
     _record_final_output,
     _terminalize_worker_observed_cancellation,
 )
@@ -343,12 +344,13 @@ def submit_runtime_turn(
         )
         final_output_text = output_recorder.final_text(result.output_text)
         app_output_text = output_recorder.complete_text(result.output_text)
+        execution_provider_id = _execution_provider_id(session, provider_id)
         events.append(
             _record_final_output(
                 state,
                 session_id=session.session_id,
                 turn_id=turn.turn_id,
-                provider_id=provider_id,
+                provider_id=execution_provider_id,
                 output_text=final_output_text,
                 complete_text=app_output_text,
                 exit_code=result.exit_code,
@@ -358,7 +360,7 @@ def submit_runtime_turn(
             state,
             session_id=session.session_id,
             turn_id=turn.turn_id,
-            provider_id=provider_id,
+            provider_id=execution_provider_id,
             exit_code=result.exit_code,
             output_text=app_output_text,
             failure_reason_code=result.failure_reason_code,

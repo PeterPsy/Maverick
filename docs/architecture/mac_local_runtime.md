@@ -1455,3 +1455,39 @@ No ZIP package or artifact-upload step ran. The installer updated
 requested launch at **09:51:37 UTC**. Installed label: **97dd421 · recupero
 scena nativa v32**. Permission retention and complete GUI acceptance remain
 physical facts.
+
+### v33 current-window reacquisition and recoverable-consent continuity
+
+Physical v32 acceptance passed background observation of all three approved
+apps, Notes search, the first TextEdit click, exact text entry, double click,
+contextual menu/Escape and middle click. The observation following hover then
+failed pre-dispatch with MC-TOOL-30. Although the native tool left the turn
+recoverable, the attempted activation returned MC-TOOL-15 and prevented the
+remaining test phases.
+
+The window resolver had retained an unnecessary equality between the prior
+receipt rectangle and the current ScreenCaptureKit rectangle. V33 instead uses
+the prior PID and CoreGraphics window ID to reacquire only that same currently
+visible layer-zero window, then adopts its current valid rectangle for the new
+observation. Stable sampling still requires two identical current scenes, and
+the complete current scene must still equal the fresh leased scene immediately
+before input. Window replacement, foreign ownership, hidden/non-layer-zero
+surfaces, post-observation movement and failed recipient hit tests therefore
+remain fail-closed.
+
+The second defect was consent lifecycle rather than task-budget exhaustion.
+Recoverable pre-dispatch diagnostics were sent through the blocking diagnostic
+callback, whose runtime handler revoked the per-task lease. V33 separates
+recoverable diagnostics: they remain visible and invalidate all stale receipts
+but preserve the existing app/time/action-bounded task consent. Denials,
+confirmation failures, permission/security failures, session loss and
+uncertain effects still revoke consent and block the turn. The same distinction
+now covers the read-only MC-PEEKABOO-25 recovery path.
+
+Model guidance first requests a fresh observation of the same approved app and
+allows activation only when that observation proves foreground focus is
+missing and needed. One added Swift window-policy regression plus strengthened
+native, Peekaboo and consent tests cover the two fixes. The Python integration
+contract pins the code, recovery order and visible label **recupero hover
+nativo v33**. Expected totals are **253 Swift tests** and **30 Python tests**;
+signed validation, installation and physical acceptance remain separate.

@@ -1380,3 +1380,23 @@ storage every 6–12 hours, no destructive cleanup or repeated install was issue
 Publishing the storage-neutral workflow requires the GitHub App's workflow-file
 write permission; deleting bounded older artifacts requires separate explicit
 operator authorization.
+
+#### v31 validated storage-neutral installation (2026-09-12)
+
+The existing GitHub App installation accepted the newly requested `Workflows:
+read and write` permission; a fresh installation token then reported write
+access for Actions, Contents and Workflows. GitHub accepted commit **2aff701**,
+whose `[skip ci]` marker correctly prevented a push build.
+
+Explicit install run
+[34684831344](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34684831344)
+passed all **248 Swift tests** and **29 Python tests**, release/runtime/catalog,
+credential-free admission, Apple Development signing and bidirectional identity
+continuity. Designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+The run contained no ZIP-package or artifact-upload step and created no new
+artifact. It updated `~/Applications/MaverickMac.app` in place without a
+persistent backup and requested launch at **09:04:54 UTC**. Installed label:
+**2aff701 · cattura Peekaboo classica v31**. Exact GUI behavior and permission
+retention remain physical acceptance facts.

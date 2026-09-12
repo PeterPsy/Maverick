@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "e3546528973fbc7d1ec7b8006de1cfa4541aa90b4e97772ece0b99a8953749ca",
+  "build_id": "b519a88578e89b1a4290f6542532be3ccf06c79712bf3ae0710bc9cedb618355",
   "entrypoints": [
     "index.html",
     "widgets/videomaker-sidebar/index.html",
@@ -13,14 +13,14 @@
       "size_bytes": 1784
     },
     {
-      "path": "assets/app-DrJKzUaX.js",
-      "sha256": "cb8e2142fece1ee57add1cbf794a691896edebedf883f5ba91451cbc9c0e7f0f",
-      "size_bytes": 29626
+      "path": "assets/app-CJKSbVuK.css",
+      "sha256": "922736eca2ec742c201270276322c26b48fa148e309e6e336a695caeee4d956f",
+      "size_bytes": 14961
     },
     {
-      "path": "assets/app-FNgO0Uto.css",
-      "sha256": "f4cb3138741cae3e9166a35193ec91bcd54f751b5b92c123652d83fa16410b0c",
-      "size_bytes": 16404
+      "path": "assets/app-CgNpec_0.js",
+      "sha256": "9c4137a749063d37dd020bff67a3ca6ec8bd9863d85bef800fd45c3329cfe554",
+      "size_bytes": 28910
     },
     {
       "path": "assets/createLucideIcon-BGrHN7i2.js",
@@ -46,7 +46,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "f4b51c07c1d457cc6fefa4d567846b79681dd2de0d4ca7cb2466b24f57165ff8",
+      "sha256": "9db01506c9868be7e877b49e05e2a64a95aae4b907c94f32237ba05a8ce20f33",
       "size_bytes": 682
     },
     {

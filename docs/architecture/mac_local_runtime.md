@@ -1720,3 +1720,18 @@ static match diagnostics and read-only-only Peekaboo recovery. The Python
 contract pins those behaviors and label **tutte le finestre app v38**. Expected
 totals are **258 Swift tests** and **32 Python tests**; signed validation,
 installation and physical acceptance remain separate gates.
+
+#### v38 validated storage-neutral installation (2026-09-12)
+
+Install run
+[34704747563](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34704747563)
+validated remote commit **a243523** with **258 Swift tests** and **32 Python
+tests** passing. Release, credential-free admission/image transport, the real
+pinned Peekaboo 4.3.1 catalog, Apple Development signing and bidirectional
+identity continuity all passed. Designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+No package or artifact-upload step ran. The app was updated in place without a
+persistent backup and launch was requested at **16:19:53 UTC**. Installed
+label: **a243523 · tutte le finestre app v38**. Permission retention and
+complete physical GUI acceptance remain separate facts.

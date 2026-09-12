@@ -1538,3 +1538,25 @@ new classification. The Python integration contract pins implementation,
 guidance and label **verifica esito Peekaboo v34**. Expected totals are **254
 Swift tests** and **30 Python tests**; signed validation, installation and
 physical acceptance remain separate.
+
+#### v34 validated storage-neutral installation (2026-09-12)
+
+Initial install run
+[34690029261](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34690029261)
+compiled v34 and ran all **254 Swift tests**. The new state-machine regression
+passed; one historical focus-guidance assertion still expected the removed
+blanket stop after every uncertain dispatch. That assertion alone failed, so
+no release build or installation occurred.
+
+After correcting only the stale assertion, install run
+[34690213467](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34690213467)
+validated remote commit **6be87b3** with **254 Swift tests** and **30 Python
+tests** passing. Release, credential-free admission/image transport, the real
+pinned Peekaboo 4.3.1 catalog, Apple Development signing and bidirectional
+identity continuity all passed. Designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+No package or artifact-upload step ran. The app was updated in place without a
+persistent backup and launch was requested at **11:08:54 UTC**. Installed
+label: **6be87b3 · verifica esito Peekaboo v34**. Permission retention and
+complete physical GUI acceptance remain separate facts.

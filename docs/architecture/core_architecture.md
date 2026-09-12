@@ -684,9 +684,9 @@ not the runtime-registry builder or bootstrap control flow.
 A shared hosted adapter version change requires a new immutable revision for
 every bundled profile that pins it, including profiles for otherwise unchanged
 providers. Bootstrap preserves existing definitions and suspends superseded
-revisions through their separate rollout records. Google profile 69 pins hosted
-adapter 58; revisions 67 and 68 retain their original adapter-56 and adapter-57
-definitions respectively.
+revisions through their separate rollout records. Google profile 70 pins hosted
+adapter 59; revisions 67, 68, and 69 retain their original adapter-56,
+adapter-57, and adapter-58 definitions respectively.
 
 Text-only API sessions have a third and disjoint identity path. Before a new
 session is persisted, Core resolves the exact hosted provider/model and creates

@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-12-r66-openrouter-glm-http-finalization-tcb56`
+Matrix revision: `2026-09-12-r67-openrouter-glm-catalog-expiration-tcb57`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==58`
+Adapter: `maverick-hosted-tool-loop==59`
 
 ## P6 candidate checkpoint
 
-Suite 66 / TCB manifest 56 / hosted adapter 58 / recipe 26 retain the P5
+Suite 67 / TCB manifest 57 / hosted adapter 59 / recipe 26 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -707,3 +707,9 @@ HTTP finalization correction without changing the uncertified Google profile or
 adapter bytes. OpenRouter GLM profile 5 uses recipe 29 and that current TCB
 identity.
 Codex revision 15 remains byte-identical and separately authoritative.
+
+Revision 70 pins hosted adapter 59 with suite 67 and TCB manifest 57. The
+adapter digest changes because OpenRouter's official model catalog now reports
+the exact expiration `2098-12-31`; OpenRouter profile 6 binds that fail-closed
+catalog contract. Google remains unbound and contained, and no Google or
+Antigravity live call is implied.

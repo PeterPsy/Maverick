@@ -1,10 +1,10 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-12-r66-openrouter-glm-http-finalization-tcb56`
+Matrix revision: `2026-09-12-r67-openrouter-glm-catalog-expiration-tcb57`
 Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==58`
+Adapter: `maverick-hosted-tool-loop==59`
 
 ## Scope
 
@@ -17,10 +17,12 @@ Google AI Studio and Antigravity remain contained and are not part of this
 promotion decision. Codex remains the active native agent and must not be
 reconfigured by this work.
 
-Profile revision 5 and TCB manifest 56 bind HTTP/background finalization to the
+Profile revision 6 and TCB manifest 57 bind HTTP/background finalization to the
 model-provider identity pinned in the immutable execution binding. This keeps a
 durable OpenRouter final outbox delivery from conflicting with the shared
-`maverick-tool-loop` runtime-engine identity after successful execution.
+`maverick-tool-loop` runtime-engine identity after successful execution. They
+also bind the exact `2098-12-31` expiration now advertised by OpenRouter's
+official model catalog; any further catalog drift fails before transport.
 
 ## Exact candidate
 
@@ -30,13 +32,13 @@ durable OpenRouter final outbox delivery from conflicting with the shared
 | Model | `z-ai/glm-5.3-flash` |
 | Resolved model | `z-ai/glm-5.3-flash-20260826` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-12` |
-| Catalog expiration | exact absence (`null`); any drift fails closed |
-| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@5` |
+| Catalog expiration | exact `2098-12-31`; any drift fails closed |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@6` |
 | Execution family | `maverick_agent` |
 | Full Workspace contract | `codex-baseline-v21` |
 | Protocol | OpenAI-compatible streaming Chat Completions v1 |
 | Protocol adapter | `openrouter-chat-completions-protocol@4` |
-| Runtime adapter | `maverick-hosted-tool-loop==58` |
+| Runtime adapter | `maverick-hosted-tool-loop==59` |
 | Harness recipe | `maverick-openrouter-chat-governed-workspace@29` |
 | Provider config | `openrouter-relace-glm-5-3-flash@2` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -83,8 +85,8 @@ Every request carries this non-permissive router object:
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@66` and the certified
-execution TCB is manifest 56. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@67` and the certified
+execution TCB is manifest 57. The exact checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |

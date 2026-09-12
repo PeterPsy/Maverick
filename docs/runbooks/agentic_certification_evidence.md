@@ -5,7 +5,7 @@ Status date: 2026-09-12
 Scope: trusted CI or operator-controlled certification worker
 
 Production status: **OpenRouter GLM 5.3 Flash is the only current release
-candidate; exact suite-66 live and natural evidence is required before
+candidate; exact suite-67 live and natural evidence is required before
 activation. Google and Antigravity remain NO-GO.**
 
 The following coverage inventory is historical P4 evidence, not a P6 run.
@@ -120,8 +120,8 @@ every other invalid identity remain fail-closed. It also binds Antigravity's
 provider-observed tool `ERROR` state and the exact, dedicated AppArmor profile
 plus root-owned Bubblewrap digest needed for its nested terminal sandbox,
 without changing Codex's sandbox launcher. The current successor binds hosted
-adapter 58, Google recipe 26/profile 69, OpenRouter GLM recipe 29/profile 5,
-Antigravity adapter 5 / recipe 4, TCB 56 and Codex artifact revision 15. Codex revision 15 is the active verified
+  adapter 59, Google recipe 26/profile 70, OpenRouter GLM recipe 29/profile 6,
+  Antigravity adapter 5 / recipe 4, TCB 57 and Codex artifact revision 15. Codex revision 15 is the active verified
 profile, revision 14 remains immutable history, and a remote-provider
 certification worker must not restart, migrate, or reissue the Codex runtime or
 certificate.
@@ -139,8 +139,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a production-owned provider credential leased ephemerally only to the
   operator-controlled live-probe worker and never written to evidence;
-- the dated suite-v66 matrix revision
-  `2026-09-12-r66-openrouter-glm-http-finalization-tcb56` declared by the provider
+- the dated suite-v67 matrix revision
+  `2026-09-12-r67-openrouter-glm-catalog-expiration-tcb57` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -197,8 +197,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-66 manifests bind matrix revision
-`2026-09-12-r66-openrouter-glm-http-finalization-tcb56`. OpenRouter uses suite id
+All suite-67 manifests bind matrix revision
+`2026-09-12-r67-openrouter-glm-catalog-expiration-tcb57`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
@@ -342,7 +342,7 @@ fixture verification neither performs this deployment nor authorizes live writes
 Before its first completion request, the OpenRouter probe must fetch the main
 model catalog, official model endpoint catalog, and ZDR endpoint catalog in one
 bounded parallel window. It fails closed unless the main record resolves to
-`z-ai/glm-5.3-flash-20260826`, has exact absence of catalog expiration (`null`), and
+`z-ai/glm-5.3-flash-20260826`, has exact catalog expiration `2098-12-31`, and
 advertises exactly `max`/`high`/`low` with default `max` and
 `mandatory=true`. The exact `relace` record must be active, report the pinned
 `unknown` quantization marker, be ZDR-listed, have enough completion

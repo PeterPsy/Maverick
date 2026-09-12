@@ -65,6 +65,25 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Content-Security-Policy"], "sandbox; default-src 'none'; style-src 'unsafe-inline'")
         self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
 
+    def test_app_owned_compact_icon_is_served_as_a_revalidated_public_image(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            icon = b"\x89PNG\r\n\x1a\ncompact-icon"
+            (root / "maverick-icon-compact.png").write_bytes(icon)
+
+            status, headers, body = _serve_body(
+                root,
+                "/maverick-icon-compact.png",
+                cross_origin=True,
+            )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["Content-Type"], "image/png")
+        self.assertEqual(headers["Cache-Control"], "public, max-age=86400, must-revalidate")
+        self.assertEqual(headers["Cross-Origin-Resource-Policy"], "cross-origin")
+        self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(body, icon)
+
     def test_root_service_worker_keeps_its_origin_for_cache_storage(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1626,7 +1626,12 @@ the frontend artifact root are public artifacts and must not contain user,
 workspace, secret, or app-data payloads. Only bytes matching an `immutable`
 record in the generated manifest receive
 `public, max-age=31536000, immutable`; other public static files remain
-revalidated. Any public app artifact is served with a restrictive document CSP
+revalidated. The exact root asset `maverick-icon-compact.png` is the app-owned
+compact identity image used by shell surfaces such as the rail and App Store;
+Core allowlists that filename as a public, revalidated image so isolated shell
+surfaces can render it without app-frame session authority. Similar or nested
+paths are not included by that allowlist. Any public app artifact is served with
+a restrictive document CSP
 (`sandbox`) and `X-Content-Type-Options: nosniff`, preventing script-capable SVG
 or mislabeled bytes from becoming app-controlled platform-origin documents.
 The root `/sw.js` executable is the narrow exception to the document sandbox:

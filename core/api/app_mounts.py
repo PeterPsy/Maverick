@@ -136,6 +136,7 @@ _PUBLIC_APP_STATIC_MANIFEST = {
     "manifest.webmanifest",
     "material-symbols-rounded.woff2",
     "maverick-frontend-assets.json",
+    "maverick-icon-compact.png",
     "pwa-apple-touch-icon.png",
     "pwa-logo-192.png",
     "pwa-logo.png",

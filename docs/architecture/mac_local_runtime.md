@@ -1432,3 +1432,26 @@ Four Swift regressions cover root continuity and the non-poisoning recovery
 boundary; one Python regression pins implementation/guidance and label
 **recupero scena nativa v32**. Expected totals are **252 Swift** and **30 Python
 tests**. Signed validation, installation and physical acceptance remain pending.
+
+#### v32 validated storage-neutral installation (2026-09-12)
+
+Initial install run
+[34686754183](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34686754183)
+compiled the implementation but stopped before installation because one
+historical test still asserted the removed blanket stop-after-any-click-failure
+wording. All new root-continuity regressions passed. The assertion was corrected
+to require stop for denial/uncertain dispatch and fresh-observation recovery for
+an explicitly safe pre-dispatch refusal; runtime behavior did not change.
+
+Install run
+[34686873714](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34686873714)
+validated remote commit **97dd421** with all **252 Swift** and **30 Python tests**
+passing, plus release/runtime/admission/wire/catalog, Apple Development signing
+and two-way identity gates. Designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+No ZIP package or artifact-upload step ran. The installer updated
+`~/Applications/MaverickMac.app` in place without a persistent backup and
+requested launch at **09:51:37 UTC**. Installed label: **97dd421 · recupero
+scena nativa v32**. Permission retention and complete GUI acceptance remain
+physical facts.

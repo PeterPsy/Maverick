@@ -130,7 +130,7 @@ class AgenticEgressEvaluator:
                 ),
                 allow_host_path_transform=(
                     policy.transform_sensitive_text
-                    and block.provenance == "tool_result"
+                    and block.provenance in {"tool_result", "workspace_instruction"}
                 ),
             )
         allowed = reason is None and exported is not None

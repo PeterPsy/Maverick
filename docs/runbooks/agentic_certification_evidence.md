@@ -5,7 +5,7 @@ Status date: 2026-09-12
 Scope: trusted CI or operator-controlled certification worker
 
 Production status: **OpenRouter GLM 5.3 Flash is the only current release
-candidate; exact suite-64 live and natural evidence is required before
+candidate; exact suite-65 live and natural evidence is required before
 activation. Google and Antigravity remain NO-GO.**
 
 The following coverage inventory is historical P4 evidence, not a P6 run.
@@ -120,8 +120,8 @@ every other invalid identity remain fail-closed. It also binds Antigravity's
 provider-observed tool `ERROR` state and the exact, dedicated AppArmor profile
 plus root-owned Bubblewrap digest needed for its nested terminal sandbox,
 without changing Codex's sandbox launcher. The current successor binds hosted
-adapter 57, Google recipe 26/profile 68, OpenRouter GLM recipe 29/profile 3,
-Antigravity adapter 5 / recipe 4, TCB 54 and Codex artifact revision 15. Codex revision 15 is the active verified
+adapter 58, Google recipe 26/profile 69, OpenRouter GLM recipe 29/profile 4,
+Antigravity adapter 5 / recipe 4, TCB 55 and Codex artifact revision 15. Codex revision 15 is the active verified
 profile, revision 14 remains immutable history, and a remote-provider
 certification worker must not restart, migrate, or reissue the Codex runtime or
 certificate.
@@ -139,8 +139,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a production-owned provider credential leased ephemerally only to the
   operator-controlled live-probe worker and never written to evidence;
-- the dated suite-v64 matrix revision
-  `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54` declared by the provider
+- the dated suite-v65 matrix revision
+  `2026-09-12-r65-openrouter-glm-workspace-instruction-redaction-tcb55` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -197,8 +197,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-64 manifests bind matrix revision
-`2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`. OpenRouter uses suite id
+All suite-65 manifests bind matrix revision
+`2026-09-12-r65-openrouter-glm-workspace-instruction-redaction-tcb55`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
@@ -415,7 +415,7 @@ live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
 separate local identity. Since manifest v9 the transitive inventory is executable;
-manifest v54 is the current collector-isolated, stage-diagnostic,
+manifest v55 is the current collector-isolated, stage-diagnostic,
 nested-sandbox-bound and hosted-finalization-runway candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package

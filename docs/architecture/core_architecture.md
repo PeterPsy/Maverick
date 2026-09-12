@@ -684,8 +684,9 @@ not the runtime-registry builder or bootstrap control flow.
 A shared hosted adapter version change requires a new immutable revision for
 every bundled profile that pins it, including profiles for otherwise unchanged
 providers. Bootstrap preserves existing definitions and suspends superseded
-revisions through their separate rollout records. Google profile 68 pins hosted
-adapter 57; revision 67 retains its original adapter-56 definition.
+revisions through their separate rollout records. Google profile 69 pins hosted
+adapter 58; revisions 67 and 68 retain their original adapter-56 and adapter-57
+definitions respectively.
 
 Text-only API sessions have a third and disjoint identity path. Before a new
 session is persisted, Core resolves the exact hosted provider/model and creates
@@ -941,13 +942,15 @@ if priced usage is absent, the worst-case reservation remains consumed. This
 keeps every next request safe against the turn ceiling without charging the
 maximum possible output repeatedly after low-cost tool steps.
 
-Textual tool results may contain absolute host paths as untrusted document
-content. Egress first rewrites the exact workspace root to its
-`workspace://<workspace_id>` identity, then redacts any remaining recognized
-host path before remote export when the policy permits sensitive transforms.
-The same remaining host path in user input, platform instructions, schemas, or
-provider state is still denied; path redaction never changes the allowed data
-class, provider, or upstream decision.
+Textual tool results and descriptor-resolved workspace instructions may contain
+absolute host paths as untrusted document content. Egress first rewrites the
+exact workspace root to its `workspace://<workspace_id>` identity, then redacts
+any remaining recognized host path before remote export when the policy permits
+sensitive transforms. Workspace-instruction redaction is narrow to that
+server-resolved, version-fenced provenance; it does not treat instruction text
+as authority. The same remaining host path in user input, platform
+instructions, schemas, or provider state is still denied; path redaction never
+changes the allowed data class, provider, or upstream decision.
 
 The runtime adapter artifact digest covers the concrete adapter plus every
 declared operational class, function, and module for the shared loop and the

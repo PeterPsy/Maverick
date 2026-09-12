@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`
+Matrix revision: `2026-09-12-r65-openrouter-glm-workspace-instruction-redaction-tcb55`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==57`
+Adapter: `maverick-hosted-tool-loop==58`
 
 ## P6 candidate checkpoint
 
-Suite 64 / TCB manifest 54 / hosted adapter 57 / recipe 26 retain the P5
+Suite 65 / TCB manifest 55 / hosted adapter 58 / recipe 26 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -62,7 +62,7 @@ this correction grants a native certificate or API release authority.
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `name=models/gemini-3.6-flash`, `version=3.6-flash-07-2026`; an omitted/null `baseModelId` is digest-bound, while any supplied value must equal `gemini-3.6-flash` |
-| Immutable profile revision | `68` (revision `67` suspended) |
+| Immutable profile revision | `69` (revisions `67` and `68` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v21` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
@@ -116,7 +116,7 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@10`; exact byte-bound classifications, conservative Luhn detection inside hexadecimal text/JSON, payload-bound typed projection of authenticated server-owned attachment and Core tool-result identity metadata, lexical no-symlink skill identity, restrictive attachment metadata/file joins, immutable server-observed attachment read fences, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, policy-narrowed live semantic revalidation for skill/app-reference blocks on tool-less requests, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v54 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, collector isolation/failure-record path, stage-safe Antigravity live diagnostics, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
+| Certified execution TCB | manifest v55 plus six static import-closure contracts, the direct-host CLI parse/context/dispatch chain, the native certification/budget entrypoints, collector isolation/failure-record path, stage-safe Antigravity live diagnostics, and the exact hosted built-in app execution roots, validated by effect audit `2026-09-07-p6-builtin-effects-reviewed-v5`, cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, typed tool-result classification projection, request/transport revalidation, success-only behavior-probe caching, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; a content-bound filesystem fence invalidates the lightweight per-event check without rehashing source bytes | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures accept only the documented omission of `model` on partial lifecycle resources and reject supplied mismatches | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -692,11 +692,14 @@ its sole recovery. This removes the artificial 2,048-token ceiling observed
 to exhaust a reasoning-heavy hosted response before it could finalize. The
 policy builder is now explicitly part of the hosted adapter artifact digest.
 
-Revision 68 pins hosted adapter 57 and governed recipe 26 with suite 64,
-matrix `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`, and TCB
-manifest v54. This separate revision prevents bootstrap from conflicting with
-the persisted revision-67 adapter pin. Bootstrap retains that immutable
-definition and suspends its rollout status; it publishes no certificate or
-workspace binding. OpenRouter GLM profile 3 uses recipe 29 and the same shared
-adapter/TCB identity.
+Revision 68 pins hosted adapter 57 and governed recipe 26 with suite 64 and TCB
+manifest v54. Revision 69 advances only the shared hosted adapter identity to
+58, suite 65, matrix
+`2026-09-12-r65-openrouter-glm-workspace-instruction-redaction-tcb55`, and TCB
+manifest v55 so descriptor-resolved workspace instructions redact host paths
+without weakening the user-input denial. These separate revisions prevent
+bootstrap from conflicting with either persisted adapter pin. Bootstrap
+retains those immutable definitions and suspends their rollout statuses; it
+publishes no certificate or workspace binding. OpenRouter GLM profile 4 uses
+recipe 29 and the same shared adapter/TCB identity.
 Codex revision 15 remains byte-identical and separately authoritative.

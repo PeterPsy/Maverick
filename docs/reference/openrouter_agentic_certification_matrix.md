@@ -1,10 +1,10 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`
+Matrix revision: `2026-09-12-r65-openrouter-glm-workspace-instruction-redaction-tcb55`
 Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==57`
+Adapter: `maverick-hosted-tool-loop==58`
 
 ## Scope
 
@@ -26,12 +26,12 @@ reconfigured by this work.
 | Resolved model | `z-ai/glm-5.3-flash-20260826` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-12` |
 | Catalog expiration | exact absence (`null`); any drift fails closed |
-| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@3` |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@4` |
 | Execution family | `maverick_agent` |
 | Full Workspace contract | `codex-baseline-v21` |
 | Protocol | OpenAI-compatible streaming Chat Completions v1 |
 | Protocol adapter | `openrouter-chat-completions-protocol@4` |
-| Runtime adapter | `maverick-hosted-tool-loop==57` |
+| Runtime adapter | `maverick-hosted-tool-loop==58` |
 | Harness recipe | `maverick-openrouter-chat-governed-workspace@29` |
 | Provider config | `openrouter-relace-glm-5-3-flash@2` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -78,8 +78,8 @@ Every request carries this non-permissive router object:
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@64` and the certified
-execution TCB is manifest 54. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@65` and the certified
+execution TCB is manifest 55. The exact checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |
@@ -92,6 +92,7 @@ this table summarizes its security objectives.
 | Parallel proposals | every proposal journaled and paired; no parallel execution |
 | Continuation | assistant tool-call messages and matching results retained in encrypted provider-private state |
 | Semantic envelope | source classifications and projection digests preserved across every provider step |
+| Workspace instructions | descriptor-resolved, version-fenced content rewrites the workspace root and redacts remaining host paths; the same paths in user input remain denied |
 | Tool authority | current binding, certificate, actor, TCB, egress and tool authority revalidated before effects and transport |
 | Full Workspace | all required filesystem, shell/process, CLI, MCP, app and collaboration behaviors pass |
 | Workspace effects | shell/process mutations commit only after exact-byte result classification is inside the live allowed class set; denied results roll back |

@@ -685,7 +685,7 @@ workspace-matching attestation covers that resource, and the selected policy
 explicitly allows the class and destination. The attestation cannot create or
 promote the resource classification. Google and Antigravity remain on that
 contained path.
-OpenRouter GLM profile 3 instead uses `remote-agentic-full-workspace@1`: an
+OpenRouter GLM profile 4 instead uses `remote-agentic-full-workspace@1`: an
 enabled exact administrator binding authorizes real workspace, personal, and
 regulated/customer classes without a fake-data or public-data attestation.
 Secrets, bearer
@@ -712,11 +712,11 @@ The OpenRouter Full Workspace profile uses Chat Completions v1, GLM 5.3 Flash,
 and the exact `relace` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current definitions are Google revision 68 and
-OpenRouter GLM revision 3. They use `maverick-hosted-tool-loop==57`; the GLM
+accepted as complete. The current definitions are Google revision 69 and
+OpenRouter GLM revision 4. They use `maverick-hosted-tool-loop==58`; the GLM
 profile is bound to
 `openrouter-relace-glm-5-3-flash@2`. Historical profiles for other
-targets grant no authority. Their suite-64 certification manifests retain distinct
+targets grant no authority. Their suite-65 certification manifests retain distinct
 deterministic fixture and operator-controlled live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 

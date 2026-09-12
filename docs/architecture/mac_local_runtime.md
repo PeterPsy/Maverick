@@ -1735,3 +1735,31 @@ No package or artifact-upload step ran. The app was updated in place without a
 persistent backup and launch was requested at **16:19:53 UTC**. Installed
 label: **a243523 · tutte le finestre app v38**. Permission retention and
 complete physical GUI acceptance remain separate facts.
+
+### v39 visible geometry for clipped multiline editors
+
+Physical v38 acceptance passed background observation, Notes search, all
+TextEdit mouse/hover/drag operations, keyboard editing and search, bidirectional
+scroll of a 30-line document, native app switching and final direct Peekaboo
+switching. MC-TOOL-30 did not recur. One observation during the scroll phase
+reported MC-FOCUS-15 because TextEdit's focused multiline AX rectangle extended
+15 points below the exact captured window even though the editor remained
+visible and scrolling worked.
+
+V39 distinguishes a multiline editor's logical AX extent from its clipped
+viewport. Search and generic single-line fields retain complete containment in
+an observed app surface. Only a verified `text_area` may use a nonempty
+intersection with its exact containing observed window. A field that intersects
+only another scene surface, or is fully outside its containing window, remains
+rejected.
+
+The overlap is not authority by itself. Exact focused-element identity,
+approved PID, AX owner and containing window, captured scene, writable and
+non-secure role, stable samples and requested target-kind equality remain
+mandatory and are rechecked before input. Accepted clipping is exposed as the
+static `field_geometry=clipped_text_area` diagnostic without reading the field
+value. The regression uses the reported v38 rectangles and proves clipped
+search/single-line fields and fully outside text areas still fail. Expected
+totals are **259 Swift tests** and **33 Python tests**; visible label is
+**editor multilinea visibile v39**. Signed validation, installation and
+physical acceptance remain separate gates.

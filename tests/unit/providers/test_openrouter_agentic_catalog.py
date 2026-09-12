@@ -455,7 +455,7 @@ def _models_catalog() -> dict[str, object]:
                 "id": "z-ai/glm-5.3-flash",
                 "canonical_slug": OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
                 "context_length": 1_310_720,
-                "expiration_date": None,
+                "expiration_date": "2098-12-31",
                 "reasoning": {
                     "mandatory": True,
                     "supported_efforts": ["max", "high", "low"],

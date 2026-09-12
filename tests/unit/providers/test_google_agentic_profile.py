@@ -89,8 +89,8 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "69")
-        self.assertEqual(profile.adapter_version_constraint, "==58")
+        self.assertEqual(profile.revision, "70")
+        self.assertEqual(profile.adapter_version_constraint, "==59")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
             ("cli", "mcp", "app-interface", "core-capability"),

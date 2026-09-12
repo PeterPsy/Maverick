@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
+import struct
 import unittest
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,18 @@ class SurfaceBundleTest(unittest.TestCase):
         self.assertFalse(contract["lifecycle"]["uninstall"])
         self.assertNotIn("uninstall", contract["entrypoints"]["hooks"])
         self.assertEqual(contract["storage"]["primary_paths"], ["data/videomaker-selection/app.db"])
+
+    def test_compact_icon_is_app_owned_and_published(self) -> None:
+        source = APP_ROOT / "frontend" / "public" / "maverick-icon-compact.png"
+        published = APP_ROOT / "frontend" / "dist" / "maverick-icon-compact.png"
+
+        self.assertTrue(source.is_file())
+        self.assertTrue(published.is_file())
+        image = source.read_bytes()
+        self.assertEqual(published.read_bytes(), image)
+        self.assertEqual(image[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(struct.unpack(">II", image[16:24]), (512, 512))
+        self.assertEqual(image[25], 6, "The compact icon must be a transparent RGBA PNG")
 
 
 if __name__ == "__main__":

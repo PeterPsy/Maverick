@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "4c07996dac4686a9da0603388f56aa788964d01226138160284aa3e189a09f2a",
+  "build_id": "33692c961119ce6bcf55980ddcb7ce25da99756d52fe1c9bde6223e143f62454",
   "entrypoints": [
     "index.html",
     "widgets/videomaker-sidebar/index.html",
@@ -48,6 +48,11 @@
       "path": "index.html",
       "sha256": "a133e279e6e0f65971ef97c6fb132558a188cb1d8e77425cf6ab5129049700cc",
       "size_bytes": 682
+    },
+    {
+      "path": "maverick-icon-compact.png",
+      "sha256": "ee4d2e06ce75c28fd70d64c22e589ed1d59bd0a982992ce2c88df65dd30941df",
+      "size_bytes": 5121
     },
     {
       "path": "widgets/videomaker-sidebar/index.html",

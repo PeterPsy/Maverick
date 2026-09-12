@@ -94,12 +94,12 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         self.assertEqual(
             payload["provider"],
             {
-                "only": ["relace/fp4"],
+                "only": ["relace"],
                 "allow_fallbacks": False,
                 "require_parameters": True,
                 "data_collection": "deny",
                 "zdr": True,
-                "quantizations": ["fp4"],
+                "quantizations": ["unknown"],
             },
         )
         self.assertEqual(payload["reasoning"], {"effort": "high"})
@@ -155,7 +155,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
     def test_runtime_config_requires_one_executable_upstream(self) -> None:
         routing = replace(
             openrouter_agentic_routing_constraint(),
-            allowed_upstream_ids=("relace/fp4", "another/fp8"),
+            allowed_upstream_ids=("relace", "another/fp8"),
         )
 
         with self.assertRaisesRegex(ValueError, "routing config is unsupported"):

@@ -194,7 +194,10 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertEqual(payload["model_options"][0]["input_modalities"], ["text", "image", "video", "pdf"])
         self.assertEqual(payload["model_options"][0]["upstream_provider_options"][0]["provider_id"], "google-ai-studio")
         self.assertEqual(payload["model_options"][1]["upstream_provider_options"][0]["provider_id"], "nvidia")
-        self.assertEqual(payload["model_options"][2]["upstream_provider_options"][0]["provider_id"], "relace/fp4")
+        self.assertEqual(
+            payload["model_options"][2]["upstream_provider_options"][0]["provider_id"],
+            "relace",
+        )
         self.assertEqual(payload["model_options"][3]["upstream_provider_options"][0]["provider_id"], "deepinfra")
         self.assertEqual(openrouter.credential_requirements[0].secret_alias_or_logical_name, "openrouter_api_key")
         self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])

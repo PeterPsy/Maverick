@@ -5,7 +5,7 @@ Status date: 2026-09-12
 Scope: trusted CI or operator-controlled certification worker
 
 Production status: **OpenRouter GLM 5.3 Flash is the only current release
-candidate; exact suite-63 live and natural evidence is required before
+candidate; exact suite-64 live and natural evidence is required before
 activation. Google and Antigravity remain NO-GO.**
 
 The following coverage inventory is historical P4 evidence, not a P6 run.
@@ -120,8 +120,8 @@ every other invalid identity remain fail-closed. It also binds Antigravity's
 provider-observed tool `ERROR` state and the exact, dedicated AppArmor profile
 plus root-owned Bubblewrap digest needed for its nested terminal sandbox,
 without changing Codex's sandbox launcher. The current successor binds hosted
-adapter 56, Google recipe 26/profile 67, OpenRouter GLM recipe 28/profile 2,
-Antigravity adapter 5 / recipe 4, TCB 53 and Codex artifact revision 15. Codex revision 15 is the active verified
+adapter 57, Google recipe 26/profile 67, OpenRouter GLM recipe 29/profile 3,
+Antigravity adapter 5 / recipe 4, TCB 54 and Codex artifact revision 15. Codex revision 15 is the active verified
 profile, revision 14 remains immutable history, and a remote-provider
 certification worker must not restart, migrate, or reissue the Codex runtime or
 certificate.
@@ -137,10 +137,10 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
 
 - an Ed25519 private key held by trusted CI and a stable `signer_key_id` whose
   public key is installed in the certificate publisher trust set;
-- a synthetic-only provider credential delivered only to the operator-controlled
-  live-probe worker;
-- the dated suite-v63 matrix revision
-  `2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53` declared by the provider
+- a production-owned provider credential leased ephemerally only to the
+  operator-controlled live-probe worker and never written to evidence;
+- the dated suite-v64 matrix revision
+  `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -150,10 +150,12 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
 - a platform evidence reference allocated by the authoritative evidence store.
 
 Abort if `git status --short` is non-empty, the matrix/catalog has not been
-reconfirmed, the live step is omitted, or the credential/workspace contains
-non-synthetic data. Ordinary repository-test workers must not receive a provider
-credential or send provider traffic; the complete certification worker is a
-separate trusted environment.
+reconfirmed, the live step is omitted, or the workspace contains an
+out-of-scope secret. Ordinary repository-test workers must not receive a
+provider credential or send provider traffic; the complete certification
+worker is a separate trusted environment. OpenRouter certification data keeps
+ordinary `workspace_internal` classification and never depends on a public or
+fake-data attestation.
 
 ## Collect, observe, review, then sign
 
@@ -195,8 +197,8 @@ count and non-refundable price reservation are checked. Stateful Interactions
 also reserve retained history, not just the current wire payload. Failed/ambiguous
 requests are never refunded or retried automatically.
 
-All suite-63 manifests bind matrix revision
-`2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53`. OpenRouter uses suite id
+All suite-64 manifests bind matrix revision
+`2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`. OpenRouter uses suite id
 `maverick-openrouter-agentic-contract`; the native connection uses
 `maverick-antigravity-native-agentic-contract`. The live step must return a bounded,
 strict JSON receipt with the exact API-profile target digest and the
@@ -246,7 +248,7 @@ reference. Certificate issuance/expiry use the natural completion timestamp.
 
 Both live probes must make the provider call the exact generated alias for
 `core-capability:filesystem.list`, execute the real Core handler over an
-isolated synthetic directory, and return its marker-bearing result to the
+isolated certification directory, and return its marker-bearing result to the
 provider at every certified reasoning effort. The OpenRouter probe requires
 three sequential tool rounds plus a final response at every effort. The Google
 probe requires two sequential tool rounds plus a final response at its single
@@ -340,10 +342,10 @@ fixture verification neither performs this deployment nor authorizes live writes
 Before its first completion request, the OpenRouter probe must fetch the main
 model catalog, official model endpoint catalog, and ZDR endpoint catalog in one
 bounded parallel window. It fails closed unless the main record resolves to
-`z-ai/glm-5.3-flash-20260826`, has exact catalog expiration `2098-12-31`, and
+`z-ai/glm-5.3-flash-20260826`, has exact absence of catalog expiration (`null`), and
 advertises exactly `max`/`high`/`low` with default `max` and
-`mandatory=true`. The exact `relace/fp4` record must be active, FP4,
-ZDR-listed, have enough completion
+`mandatory=true`. The exact `relace` record must be active, report the pinned
+`unknown` quantization marker, be ZDR-listed, have enough completion
 and total input-plus-output context capacity, and support every endpoint-gated
 translated parameter actually present. The current record reports
 `supports_tool_choice.none=true`; finalization still sends neither tool-control
@@ -360,15 +362,16 @@ id, or conflicting fragment remains terminal.
 The trust sequence is indivisible:
 
 1. deterministic conformance through `fixture_contract`;
-2. synthetic provider behavior through `live_probe`;
+2. operator-controlled provider behavior through `live_probe` using ordinary
+   `workspace_internal` classification and no fake/public attestation;
 3. independently executed natural behavioral conformance, with exact target,
    source/projection/effect/trace evidence, resource bounds and absolute gates;
 4. signing, independent verification, and immutable certificate publication.
 
-The server-owned attestation boundary is implemented, but default-off global
-and provider kill switches still block remote admission. A valid certificate
-cannot substitute for current workspace attestation, later recovery, preview,
-canary, security-review, or production gates.
+The server-owned public-attestation boundary remains available for profiles
+that intentionally require it, but it is not OpenRouter Full Workspace
+authority. That profile requires an exact enabled administrator binding plus
+the live certificate, feature, health, recovery, canary, and production gates.
 
 The runner records and signs the source commit, suite identity/version, matrix
 revision and digest, adapter digest, certified TCB manifest id/version/digest,
@@ -412,7 +415,7 @@ live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
 separate local identity. Since manifest v9 the transitive inventory is executable;
-manifest v53 is the current collector-isolated, stage-diagnostic,
+manifest v54 is the current collector-isolated, stage-diagnostic,
 nested-sandbox-bound and hosted-finalization-runway candidate:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package

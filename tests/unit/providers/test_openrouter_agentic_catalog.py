@@ -73,7 +73,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                 OPENROUTER_ZDR_ENDPOINT_CATALOG,
             },
         )
-        self.assertEqual(snapshot.upstream_id, "relace/fp4")
+        self.assertEqual(snapshot.upstream_id, "relace")
 
     def test_exact_model_and_zdr_records_support_the_request(self) -> None:
         zdr_catalog = _zdr_catalog()
@@ -85,7 +85,7 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
             zdr_catalog=zdr_catalog,
         )
 
-        self.assertEqual(snapshot.upstream_id, "relace/fp4")
+        self.assertEqual(snapshot.upstream_id, "relace")
         self.assertEqual(
             snapshot.resolved_model_id,
             OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
@@ -427,8 +427,8 @@ def _record() -> dict[str, object]:
     return {
         "model_id": "z-ai/glm-5.3-flash",
         "provider_name": "Relace",
-        "tag": "relace/fp4",
-        "quantization": "fp4",
+        "tag": "relace",
+        "quantization": "unknown",
         "context_length": 1_048_576,
         "max_completion_tokens": 131_072,
         "supported_parameters": list(SUPPORTED),
@@ -455,7 +455,7 @@ def _models_catalog() -> dict[str, object]:
                 "id": "z-ai/glm-5.3-flash",
                 "canonical_slug": OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
                 "context_length": 1_310_720,
-                "expiration_date": "2098-12-31",
+                "expiration_date": None,
                 "reasoning": {
                     "mandatory": True,
                     "supported_efforts": ["max", "high", "low"],

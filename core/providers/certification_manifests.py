@@ -175,7 +175,7 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="63",
+        suite_version="64",
         provider_id=provider_id,
         target_scope="api_profile",
         model_provider_id=None,
@@ -183,7 +183,7 @@ def _suite(
         behavioral_resource_limits=(),
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53"
+            "2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
@@ -196,7 +196,7 @@ def _suite(
                 command=("python3", "-m", "unittest", *fixture_tests, *_SHARED_FIXTURE_TESTS),
             ),
             CertificationStepManifest(
-                step_id="live-synthetic-probe",
+                step_id="live-provider-probe",
                 kind="live_probe",
                 command=("python3", live_script),
             ),
@@ -246,7 +246,7 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = _suite(
 
 ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_id="maverick-antigravity-native-agentic-contract",
-    suite_version="63",
+    suite_version="64",
     provider_id="antigravity-cli",
     target_scope="native_connection",
     model_provider_id="google",
@@ -260,7 +260,7 @@ ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
         ("cost_microusd", 3_500_000),
     ),
     matrix_path="docs/reference/antigravity_agentic_certification_matrix.md",
-    matrix_revision="2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53",
+    matrix_revision="2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54",
     tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
     tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
     tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

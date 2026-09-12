@@ -30,7 +30,7 @@ from core.providers.openrouter_agentic_models import (
 
 
 HOSTED_TOOL_LOOP_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_TOOL_LOOP_ADAPTER_VERSION = "56"
+HOSTED_TOOL_LOOP_ADAPTER_VERSION = "57"
 
 GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
     protocol_adapter_id="google-interactions-protocol",
@@ -94,8 +94,8 @@ GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
 )
 
 OPENROUTER_RELACE_GLM_PROVIDER_CONFIG = MaverickProviderConfig(
-    config_id="openrouter-relace-glm-5-3-flash-fp4",
-    revision="1",
+    config_id="openrouter-relace-glm-5-3-flash",
+    revision="2",
     model_provider_id="openrouter",
     provider_protocol="openrouter-chat-completions",
     provider_api_version="v1",
@@ -106,15 +106,15 @@ OPENROUTER_RELACE_GLM_PROVIDER_CONFIG = MaverickProviderConfig(
         require_parameters=True,
         data_collection_policy="deny",
         require_zdr=True,
-        allowed_quantizations=("fp4",),
+        allowed_quantizations=("unknown",),
     ),
     endpoint_url=OPENROUTER_AGENTIC_ENDPOINT,
     credential_logical_name="openrouter_api_key",
-    data_destination="OpenRouter via Relace FP4",
+    data_destination="OpenRouter via Relace",
     retention_policy="zdr_required",
     token_cost_policy=MaverickTokenCostPolicy(
         policy_id="openrouter-relace-glm-5-3-flash-public-list-price",
-        revision="1",
+        revision="2",
         input_microusd_per_million_tokens=90_000,
         output_microusd_per_million_tokens=300_000,
     ),

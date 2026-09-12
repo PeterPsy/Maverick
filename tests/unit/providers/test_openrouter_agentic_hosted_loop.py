@@ -84,7 +84,7 @@ class OpenRouterAgenticHostedLoopTest(unittest.TestCase):
             harness.filesystem_list_tool_name,
         )
         self.assertIn(harness.filesystem_marker, json.dumps(transport.payloads[1]))
-        self.assertEqual(transport.payloads[1]["provider"]["only"], ["relace/fp4"])
+        self.assertEqual(transport.payloads[1]["provider"]["only"], ["relace"])
         serialized = json.dumps([event.payload for event in public_events], default=str)
         self.assertNotIn("private fixture reasoning", serialized)
         self.assertNotIn("private-signature", serialized)

@@ -257,7 +257,7 @@ Workspace Storage may receive an explicit redaction-safe export, but it is not
 authoritative evidence.
 
 Certification follows one trust sequence: deterministic conformance, an
-operator-only synthetic live probe, independently executed natural behavioral
+operator-only live provider probe, independently executed natural behavioral
 conformance, trusted review/signing, then certificate publication. Suite 40
 retains `fixture_contract` and `live_probe` collection steps; natural evidence
 is a separate later observation record, not an alias for validating those two
@@ -685,7 +685,7 @@ workspace-matching attestation covers that resource, and the selected policy
 explicitly allows the class and destination. The attestation cannot create or
 promote the resource classification. Google and Antigravity remain on that
 contained path.
-OpenRouter GLM profile 2 instead uses `remote-agentic-full-workspace@1`: an
+OpenRouter GLM profile 3 instead uses `remote-agentic-full-workspace@1`: an
 enabled exact administrator binding authorizes real workspace, personal, and
 regulated/customer classes without a fake-data or public-data attestation.
 Secrets, bearer
@@ -709,15 +709,15 @@ second model on an existing adapter is a config/recipe/profile registration,
 not a model-specific factory, decoder, or router-code change.
 
 The OpenRouter Full Workspace profile uses Chat Completions v1, GLM 5.3 Flash,
-and the exact `relace/fp4` endpoint. Request routing uses the endpoint
+and the exact `relace` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
 accepted as complete. The current definitions are Google revision 67 and
-OpenRouter GLM revision 2. They use `maverick-hosted-tool-loop==56`; the GLM
+OpenRouter GLM revision 3. They use `maverick-hosted-tool-loop==57`; the GLM
 profile is bound to
-`openrouter-relace-glm-5-3-flash-fp4@1`. Historical profiles for other
-targets grant no authority. Their suite-63 certification manifests retain distinct
-deterministic fixture and synthetic live steps. No live probe is run by
+`openrouter-relace-glm-5-3-flash@2`. Historical profiles for other
+targets grant no authority. Their suite-64 certification manifests retain distinct
+deterministic fixture and operator-controlled live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
 `codex-baseline-v21` requires executable create, replace, edit, patch, move,

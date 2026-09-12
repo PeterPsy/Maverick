@@ -195,7 +195,7 @@ class CertificationPipelineTest(unittest.TestCase):
                     self._execute_unpatched(failure_artifact_path=failure_artifact)
 
             payload = json.loads(failure_artifact.read_text())
-            self.assertEqual(payload["step_id"], "live-synthetic-probe")
+            self.assertEqual(payload["step_id"], "live-provider-probe")
             self.assertEqual(payload["failure_reason"], "certification_json_invalid")
 
     def test_timed_out_step_writes_hash_only_failure_artifact(self) -> None:
@@ -341,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "451708e012315074da4dfc8618fff7d240fd183004ca815b345ff0547dcd9f2f",
-            "openrouter": "e75e7a2de626e5c6500f33aa5dc16d401ada1062f3ac22a72f8b2492e029e53e",
-            "antigravity-cli": "fa6ac691f149f69215849aaa44f0606baebafc1f6242ea32be72e4d2357ef611",
+            "google-ai-studio": "6d6a9775682df8e4a1fed02b514cbd0ca799af76173cd32c2abb7e3dc5b90436",
+            "openrouter": "064d0927d3fdeda854771a83b42926ab868da485062ef7da442ab888e17c0aa3",
+            "antigravity-cli": "e08f621beef114376eeab860bb7b1041c26a6da7530e8efae4cb012d95c73516",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "63")
+                self.assertEqual(manifest.suite_version, "64")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53",
+                    "2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54",
                 )
                 self.assertEqual(
                     manifest.digest,

@@ -136,6 +136,7 @@ def validate_model_metadata_record(
     normalized_request_effort = str(request_reasoning_effort or "").strip().lower()
     if (
         record.get("canonical_slug") != resolved_model_id
+        or "expiration_date" not in record
         or record.get("expiration_date") != expiration_date
         or reasoning.get("mandatory") is not reasoning_mandatory
         or not isinstance(advertised, list)

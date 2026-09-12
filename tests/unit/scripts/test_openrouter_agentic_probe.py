@@ -89,7 +89,7 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
             probe,
             "preflight_openrouter_agentic_catalog",
             return_value=SimpleNamespace(
-                upstream_id="relace/fp4",
+                upstream_id="relace",
                 resolved_model_id="z-ai/glm-5.3-flash-20260826",
                 reasoning_efforts=("max", "high", "low"),
                 default_reasoning_effort="max",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operator-only synthetic OpenRouter live probe used by certification."""
+"""Operator-only OpenRouter live probe used by certification."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ async def _main() -> int:
     with tempfile.TemporaryDirectory(prefix="maverick-openrouter-agentic-probe-") as temp_dir:
         filesystem_probe = AgenticFilesystemListProbe.create(Path(temp_dir))
         catalog_request = _request(
-            request_id="openrouter-live-synthetic-probe:catalog",
+            request_id="openrouter-live-provider-probe:catalog",
             reasoning_effort="high",
             tool_definition=filesystem_probe.definition,
             max_output_tokens=16_384,
@@ -83,7 +83,7 @@ async def _main() -> int:
                 response = [event async for event in client.create_response(
                     _request(
                         request_id=(
-                            f"openrouter-live-synthetic-probe:{effort}:{tool_round}"
+                            f"openrouter-live-provider-probe:{effort}:{tool_round}"
                         ),
                         reasoning_effort=effort,
                         tool_definition=filesystem_probe.definition,
@@ -123,7 +123,7 @@ async def _main() -> int:
             final = [event async for event in client.create_response(
                 _request(
                     request_id=(
-                        f"openrouter-live-synthetic-probe:{effort}:"
+                        f"openrouter-live-provider-probe:{effort}:"
                         f"{REQUESTS_PER_EFFORT}"
                     ),
                     reasoning_effort=effort,
@@ -160,20 +160,21 @@ def _request(
         model_revision_policy="provider_alias",
         content_blocks=(
             AgenticRequestContentBlock(
-                content_block_id="synthetic-user", role="user", data_class="public",
+                content_block_id="certification-user", role="user",
+                data_class="workspace_internal",
                 provenance="user_input", trust_level="trusted_platform",
                 content_type="text/plain",
                 content=(
                     f"Call {tool_definition.name} exactly three times total, one call per "
                     "response, with path '.', max_depth 1, and max_results 10. After each "
                     "of the first two results, call it once again. After the third result, "
-                    "answer OK. Synthetic data only."
+                    "answer OK. This is operator-controlled certification data."
                 ).encode("utf-8"),
             ),
             *(
                 (
                     AgenticRequestContentBlock(
-                        content_block_id="synthetic-finalization",
+                        content_block_id="certification-finalization",
                         role="system",
                         data_class="public",
                         provenance="finalization_instruction",

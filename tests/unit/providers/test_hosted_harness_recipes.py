@@ -61,7 +61,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             (GOOGLE_GOVERNED_WORKSPACE_RECIPE, "26", "p4-context-v4"),
             (
                 OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
-                "28",
+                "29",
                 "openrouter-full-context-v1",
             ),
         ):
@@ -170,7 +170,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
 
     def test_openrouter_final_preflight_omits_tools_without_requiring_none(self) -> None:
         catalog = OpenRouterAgenticCatalogSnapshot(
-            upstream_id="relace/fp4",
+            upstream_id="relace",
             resolved_model_id="z-ai/glm-5.3-flash-20260826",
             reasoning_efforts=("max", "high", "low"),
             default_reasoning_effort="max",

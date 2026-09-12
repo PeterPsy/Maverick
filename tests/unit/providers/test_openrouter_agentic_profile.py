@@ -75,8 +75,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "available")
-        self.assertEqual(profile.revision, "2")
-        self.assertEqual(profile.adapter_version_constraint, "==56")
+        self.assertEqual(profile.revision, "3")
+        self.assertEqual(profile.adapter_version_constraint, "==57")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
             ("cli", "mcp", "app-interface", "core-capability"),
@@ -117,12 +117,12 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             300_000,
         )
         routing = profile.routing_constraint
-        self.assertEqual(routing.allowed_upstream_ids, ("relace/fp4",))
+        self.assertEqual(routing.allowed_upstream_ids, ("relace",))
         self.assertFalse(routing.allow_fallbacks)
         self.assertTrue(routing.require_parameters)
         self.assertEqual(routing.data_collection_policy, "deny")
         self.assertTrue(routing.require_zdr)
-        self.assertEqual(routing.allowed_quantizations, ("fp4",))
+        self.assertEqual(routing.allowed_quantizations, ("unknown",))
         self.assertEqual(
             profile.policy_ceiling.allowed_remote_data_classes,
             (
@@ -320,7 +320,10 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(certificate.default_reasoning_effort, "max")
         self.assertEqual(evidence.matrix_revision, OPENROUTER_CERTIFICATION_MATRIX_REVISION)
 
-        self.assertEqual(OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS, ("1",))
+        self.assertEqual(
+            OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
+            ("1", "2"),
+        )
 
 
 if __name__ == "__main__":

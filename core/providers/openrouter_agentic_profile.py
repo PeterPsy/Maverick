@@ -37,8 +37,8 @@ from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RE
 OPENROUTER_AGENTIC_PROFILE_ID = (
     "agentic-profile-openrouter-glm-5-3-flash-relace-fp4"
 )
-OPENROUTER_AGENTIC_PROFILE_REVISION = "2"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ("1",)
+OPENROUTER_AGENTIC_PROFILE_REVISION = "3"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ("1", "2")
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = OPENROUTER_AGENTIC_REASONING_EFFORTS
 OPENROUTER_DEFAULT_REASONING_EFFORT = OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
 OPENROUTER_AGENTIC_CERTIFICATE_ID = (
@@ -95,7 +95,7 @@ def openrouter_agentic_preview_publication(
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
-        display_name="OpenRouter GLM 5.3 Flash · Relace FP4 · Full Workspace",
+        display_name="OpenRouter GLM 5.3 Flash · Relace · Full Workspace",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,

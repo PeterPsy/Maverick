@@ -1,10 +1,10 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-12-r63-openrouter-glm-full-workspace-relace-tcb53`
+Matrix revision: `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`
 Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==56`
+Adapter: `maverick-hosted-tool-loop==57`
 
 ## Scope
 
@@ -24,19 +24,19 @@ reconfigured by this work.
 | Model provider | `openrouter` |
 | Model | `z-ai/glm-5.3-flash` |
 | Resolved model | `z-ai/glm-5.3-flash-20260826` |
-| Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-11` |
-| Catalog expiration | exact `2098-12-31` observation; any drift fails closed |
-| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@2` |
+| Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-12` |
+| Catalog expiration | exact absence (`null`); any drift fails closed |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@3` |
 | Execution family | `maverick_agent` |
 | Full Workspace contract | `codex-baseline-v21` |
 | Protocol | OpenAI-compatible streaming Chat Completions v1 |
 | Protocol adapter | `openrouter-chat-completions-protocol@4` |
-| Runtime adapter | `maverick-hosted-tool-loop==56` |
-| Harness recipe | `maverick-openrouter-chat-governed-workspace@28` |
-| Provider config | `openrouter-relace-glm-5-3-flash-fp4@1` |
+| Runtime adapter | `maverick-hosted-tool-loop==57` |
+| Harness recipe | `maverick-openrouter-chat-governed-workspace@29` |
+| Provider config | `openrouter-relace-glm-5-3-flash@2` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
-| Effective upstream | `Relace`; exact tag `relace/fp4` |
-| Quantization | `fp4` |
+| Effective upstream | `Relace`; exact tag `relace` |
+| Quantization | exact current catalog value `unknown` |
 | Fallback | disabled |
 | Required parameters | enabled |
 | Provider data collection | denied |
@@ -46,39 +46,40 @@ reconfigured by this work.
 | Tools | every currently authorized Full Workspace Core handle; `tools` and `tool_choice` supported; sequential execution only |
 | Empty tool catalog | omitted |
 | Finalization | exact Core finalization instruction; `tools` and `tool_choice` omitted |
-| Accounting | `openrouter-relace-glm-5-3-flash-public-list-price@1`; public list prices 90,000 / 300,000 micro-USD per million input/output tokens |
+| Accounting | `openrouter-relace-glm-5-3-flash-public-list-price@2`; public list prices 90,000 / 300,000 micro-USD per million input/output tokens |
 | Remote data | `public`, `workspace_internal`, `personal_data`, and `regulated_or_customer_data`; exact binding authority, no fake/public attestation |
 | Always denied | `credential_or_secret`, `host_operational_metadata`, `unclassified`, and legacy `workspace_internal_fake` |
 | Turn ceilings | 256 provider steps, 256 tool calls, 86,400 seconds, 16 MiB aggregate tool results; no explicit cost ceiling |
 | Confirmations | disabled in the profile, matching the local Codex operating ceiling |
 | Certificate lifetime | 30 days after a successful signed run |
 
-The public OpenRouter catalogs observed on 2026-09-11 report that GLM 5.3 Flash
-accepts text, image, and video input and returns text. The exact Relace FP4
+The public OpenRouter catalogs observed on 2026-09-12 report that GLM 5.3 Flash
+accepts text, image, and video input and returns text. The exact Relace
 endpoint advertises `tools`, `tool_choice`, `reasoning`, `reasoning_effort`, and
 `max_tokens`, supports `tool_choice.auto` and `tool_choice.none`, and appears in
-the ZDR catalog. These mutable observations grant no authority by themselves;
-they are revalidated immediately before live transport.
+the ZDR catalog with quantization reported as `unknown`. These mutable
+observations grant no authority by themselves; they are revalidated immediately
+before live transport.
 
 Every request carries this non-permissive router object:
 
 ```json
 {
   "provider": {
-    "only": ["relace/fp4"],
+    "only": ["relace"],
     "allow_fallbacks": false,
     "require_parameters": true,
     "data_collection": "deny",
     "zdr": true,
-    "quantizations": ["fp4"]
+    "quantizations": ["unknown"]
   }
 }
 ```
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@63` and the certified
-execution TCB is manifest 53. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@64` and the certified
+execution TCB is manifest 54. The exact checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |
@@ -123,7 +124,7 @@ The receipt must bind:
 - exact target digest and run nonce;
 - main-model, endpoint, ZDR and combined catalog digests;
 - resolved model and reasoning observations;
-- Relace FP4 identity and capacity;
+- Relace identity and capacity;
 - request/result counts;
 - usage and private-state events for every generation;
 - absence of normalized provider errors.
@@ -165,8 +166,10 @@ probe and complete natural report all pass for the same immutable candidate.
 Publication must revalidate the profile target and TCB and then read back the
 stored certificate.
 
-Rollout is OpenRouter-only and first proceeds in a disposable real-data
-workspace with synthetic credentials:
+Rollout is OpenRouter-only and first proceeds in an isolated certification
+workspace with the production credential leased ephemerally. Inputs and tool
+results retain ordinary `workspace_internal` classification; the run issues no
+fake/public attestation:
 
 1. create one disabled, non-default binding;
 2. verify the profile remains unavailable before feature enablement;

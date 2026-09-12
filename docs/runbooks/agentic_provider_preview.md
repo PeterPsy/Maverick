@@ -10,7 +10,7 @@ Antigravity remain contained**
 This runbook governs the Google Gemini and fixed-upstream OpenRouter API
 profiles plus the Antigravity Native connection. A capability certificate
 proves one exact implementation and provider combination. For OpenRouter
-profile 2, an enabled administrator binding is the explicit authority for real
+profile 3, an enabled administrator binding is the explicit authority for real
 workspace data; fake/public attestation is not a release prerequisite.
 Credential/secret, host-operational, and unclassified egress remains
 prohibited.
@@ -19,9 +19,9 @@ Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
-The current source candidate is hosted adapter 56 / Google recipe 26 and
-profile 67 / OpenRouter GLM recipe 28 and profile 2 / Antigravity adapter 5 and
-native recipe 4 / suite 63 / TCB 53. Codex revision 15 is
+The current source candidate is hosted adapter 57 / Google recipe 26 and
+profile 67 / OpenRouter GLM recipe 29 and profile 3 / Antigravity adapter 5 and
+native recipe 4 / suite 64 / TCB 54. Codex revision 15 is
 the active verified profile and revision 14 remains immutable history. Remote
 provider certification must not restart or migrate Codex, alter its artifact,
 or reissue its certificate.
@@ -88,9 +88,9 @@ operation.
 
 ## Invariants
 
-- OpenRouter GLM profile 2 uses `remote-agentic-full-workspace@1` and may carry
+- OpenRouter GLM profile 3 uses `remote-agentic-full-workspace@1` and may carry
   Core-classified real workspace, personal, and regulated/customer data to the
-  exact ZDR Relace FP4 route. It never accepts client-supplied classification or
+  exact ZDR Relace route. It never accepts client-supplied classification or
   fake/public attestations as authority.
 
 - Google and Antigravity remain disabled, non-selectable NO-GO records whose
@@ -107,11 +107,10 @@ operation.
 - Live certificate, credential, definition, workspace binding, execution mode,
   health, and egress state may only narrow authority.
 - OpenRouter remains pinned to `z-ai/glm-5.3-flash` through
-  `relace/fp4`, with fallback disabled, required parameters, denied data
+  `relace`, with fallback disabled, required parameters, denied data
   collection, required ZDR, and verified router metadata. Its main catalog must
-  resolve `z-ai/glm-5.3-flash-20260826`, retain catalog expiration
-  `2098-12-31`, and advertise exactly `max`/`high`/`low`, default `max`, and
-  mandatory reasoning. Profile 2 exposes the same 256-step/tool-call,
+  resolve `z-ai/glm-5.3-flash-20260826`, retain catalog expiration to remain absent (`null`), and advertise exactly `max`/`high`/`low`, default `max`, and
+  mandatory reasoning. Profile 3 exposes the same 256-step/tool-call,
   86,400-second, million-input/128k-output, no-confirmation operating ceiling
   as Codex, with no explicit per-turn cost ceiling.
 - Antigravity authority is connection-scoped to the exact installed artifact,
@@ -123,7 +122,7 @@ operation.
   every indexed proposal, including later OpenRouter indices and calls decoded
   before a terminal stream error. A multi-call response is denied and paired
   in full; no call is discarded or executed. Google retains persisted
-  confirmation; OpenRouter profile 2 does not require it. Ambiguous side effects become
+  confirmation; OpenRouter profile 3 does not require it. Ambiguous side effects become
   `execution_unknown` and are not replayed automatically.
 - Provider-step and tool-call budgets are distinct and restart-safe. One final
   request plus at most one recovery retain full output/cost/deadline reserves.
@@ -206,12 +205,12 @@ binding:
 5. The workspace policy is at least as restrictive as the profile and retains
    the complete `codex-baseline-v21` handle set and all four `cli`, `mcp`,
    `app-interface`, and `core-capability` surfaces atomically. OpenRouter
-   profile 2 deliberately has no explicit per-turn cost ceiling and does not
+   profile 3 deliberately has no explicit per-turn cost ceiling and does not
    require mutating/destructive confirmation; Google and Antigravity retain
    their contained bounded/confirmed policies. A partial read-only binding is
    not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the
-   trust order: deterministic conformance, operator-only synthetic live probe,
+   trust order: deterministic conformance, operator-only live provider probe,
    behavioral conformance validation, then certificate publication. Ordinary
    repository checks explicitly select the fixture step and never run the live
    step; fixture-only evidence is rejected for signing and promotion.

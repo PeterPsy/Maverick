@@ -399,7 +399,7 @@ const openrouterModels = [
     default_reasoning_effort: null,
     supported_reasoning_efforts: [],
     upstream_provider_options: [
-      { provider_id: 'relace/fp4', label: 'Relace', tag: 'relace/fp4', quantization: 'fp4' }
+      { provider_id: 'relace', label: 'Relace', tag: 'relace', quantization: 'unknown' }
     ]
   },
   {

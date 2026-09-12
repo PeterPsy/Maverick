@@ -26,8 +26,8 @@ an agentic runtime.
 
 ## P6 certification boundary
 
-The current OpenRouter target uses hosted adapter 56, GLM recipe 28, suite 63,
-TCB manifest 53, and profile 2. Google profile 67 and Antigravity remain
+The current OpenRouter target uses hosted adapter 57, GLM recipe 29, suite 64,
+TCB manifest 54, and profile 3. Google profile 67 and Antigravity remain
 contained. Exact-target live receipts and operator-reviewed natural
 conformance are required before trusted signing and publication; neither step
 grants release authority. The procedure is in
@@ -496,12 +496,12 @@ request object.
 
 OpenRouter also has one separate contained, uncertified Full Workspace agentic
 preview. It pins
-`z-ai/glm-5.3-flash` to `relace/fp4` through
+`z-ai/glm-5.3-flash` to `relace` through
 `openrouter-chat-completions` v1 and the shared `maverick-tool-loop`. Unlike
 plain hosted chat, this profile does not inherit workspace OpenRouter routing
 preferences: its immutable routing constraint always disables fallback,
 requires parameter support, denies data collection, requires ZDR, and requires
-FP4. It preserves tool-call and reasoning continuation only in encrypted
+the exact current `unknown` quantization marker. It preserves tool-call and reasoning continuation only in encrypted
 provider-private state. Before transport it checks the main model, exact
 endpoint and ZDR catalogs; the main record must resolve the 20260826 slug and
 advertise exactly `max`/`high`/`low` with default `max` and mandatory reasoning. The exact dated evidence and promotion requirements
@@ -739,7 +739,7 @@ Unknown data class, provenance, trust, provider, or upstream fails closed.
 resource/version carries that Core-owned classification, an active scoped
 attestation matches the workspace and covers the resource, and the policy
 allows the class and destination. Attestation does not supply classification.
-OpenRouter profile 2 allows `public`, `workspace_internal`, `personal_data`,
+OpenRouter profile 3 allows `public`, `workspace_internal`, `personal_data`,
 and `regulated_or_customer_data` through its exact binding. Secret,
 host-operational, and unclassified content is always denied. Workspace paths are rewritten to
 `workspace://` references, other host paths are denied, and recognizable
@@ -797,7 +797,7 @@ filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes; only a complete successful
 result is cached, while transient, empty, and partial probe evidence is retried;
 their policy ceilings retain `cli`, `mcp`, `app-interface`, and
-`core-capability`. Google remains contained; OpenRouter profile 2 uses the
+`core-capability`. Google remains contained; OpenRouter profile 3 uses the
 exact administrator binding as real-data authority. Direct replacement
 and move propagate exact version-bound pre-image taint for read-after-write
 through authenticated same-session mutation records, even when the next tool

@@ -7,14 +7,18 @@ import sqlite3
 from typing import Any
 
 from activity_store import add_activity, list_activities
+from candidate_links import extract_instagram_profiles, extract_urls
 from domain import boolean, new_id, number, string_list, text, validate_status, value
 from schema import utcnow
 
-JSON_FIELDS = {"traits": "traits_json", "platforms": "platforms_json", "duplicate_submissions": "duplicate_submissions_json"}
+JSON_FIELDS = {
+    "traits": "traits_json", "platforms": "platforms_json", "duplicate_submissions": "duplicate_submissions_json",
+    "portfolio_links": "portfolio_links_json", "instagram_links": "instagram_links_json",
+}
 COLUMN_FIELDS = [
     "source_response_number", "source_submitted_at", "name", "email", "city", "bio", "work_status",
     "has_vat", "profile_code", "profile_label", "profile_answer", "traits_json", "social_usage", "autonomy", "workflow", "platforms_json",
-    "opportunity", "capacity", "price_proposal", "portfolio_url", "test_url", "additional_info",
+    "opportunity", "capacity", "price_proposal", "portfolio_url", "portfolio_links_json", "instagram_links_json", "test_url", "additional_info",
     "duplicate_submissions_json", "privacy_accepted", "reviewed", "review_rank", "annotation", "specialty", "score_portfolio", "score_budget",
     "score_test", "review_score", "form_fit_score", "summary", "decision", "email_status", "call_status",
     "poc_status", "next_action", "next_action_due", "process_notes", "favorite", "archived",
@@ -29,12 +33,19 @@ def _json(raw: str, fallback: Any) -> Any:
 
 
 def candidate_from_row(row: sqlite3.Row, *, activities: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    candidate = {key: row[key] for key in row.keys() if key not in {"traits_json", "platforms_json", "duplicate_submissions_json"}}
+    candidate = {key: row[key] for key in row.keys() if key not in set(JSON_FIELDS.values())}
+    portfolio_links = extract_urls(_json(row["portfolio_links_json"], [])) or extract_urls(row["portfolio_url"])
+    instagram_links = extract_instagram_profiles(_json(row["instagram_links_json"], [])) or extract_instagram_profiles(
+        row["portfolio_url"], row["bio"], row["profile_answer"], row["social_usage"], row["workflow"],
+        row["opportunity"], row["additional_info"],
+    )
     candidate.update(
         {
             "traits": _json(row["traits_json"], []),
             "platforms": _json(row["platforms_json"], []),
             "duplicate_submissions": _json(row["duplicate_submissions_json"], []),
+            "portfolio_links": portfolio_links,
+            "instagram_links": instagram_links,
             "has_vat": bool(row["has_vat"]), "privacy_accepted": bool(row["privacy_accepted"]), "reviewed": bool(row["reviewed"]),
             "favorite": bool(row["favorite"]), "archived": bool(row["archived"]),
         }
@@ -101,6 +112,31 @@ def _normalized(payload: dict[str, Any], current: dict[str, Any] | None = None) 
         "favorite": int(boolean(payload, "favorite", base.get("favorite", False))),
         "archived": int(boolean(payload, "archived", base.get("archived", False))),
     }
+    portfolio_source_changed = "portfolio_url" in payload or "portfolioUrl" in payload
+    portfolio_links_supplied = "portfolio_links" in payload or "portfolioLinks" in payload
+    if portfolio_links_supplied:
+        portfolio_links = extract_urls(value(payload, "portfolio_links"))
+    elif current and not portfolio_source_changed:
+        portfolio_links = extract_urls(base.get("portfolio_links", []))
+    else:
+        portfolio_links = extract_urls(record["portfolio_url"])
+    record["portfolio_links_json"] = json.dumps(portfolio_links, ensure_ascii=False)
+
+    instagram_source_fields = {
+        "portfolio_url", "portfolioUrl", "portfolio_links", "portfolioLinks", "bio", "profile_answer", "profile",
+        "social_usage", "socialUsage", "workflow", "opportunity", "additional_info", "additionalInfo",
+    }
+    instagram_links_supplied = "instagram_links" in payload or "instagramLinks" in payload
+    if instagram_links_supplied:
+        instagram_links = extract_instagram_profiles(value(payload, "instagram_links"))
+    elif current and not instagram_source_fields.intersection(payload):
+        instagram_links = extract_instagram_profiles(base.get("instagram_links", []))
+    else:
+        instagram_links = extract_instagram_profiles(
+            portfolio_links, record["portfolio_url"], record["bio"], record["profile_answer"],
+            record["social_usage"], record["workflow"], record["opportunity"], record["additional_info"],
+        )
+    record["instagram_links_json"] = json.dumps(instagram_links, ensure_ascii=False)
     if not record["name"]:
         raise ValueError("Candidate name is required.")
     for field, default in (("decision", "da_valutare"), ("email_status", "da_contattare"), ("call_status", "non_prevista"), ("poc_status", "non_previsto")):
@@ -151,7 +187,7 @@ def update_candidate(connection: sqlite3.Connection, candidate_id: str, payload:
 
 
 def _stored_value(candidate: dict[str, Any], field: str) -> Any:
-    if field in {"traits_json", "platforms_json", "duplicate_submissions_json"}:
+    if field in set(JSON_FIELDS.values()):
         return json.dumps(candidate[field.removesuffix("_json")], ensure_ascii=False)
     if field in {"has_vat", "privacy_accepted", "reviewed", "favorite", "archived"}:
         return int(bool(candidate[field]))

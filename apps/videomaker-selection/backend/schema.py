@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import UTC, datetime
+import json
 from pathlib import Path
 import sqlite3
 from typing import Iterator
 
-SCHEMA_VERSION = "1"
+from candidate_links import extract_instagram_profiles, extract_urls
+
+SCHEMA_VERSION = "2"
 DATABASE_NAME = "app.db"
 
 
@@ -76,6 +79,8 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
           capacity TEXT NOT NULL DEFAULT '',
           price_proposal TEXT NOT NULL DEFAULT '',
           portfolio_url TEXT NOT NULL DEFAULT '',
+          portfolio_links_json TEXT NOT NULL DEFAULT '[]',
+          instagram_links_json TEXT NOT NULL DEFAULT '[]',
           test_url TEXT NOT NULL DEFAULT '',
           additional_info TEXT NOT NULL DEFAULT '',
           duplicate_submissions_json TEXT NOT NULL DEFAULT '[]',
@@ -135,11 +140,44 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
         "workflow": "TEXT NOT NULL DEFAULT ''",
         "privacy_accepted": "INTEGER NOT NULL DEFAULT 0",
         "review_rank": "INTEGER",
+        "portfolio_links_json": "TEXT NOT NULL DEFAULT '[]'",
+        "instagram_links_json": "TEXT NOT NULL DEFAULT '[]'",
     }.items():
         if column not in existing_columns:
             connection.execute(f"ALTER TABLE candidates ADD COLUMN {column} {definition}")
+    _backfill_candidate_links(connection)
     connection.execute(
         "INSERT INTO metadata(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         (SCHEMA_VERSION,),
+    )
+
+
+def _backfill_candidate_links(connection: sqlite3.Connection) -> None:
+    marker = connection.execute(
+        "SELECT value FROM metadata WHERE key='candidate_links_backfill_version'"
+    ).fetchone()
+    if marker is not None and marker[0] == "1":
+        return
+    rows = connection.execute(
+        "SELECT id, portfolio_url, bio, profile_answer, social_usage, workflow, opportunity, "
+        "additional_info, portfolio_links_json, instagram_links_json FROM candidates"
+    ).fetchall()
+    for row in rows:
+        portfolio_links = extract_urls(row["portfolio_url"])
+        instagram_links = extract_instagram_profiles(
+            row["portfolio_url"], row["bio"], row["profile_answer"], row["social_usage"],
+            row["workflow"], row["opportunity"], row["additional_info"],
+        )
+        connection.execute(
+            "UPDATE candidates SET portfolio_links_json=?, instagram_links_json=? WHERE id=?",
+            (
+                json.dumps(portfolio_links, ensure_ascii=False),
+                json.dumps(instagram_links, ensure_ascii=False),
+                row["id"],
+            ),
+        )
+    connection.execute(
+        "INSERT INTO metadata(key, value) VALUES('candidate_links_backfill_version', '1') "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
     )

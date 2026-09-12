@@ -1,5 +1,6 @@
 import { Check, ChevronRight, ExternalLink, Star } from 'lucide-react';
 import { CALL_STATUSES, DECISIONS, EMAIL_STATUSES, POC_STATUSES, labelFor } from '../constants';
+import { portfolioLinks } from '../links';
 import type { Candidate } from '../types';
 
 type Props = {
@@ -7,7 +8,6 @@ type Props = {
   onToggle:(id:string,checked:boolean)=>void; onUpdate:(id:string,payload:Partial<Candidate>)=>void; showRanking:boolean;
 };
 const score = (value:number|null) => value == null ? '—' : value.toFixed(1);
-const validUrl = (value:string) => /^https?:\/\//i.test(value) ? value : `https://${value}`;
 function PipelineSelect({value,items,onChange,label}:{value:string;items:Array<{value:string;label:string}>;onChange:(value:string)=>void;label:string}) {
   return <select aria-label={label} className={`pipeline-select status-${value}`} value={value} onClick={event=>event.stopPropagation()} onChange={event=>onChange(event.target.value)}>{items.map(item=><option key={item.value} value={item.value}>{item.label}</option>)}</select>;
 }
@@ -30,7 +30,7 @@ export default function CandidateTable({candidates,selectedIds,onSelect,onToggle
       <div className="candidate-card-head"><span className="avatar">{candidate.name.split(/\s+/).slice(0,2).map(part=>part[0]).join('').toUpperCase()}</span><div><h3>{candidate.name}</h3><p>{candidate.city || candidate.email}</p></div><strong className="card-score">{score(candidate.review_score)}</strong></div>
       <p className="card-summary">{candidate.summary || candidate.annotation || candidate.bio || 'Profilo da completare'}</p>
       <div className="card-pipeline"><span className={`status-pill status-${candidate.decision}`}>{labelFor(DECISIONS,candidate.decision)}</span><span>{labelFor(EMAIL_STATUSES,candidate.email_status)}</span><span>{labelFor(CALL_STATUSES,candidate.call_status)}</span></div>
-      <div className="card-actions"><button className={`check-box ${selectedIds.has(candidate.id)?'is-active':''}`} onClick={event=>{event.stopPropagation();onToggle(candidate.id,!selectedIds.has(candidate.id));}} type="button">{selectedIds.has(candidate.id)?<Check size={13}/>:null}</button>{candidate.portfolio_url?<a href={validUrl(candidate.portfolio_url)} onClick={event=>event.stopPropagation()} rel="noreferrer" target="_blank">Portfolio <ExternalLink size={12}/></a>:null}<ChevronRight size={16}/></div>
+      <div className="card-actions"><button className={`check-box ${selectedIds.has(candidate.id)?'is-active':''}`} onClick={event=>{event.stopPropagation();onToggle(candidate.id,!selectedIds.has(candidate.id));}} type="button">{selectedIds.has(candidate.id)?<Check size={13}/>:null}</button>{portfolioLinks(candidate)[0]?<a href={portfolioLinks(candidate)[0]} onClick={event=>event.stopPropagation()} rel="noreferrer" target="_blank">Portfolio{portfolioLinks(candidate).length>1?` · ${portfolioLinks(candidate).length} link`:''} <ExternalLink size={12}/></a>:null}<ChevronRight size={16}/></div>
     </article>)}</div>
   </>;
 }

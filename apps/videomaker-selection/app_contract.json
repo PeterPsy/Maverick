@@ -2,7 +2,7 @@
   "app_id": "videomaker-selection",
   "contract_version": "1.0",
   "name": "Videomaker Selection",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Workspace recruiting app for Social Video Editor candidates, evaluations, contacts, calls, pilots, and decisions.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
@@ -176,7 +176,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
       "data/videomaker-selection/app.db"
     ],

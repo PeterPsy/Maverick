@@ -13,7 +13,7 @@ PIPELINE_FIELDS = {"decision", "email_status", "call_status", "poc_status"}
 EDITABLE_FIELDS = {
     "name", "email", "city", "bio", "work_status", "has_vat", "profile_code", "profile_label", "profile_answer",
     "traits", "social_usage", "autonomy", "workflow", "platforms", "opportunity", "capacity", "price_proposal",
-    "portfolio_url", "test_url", "additional_info", "reviewed", "annotation", "specialty",
+    "portfolio_url", "portfolio_links", "instagram_links", "test_url", "additional_info", "reviewed", "annotation", "specialty",
     "score_portfolio", "score_budget", "score_test", "form_fit_score", "summary", *PIPELINE_FIELDS,
     "privacy_accepted", "review_rank", "next_action", "next_action_due", "process_notes", "favorite", "archived",
 }
@@ -23,7 +23,8 @@ ALIASES = {
     "work_status": "workStatus", "has_vat": "hasVat", "profile_code": "profileCode",
     "profile_label": "profileShort", "profile_answer": "profile", "social_usage": "socialUsage", "autonomy": "autonomyShort",
     "privacy_accepted": "privacyAccepted", "review_rank": "reviewRank", "price_proposal": "priceProposal",
-    "portfolio_url": "portfolioUrl", "test_url": "testUrl", "additional_info": "additionalInfo",
+    "portfolio_url": "portfolioUrl", "portfolio_links": "portfolioLinks", "instagram_links": "instagramLinks",
+    "test_url": "testUrl", "additional_info": "additionalInfo",
     "duplicate_submissions": "duplicateSubmissions", "specialty": "area", "score_portfolio": "portfolio",
     "score_budget": "budget", "score_test": "test", "review_score": "reviewScore",
     "form_fit_score": "fitScore", "email_status": "emailStatus", "call_status": "callStatus",

@@ -87,8 +87,41 @@ class CandidateCatalogTest(unittest.TestCase):
         recalled = self.call("read", id="candidate_anna")["candidate"]
         self.assertEqual(recalled["email_status"], "email_inviata")
         exported = self.call("export")["export"]
-        self.assertEqual(exported["schema_version"], "1")
+        self.assertEqual(exported["schema_version"], "2")
         self.assertEqual(len(exported["candidates"]), 2)
+
+    def test_multiple_portfolio_links_and_instagram_profiles_are_normalized(self) -> None:
+        created = self.call(
+            "create",
+            payload={
+                "name": "Link Candidate",
+                "portfolioUrl": (
+                    "https://canva.link/portfolio-demo e "
+                    "https://www.instagram.com/reel/DEMO123/?utm_source=test / "
+                    "https://www.instagram.com/link.candidate/?igsi=tracking"
+                ),
+                "bio": "Altri lavori su https://link-candidate.myportfolio.com/",
+                "additionalInfo": "Profilo personale: instagram.com/link.personal",
+                "testUrl": "https://drive.google.com/file/d/test/view",
+            },
+        )["candidate"]
+        self.assertEqual(
+            created["portfolio_links"],
+            [
+                "https://canva.link/portfolio-demo",
+                "https://www.instagram.com/reel/DEMO123/?utm_source=test",
+                "https://www.instagram.com/link.candidate/?igsi=tracking",
+            ],
+        )
+        self.assertEqual(
+            created["instagram_links"],
+            ["https://www.instagram.com/link.candidate/", "https://www.instagram.com/link.personal/"],
+        )
+        self.assertNotIn(created["test_url"], created["portfolio_links"])
+
+        updated = self.call("update", id=created["id"], payload={"decision": "riserva"})["candidate"]
+        self.assertEqual(updated["portfolio_links"], created["portfolio_links"])
+        self.assertEqual(updated["instagram_links"], created["instagram_links"])
 
     def test_validation_and_deduplication(self) -> None:
         self.call("create", payload={"name": "A", "email": "same@example.test"})

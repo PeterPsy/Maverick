@@ -11,7 +11,7 @@ export interface Candidate {
   id: string; source_response_number: number | null; source_submitted_at: string; name: string; email: string;
   city: string; bio: string; work_status: string; has_vat: boolean; profile_code: string; profile_label: string; profile_answer:string;
   traits: string[]; social_usage: string; autonomy: string; workflow:string; platforms: string[]; opportunity: string; capacity: string;
-  price_proposal: string; portfolio_url: string; test_url: string; additional_info: string; duplicate_submissions: unknown[];
+  price_proposal: string; portfolio_url: string; portfolio_links: string[]; instagram_links: string[]; test_url: string; additional_info: string; duplicate_submissions: unknown[];
   privacy_accepted:boolean; reviewed: boolean; review_rank:number|null; annotation: string; specialty: string; score_portfolio: number | null; score_budget: number | null;
   score_test: number | null; review_score: number | null; form_fit_score: number | null; summary: string;
   decision: Decision; email_status: EmailStatus; call_status: CallStatus; poc_status: PocStatus;

@@ -5,6 +5,7 @@ Workspace-local Maverick app for cataloguing and managing Social Video Editor ca
 ## Included surfaces
 
 - Full responsive React workspace with ranking, filters, bulk decisions, profile drawer, notes and JSON/CSV export.
+- Separate portfolio, Instagram-profile and test-video sections, with automatic recovery of multiple URLs from free-form form responses.
 - `base-shell` primary sidebar widget with live aggregate buttons that filter the workspace catalog.
 - `base-shell` footer widget for creating a candidate, including the shell primary-action protocol.
 - Persistent SQLite backend with candidate CRUD, activity timeline, pipeline statistics and deterministic import/export.

@@ -1491,3 +1491,20 @@ native, Peekaboo and consent tests cover the two fixes. The Python integration
 contract pins the code, recovery order and visible label **recupero hover
 nativo v33**. Expected totals are **253 Swift tests** and **30 Python tests**;
 signed validation, installation and physical acceptance remain separate.
+
+#### v33 validated storage-neutral installation (2026-09-12)
+
+Explicit install run
+[34687876135](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34687876135)
+validated remote commit **c23116d** with **253 Swift tests** and **30 Python
+tests** passing. Release build, credential-free Codex/image admission,
+same-turn observation delivery, the real pinned Peekaboo 4.3.1 catalog, Apple
+Development signing and bidirectional identity continuity all passed. The
+designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+No package or artifact-upload step ran and no redundant ZIP was created. The
+installer updated `~/Applications/MaverickMac.app` in place without a
+persistent backup and requested launch at **10:15:05 UTC**. Installed label:
+**c23116d · recupero hover nativo v33**. Permission retention and complete GUI
+acceptance remain physical facts.

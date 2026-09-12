@@ -1636,3 +1636,34 @@ No package or artifact-upload step ran. The app was updated in place without a
 persistent backup and launch was requested at **14:47:31 UTC**. Installed
 label: **52c2ced · sicurezza campo mirato v36**. Permission retention and
 complete physical GUI acceptance remain separate facts.
+
+### v37 standard help-level tooltips in the native app scene
+
+Physical v36 acceptance passed background observation, Notes search, TextEdit
+click and exact text, double click, contextual menu/Escape and middle click.
+The native observation immediately after hovering Bold passed, but after a
+900 ms wait with the pointer still over the control both the normal observation
+and its allowed fresh recovery returned **MC-TOOL-30**. The failure supplies no
+image, so tooltip identity is an inference; the delayed hover surface is the
+state change isolated by the sequence.
+
+The scene policy previously admitted same-PID owned surfaces only through the
+Core Graphics pop-up-menu level. Core Graphics defines
+[`helpWindow`](https://developer.apple.com/documentation/coregraphics/cgwindowlevelkey/helpwindow)
+as a separate standard level. V37 admits exactly that one additional level so a
+native help tooltip can be captured with the document. It does not admit an
+open range of higher layers or dragging, overlay, screen-saver and cursor
+windows.
+
+A focused help-level overlay cannot become the capture root. When
+`AXMainWindow` is transiently absent, root selection requires exactly one
+visible capturable layer-zero window and keeps the tooltip above it in the
+same-PID scene. PID, Core Graphics window ID, ScreenCaptureKit eligibility,
+valid geometry, the eight-surface ceiling, stable sampling, fresh receipts and
+native recipient hit testing are unchanged.
+
+One Swift policy regression proves the standard tooltip joins the scene while
+the document remains root. One Python integration contract pins the exact
+level and label **tooltip livello help v37**. Expected totals are **256 Swift
+tests** and **32 Python tests**; signed validation, installation and physical
+acceptance remain separate.

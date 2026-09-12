@@ -1621,3 +1621,18 @@ integrated and native input paths, and requires both the general-key focus
 recheck and the AX secure-role guard. Expected totals remain **255 Swift tests**
 and **31 Python tests**. Visible label: **sicurezza campo mirato v36**. Signed
 validation, installation and physical acceptance remain separate gates.
+
+#### v36 validated storage-neutral installation (2026-09-12)
+
+Install run
+[34700233453](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34700233453)
+validated remote commit **52c2ced** with **255 Swift tests** and **31 Python
+tests** passing. Release, credential-free admission/image transport, the real
+pinned Peekaboo 4.3.1 catalog, Apple Development signing and bidirectional
+identity continuity all passed. Designated-requirement SHA256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+
+No package or artifact-upload step ran. The app was updated in place without a
+persistent backup and launch was requested at **14:47:31 UTC**. Installed
+label: **52c2ced · sicurezza campo mirato v36**. Permission retention and
+complete physical GUI acceptance remain separate facts.

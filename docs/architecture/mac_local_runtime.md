@@ -1400,3 +1400,35 @@ artifact. It updated `~/Applications/MaverickMac.app` in place without a
 persistent backup and requested launch at **09:04:54 UTC**. Installed label:
 **2aff701 · cattura Peekaboo classica v31**. Exact GUI behavior and permission
 retention remain physical acceptance facts.
+
+### v32 exact observed-root continuity and autonomous native recovery
+
+Physical v31 acceptance passed direct background Peekaboo observation for
+Calendar, Notes and TextEdit and therefore closed the prior MC-PEEKABOO-24
+`runtime_incompatible` regression. Notes activation/search also passed after a
+visible search-field focus correction. TextEdit produced a stable
+`native_text_focus=text_area`, but its first click stopped before dispatch with
+MC-TOOL-30. No test text was inserted.
+
+The native input path had discarded the already verified scene root and rebuilt
+AX-to-ScreenCaptureKit identity solely from the newest AX rectangles. V32
+carries the observed root into later reads and admits it only when PID, exact
+CoreGraphics window ID, layer-zero status, visibility and full ScreenCaptureKit
+rectangle are unchanged. Owned overlays may appear above it. A moved, replaced,
+hidden, differently layered or foreign root is rejected; the complete scene
+must still equal the leased scene before input, and native pointer-recipient hit
+testing is unchanged. This is exact receipt continuity, not approximate frame
+matching or a largest-window guess.
+
+The failure boundary now distinguishes proven pre-dispatch native state errors
+from denial, permission/security and uncertain-effect failures. A recoverable
+error invalidates every old receipt and permits only reasoned recovery beginning
+with app activation when needed and a fresh observation. The agent must report
+the original diagnostic and the recovery, may never replay an uncertain input,
+and remains blocked after user denial, screen/session/TCC failure, secure input,
+unknown mutation or partial text selection.
+
+Four Swift regressions cover root continuity and the non-poisoning recovery
+boundary; one Python regression pins implementation/guidance and label
+**recupero scena nativa v32**. Expected totals are **252 Swift** and **30 Python
+tests**. Signed validation, installation and physical acceptance remain pending.

@@ -1596,3 +1596,28 @@ No package or artifact-upload step ran. The app was updated in place without a
 persistent backup and launch was requested at **14:26:23 UTC**. Installed
 label: **d975d82 · visione durante input sicuro v35**. Permission retention and
 complete physical GUI acceptance remain separate facts.
+
+### v36 target-specific secure-field enforcement
+
+Physical v35 acceptance passed direct background observation of Calendar,
+Notes and TextEdit, then stopped on **MC-TOOL-21** while typing in the ordinary
+Notes search field. The rejection came from
+`IsSecureEventInputEnabled()`, whose session-global value does not identify the
+authorized app, window or focused control and may belong to a different or
+stale process.
+
+V36 therefore removes that global value as an authorization veto. Native text
+and keyboard routes re-resolve the focused control inside the exact authorized
+PID immediately before event submission and still reject an explicit
+`AXSecureTextField`. Peekaboo keeps its engine-owned secure-field behavior plus
+exact approved bundle, window and fresh-snapshot binding. AX trust, Event
+Synthesizing permission, native foreground/window/focus checks, bounded task or
+per-action consent, stale-receipt rejection and post-action verification are
+unchanged. Credential and security UI remains prohibited.
+
+The Swift regression pins MC-TOOL-21 to the actual target role and the public
+guidance. The Python contract rejects any remaining global-flag call in the
+integrated and native input paths, and requires both the general-key focus
+recheck and the AX secure-role guard. Expected totals remain **255 Swift tests**
+and **31 Python tests**. Visible label: **sicurezza campo mirato v36**. Signed
+validation, installation and physical acceptance remain separate gates.

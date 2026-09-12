@@ -27,7 +27,7 @@ an agentic runtime.
 ## P6 certification boundary
 
 The current OpenRouter target uses hosted adapter 57, GLM recipe 29, suite 64,
-TCB manifest 54, and profile 3. Google profile 67 and Antigravity remain
+TCB manifest 54, and profile 3. Google profile 68 and Antigravity remain
 contained. Exact-target live receipts and operator-reviewed natural
 conformance are required before trusted signing and publication; neither step
 grants release authority. The procedure is in

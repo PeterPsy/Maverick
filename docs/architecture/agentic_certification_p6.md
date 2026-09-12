@@ -1,7 +1,7 @@
 # P6 certification and release boundary
 
 Status: P6 is recertifying the OpenRouter-only real-workspace successor. Google
-and Antigravity remain **NO-GO**. Until suite 63 is published and its binding is
+and Antigravity remain **NO-GO**. Until suite 64 is published and its binding is
 enabled, OpenRouter also remains unavailable. The earlier Candidate 49 rollback
 remains historical; no new remote certificate has yet been published. Codex revision
 15 remains active and unchanged. See
@@ -13,9 +13,9 @@ The earlier reviews and failing baselines remain in
 `docs/development/agentic_p6_review_fixes_2026-09-06.md` and
 `docs/development/agentic_p6_validation_2026-09-06.md`.
 
-That pass is historical. The current successor uses suite 63 / TCB 53 / hosted
-adapter 56 / Google recipe 26 and profile 67 / OpenRouter GLM recipe 28 and
-profile 2,
+That pass is historical. The current successor uses suite 64 / TCB 54 / hosted
+adapter 57 / Google recipe 26 and profile 68 / OpenRouter GLM recipe 29 and
+profile 3,
 plus Antigravity native adapter 5, native recipe 4, and Codex revision 15. It
 requires its own exact-source operator record before signing or release. The
 source tree does not treat a mocked probe receipt or this status paragraph as
@@ -332,9 +332,9 @@ merely because a generic handoff fixture passes.
 
 ## Checkpoints
 
-1. **Candidate identities and deterministic corpus:** hosted adapter 56,
-   Google recipe 26/profile 67, OpenRouter GLM recipe 28/profile 2, suite 63,
-   canonical TCB manifest 53, Antigravity adapter 5 / recipe 4, and active Codex revision
+1. **Candidate identities and deterministic corpus:** hosted adapter 57,
+   Google recipe 26/profile 68, OpenRouter GLM recipe 29/profile 3, suite 64,
+   canonical TCB manifest 54, Antigravity adapter 5 / recipe 4, and active Codex revision
    15.
    The corpus includes P5 family/pinning/onboarding, native Antigravity stream-json
    lifecycle, and hosted-text non-regressions, in addition to P0–P4.

@@ -20,7 +20,7 @@ Certificate evidence must be produced and published through
 runbook begins. This runbook never manufactures or repairs a certificate.
 
 The current source candidate is hosted adapter 57 / Google recipe 26 and
-profile 67 / OpenRouter GLM recipe 29 and profile 3 / Antigravity adapter 5 and
+profile 68 / OpenRouter GLM recipe 29 and profile 3 / Antigravity adapter 5 and
 native recipe 4 / suite 64 / TCB 54. Codex revision 15 is
 the active verified profile and revision 14 remains immutable history. Remote
 provider certification must not restart or migrate Codex, alter its artifact,

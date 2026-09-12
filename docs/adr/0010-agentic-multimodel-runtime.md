@@ -712,7 +712,7 @@ The OpenRouter Full Workspace profile uses Chat Completions v1, GLM 5.3 Flash,
 and the exact `relace` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current definitions are Google revision 67 and
+accepted as complete. The current definitions are Google revision 68 and
 OpenRouter GLM revision 3. They use `maverick-hosted-tool-loop==57`; the GLM
 profile is bound to
 `openrouter-relace-glm-5-3-flash@2`. Historical profiles for other

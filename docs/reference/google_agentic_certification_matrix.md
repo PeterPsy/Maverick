@@ -62,7 +62,7 @@ this correction grants a native certificate or API release authority.
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `name=models/gemini-3.6-flash`, `version=3.6-flash-07-2026`; an omitted/null `baseModelId` is digest-bound, while any supplied value must equal `gemini-3.6-flash` |
-| Immutable profile revision | `67` (revision `66` suspended) |
+| Immutable profile revision | `68` (revision `67` suspended) |
 | Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v21` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
@@ -685,13 +685,18 @@ hashes plus allowlisted diagnostics. This collector hardening does not change
 the hosted adapter artifact or Codex revision-15 artifact. No certificate,
 activation, binding, canary, or release is implied by the identity advance.
 
-Revision 67 pins hosted adapter 57 and governed recipe 26 while advancing to
-suite 64, matrix `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`, and TCB
-manifest v54. The provider-step output allowance is now 4,096 tokens, while
-the 16,384-token turn ceiling still protects both the finalization attempt and
+Revision 67 pins hosted adapter 56 and governed recipe 26. The provider-step
+output allowance is 4,096 tokens, while the 16,384-token turn ceiling still
+protects both the finalization attempt and
 its sole recovery. This removes the artificial 2,048-token ceiling observed
 to exhaust a reasoning-heavy hosted response before it could finalize. The
 policy builder is now explicitly part of the hosted adapter artifact digest.
-The OpenRouter GLM profile 3 advances independently with recipe 29 and the
-same shared adapter/TCB identity.
+
+Revision 68 pins hosted adapter 57 and governed recipe 26 with suite 64,
+matrix `2026-09-12-r64-openrouter-glm-full-workspace-relace-tcb54`, and TCB
+manifest v54. This separate revision prevents bootstrap from conflicting with
+the persisted revision-67 adapter pin. Bootstrap retains that immutable
+definition and suspends its rollout status; it publishes no certificate or
+workspace binding. OpenRouter GLM profile 3 uses recipe 29 and the same shared
+adapter/TCB identity.
 Codex revision 15 remains byte-identical and separately authoritative.

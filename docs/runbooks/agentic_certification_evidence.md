@@ -120,7 +120,7 @@ every other invalid identity remain fail-closed. It also binds Antigravity's
 provider-observed tool `ERROR` state and the exact, dedicated AppArmor profile
 plus root-owned Bubblewrap digest needed for its nested terminal sandbox,
 without changing Codex's sandbox launcher. The current successor binds hosted
-adapter 57, Google recipe 26/profile 67, OpenRouter GLM recipe 29/profile 3,
+adapter 57, Google recipe 26/profile 68, OpenRouter GLM recipe 29/profile 3,
 Antigravity adapter 5 / recipe 4, TCB 54 and Codex artifact revision 15. Codex revision 15 is the active verified
 profile, revision 14 remains immutable history, and a remote-provider
 certification worker must not restart, migrate, or reissue the Codex runtime or

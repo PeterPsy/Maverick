@@ -681,6 +681,12 @@ all registered profiles through the same catalog. Adding another model for an
 existing trusted protocol therefore changes its config/recipe/publication data,
 not the runtime-registry builder or bootstrap control flow.
 
+A shared hosted adapter version change requires a new immutable revision for
+every bundled profile that pins it, including profiles for otherwise unchanged
+providers. Bootstrap preserves existing definitions and suspends superseded
+revisions through their separate rollout records. Google profile 68 pins hosted
+adapter 57; revision 67 retains its original adapter-56 definition.
+
 Text-only API sessions have a third and disjoint identity path. Before a new
 session is persisted, Core resolves the exact hosted provider/model and creates
 a self-digesting `HostedTextExecutionBinding`. That binding embeds an immutable

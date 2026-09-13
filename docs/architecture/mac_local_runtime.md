@@ -1848,3 +1848,25 @@ updated `~/Applications/MaverickMac.app` in place without a persistent backup
 and requested launch. Installed label: **aec101a · verifica sola lettura v40**.
 Privacy-permission retention and the complete physical acceptance remain
 separate facts.
+
+#### v40 physical acceptance (2026-09-13)
+
+The complete installed-app acceptance passed with one autonomous stale-scene
+recovery. Background Peekaboo observation of Calendar, Notes and TextEdit,
+Notes search, exact TextEdit visual and AX verification, mouse/double-click/
+context-menu/middle-click/hover/drag behavior, keyboard editing and search,
+30-line bidirectional scrolling, native app switching and the final three
+direct Peekaboo observations all succeeded. The v39 terminal MC-TOOL-15 did
+not recur; the read-only verification remained available at the end of the
+long input sequence as intended.
+
+One `replace_text` stopped before dispatch with MC-TOOL-14 after Escape removed
+a transient TextEdit surface. No input or mutation occurred. A fresh
+observation proved the editor still focused, issued a new observation ID and
+allowed the test to continue without unnecessary reactivation. This is the
+expected fail-closed recovery and is not an open blocker.
+
+After the test had already reported **PASS CON RECUPERO** and
+**PRONTA PER L'USO: SÌ**, screen sleep produced MC-SESSION-05. Invalidating all
+consents and observations and refusing automatic resumption on sleep is the
+intended session boundary. No runtime defect remains open from v40 acceptance.

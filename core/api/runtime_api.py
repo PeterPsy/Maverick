@@ -1948,12 +1948,28 @@ def _handle_session_turns(
                 return validation_response
             if draft is None:
                 return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
-            session = _promote_prepared_session_for_turn(state, context, session, body)
             session = _reconciled_session(state, session, start_path=start_path)
             try:
-                session = admit_runtime_session(state, session=session).session
+                session = admit_runtime_session(
+                    state,
+                    session=session,
+                    allow_compatible_fork=False,
+                ).session
             except RuntimeProfileUpgradeRequiredError as error:
                 return _runtime_profile_upgrade_response(start_response, error)
+            draft, validation_response = (
+                _finalize_runtime_turn_submission_for_admitted_session(
+                    state,
+                    context,
+                    session,
+                    draft,
+                    start_response,
+                    start_path=start_path,
+                )
+            )
+            if validation_response is not None:
+                return validation_response
+            session = _promote_prepared_session_for_turn(state, context, session, body)
             return _queue_runtime_turn_response(
                 state,
                 context,
@@ -2158,6 +2174,15 @@ def _handle_session_prewarm(
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     session = _reconciled_session(state, session, start_path=start_path)
+    try:
+        admission = admit_runtime_session(
+            state,
+            session=session,
+            allow_compatible_fork=runtime_session_allows_user_thread(session),
+        )
+    except RuntimeProfileUpgradeRequiredError as error:
+        return _runtime_profile_upgrade_response(start_response, error)
+    session = admission.session
     prewarm_result = _prewarm_new_runtime_session(
         state,
         session,
@@ -2227,6 +2252,17 @@ def _submit_runtime_turn_response(
         _release_client_message_claim(state, release_claim_on_failure)
         return _runtime_profile_upgrade_response(start_response, error)
     session = admission.session
+    draft, validation_response = _finalize_runtime_turn_submission_for_admitted_session(
+        state,
+        context,
+        session,
+        draft,
+        start_response,
+        start_path=start_path,
+        release_claim_on_failure=release_claim_on_failure,
+    )
+    if validation_response is not None:
+        return validation_response
     with runtime_message_admission_handoff(session.session_id):
         steering_fallback_reason = None
         if delivery_policy == "steer_or_queue":
@@ -2506,19 +2542,52 @@ def _prepare_runtime_turn_submission(
         if attachment_limit_error is not None:
             _release_client_message_claim(state, release_claim_on_failure)
             return None, json_response(start_response, {"error": attachment_limit_error}, status="400 Bad Request")
-    elif session.execution_binding is not None:
+    app_reference_context = RuntimeAppReferenceRequestContext(
+        state,
+        context=context,
+        start_path=start_path,
+    )
+    return RuntimeTurnSubmissionDraft(
+        timing=timing,
+        client_message_id=client_message_id,
+        attachment_items=attachment_items,
+        input_text=input_text,
+        app_reference_items=[
+            item for item in app_references if isinstance(item, dict)
+        ],
+        app_reference_context=app_reference_context,
+        invoked_skill_ids=invoked_skill_ids,
+        async_requested=bool(body.get("async")),
+    ), None
+
+
+def _finalize_runtime_turn_submission_for_admitted_session(
+    state: PlatformState,
+    context: RequestSession,
+    session: RuntimeSessionRecord,
+    draft: RuntimeTurnSubmissionDraft,
+    start_response: StartResponse,
+    *,
+    start_path,
+    release_claim_on_failure: RuntimeClientMessageClaim | None = None,
+) -> tuple[RuntimeTurnSubmissionDraft, list[bytes] | None]:
+    """Validate live authority and references only after continuation admission."""
+    if not runtime_session_is_plain_hosted_chat(session) and session.execution_binding is not None:
         try:
             preflight_runtime_context_capabilities(
                 state,
                 session=session,
-                turn_id=f"context-admission:{session.session_id}:{client_message_id or 'new'}",
-                invoked_skills=invoked_skills,
-                attachments=attachment_items,
-                app_references=app_references,
+                turn_id=(
+                    f"context-admission:{session.session_id}:"
+                    f"{draft.client_message_id or 'new'}"
+                ),
+                invoked_skills=draft.invoked_skill_ids,
+                attachments=draft.attachment_items,
+                app_references=draft.app_reference_items,
             )
         except CapabilityCertificateError as error:
             _release_client_message_claim(state, release_claim_on_failure)
-            return None, json_response(
+            return draft, json_response(
                 start_response,
                 {
                     "error": error.reason_code,
@@ -2527,28 +2596,21 @@ def _prepare_runtime_turn_submission(
                 status="400 Bad Request",
             )
     reference_validate_started_at = time.perf_counter()
-    app_reference_context = RuntimeAppReferenceRequestContext(
-        state,
-        context=context,
-        start_path=start_path,
-    )
     app_reference_items = validate_runtime_app_references(
         state,
         context=context,
-        references=[item for item in app_references if isinstance(item, dict)],
+        references=draft.app_reference_items,
         start_path=start_path,
-        reference_context=app_reference_context,
+        reference_context=draft.app_reference_context,
     )
-    _record_timing_duration(timing, "reference_validate_ms", reference_validate_started_at)
-    return RuntimeTurnSubmissionDraft(
-        timing=timing,
-        client_message_id=client_message_id,
-        attachment_items=attachment_items,
-        input_text=input_text,
+    _record_timing_duration(
+        draft.timing,
+        "reference_validate_ms",
+        reference_validate_started_at,
+    )
+    return replace(
+        draft,
         app_reference_items=app_reference_items,
-        app_reference_context=app_reference_context,
-        invoked_skill_ids=invoked_skill_ids,
-        async_requested=bool(body.get("async")),
     ), None
 
 

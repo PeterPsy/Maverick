@@ -258,6 +258,12 @@ Workspace backup and export therefore treat these records differently:
   capability certificate.
 
 Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime roots. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between independent concurrent agents unless a provider adapter documents an explicit immutable cache. A compatible Codex continuation lineage is one provider conversation rather than independent agents: its single executable child inherits the lineage-root `CODEX_HOME` because the thread database points to an absolute rollout file there, and the operating-system sandbox receives that same path as `HOME` and `CODEX_HOME`. Continuation admission is serialized with message admission; any non-terminal turn blocks transfer. The predecessor provider state is fenced and its app-server process is proven closed before provider-state ownership passes to the child. Recovery inventory resolves a requested lineage member to the current tip, and a mutating repair snapshots every lineage record plus a checked SQLite backup and checksummed rollout files from the root home. Lineage-aware cleanup removes the root home with the complete lineage.
+
+Certified-rollout repair scopes those snapshots to one durable user-visible chat
+lineage at a time. Hidden prepared-session homes are disposable and are not part
+of chat migration. A snapshot failure leaves its lineage unchanged, removes the
+incomplete snapshot directory, and does not prevent independent chat lineages
+from receiving their own snapshots and compatible successors.
 Runtime session history and operational records that belong to one agent must live inside that same session root so cleanup can remove one agent's files without scanning or rewriting shared cross-agent history files. This includes persisted runtime events, turn records, process records, and the mutable runtime state snapshot.
 
 ```text

@@ -361,6 +361,8 @@ class RuntimeContinuationSnapshotTest(unittest.TestCase):
                         session_ids={f"missing-{missing_kind}"},
                         now=NOW,
                     )
+                snapshot_root = root / "data" / "recovery-snapshots"
+                self.assertFalse(snapshot_root.exists() and any(snapshot_root.iterdir()))
 
 
 if __name__ == "__main__":

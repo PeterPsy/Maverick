@@ -20,10 +20,11 @@ def repair_runtime_continuations_after_certified_rollout(
     """Fork every provably compatible chat after active profiles converge.
 
     Certificate publication itself is intentionally immutable. This hook runs
-    after profile and workspace-binding rollout, snapshots every candidate
-    lineage, and materializes a current certified successor. A failed snapshot
-    prevents all writes for that workspace; a failed handoff remains resumable
-    and does not prevent unrelated chats or the backend from starting.
+    after profile and workspace-binding rollout, snapshots each durable chat
+    lineage, and materializes a current certified successor. Prepared sessions
+    are disposable pool entries rather than conversations. A failed snapshot
+    prevents mutation only for that lineage; it must not block unrelated chats
+    or the backend from starting.
     """
     timestamp = now or datetime.now(tz=UTC)
     workspace_ids = sorted(
@@ -63,10 +64,19 @@ def _repair_workspace_continuations(
     workspace_id: str,
     now: datetime,
 ) -> dict[str, object]:
+    session_ids = _durable_chat_session_ids(state, workspace_id=workspace_id)
+    if not session_ids:
+        return _workspace_result(
+            workspace_id,
+            candidate_count=0,
+            repaired_count=0,
+            failures=[],
+        )
     try:
         inventory = continuation_repair_inventory(
             state,
             workspace_id=workspace_id,
+            session_ids=session_ids,
             now=now,
         )
     except Exception as error:
@@ -92,29 +102,23 @@ def _repair_workspace_continuations(
             repaired_count=0,
             failures=[],
         )
-    candidate_ids = {str(item["session_id"]) for item in candidates}
-    try:
-        snapshot = snapshot_runtime_continuation_state(
-            state.repository_root,
-            workspace_id=workspace_id,
-            session_ids=candidate_ids,
-            now=now,
-        )
-    except Exception as error:
-        # Snapshot failure is fail-closed for mutation, not host startup.
-        result = _workspace_result(
-            workspace_id,
-            candidate_count=len(candidates),
-            repaired_count=0,
-            failures=[_failure_payload(None, error)],
-        )
-        _record_rollout_repair(state, result=result, now=now)
-        return result
-
     repaired_count = 0
     failures: list[dict[str, str | None]] = []
+    snapshots: list[dict[str, object]] = []
     for item in candidates:
         session_id = str(item["session_id"])
+        try:
+            snapshot = snapshot_runtime_continuation_state(
+                state.repository_root,
+                workspace_id=workspace_id,
+                session_ids={session_id},
+                now=now,
+            )
+            snapshots.append(snapshot)
+        except Exception as error:
+            # A durable lineage remains untouched when its backup cannot be proven.
+            failures.append(_failure_payload(session_id, error))
+            continue
         try:
             repair = repair_compatible_runtime_continuations(
                 state,
@@ -133,7 +137,7 @@ def _repair_workspace_continuations(
         candidate_count=len(candidates),
         repaired_count=repaired_count,
         failures=failures,
-        snapshot=snapshot,
+        snapshots=snapshots,
     )
     _record_rollout_repair(state, result=result, now=now)
     return result
@@ -145,7 +149,7 @@ def _workspace_result(
     candidate_count: int,
     repaired_count: int,
     failures: list[dict[str, str | None]],
-    snapshot: dict[str, object] | None = None,
+    snapshots: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     return {
         "workspace_id": workspace_id,
@@ -153,7 +157,18 @@ def _workspace_result(
         "repaired_count": repaired_count,
         "failure_count": len(failures),
         "failures": failures,
-        "snapshot": snapshot,
+        "snapshots": list(snapshots or ()),
+    }
+
+
+def _durable_chat_session_ids(state, *, workspace_id: str) -> set[str]:
+    """Return persisted user conversations, excluding disposable preload state."""
+    return {
+        session.session_id
+        for session in state.runtime_store.list_sessions(workspace_id)
+        if session.runtime_mode == "agentic"
+        and session.session_kind == "chat_root"
+        and session.thread_visibility == "user"
     }
 
 
@@ -190,15 +205,17 @@ def _record_rollout_repair(state, *, result: dict[str, object], now: datetime) -
     if observability_store is None:
         return
     failures = list(result["failures"])
-    snapshot = result.get("snapshot")
+    snapshots = list(result.get("snapshots") or ())
     payload = {
         "candidate_count": result["candidate_count"],
         "repaired_count": result["repaired_count"],
         "failure_count": result["failure_count"],
         "failure_reason_codes": [item["reason_code"] for item in failures],
-        "snapshot_id": (
-            snapshot.get("snapshot_id") if isinstance(snapshot, dict) else None
-        ),
+        "snapshot_ids": [
+            snapshot.get("snapshot_id")
+            for snapshot in snapshots
+            if isinstance(snapshot, dict) and snapshot.get("snapshot_id")
+        ],
     }
     status = "failed" if failures else "succeeded"
     workspace_id = str(result["workspace_id"])

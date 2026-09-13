@@ -6,20 +6,11 @@ import {
   type ChatThread,
   type ProviderItem,
 } from "../api/client";
-import { requestNativeDeviceUse } from "../lib/deviceUse";
-
-const REQUIRED_MODEL = "gpt-6-astra";
-const REQUIRED_EFFORT = "high";
-
-function compatibleProvider(providers: ProviderItem[]): ProviderItem | null {
-  return providers.find((provider) => (
-    provider.provider_role === "runtime_engine"
-    && provider.default_model_family === REQUIRED_MODEL
-    && Boolean(provider.workspace_profile_binding_id)
-    && provider.selectable !== false
-    && provider.status === "active"
-  )) || null;
-}
+import {
+  compatibleDeviceUseProvider,
+  DEVICE_USE_REASONING_EFFORT,
+  requestNativeDeviceUse,
+} from "../lib/deviceUse";
 
 async function waitUntilReady(activationId: string) {
   const deadline = performance.now() + 10_000;
@@ -95,7 +86,7 @@ export function useDeviceUse({
       setBusy(false);
       return;
     }
-    const provider = compatibleProvider(providers);
+    const provider = compatibleDeviceUseProvider(providers);
     if (!provider) {
       setError("Device Use richiede il profilo Codex gpt-6-astra con effort High.");
       setBusy(false);
@@ -103,7 +94,7 @@ export function useDeviceUse({
     }
     let createdId = "";
     try {
-      await onPrepare(provider.provider_id, REQUIRED_EFFORT);
+      await onPrepare(provider.provider_id, DEVICE_USE_REASONING_EFFORT);
       const activation = await createDeviceUseActivation(crypto.randomUUID());
       createdId = activation.activation_id;
       if (!activation.ticket || activation.websocket_path !== "/ws/device-use/executor") {

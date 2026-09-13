@@ -1,6 +1,6 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
-Status date: 2026-09-12
+Status date: 2026-09-13
 Matrix revision: `2026-09-13-r68-stable-openrouter-catalog-tcb58`
 Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
@@ -17,12 +17,13 @@ Google AI Studio and Antigravity remain contained and are not part of this
 promotion decision. Codex remains the active native agent and must not be
 reconfigured by this work.
 
-Profile revision 6 and TCB manifest 57 bind HTTP/background finalization to the
-model-provider identity pinned in the immutable execution binding. This keeps a
-durable OpenRouter final outbox delivery from conflicting with the shared
-`maverick-tool-loop` runtime-engine identity after successful execution. They
-also bind the exact `2098-12-31` expiration now advertised by OpenRouter's
-official model catalog; any further catalog drift fails before transport.
+The renamed profile revision 1 and TCB manifest 58 bind HTTP/background
+finalization to the model-provider identity pinned in the immutable execution
+binding. This keeps a durable OpenRouter final outbox delivery from conflicting
+with the shared `maverick-tool-loop` runtime-engine identity after successful
+execution. The catalog expiration is a live availability fence rather than a
+stable identity field: a canonical future date or `null` is accepted, while an
+expired, malformed, or missing value fails before transport.
 
 ## Exact candidate
 
@@ -31,9 +32,9 @@ official model catalog; any further catalog drift fails before transport.
 | Model provider | `openrouter` |
 | Model | `z-ai/glm-5.3-flash` |
 | Resolved model | `z-ai/glm-5.3-flash-20260826` |
-| Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-12` |
-| Catalog expiration | exact `2098-12-31`; any drift fails closed |
-| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace-fp4@6` |
+| Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-09-13` |
+| Catalog expiration | live canonical future date or `null`; exact administrative value excluded from stable identity |
+| Immutable profile | `agentic-profile-openrouter-glm-5-3-flash-relace@1` |
 | Execution family | `maverick_agent` |
 | Full Workspace contract | `codex-baseline-v21` |
 | Protocol | OpenAI-compatible streaming Chat Completions v1 |
@@ -85,8 +86,8 @@ Every request carries this non-permissive router object:
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@67` and the certified
-execution TCB is manifest 57. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@68` and the certified
+execution TCB is manifest 58. The exact checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |
@@ -167,6 +168,26 @@ provider-step journals, source/projection/effect digests, resource accounting,
 and zero absolute failure counters. Execution and post-evidence review are
 separate operations; a runner cannot manufacture its own green review.
 
+The reproducible operator path is the checked-in
+`scripts/run_agentic_certification.py natural` command, invoked once per
+effort/scenario against a clean frozen checkout. It reads the production
+OpenRouter credential only through the operator secret-resolution path, binds
+an existing private budget ledger and signer key by absolute path, and writes
+create-only private artifacts outside the checkout. After all 42 runs,
+`review-natural` verifies every report/trace pair and produces a merged report
+plus a separate review artifact. The ordinary `sign` phase still requires the
+explicit `natural-traces-reviewed` confirmation; neither natural phase can
+publish a certificate or enable a workspace binding.
+
+The same runner's live `collect` phase accepts
+`--openrouter-control-root` only for the OpenRouter live suite. It resolves the
+one active credential through Core secret storage, injects it only into the
+bounded suite environment, and never requires an operator to export or print
+the API key. The final `activate-openrouter` phase accepts only the separately
+signed run plus the matching private key and explicit
+`activate-certified-openrouter-non-default` confirmation. All input, output,
+ledger, key, and evidence paths remain outside the frozen source checkout.
+
 ## Publication and rollout
 
 A certificate may be signed only after the deterministic suite, exact live
@@ -174,21 +195,29 @@ probe and complete natural report all pass for the same immutable candidate.
 Publication must revalidate the profile target and TCB and then read back the
 stored certificate.
 
-Rollout is OpenRouter-only and first proceeds in an isolated certification
-workspace with the production credential leased ephemerally. Inputs and tool
+Rollout is OpenRouter-only. Natural certification first executes in a disposable
+installation with the production credential leased ephemerally. Inputs and tool
 results retain ordinary `workspace_internal` classification; the run issues no
-fake/public attestation:
+fake/public attestation. After all evidence is independently reviewed and
+signed, the checked-in activation phase performs one fail-closed release:
 
-1. create one disabled, non-default binding;
-2. verify the profile remains unavailable before feature enablement;
-3. enable only the OpenRouter hosted-agent feature;
-4. run one full-workspace canary, sensitive-data denial, interrupt, restart and
-   rollback exercise;
-5. verify zero absolute failure counters and no credential leakage;
-6. enable the binding after the canary is green; changing the workspace default
-   remains a separate operator choice;
-7. confirm Settings and Chat show GLM 5.3 Flash and no retired target;
-8. retain an immediately tested kill switch and rollback path.
+1. require exactly one existing Codex workspace default;
+2. revalidate the signed run against the current profile, adapter, source, TCB,
+   matrix, and trusted public key;
+3. publish the immutable OpenRouter certificate and evidence;
+4. enable the certified OpenRouter binding as non-default using the one active
+   workspace credential;
+5. disable superseded OpenRouter bindings and revoke only superseded OpenRouter
+   certificates;
+6. prove that the exact Codex default binding is unchanged;
+7. run a production Full Workspace canary and confirm Settings and Chat show
+   GLM 5.3 Flash with no retired target;
+8. retain the provider feature flag as the immediate kill switch.
+
+Changing the workspace default remains a separate operator choice and is not
+part of this release. A behavior-changing Codex artifact revision continues to
+publish its own current connection certificate and model projections during
+bootstrap; this OpenRouter flow cannot replace, revoke, or demote them.
 
 Any source or TCB change after evidence collection invalidates the run. Google
 and Antigravity remain disabled even if this target reaches GO.

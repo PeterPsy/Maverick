@@ -54,6 +54,51 @@ class AgenticCertificationRunnerTest(unittest.TestCase):
             for key in ("MAVERICK_CERTIFICATION_BUDGET_LEDGER", "MAVERICK_CERTIFICATION_BUDGET_POLICY_DIGEST"):
                 self.assertEqual(actual[key], env[key])
 
+    def test_openrouter_live_collection_resolves_production_credential(self):
+        env = fixture_budget_environment(self)
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+            runner,
+            "execute_certification_suite",
+            return_value=object(),
+        ) as execute, patch.object(
+            runner,
+            "collection_to_json",
+            return_value="{}",
+        ), patch(
+            "core.providers.certification_natural_credential.production_openrouter_credential",
+            return_value="leased-secret",
+        ) as resolve:
+            runner.main(
+                [
+                    "collect",
+                    "--suite-id",
+                    "maverick-openrouter-agentic-contract",
+                    "--suite-version",
+                    "68",
+                    "--adapter-artifact-digest",
+                    "a" * 64,
+                    "--evidence-ref",
+                    "platform-evidence:test",
+                    "--output",
+                    str(Path(folder) / "result.json"),
+                    "--live-probe",
+                    "--max-cost-microusd",
+                    "1000000",
+                    "--budget-ledger",
+                    env["MAVERICK_CERTIFICATION_BUDGET_LEDGER"],
+                    "--budget-policy-digest",
+                    env["MAVERICK_CERTIFICATION_BUDGET_POLICY_DIGEST"],
+                    "--openrouter-control-root",
+                    folder,
+                ]
+            )
+
+            resolve.assert_called_once_with(Path(folder).resolve())
+            self.assertEqual(
+                execute.call_args.kwargs["environment"]["MAVERICK_OPENROUTER_CERTIFICATION_API_KEY"],
+                "leased-secret",
+            )
+
     def test_p6_budget_cli_rejects_more_than_five_dollars_or_faster_google(self):
         with tempfile.TemporaryDirectory() as folder:
             ledger = Path(folder) / "budget.sqlite3"
@@ -78,6 +123,26 @@ class AgenticCertificationRunnerTest(unittest.TestCase):
                 runner.main(self.arguments(output))
             self.assertEqual(output.read_text(), "preserve")
             execute.assert_not_called()
+
+    def test_natural_phases_delegate_to_the_code_owned_operator(self):
+        with patch(
+            "core.providers.certification_natural_operator.run_openrouter_natural_cli",
+            return_value=7,
+        ) as natural:
+            self.assertEqual(runner.main(["natural", "--bounded"]), 7)
+            natural.assert_called_once_with(["--bounded"])
+        with patch(
+            "core.providers.certification_natural_review.review_openrouter_natural_cli",
+            return_value=8,
+        ) as review:
+            self.assertEqual(runner.main(["review-natural", "--bounded"]), 8)
+            review.assert_called_once_with(["--bounded"])
+        with patch(
+            "core.providers.certification_openrouter_release_operator.activate_openrouter_release_cli",
+            return_value=9,
+        ) as activate:
+            self.assertEqual(runner.main(["activate-openrouter", "--bounded"]), 9)
+            activate.assert_called_once_with(["--bounded"])
 
 
 if __name__ == "__main__":

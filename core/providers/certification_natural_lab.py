@@ -259,7 +259,10 @@ class CertificationNaturalLabAuthority:
                 f"profile:{definition.definition_id}:{definition.revision}",
                 f"workspace-live:{workspace_binding.binding_id}:{workspace_binding.revision}",
                 f"lab-permit:{self.permit.permit_id}",
-                f"egress:{context.binding.egress_policy_id}:{context.binding.egress_policy_revision}",
+                (
+                    f"egress:{context.binding.egress_policy_id}:"
+                    f"{context.binding.egress_policy_revision}"
+                ),
             ),
             health_revision="runtime-health:certification-lab-validated",
             authority_digest="",
@@ -274,9 +277,13 @@ class CertificationNaturalLabAuthority:
             model_revision_policy=context.binding.model_revision_policy,
             provider_protocol=context.binding.provider_protocol,
             certified_upstream_ids=tuple(definition.routing_constraint.allowed_upstream_ids),
-            effective_upstream_ids=tuple(context.binding.routing_constraint_snapshot.allowed_upstream_ids),
+            effective_upstream_ids=tuple(
+                context.binding.routing_constraint_snapshot.allowed_upstream_ids
+            ),
             allowed_remote_data_classes=policy.allowed_remote_data_classes,
-            data_collection_policy=context.binding.routing_constraint_snapshot.data_collection_policy,
+            data_collection_policy=(
+                context.binding.routing_constraint_snapshot.data_collection_policy
+            ),
             require_zdr=context.binding.routing_constraint_snapshot.require_zdr,
             certificate_suite_id="certification-natural-lab",
             certificate_suite_version="1",
@@ -293,7 +300,9 @@ class CertificationNaturalLabAuthority:
             harness_recipe_revision=context.binding.harness_recipe_revision,
             harness_recipe_digest=context.binding.harness_recipe_digest,
             provider_capability_catalog_digest=context.binding.provider_capability_catalog_digest,
-            semantic_projection_compiler_revision=context.binding.semantic_projection_compiler_revision,
+            semantic_projection_compiler_revision=(
+                context.binding.semantic_projection_compiler_revision
+            ),
             tool_contract_revision=context.binding.tool_contract_revision,
             context_policy_revision=(
                 ""
@@ -369,7 +378,10 @@ class CertificationNaturalLabAuthority:
         ):
             raise CapabilityCertificateError("certification_lab_binding_mismatch")
         persisted = self.state.runtime_store.get_session(session.session_id)
-        if persisted.execution_binding != binding or persisted.workspace_root != permit.workspace_root:
+        if (
+            persisted.execution_binding != binding
+            or persisted.workspace_root != permit.workspace_root
+        ):
             raise CapabilityCertificateError("certification_lab_session_changed")
         definition = self.state.provider_store.get_agentic_profile_definition(
             permit.definition_id,
@@ -492,10 +504,11 @@ def build_certification_natural_runtime_registry(
     result = HostedProviderRuntimeRegistry()
     for runtime in base.runtimes():
         client = runtime.client
-        if runtime.model_provider_id == authority.state.provider_store.get_agentic_profile_definition(
+        candidate = authority.state.provider_store.get_agentic_profile_definition(
             authority.permit.definition_id,
             authority.permit.definition_revision,
-        ).model_provider_id:
+        )
+        if runtime.model_provider_id == candidate.model_provider_id:
             publication = next(
                 item
                 for item in authority.state.maverick_agent_onboarding_catalog.publications()

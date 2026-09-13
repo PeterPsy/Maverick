@@ -322,28 +322,28 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "ba2571a5f26e87ba78a705de5d2e5fc159222e7c20730693a7bc5e48b0e456ea"
+                "8e359447149019a627f4c1550c33b762e8dad161925d78a275f87bde70da60f9"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "592140fd8625e7b4cb1e07bd8ff6418f21f6694c9081fad2a61e15abe0f4413b"
+                "0a99824c8b40c662a10335eaec007ea6658d2e1e2b8287dbaee0c0e0604785b6"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
             ("antigravity-cli", "fixture_contract"): (
-                "1177ce520ea8997171b01388ccf6fc72a20ddcfffcbc873961c8af197f7ee99c"
+                "782ac1fd2dd8b9f99232e6d3c548c77c522dee1bd186d6bb8338b760cbf81bb3"
             ),
             ("antigravity-cli", "live_probe"): (
                 "0dfccc774ce0bb02dfa12244512748e2e85b8c913d975fd23c6d02cbe9284b63"
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "988f56773d66e4a29cebcce8285ed3824c042dabd35e67bb3d1cc549c5c85471",
-            "openrouter": "ec36c9496d70f733db4aa0d97f5378dd360e0feed61cd90a952a72f41cdc4df3",
-            "antigravity-cli": "6baa9c017e6464a519e7a3c81e59d0fd8855c8328a8050044f4ab1a53e20ef0e",
+            "google-ai-studio": "f3788d24e4436f46f8d3dc9d5c08a103f4d949aa41a280c26660c1a3a3f72383",
+            "openrouter": "cd386c80da5a5ef56111773512b403f10452331c5f70a40392170777dd5df719",
+            "antigravity-cli": "eebcf50930d811af569354b9487bf7499da945aa3501202b6a5e97ba5f82f685",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,

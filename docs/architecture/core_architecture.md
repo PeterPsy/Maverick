@@ -886,6 +886,15 @@ can support the later behavioral report and autonomous post-evidence review;
 the permit itself grants no production admission, publication, or rollout
 authority.
 
+OpenRouter certification collection, per-scenario natural execution,
+independent merge/review, signing, and release are separate checked-in operator
+phases. Live collection and natural execution resolve the one production
+credential through Core secret storage instead of requiring a shell export.
+The release phase revalidates the signed run against the current source, TCB,
+adapter, profile, and trusted key; enables the new OpenRouter binding only as a
+non-default; retires only superseded OpenRouter authority; and fails unless the
+exact existing Codex default remains unchanged.
+
 Provider preflight is not the final authority boundary. After preflight and
 before the staged egress CAS, one shared last-mile guard re-resolves the full
 certificate/binding/feature/actor/health/Full Workspace authority, rechecks the
@@ -1055,9 +1064,9 @@ partial result is fail-closed for that evaluation and must remain retryable.
 Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 46 and OpenRouter
-revision 45 definitions bind provider-config revision 2 and make that atomic
-claim only because the executable gate returns all 24 required result
+complete atomic contract. The current code-owned hosted definitions bind their
+exact provider-config revisions and make that atomic claim only because the
+executable gate returns all 24 required result
 behaviors, including the concrete
 `shell.run` and `process.start/status/input/interrupt` handlers, real app-owned
 CLI/MCP reads with Core-audited conservative effect metadata and executable

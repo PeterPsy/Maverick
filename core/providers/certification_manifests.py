@@ -45,6 +45,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.providers.test_certification_behavior",
     "tests.unit.providers.test_certification_job_budget",
     "tests.unit.providers.test_certification_natural_lab",
+    "tests.unit.providers.test_certification_natural_operator",
     "tests.unit.providers.test_certification_probe_budget",
     "tests.unit.scripts.test_agentic_probe_fail_closed",
     "tests.unit.scripts.test_antigravity_native_probe",

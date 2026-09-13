@@ -22,9 +22,9 @@ isolated installation, and every HTTP generation is fenced by the shared
 operator ledger. Historical evidence below is
 not evidence for this candidate. The authoritative attestation implementation is
 available, but the global and Google kill switches still default off and no
-remote certificate or operator binding is enabled. Codex revision 16 is the
-separate code-owned profile for the Device Use MVP; this remote candidate does
-not authorize that native route.
+remote certificate or operator binding is enabled. The current code-owned Codex
+profile for the Device Use MVP is separate from this remote candidate, which
+does not authorize that native route.
 
 Suite 45 additionally includes generic continuation repair/multi-hop, explicit
 native identity rejection, the reviewed app-effect delta regressions, and the

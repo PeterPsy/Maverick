@@ -13,7 +13,10 @@ from core.shared.entrypoints import EntrypointShutdownController
 
 
 DEVICE_USE_EXECUTOR_WS_PATH = "/ws/device-use/executor"
-MAX_DEVICE_CONTROL_FRAME_BYTES = 96_000
+# A direct v40 EventKit read can contain just under 200 KB of JSON. Encoding
+# that JSON string in the result envelope may escape it close to twice, so the
+# transport needs a larger—but still fixed—control-frame ceiling.
+MAX_DEVICE_CONTROL_FRAME_BYTES = 512_000
 
 
 async def stream_device_use_executor(

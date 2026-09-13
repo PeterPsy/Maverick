@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
+from core.providers.agentic_profiles import CODEX_PROFILE_REVISION
 from core.providers.certificate_service import (
     build_capability_evidence,
     publish_capability_certificate,
@@ -258,7 +259,7 @@ class NativeContinuationIdentityTest(RuntimeContinuationFixture, unittest.TestCa
         self.assertEqual(successor.predecessor_session_id, source.session_id)
         self.assertEqual(
             successor.execution_binding.profile_definition_revision.split(".", 1)[0],
-            "16",
+            CODEX_PROFILE_REVISION,
         )
         snapshots = list((self.root / "data" / "recovery-snapshots").iterdir())
         self.assertEqual(len(snapshots), 1)

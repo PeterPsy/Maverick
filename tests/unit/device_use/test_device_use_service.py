@@ -149,6 +149,30 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         worker.join(timeout=1)
         self.assertEqual(str(errors[0]), "device_use_execution_unknown")
 
+    def test_eventkit_result_budget_matches_the_direct_v40_executor(self):
+        service, binding, outbound = self.connected()
+        results = []
+        worker = threading.Thread(target=lambda: results.append(service.invoke(
+            binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+            provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+            call_id="calendar-read", tool_name="mac_calendar",
+            arguments={"action": "list_events"}, task_text="calendar", timeout_seconds=1,
+        )))
+        worker.start(); frame = outbound.get(timeout=1)
+        service.accept_invocation(binding.activation_id, frame)
+        # Quotes exercise the worst-case JSON escaping of a direct EventKit text
+        # result: 199,999 bytes become just over 400 KB in the relay envelope.
+        eventkit_text = '"' * 199_999
+        service.deliver_result(binding.activation_id, {
+            "invocation_id": frame["invocation_id"], "call_id": "calendar-read",
+            "arguments_digest": frame["arguments_digest"],
+            "result": {"success": True, "contentItems": [{"type": "inputText", "text": eventkit_text}]},
+            "has_image": False,
+        })
+        worker.join(timeout=1)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(results[0].result["contentItems"][0]["text"], eventkit_text)
+
     def test_disconnect_marks_dispatched_control_execution_unknown(self):
         service, binding, outbound = self.connected()
         errors = []

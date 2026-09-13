@@ -7,7 +7,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.api.device_use_websocket import stream_device_use_executor
+from core.api.device_use_websocket import (
+    MAX_DEVICE_CONTROL_FRAME_BYTES,
+    _json_message,
+    stream_device_use_executor,
+)
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.device_use.contract import (
@@ -186,6 +190,35 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
 
 
 class DeviceUseWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
+    def test_control_frame_preserves_worst_case_direct_eventkit_result(self) -> None:
+        eventkit_text = '"' * 199_999
+        encoded = json.dumps(
+            {
+                "type": "device_use.result.v1",
+                "invocation_id": "invocation-1",
+                "call_id": "call-1",
+                "arguments_digest": "a" * 64,
+                "result": {
+                    "success": True,
+                    "contentItems": [{"type": "inputText", "text": eventkit_text}],
+                },
+                "has_image": False,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        self.assertGreater(len(encoded.encode("utf-8")), 400_000)
+        self.assertLessEqual(
+            len(encoded.encode("utf-8")),
+            MAX_DEVICE_CONTROL_FRAME_BYTES,
+        )
+        self.assertEqual(
+            _json_message({"text": encoded})["result"]["contentItems"][0]["text"],
+            eventkit_text,
+        )
+        with self.assertRaises(ValueError):
+            _json_message({"text": "x" * (MAX_DEVICE_CONTROL_FRAME_BYTES + 1)})
+
     async def test_ticket_redeems_exact_contract_and_disconnects_fail_closed(self) -> None:
         service = DeviceUseService()
         activation, ticket = service.create_activation(

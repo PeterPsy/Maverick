@@ -11,7 +11,10 @@ DEVICE_USE_EXECUTOR_CONTRACT = "macos-v40"
 DEVICE_USE_MODEL_ID = "gpt-6-astra"
 DEVICE_USE_REASONING_EFFORT = "high"
 DEVICE_USE_MAX_JPEG_BYTES = 4_000_000
-DEVICE_USE_MAX_RESULT_BYTES = 64_000
+# EventKit v40 admits a bounded 200 KB JSON read before it is wrapped as a
+# dynamic-tool result. The relay bound includes JSON string escaping so the
+# Maverick path does not reject a result accepted by the direct Mac runtime.
+DEVICE_USE_MAX_RESULT_BYTES = 401_000
 DEVICE_USE_MAX_ARGUMENT_BYTES = 32_000
 
 DEVICE_USE_CODEX_CONFIG = """model_provider = "openai"

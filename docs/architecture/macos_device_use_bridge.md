@@ -100,6 +100,12 @@ send a separately framed JPEG with invocation/call identity and an independently
 checked image digest. Images are bounded below 4 MB and validated as a
 single-frame JPEG on the Mac.
 
+Text results preserve the direct v40 executor budget: EventKit may return just
+under 200 KB before the result is wrapped. The native/Core WebSocket control
+frame is therefore bounded at 512 KB and the validated inner result at 401 KB,
+covering worst-case JSON escaping plus fixed envelope fields without making the
+relay unbounded.
+
 The Mac hashes the exact canonical argument bytes before parsing or executing
 them. When Codex reaches a terminal turn, Core sends an ordered turn-end frame
 so native observation state and per-task consent are released immediately.

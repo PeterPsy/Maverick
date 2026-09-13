@@ -160,3 +160,18 @@ for (const { surface, width, touch, path, widgetMode } of [
     });
   });
 }
+
+test.describe("fixed dock compact utilities", () => {
+  test.use({ viewport: { width: 480, height: 844 } });
+
+  test("shows the same model and runtime controls as the mobile composer", async ({ page }) => {
+    await installActiveTurn(page, "fixed-right");
+    await page.goto("/apps/chat/widgets/chat-floating-dock/index.html?context=steering-fixture");
+
+    const composer = page.locator(".chatapp-composer");
+    await composer.getByRole("button", { name: "Composer utilities" }).click();
+
+    await expect(composer.getByRole("button", { name: "Model: Codex" })).toBeVisible();
+    await expect(composer.getByRole("img", { name: "Sandbox runtime" })).toBeVisible();
+  });
+});

@@ -76,4 +76,21 @@ describe("floating chat widget styles", () => {
     expect(mobileBarBlock).toContain("top: 0.48rem;");
     expect(mobileBarBlock).toContain("env(safe-area-inset-left, 0px)");
   });
+
+  it("keeps model and runtime controls visible in the compact utility panel", () => {
+    const styles = readStyle("styles.css");
+    const singleLineStyles = styles.replace(/\s+/g, " ");
+    const runtimeBadgesBlock = cssBlock(
+      styles,
+      ".chat-floating-widget-shell__body .chatapp-composer-utilities__menu .chatapp-composer__runtime-badges",
+    );
+    const providerPanelBadgesBlock = cssBlock(
+      singleLineStyles,
+      ".chat-floating-widget-shell__body .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-composer__runtime-badges",
+    );
+
+    expect(runtimeBadgesBlock).toContain("display: inline-flex;");
+    expect(providerPanelBadgesBlock).toContain("display: block;");
+    expect(providerPanelBadgesBlock).toContain("width: 100%;");
+  });
 });

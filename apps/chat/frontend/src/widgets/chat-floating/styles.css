@@ -855,6 +855,17 @@ body {
   display: none;
 }
 
+.chat-floating-widget-shell__body .chatapp-composer-utilities__menu .chatapp-composer__runtime-badges {
+  display: inline-flex;
+}
+
+.chat-floating-widget-shell__body
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu)
+  .chatapp-composer__runtime-badges {
+  display: block;
+  width: 100%;
+}
+
 .chat-floating-widget-shell__body .chatapp-composer__input-shell {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

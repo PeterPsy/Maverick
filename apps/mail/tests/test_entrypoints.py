@@ -1133,6 +1133,43 @@ class MailServiceTest(unittest.TestCase):
             self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[A-Za-z0-9_-]{32,}$")
             self.assertTrue(preview["result"]["confirmation_preview"]["confirmation_expires_at"])
 
+    def test_list_local_drafts_and_include_them_in_mailbox_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            connection_id = self._insert_gmail_fixture(data_root)
+            _, initial_counts = handle_action(data_root, {"action": "mailboxes.counts"})
+            initial_drafts = initial_counts["counts"][connection_id]["drafts"]["total"]
+            for subject in ("Videomaker follow up", "Unrelated draft"):
+                status, _created = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.create",
+                        "connection_id": connection_id,
+                        "to": [{"email": "candidate@example.com"}],
+                        "subject": subject,
+                        "body_text": "Prepared locally and not sent.",
+                    },
+                )
+                self.assertEqual(status, 201)
+
+            status, listed = handle_action(
+                data_root,
+                {
+                    "action": "drafts.list",
+                    "connection_id": connection_id,
+                    "query": "Videomaker",
+                    "limit": 10,
+                },
+            )
+            _, counts = handle_action(data_root, {"action": "mailboxes.counts"})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(listed["total_count"], 1)
+            self.assertEqual(listed["items"][0]["subject"], "Videomaker follow up")
+            self.assertEqual(listed["items"][0]["status"], "draft")
+            self.assertIsNone(listed["items"][0]["sent_at"])
+            self.assertEqual(counts["counts"][connection_id]["drafts"]["total"], initial_drafts + 2)
+
     def test_gmail_draft_confirm_requires_confirmation_token_without_attachments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)

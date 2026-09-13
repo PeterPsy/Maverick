@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { callBackend, type MailThread } from './api';
+import { callBackend, type MailDraft, type MailThread } from './api';
 import { readMailDisplay } from './pwaCache';
 
 vi.mock('./pwaCache', () => ({ readMailDisplay: vi.fn() }));
@@ -24,6 +24,7 @@ describe('Live Mail sidebar filtering', () => {
   let container: HTMLDivElement;
   let root: Root;
   let data: MailThread[];
+  let drafts: MailDraft[];
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -33,6 +34,7 @@ describe('Live Mail sidebar filtering', () => {
     root = createRoot(container);
     data = [thread('A inbox', ['inbox', 'starred']), thread('A sent', ['sent']),
       thread('B inbox', ['inbox'], 'b'), thread('B trash', ['trash'], 'b')];
+    drafts = [];
     vi.mocked(readMailDisplay).mockImplementation(async (params) => {
       if (params.kind === 'mailboxes') return { items: accounts } as never;
       if (params.kind === 'thread') return { thread: data.find((item) => item.id === params.thread_id) } as never;
@@ -40,11 +42,12 @@ describe('Live Mail sidebar filtering', () => {
       const result = params.query ? data.filter((item) => item.id === 'A sent') : data;
       return { items: result.slice(offset, offset + 200), total_count: result.length, limit: 200, offset } as never;
     });
-    vi.mocked(callBackend).mockImplementation(async (params) => (
-      params.action === 'threads.get'
-        ? { thread: data.find((item) => item.id === params.thread_id) }
-        : { items: accounts }
-    ) as never);
+    vi.mocked(callBackend).mockImplementation(async (params) => {
+      if (params.action === 'threads.get') return { thread: data.find((item) => item.id === params.thread_id) } as never;
+      if (params.action === 'drafts.list') return { items: drafts, total_count: drafts.length } as never;
+      if (params.action === 'drafts.get') return { draft: drafts.find((item) => item.id === params.draft_id) } as never;
+      return { items: accounts } as never;
+    });
   });
   afterEach(async () => {
     await act(async () => root.unmount());
@@ -98,6 +101,25 @@ describe('Live Mail sidebar filtering', () => {
     expect(container.querySelector('.mail-page-range')?.textContent).toBe('0-0');
     expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(reads);
     expect(skeleton()).toBeNull();
+  });
+
+  it('loads local drafts live, filters them into Drafts, and opens a safe preview', async () => {
+    drafts = [{
+      id: 'draft-1', connection_id: 'a', subject: 'Candidate follow up', body_text: 'Prepared, not sent.',
+      to: [{ email: 'candidate@example.com', name: 'Candidate' }], status: 'draft',
+      updated_at: '2026-09-13T11:00:00Z', sent_at: null,
+    }];
+    window.history.replaceState({}, '', '/?mailbox_scopes=all:drafts');
+
+    await mount();
+    await vi.waitFor(() => expect(rows()).toEqual(['Candidate follow up']));
+    await act(async () => container.querySelector<HTMLButtonElement>('.thread-row__body')!.click());
+
+    expect(container.querySelector('.draft-reader')?.textContent).toContain('Draft · not sent');
+    expect(container.querySelector('.draft-reader')?.textContent).toContain('Prepared, not sent.');
+    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({ action: 'drafts.list' }));
+    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({ action: 'drafts.get', draft_id: 'draft-1' }));
+    expect(vi.mocked(readMailDisplay).mock.calls.some(([params]) => params.kind === 'draft')).toBe(false);
   });
 
   it('keeps server-side body/attachment search semantics while filtering its results locally', async () => {

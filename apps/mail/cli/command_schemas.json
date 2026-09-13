@@ -21,6 +21,7 @@
           "drafts.create": "mutating",
           "drafts.delete": "destructive",
           "drafts.get": "read",
+          "drafts.list": "read",
           "drafts.send": "destructive",
           "drafts.send_approved": "destructive",
           "drafts.update": "mutating",
@@ -78,7 +79,7 @@
         "properties": {
           "action": {
             "type": "string",
-            "description": "Mail action such as connections.start_oauth, connections.complete_oauth, connections.prepare_imap_smtp, connections.test_imap_smtp, connections.activate_imap_smtp, connections.disconnect, threads.list, threads.get, drafts.create, drafts.send, drafts.send_approved, messages.send, messages.send_approved, messages.search, labels.modify, attachments.get, attachments.save_all, folders.list, or health.check."
+            "description": "Mail action such as connections.start_oauth, connections.complete_oauth, connections.prepare_imap_smtp, connections.test_imap_smtp, connections.activate_imap_smtp, connections.disconnect, threads.list, threads.get, drafts.create, drafts.list, drafts.get, drafts.send, drafts.send_approved, messages.send, messages.send_approved, messages.search, labels.modify, attachments.get, attachments.save_all, folders.list, or health.check."
           },
           "connection_id": { "type": "string" },
           "thread_id": { "type": "string" },
@@ -134,6 +135,7 @@
             "description": "Opaque token returned in confirmation_preview; required when confirm=true."
           },
           "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
+          "max_drafts": { "type": "integer", "minimum": 1, "maximum": 200 },
           "max_messages": { "type": "integer", "minimum": 1, "maximum": 100 },
           "max_body_chars": { "type": "integer", "minimum": 200, "maximum": 50000 },
           "max_body_html_chars": { "type": "integer", "minimum": 200, "maximum": 250000 },

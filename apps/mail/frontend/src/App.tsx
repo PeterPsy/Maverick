@@ -1,6 +1,7 @@
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { readMailDisplay } from './pwaCache';
 import { useMailList } from './useMailList';
+import { DraftReader } from './DraftReader';
 import { filterThreadsByMailboxScopes } from './threadFilters';
 import { mailboxScopeIdsForConnections } from './mailboxSelection';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -21,6 +22,7 @@ import {
   type MailAttachmentFetchResponse,
   type MailAddress,
   type MailConnection,
+  type MailDraft,
   type MailMessage,
   type MailThread
 } from './api';
@@ -59,6 +61,7 @@ type MailNavigateParams = {
   mailbox_scopes?: string;
   connection_id?: string | null;
   query?: string;
+  draft?: string;
   thread?: string;
 };
 
@@ -199,6 +202,13 @@ function threadRoute(thread: MailThread, connection?: MailConnection | null, mai
   const account = connectionLabel(connection);
   const counterparty = addressLabel(threadCounterparty(thread, connection));
   const isSentOnlyThread = thread.labels.includes('sent') && !thread.labels.includes('inbox');
+  if (thread.item_kind === 'draft') {
+    return {
+      fromLabel: account,
+      toLabel: counterparty,
+      title: `${account} to ${counterparty}`
+    };
+  }
   if ((mailbox === 'sent' && thread.labels.includes('sent')) || isSentOnlyThread) {
     return {
       fromLabel: account,
@@ -840,6 +850,7 @@ function MailThreadMessage({
 
 export function App() {
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null);
+  const [selectedDraft, setSelectedDraft] = useState<MailDraft | null>(null);
   const [mailboxScopeIds, setMailboxScopeIds] = useState<string[]>(() => (
     mailboxScopeIdsFromParams(Object.fromEntries(new URLSearchParams(window.location.search)))
   ));
@@ -858,6 +869,7 @@ export function App() {
   const initialThreadRef = useRef('');
   const threadOpenRequestRef = useRef(0);
   const selectedThreadRef = useRef<MailThread | null>(null);
+  const selectedDraftRef = useRef<MailDraft | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
   const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
@@ -890,6 +902,10 @@ export function App() {
     selectedThreadRef.current = selectedThread;
   }, [selectedThread]);
 
+  useEffect(() => {
+    selectedDraftRef.current = selectedDraft;
+  }, [selectedDraft]);
+
   const secretRequestForConnectionId = useCallback((id?: string) => {
     if (!id) {
       return noSecretRequest();
@@ -916,6 +932,8 @@ export function App() {
       selectedThreadRef.current = null;
       setSelectedThread(null);
     }
+    selectedDraftRef.current = null;
+    setSelectedDraft(null);
     try {
       const parameters = { kind: 'thread', thread_id: threadId, max_body_chars: READER_TEXT_BODY_CHARS };
       const payload = await readMailDisplay<{ thread: MailThread }>(parameters, {
@@ -951,16 +969,58 @@ export function App() {
     }
   }, [mailbox, secretRequestForConnectionId, serializedMailboxScopes]);
 
+  const openDraft = useCallback(async (draftId: string) => {
+    displayReads.current.get('thread')?.abort();
+    const requestId = threadOpenRequestRef.current + 1;
+    threadOpenRequestRef.current = requestId;
+    setBusy(true);
+    setThreadOpenLoading(true);
+    selectedThreadRef.current = null;
+    setSelectedThread(null);
+    selectedDraftRef.current = null;
+    setSelectedDraft(null);
+    try {
+      const payload = await callBackend<{ draft: MailDraft }>({
+        action: MAIL_BACKEND_ACTIONS.draftsGet,
+        draft_id: draftId,
+        ...noSecretRequest(),
+      });
+      if (threadOpenRequestRef.current !== requestId) return;
+      selectedDraftRef.current = payload.draft;
+      setSelectedDraft(payload.draft);
+      setConnectionId(payload.draft.connection_id);
+      notifySelection({
+        draft: payload.draft.id,
+        thread: null,
+        mailbox,
+        mailbox_scopes: serializedMailboxScopes,
+        connection_id: payload.draft.connection_id,
+      });
+    } catch (error) {
+      if (threadOpenRequestRef.current === requestId) {
+        setNotice(error instanceof Error ? error.message : 'Unable to open mail draft.');
+      }
+    } finally {
+      if (threadOpenRequestRef.current === requestId) {
+        setThreadOpenLoading(false);
+        setBusy(false);
+      }
+    }
+  }, [mailbox, serializedMailboxScopes]);
+
   const closeThread = useCallback((notify = true) => {
     threadOpenRequestRef.current += 1;
     displayReads.current.get('thread')?.abort();
     selectedThreadRef.current = null;
     setSelectedThread(null);
+    selectedDraftRef.current = null;
+    setSelectedDraft(null);
     setThreadOpenLoading(false);
     if (threadOpenLoading) setBusy(false);
     if (notify) notifySelection({
       mailbox: primaryScope.mailbox,
       mailbox_scopes: serializedMailboxScopes,
+      draft: null,
       thread: null,
       connection_id: primaryScope.connectionId
     });
@@ -981,6 +1041,7 @@ export function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const threadId = params.get('thread');
+    const draftId = params.get('draft');
     const code = params.get('code');
     const state = params.get('state');
     if (code && state && !oauthCompleting) {
@@ -1012,11 +1073,16 @@ export function App() {
         .finally(() => setOauthCompleting(false));
       return;
     }
-    if (threadId && initialThreadRef.current !== threadId) {
-      initialThreadRef.current = threadId;
-      openThread(threadId).catch((error: Error) => setNotice(error.message));
+    const selectionId = draftId ? `draft:${draftId}` : threadId ? `thread:${threadId}` : '';
+    if (selectionId && initialThreadRef.current !== selectionId) {
+      initialThreadRef.current = selectionId;
+      if (draftId) {
+        openDraft(draftId).catch((error: Error) => setNotice(error.message));
+        return;
+      }
+      if (threadId) openThread(threadId).catch((error: Error) => setNotice(error.message));
     }
-  }, [loadThreads, oauthCompleting, openThread]);
+  }, [loadThreads, oauthCompleting, openDraft, openThread]);
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -1051,12 +1117,23 @@ export function App() {
             setMailboxScopeIds(nextMailboxScopeIds);
             setConnectionId(nextPrimaryScope.connectionId);
             const currentThread = selectedThreadRef.current;
-            const keepReader = currentThread && filterThreadsByMailboxScopes([currentThread], nextMailboxScopeIds).length > 0;
+            const currentDraft = selectedDraftRef.current;
+            const currentDraftItem = currentDraft
+              ? loadedThreads.find((item) => item.draft_id === currentDraft.id)
+              : undefined;
+            const keepThreadReader = Boolean(
+              currentThread && filterThreadsByMailboxScopes([currentThread], nextMailboxScopeIds).length > 0,
+            );
+            const keepDraftReader = Boolean(
+              currentDraftItem && filterThreadsByMailboxScopes([currentDraftItem], nextMailboxScopeIds).length > 0,
+            );
+            const keepReader = keepThreadReader || keepDraftReader;
             if (!keepReader) closeThread(false);
             notifySelection({
               mailbox: nextPrimaryScope.mailbox,
               mailbox_scopes: nextSerializedScopes,
-              thread: keepReader ? currentThread.id : null,
+              draft: keepDraftReader ? currentDraft?.id : null,
+              thread: keepThreadReader ? currentThread?.id : null,
               connection_id: nextPrimaryScope.connectionId
             });
           }
@@ -1064,7 +1141,9 @@ export function App() {
         if (typeof params.query === 'string') {
           setQuery(params.query);
         }
-        if (params.thread) {
+        if (params.draft) {
+          openDraft(params.draft).catch((error: Error) => setNotice(error.message));
+        } else if (params.thread) {
           openThread(params.thread).catch((error: Error) => setNotice(error.message));
         }
         return;
@@ -1080,7 +1159,7 @@ export function App() {
     };
     window.addEventListener('message', listener);
     return () => window.removeEventListener('message', listener);
-  }, [closeThread, connectionId, loadThreads, mailbox, mailboxScopeIds, openThread, serializedMailboxScopes]);
+  }, [closeThread, connectionId, loadThreads, loadedThreads, mailbox, mailboxScopeIds, openDraft, openThread, serializedMailboxScopes]);
 
   const connection = (connectionId ? connections.find((item) => item.id === connectionId) : null) || connections.find((item) => item.status !== 'disconnected') || connections[0];
   const connectionById = useMemo(() => new Map(connections.map((item) => [item.id, item])), [connections]);
@@ -1294,7 +1373,7 @@ export function App() {
   }
 
   return (
-    <main className={`mail-shell ${selectedThread || threadOpenLoading ? 'is-reading' : 'is-list-only'}`}>
+    <main className={`mail-shell ${selectedThread || selectedDraft || threadOpenLoading ? 'is-reading' : 'is-list-only'}`}>
       <div className={`toolbar ${searchFocused ? 'is-search-focused' : ''}`}>
         <label className="mail-search">
           <span className="mail-search__icon" aria-hidden="true" />
@@ -1395,17 +1474,22 @@ export function App() {
               const canModifyThread = connectionById.get(thread.connection_id)?.status !== 'disconnected';
               const connection = connectionById.get(thread.connection_id);
               const route = threadRoute(thread, connection, primaryScope.mailbox);
+              const isDraft = thread.item_kind === 'draft' && Boolean(thread.draft_id);
               return (
                 <article
                   key={thread.id}
-                  className={`thread-row ${selectedThread?.id === thread.id ? 'selected' : ''} ${
+                  className={`thread-row ${selectedThread?.id === thread.id || selectedDraft?.id === thread.draft_id ? 'selected' : ''} ${
                     draggingThreadId === thread.id ? 'is-dragging' : ''
                   }`}
-                  draggable
+                  draggable={!isDraft}
                   onDragEnd={handleThreadDragEnd}
                   onDragStart={(event) => handleThreadDragStart(event, thread)}
                 >
-                  <button className="thread-row__body" type="button" onClick={() => openThread(thread.id, thread.connection_id)}>
+                  <button
+                    className="thread-row__body"
+                    type="button"
+                    onClick={() => isDraft ? openDraft(thread.draft_id!) : openThread(thread.id, thread.connection_id)}
+                  >
                     <span className="thread-avatar" aria-hidden="true">{avatarInitials(thread)}</span>
                     <span className="thread-copy">
                       <span className="thread-title-line">
@@ -1421,32 +1505,34 @@ export function App() {
                       <span className="thread-route-arrow" aria-hidden="true" />
                       <span>{route.toLabel}</span>
                     </span>
-                    <span className="thread-action-row">
-                      <button
-                        type="button"
-                        className="thread-read-button"
-                        onClick={() => markThread(thread, thread.unread)}
-                        disabled={busy || !canModifyThread}
-                        aria-label={thread.unread ? 'Mark read' : 'Mark unread'}
-                        title={thread.unread ? 'Mark read' : 'Mark unread'}
-                      >
-                        {thread.unread ? (
-                          <MailOpen size={15} strokeWidth={1.9} aria-hidden="true" />
-                        ) : (
-                          <Mail size={15} strokeWidth={1.9} aria-hidden="true" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className="thread-trash-button"
-                        onClick={() => moveThreadToTrash(thread)}
-                        disabled={busy || !canModifyThread || thread.labels.includes('trash')}
-                        aria-label="Move to trash"
-                        title="Move to trash"
-                      >
-                        <StorageDeleteIcon className="thread-trash-icon" size={16} />
-                      </button>
-                    </span>
+                    {!isDraft ? (
+                      <span className="thread-action-row">
+                        <button
+                          type="button"
+                          className="thread-read-button"
+                          onClick={() => markThread(thread, thread.unread)}
+                          disabled={busy || !canModifyThread}
+                          aria-label={thread.unread ? 'Mark read' : 'Mark unread'}
+                          title={thread.unread ? 'Mark read' : 'Mark unread'}
+                        >
+                          {thread.unread ? (
+                            <MailOpen size={15} strokeWidth={1.9} aria-hidden="true" />
+                          ) : (
+                            <Mail size={15} strokeWidth={1.9} aria-hidden="true" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="thread-trash-button"
+                          onClick={() => moveThreadToTrash(thread)}
+                          disabled={busy || !canModifyThread || thread.labels.includes('trash')}
+                          aria-label="Move to trash"
+                          title="Move to trash"
+                        >
+                          <StorageDeleteIcon className="thread-trash-icon" size={16} />
+                        </button>
+                      </span>
+                    ) : null}
                   </span>
                 </article>
               );
@@ -1454,7 +1540,13 @@ export function App() {
           </div>
         </section>
 
-        {selectedThread ? (
+        {selectedDraft ? (
+          <DraftReader
+            connection={connectionById.get(selectedDraft.connection_id)}
+            draft={selectedDraft}
+            onClose={() => closeThread()}
+          />
+        ) : selectedThread ? (
           <section className="reader-column">
             <header className="reader-header">
               <div className="reader-actions">

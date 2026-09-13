@@ -279,8 +279,16 @@ def mailbox_counts(data_root: Path) -> dict[str, dict[str, dict[str, int]]]:
                     """,
                     (connection_id, pattern),
                 ).fetchone()
+                local_draft_count = 0
+                if mailbox == "drafts":
+                    local_draft_count = int(
+                        db.execute(
+                            "SELECT COUNT(*) AS count FROM drafts WHERE connection_id = ? AND status != 'sent'",
+                            (connection_id,),
+                        ).fetchone()["count"]
+                    )
                 result[connection_id][mailbox] = {
-                    "total": int(count_row["total_count"]),
+                    "total": int(count_row["total_count"]) + local_draft_count,
                     "unread": int(count_row["unread_count"]),
                 }
     return result

@@ -22,6 +22,8 @@ export type MailProviderState = {
 
 export type MailThread = {
   id: string;
+  item_kind?: 'thread' | 'draft';
+  draft_id?: string;
   connection_id: string;
   subject: string;
   participants: MailAddress[];
@@ -107,6 +109,11 @@ export type MailDraft = {
   bcc?: MailAddress[];
   reply_to?: MailAddress[];
   status: string;
+  dirty?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  sent_at?: string | null;
+  deep_link?: string;
 };
 
 export type MailStatus = {
@@ -135,6 +142,8 @@ export const MAIL_BACKEND_ACTIONS = {
   threadsSync: 'threads.sync',
   messagesGet: 'messages.get',
   draftsCreate: 'drafts.create',
+  draftsList: 'drafts.list',
+  draftsGet: 'drafts.get',
   draftsSend: 'drafts.send',
   messagesMarkRead: 'messages.mark_read',
   labelsModify: 'labels.modify',

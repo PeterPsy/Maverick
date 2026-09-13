@@ -1,15 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { callBackend, MAIL_BACKEND_ACTIONS, type MailConnection, type MailThread } from './api';
+import {
+  callBackend,
+  MAIL_BACKEND_ACTIONS,
+  type MailConnection,
+  type MailDraft,
+  type MailThread,
+} from './api';
 import { readMailDisplay } from './pwaCache';
 import { readMailThreadList } from './threadList';
 
 type ConnectionPayload = { items: MailConnection[] };
 type ThreadSnapshot = { query: string; items: MailThread[]; complete: boolean };
+type DraftPayload = { items: MailDraft[]; total_count: number };
+type DraftSnapshot = { query: string; items: MailThread[] };
+
+function draftListItem(draft: MailDraft): MailThread {
+  return {
+    id: draft.id,
+    item_kind: 'draft',
+    draft_id: draft.id,
+    connection_id: draft.connection_id,
+    subject: draft.subject,
+    participants: draft.to || [],
+    last_message_at: draft.updated_at || draft.created_at || '',
+    snippet: draft.body_text.slice(0, 180),
+    unread: false,
+    starred: false,
+    labels: ['drafts'],
+  };
+}
+
+function newestFirst(left: MailThread, right: MailThread) {
+  return right.last_message_at.localeCompare(left.last_message_at) || left.id.localeCompare(right.id);
+}
 
 export function useMailList(query: string, onError: (message: string) => void) {
   const [connections, setConnections] = useState<MailConnection[]>([]);
   const [liveConnections, setLiveConnections] = useState<MailConnection[] | null>(null);
   const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(null);
+  const [draftSnapshot, setDraftSnapshot] = useState<DraftSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const controllerRef = useRef<AbortController | null>(null);
 
@@ -43,14 +72,31 @@ export function useMailList(query: string, onError: (message: string) => void) {
       }
     }).catch(() => undefined);
 
+    const draftRequest = callBackend<DraftPayload>({
+      action: MAIL_BACKEND_ACTIONS.draftsList,
+      ...(query ? { query } : {}),
+      limit: 200,
+      _app_secret_request: { logical_names: [], required: false },
+    }).then((next) => {
+      if (!signal.aborted) setDraftSnapshot({ query, items: next.items.map(draftListItem).sort(newestFirst) });
+    }).catch((error) => {
+      if (!signal.aborted) {
+        setDraftSnapshot({ query, items: [] });
+        report(error);
+      }
+    });
+
     try {
-      await readMailThreadList(query, signal, (items, complete) => {
-        if (!signal.aborted) {
-          setSnapshot((current) => current?.query === query && current.complete && !complete
-            ? current : { query, items, complete });
-          setRefreshing(!complete);
-        }
-      }, report);
+      await Promise.all([
+        readMailThreadList(query, signal, (items, complete) => {
+          if (!signal.aborted) {
+            setSnapshot((current) => current?.query === query && current.complete && !complete
+              ? current : { query, items, complete });
+            setRefreshing(!complete);
+          }
+        }, report),
+        draftRequest,
+      ]);
     } catch (error) {
       if (!signal.aborted) {
         setSnapshot((current) => current?.query === query ? current : { query, items: [], complete: false });
@@ -66,9 +112,12 @@ export function useMailList(query: string, onError: (message: string) => void) {
     return () => controllerRef.current?.abort();
   }, [refresh]);
 
+  const threads = snapshot?.query === query ? snapshot.items : [];
+  const drafts = draftSnapshot?.query === query ? draftSnapshot.items : [];
+
   return {
     connections, liveConnections, refresh, refreshing,
-    threads: snapshot?.query === query ? snapshot.items : [],
+    threads: [...threads, ...drafts].sort(newestFirst),
     loading: snapshot?.query !== query,
     incomplete: snapshot?.query === query && !snapshot.complete && !refreshing,
   };

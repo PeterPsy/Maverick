@@ -1020,6 +1020,18 @@ p {
   display: none;
 }
 
+.draft-reader__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 999px;
+  background: var(--mail-control);
+  color: var(--maverick-text-muted);
+  padding: 0 12px;
+  font-size: 0.78rem;
+}
+
 .reader-view-actions,
 .reader-thread-actions {
   display: inline-flex;

@@ -23,7 +23,14 @@ from connections import (
     update_imap_smtp,
 )
 from database import health_payload
-from drafts import create_draft, delete_draft, get_draft, update_draft
+from drafts import (
+    count_drafts,
+    create_draft,
+    delete_draft,
+    get_draft,
+    list_drafts,
+    update_draft,
+)
 from oauth import complete_oauth, provider_status, start_oauth
 from providers.registry import provider_for_connection
 from references import reference_manifest, reference_resolve, reference_search, reference_summary
@@ -195,6 +202,13 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             }
         if action in {"drafts.create", "mail_create_draft"}:
             return 201, {"draft": create_draft(data_root, _with_effective_connection_payload(data_root, payload))}
+        if action == "drafts.list":
+            return 200, {
+                "items": list_drafts(data_root, payload),
+                "limit": _bounded_int(payload.get("max_drafts") or payload.get("limit"), 50, 1, 200),
+                "offset": _bounded_int(payload.get("offset"), 0, 0, 100_000),
+                "total_count": count_drafts(data_root, payload),
+            }
         if action in {"drafts.update", "mail_update_draft"}:
             return 200, {"draft": update_draft(data_root, _required_string(payload.get("draft_id") or payload.get("id"), "draft_id"), payload)}
         if action == "drafts.get":

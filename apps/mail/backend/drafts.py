@@ -111,6 +111,35 @@ def get_draft(data_root: Path, draft_id: str) -> dict[str, object]:
     return _draft(row)
 
 
+def list_drafts(data_root: Path, payload: dict[str, object]) -> list[dict[str, object]]:
+    ensure_schema(data_root)
+    clauses, params = _draft_filter(payload)
+    limit = _bounded_int(
+        payload.get("max_drafts") or payload.get("limit"),
+        default=50,
+        minimum=1,
+        maximum=200,
+    )
+    offset = _bounded_int(payload.get("offset"), default=0, minimum=0, maximum=100_000)
+    with connect(data_root) as db:
+        rows = db.execute(
+            f"SELECT * FROM drafts WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id ASC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
+        ).fetchall()
+    return [_draft(row) for row in rows]
+
+
+def count_drafts(data_root: Path, payload: dict[str, object]) -> int:
+    ensure_schema(data_root)
+    clauses, params = _draft_filter(payload)
+    with connect(data_root) as db:
+        row = db.execute(
+            f"SELECT COUNT(*) AS count FROM drafts WHERE {' AND '.join(clauses)}",
+            tuple(params),
+        ).fetchone()
+    return int(row["count"])
+
+
 def delete_draft(data_root: Path, draft_id: str) -> dict[str, object]:
     get_draft(data_root, draft_id)
     with connect(data_root) as db:
@@ -141,6 +170,22 @@ def search_drafts(data_root: Path, query: str, limit: int = 20) -> list[dict[str
             (needle, needle, needle, needle, needle, _bounded_int(limit, default=20, minimum=1, maximum=50)),
         ).fetchall()
     return [_draft(row) for row in rows]
+
+
+def _draft_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]:
+    clauses = ["status != 'sent'"]
+    params: list[object] = []
+    connection_id = _optional_string(payload.get("connection_id"))
+    query = _optional_string(payload.get("query"))
+    if connection_id:
+        clauses.append("connection_id = ?")
+        params.append(connection_id)
+    if query:
+        clauses.append(
+            "(subject LIKE ? OR body_text LIKE ? OR to_json LIKE ? OR cc_json LIKE ? OR bcc_json LIKE ?)"
+        )
+        params.extend([f"%{query}%"] * 5)
+    return clauses, params
 
 
 def _draft(row) -> dict[str, object]:

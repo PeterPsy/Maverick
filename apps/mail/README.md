@@ -34,6 +34,13 @@ and exceeding the store's pagination limit asks the user to narrow the search
 instead of silently returning a complete-looking partial list. Thread ordering
 uses the thread id to break equal timestamp ties consistently across pages.
 
+The Drafts mailbox combines provider-synchronized draft threads with Mail's own
+local, unsent draft records. Local drafts are read through the live-only
+`drafts.list` and `drafts.get` backend actions, are never written into the PWA
+display cache, and open in a clearly labeled no-send preview. Draft counters add
+both sources, while `drafts.create` remains local-only and never sends or
+publishes a message to the provider.
+
 ## Storage
 
 The app owns `workspaces/<workspace_id>/data/mail/`.

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "25bc95356c2ad2c408ef7708f5953f34feb66dda8ce15e2160f3758b3149c867",
+  "build_id": "297bcc5f3a83afe65a6e111b2d7e1f4cb6928c749fba55d9660c97906788fef9",
   "entrypoints": [
     "index.html",
     "widgets/chat-floating/index.html",
@@ -41,9 +41,9 @@
       "size_bytes": 1829
     },
     {
-      "path": "assets/floatingWidgetRuntime-BRPA9ghd.js",
-      "sha256": "fed59efd684bc687c2c0fc856fef2dbbdc213915558c0ea0345da72326d6725e",
-      "size_bytes": 14672
+      "path": "assets/floatingWidgetRuntime-dvtznfg7.js",
+      "sha256": "6b1696b019f9d1ed4f3f76f359039d6556c0c35fbc6c7fe8dd4ca75bdcf2d1a3",
+      "size_bytes": 14651
     },
     {
       "path": "assets/index-CW9znrVY.css",
@@ -91,13 +91,13 @@
       "size_bytes": 14188
     },
     {
-      "path": "assets/widgets/chat-floating/index-CZpWtPcx.js",
-      "sha256": "ec58f79ad5ce1a29cc4c02614df89975dcaee42fd30b7d1429eefad73f616951",
+      "path": "assets/widgets/chat-floating/index-DG0prdag.js",
+      "sha256": "cedac85a6dc7146785330054469335f4c716861e8619e3fc02adcbb025b8e27d",
       "size_bytes": 6891
     },
     {
-      "path": "assets/widgets/chat-floating-dock/index-Dn62lbiP.js",
-      "sha256": "08afb958f079df3bc7429ce9829b6311ed1bb20aa7f89d5327fdb5d54dde8935",
+      "path": "assets/widgets/chat-floating-dock/index-DWjkdXDP.js",
+      "sha256": "02a42d25b774985c0a873e66f9b1a2c3ea4d22320f9c4dc22151f019075b59aa",
       "size_bytes": 3655
     },
     {
@@ -134,12 +134,12 @@
     },
     {
       "path": "widgets/chat-floating/index.html",
-      "sha256": "e63fc5e663a67d31c4aae4d663f47d6a389d537fd29725fb1ba9de69a515a94e",
+      "sha256": "5637c1c6218f1df7b0dbf1a00740a7a1b4b0e33bf074c2a869f3871862c9932d",
       "size_bytes": 2071
     },
     {
       "path": "widgets/chat-floating-dock/index.html",
-      "sha256": "1825acdb4d93b6fc641c9a413912a133d5f628440c054063daebf6cdd9ad71b5",
+      "sha256": "86f3097a3e35647f7572a68a2b6abb90a9f3e9abfe998b9b36263ca6e0c4ff77",
       "size_bytes": 2081
     },
     {

@@ -90,5 +90,6 @@ describe("FloatingWindow", () => {
       newChatRequestId: null,
       threadId: "thread-1",
     });
+    expect(appProps).not.toHaveProperty("enablePageCapture");
   });
 });

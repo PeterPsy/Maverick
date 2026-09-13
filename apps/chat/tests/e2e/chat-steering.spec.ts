@@ -171,6 +171,7 @@ test.describe("fixed dock compact utilities", () => {
     const composer = page.locator(".chatapp-composer");
     await composer.getByRole("button", { name: "Composer utilities" }).click();
 
+    await expect(composer.getByRole("button", { name: "Capture page area" })).toHaveCount(0);
     await expect(composer.getByRole("button", { name: "Model: Codex" })).toBeVisible();
     await expect(composer.getByRole("img", { name: "Sandbox runtime" })).toBeVisible();
   });

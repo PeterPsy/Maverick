@@ -204,7 +204,6 @@ export function FloatingChatFrame({
       </header>
       <div className="chat-floating-widget-shell__body">
         <App
-          enablePageCapture
           externalFileDrop={externalFileDrop}
           externalMentionDrop={externalMentionDrop}
           navigationScope={windowItem.id}

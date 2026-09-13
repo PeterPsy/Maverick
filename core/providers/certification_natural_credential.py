@@ -17,6 +17,16 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 from core.secrets.store import SecretDocumentStore
 
 
+_SERVICE_PATH_VARIABLES = frozenset(
+    {
+        "MAVERICK_JSON_CONTROL_STORE_ROOT",
+        "MAVERICK_LOCAL_STATE_ROOT",
+        "MAVERICK_SECRET_KEY_FILE",
+        "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT",
+    }
+)
+
+
 def service_environment(control_root: Path) -> dict[str, str]:
     """Read only the service variables needed to open the control plane."""
     pid = int(
@@ -57,7 +67,7 @@ def service_environment(control_root: Path) -> dict[str, str]:
             continue
         value = value_raw.decode()
         if (
-            key != "MAVERICK_CONTROL_STORE"
+            key in _SERVICE_PATH_VARIABLES
             and value
             and not Path(value).is_absolute()
         ):

@@ -60,6 +60,42 @@ describe("runtimeSessionOptionsForNewChat", () => {
     });
     expect(options.skill_activation_mode).toBe("implicit");
   });
+
+  it("reduces a Device Use chat to the Codex mono-agent envelope", () => {
+    const options = runtimeSessionOptionsForNewChat({
+      agentRuntimeConfig: {
+        agent_id: "chat",
+        agent_role_id: "",
+        agent_type_id: "",
+        skill_catalog_app_id: "",
+        skill_ids: [],
+        skill_activation_mode: "explicit",
+        source_app_id: "chat",
+        system_prompt: "",
+        title: "GPT-6 Astra",
+        runtime_mode: "agentic",
+        workspace_profile_binding_id: "binding-astra",
+        reasoning_effort: "high",
+      },
+      deviceUseActivationId: "01234567-89ab-cdef-0123-456789abcdef",
+      draftChat: null,
+      systemPrompt: "must not enter the device thread",
+    });
+
+    expect(options).toMatchObject({
+      agent_id: "chat",
+      source_app_id: "chat",
+      agent_role_id: "",
+      agent_type_id: "",
+      skill_ids: [],
+      skill_activation_mode: "explicit",
+      runtime_mode: "agentic",
+      workspace_profile_binding_id: "binding-astra",
+      reasoning_effort: "high",
+      device_use_activation_id: "01234567-89ab-cdef-0123-456789abcdef",
+    });
+    expect(options.system_prompt).toBeUndefined();
+  });
 });
 
 describe("prepared runtime sessions", () => {

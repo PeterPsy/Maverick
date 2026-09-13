@@ -30,6 +30,7 @@ import { useChatRuntimeControls } from "./useChatRuntimeControls";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { DraftChat, conversationKeyFor, useMessageSubmission } from "./useMessageSubmission";
 import { useQueuedMessageMemory } from "./useQueuedMessageMemory";
+import { useDeviceUse } from "./useDeviceUse";
 
 type UseChatAppControllerParams = {
   enablePageCapture: boolean;
@@ -380,6 +381,18 @@ export function useChatAppController({
     setEvents,
     setSelectedAgentTypeId,
   });
+  const prepareDeviceUse = useCallback(async (providerId: string, effort: string) => {
+    clearAttachments();
+    setSelectedReferences([]);
+    setSelectedAgentTypeId("");
+    setMultiAgentMode("off");
+    await runtimeControls.handleSelectProvider(providerId, effort);
+  }, [clearAttachments, runtimeControls, setSelectedAgentTypeId]);
+  const deviceUse = useDeviceUse({
+    activeThread,
+    providers: composerProviders,
+    onPrepare: prepareDeviceUse,
+  });
   const upsertInterAgentRunDetail = useCallback((detail: InterAgentRunDetail) => {
     setInterAgentRuns((current) => {
       const next = current.filter((item) => item.run.run_id !== detail.run.run_id);
@@ -531,6 +544,7 @@ export function useChatAppController({
     composer,
     composerMentionItems,
     draftChat,
+    deviceUseActivationId: deviceUse.activationId,
     isBootstrapping: isBootstrapping || !initialDependenciesReady || !targetConversationResolved,
     isHistoryLoading,
     isRuntimeBusy,
@@ -683,6 +697,11 @@ export function useChatAppController({
     canStopTurn,
     composer,
     composerError: runtimeAdmissionError || composerError,
+    deviceUseAvailable: deviceUse.available,
+    deviceUseBusy: deviceUse.busy,
+    deviceUseEnabled: deviceUse.enabled,
+    deviceUseError: deviceUse.error,
+    deviceUseLocked: deviceUse.locked,
     runtimeAdmissionBlocked: Boolean(runtimeAdmissionError),
     composerMentionItems,
     chatUsage,
@@ -705,6 +724,7 @@ export function useChatAppController({
     handleReasoningEffortChange: runtimeControls.setReasoningEffort,
     handleSend,
     handleStopTurn,
+    handleToggleDeviceUse: deviceUse.toggle,
     hasLoadedHistory,
     isBootstrapping,
     isHistoryLoading,

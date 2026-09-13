@@ -560,6 +560,7 @@ export type ChatThreadSummary = {
   last_user_message_at?: string | null;
   last_completed_response_at?: string | null;
   has_unread_completed_response?: boolean;
+  device_use_enabled?: boolean;
 };
 
 export type ChatThread = ChatThreadSummary & {
@@ -689,6 +690,22 @@ export type RuntimeSession = {
   lineage_root_session_id?: string | null;
   continuation_successor_session_id?: string | null;
   runtime_admission?: RuntimeAdmission | null;
+  device_use_enabled?: boolean;
+  device_use?: DeviceUseActivation | null;
+};
+
+export type DeviceUseActivation = {
+  activation_id: string;
+  status: string;
+  ready: boolean;
+  bound: boolean;
+  reason?: string | null;
+  model_id?: string;
+  reasoning_effort?: string;
+  initial_app?: string | null;
+  approved_app_count?: number;
+  ticket?: string;
+  websocket_path?: string;
 };
 
 export type RuntimeAdmission = {
@@ -1207,4 +1224,5 @@ export type RuntimeSessionOptions = {
   reasoning_effort?: string;
   prepare_only?: boolean;
   title?: string;
+  device_use_activation_id?: string;
 };

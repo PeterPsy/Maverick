@@ -172,9 +172,14 @@ async function renderComposer({
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
   agentCatalogLoading = false,
+  deviceUseAvailable = false,
+  deviceUseEnabled = false,
+  onToggleDeviceUse,
 }: {
   agentOptions?: AgentTypeSummary[];
   agentCatalogLoading?: boolean;
+  deviceUseAvailable?: boolean;
+  deviceUseEnabled?: boolean;
   canStopTurn?: boolean;
   mentionItems?: MentionItem[];
   onAddAttachments?: (files: File[]) => void;
@@ -187,6 +192,7 @@ async function renderComposer({
   multiAgentGroupChatEnabled?: boolean;
   multiAgentMode?: MultiAgentComposerMode;
   onSubmit?: () => void;
+  onToggleDeviceUse?: () => void;
   transcriptionChunkedDictationSupported?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
@@ -207,6 +213,8 @@ async function renderComposer({
         attachments={[]}
         canStopTurn={canStopTurn}
         disabled={false}
+        deviceUseAvailable={deviceUseAvailable}
+        deviceUseEnabled={deviceUseEnabled}
         error={null}
         executionMode={executionMode}
         isSending={false}
@@ -228,6 +236,7 @@ async function renderComposer({
         onRemoveAttachment={() => undefined}
         onStopTurn={() => undefined}
         onSubmit={onSubmit}
+        onToggleDeviceUse={onToggleDeviceUse}
         providers={providers}
         queuedCount={0}
         queuedPreview={null}
@@ -265,6 +274,26 @@ describe("agent selector loading", () => {
 });
 
 describe("composer utilities", () => {
+  it("renders Device Use only after native availability and exposes its state", async () => {
+    const onToggleDeviceUse = vi.fn();
+    const unavailable = await renderComposer({ onToggleDeviceUse });
+    expect(unavailable.element.querySelector('[aria-label="Attiva Device Use"]')).toBeNull();
+    root?.unmount();
+
+    const available = await renderComposer({
+      deviceUseAvailable: true,
+      deviceUseEnabled: true,
+      onToggleDeviceUse,
+    });
+    const button = available.element.querySelector('[aria-label="Device Use attivo"]');
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    expect(button?.getAttribute("aria-pressed")).toBe("true");
+    expect(available.element.querySelector('[aria-label="Composer utility controls"]')?.contains(button)).toBe(false);
+    expect(available.element.querySelector(".chatapp-composer__toolbar")?.contains(button)).toBe(true);
+    await act(async () => { (button as HTMLButtonElement).click(); });
+    expect(onToggleDeviceUse).toHaveBeenCalledOnce();
+  });
+
   it("keeps attachment and primary actions outside the secondary utility panel", async () => {
     const { element } = await renderComposer({
       canStopTurn: true,

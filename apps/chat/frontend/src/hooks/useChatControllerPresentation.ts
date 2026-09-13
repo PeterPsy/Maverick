@@ -45,6 +45,11 @@ type UseChatControllerPresentationParams = {
   canStopTurn: boolean;
   composer: string;
   composerError: string | null;
+  deviceUseAvailable: boolean;
+  deviceUseBusy: boolean;
+  deviceUseEnabled: boolean;
+  deviceUseError: string | null;
+  deviceUseLocked: boolean;
   runtimeAdmissionBlocked: boolean;
   composerMentionItems: MentionItem[];
   chatUsage: ChatUsageSummary | null;
@@ -67,6 +72,7 @@ type UseChatControllerPresentationParams = {
   handleReasoningEffortChange: (effort: string) => void;
   handleSend: (inputOverride?: string) => void;
   handleStopTurn: () => void;
+  handleToggleDeviceUse: () => void;
   hasLoadedHistory: boolean;
   isBootstrapping: boolean;
   isHistoryLoading: boolean;
@@ -119,6 +125,11 @@ export function useChatControllerPresentation({
   canStopTurn,
   composer,
   composerError,
+  deviceUseAvailable,
+  deviceUseBusy,
+  deviceUseEnabled,
+  deviceUseError,
+  deviceUseLocked,
   runtimeAdmissionBlocked,
   composerMentionItems,
   chatUsage,
@@ -141,6 +152,7 @@ export function useChatControllerPresentation({
   handleReasoningEffortChange,
   handleSend,
   handleStopTurn,
+  handleToggleDeviceUse,
   hasLoadedHistory,
   isBootstrapping,
   isHistoryLoading,
@@ -180,7 +192,7 @@ export function useChatControllerPresentation({
 }: UseChatControllerPresentationParams) {
   const { hasHiddenMessages, messages } = useVisibleChatMessages(events, pendingUserMessages, failedUserMessages, visibleMessageLimit);
   const historicalReadOnlyReason = historicalSourceAppReadOnlyReason(activeThread?.source_app_id);
-  const effectiveComposerError = historicalReadOnlyReason || composerError;
+  const effectiveComposerError = historicalReadOnlyReason || deviceUseError || composerError;
   const composerSelectedAgentTypeId = activeThread
     ? activeThread.source_app_id && activeThread.source_app_id !== "chat"
       ? activeThread.agent_type_id
@@ -229,7 +241,7 @@ export function useChatControllerPresentation({
     return interAgentComposerBudgetLabel(multiAgentMode);
   }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
-    disabled: isThreadLoading || runtimeAdmissionBlocked || Boolean(historicalReadOnlyReason),
+    disabled: isThreadLoading || runtimeAdmissionBlocked || deviceUseEnabled || Boolean(historicalReadOnlyReason),
     handleAddAttachments,
   });
   const surfaceProps: ChatSurfaceProps = {
@@ -240,11 +252,15 @@ export function useChatControllerPresentation({
       agents: agentOptions,
       attachments,
       canStopTurn,
+      deviceUseAvailable,
+      deviceUseBusy,
+      deviceUseEnabled,
+      deviceUseLocked,
       disabled: isThreadLoading || runtimeAdmissionBlocked || Boolean(historicalReadOnlyReason),
       error: effectiveComposerError,
       executionMode,
       isSending,
-      mentionItems: composerMentionItems,
+      mentionItems: deviceUseEnabled ? [] : composerMentionItems,
       usage: chatUsage,
       multiAgentBudgetLabel,
       multiAgentMode,
@@ -261,6 +277,7 @@ export function useChatControllerPresentation({
       onReasoningEffortChange: handleReasoningEffortChange,
       onStopTurn: handleStopTurn,
       onSubmit: handleSend,
+      onToggleDeviceUse: handleToggleDeviceUse,
       providers,
       reasoningEffort,
       providerSelectorLocked,

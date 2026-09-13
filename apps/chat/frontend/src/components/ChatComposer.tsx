@@ -27,6 +27,10 @@ export type ChatComposerProps = {
   attachments: ComposerAttachment[];
   canStopTurn: boolean;
   disabled: boolean;
+  deviceUseAvailable?: boolean;
+  deviceUseBusy?: boolean;
+  deviceUseEnabled?: boolean;
+  deviceUseLocked?: boolean;
   error: string | null;
   executionMode: ExecutionMode | null;
   isEmptyMode?: boolean;
@@ -49,6 +53,7 @@ export type ChatComposerProps = {
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
   onSubmit: () => void;
+  onToggleDeviceUse?: () => void;
   providers: ProviderItem[];
   reasoningEffort?: string;
   queuedCount: number;
@@ -72,6 +77,10 @@ export function ChatComposer({
   attachments,
   canStopTurn,
   disabled,
+  deviceUseAvailable = false,
+  deviceUseBusy = false,
+  deviceUseEnabled = false,
+  deviceUseLocked = false,
   error,
   executionMode,
   isEmptyMode = false,
@@ -94,6 +103,7 @@ export function ChatComposer({
   onRemoveAttachment,
   onStopTurn,
   onSubmit,
+  onToggleDeviceUse,
   providers,
   reasoningEffort = "",
   queuedCount,
@@ -257,13 +267,30 @@ export function ChatComposer({
             </div>
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
-                <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
+                <AttachmentMenu attachments={attachments} disabled={disabled || deviceUseEnabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
+                {deviceUseAvailable && onToggleDeviceUse ? (
+                  <button
+                    aria-label={deviceUseEnabled ? "Device Use attivo" : "Attiva Device Use"}
+                    aria-pressed={deviceUseEnabled}
+                    className={`chatapp-composer__tool-button chatapp-device-use-button ${deviceUseEnabled ? "is-active" : ""}`}
+                    disabled={disabled || deviceUseBusy || deviceUseLocked}
+                    onClick={onToggleDeviceUse}
+                    title={deviceUseLocked
+                      ? "Device Use è fissato per questa chat"
+                      : deviceUseEnabled ? "Disattiva Device Use" : "Attiva Device Use via Maverick"}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="material-symbols-rounded">
+                      desktop_windows
+                    </span>
+                  </button>
+                ) : null}
                 <ComposerUtilities>
                   {onCapturePageArea ? (
                     <button
                       aria-label="Capture page area"
                       className="chatapp-composer__tool-button chatapp-composer-utilities__capture-button"
-                      disabled={disabled}
+                      disabled={disabled || deviceUseEnabled}
                       onClick={onCapturePageArea}
                       title="Capture page area"
                       type="button"
@@ -278,7 +305,7 @@ export function ChatComposer({
                     aria-haspopup="listbox"
                     aria-label="Apps and references"
                     className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
-                    disabled={disabled}
+                    disabled={disabled || deviceUseEnabled}
                     onClick={openAppPicker}
                     ref={appPickerButtonRef}
                     type="button"
@@ -289,7 +316,7 @@ export function ChatComposer({
                   </button>
                   <MultiAgentModeControl
                     budgetLabel={multiAgentBudgetLabel}
-                    disabled={disabled || isSending}
+                    disabled={disabled || isSending || deviceUseEnabled}
                     groupChatEnabled={multiAgentGroupChatEnabled}
                     menuOpen={multiAgentMenuOpen}
                     mode={multiAgentMode}
@@ -301,7 +328,7 @@ export function ChatComposer({
                   />
                   <AgentSelector
                     agents={agents}
-                    disabled={disabled || isSending}
+                    disabled={disabled || isSending || deviceUseEnabled}
                     loading={agentCatalogLoading}
                     locked={agentSelectorLocked}
                     onSelect={onSelectAgent}
@@ -309,7 +336,7 @@ export function ChatComposer({
                   />
                   <ComposerRuntimeBadges
                     activeProviderId={activeProviderId}
-                    disabled={disabled || isSending}
+                    disabled={disabled || isSending || deviceUseEnabled}
                     executionMode={executionMode}
                     locked={providerSelectorLocked}
                     onSelectProvider={onSelectProvider}
@@ -326,7 +353,7 @@ export function ChatComposer({
                 dictationControl={
                   <ComposerDictationButton
                     chunkedDictationSupported={transcriptionChunkedDictationSupported}
-                    disabled={disabled || isSending}
+                    disabled={disabled || isSending || deviceUseEnabled}
                     maxAudioBytes={transcriptionMaxAudioBytes}
                     maxDurationSeconds={transcriptionMaxDurationSeconds}
                     onError={setDictationError}

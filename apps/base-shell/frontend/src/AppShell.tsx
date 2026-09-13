@@ -54,6 +54,7 @@ import {
 } from "./iframePolicy";
 import { usePwaDataCacheBrokerHost } from "./usePwaDataCacheBrokerHost";
 import { useLocalRuntimeBroker } from "./useLocalRuntimeBroker";
+import { useDeviceUseBroker } from "./useDeviceUseBroker";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
 import { MobileShellHeader } from "./components/MobileShellHeader";
@@ -142,6 +143,7 @@ export function AppShell() {
       : null
   ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId]);
   useLocalRuntimeBroker(frameScope);
+  useDeviceUseBroker(frameScope);
   const cancelShellLoading = useCallback(({ resetRecovery = false } = {}) => {
     shellLoadAbortRef.current?.abort();
     shellLoadAbortRef.current = null;

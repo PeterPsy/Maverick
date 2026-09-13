@@ -13,7 +13,24 @@ import type {
   RuntimeToolConfirmation,
   RuntimeWebSocketFrame,
   UploadedWorkspaceFile,
+  DeviceUseActivation,
 } from "./types";
+
+export function createDeviceUseActivation(clientGeneration: string): Promise<DeviceUseActivation> {
+  return requestJson<DeviceUseActivation>("/api/device-use/activations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_generation: clientGeneration }),
+  });
+}
+
+export function getDeviceUseActivation(activationId: string): Promise<DeviceUseActivation> {
+  return requestJson<DeviceUseActivation>(`/api/device-use/activations/${encodeURIComponent(activationId)}`);
+}
+
+export function stopDeviceUseActivation(activationId: string): Promise<{ status: string }> {
+  return requestJson(`/api/device-use/activations/${encodeURIComponent(activationId)}`, { method: "DELETE" });
+}
 
 export function isRuntimeSessionUnavailableError(error: unknown, sessionId?: string): boolean {
   if (!(error instanceof ApiError)) {
@@ -49,6 +66,7 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}, reques
       hosted_model_id: options.hosted_model_id || undefined,
       workspace_profile_binding_id: options.workspace_profile_binding_id || undefined,
       reasoning_effort: options.reasoning_effort || undefined,
+      device_use_activation_id: options.device_use_activation_id || undefined,
       prepare_only: options.prepare_only || undefined,
       title: options.title || "New chat",
     }),
@@ -134,6 +152,7 @@ export function createRuntimeSessionWithTurn({
     hosted_model_id: options.hosted_model_id || undefined,
     workspace_profile_binding_id: options.workspace_profile_binding_id || undefined,
     reasoning_effort: options.reasoning_effort || undefined,
+    device_use_activation_id: options.device_use_activation_id || undefined,
     title: options.title || "New chat",
     input_text: inputText,
     invoked_skill_ids: invokedSkillIds,

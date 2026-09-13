@@ -76,6 +76,7 @@ type UseMessageSubmissionParams = {
   composer: string;
   composerMentionItems: MentionItem[];
   draftChat: DraftChat | null;
+  deviceUseActivationId: string | null;
   canPreloadRuntime: boolean;
   isBootstrapping: boolean;
   isHistoryLoading: boolean;
@@ -193,6 +194,7 @@ function optimisticThreadForPendingSession({
     provider_id: session.provider_id,
     hosted_provider_id: session.hosted_provider_id,
     hosted_model_id: session.hosted_model_id,
+    device_use_enabled: session.device_use_enabled,
   };
 }
 
@@ -243,13 +245,30 @@ function isPendingIdempotencyResponse(response: RuntimeTurnSubmitResponse): bool
 
 export function runtimeSessionOptionsForNewChat({
   agentRuntimeConfig,
+  deviceUseActivationId,
   draftChat,
   systemPrompt,
 }: {
   agentRuntimeConfig: AgentRuntimeConfig | null;
+  deviceUseActivationId?: string | null;
   draftChat: DraftChat | null;
   systemPrompt: string;
 }): RuntimeSessionOptions {
+  if (deviceUseActivationId) {
+    return {
+      agent_id: "chat",
+      agent_role_id: "",
+      agent_type_id: "",
+      source_app_id: "chat",
+      skill_ids: [],
+      skill_activation_mode: "explicit",
+      runtime_mode: "agentic",
+      workspace_profile_binding_id: agentRuntimeConfig?.workspace_profile_binding_id,
+      reasoning_effort: "high",
+      device_use_activation_id: deviceUseActivationId,
+      title: "New chat",
+    };
+  }
   return {
     agent_id: agentRuntimeConfig?.agent_id,
     agent_role_id: agentRuntimeConfig?.agent_role_id,
@@ -288,6 +307,7 @@ function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSess
     skill_activation_mode: options.skill_activation_mode || "implicit",
     source_app_id: options.source_app_id || "chat",
     system_prompt: options.system_prompt || "",
+    device_use_activation_id: options.device_use_activation_id || "",
   });
 }
 
@@ -340,6 +360,7 @@ export function useMessageSubmission({
   composer,
   composerMentionItems,
   draftChat,
+  deviceUseActivationId,
   canPreloadRuntime,
   isBootstrapping,
   isHistoryLoading,
@@ -408,7 +429,9 @@ export function useMessageSubmission({
   }, [activeAppContext, activeConversationKey, activeInterAgentRun, activeThread, activeTurn, draftChat, threads]);
 
   useEffect(() => {
-    if (!canPreloadRuntime) {
+    // A native activation is one-use authority. Bind it atomically with the
+    // user's first submission rather than consuming it in a hidden prewarm.
+    if (!canPreloadRuntime || deviceUseActivationId) {
       return;
     }
     const abortController = new AbortController();
@@ -416,7 +439,7 @@ export function useMessageSubmission({
     return () => {
       abortController.abort();
     };
-  }, [activeAppContext, activeThread, canPreloadRuntime, draftChat, selectedAgentRuntimeConfig, threads]);
+  }, [activeAppContext, activeThread, canPreloadRuntime, deviceUseActivationId, draftChat, selectedAgentRuntimeConfig, threads]);
 
   useEffect(
     () => () => {
@@ -655,6 +678,7 @@ export function useMessageSubmission({
       agentRuntimeConfig,
       options: runtimeSessionOptionsForNewChat({
         agentRuntimeConfig,
+        deviceUseActivationId,
         draftChat: target.draftChat,
         systemPrompt,
       }),
@@ -1504,12 +1528,15 @@ export function useMessageSubmission({
     const explicitInput = typeof inputOverride === "string" ? inputOverride : undefined;
     const isComposerSubmission = explicitInput === undefined;
     const input = (explicitInput ?? composer).trim();
-    const targetAttachments = isComposerSubmission ? [...attachments] : [];
-    if ((!input && !targetAttachments.length) || hasInvalidAttachments(targetAttachments)) {
-      return;
-    }
     const target = currentSubmissionTarget();
     if (!target) {
+      return;
+    }
+    const deviceUseEnabled = target.thread
+      ? Boolean(target.thread.device_use_enabled)
+      : Boolean(deviceUseActivationId);
+    const targetAttachments = isComposerSubmission && !deviceUseEnabled ? [...attachments] : [];
+    if ((!input && !targetAttachments.length) || hasInvalidAttachments(targetAttachments)) {
       return;
     }
     if (historicalSourceAppReadOnlyReason(target.thread?.source_app_id)) {
@@ -1518,9 +1545,11 @@ export function useMessageSubmission({
     }
     const clientMessageId = crypto.randomUUID();
     const clientSubmissionStartedAt = new Date().toISOString();
-    const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
-    const invokedSkillIds = skillIdsFromText(input, composerMentionItems);
-    const targetMultiAgentMode = isComposerSubmission ? multiAgentMode : "off";
+    const appReferences = deviceUseEnabled
+      ? []
+      : mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
+    const invokedSkillIds = deviceUseEnabled ? [] : skillIdsFromText(input, composerMentionItems);
+    const targetMultiAgentMode = deviceUseEnabled ? "off" : isComposerSubmission ? multiAgentMode : "off";
     const clientSubmissionMetrics: RuntimeTurnClientMetrics = {};
     const localMessage: QueuedMessage = {
       clientMessageId,

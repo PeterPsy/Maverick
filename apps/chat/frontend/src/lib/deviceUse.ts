@@ -1,18 +1,4 @@
-import type { ProviderItem } from "../api/client";
-
 export const DEVICE_USE_REQUEST = "maverick.device-use.request.v1";
-export const DEVICE_USE_MODEL = "gpt-6-astra";
-export const DEVICE_USE_REASONING_EFFORT = "high";
-
-export function compatibleDeviceUseProvider(providers: ProviderItem[]): ProviderItem | null {
-  return providers.find((provider) => (
-    provider.provider_role === "runtime_engine"
-    && provider.default_model_family === DEVICE_USE_MODEL
-    && Boolean(provider.workspace_profile_binding_id)
-    && provider.selectable !== false
-    && provider.status === "active"
-  )) || null;
-}
 
 export type NativeDeviceUseSnapshot = {
   available: boolean;

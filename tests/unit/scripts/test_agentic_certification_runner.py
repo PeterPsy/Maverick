@@ -1,5 +1,7 @@
 """The operator runner separates collection, natural review, and signing."""
 
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -110,6 +112,59 @@ class AgenticCertificationRunnerTest(unittest.TestCase):
                         "--confirmation", "google-project-free-tier-confirmed", *extra,
                     ])
             self.assertFalse(ledger.exists())
+
+    def test_p6_budget_cli_can_continue_an_openrouter_only_ledger(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            root.chmod(0o700)
+            predecessor_path = root / "predecessor.sqlite3"
+            predecessor = budget_runner.CertificationBudgetLedger.create(
+                predecessor_path,
+                authorization_ref="a" * 64,
+                limits=(
+                    budget_runner.CertificationBudgetLimit(
+                        "openrouter",
+                        "paid",
+                        5_000_000,
+                        1_000,
+                        6,
+                    ),
+                ),
+            )
+            predecessor.halt("openrouter", reason="operator_stop")
+            successor_path = root / "successor.sqlite3"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = budget_runner.main(
+                    [
+                        "--ledger",
+                        str(successor_path),
+                        "create-successor",
+                        "--authorization-ref",
+                        "b" * 64,
+                        "--confirmation",
+                        "successor-job-authorized",
+                        "--predecessor-ledger",
+                        str(predecessor_path),
+                        "--predecessor-policy-digest",
+                        predecessor.policy_digest,
+                        "--openrouter-only",
+                        "--openrouter-max-cost-microusd",
+                        "5000000",
+                        "--openrouter-max-requests",
+                        "1000",
+                        "--openrouter-min-interval-seconds",
+                        "6",
+                    ]
+                )
+            self.assertEqual(result, 0)
+            policy_digest = json.loads(output.getvalue())["policy_digest"]
+            status = budget_runner.CertificationBudgetLedger(
+                successor_path,
+                policy_digest=policy_digest,
+            ).status()
+            self.assertEqual(tuple(status), ("openrouter",))
 
     def test_failure_never_creates_an_artifact_and_existing_output_is_preserved(self):
         with tempfile.TemporaryDirectory() as folder:

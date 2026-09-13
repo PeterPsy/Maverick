@@ -37,9 +37,15 @@ def main(argv=None):
             default=4_500_000,
         )
         create.add_argument("--openrouter-max-requests", type=int, default=200)
+        create.add_argument(
+            "--openrouter-min-interval-seconds",
+            type=int,
+            default=6,
+        )
         create.add_argument("--google-max-requests", type=int, default=80)
         create.add_argument("--google-min-interval-seconds", type=int, default=15)
         if phase_name == "create-successor":
+            create.add_argument("--openrouter-only", action="store_true")
             create.add_argument("--predecessor-ledger", type=Path, required=True)
             create.add_argument("--predecessor-policy-digest", required=True)
     for phase in ("status", "halt"):
@@ -64,22 +70,27 @@ def main(argv=None):
             parser.error("This P6 authorization allows at most 5 USD total on OpenRouter.")
         if args.google_min_interval_seconds < 15:
             parser.error("This P6 job requires at least 15 seconds between Google requests.")
-        limits = (
+        limits = [
             CertificationBudgetLimit(
                 "openrouter",
                 "paid",
                 args.openrouter_max_cost_microusd,
                 args.openrouter_max_requests,
-                1,
+                args.openrouter_min_interval_seconds,
             ),
-            CertificationBudgetLimit(
-                "google-ai-studio",
-                "free_tier",
-                0,
-                args.google_max_requests,
-                args.google_min_interval_seconds,
-            ),
-        )
+        ]
+        if not (
+            args.phase == "create-successor" and args.openrouter_only
+        ):
+            limits.append(
+                CertificationBudgetLimit(
+                    "google-ai-studio",
+                    "free_tier",
+                    0,
+                    args.google_max_requests,
+                    args.google_min_interval_seconds,
+                )
+            )
         if args.phase == "create":
             ledger = CertificationBudgetLedger.create(
                 args.ledger,

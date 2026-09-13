@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-13-r69-macos-device-use-tcb59`
+Matrix revision: `2026-09-13-r70-mail-drafts-read-audit-tcb60`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==59`
 
 ## P6 candidate checkpoint
 
-Suite 69 / TCB manifest 59 / hosted adapter 59 / recipe 26 retain the P5
+Suite 70 / TCB manifest 60 / hosted adapter 59 / recipe 26 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -25,6 +25,10 @@ available, but the global and Google kill switches still default off and no
 remote certificate or operator binding is enabled. The current code-owned Codex
 profile for the Device Use MVP is separate from this remote candidate, which
 does not authorize that native route.
+
+TCB 60 additionally refreshes the Core-owned Mail read-effect audit for the
+declared `drafts.list` CLI action and the exact updated Mail executable closure.
+No Google provider traffic was used to make this audit update.
 
 Suite 45 additionally includes generic continuation repair/multi-hop, explicit
 native identity rejection, the reviewed app-effect delta regressions, and the

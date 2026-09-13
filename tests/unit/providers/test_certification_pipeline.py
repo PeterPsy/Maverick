@@ -341,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "c503f4f98212fde9d3f88013228f3e3332bc8728a6fd348b30dd575a113c088e",
-            "openrouter": "0322b12eff491fff289584c65f29f8d73b07ee7165f8d0df98ddb3113e359533",
-            "antigravity-cli": "8364dded61d54e04ba9c3f1d009b6f5050967a3ade1f17d9340690548e5b0ad6",
+            "google-ai-studio": "9b704b7f6c26bccca5eb2fb5274875fc97278bef10921094d04675ed84a0a206",
+            "openrouter": "a826b1dc6e0ca620e1c0c61fe4809e5e81303a2879bcd0c9b7f4e9814d207e3b",
+            "antigravity-cli": "b5caacbfc12dd4d24670e15c313665f5bb202ec802993addd0d3afa91b51103b",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "69")
+                self.assertEqual(manifest.suite_version, "70")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-13-r69-macos-device-use-tcb59",
+                    "2026-09-13-r70-mail-drafts-read-audit-tcb60",
                 )
                 self.assertEqual(
                     manifest.digest,

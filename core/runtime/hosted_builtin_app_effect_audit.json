@@ -132,12 +132,12 @@
     },
     "mail": {
       "cli": {
-        "descriptor_sha256": "b1e00ebf70f7cc72f7b0865778bb22b5a2e2932d82c80c7c6c03fb8e7a898c9d",
-        "execution_sha256": "6a094e34f66e892e42a1f0cea4ed1283bcd71df1a08130b9960c984775dbdb2d"
+        "descriptor_sha256": "f7560add153b6a68ad63125f3d3f3dd68c51ecacfd544666a2f80418476d0230",
+        "execution_sha256": "50dd7d8cdbe0f7a64c8cd0ff4a89197d8a3d4ba97091915fa08e06db27706ee9"
       },
       "mcp": {
         "descriptor_sha256": "1270eab5ef5ce7cd6631568f46226fb616648e3cae12b702c3fc68beff5e2249",
-        "execution_sha256": "414bfeeec228bd47420e7016e3aa438255a0fd44c25615bb8adcb32af45e834e"
+        "execution_sha256": "02dc868e1ff51d94a43eb34392ff22d6f24345f71876cafba8cf2e47278607e4"
       }
     },
     "memory": {
@@ -231,6 +231,6 @@
       }
     }
   },
-  "audit_revision": "2026-09-07-p6-builtin-effects-reviewed-v5",
+  "audit_revision": "2026-09-13-p6-builtin-effects-reviewed-v6",
   "schema_version": "2"
 }

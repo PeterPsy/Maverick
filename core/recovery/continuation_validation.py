@@ -51,6 +51,7 @@ def revalidate_continuation_handoff(
             binding=source,
             adapter=adapter,
             now=now,
+            historical_native_source=True,
         )
         target_reason = _certificate_problem(
             state,
@@ -98,13 +99,21 @@ def revalidate_continuation_handoff(
     return target_reason is None
 
 
-def _certificate_problem(state, *, binding, adapter, now: datetime) -> str | None:
+def _certificate_problem(
+    state,
+    *,
+    binding,
+    adapter,
+    now: datetime,
+    historical_native_source: bool = False,
+) -> str | None:
     try:
         validate_certificate_for_binding(
             state.provider_store,
             binding=binding,
             adapter=adapter,
             now=now,
+            historical_native_source=historical_native_source,
         )
     except ProviderError as error:
         return _reason(error)

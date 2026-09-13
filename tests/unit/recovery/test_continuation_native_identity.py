@@ -189,8 +189,19 @@ class NativeContinuationIdentityTest(RuntimeContinuationFixture, unittest.TestCa
                 now=NOW,
             )
 
+            continuation = admit_runtime_session(
+                self.state,
+                session=source,
+                now=NOW,
+            )
+
         self.assertEqual(assessment.status, "compatible_upgrade")
         self.assertEqual(assessment.detail_code, "adapter_artifact_mismatch")
+        self.assertEqual(continuation.status, "forked")
+        self.assertEqual(
+            continuation.session.predecessor_session_id,
+            source.session_id,
+        )
 
     def test_changed_codex_artifact_cannot_borrow_current_connection_authority(self):
         store = self.state.provider_store

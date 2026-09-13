@@ -418,6 +418,12 @@ def _create_orchestration(
         return json_response(start_response, {"error": "orchestration_source_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(root_session):
         return json_response(start_response, {"error": "root_runtime_session_hidden"}, status="409 Conflict")
+    if root_session.device_use_binding is not None:
+        return json_response(
+            start_response,
+            {"error": "device_use_requires_codex_mono_agent_chat"},
+            status="409 Conflict",
+        )
     authorize_inter_agent_root_session_use(
         workspace_store=state.workspace_store,
         user=context.user,
@@ -532,6 +538,12 @@ def _create_run(
         return json_response(start_response, {"error": "root_runtime_session_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(root_session):
         return json_response(start_response, {"error": "root_runtime_session_hidden"}, status="409 Conflict")
+    if root_session.device_use_binding is not None:
+        return json_response(
+            start_response,
+            {"error": "device_use_requires_codex_mono_agent_chat"},
+            status="409 Conflict",
+        )
     try:
         authorize_inter_agent_root_session_use(
             workspace_store=state.workspace_store,

@@ -13,6 +13,7 @@ from core.api.app_events import AppEventBus
 from core.api.application import create_application
 from core.api.control_store import ControlPlaneCollections, ControlStoreSettings, build_control_plane_collections
 from core.api.persistence_cleanup_worker import run_pending_cleanup_plans
+from core.device_use.service import DeviceUseService
 from core.egress.agentic_policy import AgenticEgressEvaluator
 from core.apps.store import AppDocumentStore
 from core.apps.runtime_root_capabilities import RuntimeRootCapabilityStore
@@ -92,6 +93,7 @@ class PlatformState:
     usage_store: UsageDocumentStore
     sidecar_browser_sessions: SidecarBrowserSessionStore
     runtime_root_capabilities: RuntimeRootCapabilityStore
+    device_use_service: DeviceUseService
     root_shell_app_id: str
     runtime_tool_ledger: RuntimeToolLedger | None = None
     provider_private_state_service: ProviderPrivateStateService | None = None
@@ -290,6 +292,7 @@ def bootstrap_platform_state(
         usage_store=usage_store,
         sidecar_browser_sessions=SidecarBrowserSessionStore(),
         runtime_root_capabilities=RuntimeRootCapabilityStore(),
+        device_use_service=DeviceUseService(),
         root_shell_app_id=os.environ.get("MAVERICK_ROOT_SHELL_APP_ID", "base-shell").strip() or "base-shell",
         runtime_tool_ledger=runtime_tool_ledger,
         provider_private_state_service=provider_private_state_service,

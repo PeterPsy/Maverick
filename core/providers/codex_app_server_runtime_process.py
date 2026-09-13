@@ -5,9 +5,14 @@ import queue
 import subprocess
 import time
 from typing import Callable
-
 from core.providers.codex_app_server_runtime_errors import terminal_completion_wait
-from core.providers.codex_skill_inputs import codex_provider_input_text, codex_skill_input_items
+from core.providers.codex_app_server_device_use_turn import (
+    clear_device_use_turn,
+    codex_turn_input,
+    codex_turn_start_params,
+    finish_device_use_turn,
+    set_device_use_turn,
+)
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEventSink
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -15,7 +20,6 @@ from core.skills.models import SkillDefinition
 @dataclass
 class CodexAppServerTurnResult:
     """Result of one Codex app-server turn."""
-
     output_text: str
     exit_code: int
     provider_thread_id: str
@@ -41,6 +45,7 @@ def execute_codex_app_server_turn(
     invoked_skills: list[SkillDefinition] | None = None,
     event_sink: RuntimeExecutionEventSink | None,
     timeout_seconds: int | None,
+    runtime_turn_id: str | None = None,
     on_provider_thread_id: Callable[[str], None] | None = None,
     on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
     on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
@@ -85,16 +90,9 @@ def execute_codex_app_server_turn(
                 "provider_thread_id": provider_thread_id,
             },
         )
-    turn_input = [
-        {
-            "type": "text",
-            "text": codex_provider_input_text(
-                input_text,
-                skill_activation_mode=getattr(session, "skill_activation_mode", "implicit"),
-            ),
-        },
-        *codex_skill_input_items(runtime.runtime_root, invoked_skills, runtime_home=runtime.runtime_home),
-    ]
+    device_use, turn_input = codex_turn_input(
+        session, runtime, input_text, invoked_skills
+    )
     if on_provider_startup_event is not None:
         on_provider_startup_event("event_sink_reset_started", {})
     event_sink_reset_started_at = time.perf_counter()
@@ -113,6 +111,7 @@ def execute_codex_app_server_turn(
         runtime.current_invoked_skills = tuple(invoked_skills or ())
         runtime.rehydrated_compaction_items = set()
         runtime.skill_rehydration_sequence = 0
+    set_device_use_turn(runtime, runtime_turn_id=runtime_turn_id, task_text=input_text)
     event_sink_reset_ms = (time.perf_counter() - event_sink_reset_started_at) * 1000
     if on_provider_startup_event is not None:
         on_provider_startup_event("event_sink_reset_completed", {"event_sink_reset_ms": event_sink_reset_ms})
@@ -151,13 +150,13 @@ def execute_codex_app_server_turn(
         turn = _send_request(
             runtime,
             "turn/start",
-            {
-                "threadId": provider_thread_id,
-                "input": turn_input,
-                "approvalPolicy": "never",
-                "sandboxPolicy": _turn_sandbox_policy(launch_spec),
-                "cwd": launch_spec.working_directory,
-            },
+            codex_turn_start_params(
+                device_use=device_use,
+                provider_thread_id=provider_thread_id,
+                turn_input=turn_input,
+                launch_spec=launch_spec,
+                sandbox_policy=_turn_sandbox_policy,
+            ),
             timeout=20.0,
             on_sent=(
                 record_turn_start_sent
@@ -168,6 +167,7 @@ def execute_codex_app_server_turn(
     except Exception:
         with runtime.event_lock:
             runtime.current_event_sink = None
+        clear_device_use_turn(runtime)
         with runtime.skill_rehydration_lock:
             runtime.current_invoked_skills = ()
             runtime.rehydrated_compaction_items = set()
@@ -270,6 +270,7 @@ def execute_codex_app_server_turn(
         with runtime.active_turn_lock:
             if runtime.current_provider_turn_id == provider_turn_id:
                 runtime.current_provider_turn_id = None
+        finish_device_use_turn(runtime, runtime_turn_id)
 
     status = str(completion.get("status") or "completed").strip().lower() if isinstance(completion, dict) else "completed"
     output = "".join(chunks).strip()

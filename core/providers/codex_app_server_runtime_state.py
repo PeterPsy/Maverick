@@ -8,6 +8,7 @@ import subprocess
 import threading
 
 from core.runtime.execution_events import RuntimeExecutionEventSink
+from core.device_use.models import DeviceUseSessionBinding
 from core.skills.models import SkillDefinition
 
 
@@ -43,6 +44,11 @@ class _CodexAppServerRuntime:
     current_completion_received: bool = False
     completion_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=1))
     reader_thread: threading.Thread | None = None
+    server_request_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=16))
+    server_request_thread: threading.Thread | None = None
+    device_use_binding: DeviceUseSessionBinding | None = None
+    current_runtime_turn_id: str | None = None
+    current_task_text: str = ""
     generated_system_skills_cleaned_home: str | None = None
     current_invoked_skills: tuple[SkillDefinition, ...] = ()
     rehydrated_compaction_items: set[str] = field(default_factory=set)

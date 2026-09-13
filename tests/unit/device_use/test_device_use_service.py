@@ -1,0 +1,262 @@
+from __future__ import annotations
+
+import hashlib
+import queue
+import threading
+import unittest
+from datetime import UTC, datetime, timedelta
+
+from core.device_use.contract import (
+    DEVICE_USE_EXECUTOR_CONTRACT,
+    DEVICE_USE_PROTOCOL_VERSION,
+    DEVICE_USE_TOOL_CONTRACT_DIGEST,
+)
+from core.device_use.errors import (
+    DeviceUseAuthorizationError,
+    DeviceUseUnavailableError,
+)
+from core.device_use.service import DeviceUseService, encode_image_frame
+
+
+class DeviceUseServiceTestCase(unittest.TestCase):
+    def test_contract_digest_is_the_frozen_macos_v40_digest(self):
+        self.assertEqual(
+            DEVICE_USE_TOOL_CONTRACT_DIGEST,
+            "6135e7975fc6d510723fc146c76133f1fb3c23a5a4d9b53935c5149d4c477752",
+        )
+
+    def connected(self):
+        service = DeviceUseService()
+        activation, ticket = service.create_activation(
+            owner_user_id="user-1",
+            auth_session_id="auth-1",
+            workspace_id="default",
+            session_generation="generation-1",
+        )
+        outbound: queue.Queue = queue.Queue(maxsize=8)
+        service.connect_executor(
+            ticket=ticket,
+            protocol_version=DEVICE_USE_PROTOCOL_VERSION,
+            executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
+            tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+            initial_app="com.apple.Safari",
+            approved_apps=["com.apple.Safari"],
+            outbound=outbound,
+        )
+        binding = service.binding_snapshot(
+            activation["activation_id"],
+            owner_user_id="user-1",
+            workspace_id="default",
+        )
+        service.bind_session(binding, session_id="runtime-1")
+        return service, binding, outbound
+
+    def test_invocation_pairs_text_and_binary_image_without_replay(self):
+        service, binding, outbound = self.connected()
+        result_holder = []
+
+        def invoke():
+            result_holder.append(service.invoke(
+                binding=binding,
+                runtime_session_id="runtime-1",
+                turn_id="turn-1",
+                provider_thread_id="provider-thread",
+                provider_turn_id="provider-turn",
+                call_id="call-1",
+                tool_name="mac_computer",
+                arguments={"action": "observe"},
+                task_text="Osserva Safari",
+                timeout_seconds=1,
+            ))
+
+        worker = threading.Thread(target=invoke)
+        worker.start()
+        frame = outbound.get(timeout=1)
+        self.assertNotIn("arguments", frame)
+        self.assertEqual(frame["arguments_json"], '{"action":"observe"}')
+        self.assertEqual(
+            frame["arguments_digest"],
+            hashlib.sha256(frame["arguments_json"].encode("utf-8")).hexdigest(),
+        )
+        jpeg = b"\xff\xd8device-use\xff\xd9"
+        service.accept_invocation(binding.activation_id, frame)
+        with self.assertRaises(DeviceUseAuthorizationError):
+            service.accept_invocation(binding.activation_id, frame)
+        service.deliver_result(binding.activation_id, {
+            "invocation_id": frame["invocation_id"],
+            "call_id": "call-1",
+            "arguments_digest": frame["arguments_digest"],
+            "result": {"success": True, "contentItems": [{"type": "inputText", "text": "metadata"}]},
+            "has_image": True,
+            "image_sha256": hashlib.sha256(jpeg).hexdigest(),
+            "native_duration_ms": 12,
+        })
+        service.deliver_image(binding.activation_id, encode_image_frame(
+            invocation_id=frame["invocation_id"], call_id="call-1", jpeg=jpeg,
+        ))
+        worker.join(timeout=1)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(result_holder[0].image_jpeg, jpeg)
+        self.assertEqual(service.journal(runtime_session_id="runtime-1")[-1].status, "completed")
+        metrics = service.activation_metrics(
+            binding.activation_id,
+            owner_user_id="user-1",
+            workspace_id="default",
+        )
+        self.assertEqual(metrics["completed_count"], 1)
+        self.assertEqual(metrics["execution_unknown_count"], 0)
+        self.assertEqual(metrics["invocations"][0]["image_bytes"], len(jpeg))
+        self.assertEqual(metrics["invocations"][0]["native_duration_ms"], 12.0)
+        self.assertIsNotNone(metrics["invocations"][0]["bridge_end_to_end_ms"])
+        service.end_turn(
+            binding,
+            runtime_session_id="runtime-1",
+            turn_id="turn-1",
+        )
+        self.assertEqual(outbound.get(timeout=1), {
+            "type": "device_use.turn_end.v1",
+            "activation_id": binding.activation_id,
+            "runtime_session_id": "runtime-1",
+            "turn_id": "turn-1",
+        })
+        with self.assertRaises(DeviceUseAuthorizationError):
+            service.invoke(
+                binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+                call_id="call-1", tool_name="mac_computer",
+                arguments={"action": "observe"}, task_text="duplicate", timeout_seconds=.01,
+            )
+
+    def test_only_a_successful_observation_may_declare_an_image(self):
+        service, binding, outbound = self.connected()
+        errors = []
+        worker = threading.Thread(target=lambda: self._capture_error(errors, lambda: service.invoke(
+            binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+            provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+            call_id="call-1", tool_name="mac_calendar", arguments={"action": "create_event"},
+            task_text="calendar", timeout_seconds=.05,
+        )))
+        worker.start(); frame = outbound.get(timeout=1)
+        service.accept_invocation(binding.activation_id, frame)
+        with self.assertRaises(DeviceUseAuthorizationError):
+            service.deliver_result(binding.activation_id, {
+                "invocation_id": frame["invocation_id"], "call_id": "call-1",
+                "arguments_digest": frame["arguments_digest"],
+                "result": {"success": True, "contentItems": [{"type": "inputText", "text": "bad"}]},
+                "has_image": True, "image_sha256": "a" * 64,
+            })
+        service.disconnect_executor(binding.activation_id)
+        worker.join(timeout=1)
+        self.assertEqual(str(errors[0]), "device_use_execution_unknown")
+
+    def test_disconnect_marks_dispatched_control_execution_unknown(self):
+        service, binding, outbound = self.connected()
+        errors = []
+        worker = threading.Thread(target=lambda: self._capture_error(errors, lambda: service.invoke(
+            binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+            provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+            call_id="call-1", tool_name="mac_computer", arguments={"action": "click", "x": 1, "y": 1},
+            task_text="click", timeout_seconds=1,
+        )))
+        worker.start(); outbound.get(timeout=1)
+        service.disconnect_executor(binding.activation_id)
+        worker.join(timeout=1)
+        self.assertEqual(str(errors[0]), "device_use_execution_unknown")
+        self.assertEqual(service.journal()[-1].status, "execution_unknown")
+
+    def test_disconnected_executor_cannot_be_bound_to_a_session(self):
+        service = DeviceUseService()
+        activation, ticket = service.create_activation(
+            owner_user_id="user-1", auth_session_id="auth-1",
+            workspace_id="default", session_generation="generation-1",
+        )
+        outbound: queue.Queue = queue.Queue(maxsize=8)
+        service.connect_executor(
+            ticket=ticket,
+            protocol_version=DEVICE_USE_PROTOCOL_VERSION,
+            executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
+            tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+            initial_app="com.apple.Safari",
+            approved_apps=["com.apple.Safari"],
+            outbound=outbound,
+        )
+        binding = service.binding_snapshot(
+            activation["activation_id"],
+            owner_user_id="user-1",
+            workspace_id="default",
+        )
+        service.disconnect_executor(binding.activation_id)
+        with self.assertRaises(DeviceUseUnavailableError):
+            service.bind_session(binding, session_id="runtime-1")
+
+    def test_activation_ticket_expires_and_cannot_be_redeemed(self):
+        now = datetime(2026, 9, 13, 12, tzinfo=UTC)
+        service = DeviceUseService(now=lambda: now)
+        _activation, ticket = service.create_activation(
+            owner_user_id="user-1", auth_session_id="auth-1",
+            workspace_id="default", session_generation="generation-1",
+        )
+        now += timedelta(seconds=61)
+        with self.assertRaises(DeviceUseAuthorizationError):
+            service.connect_executor(
+                ticket=ticket,
+                protocol_version=DEVICE_USE_PROTOCOL_VERSION,
+                executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
+                tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+                initial_app="com.apple.Safari",
+                approved_apps=["com.apple.Safari"],
+                outbound=queue.Queue(maxsize=8),
+            )
+
+    def test_activation_is_pinned_to_the_browser_auth_session(self):
+        service, binding, _outbound = self.connected()
+        with self.assertRaises(DeviceUseAuthorizationError):
+            service.binding_snapshot(
+                binding.activation_id,
+                owner_user_id="user-1",
+                workspace_id="default",
+                auth_session_id="auth-2",
+            )
+        with self.assertRaises(DeviceUseAuthorizationError):
+            service.activation_metrics(
+                binding.activation_id,
+                owner_user_id="user-1",
+                workspace_id="default",
+                auth_session_id="auth-2",
+            )
+        with self.assertRaises(DeviceUseAuthorizationError):
+            service.stop_activation(
+                binding.activation_id,
+                owner_user_id="user-1",
+                workspace_id="default",
+                auth_session_id="auth-2",
+            )
+
+    def test_non_finite_arguments_are_rejected_before_dispatch(self):
+        service, binding, outbound = self.connected()
+
+        with self.assertRaisesRegex(
+            DeviceUseAuthorizationError,
+            "device_use_arguments_invalid",
+        ):
+            service.invoke(
+                binding=binding,
+                runtime_session_id="runtime-1",
+                turn_id="turn-1",
+                provider_thread_id="provider-thread",
+                provider_turn_id="provider-turn",
+                call_id="call-1",
+                tool_name="mac_computer",
+                arguments={"action": "click", "x": float("nan")},
+                task_text="invalid",
+            )
+        self.assertTrue(outbound.empty())
+
+    @staticmethod
+    def _capture_error(target, action):
+        try: action()
+        except Exception as error: target.append(error)
+
+
+if __name__ == "__main__":
+    unittest.main()

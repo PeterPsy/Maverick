@@ -71,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="58",
+    manifest_version="59",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -115,6 +115,16 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/identity",
                 "core/execution_policy",
                 "core/cli/core_commands.py",
+            ),
+        ),
+        CertifiedTcbComponent(
+            "native-device-use",
+            "Ephemeral Mac executor authority, v40 contract, relay, and transport admission.",
+            (
+                "core/device_use",
+                "core/api/device_use_api.py",
+                "core/api/device_use_websocket.py",
+                "core/api/inter_agent_api.py",
             ),
         ),
         CertifiedTcbComponent(

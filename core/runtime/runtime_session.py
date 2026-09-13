@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+from core.device_use.models import (
+    DeviceUseSessionBinding,
+    device_use_binding_from_document,
+)
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import RuntimeDataClass
 from core.providers.hosted_text_profiles import (
@@ -108,6 +112,7 @@ class RuntimeSessionRecord:
     declared_remote_data_class: RuntimeDataClass | None = None
     recovery_reason_code: str | None = None
     prepared_session_fingerprint: str | None = None
+    device_use_binding: DeviceUseSessionBinding | None = None
 
 
 @dataclass(frozen=True)
@@ -201,6 +206,7 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     payload.setdefault("preparation_status", "prepared")
     payload.setdefault("recovery_reason_code", None)
     payload.setdefault("prepared_session_fingerprint", None)
+    payload.setdefault("device_use_binding", None)
     session_kind, thread_visibility = normalize_runtime_session_visibility(
         payload.get("session_kind"),
         payload.get("thread_visibility"),
@@ -228,6 +234,9 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     ):
         raise ValueError("Hosted text execution binding must be an object.")
     payload.setdefault("hosted_text_binding", None)
+    payload["device_use_binding"] = device_use_binding_from_document(
+        payload.get("device_use_binding")
+    )
     _validate_runtime_family_pins(payload)
     return RuntimeSessionRecord(**payload)
 

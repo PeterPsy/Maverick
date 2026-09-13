@@ -182,7 +182,15 @@ class CodexProviderAdapter(
         return tuple(
             import_module(module_name)
             for module_name in (
+                "core.device_use.contract",
+                "core.device_use.errors",
+                "core.device_use.models",
+                "core.device_use.runtime_registry",
+                "core.device_use.service",
                 "core.providers.codex_app_server",
+                "core.providers.codex_app_server_device_use",
+                "core.providers.codex_app_server_device_use_requests",
+                "core.providers.codex_app_server_device_use_turn",
                 "core.providers.codex_app_server_runtime",
                 "core.providers.codex_app_server_runtime_errors",
                 "core.providers.codex_app_server_runtime_lifecycle",
@@ -199,6 +207,7 @@ class CodexProviderAdapter(
                 "core.providers.codex_app_server_skill_rehydration",
                 "core.providers.codex_prompt_budget",
                 "core.providers.codex_skill_inputs",
+                "core.providers.codex_device_use_home",
                 "core.providers.provider_codex",
                 "core.providers.provider_codex_config_policy",
                 "core.providers.provider_codex_continuation_home",

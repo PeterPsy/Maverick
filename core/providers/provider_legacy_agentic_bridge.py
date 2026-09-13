@@ -101,7 +101,7 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
 
         def run() -> None:
             try:
-                result = self.legacy_adapter.execute_turn(
+                execute_kwargs = dict(
                     session=context.session,
                     launch_spec=launch_spec,
                     input_text=context.input_text,
@@ -119,6 +119,9 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
                     on_provider_turn_start_sent=lambda metadata: publish("provider.request.sent", metadata),
                     on_provider_accepted=lambda metadata: publish("provider.accepted", metadata),
                 )
+                if getattr(context.session, "device_use_binding", None) is not None:
+                    execute_kwargs["runtime_turn_id"] = context.correlation_id
+                result = self.legacy_adapter.execute_turn(**execute_kwargs)
                 completion_payload: dict[str, object] = {
                     "output_text": result.output_text,
                     "exit_code": result.exit_code,

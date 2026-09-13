@@ -17,6 +17,12 @@ from core.providers.codex_app_server_runtime_resume import (
 from core.providers.codex_app_server_runtime_thread_params import codex_thread_params as _thread_params
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
+from core.providers.codex_app_server_device_use_requests import (
+    dispatch_server_request,
+    start_device_use_request_worker,
+    stop_device_use_request_worker,
+    stop_device_use_runtime,
+)
 from core.providers.codex_prompt_budget import configure_codex_prompt_budget
 from core.providers.errors import ProviderLaunchError
 from core.providers.models import RuntimeBackendLaunchSpec
@@ -68,11 +74,13 @@ def _ensure_runtime(
                 str(launch_spec.env_overrides.get("CODEX_HOME") or "").strip()
                 or f"{session.runtime_root}/codex-home"
             ),
+            device_use_binding=getattr(session, "device_use_binding", None),
         )
         runtime.reader_thread = threading.Thread(target=_reader_loop, args=(runtime,), daemon=True, name=f"codex-app-server-{session.session_id}")
         _RUNTIMES[session.session_id] = runtime
         register_runtime_process(session.session_id, process)
         runtime.reader_thread.start()
+        start_device_use_request_worker(runtime)
 
     try:
         _send_request(
@@ -197,7 +205,7 @@ def _reader_loop(runtime: _CodexAppServerRuntime) -> None:
                 _resolve_response(runtime, payload)
                 continue
             if "method" in payload and "id" in payload:
-                _respond_to_server_request(runtime, payload)
+                dispatch_server_request(runtime, payload, _respond_to_server_request)
                 continue
             if "method" in payload:
                 _handle_notification(runtime, payload)
@@ -205,6 +213,8 @@ def _reader_loop(runtime: _CodexAppServerRuntime) -> None:
         exit_reason = "reader_exception"
         exit_error = f"{type(error).__name__}: {error}"
     finally:
+        stop_device_use_request_worker(runtime)
+        stop_device_use_runtime(runtime, reason="device_use_provider_process_ended")
         _handle_reader_loop_exit(runtime, reason=exit_reason, error=exit_error)
         with _RUNTIMES_LOCK:
             if _RUNTIMES.get(runtime.session_id) is runtime:

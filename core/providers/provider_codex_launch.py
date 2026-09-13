@@ -11,6 +11,7 @@ import subprocess
 from typing import TYPE_CHECKING, Callable
 
 from core.providers.errors import ProviderLaunchError
+from core.providers.codex_device_use_home import device_use_workdir
 from core.providers.models import (
     ProviderCapabilitySet,
     ProviderDefinition,
@@ -289,9 +290,6 @@ class CodexLaunchMixin:
             return
         if shutil.which(command) is None:
             raise ProviderLaunchError(f"Codex binary `{command}` is not available on PATH.")
-
-
-
     def build_launch_spec(
         self,
         session: RuntimeSessionRecord,
@@ -305,9 +303,9 @@ class CodexLaunchMixin:
         """Build one runtime launch spec for the local Codex backend."""
         self.validate_backend()
         selected_model, selected_reasoning = self.validate_model_settings(model_id, model_reasoning_effort)
-        workdir = Path(session.workdir)
-        workspace_root = Path(session.workspace_root)
         runtime_root = Path(session.runtime_root)
+        workspace_root = Path(session.workspace_root)
+        workdir = device_use_workdir(session, runtime_root)
         host_command = self._runtime_command(self.codex_command)
         runtime_bin = self._prepare_runtime_bin(session, host_command=host_command)
         runtime_home = self._runtime_home(session)
@@ -420,6 +418,7 @@ class CodexLaunchMixin:
         invoked_skills: list["SkillDefinition"] | None = None,
         event_sink: RuntimeExecutionEventSink | None = None,
         timeout_seconds: int | None = None,
+        runtime_turn_id: str | None = None,
         on_provider_thread_id: Callable[[str], None] | None = None,
         on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
         on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
@@ -437,6 +436,7 @@ class CodexLaunchMixin:
             invoked_skills=invoked_skills,
             event_sink=event_sink,
             timeout_seconds=timeout_seconds,
+            runtime_turn_id=runtime_turn_id,
             on_provider_thread_id=on_provider_thread_id,
             on_provider_startup_event=on_provider_startup_event,
             on_provider_turn_start_sent=on_provider_turn_start_sent,

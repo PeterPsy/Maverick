@@ -1,6 +1,10 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-13-r68-stable-openrouter-catalog-tcb58`
+Revision: `2026-09-13-r69-macos-device-use-tcb59`
+
+TCB 59 adds the native Device Use bridge and its mono-agent admission boundary.
+Earlier TCB 58 evidence does not authorize this revision; Antigravity remains
+contained until a complete current-suite run is signed and published.
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through

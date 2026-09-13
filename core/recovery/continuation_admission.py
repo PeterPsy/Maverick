@@ -133,6 +133,8 @@ def assess_runtime_session_admission(
         source_reason = _provider_reason(error)
     else:
         return _direct(session)
+    if session.device_use_binding is not None:
+        return _blocked(session, "device_use_continuation_unsupported")
     if source_reason not in COMPATIBLE_UPGRADE_SOURCE_REASONS:
         return _blocked(session, source_reason)
     try:

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.device_use.models import DeviceUseSessionBinding
 from core.inter_agent.errors import InterAgentRunNotFoundError
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -73,7 +74,20 @@ class InterAgentApiSupport(AppReferenceApiTestSupport, unittest.TestCase):
         ):
             return bootstrap_platform_state(start_path=repo_root)
 
-    def _create_root_session(self, state, repo_root) -> None:
+    def _create_root_session(self, state, repo_root, *, device_use: bool = False) -> None:
+        device_use_binding = None
+        if device_use:
+            device_use_binding = DeviceUseSessionBinding(
+                activation_id="01234567-89ab-cdef-0123-456789abcdef",
+                workspace_id="default",
+                owner_user_id="parent-owner",
+                protocol_version="maverick.device-use.v1",
+                executor_contract="macos-v40",
+                tool_contract_digest="digest",
+                initial_app="com.apple.Safari",
+                approved_apps=("com.apple.Safari",),
+                created_at=datetime(2026, 6, 16, 12, 0, tzinfo=UTC),
+            )
         create_runtime_session(
             state.runtime_store,
             session_id="root-session",
@@ -94,6 +108,7 @@ class InterAgentApiSupport(AppReferenceApiTestSupport, unittest.TestCase):
             governance=state.workspace_store.get_governance("default"),
             platform_allows_full_access=True,
             start_path=repo_root,
+            device_use_binding=device_use_binding,
         )
 
 

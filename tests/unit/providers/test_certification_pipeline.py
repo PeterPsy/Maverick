@@ -341,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "f3788d24e4436f46f8d3dc9d5c08a103f4d949aa41a280c26660c1a3a3f72383",
-            "openrouter": "cd386c80da5a5ef56111773512b403f10452331c5f70a40392170777dd5df719",
-            "antigravity-cli": "eebcf50930d811af569354b9487bf7499da945aa3501202b6a5e97ba5f82f685",
+            "google-ai-studio": "c503f4f98212fde9d3f88013228f3e3332bc8728a6fd348b30dd575a113c088e",
+            "openrouter": "0322b12eff491fff289584c65f29f8d73b07ee7165f8d0df98ddb3113e359533",
+            "antigravity-cli": "8364dded61d54e04ba9c3f1d009b6f5050967a3ade1f17d9340690548e5b0ad6",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "68")
+                self.assertEqual(manifest.suite_version, "69")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-13-r68-stable-openrouter-catalog-tcb58",
+                    "2026-09-13-r69-macos-device-use-tcb59",
                 )
                 self.assertEqual(
                     manifest.digest,

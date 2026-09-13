@@ -131,9 +131,14 @@ def runtime_snapshot_frame(
     lineage_session_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Wrap the initial runtime session state in a transport frame."""
+    session_payload = asdict(session)
+    session_payload.pop("device_use_binding", None)
+    session_payload["device_use_enabled"] = bool(
+        getattr(session, "device_use_binding", None)
+    )
     return {
         "type": "runtime.snapshot",
-        "session": asdict(session),
+        "session": session_payload,
         "events": [replay_runtime_event_payload(event) for event in events],
         "turns": [asdict(turn) for turn in turns or []],
         "last_event_id": last_event_id,

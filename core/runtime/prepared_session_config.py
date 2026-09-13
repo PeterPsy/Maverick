@@ -9,7 +9,7 @@ import json
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
-_PREPARED_SESSION_FINGERPRINT_VERSION = 3
+_PREPARED_SESSION_FINGERPRINT_VERSION = 4
 
 
 def prepared_session_fingerprint(
@@ -52,6 +52,7 @@ def prepared_session_fingerprint(
         ),
         "title": _text(body.get("title")),
         "agent_label": _text(body.get("agent_label")),
+        "device_use_activation_id": _text(body.get("device_use_activation_id")) or None,
     }
     return _fingerprint(payload)
 
@@ -111,6 +112,11 @@ def stored_prepared_session_configuration_key(session: RuntimeSessionRecord) -> 
         "hosted_model_id": session.hosted_model_id,
         "thread_title": session.thread_title,
         "agent_label": session.agent_label,
+        "device_use_activation_id": (
+            session.device_use_binding.activation_id
+            if session.device_use_binding is not None
+            else None
+        ),
         "binding": (
             {
                 "workspace_binding_id": binding.workspace_binding_id,

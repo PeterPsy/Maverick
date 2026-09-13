@@ -1,5 +1,9 @@
 # macOS direct-provider runtime
 
+This document describes the retained direct-provider A/B control. The
+Codex-via-Maverick executor route is documented separately in
+[`macos_device_use_bridge.md`](macos_device_use_bridge.md).
+
 Status: development implementation; focused tests and native runner build pass.
 Real-account import and a local authenticated text reply are confirmed. Physical
 Notes/search/scroll and lock/restart checks are physically accepted; v18 extended

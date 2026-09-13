@@ -396,6 +396,12 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
             )
         except AuthorizationError as error:
             return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
-        return json_response(start_response, {"intent": asdict(intent), "session": asdict(session)})
+        session_payload = asdict(session)
+        session_payload.pop("device_use_binding", None)
+        session_payload["device_use_enabled"] = session.device_use_binding is not None
+        return json_response(
+            start_response,
+            {"intent": asdict(intent), "session": session_payload},
+        )
 
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")

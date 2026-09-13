@@ -1,7 +1,7 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-13
-Matrix revision: `2026-09-13-r68-stable-openrouter-catalog-tcb58`
+Matrix revision: `2026-09-13-r69-macos-device-use-tcb59`
 Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==59`
@@ -17,7 +17,7 @@ Google AI Studio and Antigravity remain contained and are not part of this
 promotion decision. Codex remains the active native agent and must not be
 reconfigured by this work.
 
-The renamed profile revision 1 and TCB manifest 58 bind HTTP/background
+The renamed profile revision 1 and TCB manifest 59 bind HTTP/background
 finalization to the model-provider identity pinned in the immutable execution
 binding. This keeps a durable OpenRouter final outbox delivery from conflicting
 with the shared `maverick-tool-loop` runtime-engine identity after successful
@@ -86,8 +86,11 @@ Every request carries this non-permissive router object:
 
 ## Required deterministic evidence
 
-The suite is `maverick-openrouter-agentic-contract@68` and the certified
-execution TCB is manifest 58. The exact checked-in manifest is authoritative;
+The suite is `maverick-openrouter-agentic-contract@69` and the certified
+execution TCB is manifest 59. TCB 59 adds the native Device Use bridge and its
+mono-agent admission boundary. Evidence signed against TCB 58 does not
+authorize this revision and must be rerun before publication. The exact
+checked-in manifest is authoritative;
 this table summarizes its security objectives.
 
 | Contract | Required result |

@@ -1,14 +1,14 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-13-r68-stable-openrouter-catalog-tcb58`
+Matrix revision: `2026-09-13-r69-macos-device-use-tcb59`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==59`
 
 ## P6 candidate checkpoint
 
-Suite 67 / TCB manifest 57 / hosted adapter 59 / recipe 26 retain the P5
+Suite 69 / TCB manifest 59 / hosted adapter 59 / recipe 26 retain the P5
 executable family, native Antigravity stream-json lifecycle, catalog/lineage, and text-only
 non-regression corpus in addition to the P0–P4 fixtures. The new API profile
 revision is immutable, unbound, and uncertified. P6 also binds exact-target live
@@ -22,9 +22,9 @@ isolated installation, and every HTTP generation is fenced by the shared
 operator ledger. Historical evidence below is
 not evidence for this candidate. The authoritative attestation implementation is
 available, but the global and Google kill switches still default off and no
-remote certificate or operator binding is enabled. Codex revision 15 is the
-active verified profile; this remote candidate does not change its artifact,
-restart or migrate its process, or reissue its certificate.
+remote certificate or operator binding is enabled. Codex revision 16 is the
+separate code-owned profile for the Device Use MVP; this remote candidate does
+not authorize that native route.
 
 Suite 45 additionally includes generic continuation repair/multi-hop, explicit
 native identity rejection, the reviewed app-effect delta regressions, and the

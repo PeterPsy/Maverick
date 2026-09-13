@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.device_use.models import DeviceUseSessionBinding
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
 from core.runtime.execution_binding import RuntimeExecutionBinding, fork_runtime_execution_binding
@@ -42,11 +43,9 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-
 def _transition_allowed(current: str, target: str, *, allowed: dict[str, set[str]], kind: str) -> None:
     if target not in allowed[current]:
         raise RuntimeTransitionError(f"Cannot transition {kind} from `{current}` to `{target}`.")
-
 
 
 def create_runtime_session(
@@ -88,6 +87,7 @@ def create_runtime_session(
     observability_store=None,
     execution_binding: RuntimeExecutionBinding | None = None,
     hosted_text_binding: HostedTextExecutionBinding | None = None,
+    device_use_binding: DeviceUseSessionBinding | None = None,
     routing: RuntimeRoutingDecision | None = None,
     workspace_store: object | None = None,
 ) -> RuntimeSessionRecord:
@@ -187,6 +187,7 @@ def create_runtime_session(
         hosted_model_id=_optional_text(hosted_model_id),
         declared_remote_data_class=coerce_declared_remote_data_class(declared_remote_data_class),
         prepared_session_fingerprint=_optional_text(prepared_session_fingerprint),
+        device_use_binding=device_use_binding,
     )
     saved, published = prepare_runtime_session(store, session, execution_binding, now=timestamp)
     if not published:
@@ -240,7 +241,6 @@ def create_runtime_session(
             now=timestamp,
         )
     return saved
-
 
 
 def _platform_runtime_grants(grants: list[RuntimeSessionGrantRecord] | None) -> list[RuntimeSessionGrantRecord]:

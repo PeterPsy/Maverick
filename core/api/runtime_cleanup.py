@@ -8,6 +8,7 @@ import time
 from core.api.platform_state import PlatformState
 from core.api.runtime_cleanup_errors import RuntimeCleanupError
 from core.api.runtime_cleanup_hooks import cleanup_app_runtime_session_metadata
+from core.device_use.runtime_registry import unregister_device_use_session
 from core.inter_agent.service import InterAgentService, TERMINAL_RUN_STATUSES
 from core.inter_agent.surfaces import inter_agent_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
@@ -52,6 +53,12 @@ def cleanup_runtime_session(
             "runtime_root_deleted": False,
             "runtime_root_purge_pending": False,
         }
+    if session.device_use_binding is not None:
+        unregister_device_use_session(session.session_id)
+        state.device_use_service.stop_activation(
+            session.device_use_binding.activation_id,
+            reason="runtime_session_cleanup",
+        )
     if not runtime_session_allows_user_thread(session):
         hidden_prepared_chat_allowed = (
             allow_hidden_prepared_chat_cleanup

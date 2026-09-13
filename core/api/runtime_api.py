@@ -33,6 +33,16 @@ from core.api.runtime_thread_delete_api import (
     handle_thread_delete_batch,
     thread_cleanup_forbidden_reason,
 )
+from core.device_use.contract import (
+    DEVICE_USE_MODEL_ID,
+    DEVICE_USE_REASONING_EFFORT,
+)
+from core.device_use.errors import DeviceUseError
+from core.device_use.models import DeviceUseSessionBinding
+from core.device_use.runtime_registry import (
+    register_device_use_session,
+    unregister_device_use_session,
+)
 from core.apps.errors import AppHostingError
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dispatch_source_app_runtime_event_async
 from core.authorization.errors import AuthorizationError
@@ -180,6 +190,7 @@ class RuntimeSessionCreationPreflight:
     governance: WorkspaceGovernanceRecord
     execution_binding: RuntimeExecutionBinding | None
     hosted_text_binding: HostedTextExecutionBinding | None
+    device_use_binding: DeviceUseSessionBinding | None
 
 
 def _session_payload(
@@ -192,6 +203,7 @@ def _session_payload(
     governance_projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
     payload = asdict(session)
+    payload.pop("device_use_binding", None)
     payload.pop("prepared_session_fingerprint", None)
     payload.pop("declared_remote_data_class", None)
     payload["recovery_reason_code"] = public_runtime_recovery_reason_code(
@@ -199,6 +211,22 @@ def _session_payload(
         reason_code=session.recovery_reason_code,
     )
     payload["provider_id"] = provider_id
+    payload["device_use_enabled"] = session.device_use_binding is not None
+    if session.device_use_binding is not None and state is not None:
+        try:
+            payload["device_use"] = state.device_use_service.public_activation(
+                session.device_use_binding.activation_id,
+                owner_user_id=session.device_use_binding.owner_user_id,
+                workspace_id=session.device_use_binding.workspace_id,
+            )
+        except DeviceUseError:
+            payload["device_use"] = {
+                "activation_id": session.device_use_binding.activation_id,
+                "status": "offline",
+                "ready": False,
+                "bound": True,
+                "reason": "device_use_executor_unavailable",
+            }
     if session.hosted_text_binding is not None:
         text_binding = session.hosted_text_binding
         payload["hosted_text_binding"] = {
@@ -443,6 +471,7 @@ def _thread_detail_payload_with_runtime(
     payload["provider_id"] = _resolved_provider_id(state, runtime_session)
     payload["hosted_provider_id"] = runtime_session.hosted_provider_id
     payload["hosted_model_id"] = runtime_session.hosted_model_id
+    payload["device_use_enabled"] = runtime_session.device_use_binding is not None
     return payload
 
 
@@ -1010,6 +1039,7 @@ def _create_session(
         user=context.user,
         workspace_id=context.workspace_id,
     )
+    device_binding = preflight.device_use_binding
     source_app_id = str(body.get("source_app_id") or "").strip() or None
     resolved_session_id = preflight.session_id
     governance = preflight.governance
@@ -1017,7 +1047,7 @@ def _create_session(
         session_id=resolved_session_id,
         workspace_id=context.workspace_id,
         agent_id=agent_id,
-        requested_mode=body.get("requested_mode"),
+        requested_mode="sandbox" if device_binding is not None else body.get("requested_mode"),
         governance=governance,
         platform_allows_full_access=context.workspace_id == "default",
         start_path=start_path,
@@ -1040,63 +1070,99 @@ def _create_session(
         )
     ):
         raise ProviderError("runtime_preflight_pin_mismatch")
-    session = create_runtime_session(
-        state.runtime_store,
-        session_id=resolved_session_id,
-        workspace_id=context.workspace_id,
-        agent_id=agent_id,
-        requested_mode=body.get("requested_mode"),
-        runtime_mode=runtime_mode,
-        hosted_provider_id=(
-            hosted_text_binding.provider_id if hosted_text_binding else None
-        ),
-        hosted_model_id=(
-            hosted_text_binding.model_id if hosted_text_binding else None
-        ),
-        declared_remote_data_class=None,
-        prepared_session_fingerprint=prepared_fingerprint,
-        system_prompt=str(body.get("system_prompt") or "").strip() or None,
-        skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
-        skill_activation_mode=body.get("skill_activation_mode"),
-        skill_catalog_app_id=runtime_skill_catalog_app_id_for_request(
-            state.app_store,
+    device_registered = False
+    try:
+        if device_binding is not None:
+            state.device_use_service.bind_session(
+                device_binding,
+                session_id=resolved_session_id,
+            )
+            register_device_use_session(resolved_session_id, state.device_use_service)
+            device_registered = True
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=resolved_session_id,
             workspace_id=context.workspace_id,
+            agent_id=agent_id,
+            requested_mode="sandbox" if device_binding is not None else body.get("requested_mode"),
+            runtime_mode=runtime_mode,
+            hosted_provider_id=(
+                hosted_text_binding.provider_id if hosted_text_binding else None
+            ),
+            hosted_model_id=(
+                hosted_text_binding.model_id if hosted_text_binding else None
+            ),
+            declared_remote_data_class=None,
+            prepared_session_fingerprint=prepared_fingerprint,
+            # Device instructions are injected only into the private Codex thread.
+            # Do not mirror native app scope into browser-visible thread metadata.
+            system_prompt=(
+                None
+                if device_binding is not None
+                else str(body.get("system_prompt") or "").strip() or None
+            ),
+            skill_ids=(
+                []
+                if device_binding is not None
+                else body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else []
+            ),
+            skill_activation_mode=(
+                "explicit" if device_binding is not None else body.get("skill_activation_mode")
+            ),
+            skill_catalog_app_id=(
+                None
+                if device_binding is not None
+                else runtime_skill_catalog_app_id_for_request(
+                    state.app_store,
+                    workspace_id=context.workspace_id,
+                    source_app_id=source_app_id,
+                    explicit_app_id=str(body.get("skill_catalog_app_id") or "").strip() or None,
+                    user=context.user,
+                    workspace_store=state.workspace_store,
+                    start_path=start_path,
+                    allow_missing_source_app=True,
+                )
+            ),
             source_app_id=source_app_id,
-            explicit_app_id=str(body.get("skill_catalog_app_id") or "").strip() or None,
-            user=context.user,
-            workspace_store=state.workspace_store,
+            thread_title=str(body.get("title") or "").strip(),
+            agent_label=str(body.get("agent_label") or "").strip(),
+            agent_type_id=str(body.get("agent_type_id") or "").strip(),
+            agent_role_id=str(body.get("agent_role_id") or "").strip(),
+            project_id=str(body.get("project_id") or "").strip() or None,
+            owner_user_id=context.user.user_id,
+            created_by_user_id=context.user.user_id,
+            thread_visibility="hidden" if prepare_only else "user",
+            grants=[],
+            governance=governance,
+            platform_allows_full_access=context.workspace_id == "default",
             start_path=start_path,
-            allow_missing_source_app=True,
-        ),
-        source_app_id=source_app_id,
-        thread_title=str(body.get("title") or "").strip(),
-        agent_label=str(body.get("agent_label") or "").strip(),
-        agent_type_id=str(body.get("agent_type_id") or "").strip(),
-        agent_role_id=str(body.get("agent_role_id") or "").strip(),
-        project_id=str(body.get("project_id") or "").strip() or None,
-        owner_user_id=context.user.user_id,
-        created_by_user_id=context.user.user_id,
-        thread_visibility="hidden" if prepare_only else "user",
-        grants=[],
-        governance=governance,
-        platform_allows_full_access=context.workspace_id == "default",
-        start_path=start_path,
-        observability_store=state.observability_store,
-        execution_binding=execution_binding,
-        hosted_text_binding=hosted_text_binding,
-        routing=routing,
-        workspace_store=state.workspace_store,
-    )
-    session = transition_runtime_session(
-        state.runtime_store,
-        session_id=session.session_id,
-        target_status="running",
-        observability_store=state.observability_store,
-        start_path=start_path,
-    )
-    if not prepare_only:
-        _create_thread_for_session(state, context=context, session=session, body=body)
-    return session
+            observability_store=state.observability_store,
+            execution_binding=execution_binding,
+            hosted_text_binding=hosted_text_binding,
+            device_use_binding=device_binding,
+            routing=routing,
+            workspace_store=state.workspace_store,
+        )
+        session = transition_runtime_session(
+            state.runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+            observability_store=state.observability_store,
+            start_path=start_path,
+        )
+        if not prepare_only:
+            _create_thread_for_session(state, context=context, session=session, body=body)
+        return session
+    except Exception as error:
+        if device_registered and device_binding is not None:
+            unregister_device_use_session(resolved_session_id)
+            state.device_use_service.stop_activation(
+                device_binding.activation_id,
+                reason="runtime_session_creation_failed",
+            )
+        if isinstance(error, DeviceUseError):
+            raise ProviderError(error.reason_code) from error
+        raise
 
 
 def _preflight_runtime_session_creation_before_persistence(
@@ -1125,6 +1191,32 @@ def _preflight_runtime_session_creation_before_persistence(
     raw_invoked_skill_ids = body.get("invoked_skill_ids", ())
     raw_attachments = body.get("attachments", ())
     raw_app_references = body.get("app_references", ())
+    activation_id = str(body.get("device_use_activation_id") or "").strip()
+    device_use_binding = None
+    if activation_id:
+        if (
+            runtime_mode != "agentic"
+            or str(body.get("agent_id") or "").strip() != "chat"
+            or str(body.get("source_app_id") or "").strip() != "chat"
+            or str(body.get("requested_mode") or "").strip() not in {"", "sandbox"}
+            or str(body.get("agent_type_id") or "").strip()
+            or str(body.get("agent_role_id") or "").strip()
+            or raw_skill_ids
+            or raw_invoked_skill_ids
+            or raw_attachments
+            or raw_app_references
+            or body.get("prepare_only") is True
+        ):
+            raise ProviderError("device_use_requires_codex_mono_agent_chat")
+        try:
+            device_use_binding = state.device_use_service.binding_snapshot(
+                activation_id,
+                owner_user_id=context.user.user_id,
+                workspace_id=context.workspace_id,
+                auth_session_id=context.session.session_id,
+            )
+        except DeviceUseError as error:
+            raise ProviderError(error.reason_code) from error
     if runtime_mode == "plain_hosted_chat":
         if raw_skill_ids or raw_invoked_skill_ids:
             raise ProviderError("plain_hosted_chat_blocks_skills")
@@ -1188,7 +1280,11 @@ def _preflight_runtime_session_creation_before_persistence(
             workspace_id=context.workspace_id,
             execution_mode=resolve_runtime_execution_mode(
                 workspace_id=context.workspace_id,
-                requested_mode=body.get("requested_mode"),
+                requested_mode=(
+                    "sandbox"
+                    if device_use_binding is not None
+                    else body.get("requested_mode")
+                ),
                 governance=governance,
                 platform_allows_full_access=context.workspace_id == "default",
             ),
@@ -1207,7 +1303,11 @@ def _preflight_runtime_session_creation_before_persistence(
             turn_id=f"session-admission:{session_id}",
             live_execution_mode=resolve_runtime_execution_mode(
                 workspace_id=context.workspace_id,
-                requested_mode=body.get("requested_mode"),
+                requested_mode=(
+                    "sandbox"
+                    if device_use_binding is not None
+                    else body.get("requested_mode")
+                ),
                 governance=governance,
                 platform_allows_full_access=context.workspace_id == "default",
             ),
@@ -1235,11 +1335,18 @@ def _preflight_runtime_session_creation_before_persistence(
                 else ()
             ),
         )
+        if device_use_binding is not None and (
+            execution_binding.runtime_engine_id != "codex"
+            or execution_binding.model_id != DEVICE_USE_MODEL_ID
+            or execution_binding.reasoning_effort != DEVICE_USE_REASONING_EFFORT
+        ):
+            raise ProviderError("device_use_requires_codex_astra_high")
     return RuntimeSessionCreationPreflight(
         session_id=session_id,
         governance=governance,
         execution_binding=execution_binding,
         hosted_text_binding=hosted_text_binding,
+        device_use_binding=device_use_binding,
     )
 
 
@@ -2306,6 +2413,36 @@ def _prepare_runtime_turn_submission(
         timing.client_submission_metrics.update(_client_submission_metrics(body))
     raw_attachments = body.get("attachments", [])
     raw_app_references = body.get("app_references", [])
+    if session.device_use_binding is not None:
+        if (
+            body.get("skill_ids")
+            or body.get("invoked_skill_ids")
+            or raw_attachments
+            or raw_app_references
+        ):
+            _release_client_message_claim(state, release_claim_on_failure)
+            return None, json_response(
+                start_response,
+                {"error": "device_use_blocks_skills_attachments_and_app_references"},
+                status="400 Bad Request",
+            )
+        try:
+            current_binding = state.device_use_service.binding_snapshot(
+                session.device_use_binding.activation_id,
+                owner_user_id=session.device_use_binding.owner_user_id,
+                workspace_id=session.device_use_binding.workspace_id,
+                auth_session_id=context.session.session_id,
+                bound_session_id=session.session_id,
+            )
+            if current_binding != session.device_use_binding:
+                raise DeviceUseError("device_use_binding_changed")
+        except DeviceUseError as error:
+            _release_client_message_claim(state, release_claim_on_failure)
+            return None, json_response(
+                start_response,
+                {"error": error.reason_code},
+                status="409 Conflict",
+            )
     try:
         validate_agentic_context_shape(
             invoked_skills=body.get("skill_ids", []),
@@ -2755,6 +2892,11 @@ def _handle_turn_interrupt(
     provider_id = None
     provider_interrupted = False
     if cancellation_request.cancellation_requested_at is not None:
+        if session.device_use_binding is not None:
+            state.device_use_service.stop_activation(
+                session.device_use_binding.activation_id,
+                reason="runtime_turn_interrupted",
+            )
         provider_id = _resolved_provider_id(state, session)
         provider_interrupted = interrupt_runtime_provider_turn(state, session, turn_id=turn_id)
     terminalization = terminalize_runtime_turn_cancellation(

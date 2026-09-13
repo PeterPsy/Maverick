@@ -58,3 +58,14 @@ aliases only. They reject `native_agent_exact_revision_unsupported` at admission
 certificate validation, launch, connect, execute, and resume. Previously persisted
 exact pins also fail closed: matching a discovery snapshot cannot substitute
 for a revision selector that the transport does not implement.
+
+An immutable historical Codex connection root may attest a continuation source
+without becoming live execution authority. This exception is limited to roots
+whose stored adapter digest, when combined with the otherwise-current native
+installation contract and the historical root reference, reproduces the exact
+stored connection identity and still validates the certified runtime artifact,
+evidence, status, and validity window. The successor is independently pinned to
+the current certificate and must pass the normal compatibility/non-expansion
+proof. Legacy model certificates with no provable connection root, or roots
+whose installation contract changed, remain readable but cannot be resumed
+automatically.

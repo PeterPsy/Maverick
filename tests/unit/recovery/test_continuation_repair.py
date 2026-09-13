@@ -8,7 +8,10 @@ from unittest.mock import patch
 from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.cli.recovery_commands import recovery_command_specs
 from core.recovery import continuation_handoff_service
-from core.recovery.continuation_admission import assess_runtime_session_admission
+from core.recovery.continuation_admission import (
+    _numeric_revision,
+    assess_runtime_session_admission,
+)
 from core.recovery.continuation_fork import (
     admit_runtime_session,
     continuation_repair_inventory,
@@ -26,6 +29,12 @@ from tests.support.continuation_profiles import install_continuation_target
 
 
 class RuntimeContinuationRepairTest(RuntimeContinuationFixture, unittest.TestCase):
+    def test_content_addressed_profile_revision_sorts_by_numeric_generation(self) -> None:
+        self.assertGreater(
+            _numeric_revision("16.14d7c0a8917f7836"),
+            _numeric_revision("15.0134a4826cba55de"),
+        )
+
     def test_repair_dry_run_classifies_without_writing_runtime_state(self) -> None:
         source = self._source_session("source-dry-run")
         provider_state_before = self.state.runtime_store.get_provider_state(

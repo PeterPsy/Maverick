@@ -133,6 +133,13 @@ def assess_runtime_session_admission(
         source_reason = _provider_reason(error)
     else:
         return _direct(session)
+    if source_reason == "native_agent_connection_identity_mismatch":
+        source_reason = _historical_native_source_reason(
+            provider_store,
+            registry,
+            binding=binding,
+            now=now,
+        )
     if session.device_use_binding is not None:
         return _blocked(session, "device_use_continuation_unsupported")
     if source_reason not in COMPATIBLE_UPGRADE_SOURCE_REASONS:
@@ -303,9 +310,31 @@ def _compatible_target_workspace_binding_id(
 
 def _numeric_revision(value: str) -> int:
     try:
-        return int(value)
+        return int(str(value).split(".", 1)[0])
     except (TypeError, ValueError):
         return -1
+
+
+def _historical_native_source_reason(
+    provider_store: ProviderStore,
+    registry: ProviderRegistry,
+    *,
+    binding: RuntimeExecutionBinding,
+    now: datetime | None,
+) -> str:
+    """Classify a prior native root only for a fenced continuation handoff."""
+    adapter = registry.get_agentic_runtime_adapter(binding.runtime_engine_id)
+    try:
+        validate_certificate_for_binding(
+            provider_store,
+            binding=binding,
+            adapter=adapter,
+            now=now,
+            historical_native_source=True,
+        )
+    except ProviderError as error:
+        return _provider_reason(error)
+    return "native_agent_connection_identity_mismatch"
 
 
 def _provider_reason(error: BaseException) -> str:

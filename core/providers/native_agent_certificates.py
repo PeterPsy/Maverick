@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -146,10 +147,46 @@ def validate_native_connection_certificate(
     return root
 
 
+def validate_native_connection_certificate_for_continuation_source(
+    store: ProviderStore,
+    certificate: CapabilityCertificate,
+    *,
+    installation: NativeAgentInstallation,
+    now: datetime | None = None,
+) -> CapabilityCertificate:
+    """Validate an authentic prior connection without granting it execution."""
+    root = connection_certificate_for_projection(store, certificate)
+    references = tuple(
+        (
+            model_provider_id,
+            root.certificate_id
+            if model_provider_id == certificate.model_provider_id
+            else certificate_id,
+        )
+        for model_provider_id, certificate_id in (
+            installation.certificate.connection_certificate_ids
+        )
+    )
+    historical_installation = replace(
+        installation,
+        certificate=replace(
+            installation.certificate,
+            connection_certificate_ids=references,
+        ),
+    )
+    return validate_native_connection_certificate(
+        store,
+        certificate,
+        now=now,
+        installation=historical_installation,
+    )
+
+
 __all__ = [
     "connection_certificate_for_projection",
     "native_connection_identity_digest",
     "native_connection_reference",
     "native_installation_for_adapter",
     "validate_native_connection_certificate",
+    "validate_native_connection_certificate_for_continuation_source",
 ]

@@ -296,8 +296,13 @@ def validate_certificate_for_binding(
     observed_upstream_id: str | None = None,
     now: datetime | None = None,
     adapter_artifact_digest: str | None = None,
+    historical_native_source: bool = False,
 ) -> CapabilityCertificate:
-    """Fail closed unless live certification exactly matches the pinned combination."""
+    """Fail closed unless certification exactly matches the pinned combination.
+
+    Historical native-source validation is reserved for continuation admission;
+    the source remains non-executable and the live adapter digest must differ.
+    """
     certificate, _revision_fence = (
         validate_certificate_for_binding_with_revision_fence(
             store,
@@ -306,6 +311,7 @@ def validate_certificate_for_binding(
             observed_upstream_id=observed_upstream_id,
             now=now,
             adapter_artifact_digest=adapter_artifact_digest,
+            historical_native_source=historical_native_source,
         )
     )
     return certificate
@@ -319,6 +325,7 @@ def validate_certificate_for_binding_with_revision_fence(
     observed_upstream_id: str | None = None,
     now: datetime | None = None,
     adapter_artifact_digest: str | None = None,
+    historical_native_source: bool = False,
 ) -> tuple[CapabilityCertificate, str]:
     """Validate a certificate and return its content-bound cheap TCB fence."""
     try:
@@ -333,13 +340,29 @@ def validate_certificate_for_binding_with_revision_fence(
     if certificate.certificate_scope != "model":
         raise CapabilityCertificateError("certificate_scope_invalid")
     if _is_native_certificate(certificate):
-        from core.providers.native_agent_certificates import native_installation_for_adapter, validate_native_connection_certificate
+        from core.providers.native_agent_certificates import (
+            native_installation_for_adapter,
+            validate_native_connection_certificate,
+            validate_native_connection_certificate_for_continuation_source,
+        )
         from core.providers.native_model_revision import require_native_model_revision_transport
 
         require_native_model_revision_transport(binding)
-        validate_native_connection_certificate(
-            store, certificate, now=now, installation=native_installation_for_adapter(adapter),
-        )
+        installation = native_installation_for_adapter(adapter)
+        if historical_native_source:
+            validate_native_connection_certificate_for_continuation_source(
+                store,
+                certificate,
+                now=now,
+                installation=installation,
+            )
+        else:
+            validate_native_connection_certificate(
+                store,
+                certificate,
+                now=now,
+                installation=installation,
+            )
     try:
         evidence = store.get_capability_evidence(certificate.evidence_digest)
     except ProviderNotFoundError as error:

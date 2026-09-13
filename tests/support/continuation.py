@@ -65,6 +65,7 @@ class RuntimeContinuationFixture:
         legacy_inferred: bool = False,
         session_kind: str = "chat_root",
         target_workspace_binding_id: str | None = None,
+        source_certificate=None,
     ):
         target = build_pinned_execution_binding(
             self.state.provider_store,
@@ -88,49 +89,57 @@ class RuntimeContinuationFixture:
         source_profile = replace(
             target_profile,
             revision=f"obsolete:{session_id}",
-            capability_certificate_id=f"old-certificate:{session_id}",
+            capability_certificate_id=(
+                source_certificate.certificate_id
+                if source_certificate is not None
+                else f"old-certificate:{session_id}"
+            ),
             model_id=source_model_id or target.model_id,
             routing_constraint=source_routing,
         )
         self.state.provider_store.save_agentic_profile_definition(source_profile)
-        old_artifact_digest = "2" * 64
-        old_evidence = build_capability_evidence(
-            suite_id=target_certificate.suite_id,
-            suite_version=target_certificate.suite_version,
-            test_run_id=f"old-revision:{session_id}",
-            adapter_artifact_digest=old_artifact_digest,
-            result_summary_digest=canonical_digest({"session_id": session_id}),
-            evidence_refs=target_certificate.evidence_refs,
-            recorded_at=NOW,
-            certification_target_digest=(
-                api_profile_target_digest(source_profile)
-                if source_profile.execution_family == "maverick_agent" else ""
-            ),
-            **{name: getattr(target_certificate, name) for name in (
-                "tcb_manifest_id", "tcb_manifest_version", "tcb_structure_digest", "tcb_live_digest",
-            )},
-        )
-        source_capabilities = target_certificate.certified_capabilities
-        if restrict_source_capability:
-            source_capabilities = replace(source_capabilities, shell=False)
-        old_certificate = replace(
-            target_certificate,
-            certificate_id=f"old-certificate:{session_id}",
-            adapter_artifact_digest=old_artifact_digest,
-            test_run_id=old_evidence.test_run_id,
-            evidence_digest=old_evidence.evidence_digest,
-            certification_target_digest=old_evidence.certification_target_digest,
-            model_id=source_model_id or target.model_id,
-            certified_upstream_ids=source_routing.allowed_upstream_ids,
-            routing_constraint_digest=canonical_digest(source_routing),
-            certified_capabilities=source_capabilities,
-            issued_at=NOW,
-        )
-        publish_capability_certificate(
-            self.state.provider_store,
-            certificate=old_certificate,
-            evidence=old_evidence,
-        )
+        if source_certificate is None:
+            old_artifact_digest = "2" * 64
+            old_evidence = build_capability_evidence(
+                suite_id=target_certificate.suite_id,
+                suite_version=target_certificate.suite_version,
+                test_run_id=f"old-revision:{session_id}",
+                adapter_artifact_digest=old_artifact_digest,
+                result_summary_digest=canonical_digest({"session_id": session_id}),
+                evidence_refs=target_certificate.evidence_refs,
+                recorded_at=NOW,
+                certification_target_digest=(
+                    api_profile_target_digest(source_profile)
+                    if source_profile.execution_family == "maverick_agent" else ""
+                ),
+                **{name: getattr(target_certificate, name) for name in (
+                    "tcb_manifest_id", "tcb_manifest_version", "tcb_structure_digest", "tcb_live_digest",
+                )},
+            )
+            source_capabilities = target_certificate.certified_capabilities
+            if restrict_source_capability:
+                source_capabilities = replace(source_capabilities, shell=False)
+            old_certificate = replace(
+                target_certificate,
+                certificate_id=f"old-certificate:{session_id}",
+                adapter_artifact_digest=old_artifact_digest,
+                test_run_id=old_evidence.test_run_id,
+                evidence_digest=old_evidence.evidence_digest,
+                certification_target_digest=old_evidence.certification_target_digest,
+                model_id=source_model_id or target.model_id,
+                certified_upstream_ids=source_routing.allowed_upstream_ids,
+                routing_constraint_digest=canonical_digest(source_routing),
+                certified_capabilities=source_capabilities,
+                issued_at=NOW,
+            )
+            publish_capability_certificate(
+                self.state.provider_store,
+                certificate=old_certificate,
+                evidence=old_evidence,
+            )
+        else:
+            old_certificate = source_certificate
+            old_artifact_digest = source_certificate.adapter_artifact_digest
         source_binding = build_runtime_execution_binding(
             session_id=session_id,
             workspace_id="default",

@@ -1818,7 +1818,7 @@ and visible label **verifica sola lettura v40**. Expected totals are **261 Swift
 tests** and **34 Python tests**. Signed validation, installation and physical
 acceptance remain separate gates.
 
-#### v40 signed validation
+#### v40 signed validation and installation
 
 Remote source commit `0d46fa2c97235bbb0aa0af08ead56a4ef7eaaacd`
 passed **261 Swift tests** and **34 Python tests** on the self-hosted
@@ -1832,4 +1832,19 @@ Push run
 [`34711039729`](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34711039729)
 is red only because its optional artifact upload hit the existing GitHub
 storage quota after all authoritative gates completed. It did not install or
-open the app. Installation and physical acceptance remain pending.
+open the app.
+
+Install run
+[`34749285400`](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34749285400)
+validated remote head `aec101a08dccef64be490e3c22ee7d54f11ac54b`, whose
+only change after the validated source commit was documentation. It repeated
+the **261 Swift tests** and **34 Python tests**, Release, Codex/image transport,
+same-turn observation, pinned Peekaboo 4.3.1, Apple Development signature and
+bidirectional code-identity gates successfully. No package or artifact-upload
+step ran.
+
+At **09:19:29 UTC on 2026-09-13**, the installer verified identity continuity,
+updated `~/Applications/MaverickMac.app` in place without a persistent backup
+and requested launch. Installed label: **aec101a · verifica sola lettura v40**.
+Privacy-permission retention and the complete physical acceptance remain
+separate facts.

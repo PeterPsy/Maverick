@@ -244,7 +244,7 @@ def list_threads(data_root: Path, payload: dict[str, object]) -> list[dict[str, 
     offset = _bounded_int(payload.get("offset"), default=0, minimum=0, maximum=100_000)
     with connect(data_root) as db:
         rows = db.execute(
-            f"SELECT * FROM threads WHERE {' AND '.join(clauses)} ORDER BY last_message_at DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM threads WHERE {' AND '.join(clauses)} ORDER BY last_message_at DESC, id ASC LIMIT ? OFFSET ?",
             (*params, limit, offset),
         ).fetchall()
     return [_thread(row) for row in rows]

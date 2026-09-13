@@ -1,5 +1,8 @@
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { readMailDisplay } from './pwaCache';
+import { useMailList } from './useMailList';
+import { filterThreadsByMailboxScopes } from './threadFilters';
+import { mailboxScopeIdsForConnections } from './mailboxSelection';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import {
@@ -24,11 +27,8 @@ import {
 import SlidingPagination from './components/ui/sliding-pagination';
 import { mailThreadDragPayloadFromThread, mountMailThreadDragPreview, writeMailThreadDragData } from './lib/mailThreadDragDrop';
 import {
-  DEFAULT_MAILBOX_SCOPE_IDS,
   isMailbox,
   mailboxScopeIdsFromParams,
-  normalizeMailboxScopeIds,
-  parseMailboxScopeId,
   primaryMailboxScope,
   serializeMailboxScopeIds
 } from './mailboxScopes';
@@ -52,12 +52,6 @@ const EMAIL_FRAME_MIN_HEIGHT = 180;
 const EMAIL_FRAME_MAX_HEIGHT = 12_000;
 const EMAIL_FRAME_MAX_WIDTH = 3_200;
 
-type ConnectionPayload = {
-  items: MailConnection[];
-  required_secrets?: string[];
-  callback_path?: string;
-};
-
 type MailNavigateParams = {
   add_account?: boolean;
   add_account_request_id?: string;
@@ -66,13 +60,6 @@ type MailNavigateParams = {
   connection_id?: string | null;
   query?: string;
   thread?: string;
-};
-
-type ThreadListPayload = {
-  items: MailThread[];
-  limit?: number;
-  offset?: number;
-  total_count?: number;
 };
 
 type SyncPayload = {
@@ -152,15 +139,6 @@ function connectionSecretRequest(connection?: MailConnection | null) {
   return gmailSecretRequest(connection.id);
 }
 
-function mailboxScopeIdsForConnections(scopeIds: string[], connections: MailConnection[]) {
-  const connectionIds = new Set(connections.map((connection) => connection.id));
-  const filtered = normalizeMailboxScopeIds(scopeIds).filter((scopeId) => {
-    const scope = parseMailboxScopeId(scopeId);
-    return Boolean(scope && (!scope.connectionId || connectionIds.has(scope.connectionId)));
-  });
-  return filtered.length ? filtered : DEFAULT_MAILBOX_SCOPE_IDS;
-}
-
 function isUsableConnection(connection?: MailConnection | null) {
   return Boolean(connection && connection.status !== 'disconnected');
 }
@@ -221,7 +199,7 @@ function threadRoute(thread: MailThread, connection?: MailConnection | null, mai
   const account = connectionLabel(connection);
   const counterparty = addressLabel(threadCounterparty(thread, connection));
   const isSentOnlyThread = thread.labels.includes('sent') && !thread.labels.includes('inbox');
-  if (mailbox === 'sent' || isSentOnlyThread) {
+  if ((mailbox === 'sent' && thread.labels.includes('sent')) || isSentOnlyThread) {
     return {
       fromLabel: account,
       toLabel: counterparty,
@@ -861,31 +839,50 @@ function MailThreadMessage({
 }
 
 export function App() {
-  const [connections, setConnections] = useState<MailConnection[]>([]);
-  const [threads, setThreads] = useState<MailThread[]>([]);
-  const [totalThreads, setTotalThreads] = useState(0);
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null);
-  const [mailboxScopeIds, setMailboxScopeIds] = useState<string[]>(DEFAULT_MAILBOX_SCOPE_IDS);
-  const [mailbox, setMailbox] = useState('inbox');
+  const [mailboxScopeIds, setMailboxScopeIds] = useState<string[]>(() => (
+    mailboxScopeIdsFromParams(Object.fromEntries(new URLSearchParams(window.location.search)))
+  ));
   const [connectionId, setConnectionId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('query') || '');
   const [searchFocused, setSearchFocused] = useState(false);
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [threadListLoading, setThreadListLoading] = useState(true);
   const [threadOpenLoading, setThreadOpenLoading] = useState(false);
   const [oauthCompleting, setOauthCompleting] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [readerPlain, setReaderPlain] = useState(false);
   const [readerShowImages, setReaderShowImages] = useState(false);
   const [draggingThreadId, setDraggingThreadId] = useState('');
-  const threadListRequestRef = useRef(0);
+  const initialThreadRef = useRef('');
   const threadOpenRequestRef = useRef(0);
   const selectedThreadRef = useRef<MailThread | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
   const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
+  const mailbox = primaryScope.mailbox;
+  const {
+    connections, liveConnections, threads: loadedThreads,
+    loading: threadListLoading, refreshing: threadListRefreshing,
+    incomplete: threadListIncomplete, refresh: loadThreads,
+  } = useMailList(query, setNotice);
+  const filteredThreads = useMemo(
+    () => filterThreadsByMailboxScopes(loadedThreads, mailboxScopeIds),
+    [loadedThreads, mailboxScopeIds],
+  );
+  const totalThreads = filteredThreads.length;
+  const totalPages = Math.max(1, Math.ceil(totalThreads / THREADS_PAGE_SIZE));
+  const visiblePage = Math.min(page, totalPages);
+  const threads = filteredThreads.slice((visiblePage - 1) * THREADS_PAGE_SIZE, visiblePage * THREADS_PAGE_SIZE);
+
+  useEffect(() => {
+    if (liveConnections === null) return;
+    setMailboxScopeIds((current) => {
+      const valid = mailboxScopeIdsForConnections(current, liveConnections);
+      return serializeMailboxScopeIds(valid) === serializeMailboxScopeIds(current) ? current : valid;
+    });
+  }, [liveConnections]);
 
   useEffect(() => () => cleanupThreadDragPreview(), []);
 
@@ -916,6 +913,7 @@ export function App() {
     setBusy(true);
     setThreadOpenLoading(true);
     if (!refresh) {
+      selectedThreadRef.current = null;
       setSelectedThread(null);
     }
     try {
@@ -925,6 +923,7 @@ export function App() {
         onRevalidated: (next) => { if (threadOpenRequestRef.current === requestId) setSelectedThread(next.thread); },
         onRevalidationError: (error) => { if (threadOpenRequestRef.current === requestId) setNotice(error instanceof Error ? error.message : 'Mail read failed.'); },
       });
+      if (controller.signal.aborted || threadOpenRequestRef.current !== requestId) return;
       // Rich rendering/provider refresh remains live-only, and never gates the
       // cached message text. No attachment bytes or send authority are cached.
       void callBackend<{ thread: MailThread }>({
@@ -932,9 +931,6 @@ export function App() {
         max_body_chars: READER_TEXT_BODY_CHARS, max_body_html_chars: READER_HTML_BODY_CHARS,
         ...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest()),
       }).then((next) => { if (!controller.signal.aborted && threadOpenRequestRef.current === requestId) setSelectedThread(next.thread); }).catch(() => undefined);
-      if (threadOpenRequestRef.current !== requestId) {
-        return;
-      }
       setSelectedThread(payload.thread);
       setConnectionId(payload.thread.connection_id);
       notifySelection({
@@ -955,70 +951,20 @@ export function App() {
     }
   }, [mailbox, secretRequestForConnectionId, serializedMailboxScopes]);
 
-  const loadThreads = useCallback(async () => {
-    const controller = beginDisplayRead('list');
-    const requestId = threadListRequestRef.current + 1;
-    threadListRequestRef.current = requestId;
-    setThreadListLoading(true);
-    const offset = (page - 1) * THREADS_PAGE_SIZE;
-    try {
-      const metadata = readMailDisplay<ConnectionPayload>({ kind: 'mailboxes' }, {
-        signal: controller.signal,
-        onRevalidated: (next) => { if (!controller.signal.aborted) setConnections(next.items); },
-      });
-      void metadata.then((next) => { if (!controller.signal.aborted) setConnections(next.items); }).catch(() => undefined);
-      const nextMailboxScopeIds = mailboxScopeIds;
-      const nextSerializedMailboxScopes = serializeMailboxScopeIds(nextMailboxScopeIds);
-      const nextPrimaryScope = primaryMailboxScope(nextMailboxScopeIds);
-      const threadPayload = await readMailDisplay<ThreadListPayload>({
-        kind: 'threads',
-        mailbox: nextPrimaryScope.mailbox,
-        mailbox_scopes: nextSerializedMailboxScopes,
-        ...(nextPrimaryScope.connectionId ? { connection_id: nextPrimaryScope.connectionId } : {}),
-        ...(query ? { query } : {}),
-        max_threads: THREADS_PAGE_SIZE,
-        offset,
-      }, {
-        signal: controller.signal,
-        onRevalidated: (next) => {
-          if (threadListRequestRef.current === requestId) { setThreads(next.items); setTotalThreads(next.total_count ?? next.items.length); }
-        },
-        onRevalidationError: (error) => { if (!controller.signal.aborted) setNotice(error instanceof Error ? error.message : 'Mail list failed.'); },
-      });
-      if (threadListRequestRef.current !== requestId) {
-        return;
-      }
-      void callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() })
-        .then((next) => { if (!controller.signal.aborted) setConnections(next.items); }).catch(() => undefined);
-      if (nextSerializedMailboxScopes !== serializedMailboxScopes) {
-        setMailboxScopeIds(nextMailboxScopeIds);
-        setMailbox(nextPrimaryScope.mailbox);
-        setConnectionId(nextPrimaryScope.connectionId);
-        notifySelection({
-          mailbox: nextPrimaryScope.mailbox,
-          mailbox_scopes: nextSerializedMailboxScopes,
-          thread: null,
-          connection_id: nextPrimaryScope.connectionId
-        });
-      }
-      setThreads(threadPayload.items);
-      setTotalThreads(threadPayload.total_count ?? threadPayload.items.length);
-      void metadata.then((next) => {
-        if (controller.signal.aborted) return;
-        const validScopes = mailboxScopeIdsForConnections(mailboxScopeIds, next.items);
-        if (serializeMailboxScopeIds(validScopes) !== serializedMailboxScopes) setMailboxScopeIds(validScopes);
-      }).catch(() => undefined);
-    } catch (error) {
-      if (threadListRequestRef.current !== requestId) {
-        return;
-      }
-      throw error;
-    } finally {
-      if (threadListRequestRef.current === requestId) {
-        setThreadListLoading(false);
-      }
-    }
-  }, [connectionId, mailboxScopeIds, page, query, serializedMailboxScopes]);
+  const closeThread = useCallback((notify = true) => {
+    threadOpenRequestRef.current += 1;
+    displayReads.current.get('thread')?.abort();
+    selectedThreadRef.current = null;
+    setSelectedThread(null);
+    setThreadOpenLoading(false);
+    if (threadOpenLoading) setBusy(false);
+    if (notify) notifySelection({
+      mailbox: primaryScope.mailbox,
+      mailbox_scopes: serializedMailboxScopes,
+      thread: null,
+      connection_id: primaryScope.connectionId
+    });
+  }, [primaryScope, serializedMailboxScopes, threadOpenLoading]);
 
   useEffect(() => {
     setPage(1);
@@ -1066,14 +1012,11 @@ export function App() {
         .finally(() => setOauthCompleting(false));
       return;
     }
-    if (threadId) {
+    if (threadId && initialThreadRef.current !== threadId) {
+      initialThreadRef.current = threadId;
       openThread(threadId).catch((error: Error) => setNotice(error.message));
     }
   }, [loadThreads, oauthCompleting, openThread]);
-
-  useEffect(() => {
-    loadThreads().catch((error: Error) => setNotice(error.message));
-  }, [loadThreads]);
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -1103,17 +1046,20 @@ export function App() {
             );
           const nextPrimaryScope = primaryMailboxScope(nextMailboxScopeIds);
           const nextSerializedScopes = serializeMailboxScopeIds(nextMailboxScopeIds);
-          setPage(1);
-          setMailboxScopeIds(nextMailboxScopeIds);
-          setMailbox(nextPrimaryScope.mailbox);
-          setConnectionId(nextPrimaryScope.connectionId);
-          setSelectedThread(null);
-          notifySelection({
-            mailbox: nextPrimaryScope.mailbox,
-            mailbox_scopes: nextSerializedScopes,
-            thread: null,
-            connection_id: nextPrimaryScope.connectionId
-          });
+          if (nextSerializedScopes !== serializedMailboxScopes) {
+            setPage(1);
+            setMailboxScopeIds(nextMailboxScopeIds);
+            setConnectionId(nextPrimaryScope.connectionId);
+            const currentThread = selectedThreadRef.current;
+            const keepReader = currentThread && filterThreadsByMailboxScopes([currentThread], nextMailboxScopeIds).length > 0;
+            if (!keepReader) closeThread(false);
+            notifySelection({
+              mailbox: nextPrimaryScope.mailbox,
+              mailbox_scopes: nextSerializedScopes,
+              thread: keepReader ? currentThread.id : null,
+              connection_id: nextPrimaryScope.connectionId
+            });
+          }
         }
         if (typeof params.query === 'string') {
           setQuery(params.query);
@@ -1134,14 +1080,13 @@ export function App() {
     };
     window.addEventListener('message', listener);
     return () => window.removeEventListener('message', listener);
-  }, [connectionId, loadThreads, mailbox, mailboxScopeIds, openThread]);
+  }, [closeThread, connectionId, loadThreads, mailbox, mailboxScopeIds, openThread, serializedMailboxScopes]);
 
   const connection = (connectionId ? connections.find((item) => item.id === connectionId) : null) || connections.find((item) => item.status !== 'disconnected') || connections[0];
   const connectionById = useMemo(() => new Map(connections.map((item) => [item.id, item])), [connections]);
   const canUseConnection = Boolean(connection && connection.status !== 'disconnected');
-  const totalPages = Math.max(1, Math.ceil(totalThreads / THREADS_PAGE_SIZE));
-  const visibleStart = totalThreads === 0 ? 0 : (page - 1) * THREADS_PAGE_SIZE + 1;
-  const visibleEnd = totalThreads === 0 ? 0 : Math.min(page * THREADS_PAGE_SIZE, totalThreads);
+  const visibleStart = totalThreads === 0 ? 0 : (visiblePage - 1) * THREADS_PAGE_SIZE + 1;
+  const visibleEnd = totalThreads === 0 ? 0 : Math.min(visiblePage * THREADS_PAGE_SIZE, totalThreads);
   const selectedMessages = selectedThread?.messages || [];
   const readerHasHtml = selectedMessages.some((message) => Boolean(message.body_html_rendered || message.body_html_sanitized));
   const readerHasRemoteImages = selectedMessages.some((message) => {
@@ -1172,16 +1117,6 @@ export function App() {
     setReaderPlain(false);
     setReaderShowImages(false);
   }, [selectedThread?.id]);
-
-  function closeThread() {
-    setSelectedThread(null);
-    notifySelection({
-      mailbox: primaryScope.mailbox,
-      mailbox_scopes: serializedMailboxScopes,
-      thread: null,
-      connection_id: primaryScope.connectionId
-    });
-  }
 
   async function startGmailOAuth() {
     const authorizationWindow = openBlankAuthorizationWindow();
@@ -1389,7 +1324,7 @@ export function App() {
           {totalPages > 1 ? (
             <SlidingPagination
               totalPages={totalPages}
-              currentPage={page}
+              currentPage={visiblePage}
               onPageChange={setPage}
               maxVisiblePages={7}
             />
@@ -1446,9 +1381,11 @@ export function App() {
       <div className="mail-workspace">
         <section className="thread-column">
           {notice ? <div className="mail-sidebar-notice" role="status" aria-live="polite">{notice}</div> : null}
-          <div className="thread-list" aria-busy={threadListLoading}>
+          <div className="thread-list" aria-busy={threadListLoading || threadListRefreshing}>
             {threadListLoading ? <MailThreadListSkeleton /> : null}
-            {!threadListLoading && threads.length === 0 ? (
+            {!threadListLoading && threadListRefreshing ? <div className="thread-list-status" role="status">Updating cached mail…</div> : null}
+            {threadListIncomplete ? <div className="thread-list-status" role="status">Some cached mail could not be loaded. Refresh or narrow the search.</div> : null}
+            {!threadListLoading && !threadListRefreshing && !threadListIncomplete && threads.length === 0 ? (
               <div className="thread-empty">
                 {canUseConnection ? 'No threads match this view.' : 'Connect a mail account to load mail.'}
               </div>
@@ -1558,7 +1495,7 @@ export function App() {
                   >
                     <RefreshCw size={16} strokeWidth={1.8} aria-hidden="true" />
                   </button>
-                  <button type="button" className="reader-close" onClick={closeThread} aria-label="Close mail">
+                  <button type="button" className="reader-close" onClick={() => closeThread()} aria-label="Close mail">
                     <X size={16} strokeWidth={1.8} aria-hidden="true" />
                   </button>
                 </div>

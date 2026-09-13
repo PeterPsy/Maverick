@@ -2231,7 +2231,7 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "health.check"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["schema_version"], "9")
+            self.assertEqual(payload["schema_version"], "10")
             self.assertEqual(payload["health_status"], "healthy")
             self.assertEqual(payload["database"], "mail.sqlite")
             with connect(Path(tmp)) as db:
@@ -3933,7 +3933,7 @@ class MailServiceTest(unittest.TestCase):
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
 
         self.assertIn("function threadRoute(thread: MailThread, connection?: MailConnection | null, mailbox?: string)", app_source)
-        self.assertIn("if (mailbox === 'sent' || isSentOnlyThread)", app_source)
+        self.assertIn("if ((mailbox === 'sent' && thread.labels.includes('sent')) || isSentOnlyThread)", app_source)
         self.assertIn("fromLabel: account", app_source)
         self.assertIn("toLabel: counterparty", app_source)
         self.assertIn("const route = threadRoute(thread, connection, primaryScope.mailbox);", app_source)

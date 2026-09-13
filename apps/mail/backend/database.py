@@ -11,7 +11,7 @@ import re
 import sqlite3
 
 
-SCHEMA_VERSION = "9"
+SCHEMA_VERSION = "10"
 REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
 REQUIRED_TABLES = [
     "schema_metadata",
@@ -258,6 +258,7 @@ def ensure_schema(data_root: Path) -> None:
         )
         _remove_mock_provider_rows(db)
         _migrate_legacy_gmail_cache_ids(db)
+        _migrate_gmail_draft_labels(db)
 
 
 def health_payload(data_root: Path, *, initialize: bool = True) -> dict[str, object]:
@@ -441,6 +442,19 @@ def _delete_where_in(db: sqlite3.Connection, table: str, column: str, ids: list[
         return
     placeholders = ",".join("?" for _ in ids)
     db.execute(f"DELETE FROM {table} WHERE {column} IN ({placeholders})", ids)
+
+
+def _migrate_gmail_draft_labels(db: sqlite3.Connection) -> None:
+    rows = db.execute(
+        """
+        SELECT threads.id, threads.labels_json
+        FROM threads JOIN connections ON threads.connection_id = connections.id
+        WHERE connections.provider = 'gmail' AND threads.labels_json LIKE '%"draft"%'
+        """
+    ).fetchall()
+    for row in rows:
+        labels = sorted({"drafts" if label == "draft" else label for label in json.loads(row["labels_json"])})
+        db.execute("UPDATE threads SET labels_json = ? WHERE id = ?", (json.dumps(labels), row["id"]))
 
 
 def _migrate_legacy_gmail_cache_ids(db: sqlite3.Connection) -> None:

@@ -20,6 +20,20 @@ such as `all:inbox` and `connection:<connection_id>:sent`; `threads.list` treats
 those scopes as a union so sidebar checkbox selections add together instead of
 replacing each other.
 
+The frontend loads locally cached thread headers across folders in bounded
+200-row display-read pages, then applies sidebar scopes and 50-row UI pagination
+in memory. Checkbox changes do not reload the app, refetch the list, or replace
+loaded rows with skeletons. Aggregate and per-account scopes form a union without
+duplicates; clearing every checkbox shows no threads and never restores Inbox
+implicitly. A reader stays open while its thread still matches the selection.
+Search remains server-side across cached subjects, bodies, addresses and attachment
+names, then the same local mailbox scopes apply to its results. Sync and data
+events refresh the header collection in the background; complete loaded lists stay
+visible until replacement pages finish. Initial page loading reports progress,
+and exceeding the store's pagination limit asks the user to narrow the search
+instead of silently returning a complete-looking partial list. Thread ordering
+uses the thread id to break equal timestamp ties consistently across pages.
+
 ## Storage
 
 The app owns `workspaces/<workspace_id>/data/mail/`.
@@ -30,7 +44,7 @@ Primary data lives in:
 data/mail/mail.sqlite
 ```
 
-Schema version `9` stores connections, non-sensitive provider settings, OAuth flow metadata, redaction-safe credential references, folders, labels, threads, messages, bounded original HTML bodies, Gmail-sanitized HTML bodies, rendered HTML bodies, render policy metadata, MIME part metadata, inline asset metadata, attachment metadata, plain-text and optional HTML draft bodies, draft reply-to recipients, Storage-backed draft attachments, sync state, app-to-app entity links, and audit log entries. The install and migrate hooks are idempotent and create or upgrade the schema. The schema migration removes legacy local mock provider rows and leaves Gmail connections/cache intact.
+Schema version `10` stores connections, non-sensitive provider settings, OAuth flow metadata, redaction-safe credential references, folders, labels, threads, messages, bounded original HTML bodies, Gmail-sanitized HTML bodies, rendered HTML bodies, render policy metadata, MIME part metadata, inline asset metadata, attachment metadata, plain-text and optional HTML draft bodies, draft reply-to recipients, Storage-backed draft attachments, sync state, app-to-app entity links, and audit log entries. The install and migrate hooks are idempotent and create or upgrade the schema. The schema migration removes legacy local mock provider rows and preserves Gmail connections/cache. Version `10` normalizes cached Gmail `draft` labels to the canonical `drafts` mailbox; new Gmail reads apply the same mapping, so Drafts filters and counts work without requiring a provider resync.
 
 Provider tokens, OAuth client secrets, and mailbox passwords must not be stored in this repository, frontend, logs, app events, SQLite raw fields, or Storage files. Providers resolve them through Vault/Core Secrets. The app database stores only connection metadata, non-sensitive IMAP/SMTP settings, `secret_ref`, `grant_id`, and non-sensitive token/credential metadata.
 
@@ -86,6 +100,7 @@ maverick app mail frontend build --json
 maverick app mail cli list --json
 maverick app mail mcp list --json
 python3 -m unittest discover -s apps/mail/tests -p 'test_*.py'
+npm --prefix apps/mail test
 ```
 
 ## Known Gaps

@@ -564,7 +564,7 @@ def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]
         return
     subject = parsed_messages[-1]["subject"] or "(no subject)"
     participants = _participants(parsed_messages)
-    labels = sorted({label.lower() for item in parsed_messages for label in item["labels"]})
+    labels = sorted({"drafts" if label == "DRAFT" else label.lower() for item in parsed_messages for label in item["labels"]})
     unread = any("UNREAD" in item["labels"] for item in parsed_messages)
     starred = any("STARRED" in item["labels"] for item in parsed_messages)
     last_message_at = max(str(item["sent_at"]) for item in parsed_messages)

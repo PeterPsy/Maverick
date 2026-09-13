@@ -69,3 +69,14 @@ the current certificate and must pass the normal compatibility/non-expansion
 proof. Legacy model certificates with no provable connection root, or roots
 whose installation contract changed, remain readable but cannot be resumed
 automatically.
+
+After cold bootstrap publishes a new active Codex connection certificate and
+rolls compatible workspace bindings forward, Core automatically inventories
+Codex chat roots pinned to the prior certificate. It snapshots every compatible
+lineage before mutation and materializes the same audited continuation fork used
+by message admission, so the user-facing thread points at a current certified
+successor without waiting for another message. The pass is idempotent and does
+not rewrite either certificate or the predecessor. Snapshot failure blocks all
+writes for that workspace; one handoff failure remains resumable and does not
+prevent unrelated chat migrations or backend startup. Sessions without the
+historical proof above remain unchanged and fail closed.

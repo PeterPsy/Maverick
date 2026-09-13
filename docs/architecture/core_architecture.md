@@ -2903,6 +2903,19 @@ manifest. Logs, transient caches, and unrelated provider homes remain excluded.
 The mutation then uses the same preflight inventory and never broadens its
 session scope between snapshot and handoff.
 
+Cold bootstrap also runs this snapshot-backed repair automatically after a new
+active Codex certificate, model profiles, and compatible workspace bindings
+have converged. It selects only `chat_root` lineages whose historical Codex
+connection identity and ordinary non-expansion proof classify them as
+`compatible_upgrade`; it never rewrites a predecessor or historical
+certificate. Each selected lineage is materialized through the same resumable
+handoff phase machine used by live message admission. Repeated bootstrap is
+idempotent and creates no additional snapshot after all candidates are direct.
+A workspace snapshot failure prevents every automatic mutation in that
+workspace, while a per-lineage handoff failure is audited and isolated so Core
+can start and unrelated compatible chats can still move. Unproven or
+incompatible sessions remain `upgrade_required`.
+
 The core owns the delete operation. `DELETE /api/runtime/threads/<thread_id>` removes the core thread record and performs full cleanup of the linked runtime session. `POST /api/runtime/threads/delete-batch` accepts up to 20 deduplicated thread ids, authorizes every resolvable thread before mutation, expands root and active inter-agent child sessions once, and returns an explicit `deleted` or `not_found` result for every requested id. `POST /api/runtime/threads/clear` applies the same batch cleanup operation to every runtime thread in the active workspace.
 
 A synchronous thread-delete batch invokes each eligible app cleanup callback once with the complete deduplicated session-id list, including every continuation predecessor, deletes the selected thread records with one collection mutation, and publishes one workspace thread-catalog delta. Direct chat cleanup, Settings cleanup, and authorized app cleanup requests use the same lineage expansion, so no surface may delete only the current child and orphan its predecessor or handoff record. Physical runtime cleanup remains complete before the response; batching must not weaken process termination, authorization, hidden-session policy, or canonical-root safety.

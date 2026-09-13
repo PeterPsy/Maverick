@@ -30,6 +30,9 @@ from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import builtin_provider_registry, effective_provider_registry
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
+from core.recovery.continuation_rollout import (
+    repair_runtime_continuations_after_certified_rollout,
+)
 from core.providers.store import ProviderDocumentStore
 from core.recovery.store import RecoveryDocumentStore, RecoveryCollections
 from core.runtime.app_reference_classification import (
@@ -324,6 +327,11 @@ def bootstrap_platform_state(
     if recover_backend_restart:
         recover_interrupted_runtime_turns_after_backend_restart(state)
         job_service.recover_expired_jobs()
+    if register_builtin_provider_definitions:
+        repair_runtime_continuations_after_certified_rollout(
+            state,
+            now=onboarding_now,
+        )
     return state
 
 

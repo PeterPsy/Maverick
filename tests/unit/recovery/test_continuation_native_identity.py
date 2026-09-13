@@ -1,9 +1,14 @@
 """Native continuation accepts only authentic compatible connection history."""
 
+from contextlib import closing
 from dataclasses import replace
+from datetime import timedelta
+import os
+import sqlite3
 import unittest
 from unittest.mock import patch
 
+from core.api.platform_state import bootstrap_platform_state
 from core.providers.certificate_service import (
     build_capability_evidence,
     publish_capability_certificate,
@@ -201,6 +206,81 @@ class NativeContinuationIdentityTest(RuntimeContinuationFixture, unittest.TestCa
         self.assertEqual(
             continuation.session.predecessor_session_id,
             source.session_id,
+        )
+
+    def test_backend_bootstrap_upgrades_chat_after_certified_codex_rollout(self):
+        historical_projection, _historical_root, installation, codex = (
+            self._install_historical_projection()
+        )
+        source = self._source_session(
+            "automatic-native-history",
+            target_workspace_binding_id=codex.binding_id,
+            source_certificate=historical_projection,
+        )
+        codex_home = (
+            self.root
+            / "workspaces"
+            / "default"
+            / "runtime"
+            / "sessions"
+            / source.session_id
+            / "codex-home"
+        )
+        rollout = codex_home / "sessions" / "rollout.jsonl"
+        rollout.parent.mkdir(parents=True)
+        rollout.write_text('{"event":"preserved"}\n', encoding="utf-8")
+        with closing(sqlite3.connect(codex_home / "state_5.sqlite")) as connection:
+            connection.execute("CREATE TABLE provider_state (value TEXT)")
+            connection.execute("INSERT INTO provider_state VALUES ('preserved')")
+            connection.commit()
+
+        with (
+            patch.dict(
+                os.environ,
+                {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+                clear=False,
+            ),
+            patch.object(
+                installation.inspector,
+                "artifact",
+                return_value=installation.runtime_artifact,
+            ),
+        ):
+            restarted = bootstrap_platform_state(
+                start_path=self.root,
+                now=NOW + timedelta(seconds=1),
+                install_builtin_apps=False,
+            )
+
+        thread = restarted.runtime_store.get_thread(source.session_id)
+        self.assertNotEqual(thread.runtime_session_id, source.session_id)
+        successor = restarted.runtime_store.get_session(thread.runtime_session_id)
+        self.assertEqual(successor.predecessor_session_id, source.session_id)
+        self.assertEqual(
+            successor.execution_binding.profile_definition_revision.split(".", 1)[0],
+            "16",
+        )
+        snapshots = list((self.root / "data" / "recovery-snapshots").iterdir())
+        self.assertEqual(len(snapshots), 1)
+
+        with patch.dict(
+            os.environ,
+            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            clear=False,
+        ):
+            converged = bootstrap_platform_state(
+                start_path=self.root,
+                now=NOW + timedelta(seconds=2),
+                install_builtin_apps=False,
+            )
+
+        self.assertEqual(
+            converged.runtime_store.get_thread(source.session_id).runtime_session_id,
+            successor.session_id,
+        )
+        self.assertEqual(
+            len(list((self.root / "data" / "recovery-snapshots").iterdir())),
+            1,
         )
 
     def test_changed_codex_artifact_cannot_borrow_current_connection_authority(self):

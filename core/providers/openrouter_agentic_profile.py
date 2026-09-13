@@ -34,16 +34,15 @@ from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISIO
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 
 
-OPENROUTER_AGENTIC_PROFILE_ID = (
-    "agentic-profile-openrouter-glm-5-3-flash-relace-fp4"
-)
-OPENROUTER_AGENTIC_PROFILE_REVISION = "6"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = (
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
+OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-glm-5-3-flash-relace"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "1"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ()
+OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS = tuple(
+    (
+        "agentic-profile-openrouter-glm-5-3-flash-relace-fp4",
+        revision,
+    )
+    for revision in ("1", "2", "3", "4", "5", "6")
 )
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = OPENROUTER_AGENTIC_REASONING_EFFORTS
 OPENROUTER_DEFAULT_REASONING_EFFORT = OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
@@ -149,6 +148,9 @@ def openrouter_agentic_preview_publication(
         profile=definition,
         rollout_status="available",
         superseded_profile_revisions=OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
+        superseded_profile_definitions=(
+            OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS
+        ),
     )
 
 

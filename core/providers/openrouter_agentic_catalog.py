@@ -26,7 +26,6 @@ from core.providers.openrouter_agentic_catalog_records import (
 )
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
-    OPENROUTER_AGENTIC_MODEL_EXPIRATION_DATE,
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_MODEL_REVISION,
     OPENROUTER_AGENTIC_REASONING_EFFORTS,
@@ -148,7 +147,6 @@ def validate_openrouter_agentic_catalog(
     metadata_context = validate_model_metadata_record(
         metadata_record,
         resolved_model_id=OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
-        expiration_date=OPENROUTER_AGENTIC_MODEL_EXPIRATION_DATE,
         reasoning_efforts=OPENROUTER_AGENTIC_REASONING_EFFORTS,
         default_reasoning_effort=OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
         reasoning_mandatory=OPENROUTER_AGENTIC_REASONING_MANDATORY,

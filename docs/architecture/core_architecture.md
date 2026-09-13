@@ -902,6 +902,20 @@ mutable-authority, TCB-filesystem, classification, credential, policy, and
 deadline fence, so revocation remains immediate without rehashing the complete
 TCB or rerunning Full Workspace behavior probes per SSE event.
 
+OpenRouter alias preflight pins the canonical resolved model slug, reasoning
+contract, endpoint identity, ZDR eligibility, context/output ceilings, and
+every routed parameter. Vendor catalog expiration remains a live fail-closed
+availability fence: a present date must be canonical and strictly in the
+future, while `null` means no scheduled expiry. Its exact administrative value
+is not part of the stable catalog identity and a vendor extension of that date
+does not force recertification; an expired, malformed, or missing field is
+still rejected before provider dispatch.
+The immutable profile identity names only verified routing facts; it must not
+claim an endpoint quantization that OpenRouter does not attest. Renaming such a
+profile is an explicit immutable-lineage migration: the new definition starts
+at revision 1 and its publication suspends every declared old definition and
+revision without rewriting old certificates or workspace bindings.
+
 Before egress, that loop compiles a Core-owned semantic-envelope schema. Its
 ordered blocks preserve platform, runtime/capability, workspace, agent, user,
 governed-context, attachment, app-reference, skill, tool, result, and
@@ -958,7 +972,14 @@ installed provider codecs. Digest construction reads each resolved source file
 directly; it must never collapse a function to the built-in `function` type.
 Changing any declared codec, request builder, stream consumer, tool
 orchestrator, or filesystem module therefore invalidates the previous
-certificate at runtime.
+certificate. The certified execution TCB follows the same least-authority
+rule at package boundaries: HTTP participation is an explicit set of runtime,
+provider, settings, session, cleanup, and sidecar-invocation modules proven by
+the static local-import audit, never the entire `core/api` directory. A change
+to unrelated app-mount presentation or another unreferenced HTTP surface must
+not invalidate hosted-provider certificates; adding a new local dependency to
+a certified entrypoint remains fail-closed until that exact file is reviewed
+and added to the manifest.
 
 Sequential provider requests must explicitly disable parallel tool calls when
 the selected endpoint declares that control. If it does not, the request omits

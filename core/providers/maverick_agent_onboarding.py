@@ -72,6 +72,7 @@ class MaverickAgentProfilePublication:
     profile: AgenticProfileDefinition
     rollout_status: ProfileRolloutStatus
     superseded_profile_revisions: tuple[str, ...] = ()
+    superseded_profile_definitions: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -318,9 +319,16 @@ def _suspend_superseded_profile_revisions(
     publication: MaverickAgentProfilePublication,
     now: datetime,
 ) -> None:
-    for revision in publication.superseded_profile_revisions:
+    identities = (
+        *(
+            (publication.profile.definition_id, revision)
+            for revision in publication.superseded_profile_revisions
+        ),
+        *publication.superseded_profile_definitions,
+    )
+    for definition_id, revision in identities:
         status = store.get_agentic_profile_definition_status(
-            publication.profile.definition_id,
+            definition_id,
             revision,
         )
         if status is None or status.rollout_status in {"disabled", "suspended"}:
@@ -367,6 +375,16 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
         publication.superseded_profile_revisions
     ):
         raise AgenticProfileError("maverick_profile_superseded_revision_duplicate")
+    superseded_definitions = publication.superseded_profile_definitions
+    if (
+        len(set(superseded_definitions)) != len(superseded_definitions)
+        or (profile.definition_id, profile.revision) in superseded_definitions
+        or any(
+            not definition_id or not revision
+            for definition_id, revision in superseded_definitions
+        )
+    ):
+        raise AgenticProfileError("maverick_profile_superseded_definition_invalid")
     if (
         profile.runtime_engine_id != "maverick-tool-loop"
         or profile.adapter_id != adapter.runtime_adapter_id

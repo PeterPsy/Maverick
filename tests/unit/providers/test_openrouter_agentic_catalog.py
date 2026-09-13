@@ -168,6 +168,44 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                     zdr_catalog=_zdr_catalog(),
                 )
 
+    def test_administrative_expiration_drift_does_not_change_catalog_identity(self) -> None:
+        original = validate_openrouter_agentic_catalog(
+            _request(),
+            models_catalog=_models_catalog(),
+            model_catalog=_model_catalog(),
+            zdr_catalog=_zdr_catalog(),
+        )
+        updated_catalog = _models_catalog()
+        updated_catalog["data"][0]["expiration_date"] = "2099-01-01"
+        updated = validate_openrouter_agentic_catalog(
+            _request(),
+            models_catalog=updated_catalog,
+            model_catalog=_model_catalog(),
+            zdr_catalog=_zdr_catalog(),
+        )
+        no_expiration_catalog = _models_catalog()
+        no_expiration_catalog["data"][0]["expiration_date"] = None
+        no_expiration = validate_openrouter_agentic_catalog(
+            _request(),
+            models_catalog=no_expiration_catalog,
+            model_catalog=_model_catalog(),
+            zdr_catalog=_zdr_catalog(),
+        )
+
+        self.assertEqual(
+            updated.model_metadata_record_digest,
+            original.model_metadata_record_digest,
+        )
+        self.assertEqual(
+            no_expiration.model_metadata_record_digest,
+            original.model_metadata_record_digest,
+        )
+        self.assertEqual(updated.catalog_snapshot_digest, original.catalog_snapshot_digest)
+        self.assertEqual(
+            no_expiration.catalog_snapshot_digest,
+            original.catalog_snapshot_digest,
+        )
+
         duplicate = _models_catalog()
         duplicate["data"].append(deepcopy(duplicate["data"][0]))
         with self.assertRaisesRegex(

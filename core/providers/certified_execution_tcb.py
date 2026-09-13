@@ -71,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="57",
+    manifest_version="58",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -95,7 +95,21 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             "runtime-api-admission",
             "Runtime HTTP admission, app-runtime requests, actors, and control persistence.",
             (
-                "core/api",
+                "core/api/__init__.py",
+                "core/api/app_event_publication.py",
+                "core/api/app_reference_payloads.py",
+                "core/api/http.py",
+                "core/api/platform_state.py",
+                "core/api/provider_api.py",
+                "core/api/runtime_api.py",
+                "core/api/runtime_cleanup.py",
+                "core/api/runtime_cleanup_batch.py",
+                "core/api/runtime_thread_delete_api.py",
+                "core/api/runtime_tool_confirmation_api.py",
+                "core/api/session_api.py",
+                "core/api/settings_api.py",
+                "core/api/sidecar_entrypoint_invocation.py",
+                "core/api/workspace_api.py",
                 "core/apps",
                 "core/authorization",
                 "core/identity",

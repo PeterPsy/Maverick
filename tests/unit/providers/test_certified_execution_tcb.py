@@ -31,10 +31,10 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
 
     def test_every_suite_derives_artifacts_and_identity_from_one_manifest(self) -> None:
         identity = certified_tcb_identity(self.root)
-        self.assertEqual(identity.manifest_version, "57")
+        self.assertEqual(identity.manifest_version, "58")
         self.assertEqual(
             identity.structure_digest,
-            "2b48527e32c5f29e03ffe92abc948bac190922cb3c4aa60f51453e5e371a0125",
+            "a9c35c5e638aec91a26e8e673c81f6bbf89b270d9389e840245bd470db81f0b1",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",
@@ -42,6 +42,11 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
         )
         self.assertIn(
             "scripts/run_openrouter_agentic_probe.py",
+            CERTIFIED_EXECUTION_TCB.artifact_paths,
+        )
+        self.assertNotIn("core/api", CERTIFIED_EXECUTION_TCB.artifact_paths)
+        self.assertNotIn(
+            "core/api/app_mounts.py",
             CERTIFIED_EXECUTION_TCB.artifact_paths,
         )
         for operator_surface in (
@@ -280,6 +285,20 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
                 drifted_read_bytes,
             ):
                 self.assertNotEqual(compute_certified_tcb_digest(self.root), baseline)
+
+    def test_unrelated_app_mount_presentation_does_not_change_the_live_digest(self) -> None:
+        baseline = compute_certified_tcb_digest(self.root)
+        target = (self.root / "core/api/app_mounts.py").resolve(strict=True)
+        original_read_bytes = Path.read_bytes
+
+        def drifted_read_bytes(path: Path) -> bytes:
+            content = original_read_bytes(path)
+            if path.resolve() == target:
+                return content + b"\n# unrelated-presentation-drift\n"
+            return content
+
+        with patch.object(Path, "read_bytes", drifted_read_bytes):
+            self.assertEqual(compute_certified_tcb_digest(self.root), baseline)
 
 
 if __name__ == "__main__":

@@ -341,9 +341,9 @@ class CertificationPipelineTest(unittest.TestCase):
             ),
         }
         expected_manifest_digests = {
-            "google-ai-studio": "741791ca85ba3469dd253259416b13f141ad8b798be3acfe6a643e2fb9252233",
-            "openrouter": "597c0914143847c90377be4186fe739e2b8e5f7d67b196552af5351400ca2e17",
-            "antigravity-cli": "051bc6b344d98ecad6684f819ce0d0a92681e50e514d9ed9a7de64f9046e0d31",
+            "google-ai-studio": "988f56773d66e4a29cebcce8285ed3824c042dabd35e67bb3d1cc549c5c85471",
+            "openrouter": "ec36c9496d70f733db4aa0d97f5378dd360e0feed61cd90a952a72f41cdc4df3",
+            "antigravity-cli": "6baa9c017e6464a519e7a3c81e59d0fd8855c8328a8050044f4ab1a53e20ef0e",
         }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
@@ -351,10 +351,10 @@ class CertificationPipelineTest(unittest.TestCase):
             ANTIGRAVITY_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "67")
+                self.assertEqual(manifest.suite_version, "68")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-12-r67-openrouter-glm-catalog-expiration-tcb57",
+                    "2026-09-13-r68-stable-openrouter-catalog-tcb58",
                 )
                 self.assertEqual(
                     manifest.digest,

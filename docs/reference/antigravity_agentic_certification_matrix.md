@@ -1,6 +1,6 @@
 # Antigravity Native Agent certification matrix
 
-Revision: `2026-09-12-r67-openrouter-glm-catalog-expiration-tcb57`
+Revision: `2026-09-13-r68-stable-openrouter-catalog-tcb58`
 
 This matrix certifies one `antigravity-cli` → `google` native connection, not
 individual model slugs. Catalog slugs inherit the connection evidence through

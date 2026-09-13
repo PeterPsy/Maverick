@@ -1,7 +1,7 @@
 # OpenRouter GLM 5.3 Flash agentic certification matrix
 
 Status date: 2026-09-12
-Matrix revision: `2026-09-12-r67-openrouter-glm-catalog-expiration-tcb57`
+Matrix revision: `2026-09-13-r68-stable-openrouter-catalog-tcb58`
 Rollout: Full Workspace available after exact certification and binding enablement
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==59`

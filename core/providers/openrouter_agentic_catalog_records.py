@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
+
 from core.providers.agentic_protocol import AgenticModelRequest
 from core.providers.openrouter_agentic_models import (
     OpenRouterAgenticProtocolError,
@@ -119,12 +121,12 @@ def validate_model_metadata_record(
     record: dict[str, object],
     *,
     resolved_model_id: str,
-    expiration_date: str | None,
     reasoning_efforts: tuple[str, ...],
     default_reasoning_effort: str,
     reasoning_mandatory: bool,
     request_reasoning_effort: str | None,
     required_context_tokens: int,
+    observed_on: date | None = None,
 ) -> int:
     """Require the exact resolved model and its advertised reasoning contract."""
     reasoning = record.get("reasoning")
@@ -137,7 +139,10 @@ def validate_model_metadata_record(
     if (
         record.get("canonical_slug") != resolved_model_id
         or "expiration_date" not in record
-        or record.get("expiration_date") != expiration_date
+        or not _model_expiration_is_current(
+            record.get("expiration_date"),
+            observed_on=observed_on,
+        )
         or reasoning.get("mandatory") is not reasoning_mandatory
         or not isinstance(advertised, list)
         or any(not isinstance(value, str) for value in advertised)
@@ -186,7 +191,6 @@ def model_metadata_identity(record: dict[str, object]) -> dict[str, object]:
         "id": record.get("id"),
         "canonical_slug": record.get("canonical_slug"),
         "context_length": record.get("context_length"),
-        "expiration_date": record.get("expiration_date"),
         "reasoning": {
             "mandatory": reasoning_data.get("mandatory"),
             "supported_efforts": tuple(
@@ -195,6 +199,26 @@ def model_metadata_identity(record: dict[str, object]) -> dict[str, object]:
             "default_effort": reasoning_data.get("default_effort"),
         },
     }
+
+
+def _model_expiration_is_current(
+    value: object,
+    *,
+    observed_on: date | None,
+) -> bool:
+    """Accept no scheduled expiry or one canonical date strictly in the future."""
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    try:
+        expires_on = date.fromisoformat(value)
+    except ValueError:
+        return False
+    if value != expires_on.isoformat():
+        return False
+    today = observed_on or datetime.now(tz=UTC).date()
+    return expires_on > today
 
 
 def supports_tool_choice_none(record: dict[str, object]) -> bool:

@@ -10,6 +10,7 @@ import unittest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from core.api.platform_state import bootstrap_platform_state
+from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.providers.certificate_projection import certificate_profile_status
 from core.providers.certification_target import api_profile_target_digest
@@ -29,6 +30,8 @@ from core.providers.openrouter_agentic_profile import (
     OPENROUTER_AGENTIC_PROFILE_ID,
     OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
     OPENROUTER_AGENTIC_PROFILE_REVISION,
+    OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS,
+    ensure_openrouter_agentic_preview_profile,
 )
 from core.providers.openrouter_agentic_models import OPENROUTER_AGENTIC_MODEL_REVISION
 from core.providers.maverick_agent_builtins import (
@@ -75,7 +78,11 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "available")
-        self.assertEqual(profile.revision, "6")
+        self.assertEqual(
+            profile.definition_id,
+            "agentic-profile-openrouter-glm-5-3-flash-relace",
+        )
+        self.assertEqual(profile.revision, "1")
         self.assertEqual(profile.adapter_version_constraint, "==59")
         self.assertEqual(
             profile.policy_ceiling.allowed_surface_kinds,
@@ -185,6 +192,42 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 binding.definition_id == profile.definition_id
                 for binding in state.provider_store.list_workspace_agentic_profile_bindings("default")
             )
+        )
+
+        legacy_id, legacy_revision = (
+            OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS[-1]
+        )
+        state.provider_store.save_agentic_profile_definition(
+            replace(
+                profile,
+                definition_id=legacy_id,
+                revision=legacy_revision,
+                capability_certificate_id=(
+                    f"capability-certificate:{legacy_id}:{legacy_revision}"
+                ),
+            )
+        )
+        state.provider_store.save_agentic_profile_definition_status(
+            AgenticProfileDefinitionStatus(
+                definition_id=legacy_id,
+                definition_revision=legacy_revision,
+                rollout_status="available",
+                revision=0,
+                updated_at=NOW,
+            ),
+            expected_revision=None,
+        )
+        ensure_openrouter_agentic_preview_profile(
+            state.provider_store,
+            adapter=adapter,
+            now=NOW,
+        )
+        self.assertEqual(
+            state.provider_store.get_agentic_profile_definition_status(
+                legacy_id,
+                legacy_revision,
+            ).rollout_status,
+            "suspended",
         )
 
         private_key = Ed25519PrivateKey.generate()
@@ -322,7 +365,17 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
 
         self.assertEqual(
             OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
-            ("1", "2", "3", "4", "5"),
+            (),
+        )
+        self.assertEqual(
+            OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS,
+            tuple(
+                (
+                    "agentic-profile-openrouter-glm-5-3-flash-relace-fp4",
+                    revision,
+                )
+                for revision in ("1", "2", "3", "4", "5", "6")
+            ),
         )
 
 

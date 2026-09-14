@@ -11,11 +11,17 @@ import sys
 from tempfile import TemporaryDirectory
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from core.apps.contracts import parse_app_contract_file
 from core.apps.presentation import app_frontend_is_launchable
+from core.apps.surface_descriptors import app_mcp_tool_execution_metadata
+from core.runtime.hosted_tool_result_admission import (
+    build_hosted_tool_result_admission_resolver,
+)
+from core.runtime.tool_catalog import RuntimeToolActorContext
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +84,8 @@ class BrowserAppTests(unittest.TestCase):
         cli_descriptor = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
 
         expected_tools = {
+            "web_search",
+            "web_open",
             "browser_session_create",
             "browser_session_close",
             "browser_navigate",
@@ -105,6 +113,104 @@ class BrowserAppTests(unittest.TestCase):
         self.assertIn("viewport_width", session_create_properties)
         self.assertIn("viewport_height", session_create_properties)
         self.assertIn("mobile", session_create_properties)
+
+    def test_research_tools_use_one_ephemeral_read_only_session(self) -> None:
+        responses = {
+            "session.create": {"session_id": "research-session"},
+            "navigate": {"url": "https://example.com/article", "title": "Example"},
+            "snapshot": {
+                "url": "https://example.com/article",
+                "title": "Example",
+                "snapshot": "heading Example\nlink Source https://example.com/source",
+            },
+            "session.close": {"closed": True},
+        }
+        with broker_stub(responses) as broker:
+            with TemporaryDirectory() as temp_dir:
+                with patch.dict(
+                    "os.environ",
+                    {
+                        "MAVERICK_BROWSER_BROKER_URL": broker.url,
+                        "MAVERICK_BROWSER_BROKER_TOKEN": "test-token",
+                    },
+                ), patch(
+                    "service.preflight_payload",
+                    return_value={"allowed": True, "reason": "allowed_public_web"},
+                ):
+                    status_code, result = mcp_result_for_tool(
+                        Path(temp_dir),
+                        "web_open",
+                        {"url": "https://example.com/article"},
+                        effective_mode="full-access",
+                    )
+                    state = load_state(temp_dir)
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(result["content"], responses["snapshot"]["snapshot"])
+        self.assertEqual(result["url"], "https://example.com/article")
+        self.assertEqual(
+            [item["action"] for item in broker.actions],
+            ["session.create", "navigate", "snapshot", "session.close"],
+        )
+        self.assertEqual(state["sessions"], {})
+        self.assertEqual(state["audit"][-1]["action"], "research.open")
+
+    def test_research_tools_reject_extra_or_oversized_input(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            extra_status, extra = mcp_result_for_tool(
+                Path(temp_dir),
+                "web_search",
+                {"query": "maverick", "session_id": "not-allowed"},
+            )
+            long_status, too_long = mcp_result_for_tool(
+                Path(temp_dir),
+                "web_open",
+                {"url": "https://example.com/" + "x" * 4096},
+            )
+
+        self.assertEqual((extra_status, extra["field"]), (400, "session_id"))
+        self.assertEqual((long_status, too_long["field"]), (400, "url"))
+
+    def test_research_result_has_audited_public_source_authority(self) -> None:
+        metadata = app_mcp_tool_execution_metadata(APP_ROOT, "web_open")
+        definition = SimpleNamespace(
+            tool_name="app.browser.web_open",
+            owner_kind="app",
+            owner_id="browser",
+            entrypoint_path=str((APP_ROOT / "mcp" / "server.py").resolve()),
+            effect_class=metadata.effect_class,
+            supports_idempotency=metadata.supports_idempotency,
+            safe_to_retry=metadata.safe_to_retry,
+            argument_effects=metadata.argument_effects,
+        )
+        resolver = build_hosted_tool_result_admission_resolver(
+            cli_registry=SimpleNamespace(),
+            mcp_registry=SimpleNamespace(get_tool=lambda _tool_name: definition),
+            allowed_remote_data_classes=("public",),
+        )
+        actor = RuntimeToolActorContext(
+            workspace_id="default",
+            actor_id="user-1",
+            agent_id="research",
+            platform_role=None,
+            workspace_role=None,
+            session_id="session-research",
+            execution_mode="full-access",
+        )
+
+        result = resolver(
+            "mcp:app.browser.web_open",
+            {"url": "https://example.com"},
+            {
+                "status": "ok",
+                "url": "https://example.com",
+                "content": "Public source text.",
+            },
+            actor,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.classification.data_class, "public")
 
     def test_mcp_rejects_prohibited_or_unknown_tool_names(self) -> None:
         with TemporaryDirectory() as temp_dir:

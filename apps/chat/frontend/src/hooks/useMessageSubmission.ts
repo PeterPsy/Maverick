@@ -53,6 +53,8 @@ export type AgentRuntimeConfig = {
   agent_role_id: string;
   agent_type_id: string;
   runtime_mode?: "agentic" | "plain_hosted_chat";
+  runtime_profile?: "workspace" | "research";
+  requested_mode?: "sandbox" | "full-access";
   routing_profile?: string;
   hosted_provider_id?: string;
   hosted_model_id?: string;
@@ -191,6 +193,7 @@ function optimisticThreadForPendingSession({
     updated_at: messageCreatedAt,
     last_user_message_at: messageCreatedAt,
     runtime_mode: session.runtime_mode,
+    runtime_profile: session.runtime_profile,
     provider_id: session.provider_id,
     hosted_provider_id: session.hosted_provider_id,
     hosted_model_id: session.hosted_model_id,
@@ -273,13 +276,17 @@ export function runtimeSessionOptionsForNewChat({
     agent_id: agentRuntimeConfig?.agent_id,
     agent_role_id: agentRuntimeConfig?.agent_role_id,
     agent_type_id: agentRuntimeConfig?.agent_type_id,
-    project_id: draftChat?.projectId ?? null,
+    project_id: agentRuntimeConfig?.runtime_profile === "research"
+      ? null
+      : draftChat?.projectId ?? null,
     source_app_id: agentRuntimeConfig?.source_app_id || "chat",
     system_prompt: systemPrompt,
     skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
     skill_ids: agentRuntimeConfig?.skill_ids || [],
     skill_activation_mode: agentRuntimeConfig?.skill_activation_mode || (agentRuntimeConfig ? "implicit" : "explicit"),
     runtime_mode: agentRuntimeConfig?.runtime_mode,
+    runtime_profile: agentRuntimeConfig?.runtime_profile,
+    requested_mode: agentRuntimeConfig?.requested_mode,
     routing_profile: agentRuntimeConfig?.routing_profile,
     hosted_provider_id: agentRuntimeConfig?.hosted_provider_id,
     hosted_model_id: agentRuntimeConfig?.hosted_model_id,
@@ -302,6 +309,8 @@ function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSess
     project_id: options.project_id || null,
     routing_profile: options.routing_profile || "",
     runtime_mode: options.runtime_mode || "",
+    runtime_profile: options.runtime_profile || "workspace",
+    requested_mode: options.requested_mode || "",
     skill_catalog_app_id: options.skill_catalog_app_id || "",
     skill_ids: options.skill_ids || [],
     skill_activation_mode: options.skill_activation_mode || "implicit",
@@ -659,18 +668,19 @@ export function useMessageSubmission({
     if (signal) {
       throwIfAborted(signal);
     }
-    const agentRuntimeConfigPromise = selectedAgentRuntimeConfig(target.activeAppContext);
-    const defaultSystemPromptPromise = target.draftChat?.systemPrompt
-      ? Promise.resolve(target.draftChat.systemPrompt)
-      : loadDefaultSystemPrompt(target.activeAppContext);
-    const [agentRuntimeConfig, defaultSystemPrompt] = await Promise.all([
-      agentRuntimeConfigPromise,
-      defaultSystemPromptPromise,
-    ]);
+    const agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
+    const isolatedResearch = agentRuntimeConfig?.runtime_profile === "research";
+    const defaultSystemPrompt = isolatedResearch
+      ? ""
+      : target.draftChat?.systemPrompt
+        ? target.draftChat.systemPrompt
+        : await loadDefaultSystemPrompt(target.activeAppContext);
     if (signal) {
       throwIfAborted(signal);
     }
-    const systemPrompt = agentRuntimeConfig?.system_prompt || target.draftChat?.systemPrompt || defaultSystemPrompt;
+    const systemPrompt = isolatedResearch
+      ? ""
+      : agentRuntimeConfig?.system_prompt || target.draftChat?.systemPrompt || defaultSystemPrompt;
     if (signal) {
       throwIfAborted(signal);
     }

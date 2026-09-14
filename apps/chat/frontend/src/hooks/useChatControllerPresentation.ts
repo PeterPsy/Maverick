@@ -25,6 +25,7 @@ import { useChatRootDropHandlers } from "./useChatRootDropHandlers";
 import { useDockedComposerHeight } from "./useDockedComposerHeight";
 import type { DraftChat } from "./useMessageSubmission";
 import { interAgentComposerBudgetLabel } from "./useMessageSubmission";
+import { RESEARCH_RUNNER_ID } from "../lib/runtimeProfiles";
 
 const EVENT_PROJECTION_MIN_LIMIT = 500;
 const EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE = 80;
@@ -79,6 +80,7 @@ type UseChatControllerPresentationParams = {
   isOlderHistoryLoading: boolean;
   isRuntimeBusy: boolean;
   isSending: boolean;
+  isolatedResearch: boolean;
   interAgentApprovalsByRunId: Record<string, InterAgentApprovalRecord[]>;
   interAgentEventsByRunId: Record<string, InterAgentEventRecord[]>;
   interAgentRuns: InterAgentRunDetail[];
@@ -88,6 +90,7 @@ type UseChatControllerPresentationParams = {
   pendingUserMessages: PendingMessage[];
   providers: ProviderItem[];
   reasoningEffort: string;
+  researchAvailable: boolean;
   providerSelectorLocked: boolean;
   queuedMessages: QueuedMessage[];
   removeAttachment: (attachmentId: string) => void;
@@ -159,6 +162,7 @@ export function useChatControllerPresentation({
   isOlderHistoryLoading,
   isRuntimeBusy,
   isSending,
+  isolatedResearch,
   interAgentApprovalsByRunId,
   interAgentEventsByRunId,
   interAgentRuns,
@@ -168,6 +172,7 @@ export function useChatControllerPresentation({
   pendingUserMessages,
   providers,
   reasoningEffort,
+  researchAvailable,
   providerSelectorLocked,
   queuedMessages,
   removeAttachment,
@@ -194,7 +199,9 @@ export function useChatControllerPresentation({
   const historicalReadOnlyReason = historicalSourceAppReadOnlyReason(activeThread?.source_app_id);
   const effectiveComposerError = historicalReadOnlyReason || deviceUseError || composerError;
   const composerSelectedAgentTypeId = activeThread
-    ? activeThread.source_app_id && activeThread.source_app_id !== "chat"
+    ? isolatedResearch
+      ? RESEARCH_RUNNER_ID
+      : activeThread.source_app_id && activeThread.source_app_id !== "chat"
       ? activeThread.agent_type_id
       : ""
     : selectedAgentTypeId;
@@ -241,7 +248,7 @@ export function useChatControllerPresentation({
     return interAgentComposerBudgetLabel(multiAgentMode);
   }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
-    disabled: isThreadLoading || runtimeAdmissionBlocked || deviceUseEnabled || Boolean(historicalReadOnlyReason),
+    disabled: isThreadLoading || runtimeAdmissionBlocked || deviceUseEnabled || isolatedResearch || Boolean(historicalReadOnlyReason),
     handleAddAttachments,
   });
   const surfaceProps: ChatSurfaceProps = {
@@ -260,7 +267,8 @@ export function useChatControllerPresentation({
       error: effectiveComposerError,
       executionMode,
       isSending,
-      mentionItems: deviceUseEnabled ? [] : composerMentionItems,
+      isolatedResearch,
+      mentionItems: deviceUseEnabled || isolatedResearch ? [] : composerMentionItems,
       usage: chatUsage,
       multiAgentBudgetLabel,
       multiAgentMode,
@@ -280,6 +288,7 @@ export function useChatControllerPresentation({
       onToggleDeviceUse: handleToggleDeviceUse,
       providers,
       reasoningEffort,
+      researchAvailable,
       providerSelectorLocked,
       queuedCount: queuedMessages.length,
       queuedPreview: queuedMessages[0]?.content || null,

@@ -74,6 +74,7 @@ from core.runtime.async_runtime import run_runtime_coroutine
 from core.runtime.authority import (
     blocked_runtime_capability_payload,
     effective_runtime_capability_payload,
+    intersect_runtime_policies,
     resolve_effective_runtime_authority,
 )
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
@@ -720,6 +721,14 @@ def workspace_agentic_profile_status(
                 effective_capabilities.get("reason_code")
                 or "runtime_authority_unavailable"
             )
+        effective_policy = (
+            intersect_runtime_policies(
+                definition.policy_ceiling,
+                binding.workspace_policy_ceiling,
+            )
+            if selectable
+            else None
+        )
         items.append(
             {
                 "workspace_profile_binding_id": binding.binding_id,
@@ -800,6 +809,12 @@ def workspace_agentic_profile_status(
                 "allowed_remote_data_classes": binding.workspace_policy_ceiling.allowed_remote_data_classes,
                 "tool_handle_mode": binding.workspace_policy_ceiling.tool_handle_mode,
                 "allowed_tool_handles": binding.workspace_policy_ceiling.allowed_tool_handles,
+                "effective_tool_handle_mode": (
+                    effective_policy.tool_handle_mode if effective_policy else "none"
+                ),
+                "effective_allowed_tool_handles": (
+                    effective_policy.allowed_tool_handles if effective_policy else ()
+                ),
                 "max_estimated_cost_microusd": binding.workspace_policy_ceiling.max_estimated_cost_microusd,
                 "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
                 "effective_capabilities": effective_capabilities,

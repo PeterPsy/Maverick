@@ -106,8 +106,13 @@ from core.runtime.authority_service import (
     preflight_execution_binding_context,
     preflight_runtime_context_capabilities,
 )
-from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
-from core.runtime.runtime_session import coerce_runtime_mode
+from core.runtime.runtime_session import (
+    RuntimeProfile,
+    RuntimeSessionRecord,
+    coerce_runtime_mode,
+    coerce_runtime_profile,
+    runtime_session_allows_user_thread,
+)
 from core.runtime.remote_agentic_admission import (
     remote_agentic_containment_reason,
     require_remote_agentic_session_admission,
@@ -122,6 +127,9 @@ from core.runtime.plain_hosted_text import (
     runtime_session_is_plain_hosted_chat,
 )
 from core.runtime.prepared_session_config import prepared_session_fingerprint
+from core.runtime.research_runtime import (
+    assert_research_runtime_input_allowed,
+)
 from core.runtime.prepared_sessions import acquire_prepared_session
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_terminalization import (
@@ -187,6 +195,7 @@ class RuntimeSessionCreationPreflight:
     """Persistence-free authorization snapshot for one new runtime session."""
 
     session_id: str
+    runtime_profile: RuntimeProfile
     governance: WorkspaceGovernanceRecord
     execution_binding: RuntimeExecutionBinding | None
     hosted_text_binding: HostedTextExecutionBinding | None
@@ -460,6 +469,7 @@ def _thread_detail_payload_with_runtime(
     if runtime_session is None:
         return payload
     payload["runtime_mode"] = runtime_session.runtime_mode
+    payload["runtime_profile"] = runtime_session.runtime_profile
     payload["provider_id"] = _resolved_provider_id(state, runtime_session)
     payload["hosted_provider_id"] = runtime_session.hosted_provider_id
     payload["hosted_model_id"] = runtime_session.hosted_model_id
@@ -1047,8 +1057,10 @@ def _create_session(
     execution_binding = preflight.execution_binding
     hosted_text_binding = preflight.hosted_text_binding
     runtime_mode = coerce_runtime_mode(body.get("runtime_mode"))
+    runtime_profile = coerce_runtime_profile(body.get("runtime_profile"))
     if (
-        (runtime_mode == "agentic")
+        runtime_profile != preflight.runtime_profile
+        or (runtime_mode == "agentic")
         != (execution_binding is not None)
         or (runtime_mode == "plain_hosted_chat")
         != (hosted_text_binding is not None)
@@ -1078,6 +1090,7 @@ def _create_session(
             agent_id=agent_id,
             requested_mode="sandbox" if device_binding is not None else body.get("requested_mode"),
             runtime_mode=runtime_mode,
+            runtime_profile=runtime_profile,
             hosted_provider_id=(
                 hosted_text_binding.provider_id if hosted_text_binding else None
             ),
@@ -1179,10 +1192,16 @@ def _preflight_runtime_session_creation_before_persistence(
         workspace_id=context.workspace_id,
     )
     runtime_mode = coerce_runtime_mode(body.get("runtime_mode"))
+    runtime_profile = coerce_runtime_profile(body.get("runtime_profile"))
     raw_skill_ids = body.get("skill_ids", ())
     raw_invoked_skill_ids = body.get("invoked_skill_ids", ())
     raw_attachments = body.get("attachments", ())
     raw_app_references = body.get("app_references", ())
+    _validate_research_session_request(
+        body,
+        runtime_mode=runtime_mode,
+        runtime_profile=runtime_profile,
+    )
     activation_id = str(body.get("device_use_activation_id") or "").strip()
     device_use_binding = None
     if activation_id:
@@ -1307,6 +1326,7 @@ def _preflight_runtime_session_creation_before_persistence(
                 f"workspace-actor:{execution_binding.workspace_binding_id}:"
                 f"{execution_binding.workspace_binding_revision}"
             ),
+            runtime_profile=runtime_profile,
             adapter=adapter,
             invoked_skills=(
                 *(body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else ()),
@@ -1335,11 +1355,43 @@ def _preflight_runtime_session_creation_before_persistence(
             raise ProviderError("device_use_requires_codex_astra_high")
     return RuntimeSessionCreationPreflight(
         session_id=session_id,
+        runtime_profile=runtime_profile,
         governance=governance,
         execution_binding=execution_binding,
         hosted_text_binding=hosted_text_binding,
         device_use_binding=device_use_binding,
     )
+
+
+def _validate_research_session_request(
+    body: dict,
+    *,
+    runtime_mode: str,
+    runtime_profile: RuntimeProfile,
+) -> None:
+    if runtime_profile != "research":
+        return
+    if (
+        runtime_mode != "agentic"
+        or str(body.get("agent_id") or "").strip() != "research"
+        or str(body.get("source_app_id") or "").strip() != "chat"
+        or str(body.get("requested_mode") or "").strip() != "full-access"
+        or str(body.get("skill_activation_mode") or "").strip() != "explicit"
+        or str(body.get("agent_type_id") or "").strip()
+        or str(body.get("agent_role_id") or "").strip()
+        or str(body.get("system_prompt") or "").strip()
+        or str(body.get("skill_catalog_app_id") or "").strip()
+        or str(body.get("project_id") or "").strip()
+        or body.get("skill_ids")
+        or body.get("invoked_skill_ids")
+        or body.get("attachments")
+        or body.get("app_references")
+        or body.get("device_use_activation_id")
+        or body.get("hosted_provider_id")
+        or body.get("hosted_model_id")
+        or body.get("routing_profile")
+    ):
+        raise ProviderError("research_runtime_contract_invalid")
 
 
 def _reject_client_remote_data_declaration(body: dict) -> None:
@@ -2033,6 +2085,10 @@ def _handle_session_app_references_prepare(
     raw_references = body.get("app_references", [])
     try:
         _reject_client_remote_data_declaration(body)
+        assert_research_runtime_input_allowed(
+            session,
+            app_references=raw_references,
+        )
         validate_agentic_context_shape(app_references=raw_references)
         if session.execution_binding is not None:
             preflight_runtime_context_capabilities(
@@ -2472,6 +2528,14 @@ def _prepare_runtime_turn_submission(
                 status="409 Conflict",
             )
     try:
+        assert_research_runtime_input_allowed(
+            session,
+            attachments=raw_attachments,
+            app_references=raw_app_references,
+            invoked_skill_ids=bool(
+                body.get("skill_ids") or body.get("invoked_skill_ids")
+            ),
+        )
         validate_agentic_context_shape(
             invoked_skills=body.get("skill_ids", []),
         )

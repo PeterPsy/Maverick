@@ -96,6 +96,42 @@ describe("runtimeSessionOptionsForNewChat", () => {
     });
     expect(options.system_prompt).toBeUndefined();
   });
+
+  it("pins Research without project, prompt, skills, or workspace context", () => {
+    const options = runtimeSessionOptionsForNewChat({
+      agentRuntimeConfig: {
+        agent_id: "research",
+        agent_role_id: "",
+        agent_type_id: "",
+        runtime_mode: "agentic",
+        runtime_profile: "research",
+        requested_mode: "full-access",
+        workspace_profile_binding_id: "binding-research",
+        skill_catalog_app_id: "",
+        skill_ids: [],
+        skill_activation_mode: "explicit",
+        source_app_id: "chat",
+        system_prompt: "",
+        title: "Research",
+      },
+      draftChat: {
+        draftId: "draft-1",
+        projectId: "project-must-not-cross",
+        systemPrompt: "prompt-must-not-cross",
+      },
+      systemPrompt: "",
+    });
+
+    expect(options).toMatchObject({
+      agent_id: "research",
+      project_id: null,
+      runtime_profile: "research",
+      requested_mode: "full-access",
+      skill_ids: [],
+      source_app_id: "chat",
+      system_prompt: "",
+    });
+  });
 });
 
 describe("prepared runtime sessions", () => {

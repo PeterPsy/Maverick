@@ -92,6 +92,26 @@ describe("runtime API client", () => {
     });
   });
 
+  it("serializes the fixed Research profile", async () => {
+    await createRuntimeSession({
+      agent_id: "research",
+      runtime_mode: "agentic",
+      runtime_profile: "research",
+      requested_mode: "full-access",
+      source_app_id: "chat",
+      skill_activation_mode: "explicit",
+    });
+
+    expect(requestBody()).toMatchObject({
+      agent_id: "research",
+      runtime_mode: "agentic",
+      runtime_profile: "research",
+      requested_mode: "full-access",
+      source_app_id: "chat",
+      skill_activation_mode: "explicit",
+    });
+  });
+
   it("posts runtime session prewarm requests", async () => {
     await prewarmRuntimeSession("session-hot");
 

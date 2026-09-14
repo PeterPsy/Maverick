@@ -2826,6 +2826,14 @@ binding ceiling. A disabled or missing app, changed dependency selection,
 revoked grant, unknown handle, or policy mismatch fails closed. Live state may
 remove tools from a session but cannot add authority above its pinned ceiling.
 
+The Chat Research runner uses this same path with a stricter fixed contract. It
+is not an app or agent definition and cannot discover arbitrary surfaces. Core
+may resolve only Browser's exact `web_search` and `web_open` MCP handles, both
+declared read effects backed by isolated ephemeral Browser sessions. Browser
+egress validation, executable-closure audit, result classification, and live
+authority checks still apply; no descriptor may broaden Research into
+interactive browsing, workspace reads, writes, shell, or delegation.
+
 Full-workspace hosted profiles reach CLI and MCP through discovery-first Core
 wrappers rather than embedding every enabled app schema in the provider's base
 catalog. Discovery filters the authoritative registry by the current actor,

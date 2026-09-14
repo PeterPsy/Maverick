@@ -12,6 +12,7 @@ from core.runtime.provider_input_context import (
     runtime_provider_input_sources,
     runtime_provider_input_text,
 )
+from core.runtime.research_runtime import runtime_session_is_research
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,11 @@ def capture_runtime_provider_input(
     attachments: list[dict[str, object]] | None,
 ) -> CapturedRuntimeProviderInput:
     """Capture, classify, and compose one exact pre-dispatch input snapshot."""
-    orchestration = generalist_orchestration_source(state, session=session)
+    orchestration = (
+        None
+        if runtime_session_is_research(session)
+        else generalist_orchestration_source(state, session=session)
+    )
     sources = runtime_provider_input_sources(
         state,
         session=session,

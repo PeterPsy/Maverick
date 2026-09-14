@@ -109,6 +109,7 @@ export type ProviderItem = {
   description: string;
   kind?: string;
   provider_role?: string;
+  runtime_engine_id?: string;
   status: string;
   default_model_family: string | null;
   model_options?: ProviderModelOption[];
@@ -119,6 +120,9 @@ export type ProviderItem = {
   agentic_rollout_status?: string | null;
   agentic_egress_policy_id?: string | null;
   agentic_allowed_tool_handles?: string[];
+  agentic_tool_handle_mode?: "none" | "exact" | "all_currently_authorized";
+  agentic_effective_allowed_tool_handles?: string[];
+  agentic_effective_tool_handle_mode?: "none" | "exact" | "all_currently_authorized";
   agentic_max_estimated_cost_microusd?: number | null;
   agentic_containment_status?: "GO" | "NO-GO";
   agentic_containment_reason?: string | null;
@@ -347,6 +351,9 @@ export type AgenticProfileItem = {
   egress_policy?: AgenticEgressPolicy;
   data_policy?: AgenticDataPolicy;
   allowed_tool_handles?: string[];
+  tool_handle_mode?: "none" | "exact" | "all_currently_authorized";
+  effective_allowed_tool_handles?: string[];
+  effective_tool_handle_mode?: "none" | "exact" | "all_currently_authorized";
   max_estimated_cost_microusd?: number | null;
   effective_capabilities?: AgenticEffectiveCapabilities;
 };
@@ -535,6 +542,7 @@ export type ChatThread = ChatThreadSummary & {
   system_prompt?: string;
   last_completed_turn_id?: string | null;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
+  runtime_profile?: "workspace" | "research" | string;
   provider_id?: string | null;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;
@@ -618,6 +626,7 @@ export type RuntimeSession = {
   status: string;
   effective_mode: string;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
+  runtime_profile?: "workspace" | "research" | string;
   skill_ids?: string[];
   skill_catalog_app_id?: string | null;
   skill_activation_mode?: "implicit" | "explicit" | string;
@@ -1185,6 +1194,8 @@ export type RuntimeSessionOptions = {
   skill_ids?: string[];
   skill_activation_mode?: "implicit" | "explicit";
   runtime_mode?: "agentic" | "plain_hosted_chat";
+  runtime_profile?: "workspace" | "research";
+  requested_mode?: "sandbox" | "full-access";
   routing_profile?: "fast_model" | string;
   hosted_provider_id?: string;
   hosted_model_id?: string;

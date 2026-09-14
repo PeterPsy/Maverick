@@ -1,5 +1,6 @@
 import type { ChatThread, ProviderItem, RuntimeSession } from "../api/client";
 import { providerUsesPlainHostedRuntime } from "./providerRuntimeOptions";
+import { isResearchRunner } from "./runtimeProfiles";
 
 export type ComposerRuntimeCapabilities = {
   allowedAttachmentInputModalities: string[] | null;
@@ -10,11 +11,23 @@ export function composerRuntimeCapabilities({
   activeSession,
   activeThread,
   selectedProvider,
+  selectedAgentTypeId,
 }: {
   activeSession: RuntimeSession | null;
   activeThread: ChatThread | null;
   selectedProvider: ProviderItem | null;
+  selectedAgentTypeId?: string;
 }): ComposerRuntimeCapabilities {
+  if (
+    activeSession?.runtime_profile === "research"
+    || activeThread?.runtime_profile === "research"
+    || (!activeThread && isResearchRunner(selectedAgentTypeId))
+  ) {
+    return {
+      allowedAttachmentInputModalities: [],
+      appReferencesAllowed: false,
+    };
+  }
   if (isPlainHostedComposer({ activeSession, activeThread, selectedProvider })) {
     return {
       allowedAttachmentInputModalities: selectedProvider?.input_modalities || [],

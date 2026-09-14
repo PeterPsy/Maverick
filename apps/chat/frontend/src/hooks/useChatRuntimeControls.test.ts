@@ -3,6 +3,7 @@ import type { ProviderItem } from "../api/client";
 import {
   effectiveNewChatReasoningEffort,
   genericAgenticRuntimeConfig,
+  researchRuntimeConfig,
 } from "./useChatRuntimeControls";
 
 function agenticProvider(overrides: Partial<ProviderItem> = {}): ProviderItem {
@@ -52,5 +53,56 @@ describe("genericAgenticRuntimeConfig", () => {
     expect(genericAgenticRuntimeConfig(agenticProvider({
       provider_role: "model_provider",
     }), "max")).toBeNull();
+  });
+
+  it("builds Research as a clean full-access profile", () => {
+    const provider = agenticProvider({
+      runtime_engine_id: "maverick-tool-loop",
+      execution_family: "maverick_agent",
+      full_workspace_status: "available",
+      agentic_effective_tool_handle_mode: "all_currently_authorized",
+      agentic_effective_capabilities: {
+        status: "active",
+        reason_code: null,
+        snapshot_digest: "research-capabilities",
+        execution_mode: "full-access",
+        capabilities: {
+          streaming: true,
+          tool_orchestration: true,
+          cli: true,
+          mcp: true,
+          skill_catalog: true,
+          filesystem_list: true,
+          filesystem_read: true,
+          filesystem_write: true,
+          shell: true,
+          interrupt: true,
+          same_turn_steering: true,
+          recovery: true,
+          confirmation_resume: true,
+          provider_private_state: true,
+          attachment_modalities: ["file"],
+          app_references: true,
+          confirmations: true,
+        },
+      },
+    });
+
+    expect(researchRuntimeConfig(provider, "high")).toEqual({
+      agent_id: "research",
+      agent_role_id: "",
+      agent_type_id: "",
+      runtime_mode: "agentic",
+      runtime_profile: "research",
+      requested_mode: "full-access",
+      workspace_profile_binding_id: "binding-google-gemini-35-pro",
+      reasoning_effort: "high",
+      skill_catalog_app_id: "",
+      skill_ids: [],
+      skill_activation_mode: "explicit",
+      source_app_id: "chat",
+      system_prompt: "",
+      title: "Research",
+    });
   });
 });

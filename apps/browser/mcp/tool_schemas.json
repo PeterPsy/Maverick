@@ -1,5 +1,29 @@
 {
   "tools": {
+    "web_search": {
+      "effect_class": "read",
+      "description": "Search the public web and return a readable result-page snapshot with links.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    },
+    "web_open": {
+      "effect_class": "read",
+      "description": "Open a public web URL and return its readable page snapshot.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": {"type": "string", "minLength": 1, "maxLength": 4096}
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      }
+    },
     "browser_session_create": {
       "effect_class": "mutating",
       "description": "Create an isolated Browser Lab session through the Playwright broker.",

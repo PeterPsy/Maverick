@@ -43,11 +43,13 @@ RuntimeSessionGrantPrincipalKind = Literal["user", "app", "runtime_session"]
 RuntimeSessionKind = Literal["chat_root", "inter_agent_participant", "system"]
 RuntimeThreadVisibility = Literal["user", "hidden"]
 RuntimeMode = Literal["agentic", "plain_hosted_chat"]
+RuntimeProfile = Literal["workspace", "research"]
 SkillActivationMode = Literal["implicit", "explicit"]
 
 RUNTIME_SESSION_KINDS = {"chat_root", "inter_agent_participant", "system"}
 RUNTIME_THREAD_VISIBILITIES = {"user", "hidden"}
 RUNTIME_MODES = {"agentic", "plain_hosted_chat"}
+RUNTIME_PROFILES = {"workspace", "research"}
 SKILL_ACTIVATION_MODES = {"implicit", "explicit"}
 LEGACY_DECLARED_REMOTE_DATA_CLASSES = {"public", "workspace_internal_fake"}
 
@@ -84,6 +86,7 @@ class RuntimeSessionRecord:
     session_kind: RuntimeSessionKind = "chat_root"
     thread_visibility: RuntimeThreadVisibility = "user"
     runtime_mode: RuntimeMode = "agentic"
+    runtime_profile: RuntimeProfile = "workspace"
     system_prompt: str | None = None
     skill_ids: list[str] = field(default_factory=list)
     skill_catalog_app_id: str | None = None
@@ -159,6 +162,16 @@ def coerce_runtime_mode(value: object | None) -> RuntimeMode:
     raise ValueError(f"Unsupported runtime mode `{normalized}`.")
 
 
+def coerce_runtime_profile(value: object | None) -> RuntimeProfile:
+    """Return a supported context profile, defaulting only for omitted records."""
+    if value is None or value == "":
+        return "workspace"
+    normalized = str(value).strip()
+    if normalized in RUNTIME_PROFILES:
+        return normalized  # type: ignore[return-value]
+    raise ValueError(f"Unsupported runtime profile `{normalized}`.")
+
+
 def coerce_skill_activation_mode(value: object | None) -> SkillActivationMode:
     """Return a supported skill mode, preserving implicit behavior for legacy records."""
     if value is None or value == "":
@@ -214,6 +227,7 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     payload["session_kind"] = session_kind
     payload["thread_visibility"] = thread_visibility
     payload["runtime_mode"] = coerce_runtime_mode(payload.get("runtime_mode"))
+    payload["runtime_profile"] = coerce_runtime_profile(payload.get("runtime_profile"))
     payload["skill_activation_mode"] = coerce_skill_activation_mode(payload.get("skill_activation_mode"))
     payload["declared_remote_data_class"] = coerce_declared_remote_data_class(
         payload.get("declared_remote_data_class")

@@ -9,7 +9,7 @@ import json
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
-_PREPARED_SESSION_FINGERPRINT_VERSION = 4
+_PREPARED_SESSION_FINGERPRINT_VERSION = 5
 
 
 def prepared_session_fingerprint(
@@ -33,6 +33,7 @@ def prepared_session_fingerprint(
         "skill_activation_mode": _text(body.get("skill_activation_mode")) or "implicit",
         "requested_mode": _requested_mode(body.get("requested_mode")),
         "runtime_mode": _text(body.get("runtime_mode")) or "agentic",
+        "runtime_profile": _text(body.get("runtime_profile")) or "workspace",
         "routing_profile": _text(body.get("routing_profile")) or None,
         "hosted_provider_id": _text(body.get("hosted_provider_id")) or None,
         "hosted_model_id": _text(body.get("hosted_model_id")) or None,
@@ -108,6 +109,7 @@ def stored_prepared_session_configuration_key(session: RuntimeSessionRecord) -> 
         "skill_activation_mode": session.skill_activation_mode,
         "requested_mode": session.requested_mode,
         "runtime_mode": session.runtime_mode,
+        "runtime_profile": session.runtime_profile,
         "hosted_provider_id": session.hosted_provider_id,
         "hosted_model_id": session.hosted_model_id,
         "thread_title": session.thread_title,

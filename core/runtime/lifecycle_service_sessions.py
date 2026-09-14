@@ -24,8 +24,10 @@ from core.runtime.runtime_session import (
     RuntimeSessionKind,
     RuntimeThreadVisibility,
     RuntimeMode,
+    RuntimeProfile,
     SkillActivationMode,
     coerce_runtime_mode,
+    coerce_runtime_profile,
     coerce_declared_remote_data_class,
     coerce_skill_activation_mode,
     normalize_runtime_session_visibility,
@@ -75,6 +77,7 @@ def create_runtime_session(
     session_kind: RuntimeSessionKind | str | None = None,
     thread_visibility: RuntimeThreadVisibility | str | None = None,
     runtime_mode: RuntimeMode | str | None = None,
+    runtime_profile: RuntimeProfile | str | None = None,
     hosted_provider_id: str | None = None,
     hosted_model_id: str | None = None,
     declared_remote_data_class: str | None = None,
@@ -105,6 +108,7 @@ def create_runtime_session(
         thread_visibility,
     )
     normalized_runtime_mode = coerce_runtime_mode(runtime_mode)
+    normalized_runtime_profile = coerce_runtime_profile(runtime_profile)
     normalized_skill_activation_mode = coerce_skill_activation_mode(skill_activation_mode)
     routing = routing or build_runtime_routing(
         session_id=session_id,
@@ -162,6 +166,7 @@ def create_runtime_session(
         session_kind=normalized_session_kind,
         thread_visibility=normalized_thread_visibility,
         runtime_mode=normalized_runtime_mode,
+        runtime_profile=normalized_runtime_profile,
         system_prompt=_optional_text(system_prompt),
         skill_ids=_skill_id_list(skill_ids),
         skill_catalog_app_id=_optional_text(skill_catalog_app_id),
@@ -202,6 +207,7 @@ def create_runtime_session(
             "session_kind": session.session_kind,
             "thread_visibility": session.thread_visibility,
             "runtime_mode": session.runtime_mode,
+            "runtime_profile": session.runtime_profile,
             "hosted_provider_id": session.hosted_provider_id,
             "hosted_model_id": session.hosted_model_id,
             "hosted_text_profile_id": (
@@ -279,6 +285,8 @@ def create_child_runtime_session(
     )
     if parent.runtime_mode == "plain_hosted_chat":
         raise ValueError("Text-only runtime sessions cannot create agent children.")
+    if parent.runtime_profile == "research":
+        raise ValueError("Research runtime sessions cannot create agent children.")
     timestamp = now or utcnow()
     child_session_id = normalize_runtime_session_id(child_session_id)
     runtime_root = Path(parent.runtime_root).parent / child_session_id
@@ -310,6 +318,7 @@ def create_child_runtime_session(
         session_kind="inter_agent_participant",
         thread_visibility="hidden",
         runtime_mode=parent.runtime_mode,
+        runtime_profile=parent.runtime_profile,
         system_prompt=_optional_text(system_prompt),
         skill_ids=_skill_id_list(skill_ids),
         skill_catalog_app_id=_optional_text(skill_catalog_app_id),

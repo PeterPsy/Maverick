@@ -1851,6 +1851,19 @@ run. Sandbox CLI and MCP callers do not gain mutation authority from
 Runtime session creation must include an explicit `agent_id`.
 The core must not default missing runtime ownership metadata to a product app such as Chat.
 
+Chat may request the fixed `runtime_profile=research` only for a new agentic
+session in an effectively full-access workspace. This profile is a Core-owned
+runner, not an Agents catalog entity. Its semantic envelope excludes platform,
+workspace, agent, skill, attachment, app-reference, filesystem, shell, and
+inter-agent context; only the current conversation and exact Browser
+`web_search`/`web_open` schemas and results may reach the provider. Core narrows
+and revalidates live authority to those two read-only handles on every turn and
+rejects any attempt to add workspace context. A new chat creates a fresh
+provider session, while later turns retain only that chat's provider history.
+This removes Maverick-specific bias as far as the integration can control it;
+provider and service safety policy remains outside this profile and is never
+represented as removable.
+
 Turn submission is implemented through a dedicated runtime service so future CLI, MCP, WebSocket, or automation surfaces can reuse the same orchestration without embedding execution logic in HTTP route handlers.
 
 The runtime WebSocket endpoints are the official realtime transports for mounted apps and other interactive clients.

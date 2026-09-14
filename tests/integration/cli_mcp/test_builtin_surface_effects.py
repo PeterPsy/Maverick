@@ -114,7 +114,7 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                     metadata,
                 )
 
-        self.assertEqual(counts, {"cli": 28, "mcp": 383})
+        self.assertEqual(counts, {"cli": 28, "mcp": 385})
         self.assertEqual(argument_sensitive, 33)
 
     def test_real_storage_cli_and_mcp_catalog_execute_after_preflight(self) -> None:

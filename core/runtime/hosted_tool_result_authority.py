@@ -24,7 +24,7 @@ from core.runtime.tool_result_classification import (
 )
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 11
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 12
 _REVIEWED_TOOL_SCHEMA_COMPONENT = "tool-schema-catalog"
 
 

@@ -504,7 +504,7 @@ describe("App agent catalog dependency refresh", () => {
     });
 
     await act(async () => {
-      (element.querySelector('[aria-label="Agent runner: Default Chat"]') as HTMLButtonElement | null)?.click();
+      (element.querySelector('[aria-label="Agent runner: Free Agent"]') as HTMLButtonElement | null)?.click();
     });
     await act(async () => {
       (Array.from(element.querySelectorAll('[role="option"]')).find((option) =>
@@ -577,7 +577,7 @@ describe("App agent catalog dependency refresh", () => {
       expect(element.textContent).toContain("How can I help today?");
     });
 
-    const agentButton = () => element.querySelector('[aria-label="Agent runner: Default Chat"]') as HTMLButtonElement | null;
+    const agentButton = () => element.querySelector('[aria-label="Agent runner: Free Agent"]') as HTMLButtonElement | null;
     await act(async () => {
       agentButton()?.click();
     });

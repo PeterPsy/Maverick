@@ -15,7 +15,9 @@ extension.
   Playwright `run-server` through the Playwright protocol.
 - MCP: declared P0 Browser Lab tools for sessions, navigation, snapshots,
   screenshots, console logs, network logs, tabs, waits, and Maverick dev
-  inspector actions.
+  inspector actions. It also exposes `web_search` and `web_open`, two bounded
+  read-only operations that create and close an isolated ephemeral session for
+  the Chat Research runner.
 - CLI: `browser` command for agent/operator status, policy preflight,
   acceptance smoke, and Maverick local-dev smoke.
 - Skill: bundled `browser-ops` guidance for full-access agents using the
@@ -82,6 +84,12 @@ capability but is not launchable from the workspace app rail.
 Browser also declares `capabilities.skills: ["browser-ops"]` and
 `entrypoints.skills_root: "skills"` so the Skills app can seed workspace-owned
 runtime guidance for agents without making the Browser app user-launchable.
+
+`web_search` and `web_open` deliberately bypass neither Browser policy nor Core
+authority. They accept only a bounded query or URL, use the existing governed
+navigation and snapshot path, return bounded text, and close the temporary
+read-only context even on failure. They do not expose interactive Browser
+actions to Research sessions.
 
 ## Agent Usage
 

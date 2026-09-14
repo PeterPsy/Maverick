@@ -47,6 +47,28 @@ function session(overrides: Partial<RuntimeSession> = {}): RuntimeSession {
 }
 
 describe("composerRuntimeCapabilities", () => {
+  it("removes attachments and app references from Research", () => {
+    for (const context of [
+      {
+        activeSession: null,
+        activeThread: null,
+        selectedAgentTypeId: "__research__",
+      },
+      {
+        activeSession: session({ runtime_profile: "research" }),
+        activeThread: thread({ runtime_profile: "research" }),
+      },
+    ]) {
+      expect(composerRuntimeCapabilities({
+        ...context,
+        selectedProvider: provider(),
+      })).toEqual({
+        allowedAttachmentInputModalities: [],
+        appReferencesAllowed: false,
+      });
+    }
+  });
+
   it("retains local Codex references and attachments during capability-projection rollout skew", () => {
     for (const context of [
       { activeSession: null, activeThread: null },

@@ -23,6 +23,7 @@ from core.runtime.provider_start_handoff import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.research_runtime import assert_research_runtime_input_allowed
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import transition_runtime_turn
 from core.runtime.turn_submission_service_events import (
@@ -84,6 +85,12 @@ def submit_runtime_turn(
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue and execute one runtime turn synchronously."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
+    assert_research_runtime_input_allowed(
+        session,
+        attachments=attachments,
+        app_references=app_references,
+        invoked_skill_ids=invoked_skill_ids,
+    )
     assert_plain_hosted_chat_input_allowed(
         session,
         attachments=attachments,

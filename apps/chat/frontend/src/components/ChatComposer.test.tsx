@@ -174,12 +174,15 @@ async function renderComposer({
   agentCatalogLoading = false,
   deviceUseAvailable = false,
   deviceUseEnabled = false,
+  isolatedResearch = false,
   onToggleDeviceUse,
+  researchAvailable = false,
 }: {
   agentOptions?: AgentTypeSummary[];
   agentCatalogLoading?: boolean;
   deviceUseAvailable?: boolean;
   deviceUseEnabled?: boolean;
+  isolatedResearch?: boolean;
   canStopTurn?: boolean;
   mentionItems?: MentionItem[];
   onAddAttachments?: (files: File[]) => void;
@@ -193,6 +196,7 @@ async function renderComposer({
   multiAgentMode?: MultiAgentComposerMode;
   onSubmit?: () => void;
   onToggleDeviceUse?: () => void;
+  researchAvailable?: boolean;
   transcriptionChunkedDictationSupported?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
@@ -218,6 +222,7 @@ async function renderComposer({
         error={null}
         executionMode={executionMode}
         isSending={false}
+        isolatedResearch={isolatedResearch}
         mentionItems={mentionItems}
         multiAgentBudgetLabel="1 worker · 1 turn · 1 tool call"
         multiAgentGroupChatEnabled={multiAgentGroupChatEnabled}
@@ -238,6 +243,7 @@ async function renderComposer({
         onSubmit={onSubmit}
         onToggleDeviceUse={onToggleDeviceUse}
         providers={providers}
+        researchAvailable={researchAvailable}
         queuedCount={0}
         queuedPreview={null}
         selectedAgentTypeId=""
@@ -315,7 +321,7 @@ describe("composer utilities", () => {
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Capture page area"]'))).toBe(true);
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Apps and references"]'))).toBe(true);
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Multi-agent mode: Off"]'))).toBe(true);
-    expect(utilityPanel?.contains(element.querySelector('[aria-label="Agent runner: Default Chat"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Agent runner: Free Agent"]'))).toBe(true);
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Model: Codex"]'))).toBe(true);
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Full access runtime"]'))).toBe(true);
     expect(utilityPanel?.contains(element.querySelector(".chatapp-composer__dictation"))).toBe(false);
@@ -1137,7 +1143,7 @@ describe("ChatComposer reference search", () => {
   it("opens the agent selector and selects an agent runner", async () => {
     const onSelectAgent = vi.fn();
     const { element } = await renderComposer({ onSelectAgent });
-    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
     expect(agentButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -1159,9 +1165,9 @@ describe("ChatComposer reference search", () => {
     expect(onSelectAgent).toHaveBeenCalledWith("agent-type-social-video-content-strategist");
   });
 
-  it("filters agent runners while keeping Default Chat available", async () => {
+  it("filters every runner option", async () => {
     const { element } = await renderComposer({ agentOptions: searchableAgents });
-    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
     expect(agentButton).toBeInstanceOf(HTMLButtonElement);
     const agentButtonElement = agentButton as HTMLButtonElement;
 
@@ -1175,15 +1181,15 @@ describe("ChatComposer reference search", () => {
       changeInputValue(searchInput as HTMLInputElement, "ops-reviewer");
     });
 
-    expect(element.textContent).toContain("Default Chat");
+    expect(element.textContent).not.toContain("Free Agent");
     expect(element.textContent).toContain("Operations Reviewer");
     expect(element.textContent).not.toContain("Social Video Content Strategist");
     expect(element.textContent).not.toContain("No agent catalog available");
   });
 
-  it("shows a filtered empty state without hiding Default Chat", async () => {
+  it("shows a filtered empty state", async () => {
     const { element } = await renderComposer({ agentOptions: searchableAgents });
-    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
     expect(agentButton).toBeInstanceOf(HTMLButtonElement);
     const agentButtonElement = agentButton as HTMLButtonElement;
 
@@ -1197,16 +1203,51 @@ describe("ChatComposer reference search", () => {
       changeInputValue(searchInput as HTMLInputElement, "finance");
     });
 
-    expect(element.textContent).toContain("Default Chat");
-    expect(element.textContent).toContain("No matching agents");
+    expect(element.textContent).not.toContain("Free Agent");
+    expect(element.textContent).toContain("No matching runners");
     expect(element.textContent).not.toContain("No agent catalog available");
     expect(element.textContent).not.toContain("Operations Reviewer");
+  });
+
+  it("offers Research only when its fixed runtime is available", async () => {
+    const onSelectAgent = vi.fn();
+    const { element } = await renderComposer({ onSelectAgent, researchAvailable: true });
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
+
+    await act(async () => {
+      (agentButton as HTMLButtonElement).click();
+    });
+    const research = Array.from(element.querySelectorAll(".chatapp-agent-menu__item")).find(
+      (button) => button.textContent?.includes("Research"),
+    );
+    expect(research).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (research as HTMLButtonElement).click();
+    });
+    expect(onSelectAgent).toHaveBeenCalledWith("__research__");
+  });
+
+  it("removes workspace tools from the Research composer", async () => {
+    const { element } = await renderComposer({
+      deviceUseAvailable: true,
+      isolatedResearch: true,
+      onCapturePageArea: () => undefined,
+      researchAvailable: true,
+    });
+
+    expect(element.querySelector('[aria-label="Add attachments"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Attiva Device Use"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Capture page area"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Apps and references"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Multi-agent mode: Off"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Agent runner: Free Agent"]')).toBeTruthy();
   });
 
   it("selects a filtered agent runner with ArrowDown and Enter", async () => {
     const onSelectAgent = vi.fn();
     const { element } = await renderComposer({ agentOptions: searchableAgents, onSelectAgent });
-    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
     expect(agentButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -1226,7 +1267,7 @@ describe("ChatComposer reference search", () => {
 
   it("closes the agent selector with Escape and restores focus to the trigger", async () => {
     const { element } = await renderComposer({ agentOptions: searchableAgents });
-    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
     expect(agentButton).toBeInstanceOf(HTMLButtonElement);
     const agentButtonElement = agentButton as HTMLButtonElement;
 
@@ -1248,7 +1289,7 @@ describe("ChatComposer reference search", () => {
   it("does not select an agent runner while IME composition is confirming", async () => {
     const onSelectAgent = vi.fn();
     const { element } = await renderComposer({ onSelectAgent });
-    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
     expect(agentButton).toBeInstanceOf(HTMLButtonElement);
     const agentButtonElement = agentButton as HTMLButtonElement;
 
@@ -1271,7 +1312,7 @@ describe("ChatComposer reference search", () => {
 
   it("keeps the agent selector open after a mobile tap sequence", async () => {
     const { element } = await renderComposer();
-    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
     expect(agentButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {

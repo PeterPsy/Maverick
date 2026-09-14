@@ -24,6 +24,12 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.async_runtime import run_runtime_coroutine
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.remote_agentic_admission import require_remote_agentic_authority
+from core.runtime.research_runtime import (
+    isolate_research_authority,
+    research_tool_candidates,
+    runtime_session_is_research,
+    validate_research_authority,
+)
 from core.runtime.service import record_runtime_event
 
 if TYPE_CHECKING:
@@ -87,13 +93,17 @@ def resolve_runtime_authority_snapshot(
         currently_authorized_tool_handles = (
             tuple(handle_resolver(binding)) if callable(handle_resolver) else ()
         )
+    if runtime_session_is_research(session):
+        currently_authorized_tool_handles = research_tool_candidates(
+            currently_authorized_tool_handles
+        )
     active_provider_store = provider_store or state.provider_store
     actor_allowed, actor_revision = live_runtime_actor_policy(
         state,
         session=session,
         provider_store=active_provider_store,
     )
-    return resolve_effective_runtime_authority(
+    authority = resolve_effective_runtime_authority(
         active_provider_store,
         binding=binding,
         adapter=adapter,
@@ -106,6 +116,10 @@ def resolve_runtime_authority_snapshot(
         actor_policy_revision=actor_revision,
         adapter_identity_digest=adapter_identity_digest,
     )
+    if runtime_session_is_research(session):
+        authority = isolate_research_authority(authority)
+        validate_research_authority(binding, authority)
+    return authority
 
 
 def revalidate_runtime_authority_snapshot(
@@ -171,6 +185,8 @@ def revalidate_runtime_authority_snapshot(
     )
     if effective_mode != authority.execution_mode:
         raise AgenticRuntimeError("runtime_execution_mode_changed")
+    if runtime_session_is_research(session):
+        validate_research_authority(binding, authority)
     return authority
 
 
@@ -261,6 +277,7 @@ def preflight_execution_binding_context(
     turn_id: str,
     live_execution_mode,
     actor_policy_revision: str,
+    runtime_profile: str = "workspace",
     invoked_skills: object = (),
     attachments: object = (),
     app_references: object = (),
@@ -276,6 +293,8 @@ def preflight_execution_binding_context(
     health = run_runtime_coroutine(adapter.health(RuntimeHealthContext(binding=binding)))
     handle_resolver = getattr(adapter, "currently_authorized_tool_handles", None)
     handles = tuple(handle_resolver(binding)) if callable(handle_resolver) else ()
+    if runtime_profile == "research":
+        handles = research_tool_candidates(handles)
     authority = resolve_effective_runtime_authority(
         state.provider_store,
         binding=binding,
@@ -288,6 +307,9 @@ def preflight_execution_binding_context(
         actor_policy_allowed=True,
         actor_policy_revision=actor_policy_revision,
     )
+    if runtime_profile == "research":
+        authority = isolate_research_authority(authority)
+        validate_research_authority(binding, authority)
     validate_effective_context_capabilities(
         authority,
         invoked_skills=invoked_skills,

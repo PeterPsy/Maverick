@@ -56,6 +56,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
             ? profile.runtime_engine_id
             : `agentic:${encodeURIComponent(profile.workspace_profile_binding_id)}`,
           provider_role: "runtime_engine",
+          runtime_engine_id: profile.runtime_engine_id,
           workspace_profile_binding_id: profile.workspace_profile_binding_id,
           default_model_family: profile.model_id,
           label: profile.runtime_engine_id === "codex"
@@ -66,6 +67,9 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           agentic_rollout_status: profile.rollout_status,
           agentic_egress_policy_id: profile.egress_policy_id || null,
           agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
+          agentic_tool_handle_mode: profile.tool_handle_mode,
+          agentic_effective_allowed_tool_handles: profile.effective_allowed_tool_handles || [],
+          agentic_effective_tool_handle_mode: profile.effective_tool_handle_mode,
           agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,
           agentic_containment_status: profile.containment_status,
           agentic_containment_reason: profile.containment_reason || null,

@@ -10,7 +10,7 @@
     {
       "interface": "browser.lab",
       "version": "1",
-      "description": "Governed Browser Lab sessions, snapshots, screenshots, console logs, and network observations.",
+      "description": "Governed ephemeral web research plus Browser Lab sessions, snapshots, screenshots, console logs, and network observations.",
       "surfaces": [
         "backend",
         "mcp",
@@ -47,6 +47,8 @@
   },
   "capabilities": {
     "mcp_tools": [
+      "web_search",
+      "web_open",
       "browser_session_create",
       "browser_session_close",
       "browser_navigate",

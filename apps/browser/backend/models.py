@@ -22,8 +22,11 @@ READ_ONLY_ACTIONS = frozenset(
 )
 DEV_INSPECTOR_ACTIONS = frozenset({"click", "type", "press_key"})
 AUDITED_ACTIONS = READ_ONLY_ACTIONS | DEV_INSPECTOR_ACTIONS
+RESEARCH_ACTIONS = frozenset({"research.search", "research.open"})
 
 MCP_TOOL_ACTIONS = {
+    "web_search": "research.search",
+    "web_open": "research.open",
     "browser_session_create": "session.create",
     "browser_session_close": "session.close",
     "browser_navigate": "navigate",

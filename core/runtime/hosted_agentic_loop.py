@@ -75,6 +75,7 @@ from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_catalog import RuntimeToolCatalog
+from core.runtime.research_runtime import research_provider_catalog
 from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
 
@@ -347,6 +348,7 @@ class HostedAgenticLoop:
                     if phase == "exploration"
                     else RuntimeToolCatalog(())
                 )
+                catalog = research_provider_catalog(context.session, catalog)
                 prepared_request = self.request_builder.prepare(
                     context=effective_context,
                     step=step,

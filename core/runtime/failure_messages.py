@@ -208,6 +208,15 @@ _PUBLIC_MESSAGES = {
     "runtime_feature_flags_changed": "Runtime feature authority changed during execution.",
     "runtime_health_changed": "Runtime health authority changed during execution.",
     "runtime_policy_changed": "Runtime policy changed during execution.",
+    "research_runtime_blocks_workspace_context": (
+        "Research accepts only conversation text and its fixed read-only web tools."
+    ),
+    "research_runtime_contract_invalid": (
+        "Research must start as a clean full-access web-only chat."
+    ),
+    "research_runtime_unavailable": (
+        "No compatible read-only web research runtime is currently available."
+    ),
     "runtime_profile_upgrade_required": (
         "This chat requires a compatible runtime-profile upgrade before it can continue."
     ),

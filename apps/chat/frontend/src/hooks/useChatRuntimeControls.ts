@@ -14,6 +14,10 @@ import { ActiveAppContext, promptWithActiveAppContext } from "../lib/activeAppCo
 import { mergeRuntimeEvents } from "../lib/runtimeEvents";
 import { hostedProviderRuntimeConfig, providerUsesPlainHostedRuntime } from "../lib/providerRuntimeOptions";
 import type { AgentRuntimeConfig } from "./useMessageSubmission";
+import {
+  isResearchRunner,
+  providerSupportsResearch,
+} from "../lib/runtimeProfiles";
 
 type UseChatRuntimeControlsParams = {
   activeThread: ChatThread | null;
@@ -24,6 +28,7 @@ type UseChatRuntimeControlsParams = {
   canStopTurn: boolean;
   providers: ProviderItem[];
   selectedAgentTypeId: string;
+  executionMode: "sandbox" | "full-access" | null;
   workspaceId: string;
   setActiveProviderId: (providerId: string) => void;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
@@ -59,6 +64,31 @@ export function genericAgenticRuntimeConfig(
     runtime_mode: "agentic",
     workspace_profile_binding_id: provider.workspace_profile_binding_id,
     reasoning_effort: reasoningEffort || undefined,
+  };
+}
+
+export function researchRuntimeConfig(
+  provider: ProviderItem | null,
+  reasoningEffort: string,
+): AgentRuntimeConfig | null {
+  if (!providerSupportsResearch(provider) || !provider?.workspace_profile_binding_id) {
+    return null;
+  }
+  return {
+    agent_id: "research",
+    agent_role_id: "",
+    agent_type_id: "",
+    runtime_mode: "agentic",
+    runtime_profile: "research",
+    requested_mode: "full-access",
+    workspace_profile_binding_id: provider.workspace_profile_binding_id,
+    reasoning_effort: reasoningEffort || undefined,
+    skill_catalog_app_id: "",
+    skill_ids: [],
+    skill_activation_mode: "explicit",
+    source_app_id: "chat",
+    system_prompt: "",
+    title: "Research",
   };
 }
 
@@ -125,6 +155,7 @@ export function useChatRuntimeControls({
   canStopTurn,
   providers,
   selectedAgentTypeId,
+  executionMode,
   workspaceId,
   setActiveProviderId,
   setActiveTurn,
@@ -134,6 +165,8 @@ export function useChatRuntimeControls({
   setComposerError,
 }: UseChatRuntimeControlsParams) {
   const activeProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+  const researchProvider = providers.find(providerSupportsResearch) || null;
+  const researchAvailable = executionMode === "full-access" && researchProvider !== null;
   const [reasoningEffort, setReasoningEffort] = useState("");
   const pendingReasoningEffortRef = useRef("");
   const defaultReasoningEffort = activeProvider?.default_reasoning_effort
@@ -148,7 +181,9 @@ export function useChatRuntimeControls({
     : "";
 
   useEffect(() => {
-    preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
+    if (!isResearchRunner(selectedAgentTypeId)) {
+      preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
+    }
   }, [agentCatalogAppId, selectedAgentTypeId, workspaceId]);
 
   useEffect(() => {
@@ -165,10 +200,14 @@ export function useChatRuntimeControls({
       setComposerError("Start a new chat to switch models.");
       return;
     }
+    const provider = providers.find((item) => item.provider_id === providerId) || null;
+    if (isResearchRunner(selectedAgentTypeId) && !providerSupportsResearch(provider)) {
+      setComposerError("Research requires a compatible web-enabled model.");
+      return;
+    }
     pendingReasoningEffortRef.current = selectedReasoningEffort;
     setReasoningEffort(selectedReasoningEffort);
     setActiveProviderId(providerId);
-    const provider = providers.find((item) => item.provider_id === providerId) || null;
     if (providerUsesPlainHostedRuntime(provider) || provider?.provider_role === "runtime_engine") {
       setError(null);
       return;
@@ -186,15 +225,38 @@ export function useChatRuntimeControls({
     if (activeThread) {
       return;
     }
+    if (isResearchRunner(agentTypeId)) {
+      if (!researchAvailable || !researchProvider) {
+        setComposerError("Research is available only in a full-access workspace with a compatible model.");
+        return;
+      }
+      if (!providerSupportsResearch(activeProvider)) {
+        const effort = researchProvider.default_reasoning_effort
+          || researchProvider.supported_reasoning_efforts?.[0]?.effort
+          || "";
+        pendingReasoningEffortRef.current = effort;
+        setReasoningEffort(effort);
+        setActiveProviderId(researchProvider.provider_id);
+      }
+    }
     setSelectedAgentTypeId(agentTypeId);
     setComposerError(null);
-    preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, agentTypeId);
+    if (!isResearchRunner(agentTypeId)) {
+      preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, agentTypeId);
+    }
   }
 
   const selectedAgentRuntimeConfig = useCallback(async (
     activeApp: ActiveAppContext | null,
   ): Promise<AgentRuntimeConfig | null> => {
     const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+    if (isResearchRunner(selectedAgentTypeId)) {
+      const config = researchRuntimeConfig(selectedProvider, newChatReasoningEffort);
+      if (!config || executionMode !== "full-access") {
+        throw new Error("Research is not available with the selected runtime.");
+      }
+      return config;
+    }
     const hostedConfig = hostedProviderRuntimeConfig(selectedProvider);
     if (hostedConfig) {
       return hostedConfig;
@@ -221,6 +283,7 @@ export function useChatRuntimeControls({
   }, [
     activeProviderId,
     agentCatalogAppId,
+    executionMode,
     newChatReasoningEffort,
     providers,
     selectedAgentTypeId,
@@ -247,6 +310,7 @@ export function useChatRuntimeControls({
     handleSelectAgent,
     handleSelectProvider,
     handleStopTurn,
+    researchAvailable,
     selectedAgentRuntimeConfig,
     reasoningEffort,
     setReasoningEffort,

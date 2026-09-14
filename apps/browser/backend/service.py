@@ -8,7 +8,7 @@ import ipaddress
 import os
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, quote_plus, urlsplit, urlunsplit
 
 from core.apps.contract_common import APP_ID_PATTERN
 from core.egress import (
@@ -19,7 +19,13 @@ from core.egress import (
 
 from broker_client import broker_health, call_broker_action
 from errors import BrowserBrokerUnavailableError, BrowserPolicyError, BrowserValidationError
-from models import AUDITED_ACTIONS, DEV_INSPECTOR_ACTIONS, MCP_TOOL_ACTIONS, READ_ONLY_ACTIONS
+from models import (
+    AUDITED_ACTIONS,
+    DEV_INSPECTOR_ACTIONS,
+    MCP_TOOL_ACTIONS,
+    READ_ONLY_ACTIONS,
+    RESEARCH_ACTIONS,
+)
 from store import (
     append_audit_record,
     load_state,
@@ -31,7 +37,8 @@ from store import (
 
 
 SESSION_ACTIONS = AUDITED_ACTIONS - {"session.create"}
-ACTION_EVENTS = AUDITED_ACTIONS
+ACTION_EVENTS = AUDITED_ACTIONS | RESEARCH_ACTIONS
+MAX_RESEARCH_CONTENT_CHARS = 200_000
 FORBIDDEN_PROFILE_FIELDS = frozenset(
     {
         "accept_downloads",
@@ -128,6 +135,26 @@ def handle_action(
             state = load_state(str(data_root))
             audit = visible_audit_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled)
             return 200, {"audit": audit, "limit": len(audit)}
+        if action in RESEARCH_ACTIONS:
+            status_code, result = research_web_result(
+                data_root,
+                action,
+                body,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                effective_mode=effective_mode,
+                platform_role=platform_role,
+                workspace_role=workspace_role,
+            )
+            audit_browser_action(
+                data_root,
+                action,
+                body,
+                status="ok" if status_code < 400 else "failed",
+                reason=result.get("error"),
+                mode="read_only",
+            )
+            return status_code, result
         if action in AUDITED_ACTIONS:
             status_code, result = broker_action_result(
                 data_root,
@@ -146,7 +173,7 @@ def handle_action(
             )
             return status_code, result
     except BrowserValidationError as error:
-        if action in AUDITED_ACTIONS:
+        if action in ACTION_EVENTS:
             audit_browser_action(data_root, action, body, status="invalid", reason="validation_error")
         return 400, {"error": "validation_error", "detail": str(error), "field": error.field}
     except BrowserPolicyError as error:
@@ -191,6 +218,111 @@ def mcp_result_for_tool(
         platform_role=platform_role,
         workspace_role=workspace_role,
     )
+
+
+def research_web_result(
+    data_root: Path,
+    action: str,
+    body: dict[str, Any],
+    *,
+    workspace_id: str | None,
+    app_id: str,
+    effective_mode: str | None,
+    platform_role: str | None,
+    workspace_role: str | None,
+) -> tuple[int, dict[str, Any]]:
+    """Read one public URL in an ephemeral, non-interactive browser session."""
+    target_url, query = research_target(action, body)
+
+    def invoke(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        return handle_action(
+            data_root,
+            payload,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            effective_mode=effective_mode,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
+        )
+
+    create_status, create_result = invoke(
+        {"action": "session.create", "mode": "read_only"}
+    )
+    if create_status >= 400:
+        return create_status, create_result
+    session_id = str(create_result.get("session_id") or "").strip()
+    if not session_id:
+        return 502, {
+            "error": "invalid_broker_response",
+            "detail": "Browser broker did not return a session_id.",
+        }
+    try:
+        navigate_status, navigate_result = invoke(
+            {
+                "action": "navigate",
+                "session_id": session_id,
+                "url": target_url,
+                "mode": "read_only",
+            },
+        )
+        if navigate_status >= 400:
+            return navigate_status, navigate_result
+        snapshot_status, snapshot_result = invoke(
+            {"action": "snapshot", "session_id": session_id}
+        )
+        if snapshot_status >= 400:
+            return snapshot_status, snapshot_result
+        content = str(snapshot_result.get("snapshot") or "")
+        result: dict[str, Any] = {
+            "status": "ok",
+            "url": str(
+                snapshot_result.get("url")
+                or navigate_result.get("url")
+                or target_url
+            ),
+            "title": str(
+                snapshot_result.get("title")
+                or navigate_result.get("title")
+                or ""
+            ),
+            "content": content[:MAX_RESEARCH_CONTENT_CHARS],
+            "truncated": len(content) > MAX_RESEARCH_CONTENT_CHARS,
+        }
+        if query is not None:
+            result["query"] = query
+        return 200, result
+    finally:
+        invoke({"action": "session.close", "session_id": session_id})
+
+
+def research_target(action: str, body: dict[str, Any]) -> tuple[str, str | None]:
+    allowed_fields = {
+        "research.search": frozenset({"action", "query"}),
+        "research.open": frozenset({"action", "url"}),
+    }.get(action)
+    if allowed_fields is None:
+        raise BrowserValidationError("Unsupported research action.", field="action")
+    extra_fields = sorted(field for field in body if field not in allowed_fields)
+    if extra_fields:
+        raise BrowserValidationError(
+            f"{extra_fields[0]} is not allowed for {action}.",
+            field=extra_fields[0],
+        )
+    if action == "research.search":
+        query = require_string(body, "query")
+        if len(query) > 500:
+            raise BrowserValidationError(
+                "query must contain at most 500 characters.",
+                field="query",
+            )
+        return f"https://html.duckduckgo.com/html/?q={quote_plus(query)}", query
+    url = require_string(body, "url")
+    if len(url) > 4096:
+        raise BrowserValidationError(
+            "url must contain at most 4096 characters.",
+            field="url",
+        )
+    return url, None
 
 
 def status_payload(
@@ -271,6 +403,10 @@ def operations_manifest() -> dict[str, Any]:
             },
         },
         "mcp_tools": sorted(MCP_TOOL_ACTIONS),
+        "research": {
+            "actions": sorted(RESEARCH_ACTIONS),
+            "description": "Ephemeral search and open operations with no interactive browser controls.",
+        },
         "admin_dev_targets": admin_dev_target_urls(),
         "smoke": {
             "acceptance": "acceptance.smoke runs the public/read-only P0 broker path.",

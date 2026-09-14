@@ -73,6 +73,7 @@ from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.errors import RuntimeTurnQueueRejectedError
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.research_runtime import assert_research_runtime_input_allowed
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.turn_queue_admission import require_turn_queue_session_executable
@@ -640,6 +641,12 @@ def submit_runtime_turn_async(
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue one runtime turn and execute it in a background worker."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
+    assert_research_runtime_input_allowed(
+        session,
+        attachments=attachments,
+        app_references=app_references,
+        invoked_skill_ids=invoked_skill_ids,
+    )
     assert_plain_hosted_chat_input_allowed(
         session,
         attachments=attachments,

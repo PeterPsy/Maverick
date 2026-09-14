@@ -38,6 +38,10 @@ from core.shared.tool_effects import resolve_tool_effect_class
 
 
 HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 6
+_PUBLIC_WEB_RESULT_TOOLS = {
+    "app.browser.web_search",
+    "app.browser.web_open",
+}
 
 _ACTION_METADATA_FIELDS: dict[str, tuple[str, ...]] = {
     "core-capability:process.start": (
@@ -218,6 +222,10 @@ def build_hosted_tool_result_admission_resolver(
                 context,
                 declared_public=_definition_has_public_result_authority(
                     definition
+                )
+                or _audited_public_web_result_authority(
+                    definition,
+                    _surface_arguments(handle, arguments) or {},
                 ),
                 public_content_authority=_public_authority(
                     public_content_authority_resolver,
@@ -408,6 +416,21 @@ def _surface_arguments(
         nested = arguments.get("arguments")
         return nested if isinstance(nested, dict) else None
     return arguments
+
+
+def _audited_public_web_result_authority(
+    definition,
+    arguments: dict[str, object],
+) -> bool:
+    """Trust only the exact audited Browser public-read closure as a public source."""
+    return bool(
+        getattr(definition, "tool_name", None) in _PUBLIC_WEB_RESULT_TOOLS
+        and app_read_effect_has_core_audit_authority(
+            definition,
+            arguments,
+            surface="mcp",
+        )
+    )
 
 
 def _metadata_projection(

@@ -57,6 +57,7 @@ def ensure_successor_session(
             session_kind=predecessor.session_kind,
             thread_visibility=predecessor.thread_visibility,
             runtime_mode=predecessor.runtime_mode,
+            runtime_profile=getattr(predecessor, "runtime_profile", "workspace"),
             hosted_provider_id=predecessor.hosted_provider_id,
             hosted_model_id=predecessor.hosted_model_id,
             hosted_text_binding=(

@@ -61,6 +61,10 @@ from core.runtime.public_content_authority_store import (
     runtime_public_content_authority_for_workspace,
 )
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
+from core.runtime.research_runtime import (
+    research_runtime_policy,
+    runtime_session_is_research,
+)
 from core.runtime.hosted_runtime_registry_builder import (
     build_hosted_provider_runtime_registry,
 )
@@ -106,10 +110,15 @@ def build_hosted_agentic_engine_adapter(
             )
             if not live.enabled or live.workspace_id != context.binding.workspace_id:
                 raise HostedAgenticLoopError("workspace_profile_binding_disabled")
-            return intersect_runtime_policies(
+            policy = intersect_runtime_policies(
                 context.binding.profile_policy_ceiling_snapshot,
                 context.binding.workspace_policy_ceiling_snapshot,
                 live.workspace_policy_ceiling,
+            )
+            return (
+                research_runtime_policy(policy)
+                if runtime_session_is_research(context.session)
+                else policy
             )
         except HostedAgenticLoopError:
             raise
@@ -123,7 +132,11 @@ def build_hosted_agentic_engine_adapter(
                 session=context.session,
                 adapter=adapter_holder["adapter"],
                 turn_id=context.correlation_id,
-                currently_authorized_tool_handles=authorized_core_tool_handles(context.binding),
+                currently_authorized_tool_handles=(
+                    None
+                    if runtime_session_is_research(context.session)
+                    else authorized_core_tool_handles(context.binding)
+                ),
             )
         except AgenticRuntimeError as error:
             raise HostedAgenticLoopError(error.reason_code) from error

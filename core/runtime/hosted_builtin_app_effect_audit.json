@@ -33,11 +33,11 @@
     "browser": {
       "cli": {
         "descriptor_sha256": "2bb021ebd09bcecfbec52b28b43833764b0458bd79254b153b222560f770db92",
-        "execution_sha256": "beaf4946165dce0db630b759a42b4c29e198cf3d444202ab2756d491bdea57e2"
+        "execution_sha256": "8e5089e83e40323795957d67d22216718c58279034e79585db94b97e802e8771"
       },
       "mcp": {
-        "descriptor_sha256": "834f8e425b28a7fb7c8e7a0afac61d7964ad04b52166072f1984cf76615e3d42",
-        "execution_sha256": "eb5ca1563d2df424e7ab9bdafb42453ccf3d7c02e7e8ed25b37e172755f8743d"
+        "descriptor_sha256": "9ec0cf9e0e89396a29ccf2d84c8077c34198e4dea0e8e99483e19f43d256a7ad",
+        "execution_sha256": "0f0e3eb70f1914ef3ef1362664778bed748fa136a7baf9ea17cd0bd522db0e11"
       }
     },
     "calendar": {
@@ -231,6 +231,6 @@
       }
     }
   },
-  "audit_revision": "2026-09-13-p6-builtin-effects-reviewed-v6",
+  "audit_revision": "2026-09-14-browser-research-reads-reviewed-v7",
   "schema_version": "2"
 }

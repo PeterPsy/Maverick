@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from core.providers.agentic_protocol import (
@@ -32,6 +33,10 @@ from core.runtime.semantic_envelope_models import (
 )
 from core.runtime.semantic_tool_blocks import append_semantic_tool_blocks
 from core.runtime.tool_catalog import RuntimeToolCatalog
+from core.runtime.research_runtime import (
+    RESEARCH_WEB_TOOL_HANDLES,
+    runtime_session_is_research,
+)
 
 
 class HostedSemanticEnvelopeCompiler:
@@ -68,26 +73,46 @@ class HostedSemanticEnvelopeCompiler:
         request_phase: AgenticRequestPhase,
     ) -> SemanticEnvelope:
         """Build every applicable semantic block or fail before provider dispatch."""
-        filesystem = self._filesystem(context)
+        research = runtime_session_is_research(context.session)
+        if research and (
+            len(catalog.descriptors) != len(RESEARCH_WEB_TOOL_HANDLES)
+            or {descriptor.handle for descriptor in catalog.descriptors}
+            != set(RESEARCH_WEB_TOOL_HANDLES)
+        ):
+            raise HostedAgenticLoopError("research_runtime_unavailable")
+        filesystem = None if research else self._filesystem(context)
+        input_context = context
+        if research and getattr(context, "input_sources", None):
+            input_context = replace(
+                context,
+                input_sources=tuple(
+                    source
+                    for source in context.input_sources
+                    if str(getattr(source, "provenance", "") or "")
+                    in {"prompt", "user_input"}
+                ),
+            )
         blocks: list[SemanticEnvelopeBlock] = []
         try:
-            self._materializer.append_platform(blocks, context=context)
-            self._materializer.append_workspace(
-                blocks,
-                context=context,
-                filesystem=filesystem,
-            )
-            self._materializer.append_agent(blocks, context=context)
+            if not research:
+                self._materializer.append_platform(blocks, context=context)
+                self._materializer.append_workspace(
+                    blocks,
+                    context=context,
+                    filesystem=filesystem,
+                )
+                self._materializer.append_agent(blocks, context=context)
             self._materializer.append_inputs(
                 blocks,
-                context=context,
+                context=input_context,
                 input_text=input_text,
             )
-            self._materializer.append_skills(
-                blocks,
-                context=context,
-                filesystem=filesystem,
-            )
+            if not research:
+                self._materializer.append_skills(
+                    blocks,
+                    context=context,
+                    filesystem=filesystem,
+                )
             if request_phase != "exploration":
                 blocks.append(
                     make_semantic_block(
@@ -121,7 +146,8 @@ class HostedSemanticEnvelopeCompiler:
                 "semantic_envelope_materialization_failed"
             ) from error
         finally:
-            filesystem.close()
+            if filesystem is not None:
+                filesystem.close()
         if not blocks or any(not block.required for block in blocks):
             raise HostedAgenticLoopError("semantic_envelope_incomplete")
         return finalize_semantic_envelope(context=context, blocks=blocks)

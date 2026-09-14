@@ -19,6 +19,7 @@ import {
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
 import { composerRuntimeCapabilities } from "../lib/composerRuntimeCapabilities";
+import { isResearchRunner } from "../lib/runtimeProfiles";
 import { openAppParamsInShell } from "../lib/shellNavigation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
@@ -202,6 +203,7 @@ function runtimeSessionSummaryFromThread(thread: ChatThread | null): RuntimeSess
     status: "",
     effective_mode: "",
     runtime_mode: thread.runtime_mode,
+    runtime_profile: thread.runtime_profile,
     provider_id: thread.provider_id || undefined,
     hosted_provider_id: thread.hosted_provider_id || null,
     hosted_model_id: thread.hosted_model_id || null,
@@ -276,11 +278,15 @@ export function useChatAppController({
   );
   const composerActiveProviderId = selectedProvider?.provider_id || activeProviderId;
   const composerProviders = useMemo(() => providersForComposer(providers, selectedProvider), [providers, selectedProvider]);
+  const executionMode = activeSession?.effective_mode === "sandbox" || activeSession?.effective_mode === "full-access"
+    ? activeSession.effective_mode
+    : selectedProvider?.agentic_effective_capabilities?.execution_mode || null;
   const composerCapabilities = useMemo(() => composerRuntimeCapabilities({
     activeSession,
     activeThread,
     selectedProvider,
-  }), [activeSession, activeThread, selectedProvider]);
+    selectedAgentTypeId,
+  }), [activeSession, activeThread, selectedAgentTypeId, selectedProvider]);
   const allowedAttachmentInputModalities = composerCapabilities.allowedAttachmentInputModalities;
   const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ allowedInputModalities: allowedAttachmentInputModalities });
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
@@ -370,6 +376,7 @@ export function useChatAppController({
     canStopTurn: runtimeCanStopTurn,
     providers: composerProviders,
     selectedAgentTypeId,
+    executionMode,
     workspaceId,
     setActiveProviderId,
     setActiveTurn,
@@ -378,6 +385,17 @@ export function useChatAppController({
     setEvents,
     setSelectedAgentTypeId,
   });
+  const isolatedResearch = activeSession?.runtime_profile === "research"
+    || activeThread?.runtime_profile === "research"
+    || (!activeThread && isResearchRunner(selectedAgentTypeId));
+  const handleSelectAgent = useCallback((agentTypeId: string) => {
+    if (isResearchRunner(agentTypeId)) {
+      clearAttachments();
+      setSelectedReferences([]);
+      setMultiAgentMode("off");
+    }
+    runtimeControls.handleSelectAgent(agentTypeId);
+  }, [clearAttachments, runtimeControls, setSelectedReferences]);
   const prepareDeviceUse = useCallback(async (providerId: string, effort: string) => {
     clearAttachments();
     setSelectedReferences([]);
@@ -612,8 +630,6 @@ export function useChatAppController({
     threadId,
     threads,
   });
-  const executionMode = activeSession?.effective_mode === "sandbox" || activeSession?.effective_mode === "full-access" ? activeSession.effective_mode : null;
-
   useEffect(() => {
     setVisibleMessageLimit(50);
   }, [activeConversationKey]);
@@ -716,7 +732,7 @@ export function useChatAppController({
     handleSearchReferences,
     handleOpenInterAgentGraph,
     handleResolveInterAgentApproval,
-    handleSelectAgent: runtimeControls.handleSelectAgent,
+    handleSelectAgent,
     handleSelectProvider: runtimeControls.handleSelectProvider,
     handleReasoningEffortChange: runtimeControls.setReasoningEffort,
     handleSend,
@@ -744,6 +760,8 @@ export function useChatAppController({
     queuedMessages,
     removeAttachment,
     selectedAgentTypeId,
+    isolatedResearch,
+    researchAvailable: runtimeControls.researchAvailable,
     setMultiAgentMode,
     setComposer,
     speechMaxTextChars,

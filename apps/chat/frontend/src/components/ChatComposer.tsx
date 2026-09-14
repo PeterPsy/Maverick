@@ -35,6 +35,7 @@ export type ChatComposerProps = {
   executionMode: ExecutionMode | null;
   isEmptyMode?: boolean;
   isSending: boolean;
+  isolatedResearch?: boolean;
   mentionItems: MentionItem[];
   multiAgentBudgetLabel?: string;
   multiAgentGroupChatEnabled?: boolean;
@@ -56,6 +57,7 @@ export type ChatComposerProps = {
   onToggleDeviceUse?: () => void;
   providers: ProviderItem[];
   reasoningEffort?: string;
+  researchAvailable?: boolean;
   queuedCount: number;
   queuedPreview: string | null;
   selectedAgentTypeId: string;
@@ -85,6 +87,7 @@ export function ChatComposer({
   executionMode,
   isEmptyMode = false,
   isSending,
+  isolatedResearch = false,
   mentionItems,
   multiAgentBudgetLabel = "",
   multiAgentGroupChatEnabled = isGroupChatComposerModeEnabled(),
@@ -106,6 +109,7 @@ export function ChatComposer({
   onToggleDeviceUse,
   providers,
   reasoningEffort = "",
+  researchAvailable = false,
   queuedCount,
   queuedPreview,
   selectedAgentTypeId,
@@ -267,8 +271,15 @@ export function ChatComposer({
             </div>
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
-                <AttachmentMenu attachments={attachments} disabled={disabled || deviceUseEnabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
-                {deviceUseAvailable && onToggleDeviceUse ? (
+                {!isolatedResearch ? (
+                  <AttachmentMenu
+                    attachments={attachments}
+                    disabled={disabled || deviceUseEnabled}
+                    onAddAttachments={onAddAttachments}
+                    onCapturePageArea={onCapturePageArea}
+                  />
+                ) : null}
+                {!isolatedResearch && deviceUseAvailable && onToggleDeviceUse ? (
                   <button
                     aria-label={deviceUseEnabled ? "Device Use attivo" : "Attiva Device Use"}
                     aria-pressed={deviceUseEnabled}
@@ -286,7 +297,7 @@ export function ChatComposer({
                   </button>
                 ) : null}
                 <ComposerUtilities>
-                  {onCapturePageArea ? (
+                  {!isolatedResearch && onCapturePageArea ? (
                     <button
                       aria-label="Capture page area"
                       className="chatapp-composer__tool-button chatapp-composer-utilities__capture-button"
@@ -300,38 +311,43 @@ export function ChatComposer({
                       </span>
                     </button>
                   ) : null}
-                  <button
-                    aria-expanded={isAppMentionPickerOpen}
-                    aria-haspopup="listbox"
-                    aria-label="Apps and references"
-                    className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
-                    disabled={disabled || deviceUseEnabled}
-                    onClick={openAppPicker}
-                    ref={appPickerButtonRef}
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="material-symbols-rounded">
-                      apps
-                    </span>
-                  </button>
-                  <MultiAgentModeControl
-                    budgetLabel={multiAgentBudgetLabel}
-                    disabled={disabled || isSending || deviceUseEnabled}
-                    groupChatEnabled={multiAgentGroupChatEnabled}
-                    menuOpen={multiAgentMenuOpen}
-                    mode={multiAgentMode}
-                    onMenuOpenChange={setMultiAgentMenuOpen}
-                    onSelect={(nextMode) => {
-                      onSelectMultiAgentMode?.(nextMode);
-                      setMultiAgentMenuOpen(false);
-                    }}
-                  />
+                  {!isolatedResearch ? (
+                    <button
+                      aria-expanded={isAppMentionPickerOpen}
+                      aria-haspopup="listbox"
+                      aria-label="Apps and references"
+                      className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
+                      disabled={disabled || deviceUseEnabled}
+                      onClick={openAppPicker}
+                      ref={appPickerButtonRef}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className="material-symbols-rounded">
+                        apps
+                      </span>
+                    </button>
+                  ) : null}
+                  {!isolatedResearch ? (
+                    <MultiAgentModeControl
+                      budgetLabel={multiAgentBudgetLabel}
+                      disabled={disabled || isSending || deviceUseEnabled}
+                      groupChatEnabled={multiAgentGroupChatEnabled}
+                      menuOpen={multiAgentMenuOpen}
+                      mode={multiAgentMode}
+                      onMenuOpenChange={setMultiAgentMenuOpen}
+                      onSelect={(nextMode) => {
+                        onSelectMultiAgentMode?.(nextMode);
+                        setMultiAgentMenuOpen(false);
+                      }}
+                    />
+                  ) : null}
                   <AgentSelector
                     agents={agents}
                     disabled={disabled || isSending || deviceUseEnabled}
                     loading={agentCatalogLoading}
                     locked={agentSelectorLocked}
                     onSelect={onSelectAgent}
+                    researchAvailable={researchAvailable}
                     selectedAgentTypeId={selectedAgentTypeId}
                   />
                   <ComposerRuntimeBadges

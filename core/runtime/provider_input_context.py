@@ -36,6 +36,7 @@ from core.workspaces.data_governance import resource_classification_for_observat
 from core.runtime.workspace_content_classification import (
     exact_workspace_resource_classification,
 )
+from core.runtime.research_runtime import runtime_session_is_research
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,8 @@ def runtime_provider_input_text(
     orchestration: dict[str, object] | None | object = _ORCHESTRATION_UNSET,
 ) -> str:
     """Build agentic provider input from governed context and materialized references."""
+    if runtime_session_is_research(session):
+        return input_text
     if orchestration is _ORCHESTRATION_UNSET:
         governed_input = generalist_orchestration_input_text(
             state,
@@ -128,8 +131,15 @@ def runtime_provider_input_sources(
     orchestration: dict[str, object] | None | object = _ORCHESTRATION_UNSET,
 ) -> tuple[RuntimeProviderInputSource, ...]:
     """Keep prompt, orchestration, attachment, and app provenance separate."""
+    research = runtime_session_is_research(session)
+    if research:
+        orchestration = None
+        app_references = None
+        attachments = None
     sources: list[RuntimeProviderInputSource] = []
-    agent_instruction = str(getattr(session, "system_prompt", "") or "")
+    agent_instruction = (
+        "" if research else str(getattr(session, "system_prompt", "") or "")
+    )
     resolved_orchestration = (
         generalist_orchestration_source(state, session=session)
         if orchestration is _ORCHESTRATION_UNSET
@@ -154,7 +164,11 @@ def runtime_provider_input_sources(
     for index, attachment in enumerate(attachments or ()):
         content, media_type, normalized = _attachment_input_metadata(attachment)
         attachment_entries.append((index, normalized, content, media_type))
-    filesystem = _attachment_filesystem(state, session=session)
+    filesystem = (
+        None
+        if research
+        else _attachment_filesystem(state, session=session)
+    )
     observed_attachment_entries: list[
         tuple[
             int,

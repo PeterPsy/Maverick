@@ -19,7 +19,7 @@ def openrouter_chat_payload(
     request: AgenticModelRequest,
     state: OpenRouterChatState,
 ) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
-    """Return the exact certified payload and messages newly added this step."""
+    """Return the exact configured payload and messages newly added this step."""
     _validate_routing(request)
     _validate_request_phase(request)
     new_messages = _new_messages(request, state)
@@ -85,7 +85,7 @@ def _validate_routing(request: AgenticModelRequest) -> None:
         or len(set(routing.allowed_quantizations))
         != len(routing.allowed_quantizations)
     ):
-        raise OpenRouterAgenticProtocolError("provider_routing_not_certified")
+        raise OpenRouterAgenticProtocolError("provider_routing_not_allowed")
 
 
 def _new_messages(

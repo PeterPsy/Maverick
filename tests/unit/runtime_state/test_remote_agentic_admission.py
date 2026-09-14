@@ -7,12 +7,12 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import codex_routing_constraint, codex_runtime_capabilities, codex_runtime_policy
 from core.providers.agentic_data_policies import (
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
-from core.providers.errors import AgenticProfileError, CapabilityCertificateError
+from core.providers.errors import AgenticProfileError, AgenticRuntimeError
 from core.recovery.continuation_admission import assess_runtime_session_admission
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.execution_binding import build_runtime_execution_binding
@@ -58,12 +58,10 @@ def _remote_binding(*, provider_id: str, now: datetime):
         profile_definition_revision="candidate",
         workspace_binding_id=f"binding-{provider_id}",
         workspace_binding_revision=1,
-        capability_certificate_id=f"certificate-{provider_id}",
-        certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
         adapter_version="candidate",
-        adapter_artifact_digest="b" * 64,
+        adapter_identity_digest="b" * 64,
         model_provider_id=provider_id,
         model_id="fixture-model",
         model_revision="fixture-revision",
@@ -73,8 +71,9 @@ def _remote_binding(*, provider_id: str, now: datetime):
         routing_constraint=codex_routing_constraint(),
         credential_binding_id="credential-fixture",
         reasoning_effort="high",
-        certified_reasoning_efforts=("high",),
+        reasoning_efforts=("high",),
         default_reasoning_effort="high",
+        capabilities=codex_runtime_capabilities(),
         execution_mode="sandbox",
         profile_policy_ceiling=codex_runtime_policy(),
         workspace_policy_ceiling=codex_runtime_policy(),
@@ -219,7 +218,7 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
                 require_remote_agentic_dispatch(_identity("future-provider"))
         self.assertEqual(raised.exception.reason_code, "remote_agentic_provider_unapproved")
 
-    def test_certified_attestation_gate_requires_active_matching_workspace_record(self) -> None:
+    def test_attestation_gate_requires_active_matching_workspace_record(self) -> None:
         environment = {
             MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
             MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
@@ -457,7 +456,7 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
                 ):
                     self.fail("dispatch proceeded after attestation revocation")
 
-    def test_authority_refresh_rejects_revocation_before_adapter_or_certificate_work(self) -> None:
+    def test_authority_refresh_rejects_revocation_before_adapter_work(self) -> None:
         now = datetime(2026, 9, 7, tzinfo=UTC)
         active = issue_fake_data_attestation(
             workspace_id="workspace-1",
@@ -492,7 +491,7 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
             "core.runtime.remote_agentic_admission.REMOTE_AGENTIC_ATTESTATION_AVAILABLE",
             True,
         ), self.assertRaisesRegex(
-            CapabilityCertificateError,
+            AgenticRuntimeError,
             "remote_agentic_attestation_revoked",
         ):
             resolve_runtime_authority_snapshot(
@@ -503,7 +502,7 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
             )
         adapter.health.assert_not_called()
 
-    def test_continuation_admission_rechecks_attestation_before_certificate_work(self) -> None:
+    def test_continuation_admission_rechecks_attestation_before_adapter_work(self) -> None:
         now = datetime(2026, 9, 7, tzinfo=UTC)
         active = issue_fake_data_attestation(
             workspace_id="workspace-1",

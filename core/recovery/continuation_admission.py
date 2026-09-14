@@ -8,7 +8,6 @@ import hashlib
 from typing import Literal
 
 from core.providers.agentic_profiles import build_pinned_execution_binding
-from core.providers.certificate_service import validate_certificate_for_binding
 from core.providers.errors import AgenticProfileError, ProviderError
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
@@ -32,10 +31,7 @@ RuntimeAdmissionStatus = Literal[
     "provider_thread_missing",
 ]
 
-COMPATIBLE_UPGRADE_SOURCE_REASONS = {
-    "adapter_artifact_mismatch",
-    "certificate_expired",
-}
+COMPATIBLE_UPGRADE_SOURCE_REASONS: set[str] = set()
 NON_TERMINAL_CONTINUATION_TURN_STATUSES = frozenset(
     {"queued", "active", "waiting_for_tool_confirmation"}
 )
@@ -133,13 +129,6 @@ def assess_runtime_session_admission(
         source_reason = _provider_reason(error)
     else:
         return _direct(session)
-    if source_reason == "native_agent_connection_identity_mismatch":
-        source_reason = _historical_native_source_reason(
-            provider_store,
-            registry,
-            binding=binding,
-            now=now,
-        )
     if session.device_use_binding is not None:
         return _blocked(session, "device_use_continuation_unsupported")
     if source_reason not in COMPATIBLE_UPGRADE_SOURCE_REASONS:
@@ -230,15 +219,18 @@ def _validate_direct_authority(
         workspace_store=workspace_store,
     )
     adapter = registry.get_agentic_runtime_adapter(binding.runtime_engine_id)
-    validate_certificate_for_binding(
-        provider_store,
-        binding=binding,
-        adapter=adapter,
-        now=now,
-    )
+    if (
+        str(getattr(adapter, "runtime_engine_id", ""))
+        != binding.runtime_engine_id
+        or str(getattr(adapter, "adapter_id", "")) != binding.adapter_id
+        or str(getattr(adapter, "adapter_version", ""))
+        != binding.adapter_version
+    ):
+        raise AgenticProfileError("runtime_adapter_identity_mismatch")
     validate_live_runtime_binding_governance(
         provider_store,
         binding=binding,
+        allow_inactive_definition=True,
     )
 
 
@@ -313,28 +305,6 @@ def _numeric_revision(value: str) -> int:
         return int(str(value).split(".", 1)[0])
     except (TypeError, ValueError):
         return -1
-
-
-def _historical_native_source_reason(
-    provider_store: ProviderStore,
-    registry: ProviderRegistry,
-    *,
-    binding: RuntimeExecutionBinding,
-    now: datetime | None,
-) -> str:
-    """Classify a prior native root only for a fenced continuation handoff."""
-    adapter = registry.get_agentic_runtime_adapter(binding.runtime_engine_id)
-    try:
-        validate_certificate_for_binding(
-            provider_store,
-            binding=binding,
-            adapter=adapter,
-            now=now,
-            historical_native_source=True,
-        )
-    except ProviderError as error:
-        return _provider_reason(error)
-    return "native_agent_connection_identity_mismatch"
 
 
 def _provider_reason(error: BaseException) -> str:

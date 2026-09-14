@@ -11,12 +11,9 @@ import core.runtime.turn_submission_service_submit as sync_submission
 
 from core.providers.agentic_adapter import RuntimeHealth
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
-from core.providers.capability_models import RuntimeCapabilitySet
-from core.providers.certificate_service import (
-    revoke_capability_certificate,
-    runtime_adapter_artifact_digest,
-)
-from core.providers.errors import CapabilityCertificateError
+from core.providers.agentic_models import RuntimeCapabilitySet
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.authority import (
     blocked_runtime_capability_payload,
     effective_runtime_capability_payload,
@@ -30,9 +27,8 @@ from core.runtime.execution_binding import (
 )
 from core.runtime.authority_service import revalidate_runtime_authority_snapshot
 from core.runtime.failure_messages import runtime_failure_public_message
-from tests.support.agentic_certification import (
-    certified_test_provider_store,
-    fake_capability_evidence,
+from tests.support.agentic_runtime import (
+    direct_test_provider_store,
 )
 from tests.support.fake_agentic_adapter import FakeHostedAgenticAdapter
 
@@ -67,7 +63,6 @@ def capabilities(**updates: object) -> RuntimeCapabilitySet:
 class EffectiveCapabilitiesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.adapter = FakeHostedAgenticAdapter()
-        self.evidence = fake_capability_evidence(self.adapter, now=NOW)
         self.binding = build_runtime_execution_binding(
             session_id="session-effective",
             workspace_id="default",
@@ -75,11 +70,10 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="workspace-effective",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-effective",
             runtime_engine_id=self.adapter.runtime_engine_id,
             adapter_id=self.adapter.adapter_id,
             adapter_version=self.adapter.adapter_version,
-            adapter_artifact_digest=runtime_adapter_artifact_digest(self.adapter),
+            adapter_identity_digest=runtime_adapter_identity_digest(self.adapter),
             model_provider_id="fake-provider",
             model_id="fake-model",
             provider_protocol="fake-stream-v1",
@@ -87,25 +81,23 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=capabilities(),
             execution_mode="full-access",
             profile_policy_ceiling=codex_runtime_policy(),
             workspace_policy_ceiling=codex_runtime_policy(),
             egress_policy_id="fake-egress",
             egress_policy_revision="1",
-            certificate_evidence_digest=self.evidence.evidence_digest,
             created_at=NOW,
         )
-        self.store = certified_test_provider_store(
+        self.store = direct_test_provider_store(
             self.binding,
-            self.adapter,
-            evidence=self.evidence,
             now=NOW,
         )
 
     def test_intersection_never_overstates_any_input(self) -> None:
-        certificate = capabilities()
+        profile_contract = capabilities()
         profile = capabilities(cli=False, attachment_modalities=("text",))
         workspace = capabilities(filesystem_write=False, shell=False)
         actor = capabilities(mcp=False, app_references=False)
@@ -114,7 +106,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         health = capabilities(recovery=False, tool_orchestration=False)
 
         effective = intersect_runtime_capabilities(
-            certificate,
+            profile_contract,
             profile,
             workspace,
             actor,
@@ -127,7 +119,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             if isinstance(value, bool) and value:
                 self.assertTrue(
                     all(getattr(item, field_name) for item in (
-                        certificate, profile, workspace, actor, live, features, health
+                        profile_contract, profile, workspace, actor, live, features, health
                     )),
                     field_name,
                 )
@@ -183,11 +175,11 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.assertEqual(authority.actor_policy_revision, "actor:1")
         projection = effective_runtime_capability_payload(authority)
         self.assertNotIn("credential", str(projection).lower())
-        self.assertEqual(projection["certificate"]["suite_id"], self.evidence.suite_id)
-        self.assertEqual(projection["tcb"]["posture"], "active")
+        self.assertNotIn("certificate", projection)
+        self.assertNotIn("tcb", projection)
 
         with self.assertRaisesRegex(
-            CapabilityCertificateError,
+            AgenticRuntimeError,
             "runtime_actor_policy_denied",
         ):
             resolve_effective_runtime_authority(
@@ -199,7 +191,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
                 now=NOW,
             )
 
-    def test_empty_hosted_live_tool_authority_never_falls_back_to_certificate(self) -> None:
+    def test_empty_hosted_live_tool_authority_never_falls_back_to_profile(self) -> None:
         authority = resolve_effective_runtime_authority(
             self.store,
             binding=self.binding,
@@ -217,7 +209,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.filesystem_write)
         self.assertFalse(authority.allowed_capabilities.shell)
 
-    def test_lightweight_authority_revalidation_fences_tcb_and_revocation(self) -> None:
+    def test_lightweight_authority_revalidation_fences_workspace_policy(self) -> None:
         health = RuntimeHealth(status="healthy")
         authority = resolve_effective_runtime_authority(
             self.store,
@@ -250,9 +242,6 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             "core.runtime.authority_service.require_remote_agentic_authority",
             return_value=None,
         ), patch(
-            "core.runtime.authority_service.certified_tcb_revision_fence",
-            return_value=authority.tcb_revision_fence,
-        ), patch(
             "core.runtime.full_workspace_contract.validate_full_workspace_live_authority",
             side_effect=AssertionError("expensive behavior gate reran"),
         ):
@@ -261,20 +250,20 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
                 authority,
             )
 
-        status = self.store.get_capability_certificate_status(
-            authority.certificate_id
+        live_binding = self.store.get_workspace_agentic_profile_binding(
+            self.binding.workspace_binding_id
         )
-        self.assertIsNotNone(status)
-        revoke_capability_certificate(
-            self.store,
-            certificate_id=authority.certificate_id,
-            expected_revision=status.revision,
-            reason="test-revocation",
-            now=NOW,
+        self.store.save_workspace_agentic_profile_binding(
+            replace(
+                live_binding,
+                enabled=False,
+                revision=live_binding.revision + 1,
+            ),
+            expected_revision=live_binding.revision,
         )
         with self.assertRaisesRegex(
-            CapabilityCertificateError,
-            "certificate_revoked",
+            AgenticRuntimeError,
+            "workspace_profile_binding_disabled",
         ), patch(
             "core.runtime.authority_service.require_remote_agentic_authority",
             return_value=None,
@@ -320,9 +309,18 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             ),
             expected_revision=live.revision,
         )
+        binding = replace(
+            self.binding,
+            capabilities_snapshot=replace(
+                self.binding.capabilities_snapshot,
+                confirmations=False,
+            ),
+            binding_digest="",
+        )
+        binding = replace(binding, binding_digest=canonical_digest(binding))
         authority = resolve_effective_runtime_authority(
             self.store,
-            binding=self.binding,
+            binding=binding,
             adapter=self.adapter,
             turn_id="turn-confirmation-ceiling",
             currently_authorized_tool_handles=(
@@ -364,7 +362,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             ({"invoked_skills": ("skill",)}, "agentic_skill_catalog_not_effective"),
             (
                 {"attachments": ({"content_type": "image/png"},)},
-                "agentic_attachment_modality_not_certified",
+                "agentic_attachment_modality_not_supported",
             ),
             ({"attachments": ({"name": "missing-type"},)}, "agentic_attachment_metadata_invalid"),
             ({"app_references": ({"app_id": "crm"},)}, "agentic_app_references_not_effective"),
@@ -378,7 +376,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         )
         for arguments, reason in cases:
             with self.subTest(reason=reason), self.assertRaisesRegex(
-                CapabilityCertificateError,
+                AgenticRuntimeError,
                 reason,
             ):
                 validate_effective_context_capabilities(denied, **arguments)
@@ -400,7 +398,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         )
         for arguments, reason in cases:
             with self.subTest(reason=reason), self.assertRaisesRegex(
-                CapabilityCertificateError,
+                AgenticRuntimeError,
                 reason,
             ):
                 validate_effective_context_capabilities(authority, **arguments)
@@ -452,8 +450,8 @@ class RuntimeContextPrePersistenceTest(unittest.TestCase):
             ), patch.object(
                 module,
                 "preflight_runtime_context_capabilities",
-                side_effect=CapabilityCertificateError(
-                    "agentic_attachment_modality_not_certified"
+                side_effect=AgenticRuntimeError(
+                    "agentic_attachment_modality_not_supported"
                 ),
             ) as preflight, patch.object(
                 module,
@@ -465,8 +463,8 @@ class RuntimeContextPrePersistenceTest(unittest.TestCase):
                 provider_work,
             ):
                 with self.assertRaisesRegex(
-                    CapabilityCertificateError,
-                    "agentic_attachment_modality_not_certified",
+                    AgenticRuntimeError,
+                    "agentic_attachment_modality_not_supported",
                 ):
                     getattr(module, submit_name)(
                         state,

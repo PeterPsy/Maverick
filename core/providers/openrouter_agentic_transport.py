@@ -1,4 +1,4 @@
-"""Bounded HTTPS/SSE transport for certified OpenRouter agentic requests."""
+"""Bounded HTTPS/SSE transport for OpenRouter agentic requests."""
 
 from __future__ import annotations
 

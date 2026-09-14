@@ -13,7 +13,11 @@ from core.runtime.execution import RuntimeExecutionResult
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission_service_queue import _queue_turn_with_event
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.workspaces.service import default_workspace_governance
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
@@ -65,11 +69,10 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="binding-codex-test",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-codex-test",
             runtime_engine_id="codex",
             adapter_id="codex-app-server",
             adapter_version="test",
-            adapter_artifact_digest="a" * 64,
+            adapter_identity_digest="a" * 64,
             model_provider_id="codex",
             model_id="codex",
             provider_protocol="codex-app-server-stdio",
@@ -77,14 +80,14 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode=kwargs["execution_mode"],
             profile_policy_ceiling=policy,
             workspace_policy_ceiling=policy,
             egress_policy_id="local-runtime-no-remote-egress",
             egress_policy_revision="1",
-            certificate_evidence_digest="b" * 64,
             created_at=datetime(2026, 8, 26, tzinfo=UTC),
         )
 

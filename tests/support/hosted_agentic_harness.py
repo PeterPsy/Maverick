@@ -1,4 +1,4 @@
-"""Reusable complete hosted-loop fixture for runtime certification tests."""
+"""Reusable complete hosted-loop fixture for agentic runtime tests."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from core.mcp.tool_registry import McpToolRegistry
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.agentic_protocol import EphemeralCredential
-from core.providers.capability_models import RuntimeCapabilitySet
+from core.providers.agentic_models import RuntimeCapabilitySet
 from core.providers.service import builtin_provider_registry
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.agentic_feature_flags import (
@@ -174,6 +174,24 @@ class HostedAgenticHarness:
             require_confirmation_for_destructive=True,
             allowed_remote_data_classes=("public",),
         )
+        self.capabilities = RuntimeCapabilitySet(
+            streaming=True,
+            tool_orchestration=True,
+            cli=not filesystem_list,
+            mcp=not filesystem_list,
+            skill_catalog=False,
+            filesystem_list=filesystem_list,
+            filesystem_read=False,
+            filesystem_write=False,
+            shell=False,
+            interrupt=True,
+            same_turn_steering=False,
+            recovery=True,
+            confirmation_resume=True,
+            provider_private_state=True,
+            attachment_modalities=(),
+            confirmations=True,
+        )
         self.binding = build_runtime_execution_binding(
             session_id="session-hosted",
             workspace_id="default",
@@ -181,12 +199,10 @@ class HostedAgenticHarness:
             profile_definition_revision="1",
             workspace_binding_id="binding-hosted",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-hosted",
-            certificate_evidence_digest="a" * 64,
             runtime_engine_id="hosted-agentic",
             adapter_id="hosted-agentic-test-adapter",
             adapter_version="1",
-            adapter_artifact_digest="b" * 64,
+            adapter_identity_digest="b" * 64,
             model_provider_id=model_provider_id,
             model_id=model_id,
             model_revision=(None if recipe is None else recipe.model_revision),
@@ -204,7 +220,7 @@ class HostedAgenticHarness:
                 if recipe is None
                 else recipe.support_flags.reasoning_efforts[-1]
             ),
-            certified_reasoning_efforts=(
+            reasoning_efforts=(
                 () if recipe is None else recipe.support_flags.reasoning_efforts
             ),
             default_reasoning_effort=(
@@ -212,6 +228,7 @@ class HostedAgenticHarness:
                 if recipe is None
                 else recipe.support_flags.reasoning_efforts[-1]
             ),
+            capabilities=self.capabilities,
             execution_mode="full-access",
             profile_policy_ceiling=self.policy,
             workspace_policy_ceiling=self.policy,
@@ -449,25 +466,7 @@ class HostedAgenticHarness:
         authority = EffectiveRuntimeAuthority(
             execution_binding_id=self.binding.execution_binding_id,
             turn_id="turn-hosted",
-            certificate_id=self.binding.capability_certificate_id,
-            allowed_capabilities=RuntimeCapabilitySet(
-                streaming=True,
-                tool_orchestration=True,
-                cli=not self.filesystem_list,
-                mcp=not self.filesystem_list,
-                skill_catalog=False,
-                filesystem_list=self.filesystem_list,
-                filesystem_read=False,
-                filesystem_write=False,
-                shell=False,
-                interrupt=True,
-                same_turn_steering=False,
-                recovery=True,
-                confirmation_resume=True,
-                provider_private_state=True,
-                attachment_modalities=(),
-                confirmations=True,
-            ),
+            allowed_capabilities=self.capabilities,
             allowed_tool_handles=(
                 ("core-capability:filesystem.list",)
                 if self.filesystem_list
@@ -509,7 +508,7 @@ class HostedAgenticHarness:
                 effect_class="read",
                 safe_to_retry=True,
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             self._read,
         )
@@ -529,7 +528,7 @@ class HostedAgenticHarness:
                 effect_class="mutating",
                 supports_idempotency=True,
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             self._mutate,
         )

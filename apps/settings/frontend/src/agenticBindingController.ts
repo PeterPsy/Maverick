@@ -47,7 +47,7 @@ export function createAgenticBindingController(context: AgenticBindingController
         && (
           item.execution_family === null
           || item.family_contract_status !== 'complete'
-          || item.full_workspace_status !== 'certified'
+          || item.full_workspace_status !== 'available'
           || item.enable_eligible !== true
         )
       ) {

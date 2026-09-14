@@ -90,7 +90,7 @@ class OpenRouterAgenticJournalCodecTest(unittest.TestCase):
         events = asyncio.run(
             _events(OpenRouterAgenticClient(transport=_ScriptedTransport([wrong])), _request("wrong"))
         )
-        self.assertEqual(events[-1].error_code, "provider_upstream_not_certified")
+        self.assertEqual(events[-1].error_code, "provider_upstream_not_allowed")
 
         parallel = _tool_stream("generation-parallel", "fixture_read")
         parallel[0]["choices"][0]["delta"]["tool_calls"].append({
@@ -133,7 +133,7 @@ class OpenRouterAgenticJournalCodecTest(unittest.TestCase):
             [event.tool_call.provider_tool_call_id for event in events if event.tool_call],
             ["call-1"],
         )
-        self.assertEqual(events[-1].error_code, "provider_upstream_not_certified")
+        self.assertEqual(events[-1].error_code, "provider_upstream_not_allowed")
 
     def test_malformed_tool_arguments_remain_observable_for_private_ledger(self) -> None:
         stream = _tool_stream("generation-malformed", "fixture_read")

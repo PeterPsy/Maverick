@@ -35,6 +35,6 @@ function profilePriority(item: AgenticAdminItem): number {
   if (item.binding?.enabled) return 4;
   if (item.selectable) return 3;
   if (item.enable_eligible) return 2;
-  if (item.full_workspace_status === 'certified') return 1;
+  if (item.full_workspace_status === 'available') return 1;
   return 0;
 }

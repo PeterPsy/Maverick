@@ -26,7 +26,6 @@ export function ComposerRuntimeBadges({
   usage?: ChatUsageSummary | null;
 }) {
   const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
-  const certificateExpiring = agenticCertificateExpiringSoon(selectedProvider?.agentic_certificate_expires_at);
   const contained = selectedProvider?.agentic_containment_status === "NO-GO";
   const destinationLabel = selectedProvider?.agentic_data_destination?.display_label || "destination unavailable";
   const effective = selectedProvider?.agentic_effective_capabilities || null;
@@ -73,10 +72,6 @@ export function ComposerRuntimeBadges({
     selectedProvider?.agentic_data_policy
       ? `data collection ${selectedProvider.agentic_data_policy.collection} · ZDR ${selectedProvider.agentic_data_policy.require_zdr ? "required" : "not required"}`
       : null,
-    `certificate ${selectedProvider?.agentic_certificate_posture?.effective_status || selectedProvider?.agentic_certificate_status || "unknown"}`,
-    selectedProvider?.agentic_certificate_posture?.eligibility
-      ? `certificate eligibility ${selectedProvider.agentic_certificate_posture.eligibility}`
-      : null,
     effective ? `effective authority ${effective.status} · snapshot ${effective.snapshot_digest}` : null,
     effective?.execution_mode ? `execution ${effective.execution_mode}` : null,
     effectiveCapabilities
@@ -91,10 +86,6 @@ export function ComposerRuntimeBadges({
     effective?.data_policy
       ? `effective data policy ${(effective.data_policy.allowed_remote_data_classes || []).join(", ") || "none"} · collection ${effective.data_policy.collection || "deny"} · ZDR ${effective.data_policy.require_zdr ? "required" : "not required"}`
       : null,
-    effective?.certificate
-      ? `effective certificate ${effective.certificate.certificate_id || "unknown"} · suite ${effective.certificate.suite_id || "unknown"}@${effective.certificate.suite_version || "unknown"} · expires ${effective.certificate.expires_at || "unknown"}`
-      : null,
-    effective?.tcb?.posture ? `TCB ${effective.tcb.posture}` : null,
   ].filter(Boolean).join(" · ");
   return (
     <div className="chatapp-composer__runtime-badges">
@@ -111,14 +102,13 @@ export function ComposerRuntimeBadges({
       {showAgenticProfile ? (
         <span
           aria-label={contained ? `NO-GO agentic profile; ${destinationLabel}` : undefined}
-          className={`chatapp-agentic-profile-chip ${certificateExpiring || contained ? "is-warning" : ""}`}
+          className={`chatapp-agentic-profile-chip ${contained ? "is-warning" : ""}`}
           title={governanceTitle}
         >
           <span aria-hidden="true" className="material-symbols-rounded">verified_user</span>
           {contained
             ? `NO-GO · ${destinationLabel}`
             : selectedProvider?.agentic_rollout_status || "Agentic"}
-          {certificateExpiring ? " · certificate expiring" : ""}
         </span>
       ) : null}
       {executionMode ? (
@@ -137,10 +127,4 @@ export function ComposerRuntimeBadges({
 
 function yesNo(value: boolean): "yes" | "no" {
   return value ? "yes" : "no";
-}
-
-function agenticCertificateExpiringSoon(value: string | null | undefined): boolean {
-  if (!value) return false;
-  const remaining = new Date(value).getTime() - Date.now();
-  return Number.isFinite(remaining) && remaining <= 7 * 86_400_000;
 }

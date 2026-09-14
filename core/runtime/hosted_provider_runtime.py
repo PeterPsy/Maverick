@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class HostedProviderRuntime:
-    """One certified model-provider protocol implementation."""
+    """One configured model-provider protocol implementation."""
 
     model_provider_id: str
     provider_protocol: str
@@ -107,29 +107,6 @@ class HostedProviderRuntimeRegistry:
         self._validate_recipe_binding(runtime, binding)
         return runtime
 
-    def artifact_components(self) -> tuple[object, ...]:
-        """Return deterministic provider client components for certification hashing."""
-        components = []
-        for identity in sorted(
-            self._runtimes,
-            key=lambda item: tuple(str(value) for value in item),
-        ):
-            for runtime in sorted(
-                self._runtimes[identity],
-                key=lambda item: (
-                    "" if item.recipe is None else item.recipe.recipe_id,
-                    "" if item.recipe is None else item.recipe.revision,
-                ),
-            ):
-                client = runtime.client
-                components.append(client)
-                components.extend(tuple(getattr(client, "artifact_components", ())))
-                if runtime.context_compactor is not None:
-                    components.append(runtime.context_compactor)
-                if runtime.request_preflight is not None:
-                    components.append(runtime.request_preflight)
-                components.append(runtime.cost_estimator)
-        return tuple(components)
 
     def runtimes(self) -> tuple[HostedProviderRuntime, ...]:
         """Return the registered runtimes in the same deterministic order."""

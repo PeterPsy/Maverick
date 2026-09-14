@@ -20,7 +20,7 @@ from core.runtime.tool_errors import RuntimeToolError
 
 
 MAX_DISCOVERY_RESULTS = 50
-CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
+REVIEWED_TOOL_SCHEMA_COMPONENT = "tool-schema-catalog"
 
 
 def discovery_surface(name, description, schema, effect_class, handler):
@@ -34,7 +34,7 @@ def discovery_surface(name, description, schema, effect_class, handler):
             safe_to_retry=effect_class == "read",
             owner_kind="core",
             schema_public=True,
-            certified_tcb_component=CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT,
+            reviewed_schema_component=REVIEWED_TOOL_SCHEMA_COMPONENT,
         ),
         handler=handler,
         allowed_execution_modes=("sandbox", "full-access"),

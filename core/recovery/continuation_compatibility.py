@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from core.providers.capability_models import (
-    CapabilityCertificate,
-    RuntimeCapabilitySet,
-)
+from core.providers.agentic_models import RuntimeCapabilitySet
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 
@@ -32,7 +29,7 @@ def prove_compatible_runtime_upgrade(
         "routing_constraint_snapshot",
         "credential_binding_id",
         "reasoning_effort",
-        "certified_reasoning_efforts",
+        "reasoning_efforts",
         "default_reasoning_effort",
         "execution_mode",
         "profile_policy_ceiling_snapshot",
@@ -47,20 +44,8 @@ def prove_compatible_runtime_upgrade(
     ]
     if mismatches:
         raise ValueError(f"runtime_profile_upgrade_incompatible_{mismatches[0]}")
-    source_certificate = provider_store.get_capability_certificate(
-        source.capability_certificate_id
-    )
-    target_certificate = provider_store.get_capability_certificate(
-        target.capability_certificate_id
-    )
-    _require_active_certificate_status(provider_store, source_certificate)
-    _require_active_certificate_status(provider_store, target_certificate)
-    source_capabilities = _capability_names(
-        source_certificate.certified_capabilities
-    )
-    target_capabilities = _capability_names(
-        target_certificate.certified_capabilities
-    )
+    source_capabilities = _capability_names(source.capabilities_snapshot)
+    target_capabilities = _capability_names(target.capabilities_snapshot)
     if not target_capabilities.issubset(source_capabilities):
         raise ValueError("runtime_profile_upgrade_capability_expansion")
     intersection = tuple(sorted(source_capabilities.intersection(target_capabilities)))
@@ -73,19 +58,6 @@ def prove_compatible_runtime_upgrade(
         "compatible_capabilities": intersection,
     }
     return intersection, canonical_digest(proof)
-
-
-def _require_active_certificate_status(
-    provider_store: ProviderStore,
-    certificate: CapabilityCertificate,
-) -> None:
-    status = provider_store.get_capability_certificate_status(
-        certificate.certificate_id
-    )
-    if status is None:
-        raise ValueError("certificate_status_missing")
-    if status.status != "active":
-        raise ValueError("certificate_revoked")
 
 
 def _capability_names(capabilities: RuntimeCapabilitySet) -> set[str]:

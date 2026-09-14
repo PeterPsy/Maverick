@@ -46,7 +46,7 @@ def append_semantic_tool_blocks(
                 content=content,
                 classification=platform_classification(
                     f"core-tool-schema:{descriptor.handle}",
-                    str(descriptor.certified_tcb_component or ""),
+                    str(descriptor.reviewed_schema_component or ""),
                     content,
                 ),
             )

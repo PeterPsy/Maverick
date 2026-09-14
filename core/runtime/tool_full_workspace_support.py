@@ -1,4 +1,4 @@
-"""Shared support for certified Full Workspace capability surfaces."""
+"""Shared support for reviewed Full Workspace capability surfaces."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from core.runtime.workspace_instructions import (
 
 MAX_EDIT_FILE_BYTES = 1_048_576
 MAX_DIFF_BYTES = 65_536
-CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
+REVIEWED_TOOL_SCHEMA_COMPONENT = "tool-schema-catalog"
 
 
 @dataclass(frozen=True)
@@ -292,7 +292,7 @@ def full_workspace_surface(
             safe_to_retry=effect_class == "read",
             owner_kind="core",
             schema_public=True,
-            certified_tcb_component=CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT,
+            reviewed_schema_component=REVIEWED_TOOL_SCHEMA_COMPONENT,
         ),
         handler=handler,
         allowed_execution_modes=modes,

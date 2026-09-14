@@ -69,27 +69,6 @@ def build_remote_agentic_containment_plan(
             )
         )
 
-    certificate_targets: list[RemoteContainmentTarget] = []
-    for certificate in provider_store.list_capability_certificates():
-        if certificate.suite_version != "8" or not is_remote_agentic_identity(certificate):
-            continue
-        status = provider_store.get_capability_certificate_status(certificate.certificate_id)
-        if status is not None and status.status == "revoked":
-            continue
-        certificate_targets.append(
-            _target(
-                "certificate",
-                certificate.certificate_id,
-                workspace_id=None,
-                model_provider_id=certificate.model_provider_id,
-                definition_id=None,
-                definition_revision=None,
-                current_revision=None if status is None else status.revision,
-                current_status="missing_status" if status is None else status.status,
-                target_status="revoked",
-            )
-        )
-
     inventory = inventory_remote_agentic_sessions(runtime_store)
     session_targets = [
         _target(
@@ -106,13 +85,12 @@ def build_remote_agentic_containment_plan(
         for item in inventory
         if item.quarantine_required
     ]
-    for targets in (binding_targets, profile_targets, certificate_targets, session_targets):
+    for targets in (binding_targets, profile_targets, session_targets):
         targets.sort(key=lambda target: (target.workspace_id or "", target.identity))
     digest = canonical_digest(
         {
             "bindings": [asdict(item) for item in binding_targets],
             "profiles": [asdict(item) for item in profile_targets],
-            "certificates": [asdict(item) for item in certificate_targets],
             "sessions": [asdict(item) for item in session_targets],
             "inventory": [asdict(item) for item in inventory],
         }
@@ -120,7 +98,6 @@ def build_remote_agentic_containment_plan(
     return {
         "bindings": tuple(binding_targets),
         "profiles": tuple(profile_targets),
-        "certificates": tuple(certificate_targets),
         "sessions": tuple(session_targets),
         "inventory": inventory,
         "digest": digest,

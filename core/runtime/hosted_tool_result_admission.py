@@ -19,9 +19,9 @@ from core.runtime.hosted_tool_result_authority import (
     _public_authority,
 )
 from core.runtime.hosted_tool_result_projections import (
-    certified_tool_result_classification_projection,
-    definition_has_certified_result_projection,
-    project_certified_tool_result,
+    reviewed_tool_result_classification_projection,
+    definition_has_reviewed_result_projection,
+    project_reviewed_tool_result,
 )
 from core.runtime.tool_discovery_authority import (
     authenticated_discovery_classification_projection,
@@ -150,7 +150,7 @@ def build_hosted_tool_result_admission_resolver(
             definition = _cli_definition(cli_registry, command_id)
             if definition is None:
                 return None
-            projection = project_certified_tool_result(definition, dict(result))
+            projection = project_reviewed_tool_result(definition, dict(result))
             if projection is not None:
                 return _admitted_surface(
                     f"cli:{command_id}",
@@ -158,13 +158,13 @@ def build_hosted_tool_result_admission_resolver(
                     context,
                     trust_level="trusted_platform",
                     classification_projection=(
-                        certified_tool_result_classification_projection(
+                        reviewed_tool_result_classification_projection(
                             definition,
                             projection,
                         )
                     ),
                 )
-            if definition_has_certified_result_projection(definition):
+            if definition_has_reviewed_result_projection(definition):
                 return _invalid_projection_surface(
                     f"cli:{command_id}",
                     definition,
@@ -192,7 +192,7 @@ def build_hosted_tool_result_admission_resolver(
             definition = _mcp_definition(mcp_registry, tool_name)
             if definition is None:
                 return None
-            projection = project_certified_tool_result(definition, dict(result))
+            projection = project_reviewed_tool_result(definition, dict(result))
             if projection is not None:
                 return _admitted_surface(
                     f"mcp:{tool_name}",
@@ -200,13 +200,13 @@ def build_hosted_tool_result_admission_resolver(
                     context,
                     trust_level="trusted_platform",
                     classification_projection=(
-                        certified_tool_result_classification_projection(
+                        reviewed_tool_result_classification_projection(
                             definition,
                             projection,
                         )
                     ),
                 )
-            if definition_has_certified_result_projection(definition):
+            if definition_has_reviewed_result_projection(definition):
                 return _invalid_projection_surface(
                     f"mcp:{tool_name}",
                     definition,
@@ -379,7 +379,7 @@ def _definition_preflight(
 ):
     if definition is None or not isinstance(arguments, dict):
         return denied
-    if definition_has_certified_result_projection(definition):
+    if definition_has_reviewed_result_projection(definition):
         return admitted_public
     if resolve_tool_effect_class(definition, arguments) == "read":
         if getattr(definition, "owner_kind", None) == "core":

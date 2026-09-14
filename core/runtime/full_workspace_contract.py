@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 
 
 FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v21"
@@ -146,40 +146,30 @@ def inspect_full_workspace_contract(
     )
 
 
-def validate_full_workspace_contract_claim(*, profile, certificate) -> None:
+def validate_full_workspace_contract_claim(*, profile) -> None:
     """Reject a partial profile that claims the common full-workspace revision."""
     profile_revision = str(
         getattr(profile, "full_workspace_contract_revision", "") or ""
     )
-    certificate_revision = str(
-        getattr(certificate, "full_workspace_contract_revision", "") or ""
-    )
     profile_family = str(getattr(profile, "execution_family", "") or "")
-    certificate_family = str(
-        getattr(certificate, "execution_family", "") or ""
-    )
-    if profile_family != certificate_family:
-        raise CapabilityCertificateError("full_workspace_execution_family_mismatch")
     if (
         profile_family == MAVERICK_AGENT_EXECUTION_FAMILY
-        and (not profile_revision or not certificate_revision)
+        and not profile_revision
     ):
-        raise CapabilityCertificateError(
+        raise AgenticRuntimeError(
             "full_workspace_execution_family_contract_required"
         )
     if (
         profile_family == MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY
-        and (profile_revision or certificate_revision)
+        and profile_revision
     ):
-        raise CapabilityCertificateError(
+        raise AgenticRuntimeError(
             "full_workspace_candidate_contract_forbidden"
         )
-    if not profile_revision and not certificate_revision:
+    if not profile_revision:
         return
-    if profile_revision != certificate_revision:
-        raise CapabilityCertificateError("full_workspace_contract_identity_mismatch")
     if profile_revision != FULL_WORKSPACE_CONTRACT_REVISION:
-        raise CapabilityCertificateError("full_workspace_contract_revision_unknown")
+        raise AgenticRuntimeError("full_workspace_contract_revision_unknown")
     context_policy = getattr(profile, "context_policy", None)
     required_profile_identity = (
         getattr(profile, "execution_family", ""),
@@ -204,25 +194,13 @@ def validate_full_workspace_contract_claim(*, profile, certificate) -> None:
         != FULL_WORKSPACE_CONTRACT_REVISION
         or not all(str(value or "").strip() for value in required_profile_identity)
     ):
-        raise CapabilityCertificateError("full_workspace_context_contract_incomplete")
+        raise AgenticRuntimeError("full_workspace_context_contract_incomplete")
     report = inspect_full_workspace_contract(
-        capabilities=certificate.certified_capabilities,
+        capabilities=profile.capabilities,
         policy=profile.policy_ceiling,
     )
     if not report.complete:
-        raise CapabilityCertificateError("full_workspace_contract_incomplete")
-
-
-def validate_full_workspace_binding(*, certificate, binding) -> None:
-    """Require an immutable session pin to retain the certificate contract id."""
-    certificate_revision = str(
-        getattr(certificate, "full_workspace_contract_revision", "") or ""
-    )
-    binding_revision = str(
-        getattr(binding, "full_workspace_contract_revision", "") or ""
-    )
-    if certificate_revision != binding_revision:
-        raise CapabilityCertificateError("full_workspace_contract_binding_mismatch")
+        raise AgenticRuntimeError("full_workspace_contract_incomplete")
 
 
 def validate_full_workspace_live_authority(
@@ -236,21 +214,21 @@ def validate_full_workspace_live_authority(
     if not revision:
         return
     if revision != FULL_WORKSPACE_CONTRACT_REVISION:
-        raise CapabilityCertificateError("full_workspace_contract_revision_unknown")
+        raise AgenticRuntimeError("full_workspace_contract_revision_unknown")
     report = inspect_full_workspace_contract(
         capabilities=capabilities,
         policy=policy,
         allowed_handles=allowed_handles,
     )
     if not report.complete:
-        raise CapabilityCertificateError(
+        raise AgenticRuntimeError(
             "full_workspace_contract_live_authority_incomplete"
         )
 
 
 def _hosted_tool_result_behaviors() -> tuple[str, ...]:
     # Import lazily: result admission depends on the tool catalog, whose
-    # authority path imports certificate validation and therefore this module.
+    # authority path imports this module as part of profile validation.
     from core.runtime.hosted_tool_result_behavior import (
         inspect_hosted_tool_result_behavior,
     )
@@ -266,7 +244,6 @@ __all__ = [
     "MAVERICK_AGENT_EXECUTION_FAMILY",
     "FullWorkspaceContractReport",
     "inspect_full_workspace_contract",
-    "validate_full_workspace_binding",
     "validate_full_workspace_contract_claim",
     "validate_full_workspace_live_authority",
 ]

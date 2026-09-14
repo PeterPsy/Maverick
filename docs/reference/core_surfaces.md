@@ -187,7 +187,7 @@ Important current tools include:
 
 The eight inter-agent operations have explicit hosted effects: create, spawn,
 send, execute, and resume are mutating; interrupt and close are destructive;
-wait is read-only and retry-safe. Their certified result projections expose
+wait is read-only and retry-safe. Their reviewed result projections expose
 only bounded lifecycle metadata, safe platform-generated ids or hashed opaque
 references, counts, and booleans. They never expose prompts, messages, events,
 participant output, final answers, labels, or cleanup details; an invalid result
@@ -247,13 +247,13 @@ For hosted execution, an app declaration is a claim rather than execution
 authority. A built-in app read is admitted before effect only when the app id,
 namespaced surface, platform source path, live descriptor bytes, parsed effect
 metadata, and executable-closure digest match the exact Core-owned audit
-inventory and certified TCB. Core repeats the closure check at dispatch, after
+inventory. Core repeats the closure check at dispatch, after
 validation/confirmation. Workspace-local or external app metadata/code cannot
 self-authorize. Mutating, destructive, and
-unclassified app calls still require a separate certified Core pre-effect
+unclassified app calls still require a separate reviewed Core pre-effect
 contract. The inventory is versioned at
-`core/runtime/hosted_builtin_app_effect_audit.json` and is part of the certified
-runtime package/TCB. These hosted checks do not change ordinary human/operator
+`core/runtime/hosted_builtin_app_effect_audit.json` and is part of the reviewed
+runtime package. These hosted checks do not change ordinary human/operator
 CLI or MCP invocation behavior.
 
 Do not infer app capabilities from the filesystem alone.

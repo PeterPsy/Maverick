@@ -92,7 +92,7 @@ missing canonical class is recorded as `unclassified`, and an effective `deny`
 row has zero local TTL and byte budget until its policy is explicitly revised.
 
 The agentic control plane has an invariant resource override of `deny`,
-including effective capabilities, certificates, provider profiles/bindings,
+including effective capabilities, provider profiles/bindings,
 provider state, admission/preflight, recovery state, revocations, egress
 authorization, authority/confirmation, proposals, pending tool calls, and
 secret grants. Cached metadata is never evidence for a later decision.

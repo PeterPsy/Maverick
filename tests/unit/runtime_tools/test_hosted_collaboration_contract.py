@@ -22,7 +22,7 @@ from core.runtime.hosted_tool_result_projections import (
     INTER_AGENT_EFFECTS,
     INTER_AGENT_MCP_PROJECTIONS,
     INTER_AGENT_RESULT_PROJECTIONS,
-    definition_has_certified_result_projection,
+    definition_has_reviewed_result_projection,
 )
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
@@ -72,7 +72,7 @@ class HostedCollaborationContractTest(unittest.TestCase):
                     self.assertEqual(definition.safe_to_retry, safe_to_retry)
                     self.assertEqual(definition.agentic_result_projection, contract)
                     self.assertTrue(
-                        definition_has_certified_result_projection(definition)
+                        definition_has_reviewed_result_projection(definition)
                     )
                     self.assertIsNone(definition.agentic_result_data_class)
 
@@ -128,12 +128,12 @@ class HostedCollaborationContractTest(unittest.TestCase):
             command_id="unrelated.command",
             owner_kind="core",
             schema_public=True,
-            certified_tcb_component="tool-schema-catalog",
+            reviewed_schema_component="tool-schema-catalog",
             agentic_result_projection=INTER_AGENT_RESULT_PROJECTIONS["create"],
         )
-        self.assertFalse(definition_has_certified_result_projection(definition))
+        self.assertFalse(definition_has_reviewed_result_projection(definition))
 
-    def test_invalid_certified_result_is_replaced_without_content_fallback(self) -> None:
+    def test_invalid_reviewed_result_is_replaced_without_content_fallback(self) -> None:
         admission = build_hosted_tool_result_admission_resolver(
             cli_registry=self.cli,
             mcp_registry=self.mcp,
@@ -181,7 +181,7 @@ class HostedCollaborationContractTest(unittest.TestCase):
         self.assertEqual(replayed.payload, first.payload)
         self.assertNotIn(_PRIVATE_MARKER, repr(replayed.payload))
 
-    def test_certified_reference_digest_uses_authenticated_classification_view(
+    def test_reviewed_reference_digest_uses_authenticated_classification_view(
         self,
     ) -> None:
         admission = build_hosted_tool_result_admission_resolver(

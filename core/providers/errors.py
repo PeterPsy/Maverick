@@ -51,13 +51,9 @@ class AgenticProfileConflictError(AgenticProfileError):
     """Raised when an immutable record or expected revision conflicts."""
 
 
-class CapabilityCertificateError(ProviderError):
-    """Raised when certification cannot grant runtime authority."""
+class AgenticRuntimeError(ProviderError):
+    """Raised when an agentic runtime contract or live authority is invalid."""
 
     def __init__(self, reason_code: str) -> None:
-        self.reason_code = str(reason_code or "certificate_invalid")
+        self.reason_code = str(reason_code or "agentic_runtime_invalid")
         super().__init__(self.reason_code)
-
-
-class CapabilityCertificateConflictError(CapabilityCertificateError):
-    """Raised when immutable evidence/certificate or status CAS conflicts."""

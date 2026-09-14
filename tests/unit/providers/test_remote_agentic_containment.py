@@ -37,7 +37,6 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         self.assertEqual(report.operational_status, "live_apply_pending_review")
         self.assertEqual(report.counts["bindings_to_disable"], 1)
         self.assertEqual(report.counts["profiles_to_suspend"], 1)
-        self.assertEqual(report.counts["certificates_to_revoke"], 1)
         self.assertEqual(report.counts["sessions_to_quarantine"], 1)
         inventory = report.session_inventory[0]
         self.assertEqual(inventory.provider_acceptance_count, 5)
@@ -83,15 +82,10 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
             self.remote_definition.definition_id,
             self.remote_definition.revision,
         )
-        certificate_status = self.provider_store.get_capability_certificate_status(
-            self.remote_certificate.certificate_id
-        )
         session = self.runtime_store.get_session(self.remote_session.session_id)
         self.assertFalse(binding.enabled)
         self.assertFalse(binding.is_default)
         self.assertEqual(profile_status.rollout_status, "suspended")
-        self.assertEqual(certificate_status.status, "revoked")
-        self.assertEqual(certificate_status.revocation_reason, "phase" + "0_remote_agentic_containment")
         self.assertEqual(session.status, "recovery_required")
         self.assertEqual(session.recovery_reason_code, "remote_agentic_state_ambiguous")
         projection_state = SimpleNamespace(
@@ -154,14 +148,7 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                     },
                 },
             )
-            self.assertEqual(
-                governance["certificate_posture"]["effective_status"],
-                "revoked",
-            )
-            self.assertEqual(
-                governance["certificate_posture"]["eligibility"],
-                "ineligible",
-            )
+            self.assertNotIn("certificate_posture", governance)
             self.assertEqual(governance["effective_capabilities"]["status"], "blocked")
             self.assertFalse(any(
                 value
@@ -191,14 +178,10 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         )
         self.assertEqual(remote_item["binding_status"], "disabled")
         self.assertEqual(remote_item["profile_status"], "suspended")
-        self.assertEqual(remote_item["certificate"]["effective_status"], "revoked")
-        self.assertNotIn("revocation_reason", remote_item["certificate"])
-        self.assertEqual(remote_item["certificate_eligibility"], "ineligible")
+        self.assertNotIn("certificate", remote_item)
+        self.assertNotIn("certificate_eligibility", remote_item)
         self.assertEqual(remote_item["effective_capabilities"]["status"], "blocked")
-        self.assertEqual(
-            remote_item["effective_capabilities"]["tcb"]["posture"],
-            "ineligible",
-        )
+        self.assertNotIn("tcb", remote_item["effective_capabilities"])
         self.assertEqual(
             remote_item["data_destination"],
             {

@@ -58,7 +58,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
             "workspace_path_reference+host_path_redaction",
         )
 
-    def test_app_owned_dynamic_and_uncertified_tool_schemas_fail_before_dispatch(self) -> None:
+    def test_app_owned_dynamic_and_unreviewed_tool_schemas_fail_before_dispatch(self) -> None:
         harness = HostedAgenticHarness(self)
         context = RuntimeTurnContext(
             session=harness.session,
@@ -87,7 +87,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
                 schema_owner_kind="app",
                 schema_data_class="public",
                 schema_trust_level="trusted_platform",
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             RuntimeToolDescriptor(
                 **{
@@ -98,7 +98,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
                 schema_owner_kind="core",
                 schema_data_class="unclassified",
                 schema_trust_level="trusted_platform",
-                certified_tcb_component=None,
+                reviewed_schema_component=None,
             ),
         )
 
@@ -106,7 +106,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
             with self.subTest(handle=descriptor.handle):
                 with self.assertRaisesRegex(
                     HostedAgenticLoopError,
-                    "tool_schema_not_certified",
+                    "tool_schema_not_reviewed",
                 ):
                     harness.request_builder.build(
                         context=context,
@@ -283,7 +283,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
                     (),
                     (
                         RuntimeToolRejection(
-                            "app-interface:uncertified",
+                            "app-interface:unreviewed",
                             "app-interface",
                             "tool_not_authorized",
                         ),
@@ -319,7 +319,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
                         ),
                     )
                 },
-                "agentic_attachment_modality_not_certified",
+                "agentic_attachment_modality_not_supported",
             ),
             (
                 {

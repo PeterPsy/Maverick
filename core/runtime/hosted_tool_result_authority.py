@@ -1,4 +1,4 @@
-"""Exact-byte and certified-definition authority for hosted tool results."""
+"""Exact-byte and reviewed-definition authority for hosted tool results."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from core.runtime.public_content_classification import (
     classification_from_runtime_public_content_authority,
 )
 from core.runtime.hosted_tool_result_projections import (
-    definition_has_certified_result_projection,
+    definition_has_reviewed_result_projection,
 )
 from core.runtime.tool_catalog import (
     RuntimeToolActorContext,
@@ -25,7 +25,7 @@ from core.runtime.tool_result_classification import (
 
 
 HOSTED_TOOL_RESULT_ADMISSION_REVISION = 11
-_CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
+_REVIEWED_TOOL_SCHEMA_COMPONENT = "tool-schema-catalog"
 
 
 def _content_derived_surface(
@@ -229,8 +229,8 @@ def _definition_has_public_result_authority(definition) -> bool:
     return bool(
         getattr(definition, "owner_kind", None) == "core"
         and getattr(definition, "schema_public", False) is True
-        and getattr(definition, "certified_tcb_component", None)
-        == _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT
+        and getattr(definition, "reviewed_schema_component", None)
+        == _REVIEWED_TOOL_SCHEMA_COMPONENT
         and getattr(definition, "agentic_result_data_class", None) == "public"
     )
 
@@ -261,14 +261,14 @@ def _discovery_has_public_authority(
             definition is None
             or getattr(definition, "owner_kind", None) != "core"
             or getattr(definition, "schema_public", False) is not True
-            or getattr(definition, "certified_tcb_component", None)
-            != _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT
+            or getattr(definition, "reviewed_schema_component", None)
+            != _REVIEWED_TOOL_SCHEMA_COMPONENT
             or item.get("owner_kind", "core") != "core"
             or item.get("agentic_result_projection")
             != getattr(definition, "agentic_result_projection", None)
             or (
                 item.get("agentic_result_projection") is not None
-                and not definition_has_certified_result_projection(definition)
+                and not definition_has_reviewed_result_projection(definition)
             )
         ):
             return False

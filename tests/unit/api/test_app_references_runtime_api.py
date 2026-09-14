@@ -10,7 +10,7 @@ from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.providers.agentic_profiles import build_pinned_execution_binding
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
@@ -50,7 +50,7 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
 
             with patch(
                 "core.api.runtime_api.preflight_runtime_context_capabilities",
-                side_effect=CapabilityCertificateError(
+                side_effect=AgenticRuntimeError(
                     "agentic_app_references_not_effective"
                 ),
             ) as preflight, patch(

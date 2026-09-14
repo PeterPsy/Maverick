@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
+from core.providers.hosted_text_profiles import pin_hosted_text_execution_binding
 from core.providers.provider_credentials import bind_provider_credential
 from core.providers.models import ProviderSelection
 from core.providers.service import builtin_provider_registry, register_builtin_providers
@@ -39,12 +40,20 @@ class AsyncProviderContextTest(unittest.TestCase):
         self.state = _state(repository_root)
 
     def test_plain_hosted_async_dispatch_receives_context_without_persisting_it(self) -> None:
+        binding = pin_hosted_text_execution_binding(
+            self.state,
+            session_id="plain-context",
+            workspace_id="default",
+            hosted_provider_id=None,
+            hosted_model_id=None,
+        )
         session = create_runtime_session(
             self.state.runtime_store,
             session_id="plain-context",
             workspace_id="default",
             agent_id="chat",
             runtime_mode="plain_hosted_chat",
+            hosted_text_binding=binding,
             start_path=self.state.repository_root,
         )
         original_input = "Come sta andando?"

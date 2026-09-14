@@ -156,7 +156,7 @@ class FullWorkspaceLimitsAndDiscoveryTest(FullWorkspaceContractFixture, unittest
                 effect_class="read",
                 safe_to_retry=True,
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             lambda arguments, _context: {"echo": arguments.get("value")},
         )
@@ -181,7 +181,7 @@ class FullWorkspaceLimitsAndDiscoveryTest(FullWorkspaceContractFixture, unittest
                 effect_class="read",
                 safe_to_retry=True,
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             lambda arguments, _context: {"found": arguments.get("id")},
         )

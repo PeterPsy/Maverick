@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.runtime.execution_binding import build_runtime_execution_binding
 from tests.support.observability import *
 
@@ -116,12 +120,10 @@ class TestCoreFlowObservability(ObservabilityTestBase):
             profile_definition_revision="1",
             workspace_binding_id="workspace-credentialed-observability",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-credentialed-observability",
-            certificate_evidence_digest="a" * 64,
             runtime_engine_id="credentialed",
             adapter_id=bridge.adapter_id,
             adapter_version=bridge.adapter_version,
-            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
+            adapter_identity_digest=runtime_adapter_identity_digest(bridge),
             model_provider_id="credentialed",
             model_id="credentialed",
             provider_protocol="legacy-runtime-backend",
@@ -129,8 +131,9 @@ class TestCoreFlowObservability(ObservabilityTestBase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=selection.binding_id,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
             profile_policy_ceiling=policy,
             workspace_policy_ceiling=policy,

@@ -1,4 +1,4 @@
-"""Immutable preview profile for certified Google Gemini Interactions."""
+"""Immutable preview profile for Google Gemini Interactions."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from core.providers.agentic_models import (
     AgenticProfileDefinition,
     AgenticRuntimePolicy,
     RoutingConstraint,
+    RuntimeCapabilitySet,
 )
 from core.providers.agentic_data_policies import (
     REMOTE_PREVIEW_EGRESS_POLICY_ID,
@@ -42,11 +43,30 @@ GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
     "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "61", "62", "63", "64", "65", "66",
     "67", "68", "69",
 )
-GOOGLE_CERTIFIED_REASONING_EFFORTS = ("high",)
+GOOGLE_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"
-GOOGLE_AGENTIC_CERTIFICATE_ID = (
-    f"capability-certificate:{GOOGLE_AGENTIC_PROFILE_ID}:{GOOGLE_AGENTIC_PROFILE_REVISION}"
-)
+
+
+def google_agentic_capabilities() -> RuntimeCapabilitySet:
+    return RuntimeCapabilitySet(
+        streaming=True,
+        tool_orchestration=True,
+        cli=True,
+        mcp=True,
+        skill_catalog=True,
+        filesystem_list=True,
+        filesystem_read=True,
+        filesystem_write=True,
+        shell=True,
+        interrupt=True,
+        same_turn_steering=False,
+        recovery=True,
+        confirmation_resume=True,
+        provider_private_state=True,
+        attachment_modalities=("file",),
+        app_references=True,
+        confirmations=True,
+    )
 
 
 def google_agentic_preview_policy() -> AgenticRuntimePolicy:
@@ -106,7 +126,9 @@ def google_agentic_preview_publication(
         ),
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
-        capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,
+        capabilities=google_agentic_capabilities(),
+        reasoning_efforts=GOOGLE_REASONING_EFFORTS,
+        default_reasoning_effort=GOOGLE_DEFAULT_REASONING_EFFORT,
         created_at=timestamp,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
@@ -149,7 +171,7 @@ def ensure_google_agentic_preview_profile(
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish an uncertified Full Workspace preview without enabling a binding."""
+    """Publish a Full Workspace profile without enabling a binding."""
     timestamp = now or datetime.now(tz=UTC)
     validate_maverick_runtime_adapter(GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER, adapter)
     return publish_maverick_agent_profile(

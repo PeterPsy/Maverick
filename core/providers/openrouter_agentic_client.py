@@ -1,16 +1,10 @@
-"""Certified OpenRouter agentic provider client."""
+"""OpenRouter agentic provider client."""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import replace
 
-import core.providers.openrouter_agentic_models as openrouter_agentic_models_module
-import core.providers.openrouter_agentic_request as openrouter_agentic_request_module
-import core.providers.openrouter_agentic_state as openrouter_agentic_state_module
-import core.providers.openrouter_agentic_stream as openrouter_agentic_stream_module
-import core.providers.openrouter_agentic_stream_fields as openrouter_agentic_stream_fields_module
-import core.providers.openrouter_agentic_transport as openrouter_agentic_transport_module
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelRequest,
@@ -116,16 +110,6 @@ class OpenRouterAgenticClient:
         ):
             raise ValueError("OpenRouter agentic runtime routing config is unsupported.")
 
-    @property
-    def artifact_components(self) -> tuple[object, ...]:
-        return (
-            openrouter_agentic_models_module,
-            openrouter_agentic_request_module,
-            openrouter_agentic_state_module,
-            openrouter_agentic_stream_module,
-            openrouter_agentic_stream_fields_module,
-            openrouter_agentic_transport_module,
-        )
 
     async def create_response(
         self,
@@ -143,7 +127,7 @@ class OpenRouterAgenticClient:
                 and request.routing_constraint != self.routing_constraint
             ):
                 raise OpenRouterAgenticProtocolError(
-                    "provider_routing_not_certified"
+                    "provider_routing_not_allowed"
                 )
             if credential is None:
                 raise OpenRouterAgenticProtocolError("provider_authentication_failed")

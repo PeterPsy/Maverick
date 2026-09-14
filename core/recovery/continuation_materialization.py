@@ -105,7 +105,6 @@ def _same_hosted_text_route(
         and target.workspace_id == source.workspace_id
         and target.profile == source.profile
         and target.status == source.status
-        and target.certificate == source.certificate
         and target.provider_routing_digest == source.provider_routing_digest
         and target.provider_routing_snapshot == source.provider_routing_snapshot
     )

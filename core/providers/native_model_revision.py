@@ -1,6 +1,6 @@
 """Native revision guarantees must be supported by the actual launch transport."""
 
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 
 
 def require_native_model_revision_transport(binding) -> None:
@@ -8,7 +8,7 @@ def require_native_model_revision_transport(binding) -> None:
     # model aliases, not provider revisions. Preserve exact metadata but never
     # promise to run an unavailable provider revision.
     if getattr(binding, "model_revision_policy", "provider_alias") == "exact":
-        raise CapabilityCertificateError("native_agent_exact_revision_unsupported")
+        raise AgenticRuntimeError("native_agent_exact_revision_unsupported")
 
 
 __all__ = ["require_native_model_revision_transport"]

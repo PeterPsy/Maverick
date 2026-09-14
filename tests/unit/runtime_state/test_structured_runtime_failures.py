@@ -41,7 +41,7 @@ class StructuredRuntimeFailureTest(unittest.TestCase):
     def test_profile_upgrade_failures_have_actionable_public_messages(self) -> None:
         self.assertIn(
             "older runtime profile",
-            runtime_failure_public_message("adapter_artifact_mismatch"),
+            runtime_failure_public_message("runtime_adapter_identity_mismatch"),
         )
         self.assertIn(
             "compatible runtime-profile upgrade",

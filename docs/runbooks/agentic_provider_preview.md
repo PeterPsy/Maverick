@@ -1,424 +1,91 @@
-# Agentic provider preview operations
+# Agentic Provider Activation Runbook
 
-Status date: 2026-09-12
+This runbook activates a direct agentic profile for new sessions. It does not
+create model authority; the profile already declares the runtime contract.
 
-Scope: operator runbook
+## Scope
 
-Production status: **OpenRouter GLM is the only release target; Google and
-Antigravity remain contained**
+The primary hosted target is OpenRouter GLM 5.3 Flash using the Maverick-owned
+agent loop. Google API activation is outside this runbook.
 
-This runbook governs the Google Gemini and fixed-upstream OpenRouter API
-profiles plus the Antigravity Native connection. A capability certificate
-proves one exact implementation and provider combination. For OpenRouter
-profile 6, an enabled administrator binding is the explicit authority for real
-workspace data; fake/public attestation is not a release prerequisite.
-Credential/secret, host-operational, and unclassified egress remains
-prohibited.
+## Preconditions
 
-Certificate evidence must be produced and published through
-`docs/runbooks/agentic_certification_evidence.md` before this activation
-runbook begins. This runbook never manufactures or repairs a certificate.
+1. The backend is running the current source and reports healthy.
+2. The OpenRouter provider definition is active.
+3. A Core secret and provider credential binding exist for the workspace.
+4. `agentic-profile-openrouter-glm-5-3-flash-relace@1` is published with rollout
+   `available`.
+5. The workspace binding is enabled and its policy retains Full Workspace.
+6. The workspace data/egress policy permits the intended data classes.
+7. Provider and global hosted-agent feature flags are enabled.
 
-The current source candidate is hosted adapter 59 / Google recipe 26 and
-profile 70 / OpenRouter GLM recipe 29 and profile 6 / Antigravity adapter 5 and
-native recipe 4 / suite 67 / TCB 57. Codex revision 15 is
-the active verified profile and revision 14 remains immutable history. Remote
-provider certification must not restart or migrate Codex, alter its artifact,
-or reissue its certificate.
+Do not expose or copy the OpenRouter key into shell output, app storage, browser
+state, logs or runtime events.
 
-## Phase-0 containment record and rollback procedure
+## Read-only verification
 
-Material P0 containment completed before this P3 repository closure. Preserve
-the following redaction-safe evidence together: source revision
-`69d9e10fea641f805c1c52801b7fd60a027b02f9`, plan digest
-`02484a30f9ea7254c5deebd69e5af4416a22d8aecc006d81b7b5d6aad9c4578d`,
-audit saga `4a6ab3ee-8b55-40c4-9dd6-2eba17bd9bdc`, apply artifact SHA-256
-`5cd77cf01ab3e4ed12ca0ab76d3774dadf0482bd892821fb8883ef3cb2ab6898`,
-post-apply zero-target digest
-`56253919e93461e67b62a068e6e8718638475d05173dfff97b2912dcbeed2e77`,
-and post-apply artifact SHA-256
-`c6daa0b542edc92ef09116b323b1b024d3d1f94ef53aa85344eb55ea4aad733c`.
-This closes material containment only; it is not release, certification,
-preview/canary, migration, or production evidence.
+Inspect provider status and confirm:
 
-Do not run a live Google/OpenRouter probe, certification live step, provider
-HTTP request, or another containment apply while reviewing P4. The following
-commands remain the control-plane-first rollback procedure for a future
-incident. Obtain a new redaction-safe real-store plan through the operator-only
-Core CLI:
+- execution family is `maverick_agent`;
+- model is `z-ai/glm-5.3-flash`;
+- Full Workspace status is `available`;
+- profile and workspace binding are enabled;
+- credential binding is present;
+- containment is `GO`;
+- live effective capabilities are `active`;
+- reasoning efforts are `max`, `high`, `low`;
+- endpoint/upstream and data destination match the profile.
 
-```bash
-maverick core cli run core.providers.agentic.containment.dry-run --operator --json
-```
+A browser field is never sufficient evidence of authority. The server-owned
+`selectable` and effective-capability projection are decisive.
 
-The report must state `implementation_ready`, `dry_run_verified`, and
-`live_apply_pending_review`; review every binding/profile/certificate/session
-identity, current revision/status, target status, target digest, count, and the
-whole `plan_digest`. It must contain no credential binding id, secret, request
-body, tool arguments/results, private envelope locator, or provider payload.
-Review inventory ambiguity per ordered provider step across the complete event
-archive: a durable final output or a ledger-backed proposal closes that step;
-request-count-minus-invocation-count is not evidence, and a step with neither
-persisted outcome remains ambiguous.
+## Activation
 
-Only after independent review may the orchestrator apply that exact plan:
+Use the provider administration API/CLI to create or update the workspace
+binding with compare-and-set revision. Enable it for new sessions. Make it the
+workspace default only when explicitly intended; activation and default
+selection are separate operations.
 
-```bash
-maverick core cli run core.providers.agentic.containment.apply \
-  --operator \
-  --confirmation phase-0-reviewed \
-  --plan-digest <REVIEWED_PLAN_DIGEST> \
-  --json
-```
+Never rewrite existing runtime session bindings. New chats pin the current
+direct profile. Existing chats retain their immutable session pin and pass live
+policy checks on each turn.
 
-A containment apply is a partial saga, not a transaction, and the command is
-neither idempotent nor safe to retry. A changed plan digest, provider-record CAS
-conflict, session-lifecycle conflict, audit failure, or any other apply error
-may leave earlier targets narrowed. Stop, inspect the structured failed audit
-(`partial_apply`, per-kind applied counts, safe failure code and target digest),
-then obtain a fresh dry-run and review before issuing any later apply. Never
-reuse the reviewed digest or retry by dropping it. After a reported success,
-the reviewed operation is still consumed: run a fresh dry-run for verification
-and require zero
-remaining enabled/default remote bindings, selectable remote profiles, eligible
-current remote suite-v8 certificates, or ambiguous unquarantined sessions.
-Codex state and hosted text selection must be unchanged. Preserve the audit
-digest and counts. Never infer release readiness from a successful containment
-operation.
+## Smoke test
 
-## Invariants
+Create a new session selecting the OpenRouter workspace profile and `max`
+reasoning. Run a bounded task that requires:
 
-- OpenRouter GLM profile 6 uses `remote-agentic-full-workspace@1` and may carry
-  Core-classified real workspace, personal, and regulated/customer data to the
-  exact ZDR Relace route. It never accepts client-supplied classification or
-  fake/public attestations as authority.
+1. streamed assistant output;
+2. filesystem list/read;
+3. one write through the governed tool boundary;
+4. one CLI or MCP invocation;
+5. final answer and usage persistence.
 
-- Google and Antigravity remain disabled, non-selectable NO-GO records whose
-  current policy lists only Core-classified `public`. The evaluator can consider
-  `workspace_internal_fake` only when the exact resource/version has that
-  Core-owned classification, an active workspace-matching attestation covers
-  its scope, and the selected policy allows that class and destination; none of
-  those conditions can be synthesized by a browser/app declaration. The exact
-  `fake-data preview` label remains visible as a warning and is not rewritten
-  into a release claim.
-- Every session pins definition revision, engine, adapter, model, protocol,
-  endpoint/upstream, credential binding, certificate evidence, egress policy,
-  and policy ceilings once. Existing bindings are never rewritten in place.
-- Live certificate, credential, definition, workspace binding, execution mode,
-  health, and egress state may only narrow authority.
-- OpenRouter remains pinned to `z-ai/glm-5.3-flash` through
-  `relace`, with fallback disabled, required parameters, denied data
-  collection, required ZDR, and verified router metadata. Its main catalog must
-  resolve `z-ai/glm-5.3-flash-20260826`, retain the exact catalog expiration
-  `2098-12-31`, and advertise exactly `max`/`high`/`low`, default `max`, and
-  mandatory reasoning. Profile 6 exposes the same 256-step/tool-call,
-  86,400-second, million-input/128k-output, no-confirmation operating ceiling
-  as Codex, with no explicit per-turn cost ceiling.
-- Antigravity authority is connection-scoped to the exact installed artifact,
-  adapter/recipe revision 3 and `google` connection. Catalog slugs inherit that
-  evidence through immutable projections; missing and retired slugs never
-  inherit availability. Native workspace access is read-only, while mutations
-  cross Core's governed runtime CLI/MCP boundary.
-- Tool execution is sequential. Google and OpenRouter preserve and journal
-  every indexed proposal, including later OpenRouter indices and calls decoded
-  before a terminal stream error. A multi-call response is denied and paired
-  in full; no call is discarded or executed. Google retains persisted
-  confirmation; OpenRouter profile 6 does not require it. Ambiguous side effects become
-  `execution_unknown` and are not replayed automatically.
-- Provider-step and tool-call budgets are distinct and restart-safe. One final
-  request plus at most one recovery retain full output/cost/deadline reserves.
-  Tool-call exhaustion and cumulative tool-result-byte exhaustion both close
-  the catalog. A last-mile tightening rebuilds an uncommitted exploration
-  request as finalization, or denies a later lazy-open race before egress. Once
-  tools close, Google omits `tools` and OpenRouter omits both `tools` and
-  `tool_choice`; both carry the exact Core finalization instruction.
-  Whitespace is not success, and an unexpected final call is journaled and
-  `budget_denied` before the single recovery.
-- Provider-private bytes and tool payloads remain encrypted Core state. Never
-  copy them into tickets, logs, prompts, analytics, or ordinary exports.
-- Workspace attestation is a separate actor-attributed, scoped, revocable CAS
-  record. Resource classification and the final egress decision remain
-  independent; declaration can only narrow. Browser fields, policy ids, and UI
-  labels have no authority.
-- The effective capability snapshot is the intersection of certificate,
-  profile, workspace, actor, live catalog, feature flags, and health and is
-  shared by admission, request/catalog construction, API, Chat, and Settings.
-- Endpoint preflight is followed by full authority/policy and credential
-  authorization before egress commit. The same guard runs in the task that
-  opens and first advances the lazy provider stream and before every later
-  advance. Full checks compare the prepared semantic projection with the
-  freshly policy-narrowed authority, including app references and skills on
-  tool-less requests.
-- Attachment workspace references retain server-observed identity, revision,
-  digest, and MIME-derived encoding. Core injects that immutable fence into
-  every matching filesystem read, including its first chunk and equivalent
-  path spellings.
-- Remote certificates bind the canonical code-owned execution TCB. Any drift or
-  missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Since manifest v27, six maintained
-  import closures, including package initializers and the
-  `core/inter_agent/generalist_context.py` content-composition path, and hashes
-  the executable roots of every built-in app surface admitted as a hosted read;
-  a reached local dependency or app-code drift outside the artifact set makes
-  identity/authority calculation fail. Manifest v45 is the current
-  collector-isolated, stateless empty-lifecycle-ID candidate.
-- Hosted shell/process sandboxes use an immutable descriptor-confined workspace
-  snapshot that excludes every `.git` component; the live workspace namespace
-  is never bound into the sandbox. Inter-agent CLI/MCP tools carry explicit
-  effects and reviewed content-dropping projections.
+Verify that the session execution binding contains direct capability and
+reasoning snapshots, provider/model/route identity and no secret material.
+Verify that public events contain no raw provider-private history.
 
-## Future pre-activation gate (suspended pending certification and release review)
+## Failure handling
 
-This section is retained as future work and must not be executed until P6-L/S
-are complete. `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is true because the
-server-owned persisted boundary is implemented; it grants no availability.
-The global and per-provider flags remain default-off, and even enabled flags
-cannot replace a current matching workspace attestation.
+Stop activation if any of these occur:
 
-An operator must verify all of the following before enabling a workspace
-binding:
+- authentication failure or missing credential binding;
+- unexpected endpoint, model or upstream;
+- containment `NO-GO`;
+- Full Workspace/profile family incomplete;
+- effective authority blocked;
+- request/tool journal mismatch;
+- unclassified or unauthorized tool effect;
+- leaked secret, host path or provider-private payload;
+- cancellation/recovery cannot reach a deterministic terminal state.
 
-1. The profile definition and certificate endpoints show the intended immutable
-   revision, active unexpired certificate, exact adapter artifact digest, model,
-   model revision and revision policy, protocol, and upstream set. Google must
-   expose `exact` and the same authenticated live catalog version; OpenRouter
-   must expose `provider_alias`, resolved 20260423 slug, exact `xhigh`/`high`
-   reasoning contract, and the pinned endpoint/upstream catalog identity.
-   Antigravity must expose the exact installed runtime artifact and a current
-   authenticated catalog inherited from its active connection-scoped
-   certificate. A missing or retired slug is unavailable; a superseded revision
-   of a current slug is suspended.
-2. The current matrices in
-   `docs/reference/google_agentic_certification_matrix.md` or
-   `docs/reference/openrouter_agentic_certification_matrix.md`, or the native
-   `docs/reference/antigravity_agentic_certification_matrix.md`, match the
-   deployed code and dated provider catalog.
-3. Google AI Studio and OpenRouter credentials are delivered by Core credential
-   bindings. Antigravity instead requires the operator-provisioned private
-   cached-OAuth source and forbids provider/API-key bindings. No raw credential
-   is present in a workspace record, environment file, request body, or log.
-4. For the contained Google and Antigravity policies, the active
-   revision-bound server attestation is actor-attributed, scoped,
-   unrevoked, workspace-matching, and matched to exact Core resource
-   classifications. `workspace_internal_fake` additionally requires that the
-   selected policy allow that class and destination. Attestation may only narrow
-   policy; no client declaration or policy id is accepted.
-5. The workspace policy is at least as restrictive as the profile and retains
-   the complete `codex-baseline-v21` handle set and all four `cli`, `mcp`,
-   `app-interface`, and `core-capability` surfaces atomically. OpenRouter
-   profile 3 deliberately has no explicit per-turn cost ceiling and does not
-   require mutating/destructive confirmation; Google and Antigravity retain
-   their contained bounded/confirmed policies. A partial read-only binding is
-   not a Maverick Agent fallback.
-6. The complete certification manifest passes on the deployed source in the
-   trust order: deterministic conformance, operator-only live provider probe,
-   behavioral conformance validation, then certificate publication. Ordinary
-   repository checks explicitly select the fixture step and never run the live
-   step; fixture-only evidence is rejected for signing and promotion.
-7. Open platform security blockers in `SECURITY.md` remain acknowledged.
-   `available` is only the immutable definition's rollout eligibility; do not
-   call the provider active or production-ready until the current certificate,
-   binding, canary, and rollback checks all pass.
+Disable the workspace binding or provider feature flag to stop new work. Do not
+repair an outage by changing dates or issuing another capability artifact; fix
+the profile, adapter, provider config, credentials or live policy that actually
+failed.
 
-For Antigravity only, after the root certificate and all current catalog
-projections have been read back and independently reviewed, activate the
-provider definition without creating a workspace binding:
+## Codex stability
 
-```bash
-maverick core cli run core.providers.native.activate \
-  --operator \
-  --provider-id antigravity-cli \
-  --confirmation native-certificate-reviewed \
-  --json
-```
-
-This command fails unless the exact runtime artifact, root certificate, current
-catalog and each current model projection validate. It does not enable or make
-default any workspace binding. Remote admission additionally requires
-`MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME=1` and the independent default-off
-`MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW=1`; flags are kill switches, not
-certification or attestation authority.
-
-Use Settings as the normal control surface. Its agentic panel reads:
-
-- `GET /api/providers/agentic/profile-definitions`
-- `GET /api/providers/agentic/certificates`
-- `GET /api/providers/agentic/workspace-bindings`
-
-Attestation mutation is intentionally not a browser surface. Trusted operators
-use only the direct host Core commands
-`core.providers.agentic.attestation.status`,
-`core.providers.agentic.attestation.issue` (expected revision plus the exact
-`fake-data-scope-reviewed` confirmation), and
-`core.providers.agentic.attestation.revoke` (expected revision plus reason).
-The host wrapper derives the authenticated actor from its effective OS uid;
-when the CLI is reached through a runtime-token shim, the trusted runtime
-context takes precedence and `--operator` cannot elevate an agent. Every
-mutation records that actor and an append-only redaction-safe audit fact. Do
-not issue an attestation merely to exercise P3 or to bypass the provider kill
-switches or missing certification gates.
-
-Runtime-public classification is a separate authority, not an attestation.
-Trusted operators use only
-`core.providers.agentic.public-content.status`,
-`core.providers.agentic.public-content.issue` (CAS expected revision plus the
-exact `public-workspace-content-reviewed` confirmation), and
-`core.providers.agentic.public-content.revoke` (CAS expected revision plus a
-reason). Issue authorizes the server classifier; it does not make marker
-absence an authority by itself—the issued server record is the authority.
-Every resulting prompt/result classification is bound to exact canonical bytes
-and the current authority id, revision, and self-digest. Revocation invalidates
-subsequent classifications and captured input admission. Settings and Chat do
-not expose a mutation control for this authority.
-
-While containment is active, `POST /api/providers/agentic/workspace-bindings` may disable a
-remote binding but cannot enable one. No fake-data confirmation field exists.
-Settings preserves the full preview label and shows provider, upstream, data
-destination, effective egress/data policy, the read-only attestation projection,
-effective capability/TCB posture, and certificate state; it has no browser
-data-class checkbox. A revision conflict
-requires a fresh read and operator review; never overwrite it blindly.
-
-## Canary and observation
-
-Start with one new disposable synthetic workspace, one profile and one actor.
-Create new sessions only; never retrofit a running session. Exercise the whole
-Full Workspace contract with benign synthetic reads and confirmed disposable
-mutations, plus one denied unauthorized-tool request, cancellation, restart
-recovery, and a real rollback/cleanup rehearsal. A read-only canary does not
-certify the target product.
-
-For each canary, verify:
-
-- `runtime.authority.evaluated` identifies the pinned binding and current policy
-  revision set by digest, without bearer material;
-- `runtime.egress.decision` exists before each exported block and contains only
-  classification, decision metadata, and keyed digests;
-- `provider.usage` stays within the workspace token and micro-USD ceiling;
-- tool events show one sequential lifecycle and no unconfirmed side effect;
-- public events, audit, logs, UI, and exports contain no credential, private
-  continuation, reasoning detail, tool arguments/result body, or host path;
-- no default workspace binding was created outside the approved canary.
-
-Stop the canary on any `provider_upstream_not_certified`,
-`provider_routing_not_certified`, `egress_policy_drift_unresolved`, repeated
-`provider_unavailable`, private-state integrity/quota failure, unexplained cost
-increase, missing audit record, or leakage signal.
-
-## Failure and recovery
-
-Provider definition-status, binding, certificate-status, and provider-state
-conflicts are record revision CAS failures. Moving a runtime session to
-`recovery_required` is instead a legal transition serialized through the
-session lifecycle handoff; do not describe it as provider-record CAS. Public
-APIs expose only allowlisted quarantine reasons, while arbitrary diagnostic
-detail remains Core-owned. Runtime tokens belonging to a quarantined session
-have no operational authority even if their token record has not yet expired.
-Session containment is attempted and reread first; journal CAS and encrypted
-diagnostic writes are independent, bounded follow-ups. Never make quarantine
-conditional on a private-payload, audit, projection, or diagnostic success.
-
-Before provider acceptance, a new operator-initiated turn may be attempted only
-after the outage or policy issue is understood. After acceptance, do not retry a
-request automatically. Productive recovery runs at startup/worker loss,
-pre-admission, pre-prepare, uncertain cancellation, execution failure, and the
-explicit adapter operation. It reads the pinned engine/adapter/provider/API and
-exact codec from each provider-step journal; never substitute a current default
-or migrate an old codec. An ambiguous mutation remains `execution_unknown`.
-
-For each affected step, inspect only redaction-safe journal metadata:
-
-- request/response ids and acceptance/stream status;
-- journal and base provider-state revisions/digests;
-- ordered proposal/disposition/result counts and pairing/commit status;
-- request-lineage digest plus final-outbox identity/digest/size/delivery status,
-  never its text or private locator;
-- request phase/control digest, max-output/input/cost reservation, durable tool
-  charges/result-byte total, and bounded provider usage counters;
-- public recovery reason and timestamps.
-
-Do not resolve or copy staged provider bytes, tool arguments/results, or the
-private recovery-detail locator into a ticket. Recovery may attach an orphan
-request-scoped staged blob, repair a proposal WAL half, materialize a proven
-pre-effect denial/result, finish pairing, promote exact staged state, commit, or
-consume a pairing. An explicit provider `cancelled`, `budget_exceeded`, or
-`incomplete` terminal may return to the prior commit only when no call or staged
-state exists. If acceptance, pairing, codec, state revision, or effect outcome
-is not provable, retain `recovery_required`; repeated restart must not change
-the terminal revision or repeat an effect.
-
-A ready pairing can continue only under its original active turn and exact
-source journal/request/input lineage. Never move it to a new user turn. A
-terminal turn must either finish certified same-turn recovery or quarantine the
-pairing. A committed final-output outbox is drained with its stable event ids;
-do not call the provider again, and quarantine if its identity or private
-payload cannot be verified.
-
-For `finalization` and `finalization_recovery`, verify that the recorded request
-control has no tools and that only one recovery exists. Never manufacture a
-third terminal attempt or manually pair a finalization call outside the normal
-denial-result saga.
-
-Do not manually clear `recovery_required`. Queue, continuation, prepare,
-dispatch, and token paths deliberately reject the session. Settings and Chat
-may show only `provider_acceptance_ambiguous`, `provider_pairing_ambiguous`,
-`provider_state_ambiguous`, `tool_execution_ambiguous`, or the generic public
-fallback; arbitrary detail remains encrypted and Core-owned.
-
-For `provider_private_integrity_failed`, `provider_private_codec_mismatch`, or
-`provider_private_state_unavailable`, stop the session and preserve encrypted
-state for investigation. Do not discard history and continue with a partial
-vendor conversation. For `provider_private_quota_exceeded` or
-`provider_private_size_invalid`, stop the turn, inspect bounded metadata only,
-and reduce the synthetic fixture or open a reviewed quota change. Never bypass
-the quota or copy plaintext state elsewhere.
-
-Certificate revocation, credential disablement, workspace binding disablement,
-profile suspension, or egress revision drift must block the next authority
-refresh, including refreshes before private-state persistence, tool execution,
-and confirmation resume. A provider request already accepted cannot be made
-secret again; cancel its transport and follow incident handling.
-
-## Rollback
-
-Rollback is a control-plane narrowing operation first and a code deployment
-operation second:
-
-1. Run and review the store-backed containment dry-run above.
-2. Apply its exact digest once. Binding/profile/certificate status writes use
-   record CAS; ambiguous-session quarantine uses the serialized lifecycle
-   handoff. The plan is auditable but not atomic or safe to retry.
-3. Cancel active remote transports. Preserve `execution_unknown` and
-   `recovery_required`; do not replay or manufacture a committed outcome.
-4. Confirm Settings reports no enabled/default affected binding and that new
-   remote session creation fails closed.
-5. Preserve redaction-safe audit, usage, egress decisions, request ids, binding
-   digests, and certificate status. Preserve encrypted private/tool state under
-   the normal retention policy until ambiguity is resolved.
-6. Revert or redeploy code only after authority is narrowed. Startup may publish
-   a new immutable revision, but must not reactivate a suspended old revision.
-7. If local Codex is the approved fallback, select it only for newly created
-   sessions. Never migrate a pinned remote session to another engine, model, or
-   upstream.
-
-Reactivation requires a new immutable profile/certificate revision whenever
-adapter bytes, codec, transport, provider contract, routing, or evidence change.
-Repeat the full pre-activation gate and canary; do not clear a revocation or
-reuse its certificate identity.
-
-## Provider onboarding checklist
-
-A new hosted provider is incomplete until it has an exact protocol codec and
-bounded transport; state and tool-pairing semantics; request-time credential
-delivery; private-state codec; per-block egress classification; cost estimator;
-adapter-pinned finalization output/cost/deadline reserves and certified
-empty-tool wire behavior;
-strict model/API/endpoint/upstream routing; deterministic malformed-stream,
-outage, cancellation, replay, leakage, prompt-injection, quota, corruption,
-revocation, drift, and child-agent tests; a dated certification matrix; an
-expiring immutable certificate; preview-only Settings controls; and an explicit
-rollback rehearsal.
-
-Any unsupported capability fails closed. No provider-specific implementation
-may bypass the shared tool catalog, confirmation ledger, private-state service,
-egress evaluator, authority refresh, usage events, or audit surfaces.
+OpenRouter changes must not restart Codex, rewrite Codex bindings or alter Codex
+session history. Codex model/catalog changes follow normal profile reconciliation
+and do not require a Maverick renewal step.

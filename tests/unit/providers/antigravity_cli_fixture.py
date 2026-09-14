@@ -14,9 +14,8 @@ from core.providers.native_agent_builtins import (
     build_antigravity_cli_candidate_definition,
     build_antigravity_cli_candidate_installation,
 )
-from core.providers.native_runtime_artifact import inspect_native_runtime_artifact
 from core.providers.provider_registry import ProviderRegistry
-from core.providers.capability_models import RuntimeCapabilitySet
+from core.providers.agentic_models import RuntimeCapabilitySet
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.execution_binding import canonical_digest
 
@@ -83,7 +82,6 @@ class AntigravityCliFixture:
         registry.register_native_agent_installation(
             build_antigravity_cli_candidate_installation(
                 command=str(command),
-                runtime_artifact=inspect_native_runtime_artifact(str(command)),
             ),
             definition=build_antigravity_cli_candidate_definition(),
             engine_adapter=self.engine,
@@ -158,7 +156,6 @@ class AntigravityCliFixture:
         authority = EffectiveRuntimeAuthority(
             execution_binding_id="fixture-binding",
             turn_id="turn",
-            certificate_id="fixture-only",
             allowed_capabilities=RuntimeCapabilitySet(
                 streaming=True,
                 tool_orchestration=False,

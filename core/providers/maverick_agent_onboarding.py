@@ -421,6 +421,11 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
     ):
         raise AgenticProfileError("maverick_profile_composition_mismatch")
     _validate_maverick_family(profile, recipe, publication.rollout_status)
+    from core.runtime.full_workspace_contract import (
+        validate_full_workspace_contract_claim,
+    )
+
+    validate_full_workspace_contract_claim(profile=profile)
 
 
 def _validate_maverick_family(
@@ -436,6 +441,7 @@ def _validate_maverick_family(
         raise AgenticProfileError("maverick_execution_family_invalid")
     policy = profile.policy_ceiling
     flags = recipe.support_flags
+    capabilities = profile.capabilities
     if (
         profile.full_workspace_contract_revision
         != FULL_WORKSPACE_CONTRACT_REVISION
@@ -445,6 +451,12 @@ def _validate_maverick_family(
         or not flags.usage_accounting
         or not flags.tool_calling
         or not flags.cooperative_cancellation
+        or profile.reasoning_efforts != flags.reasoning_efforts
+        or profile.default_reasoning_effort not in profile.reasoning_efforts
+        or capabilities.streaming != flags.streaming
+        or capabilities.tool_orchestration != flags.tool_calling
+        or capabilities.interrupt != flags.cooperative_cancellation
+        or capabilities.attachment_modalities != flags.attachment_modalities
         or not (
             policy.tool_handle_mode == "all_currently_authorized"
             or (

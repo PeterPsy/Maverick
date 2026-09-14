@@ -479,8 +479,8 @@ const settings = {
         authentication_status: 'runtime_managed',
         models: [{ provider_id: 'codex', model_id: 'gpt-5.5', model_revision: null, model_revision_policy: 'provider_alias' }],
         effects: { mode: 'mapped_hybrid', workspace_confined: true, process_tree_supervised: true, structured_effect_events: true, sandbox_policy_revision: 'sandbox-v1', approval_policy: 'common' },
-        certification_state: 'legacy_certified',
-        full_workspace_status: 'certified',
+        contract_state: 'available',
+        full_workspace_status: 'available',
         full_workspace_contract_revision: 'codex-baseline-v20',
         selectable: true,
         unavailable_reason: null
@@ -653,7 +653,7 @@ assert.ok(html.includes('Native Agents (CLI)'));
 assert.ok(html.includes('Maverick Agents (API)'));
 assert.ok(html.includes('Text-only Models (API)'));
 assert.ok(html.includes('No workspace tools or actions.'));
-assert.ok(html.includes('Runtime available; session selection still requires an enabled certified workspace profile.'));
+assert.ok(html.includes('Runtime available; session selection still requires an enabled workspace profile.'));
 assert.ok(!html.includes('Unavailable: Native Agent Unavailable'));
 assert.ok(html.includes('Installed / executable'));
 assert.ok(html.includes('Native health / update'));
@@ -791,8 +791,6 @@ settings.agentic_admin = {
     },
     rollout_status: 'suspended',
     profile_status: 'suspended',
-    certificate: { effective_status: 'revoked', expires_at: '2026-09-01T00:00:00Z' },
-    certificate_eligibility: 'ineligible',
     credential_bindings: [],
     binding: {
       binding_id: 'binding-google-contained',
@@ -848,9 +846,7 @@ settings.agentic_admin = {
         allowed_remote_data_classes: [],
         collection: 'deny',
         require_zdr: false
-      },
-      certificate: {},
-      tcb: { posture: 'ineligible' }
+      }
     }
   }]
 };
@@ -883,7 +879,7 @@ for (const expected of [
   'Data policy collection=deny · ZDR required · attestation not_attested',
   'Effective capabilities · blocked',
   'Workspace data declaration (informational): not_attested',
-  'Binding Disabled · Profile Suspended · Certificate Revoked / Ineligible',
+  'Binding Disabled · Profile Suspended',
   'Google agentic Gemini 3.5 Pro · fake-data preview',
   'Quarantined: Remote Agentic State Ambiguous',
   'Pinned remote profile contained (NO-GO): Hosted Agent Runtime Disabled'
@@ -909,7 +905,7 @@ Object.assign(reenableItem, {
   execution_family: 'native_agent',
   family_contract_status: 'complete',
   family_contract_reason: null,
-  full_workspace_status: 'certified',
+  full_workspace_status: 'available',
   selectable: false,
   enable_eligible: true,
   enable_blocked_reason: null,
@@ -920,7 +916,6 @@ Object.assign(reenableItem, {
 });
 reenableItem.binding.enabled = false;
 reenableItem.binding.is_default = false;
-reenableItem.certificate.effective_status = 'active';
 const reenableHtml = settingsPanelHtml(reenableSettings, state);
 const reenableToggle = reenableHtml.match(/<input type="checkbox" role="switch" data-agentic-model-toggle[\s\S]*?>/)?.[0] || '';
 assert.ok(reenableToggle);

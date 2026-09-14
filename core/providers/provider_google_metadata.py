@@ -19,7 +19,7 @@ def build_google_ai_studio_definition(timestamp: datetime) -> ProviderDefinition
     return ProviderDefinition(
         provider_id="google-ai-studio",
         label="Google AI Studio",
-        description="Hosted Gemini text and certified agentic Interactions provider metadata.",
+        description="Hosted Gemini text and agentic Interactions provider metadata.",
         kind="hosted_api",
         provider_role="model_provider",
         status="disabled",
@@ -49,7 +49,7 @@ def build_google_ai_studio_definition(timestamp: datetime) -> ProviderDefinition
             _model(
                 "gemini-3.6-flash",
                 "Gemini 3.6 Flash",
-                "Stable Gemini 3.6 Flash model certified for preview agentic Interactions.",
+                "Stable Gemini 3.6 Flash model available for preview agentic Interactions.",
                 reasoning="high",
                 endpoint="https://generativelanguage.googleapis.com/v1/interactions",
                 protocol="google-interactions",

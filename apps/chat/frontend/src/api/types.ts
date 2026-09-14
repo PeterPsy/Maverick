@@ -33,14 +33,6 @@ export type AgenticDataPolicy = {
   };
 };
 
-export type AgenticCertificatePosture = {
-  certificate_id: string;
-  effective_status: string;
-  eligibility: string;
-  expires_at: string | null;
-  pinned_evidence_digest: string;
-};
-
 export type AgenticEffectiveCapabilities = {
   status: "active" | "blocked";
   reason_code: string | null;
@@ -70,7 +62,7 @@ export type AgenticEffectiveCapabilities = {
     provider_id?: string;
     model_id?: string;
     protocol?: string;
-    certified_upstream_ids?: string[];
+    configured_upstream_ids?: string[];
     effective_upstream_ids?: string[];
     health_status?: string;
     health_revision?: string;
@@ -79,16 +71,6 @@ export type AgenticEffectiveCapabilities = {
     allowed_remote_data_classes?: string[];
     collection?: string;
     require_zdr?: boolean;
-  };
-  certificate?: {
-    certificate_id?: string;
-    suite_id?: string;
-    suite_version?: string;
-    expires_at?: string | null;
-  };
-  tcb?: {
-    posture?: string;
-    [key: string]: unknown;
   };
   allowed_tool_handles?: string[];
 };
@@ -105,7 +87,7 @@ export type AgenticSessionGovernance = {
     stored_value: string | null;
     legacy_identity_projected: boolean;
   };
-  full_workspace_status?: "certified" | "unavailable";
+  full_workspace_status?: "available" | "unavailable";
   full_workspace_contract_revision?: string | null;
   harness_recipe?: AgenticHarnessRecipe;
   model_provider_id: string;
@@ -118,7 +100,6 @@ export type AgenticSessionGovernance = {
   data_destination: AgenticDataDestination;
   egress_policy: AgenticEgressPolicy;
   data_policy: AgenticDataPolicy;
-  certificate_posture: AgenticCertificatePosture;
   effective_capabilities: AgenticEffectiveCapabilities;
 };
 
@@ -136,8 +117,6 @@ export type ProviderItem = {
   hosted_model_id?: string;
   workspace_profile_binding_id?: string;
   agentic_rollout_status?: string | null;
-  agentic_certificate_status?: string | null;
-  agentic_certificate_expires_at?: string | null;
   agentic_egress_policy_id?: string | null;
   agentic_allowed_tool_handles?: string[];
   agentic_max_estimated_cost_microusd?: number | null;
@@ -146,7 +125,6 @@ export type ProviderItem = {
   agentic_data_destination?: AgenticDataDestination | null;
   agentic_egress_policy?: AgenticEgressPolicy | null;
   agentic_data_policy?: AgenticDataPolicy | null;
-  agentic_certificate_posture?: AgenticCertificatePosture | null;
   agentic_effective_capabilities?: AgenticEffectiveCapabilities | null;
   default_reasoning_effort?: string | null;
   supported_reasoning_efforts?: ProviderReasoningOption[];
@@ -158,7 +136,7 @@ export type ProviderItem = {
   execution_family_order?: number;
   selectable?: boolean;
   unavailable_reason?: string | null;
-  full_workspace_status?: "certified" | "unavailable";
+  full_workspace_status?: "available" | "unavailable";
   full_workspace_contract_revision?: string | null;
   harness_recipe?: AgenticHarnessRecipe | null;
   provider_detail?: string | null;
@@ -208,13 +186,6 @@ export type HostedTextProfileItem = {
     status: "available" | "disabled" | "unavailable";
     reason_code: string | null;
   };
-  certificate: {
-    certificate_id: string;
-    certificate_kind: "hosted_text_capability";
-    workspace_tools: false;
-    action_loop: false;
-    workspace_actions: false;
-  };
   provider: { provider_id: string; label: string; status: string };
   cost?: Record<string, unknown>;
   selectable: boolean;
@@ -253,8 +224,8 @@ export type NativeAgentItem = {
     sandbox_policy_revision: string;
     approval_policy: string;
   };
-  certification_state: string;
-  full_workspace_status: "certified" | "unavailable";
+  contract_state: string;
+  full_workspace_status: "available" | "unavailable";
   full_workspace_contract_revision: string | null;
   selectable: boolean;
   unavailable_reason: string | null;
@@ -361,13 +332,12 @@ export type AgenticProfileItem = {
   execution_family?: "native_agent" | "maverick_agent" | null;
   family_contract_status?: string;
   family_contract_reason?: string | null;
-  full_workspace_status?: "certified" | "unavailable";
+  capabilities?: AgenticEffectiveCapabilities["capabilities"];
+  full_workspace_status?: "available" | "unavailable";
   full_workspace_contract_revision?: string | null;
   harness_recipe?: AgenticHarnessRecipe;
   containment_status?: "GO" | "NO-GO";
   containment_reason?: string | null;
-  certificate_eligibility?: string;
-  certified?: boolean;
   provider_protocol?: string;
   provider_api_version?: string | null;
   adapter_id?: string;
@@ -379,10 +349,6 @@ export type AgenticProfileItem = {
   allowed_tool_handles?: string[];
   max_estimated_cost_microusd?: number | null;
   effective_capabilities?: AgenticEffectiveCapabilities;
-  certificate?: {
-    effective_status?: string;
-    expires_at?: string;
-  } | null;
 };
 
 export type DependencyProviderCandidate = {
@@ -661,7 +627,9 @@ export type RuntimeSession = {
     profile_definition_revision?: string;
     workspace_binding_id: string;
     workspace_binding_revision?: number;
-    capability_certificate_id?: string;
+    reasoning_efforts?: string[];
+    default_reasoning_effort?: string | null;
+    capabilities?: AgenticEffectiveCapabilities["capabilities"];
     model_id: string;
     reasoning_effort?: string | null;
     runtime_engine_id: string;

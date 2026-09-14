@@ -1,4 +1,4 @@
-"""Immutable Full Workspace projections for a certified Antigravity connection."""
+"""Immutable Full Workspace projections for an Antigravity connection."""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ from core.providers.agentic_models import (
     AgenticProfileDefinitionStatus,
     AgenticRuntimePolicy,
     RoutingConstraint,
+    RuntimeCapabilitySet,
 )
 from core.providers.agentic_data_policies import (
     REMOTE_PREVIEW_EGRESS_POLICY_ID,
     REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
 )
-from core.providers.capability_models import RuntimeCapabilitySet
 from core.providers.errors import AgenticProfileError, ProviderNotFoundError
 from core.providers.execution_families import NATIVE_AGENT_EXECUTION_FAMILY
 from core.providers.native_agent_catalog import NativeAgentCatalogModel
@@ -128,7 +128,7 @@ def antigravity_agentic_profile_definition(
     model: NativeAgentCatalogModel,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Build a model pin that inherits one connection-scoped certificate."""
+    """Build a model pin for one connection-scoped runtime."""
     if (
         installation.manifest.runtime_engine_id != "antigravity-cli"
         or model.model_provider_id != "google"
@@ -158,9 +158,9 @@ def antigravity_agentic_profile_definition(
         adapter_version_constraint=f"=={manifest.adapter_version}",
         routing_constraint=antigravity_native_routing_constraint(),
         policy_ceiling=antigravity_native_policy(),
-        capability_certificate_id=(
-            f"capability-certificate:{definition_id}:{revision}"
-        ),
+        capabilities=antigravity_native_capabilities(),
+        reasoning_efforts=model.reasoning_efforts,
+        default_reasoning_effort=model.default_reasoning_effort,
         created_at=timestamp,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,

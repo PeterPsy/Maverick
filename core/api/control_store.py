@@ -52,9 +52,6 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "provider_agentic_profile_definition_statuses": (("definition_id", "definition_revision"),),
     "provider_agentic_workspace_bindings": (("binding_id",),),
     "provider_agentic_migrations": (("migration_id",),),
-    "provider_agentic_capability_evidence": (("evidence_digest",),),
-    "provider_agentic_capability_certificates": (("certificate_id",),),
-    "provider_agentic_capability_certificate_statuses": (("certificate_id",),),
     "runtime_api_tokens": (("token_id",),),
     "compute_jobs": (("workspace_id", "job_id"), ("workspace_id", "idempotency_key")),
     "compute_job_events": (("event_id",),),
@@ -201,12 +198,6 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
             collections.provider.workspace_agentic_profile_bindings,
         ),
         ControlPlaneCollectionSpec("provider_agentic_migrations", collections.provider.agentic_migrations),
-        ControlPlaneCollectionSpec("provider_agentic_capability_evidence", collections.provider.capability_evidence),
-        ControlPlaneCollectionSpec("provider_agentic_capability_certificates", collections.provider.capability_certificates),
-        ControlPlaneCollectionSpec(
-            "provider_agentic_capability_certificate_statuses",
-            collections.provider.capability_certificate_statuses,
-        ),
         ControlPlaneCollectionSpec("runtime_api_tokens", collections.runtime_api_tokens),
         ControlPlaneCollectionSpec("compute_jobs", collections.jobs.jobs),
         ControlPlaneCollectionSpec("compute_job_events", collections.jobs.events),
@@ -285,11 +276,6 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
                 provider_state_root / "agentic_workspace_bindings.json"
             ),
             agentic_migrations=JsonFileCollection(provider_state_root / "agentic_migrations.json"),
-            capability_evidence=JsonFileCollection(provider_state_root / "agentic_capability_evidence.json"),
-            capability_certificates=JsonFileCollection(provider_state_root / "agentic_capability_certificates.json"),
-            capability_certificate_statuses=JsonFileCollection(
-                provider_state_root / "agentic_capability_certificate_statuses.json"
-            ),
         ),
         runtime_api_tokens=JsonFileCollection(json_root / "runtime" / "api_tokens.json"),
         jobs=JobCollections(
@@ -358,9 +344,6 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
                 "provider_agentic_workspace_bindings"
             ),
             agentic_migrations=collection("provider_agentic_migrations"),
-            capability_evidence=collection("provider_agentic_capability_evidence"),
-            capability_certificates=collection("provider_agentic_capability_certificates"),
-            capability_certificate_statuses=collection("provider_agentic_capability_certificate_statuses"),
         ),
         runtime_api_tokens=collection("runtime_api_tokens"),
         jobs=JobCollections(

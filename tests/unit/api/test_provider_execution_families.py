@@ -48,7 +48,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             workspace_store=SimpleNamespace(get_governance=lambda _workspace_id: None),
         )
 
-    def test_catalog_and_codex_use_the_exact_certified_native_family(self) -> None:
+    def test_catalog_and_codex_use_the_exact_native_family(self) -> None:
         state = self.make_state()
         payload = workspace_provider_status(state, workspace_id="default")
 
@@ -80,7 +80,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         )
         profile = payload["agentic_profiles"]["items"][0]
         self.assertEqual(profile["execution_family"], "native_agent")
-        self.assertEqual(profile["full_workspace_status"], "certified")
+        self.assertEqual(profile["full_workspace_status"], "available")
         self.assertEqual(
             profile["full_workspace_contract_revision"],
             "codex-baseline-v21",
@@ -93,12 +93,12 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             admin["default_reasoning_effort"],
             [item["effort"] for item in admin["supported_reasoning_efforts"]],
         )
-        self.assertEqual(admin["full_workspace_status"], "certified")
+        self.assertEqual(admin["full_workspace_status"], "available")
         self.assertEqual(admin["native_runtime"]["health"], "healthy")
         self.assertTrue(admin["enable_eligible"])
         self.assertIsNone(admin["enable_blocked_reason"])
 
-    def test_new_codex_catalog_model_inherits_connection_certification(self) -> None:
+    def test_new_codex_catalog_model_inherits_direct_runtime_profile(self) -> None:
         state = self.make_state()
         codex = state.provider_registry.get_provider_definition("codex")
         astra = replace(
@@ -133,7 +133,8 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             payload["agentic_profiles"]["default_binding_id"],
             binding.binding_id,
         )
-        self.assertTrue(profile["certified"])
+        self.assertEqual(profile["full_workspace_status"], "available")
+        self.assertTrue(profile["capabilities"]["tool_orchestration"])
         self.assertTrue(profile["selectable"])
         self.assertIsNone(profile["unavailable_reason"])
 
@@ -174,7 +175,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertEqual(profile["unavailable_reason"], "runtime_authority_unavailable")
         self.assertEqual(profile["effective_capabilities"]["status"], "blocked")
 
-    def test_uncertified_native_candidate_is_visible_but_never_selectable(self) -> None:
+    def test_disabled_native_candidate_is_visible_but_never_selectable(self) -> None:
         payload = workspace_provider_status(self.make_state(), workspace_id="default")
         candidates = {
             item["runtime_engine_id"]: item
@@ -184,15 +185,15 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         antigravity = candidates["antigravity-cli"]
         self.assertFalse(antigravity["selectable"])
         self.assertEqual(antigravity["provider_status"], "disabled")
-        self.assertEqual(antigravity["full_workspace_status"], "unavailable")
+        self.assertEqual(antigravity["full_workspace_status"], "available")
         self.assertEqual(
             antigravity["unavailable_reason"],
-            "native_agent_connection_certificate_missing",
+            "native_agent_disabled",
         )
         self.assertNotIn("executable_path", antigravity)
         self.assertNotIn("gemini-cli", candidates)
 
-    def test_certified_native_profile_is_unavailable_when_runtime_is_missing(self) -> None:
+    def test_native_profile_is_unavailable_when_runtime_is_missing(self) -> None:
         state = self.make_state()
         inspector = state.provider_registry.get_native_agent_installation(
             "codex"
@@ -212,7 +213,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
 
         profile = payload["agentic_profiles"]["items"][0]
         self.assertEqual(profile["family_contract_status"], "complete")
-        self.assertEqual(profile["full_workspace_status"], "certified")
+        self.assertEqual(profile["full_workspace_status"], "available")
         self.assertFalse(profile["selectable"])
         self.assertEqual(profile["unavailable_reason"], "native_runtime_not_installed")
         self.assertFalse(admin["items"][0]["selectable"])
@@ -285,7 +286,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
                     "full_workspace_policy_incomplete",
                 )
 
-    def test_text_profiles_have_a_separate_no_actions_certificate(self) -> None:
+    def test_text_profiles_declare_no_workspace_actions(self) -> None:
         payload = workspace_provider_status(self.make_state(), workspace_id="default")
         hosted = payload["hosted_text"]
 
@@ -296,13 +297,11 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertTrue(hosted["profiles"])
         for item in hosted["profiles"]:
             self.assertEqual(item["profile"]["execution_family"], "hosted_text")
+            self.assertNotIn("certificate", item)
             self.assertEqual(
-                item["certificate"]["certificate_kind"],
-                "hosted_text_capability",
+                item["workspace_actions_message"],
+                "No workspace tools or actions.",
             )
-            self.assertFalse(item["certificate"]["workspace_tools"])
-            self.assertFalse(item["certificate"]["action_loop"])
-            self.assertFalse(item["certificate"]["workspace_actions"])
 
     def test_legacy_selection_migration_is_projection_only(self) -> None:
         state = self.make_state()

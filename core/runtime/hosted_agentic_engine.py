@@ -8,7 +8,6 @@ from dataclasses import dataclass, replace
 from types import SimpleNamespace
 from threading import Event, RLock
 
-import core.runtime.provider_step_admission as provider_step_admission_module
 from core.providers.agentic_adapter import (
     RuntimeCancelContext,
     RuntimeCancelResult,
@@ -55,28 +54,16 @@ class HostedAgenticEngineAdapter:
         adapter_id: str,
         adapter_version: str,
         loop: HostedAgenticLoop,
-        composition_components: tuple[object, ...] = (),
         process_registry=None,
     ) -> None:
         self.runtime_engine_id = runtime_engine_id
         self.adapter_id = adapter_id
         self.adapter_version = adapter_version
         self.loop = loop
-        self.composition_components = composition_components
         self.process_registry = process_registry
         self._cancellations: dict[str, _ActiveHostedTurn] = {}
         self._lock = RLock()
 
-    @property
-    def artifact_components(self) -> tuple[object, ...]:
-        """Expose the shared loop and installed provider codecs to certification."""
-        return (
-            self.loop,
-            provider_step_admission_module,
-            *self.composition_components,
-            *self.loop.artifact_components,
-            *self.loop.provider_runtimes.artifact_components(),
-        )
 
     def currently_authorized_tool_handles(self, binding) -> tuple[str, ...]:
         """Expose redaction-safe candidates for the pre-execution authority audit."""

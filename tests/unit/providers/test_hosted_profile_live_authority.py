@@ -6,26 +6,24 @@ from unittest import mock
 import unittest
 
 from core.api.platform_state import bootstrap_platform_state
-from core.providers.capability_models import RuntimeCapabilitySet
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.google_agentic_profile import (
     GOOGLE_AGENTIC_PROFILE_ID,
     GOOGLE_AGENTIC_PROFILE_REVISION,
-    GOOGLE_CERTIFIED_REASONING_EFFORTS,
+    GOOGLE_REASONING_EFFORTS,
     GOOGLE_DEFAULT_REASONING_EFFORT,
 )
 from core.providers.openrouter_agentic_profile import (
     OPENROUTER_AGENTIC_PROFILE_ID,
     OPENROUTER_AGENTIC_PROFILE_REVISION,
-    OPENROUTER_CERTIFIED_REASONING_EFFORTS,
+    OPENROUTER_REASONING_EFFORTS,
     OPENROUTER_DEFAULT_REASONING_EFFORT,
 )
 from core.runtime.authority import resolve_effective_runtime_authority
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.full_workspace_contract import FULL_WORKSPACE_CORE_TOOL_HANDLES
-from tests.support.agentic_certification import (
-    certified_test_provider_store,
-    fake_capability_evidence,
+from tests.support.agentic_runtime import (
+    direct_test_provider_store,
 )
 from tests.support.repo import make_temp_repo_root
 
@@ -55,7 +53,7 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     GOOGLE_AGENTIC_PROFILE_ID,
                     GOOGLE_AGENTIC_PROFILE_REVISION,
                 ),
-                GOOGLE_CERTIFIED_REASONING_EFFORTS,
+                GOOGLE_REASONING_EFFORTS,
                 GOOGLE_DEFAULT_REASONING_EFFORT,
             ),
             (
@@ -63,32 +61,12 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     OPENROUTER_AGENTIC_PROFILE_ID,
                     OPENROUTER_AGENTIC_PROFILE_REVISION,
                 ),
-                OPENROUTER_CERTIFIED_REASONING_EFFORTS,
+                OPENROUTER_REASONING_EFFORTS,
                 OPENROUTER_DEFAULT_REASONING_EFFORT,
             ),
         )
-        capabilities = RuntimeCapabilitySet(
-            streaming=True,
-            tool_orchestration=True,
-            cli=True,
-            mcp=True,
-            skill_catalog=True,
-            filesystem_list=True,
-            filesystem_read=True,
-            filesystem_write=True,
-            shell=True,
-            interrupt=True,
-            same_turn_steering=True,
-            recovery=True,
-            confirmation_resume=True,
-            provider_private_state=True,
-            attachment_modalities=("file",),
-            app_references=True,
-            confirmations=True,
-        )
         for profile, reasoning_efforts, default_effort in profiles:
             with self.subTest(profile=profile.definition_id):
-                evidence = fake_capability_evidence(adapter, now=NOW, definition=profile)
                 binding = build_runtime_execution_binding(
                     session_id=f"session:{profile.definition_id}",
                     workspace_id="default",
@@ -96,12 +74,10 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     profile_definition_revision=profile.revision,
                     workspace_binding_id=f"binding:{profile.definition_id}",
                     workspace_binding_revision=0,
-                    capability_certificate_id=profile.capability_certificate_id,
-                    certificate_evidence_digest=evidence.evidence_digest,
                     runtime_engine_id=profile.runtime_engine_id,
                     adapter_id=profile.adapter_id,
                     adapter_version=str(getattr(adapter, "adapter_version")),
-                    adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
+                    adapter_identity_digest=runtime_adapter_identity_digest(adapter),
                     model_provider_id=profile.model_provider_id,
                     model_id=profile.model_id,
                     model_revision=profile.model_revision,
@@ -111,18 +87,15 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     routing_constraint=profile.routing_constraint,
                     credential_binding_id=None,
                     reasoning_effort=default_effort,
-                    certified_reasoning_efforts=reasoning_efforts,
+                    reasoning_efforts=reasoning_efforts,
                     default_reasoning_effort=default_effort,
+                    capabilities=profile.capabilities,
                     execution_mode="full-access",
                     profile_policy_ceiling=profile.policy_ceiling,
                     workspace_policy_ceiling=profile.policy_ceiling,
                     egress_policy_id=profile.egress_policy_id,
                     egress_policy_revision=profile.egress_policy_revision,
                     created_at=NOW,
-                    tcb_manifest_id=evidence.tcb_manifest_id,
-                    tcb_manifest_version=evidence.tcb_manifest_version,
-                    tcb_structure_digest=evidence.tcb_structure_digest,
-                    tcb_live_digest=evidence.tcb_live_digest,
                     full_workspace_contract_revision=(
                         profile.full_workspace_contract_revision
                     ),
@@ -144,12 +117,9 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     protocol_adapter_id=profile.protocol_adapter_id,
                     protocol_adapter_version=profile.protocol_adapter_version,
                 )
-                store = certified_test_provider_store(
+                store = direct_test_provider_store(
                     binding,
-                    adapter,
-                    evidence=evidence,
                     now=NOW,
-                    certified_capabilities=capabilities,
                     definition=profile,
                 )
                 with mock.patch(

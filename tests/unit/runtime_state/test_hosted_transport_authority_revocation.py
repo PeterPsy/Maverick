@@ -307,14 +307,14 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
 
     def test_full_authority_revocation_after_journal_blocks_lazy_transport(self) -> None:
         harness = HostedAgenticHarness(self)
-        certificate_live = True
+        profile_live = True
         refresh_calls = 0
 
         def refresh(_context):
             nonlocal refresh_calls
             refresh_calls += 1
-            if not certificate_live:
-                raise HostedAgenticLoopError("certificate_revoked")
+            if not profile_live:
+                raise HostedAgenticLoopError("workspace_profile_binding_disabled")
             return harness.authority
 
         client = DeterministicFakeAgenticClient()
@@ -328,9 +328,9 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
         journal_request = adapter.loop.provider_step_journal.journal_request
 
         def revoke_after_journal(record):
-            nonlocal certificate_live
+            nonlocal profile_live
             saved = journal_request(record)
-            certificate_live = False
+            profile_live = False
             return saved
 
         events = []
@@ -357,7 +357,7 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
         self.assertGreaterEqual(refresh_calls, 4)
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "certificate_revoked"}],
+            [{"reason_code": "workspace_profile_binding_disabled"}],
         )
 
     def test_credential_revocation_during_preflight_blocks_transport(self) -> None:

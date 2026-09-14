@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 from threading import RLock
 
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.execution_binding import canonical_digest
 
 
@@ -20,11 +20,6 @@ class NativeRuntimeArtifact:
         return canonical_digest(self)
 
 
-# Explicitly reviewed installed release. Discovery cannot approve an update.
-CODEX_PACKAGED_RUNTIME_ARTIFACT = NativeRuntimeArtifact(
-    "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
-    "codex-cli 0.153.4",
-)
 ANTIGRAVITY_CLI_RUNTIME_ARTIFACT = NativeRuntimeArtifact(
     "93eb2118b778a4005700b54cdd7e08b896fbe665d5ff338e38e9e53da9a091ea",
     "1.1.27",
@@ -58,12 +53,11 @@ def inspect_native_runtime_artifact(command: str) -> NativeRuntimeArtifact:
             _CACHE[fence] = artifact
             return artifact
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        raise CapabilityCertificateError("native_runtime_artifact_unavailable") from error
+        raise AgenticRuntimeError("native_runtime_artifact_unavailable") from error
 
 
 __all__ = [
     "ANTIGRAVITY_CLI_RUNTIME_ARTIFACT",
-    "CODEX_PACKAGED_RUNTIME_ARTIFACT",
     "NativeRuntimeArtifact",
     "inspect_native_runtime_artifact",
 ]

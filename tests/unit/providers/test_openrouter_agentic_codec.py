@@ -35,7 +35,7 @@ REASONING_DETAIL = {
 
 
 class OpenRouterAgenticCodecTest(unittest.TestCase):
-    def test_accepts_exact_certified_resolved_model_revision(self) -> None:
+    def test_accepts_exact_resolved_model_revision(self) -> None:
         stream = _text_stream("generation-resolved-model", "answer")
         metadata = stream[-1]["openrouter_metadata"]
         metadata["endpoints"]["available"][0]["model"] = OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
@@ -130,15 +130,15 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
                 self.assertEqual(transport.payloads, [])
 
     def test_any_relaxed_router_control_fails_before_transport(self) -> None:
-        certified = openrouter_agentic_routing_constraint()
+        declared = openrouter_agentic_routing_constraint()
         variants = (
-            replace(certified, endpoint_id="another-endpoint"),
-            replace(certified, allowed_upstream_ids=("deepinfra",)),
-            replace(certified, allow_fallbacks=True),
-            replace(certified, require_parameters=False),
-            replace(certified, data_collection_policy="provider_contract"),
-            replace(certified, require_zdr=False),
-            replace(certified, allowed_quantizations=()),
+            replace(declared, endpoint_id="another-endpoint"),
+            replace(declared, allowed_upstream_ids=("deepinfra",)),
+            replace(declared, allow_fallbacks=True),
+            replace(declared, require_parameters=False),
+            replace(declared, data_collection_policy="provider_contract"),
+            replace(declared, require_zdr=False),
+            replace(declared, allowed_quantizations=()),
         )
         for index, routing in enumerate(variants):
             with self.subTest(index=index):
@@ -149,7 +149,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
                         replace(_request(f"request-relaxed-{index}"), routing_constraint=routing),
                     )
                 )
-                self.assertEqual(events[0].error_code, "provider_routing_not_certified")
+                self.assertEqual(events[0].error_code, "provider_routing_not_allowed")
                 self.assertEqual(transport.payloads, [])
 
     def test_runtime_config_requires_one_executable_upstream(self) -> None:

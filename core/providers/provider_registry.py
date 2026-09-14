@@ -156,11 +156,8 @@ class ProviderRegistry:
             if (
                 installation is not None
                 and definition.provider_id != "codex"
-                and (
-                    not installation.certification_configured
-                    or definition.provider_id
-                    not in self._authorized_native_agent_activations
-                )
+                and definition.provider_id
+                not in self._authorized_native_agent_activations
             ):
                 definition = replace(definition, status="disabled")
             self._definitions[definition.provider_id] = definition
@@ -183,7 +180,7 @@ class ProviderRegistry:
         runtime_adapter: RuntimeBackendAdapter | None = None,
         engine_adapter: AgenticRuntimeEngineAdapter | None = None,
     ) -> ProviderDefinition:
-        """Register a validated native adapter/recipe/connection certificate.
+        """Register a validated native adapter, recipe, and runtime contract.
 
         Candidate registrations are clamped to disabled even if persisted
         provider metadata later attempts to activate them.
@@ -219,8 +216,8 @@ class ProviderRegistry:
                 raise ValueError("native_agent_adapter_identity_mismatch")
             if str(getattr(runtime_adapter, "adapter_version", "")) != manifest.adapter_version:
                 raise ValueError("native_agent_adapter_version_mismatch")
-        elif installation.certification_configured:
-            raise ValueError("native_agent_certified_adapter_missing")
+        elif installation.contract_configured:
+            raise ValueError("native_agent_runtime_adapter_missing")
         self._native_agent_installations[manifest.runtime_engine_id] = installation
         if runtime_adapter is not None:
             definition = self.register_runtime_adapter(runtime_adapter)

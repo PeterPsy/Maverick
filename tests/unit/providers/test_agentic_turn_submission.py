@@ -6,9 +6,13 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.providers.service import builtin_provider_registry
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.service import create_runtime_session, transition_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -19,9 +23,8 @@ from core.runtime.turn_submission import (
 )
 from tests.support.collections import FakeCollection
 from tests.support.fake_agentic_adapter import FakeHostedAgenticAdapter
-from tests.support.agentic_certification import (
-    certified_test_provider_store,
-    fake_capability_evidence,
+from tests.support.agentic_runtime import (
+    direct_test_provider_store,
 )
 from tests.support.repo import make_temp_repo_root
 
@@ -64,7 +67,6 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             output_text="common lifecycle answer",
             durable_final=True,
         )
-        evidence = fake_capability_evidence(adapter, now=timestamp)
         binding = build_runtime_execution_binding(
             session_id="session-fake-hosted",
             workspace_id="default",
@@ -72,11 +74,10 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="binding-fake-hosted",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-fake-hosted",
             runtime_engine_id="fake-hosted-agentic",
             adapter_id="fake-hosted-agentic-adapter",
             adapter_version="1",
-            adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
+            adapter_identity_digest=runtime_adapter_identity_digest(adapter),
             model_provider_id="fake-model-provider",
             model_id="fake-model-v1",
             provider_protocol="fake-stream-v1",
@@ -84,15 +85,15 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
             profile_policy_ceiling=codex_runtime_policy(),
             workspace_policy_ceiling=codex_runtime_policy(),
             egress_policy_id="fake-only",
             egress_policy_revision="1",
             created_at=timestamp,
-            certificate_evidence_digest=evidence.evidence_digest,
         )
         session = create_runtime_session(
             runtime_store,
@@ -110,12 +111,9 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             target_status="running",
             now=timestamp,
         )
-        provider_store = certified_test_provider_store(
+        provider_store = direct_test_provider_store(
             binding,
-            adapter,
-            evidence=evidence,
             now=timestamp,
-            validity_days=30,
         )
         definition = replace(
             builtin_provider_registry().get_provider_definition("codex"),

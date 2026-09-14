@@ -238,30 +238,26 @@ payloads behind opaque Core-issued locators. Apps, browser APIs, ordinary logs,
 workspace exports, and provider adapters do not receive a locator-resolution
 surface. Being able to read ciphertext on disk is not runtime authority.
 
-Capability definitions, workspace bindings, certificates, certificate status,
-and evidence metadata remain in their platform control-plane stores. Large
-certification evidence lives in the platform-owned content-addressed evidence
-store under `data/control-plane/provider-evidence/` (or an equivalent configured
-platform blob adapter), outside every workspace root. A copy placed in
-`storage/generated/` is a redaction-safe operational export only and is never
-authoritative evidence.
+Agentic profile definitions, rollout status, workspace bindings and provider
+credential references remain in platform control-plane stores. They never live
+inside a workspace root and cannot be changed by copying or restoring workspace
+files.
 
 Workspace backup and export therefore treat these records differently:
 
-- app and Storage exports exclude runtime-private and certification-authority
-  state;
+- app and Storage exports exclude runtime-private and provider-authority state;
 - runtime recovery retains private session state according to Core retention
   and deletion policy, independently of app lifecycle;
-- control-plane backup covers agentic definitions, bindings, certificate
-  status, evidence metadata, and the content-addressed evidence store;
-- moving or restoring a workspace cannot manufacture, widen, or reactivate a
-  capability certificate.
+- control-plane backup covers agentic definitions, rollout status, bindings and
+  provider credential references;
+- moving or restoring a workspace cannot manufacture, widen, enable or select
+  an agentic profile.
 
 Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime roots. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between independent concurrent agents unless a provider adapter documents an explicit immutable cache. A compatible Codex continuation lineage is one provider conversation rather than independent agents: its single executable child inherits the lineage-root `CODEX_HOME` because the thread database points to an absolute rollout file there, and the operating-system sandbox receives that same path as `HOME` and `CODEX_HOME`. Continuation admission is serialized with message admission; any non-terminal turn blocks transfer. The predecessor provider state is fenced and its app-server process is proven closed before provider-state ownership passes to the child. Recovery inventory resolves a requested lineage member to the current tip, and a mutating repair snapshots every lineage record plus a checked SQLite backup and checksummed rollout files from the root home. Lineage-aware cleanup removes the root home with the complete lineage.
 
-Certified-rollout repair scopes those snapshots to one durable user-visible chat
-lineage at a time. Hidden prepared-session homes are disposable and are not part
-of chat migration. A snapshot failure leaves its lineage unchanged, removes the
+Continuation repair scopes snapshots to one durable user-visible chat lineage at
+a time. Hidden prepared-session homes are disposable and are not part of chat
+migration. A snapshot failure leaves its lineage unchanged, removes the
 incomplete snapshot directory, and does not prevent independent chat lineages
 from receiving their own snapshots and compatible successors.
 Runtime session history and operational records that belong to one agent must live inside that same session root so cleanup can remove one agent's files without scanning or rewriting shared cross-agent history files. This includes persisted runtime events, turn records, process records, and the mutable runtime state snapshot.

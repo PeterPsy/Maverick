@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from core.providers.agentic_models import AgenticProfileDefinition
-from core.providers.errors import AgenticProfileError, ProviderNotFoundError
+from core.providers.errors import AgenticProfileError
 from core.providers.models import ProviderDefinition
 from core.providers.native_agent_catalog import NativeAgentCatalogModel
 from core.runtime.execution_binding import canonical_digest
@@ -38,28 +38,13 @@ def codex_model_profile_projection(
         reasoning_efforts=tuple(item.effort for item in option.supported_reasoning_efforts),
         default_reasoning_effort=option.default_reasoning_effort,
     )
-    # A bounded adoption of already-certified revision 14 keeps current Codex
-    # sessions and bindings byte-for-byte unchanged. Changed metadata never
-    # reuses that identity or mutates its certificate.
-    try:
-        legacy = store.get_agentic_profile_definition(profile.definition_id, profile.revision)
-        certificate = store.get_capability_certificate(legacy.capability_certificate_id)
-    except ProviderNotFoundError:
-        pass
-    else:
-        if (
-            not legacy.native_model_catalog_digest
-            and certificate.model_revision == model.model_revision
-            and certificate.model_revision_policy == model.revision_policy
-            and certificate.certified_reasoning_efforts == model.reasoning_efforts
-            and certificate.default_reasoning_effort == model.default_reasoning_effort
-        ):
-            return legacy
     revision = f"{profile.revision}.{canonical_digest((profile.revision, model.digest))}"
     return replace(
-        profile, revision=revision,
-        capability_certificate_id=f"capability-certificate:{profile.definition_id}:{revision}",
+        profile,
+        revision=revision,
         model_revision=model.model_revision, model_revision_policy=model.revision_policy,
+        reasoning_efforts=model.reasoning_efforts,
+        default_reasoning_effort=model.default_reasoning_effort,
         native_model_catalog_digest=model.digest,
     )
 

@@ -31,7 +31,6 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
       workspace_profile_binding_id: "binding-openrouter",
       agentic_containment_status: "NO-GO",
       agentic_containment_reason: "remote_agentic_attestation_unavailable",
-      agentic_certificate_status: "revoked",
       agentic_data_destination: {
         provider_id: "openrouter",
         endpoint_id: "openrouter-chat-completions-v1",
@@ -55,13 +54,6 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
           revision: null,
           updated_at: null,
         },
-      },
-      agentic_certificate_posture: {
-        certificate_id: "certificate-openrouter-12",
-        effective_status: "revoked",
-        eligibility: "ineligible",
-        expires_at: "2026-09-30T00:00:00Z",
-        pinned_evidence_digest: "evidence-digest",
       },
     };
     container = document.createElement("div");
@@ -95,8 +87,7 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
     expect(governance?.textContent).toContain("openrouter → relace/fp4");
     expect(governance?.title).toContain("remote-agentic-contained@2");
     expect(governance?.title).toContain("data collection deny · ZDR required");
-    expect(governance?.title).toContain("certificate revoked");
-    expect(governance?.title).toContain("certificate eligibility ineligible");
+    expect(governance?.title).toContain("destination openrouter → relace/fp4");
     expect(onSelectProvider).not.toHaveBeenCalled();
   });
 
@@ -104,7 +95,7 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
     const provider: ProviderItem = {
       provider_id: "session:binding-google",
       label: "Google agentic",
-      description: "Certified fixture profile",
+      description: "Runtime profile fixture",
       status: "available",
       default_model_family: "gemini",
       workspace_profile_binding_id: "binding-google",
@@ -149,13 +140,6 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
           collection: "deny",
           require_zdr: true,
         },
-        certificate: {
-          certificate_id: "certificate-google-1",
-          suite_id: "google-agentic-certification",
-          suite_version: "9",
-          expires_at: "2026-09-30T00:00:00Z",
-        },
-        tcb: { posture: "active" },
       },
     };
     container = document.createElement("div");
@@ -180,7 +164,6 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
     const governance = container.querySelector<HTMLElement>(".chatapp-agentic-profile-chip");
     expect(governance?.title).toContain("snapshot effective-snapshot-digest");
     expect(governance?.title).toContain("filesystem read yes / write no");
-    expect(governance?.title).toContain("suite google-agentic-certification@9");
-    expect(governance?.title).toContain("TCB active");
+    expect(governance?.title).toContain("provider google-ai-studio");
   });
 });

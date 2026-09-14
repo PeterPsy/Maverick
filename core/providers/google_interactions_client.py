@@ -5,12 +5,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 
-import core.providers.google_interactions_diagnostics as google_interactions_diagnostics_module
-import core.providers.google_interactions_models as google_interactions_models_module
-import core.providers.google_interactions_request as google_interactions_request_module
-import core.providers.google_interactions_state as google_interactions_state_module
-import core.providers.google_interactions_stream as google_interactions_stream_module
-import core.providers.google_interactions_transport as google_interactions_transport_module
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelRequest,
@@ -130,17 +124,6 @@ class GoogleInteractionsAgenticClient:
                 "Google Interactions runtime routing config is unsupported."
             )
 
-    @property
-    def artifact_components(self) -> tuple[object, ...]:
-        """Expose codec and transport modules included in capability evidence."""
-        return (
-            google_interactions_models_module,
-            google_interactions_diagnostics_module,
-            google_interactions_request_module,
-            google_interactions_state_module,
-            google_interactions_stream_module,
-            google_interactions_transport_module,
-        )
 
     async def create_response(
         self,
@@ -159,13 +142,13 @@ class GoogleInteractionsAgenticClient:
                 self.routing_constraint is not None
                 and request.routing_constraint != self.routing_constraint
             ):
-                raise GoogleInteractionsProtocolError("provider_routing_not_certified")
+                raise GoogleInteractionsProtocolError("provider_routing_not_allowed")
             if credential is None:
                 raise GoogleInteractionsProtocolError("provider_authentication_failed")
             try:
                 self._validate_routing_constraint(request.routing_constraint)
             except ValueError as error:
-                raise GoogleInteractionsProtocolError("provider_routing_not_certified") from error
+                raise GoogleInteractionsProtocolError("provider_routing_not_allowed") from error
             state = decode_google_interaction_state(
                 request.provider_private_state,
                 default_mode=self.state_mode,

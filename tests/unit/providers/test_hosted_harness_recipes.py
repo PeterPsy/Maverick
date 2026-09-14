@@ -13,6 +13,7 @@ from core.providers.agentic_protocol import (
     HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.google_agentic_profile import (
+    google_agentic_capabilities,
     google_agentic_preview_policy,
     google_interactions_routing_constraint,
 )
@@ -34,6 +35,7 @@ from core.providers.openrouter_agentic_catalog import (
 )
 from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError
 from core.providers.openrouter_agentic_profile import (
+    openrouter_agentic_capabilities,
     openrouter_agentic_preview_policy,
     openrouter_agentic_routing_constraint,
 )
@@ -268,12 +270,10 @@ def _binding(recipe):
         profile_definition_revision="1",
         workspace_binding_id="binding-recipe",
         workspace_binding_revision=1,
-        capability_certificate_id="certificate-recipe",
-        certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
         adapter_version=protocol_adapter.runtime_adapter_version,
-        adapter_artifact_digest="b" * 64,
+        adapter_identity_digest="b" * 64,
         model_provider_id=recipe.model_provider_id,
         model_id=recipe.model_id,
         model_revision=recipe.model_revision,
@@ -283,8 +283,13 @@ def _binding(recipe):
         routing_constraint=routing,
         credential_binding_id="credential-recipe",
         reasoning_effort=recipe.support_flags.reasoning_efforts[-1],
-        certified_reasoning_efforts=recipe.support_flags.reasoning_efforts,
+        reasoning_efforts=recipe.support_flags.reasoning_efforts,
         default_reasoning_effort=recipe.support_flags.reasoning_efforts[-1],
+        capabilities=(
+            google_agentic_capabilities()
+            if recipe.model_provider_id == "google-ai-studio"
+            else openrouter_agentic_capabilities()
+        ),
         execution_mode="full-access",
         profile_policy_ceiling=policy,
         workspace_policy_ceiling=policy,

@@ -111,16 +111,12 @@ class HostedTextProfilesTest(unittest.TestCase):
             now=NOW,
         )
 
-    def test_profile_status_and_certificate_are_text_only_records(self) -> None:
+    def test_profile_status_is_a_text_only_record(self) -> None:
         binding = self.pin()
 
         self.assertEqual(binding.profile.execution_family, "hosted_text")
         self.assertEqual(binding.status.status, "available")
-        self.assertEqual(binding.certificate.certificate_kind, "hosted_text_capability")
-        self.assertFalse(binding.certificate.workspace_tools)
-        self.assertFalse(binding.certificate.action_loop)
-        self.assertFalse(binding.certificate.workspace_actions)
-        self.assertNotIn("capability-certificate:", binding.certificate.certificate_id)
+        self.assertFalse(hasattr(binding, "certificate"))
 
     def test_binding_round_trips_and_rejects_profile_tampering(self) -> None:
         binding = self.pin()
@@ -128,7 +124,7 @@ class HostedTextProfilesTest(unittest.TestCase):
 
         self.assertEqual(hosted_text_binding_from_document(document), binding)
         document["profile"]["model_id"] = "silently-changed-model"
-        with self.assertRaisesRegex(ValueError, "identity is invalid"):
+        with self.assertRaisesRegex(ValueError, "digest is invalid"):
             hosted_text_binding_from_document(document)
 
     def test_session_pin_creates_no_agent_provider_state_or_step_journal(self) -> None:
@@ -154,9 +150,7 @@ class HostedTextProfilesTest(unittest.TestCase):
             payload["hosted_text_profile"]["message"],
             "No workspace tools or actions.",
         )
-        self.assertFalse(
-            payload["hosted_text_profile"]["certificate"]["workspace_actions"]
-        )
+        self.assertNotIn("certificate", payload["hosted_text_profile"])
         self.assertEqual(
             self.runtime_store.list_provider_step_journals(
                 session_id=session.session_id

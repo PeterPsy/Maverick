@@ -6,8 +6,8 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_models import codex_runtime_policy
-from core.providers.capability_models import RuntimeCapabilitySet
-from core.providers.errors import CapabilityCertificateError
+from core.providers.agentic_models import RuntimeCapabilitySet
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
@@ -131,37 +131,20 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(
-            CapabilityCertificateError,
+            AgenticRuntimeError,
             "full_workspace_execution_family_contract_required",
         ):
-            validate_full_workspace_contract_claim(
-                profile=incomplete,
-                certificate=incomplete,
-            )
-        validate_full_workspace_contract_claim(
-            profile=candidate,
-            certificate=candidate,
-        )
+            validate_full_workspace_contract_claim(profile=incomplete)
+        validate_full_workspace_contract_claim(profile=candidate)
         claimed_candidate = SimpleNamespace(
             full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
             execution_family=MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
         )
         with self.assertRaisesRegex(
-            CapabilityCertificateError,
+            AgenticRuntimeError,
             "full_workspace_candidate_contract_forbidden",
         ):
-            validate_full_workspace_contract_claim(
-                profile=claimed_candidate,
-                certificate=claimed_candidate,
-            )
-        with self.assertRaisesRegex(
-            CapabilityCertificateError,
-            "full_workspace_execution_family_mismatch",
-        ):
-            validate_full_workspace_contract_claim(
-                profile=candidate,
-                certificate=incomplete,
-            )
+            validate_full_workspace_contract_claim(profile=claimed_candidate)
 
     def test_complete_requires_every_behavior_probe(self) -> None:
         report = inspect_full_workspace_contract(
@@ -216,7 +199,6 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
         recipe = GOOGLE_GOVERNED_WORKSPACE_RECIPE
         profile = SimpleNamespace(
             full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-            policy_ceiling=policy,
             execution_family="maverick_agent",
             harness_recipe_id=recipe.recipe_id,
             harness_recipe_revision=recipe.revision,
@@ -227,11 +209,8 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
             ),
             tool_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
             context_policy=recipe.context_policy,
-        )
-        certificate = SimpleNamespace(
-            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-            execution_family="maverick_agent",
-            certified_capabilities=capabilities,
+            capabilities=capabilities,
+            policy_ceiling=policy,
         )
 
         self.assertTrue(
@@ -240,12 +219,9 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
                 policy=policy,
             ).complete
         )
-        validate_full_workspace_contract_claim(
-            profile=profile,
-            certificate=certificate,
-        )
+        validate_full_workspace_contract_claim(profile=profile)
         with self.assertRaisesRegex(
-            CapabilityCertificateError,
+            AgenticRuntimeError,
             "full_workspace_contract_live_authority_incomplete",
         ):
             validate_full_workspace_live_authority(
@@ -281,20 +257,18 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
                 )
         for missing in ("cli", "filesystem_write", "confirmations"):
             with self.subTest(missing=missing), self.assertRaisesRegex(
-                CapabilityCertificateError,
+                AgenticRuntimeError,
                 "full_workspace_contract_incomplete",
             ):
                 validate_full_workspace_contract_claim(
-                    profile=profile,
-                    certificate=SimpleNamespace(
-                        full_workspace_contract_revision=(
-                            FULL_WORKSPACE_CONTRACT_REVISION
-                        ),
-                        execution_family="maverick_agent",
-                        certified_capabilities=replace(
-                            capabilities,
-                            **{missing: False},
-                        ),
+                    profile=SimpleNamespace(
+                        **{
+                            **vars(profile),
+                            "capabilities": replace(
+                                capabilities,
+                                **{missing: False},
+                            ),
+                        }
                     ),
                 )
 

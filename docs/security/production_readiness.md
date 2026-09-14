@@ -36,217 +36,55 @@ Unacceptable current uses:
 - third-party app execution without review
 - remote agentic model profiles with real workspace, personal, customer, or regulated data
 
-## Agentic Multimodel Preview Gate
+## Agentic Multi-Model Runtime Gate
 
-ADR-0010 approves the architecture and implementation sequence for hosted
-agentic model providers. It does not close any launch blocker. Until a separate
-production security gate is approved, remote agentic profiles must remain
-disabled by default, explicitly marked preview, and blocked by the independent
-server-owned availability/admission boundary. P0 material containment is
-recorded in the agentic tasklist; P1 implements the security boundary, P2
-implements journaled recovery, P3 implements governed finalization, P4
-implements the reviewed semantic/full-workspace/provider closure, and the P6
-source candidate implements the server-owned attestation/dispatch boundary.
-`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` is therefore true in source, but the
-hosted-runtime and provider-specific kill switches still default off and no
-remote binding, profile, or certificate is enabled. Current profile policy
-lists only Core-classified public content. The fake class is not a declaration shortcut:
-it requires exact resource-derived classification, an active scoped
-workspace-matching attestation, and an allowing policy. No current contained
-profile permits it.
-Capability certificates attest only to one exact
-engine/adapter/provider/model/protocol/upstream/TCB combination and evidence
-suite; they are not a platform production-safety certificate.
+ADR-0010 defines direct agentic profiles for native and hosted runtimes. Removing
+the retired issued-capability lifecycle does not close any production launch
+blocker. Hosted agentic activation remains an explicit administrator decision
+and continues to require credentials, workspace policy, containment, sandbox,
+egress, tool-effect, recovery and monitoring controls.
 
-Core now persists certificate evidence/certificates as immutable control-plane
-records, keeps revocation in a CAS status record, and binds them to the one
-deterministic code-owned certified-execution TCB. Signing, verification,
-publication, execution binding, and live status recompute/compare the same
-digest; drift or a legacy missing identity fails closed. Effective authority is
-one intersection of certificate, profile, workspace, actor, live catalog,
-feature flags, and provider health and is reused by admission, dispatch, API,
-Chat, and Settings. This closes the P1-P4 repository implementation slices and
-implements the P6 source admission/dispatch slice; it does not relax containment
-or any platform launch blocker.
+The OpenRouter GLM profile is published as `available` so a configured workspace
+can use it. It is not silently enabled for every workspace and is never selected
+without an active workspace binding. Google API activation is independent and is
+not required for the OpenRouter path.
 
-Manifest v29 makes the known transitive boundary executable through six static
-import contracts and adds the exact executable roots for every built-in app
-CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
-input-context projection closure, continuation/recovery, app-entrypoint, audit,
-usage, and audited app-local execution dependencies must all resolve to hashed
-artifacts; a newly reached local module or app-code drift outside the manifest
-prevents authority or TCB identity calculation.
+Core computes one effective authority intersection from the direct profile,
+workspace binding, actor policy, credential availability, model/runtime health,
+feature flags, execution mode, routing constraint, egress/data policy and live
+tool authorization. This calculation is reused by admission, dispatch, API,
+Chat and Settings. Mutable browser state cannot promote it.
 
-Hosted adapter 42 and the Full Workspace result contract
-`codex-baseline-v20` are bound by TCB manifest v36. Google revision 51 and
-OpenRouter revision 50 bind provider-config revision 2 and atomically claim that
-contract and the `maverick_agent` family because the executable result gate
-reports all 24 required behaviors:
-16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
-inter-agent workflow, and seven security probes. Their exact profile policies
-retain the required `cli`, `mcp`, `app-interface`, and `core-capability`
-surfaces, and a public-resolver fixture proves complete live authority. The gate
-caches only the complete successful result; transient, empty, and partial probe
-evidence remains fail-closed and retryable.
-Their profile, certificate, and execution-binding contract also fixes the exact
-provider-config id/revision/digest and protocol-adapter id/version. Runtime
-composition rejects endpoint, route/upstream/model, or config-owned accounting
-drift before publication or dispatch. These revisions remain uncertified,
-unbound, contained, and unavailable pending a fresh signed provider run.
-Opaque Core filesystem, instruction, process, discovery, artifact, certified
-inter-agent, and compactor identities are excluded from marker scanning only by
-typed projections bound to the full result payload. Every path, content/output,
-description, and arbitrary external result value remains on the conservative
-PAN/secret scan surface.
-The gate includes a production-composed inter-agent CLI-create/MCP-wait workflow
-whose operation-specific effects and safe public projections omit all message,
-prompt, event, participant-output, final-answer, label, and cleanup content. Its
-seven negative behaviors cover
-sensitive raw/base64/chunked filesystem marker narrowing, revoke-then-rebuild
-filesystem lineage, delayed tool-result egress after revocation,
-post-preflight provider transport, revocation between two provider events,
-revocation during a real overlay commit, and immutable workspace snapshots in
-both shell and managed processes. The bounded descriptor-confined staging copy
-omits every root or nested `.git` component and never exposes the live workspace
-namespace. Concurrent post-spawn create and rename probes cover read-only and
-mutation-overlay modes. The direct filesystem boundary continues to reject the
-same metadata paths.
-Tool records and provider-state generations
-retain exact mutable-authority id/revision/digest lineage. After endpoint
-preflight, Core refreshes complete certificate, binding, feature, actor, health,
-policy, Full Workspace, classification, and credential authority before commit,
-then runs the same guard in the task that opens and first advances the lazy
-transport. At each boundary the prepared request's remote classes, exact catalog,
-surface kinds, and filesystem/shell flags are checked against the policy read
-after the authority refresh. Core also compares the prepared semantic
-projection with the freshly policy-narrowed authority, so app references,
-skills, and runtime-capability blocks cannot bypass a tool-less revalidation.
-Tool-call or cumulative tool-result-byte exhaustion closes the catalog; a
-last-mile tightening releases an uncommitted reservation and rebuilds
-finalization without tools, while a later lazy-open race is denied before
-egress. Every later provider-stream advance uses the cheap
-mutable-authority/TCB metadata, classification, credential, policy, and deadline
-fence. Runtime-public
-issue/revoke state is accepted only after its
-pending audit and classification CAS are terminalized coherently; a CAS loss is
-never recorded as success. Raw filesystem bytes are scanned before base64 and
-the complete-resource class is retained across chunks. Shell/process overlay
-batches revalidate before and after materialization and roll back on drift.
-Every built-in app CLI and MCP descriptor now carries a conservative static
-effect class; mixed operation runners also carry an exact argument-discriminator
-map whose missing, malformed, or unknown value resolves to `unclassified`.
-Hosted reads require the exact platform source, descriptor bytes, and
-executable-closure digest recorded in Core-owned audit revision
-`2026-09-03-p4-builtin-effects-execution-v3` and the certified TCB;
-Core recalculates them at dispatch before the effect boundary. Workspace-local,
-external, or drifted metadata/code cannot self-authorize. Production-composed
-Storage probes discover and execute real
-read-only CLI/MCP operations. Website Studio preview construction and document
-caching are mutating, and state snapshots prove every remaining declared read
-leaves its SQLite database and files unchanged. Other mutating and destructive
-app operations remain denied before effect unless Core can supply the certified
-result guarantee.
-The profile, certificate, execution binding, provider request, recipe, and
-authority snapshot also bind `model_revision` and its policy. Google uses an
-exact catalog revision and compares the live `version`; OpenRouter binds the
-exact public-catalog resolved model revision, supported `xhigh`/`high`
-reasoning metadata, and default effort while retaining its exact
-endpoint/upstream/ZDR catalog checks. A policy or revision mismatch fails before
-execution.
-Those definitions remain uncertified, unbound, contained previews; the local
-claim is not live-provider evidence or launch authorization. The adapter places
-all provider-bound context in semantic-envelope schema v1/compiler revision 10,
-materializes scoped instructions through the confined filesystem, requires
-commit-bound instruction digests for direct mutations, and uses rollback-safe
-batch COW overlays for shell/process effects. Terminal process polling is
-mutating/non-retry-safe. Content replacements preserve mode, ownership,
-ACL/xattrs, and exact file atime/mtime. Every pre-image remains descriptor-pinned
-and is checked against its complete metadata/xattr snapshot, so a later metadata
-race causes full rollback without losing the concurrent change. Metadata-only
-directory/root effects and hardlinks are rejected rather than committed with
-altered semantics.
+Hosted requests retain these enforcement properties:
 
-Direct replacement/edit/patch now clones the existing mode, ownership, and
-ACL/xattrs before exchange and propagates exact pre-image taint to the
-post-image for version-bound read-after-write. The authenticated same-session
-mutation result preserves the exact binding across hosted orchestrator rebuilds;
-move rebinds that taint to the destination. Failed writes remove empty parents
-they created, and move validates the exact source before it can create
-destination parents. Skill catalog and semantic materialization retain the
-lexical selection identity and reject every symlink component.
+- provider credentials remain Core secrets;
+- endpoint, model, upstream and fallback policy are pinned by the profile;
+- all content receives provenance/classification and an egress decision;
+- provider-private state remains encrypted and absent from public events;
+- tool proposals are journaled before effect and deduplicated by provider call
+  identity;
+- mutating/destructive calls follow confirmation and effect policy;
+- request, result, cost, output and deadline budgets are fail closed;
+- cancellation, restart recovery and uncertain effects reach deterministic
+  public states;
+- authority is refreshed before network submission and every side effect.
 
-Production bootstrap installs a Core-owned content classifier and atomic
-turn-manifest writer for prompt, instruction, reference metadata, and each
-governed-context source chunk; composer ids cannot select a class. Marker
-detection can narrow exact bytes but marker absence remains `unclassified`
-unless an operator-issued, CAS-revisioned runtime-public policy authorizes Core
-to classify the exact identity/revision/digest. Admission revalidates the
-server-owned policy digest and revocation state. Denied bytes stay private
-behind a call-paired public error. Core-certified CLI/MCP result declarations
-may supply explicit authority, while app declarations cannot. Mutating
-shell/process output is classified from the exact private-overlay result before
-commit and the overlay is discarded on denial. Composite attachment metadata
-is classified separately and restrictively joined with the file observation.
-Each workspace reference carries a server-observed identity/revision/digest and
-required encoding that Core injects into every matching filesystem read,
-including its first chunk; skills export exact
-classified `SKILL.md` bytes, and every semantic class is bound to the exact
-projected digest. The runtime journals distinct source/projection evidence.
-Exact app-reference observations still resolve through revisioned workspace
-classification records.
+Core-owned base tool schemas require the reviewed schema marker. Dynamic
+CLI/MCP/app tools use discovery/invocation wrappers and are revalidated against
+live app bindings, actor policy, effect declarations, executable closure and
+result classification. This tool review boundary is separate from provider
+admission and has no renewal or expiry behavior.
 
-Large artifact projections hash their provider-visible bytes while retaining
-the original taint. External cancellation and COW commit share one linearization
-gate, and every synchronous CLI/MCP/Core worker belongs to requested hosted turn
-quiescence. Adapter close, explicit session termination, and idle reap finalize
-managed-process registries and durable records; termination keeps handles owned,
-signals known leaders, and repeatedly sweeps post-SIGTERM descendants before
-release. Complete-request pressure can trigger one forced history compaction
-below the private-state-only threshold. These are repository safety invariants,
-not certification or remote-release approval.
+Runtime-public classification policy and workspace declarations remain
+operator-owned, CAS-revisioned and revocable. App/client declarations never
+classify data. Unknown or mismatched data stays unclassified and cannot egress to
+a remote model unless current policy explicitly permits it.
 
-The runtime now also separates actor-attributed CAS workspace attestation,
-exact resource classification, and per-block fail-closed egress decisions.
-Canonical provenance/trust/data-class joins, certified Core-only schemas, and
-descriptor-relative race-safe filesystem observations prevent client promotion,
-silent schema omission, and path-race classification. Provider-private/tool
-payloads remain in restart-safe integrity-bound encrypted session storage;
-public state retains only redaction-safe source digests/classes/trust, effective
-class, codec/request identity, and turn generation. The shared hosted loop
-passes deterministic
-fixture-provider coverage for streaming, complete provider-call accounting,
-provider-step CAS/WAL parity, bounded sequential tools, persisted confirmation,
-staged-state pairing, cancellation, crash/restart deduplication, terminal
-outages, mid-step revocation, egress drift, prompt-injection containment,
-explicit private-state quota/integrity failures, child-agent binding isolation,
-productive lifecycle recovery, cross-turn pairing denial, terminal-limit
-containment, containment-first fault injection, and private final-output outbox
-replay with one provider request and one terminal event identity. Phase-3
-fixtures additionally prove separate restart-safe step/tool accounting,
-step/output/cost/deadline reserves, tool-less Google/OpenRouter final payloads,
-complete-terminal-request cost coverage, staged request-specific preflight with
-tool-less fallback, deadline-fenced slow handlers and result persistence,
-persisted execution leases checked atomically by the terminal success CAS,
-request-scoped OpenRouter finalization,
-whitespace rejection, journaled `budget_denied` final calls, and no more than
-one finalization recovery. Phase-4 fixtures add production-composed
-classification/continuation, recipe/catalog identity, independent context
-reserve, pairing-safe semantic compaction, bounded result artifacts,
-UTF-8/base64 attachment references, request-scoped OpenRouter authority, and
-exact live provider preflight before egress commit. The fixture suite also
-proves attachment-only admission, composite-taint denial,
-multi-file rollback after late instruction or metadata races,
-unsupported-directory/hardlink rejection, read-modify-write timestamp fidelity,
-production app-reference classification, and non-retry-safe terminal process
-commit. They also cover production bootstrap input, safe result withholding,
-exact artifact projection digests, late-effect cancellation, managed-process
-close, and below-trigger full-request compaction. The operator
-runbook documents canary,
-observation, incident
-recovery, and control-plane-first rollback. These controls do not close the
-production gate: provider-specific live and behavioral evidence, onboarding,
-leakage review, canary, production
-key management, and the platform blockers above remain open.
+Operational testing, leakage review, canary monitoring and rollback gates remain
+required for production use. Test artifacts are evidence for reviewers, not
+runtime authority. Failures must be repaired in the responsible profile,
+adapter, provider config, credential or policy rather than masked by extending a
+date.
 
 ## Design Studio OpenDesign Gate
 

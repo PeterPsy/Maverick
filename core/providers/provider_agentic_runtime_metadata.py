@@ -16,7 +16,7 @@ def build_hosted_agentic_runtime_definition(timestamp: datetime) -> ProviderDefi
     return ProviderDefinition(
         provider_id="maverick-tool-loop",
         label="Maverick Hosted Tool Loop",
-        description="Core-owned agentic runtime engine for certified hosted model APIs.",
+        description="Core-owned agentic runtime engine for hosted model APIs.",
         kind="runtime_backend",
         provider_role="runtime_engine",
         status="active",

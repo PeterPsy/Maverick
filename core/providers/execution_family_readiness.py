@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.providers.certified_execution_tcb import is_exact_codex_identity
-from core.providers.errors import AgenticProfileError, CapabilityCertificateError, ProviderNotFoundError
+from core.providers.errors import AgenticProfileError, ProviderNotFoundError
 from core.providers.execution_families import (
     MAVERICK_AGENT_EXECUTION_FAMILY,
     NATIVE_AGENT_EXECUTION_FAMILY,
     effective_agentic_execution_family,
+    is_exact_codex_identity,
 )
 from core.providers.native_agent_catalog import (
     require_native_agent_model_available,
@@ -43,7 +43,6 @@ class AgenticFamilyReadiness:
 def inspect_agentic_family_readiness(
     *,
     definition,
-    certificate,
     binding,
     registry,
     store=None,
@@ -59,7 +58,6 @@ def inspect_agentic_family_readiness(
     if family == NATIVE_AGENT_EXECUTION_FAMILY:
         return _native_readiness(
             definition=definition,
-            certificate=certificate,
             binding=binding,
             registry=registry,
             store=store,
@@ -67,13 +65,12 @@ def inspect_agentic_family_readiness(
     if family == MAVERICK_AGENT_EXECUTION_FAMILY:
         return _maverick_readiness(
             definition=definition,
-            certificate=certificate,
             binding=binding,
         )
     return _incomplete(family, "execution_family_unclassified")
 
 
-def _native_readiness(*, definition, certificate, binding, registry, store) -> AgenticFamilyReadiness:
+def _native_readiness(*, definition, binding, registry, store) -> AgenticFamilyReadiness:
     try:
         installation = registry.get_native_agent_installation(
             definition.runtime_engine_id
@@ -85,10 +82,9 @@ def _native_readiness(*, definition, certificate, binding, registry, store) -> A
         )
     manifest = installation.manifest
     recipe = installation.recipe
-    full_revision = installation.certificate.full_workspace_contract_revision
+    full_revision = installation.full_workspace_contract_revision
     identity_matches = (
-        installation.certification_configured
-        and manifest.runtime_engine_id == definition.runtime_engine_id
+        manifest.runtime_engine_id == definition.runtime_engine_id
         and manifest.adapter_id == definition.adapter_id
         and definition.adapter_version_constraint == f"=={manifest.adapter_version}"
         and manifest.protocol_id == definition.provider_protocol
@@ -112,13 +108,8 @@ def _native_readiness(*, definition, certificate, binding, registry, store) -> A
         if store is not None and getattr(binding, "enabled", False):
             require_lineage_admission(store, binding)
         require_native_model_revision_transport(definition)
-        require_native_agent_model_available(registry, definition, certificate=certificate)
-        if certificate is None or store is None:
-            return _native_result(installation, "native_agent_connection_certificate_missing")
-        from core.providers.native_agent_certificates import validate_native_connection_certificate
-
-        validate_native_connection_certificate(store, certificate, installation=installation)
-    except (AgenticProfileError, CapabilityCertificateError) as error:
+        require_native_agent_model_available(registry, definition)
+    except AgenticProfileError as error:
         return _native_result(installation, str(error))
     legacy_codex = is_exact_codex_identity(
         runtime_engine_id=definition.runtime_engine_id,
@@ -130,7 +121,6 @@ def _native_readiness(*, definition, certificate, binding, registry, store) -> A
     if not legacy_codex:
         if not _native_profile_identity_matches(
             definition=definition,
-            certificate=certificate,
             installation=installation,
         ):
             return _native_result(
@@ -138,7 +128,7 @@ def _native_readiness(*, definition, certificate, binding, registry, store) -> A
                 "native_agent_profile_identity_incomplete",
             )
         if not inspect_full_workspace_contract(
-            capabilities=certificate.certified_capabilities,
+            capabilities=definition.capabilities,
             policy=policy,
         ).complete:
             return _native_result(installation, "full_workspace_contract_incomplete")
@@ -147,11 +137,9 @@ def _native_readiness(*, definition, certificate, binding, registry, store) -> A
     return _native_result(installation, None)
 
 
-def _native_profile_identity_matches(*, definition, certificate, installation) -> bool:
-    if certificate is None:
-        return False
+def _native_profile_identity_matches(*, definition, installation) -> bool:
     recipe = installation.recipe
-    full_revision = installation.certificate.full_workspace_contract_revision
+    full_revision = installation.full_workspace_contract_revision
     expected = (
         NATIVE_AGENT_EXECUTION_FAMILY,
         full_revision,
@@ -166,34 +154,7 @@ def _native_profile_identity_matches(*, definition, certificate, installation) -
         definition.harness_recipe_revision,
         definition.harness_recipe_digest,
     )
-    certificate_identity = (
-        certificate.execution_family,
-        certificate.full_workspace_contract_revision,
-        certificate.harness_recipe_id,
-        certificate.harness_recipe_revision,
-        certificate.harness_recipe_digest,
-    )
-    certificate_execution_identity = (
-        certificate.runtime_engine_id,
-        certificate.adapter_id,
-        certificate.adapter_version,
-        certificate.model_provider_id,
-        certificate.model_id,
-        certificate.provider_protocol,
-    )
-    expected_execution_identity = (
-        definition.runtime_engine_id,
-        installation.manifest.adapter_id,
-        installation.manifest.adapter_version,
-        definition.model_provider_id,
-        definition.model_id,
-        installation.manifest.protocol_id,
-    )
-    return (
-        definition_identity == expected
-        and certificate_identity == expected
-        and certificate_execution_identity == expected_execution_identity
-    )
+    return definition_identity == expected
 
 
 def _native_result(installation, reason_code: str | None) -> AgenticFamilyReadiness:
@@ -202,7 +163,7 @@ def _native_result(installation, reason_code: str | None) -> AgenticFamilyReadin
         execution_family=NATIVE_AGENT_EXECUTION_FAMILY,
         contract_status="complete" if reason_code is None else "incomplete",
         full_workspace_contract_revision=(
-            installation.certificate.full_workspace_contract_revision
+            installation.full_workspace_contract_revision
         ),
         harness_recipe_id=recipe.recipe_id,
         harness_recipe_revision=recipe.revision,
@@ -212,7 +173,7 @@ def _native_result(installation, reason_code: str | None) -> AgenticFamilyReadin
     )
 
 
-def _maverick_readiness(*, definition, certificate, binding) -> AgenticFamilyReadiness:
+def _maverick_readiness(*, definition, binding) -> AgenticFamilyReadiness:
     identity = (
         definition.full_workspace_contract_revision,
         definition.harness_recipe_id,
@@ -225,24 +186,8 @@ def _maverick_readiness(*, definition, certificate, binding) -> AgenticFamilyRea
         definition.protocol_adapter_id,
         definition.protocol_adapter_version,
     )
-    if certificate is None:
-        return _maverick_result(definition, "maverick_agent_certificate_missing")
-    certificate_identity = (
-        certificate.full_workspace_contract_revision,
-        certificate.harness_recipe_id,
-        certificate.harness_recipe_revision,
-        certificate.harness_recipe_digest,
-        certificate.provider_capability_catalog_digest,
-        certificate.provider_config_id,
-        certificate.provider_config_revision,
-        certificate.provider_config_digest,
-        certificate.protocol_adapter_id,
-        certificate.protocol_adapter_version,
-    )
     if (
         definition.execution_family != MAVERICK_AGENT_EXECUTION_FAMILY
-        or certificate.execution_family != MAVERICK_AGENT_EXECUTION_FAMILY
-        or identity != certificate_identity
         or identity[0] != FULL_WORKSPACE_CONTRACT_REVISION
         or not all(str(value or "").strip() for value in identity)
         or len(definition.provider_config_digest) != 64
@@ -250,7 +195,7 @@ def _maverick_readiness(*, definition, certificate, binding) -> AgenticFamilyRea
         return _maverick_result(definition, "maverick_agent_contract_incomplete")
     policy = _effective_binding_policy(definition, binding)
     report = inspect_full_workspace_contract(
-        capabilities=certificate.certified_capabilities,
+        capabilities=definition.capabilities,
         policy=policy,
     )
     if not report.complete:

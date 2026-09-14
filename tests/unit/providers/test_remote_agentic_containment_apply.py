@@ -60,13 +60,9 @@ class RemoteAgenticContainmentApplyTest(RemoteAgenticContainmentFixture, unittes
             self.remote_definition.definition_id,
             self.remote_definition.revision,
         )
-        certificate_status = self.provider_store.get_capability_certificate_status(
-            self.remote_certificate.certificate_id
-        )
         session = self.runtime_store.get_session(self.remote_session.session_id)
         self.assertFalse(binding.enabled)
         self.assertEqual(profile_status.rollout_status, "preview")
-        self.assertEqual(certificate_status.status, "active")
         self.assertEqual(session.status, "running")
         self.assertEqual(
             raised.exception.reason_code,
@@ -85,7 +81,6 @@ class RemoteAgenticContainmentApplyTest(RemoteAgenticContainmentFixture, unittes
                 "plan_digest": reviewed.plan_digest,
                 "bindings_disabled": 1,
                 "profiles_suspended": 0,
-                "certificates_revoked": 0,
                 "sessions_quarantined": 0,
                 "partial_apply": True,
                 "safe_to_retry": False,
@@ -185,7 +180,6 @@ class RemoteAgenticContainmentApplyTest(RemoteAgenticContainmentFixture, unittes
         )
         self.assertEqual(audit.payload["bindings_disabled"], 1)
         self.assertEqual(audit.payload["profiles_suspended"], 1)
-        self.assertEqual(audit.payload["certificates_revoked"], 1)
         self.assertEqual(audit.payload["sessions_quarantined"], 0)
         self.assertTrue(audit.payload["partial_apply"])
         self.assertFalse(audit.payload["safe_to_retry"])

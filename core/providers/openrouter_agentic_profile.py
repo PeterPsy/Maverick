@@ -1,4 +1,4 @@
-"""Immutable full-workspace profile for certified OpenRouter execution."""
+"""Immutable full-workspace profile for OpenRouter execution."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from core.providers.agentic_models import (
     AgenticProfileDefinition,
     AgenticRuntimePolicy,
     RoutingConstraint,
+    RuntimeCapabilitySet,
 )
 from core.providers.agentic_data_policies import (
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
@@ -44,11 +45,31 @@ OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS = tuple(
     )
     for revision in ("1", "2", "3", "4", "5", "6")
 )
-OPENROUTER_CERTIFIED_REASONING_EFFORTS = OPENROUTER_AGENTIC_REASONING_EFFORTS
+OPENROUTER_REASONING_EFFORTS = OPENROUTER_AGENTIC_REASONING_EFFORTS
 OPENROUTER_DEFAULT_REASONING_EFFORT = OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
-OPENROUTER_AGENTIC_CERTIFICATE_ID = (
-    f"capability-certificate:{OPENROUTER_AGENTIC_PROFILE_ID}:{OPENROUTER_AGENTIC_PROFILE_REVISION}"
-)
+
+
+def openrouter_agentic_capabilities() -> RuntimeCapabilitySet:
+    """Capabilities implemented by Maverick's OpenRouter tool loop."""
+    return RuntimeCapabilitySet(
+        streaming=True,
+        tool_orchestration=True,
+        cli=True,
+        mcp=True,
+        skill_catalog=True,
+        filesystem_list=True,
+        filesystem_read=True,
+        filesystem_write=True,
+        shell=True,
+        interrupt=True,
+        same_turn_steering=False,
+        recovery=True,
+        confirmation_resume=True,
+        provider_private_state=True,
+        attachment_modalities=("file",),
+        app_references=True,
+        confirmations=True,
+    )
 
 
 def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
@@ -87,7 +108,7 @@ def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
 
 
 def openrouter_agentic_routing_constraint() -> RoutingConstraint:
-    """Pin every OpenRouter router control used by the certified profile."""
+    """Pin every OpenRouter router control used by the profile."""
     return OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.routing_constraint
 
 
@@ -114,7 +135,9 @@ def openrouter_agentic_preview_publication(
         ),
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
-        capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
+        capabilities=openrouter_agentic_capabilities(),
+        reasoning_efforts=OPENROUTER_REASONING_EFFORTS,
+        default_reasoning_effort=OPENROUTER_DEFAULT_REASONING_EFFORT,
         created_at=timestamp,
         egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
@@ -160,7 +183,7 @@ def ensure_openrouter_agentic_preview_profile(
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish an uncertified Full Workspace preview without enabling a binding."""
+    """Publish a Full Workspace profile without enabling a binding."""
     timestamp = now or datetime.now(tz=UTC)
     validate_maverick_runtime_adapter(OPENROUTER_CHAT_PROTOCOL_ADAPTER, adapter)
     return publish_maverick_agent_profile(

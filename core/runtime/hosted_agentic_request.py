@@ -26,8 +26,8 @@ from core.providers.agentic_protocol import (
     AgenticToolDefinition,
     AgenticToolResult,
 )
-from core.providers.certified_execution_tcb import is_certified_tcb_component
-from core.providers.errors import CapabilityCertificateError
+from core.runtime.tool_schema_review import is_reviewed_tool_schema_component
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedContentClassification,
@@ -712,7 +712,7 @@ class HostedAgenticRequestBuilder:
                 attachments=attachments,
                 app_references=app_references,
             )
-        except CapabilityCertificateError as error:
+        except AgenticRuntimeError as error:
             raise HostedAgenticLoopError(error.reason_code) from error
 
     @staticmethod
@@ -732,10 +732,12 @@ class HostedAgenticRequestBuilder:
             descriptor.schema_owner_kind != "core"
             or descriptor.schema_data_class != "public"
             or descriptor.schema_trust_level != "trusted_platform"
-            or not descriptor.certified_tcb_component
-            or not is_certified_tcb_component(descriptor.certified_tcb_component)
+            or not descriptor.reviewed_schema_component
+            or not is_reviewed_tool_schema_component(
+                descriptor.reviewed_schema_component
+            )
         ):
-            raise HostedAgenticLoopError("tool_schema_not_certified")
+            raise HostedAgenticLoopError("tool_schema_not_reviewed")
 
     def _private_state(
         self,

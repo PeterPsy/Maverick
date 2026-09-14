@@ -9,7 +9,7 @@ function profile(revision: string, options: Partial<AgenticAdminItem> = {}): Age
     model_id: 'gpt-5.6-sol', display_name: 'Codex · gpt-5.6-sol',
     binding: null, selectable: false, enable_eligible: false,
     full_workspace_status: 'unavailable',
-    blocked_reason: 'native_agent_connection_certificate_missing',
+    blocked_reason: 'native_agent_disabled',
     ...options,
   } as AgenticAdminItem;
 }
@@ -50,14 +50,14 @@ describe('Settings agentic models', () => {
     expect(deduplicateAgenticModels([old, latest])).toEqual([latest]);
   });
 
-  it('prefers a certified, enable-eligible profile over a newer broken profile', () => {
-    const certified = profile('8', {
-      definition_id: 'codex:sol-certified',
+  it('prefers an available, enable-eligible profile over a newer broken profile', () => {
+    const available = profile('8', {
+      definition_id: 'codex:sol-available',
       enable_eligible: true,
-      full_workspace_status: 'certified',
+      full_workspace_status: 'available',
     });
     const broken = profile('99', { definition_id: 'codex:sol-broken' });
-    expect(deduplicateAgenticModels([broken, certified])).toEqual([certified]);
+    expect(deduplicateAgenticModels([broken, available])).toEqual([available]);
   });
 
   it('collapses distinct definitions and runtime engines for the same model and category', () => {

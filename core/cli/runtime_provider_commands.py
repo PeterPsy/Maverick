@@ -148,7 +148,7 @@ def runtime_provider_command_specs(
         provider_id = str(arguments.get("provider_id") or "").strip()
         if not provider_id:
             return {"command_id": command_id, "error": "provider_id_required"}
-        if arguments.get("confirmation") != "native-certificate-reviewed":
+        if arguments.get("confirmation") != "native-runtime-reviewed":
             return {
                 "command_id": command_id,
                 "error": "native_activation_confirmation_required",
@@ -169,7 +169,6 @@ def runtime_provider_command_specs(
         return {
             "command_id": command_id,
             "provider": provider_payload(activation.definition),
-            "connection_certificate_id": activation.connection_certificate_id,
             "profile_count": activation.profile_count,
         }
 
@@ -391,7 +390,7 @@ def runtime_provider_command_specs(
                     command_id="core.providers.native.activate",
                     path_segments=["core", "providers", "native", "activate"],
                     description=(
-                        "Activate one already-certified native provider without "
+                        "Activate one reviewed native provider without "
                         "creating a workspace binding."
                     ),
                     owner_id="providers",
@@ -402,7 +401,7 @@ def runtime_provider_command_specs(
                             "provider_id": {"type": "string"},
                             "confirmation": {
                                 "type": "string",
-                                "enum": ["native-certificate-reviewed"],
+                                "enum": ["native-runtime-reviewed"],
                             },
                         },
                         "required": ["provider_id", "confirmation"],

@@ -4,7 +4,11 @@ from dataclasses import replace
 from datetime import UTC, datetime
 import unittest
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.lifecycle_service_sessions import create_child_runtime_session
 from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord
@@ -41,12 +45,10 @@ class ChildExecutionBindingTest(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="workspace-child-fixture",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-child-fixture",
-            certificate_evidence_digest="a" * 64,
             runtime_engine_id="codex",
             adapter_id="codex-app-server",
             adapter_version="1",
-            adapter_artifact_digest="b" * 64,
+            adapter_identity_digest="b" * 64,
             model_provider_id="codex",
             model_id="fake-model",
             provider_protocol="codex-app-server-stdio",
@@ -54,8 +56,9 @@ class ChildExecutionBindingTest(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
             profile_policy_ceiling=policy,
             workspace_policy_ceiling=policy,

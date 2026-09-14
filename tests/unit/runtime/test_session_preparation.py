@@ -4,7 +4,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 import unittest
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.errors import RuntimeProviderStateError, RuntimeTransitionError
 from core.runtime.execution_binding import build_runtime_execution_binding
@@ -61,12 +65,10 @@ class RuntimeSessionPreparationTestCase(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="workspace-binding",
             workspace_binding_revision=1,
-            capability_certificate_id="certificate",
-            certificate_evidence_digest="a" * 64,
             runtime_engine_id="codex",
             adapter_id="codex-app-server",
             adapter_version="1",
-            adapter_artifact_digest="b" * 64,
+            adapter_identity_digest="b" * 64,
             model_provider_id="codex",
             model_id="fake-model",
             provider_protocol="codex-app-server-stdio",
@@ -74,8 +76,9 @@ class RuntimeSessionPreparationTestCase(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
             profile_policy_ceiling=codex_runtime_policy(),
             workspace_policy_ceiling=codex_runtime_policy(),

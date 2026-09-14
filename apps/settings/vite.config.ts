@@ -1,11 +1,12 @@
 import { defineConfig } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
+import { maverickFrontendAssets } from '../../scripts/vite-frontend-assets.mjs';
 
 export default defineConfig({
   root: 'frontend',
   base: '/apps/settings/',
-  plugins: [tailwindcss()],
+  plugins: [tailwindcss(), maverickFrontendAssets()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./frontend/src', import.meta.url))

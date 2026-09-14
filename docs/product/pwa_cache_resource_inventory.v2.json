@@ -590,7 +590,7 @@
       ],
       "resource": "agentic-authority",
       "owner": "core",
-      "read_surface": "capability/certificate/profile/binding/admission/egress/authority/confirmation/revocation APIs",
+      "read_surface": "profile/binding/admission/egress/authority/confirmation/provider-state APIs",
       "canonical_data_class": "host_operational_metadata",
       "provenance": "provider_state",
       "local_persistence_policy": "deny",

@@ -7,15 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from core.providers.agentic_profiles import publish_codex_agentic_profile
-from core.providers.builtin_certification import (
-    ensure_codex_connection_certificate,
-    ensure_codex_preview_certificate,
-)
-from core.providers.errors import (
-    CapabilityCertificateError,
-    ProviderNotFoundError,
-)
-from core.providers.native_agent_certificates import validate_native_connection_certificate
+from core.providers.errors import ProviderNotFoundError
 from core.providers.native_agent_discovery import (
     discover_antigravity_native_catalog,
     discover_codex_native_catalog,
@@ -46,8 +38,6 @@ def refresh_codex_native_catalog(
         )
         if snapshot is None:
             registry.clear_native_agent_catalog("codex", "codex")
-            if store is not None:
-                _adopt_existing_codex_connection(store, registry)
             return False
         definition = registry.get_provider_definition("codex")
         ids = {model.model_id for model in snapshot.models}
@@ -65,7 +55,6 @@ def refresh_codex_native_catalog(
         if registry._native_catalog_reconciliations.get(("codex", "codex")) == key:
             return True
         try:
-            _adopt_existing_codex_connection(store, registry)
             reconcile_codex_native_models(store, registry, definition, now=now)
             store.save_provider_definition(definition)
         except Exception:
@@ -81,7 +70,7 @@ def refresh_antigravity_native_catalog(
     store: ProviderStore | None = None,
     force: bool = False,
 ) -> bool:
-    """Publish catalog metadata and certified projections without auto-activation."""
+    """Publish catalog metadata and profile projections without auto-activation."""
     with registry.native_catalog_lock:
         controller = registry.get_native_agent_controller("antigravity-cli")
         snapshot = discover_antigravity_native_catalog(
@@ -180,29 +169,18 @@ def refresh_antigravity_native_catalog(
 def _antigravity_connection_ready(store, controller) -> bool:
     if store is None:
         return False
-    from core.providers.native_agent_certificates import (
-        native_connection_reference,
-    )
-
     try:
-        certificate = store.get_capability_certificate(
-            native_connection_reference(controller.installation, "google")
-        )
-        validate_native_connection_certificate(
-            store,
-            certificate,
-            installation=controller.installation,
-        )
-    except (ProviderNotFoundError, CapabilityCertificateError):
+        status = controller.installation.inspector.inspect()
+    except Exception:
         return False
-    return True
+    return status.availability == "installed" and status.health in {
+        "healthy",
+        "degraded",
+    }
 
 
 def _reconcile_antigravity_native_models(store, controller, snapshot) -> None:
-    """Project slugs from one still-valid connection without renewing evidence."""
-    from core.providers.antigravity_agentic_certification import (
-        publish_antigravity_model_certificate,
-    )
+    """Project slugs from the native runtime's current catalog."""
     from core.providers.antigravity_agentic_profile import (
         publish_antigravity_agentic_profile,
     )
@@ -216,12 +194,6 @@ def _reconcile_antigravity_native_models(store, controller, snapshot) -> None:
             now=snapshot.observed_at,
         )
         current_profiles.add((profile.definition_id, profile.revision))
-        publish_antigravity_model_certificate(
-            store,
-            profile=profile,
-            adapter=controller,
-            now=snapshot.observed_at,
-        )
     current_definition_ids = {
         definition_id for definition_id, _revision in current_profiles
     }
@@ -247,20 +219,6 @@ def _reconcile_antigravity_native_models(store, controller, snapshot) -> None:
         )
 
 
-def _adopt_existing_codex_connection(store: ProviderStore, registry: ProviderRegistry) -> None:
-    # Empty or failed discovery fences new admission, not an existing pinned
-    # connection. Adopt old authority independently of currently visible slugs.
-    legacy = next(
-        (item for item in store.list_agentic_profile_definitions()
-         if item.runtime_engine_id == "codex"),
-        None,
-    )
-    if legacy is not None:
-        ensure_codex_connection_certificate(
-            store, definition=legacy, adapter=registry.get_agentic_runtime_adapter("codex"),
-        )
-
-
 def reconcile_codex_native_models(
     store: ProviderStore,
     registry: ProviderRegistry,
@@ -268,32 +226,12 @@ def reconcile_codex_native_models(
     *,
     now: datetime | None = None,
 ) -> None:
-    """Never mint a certification run/expiry or reset revocation for a new slug."""
+    """Publish profiles for every model in the current Codex catalog."""
     timestamp = now or datetime.now(tz=UTC)
-    adapter = registry.get_agentic_runtime_adapter("codex")
     for model in definition.model_options:
-        profile = publish_codex_agentic_profile(
+        publish_codex_agentic_profile(
             store, definition=definition, model_id=model.model_id, now=timestamp,
         )
-        connection = ensure_codex_connection_certificate(store, definition=profile, adapter=adapter)
-        try:
-            validate_native_connection_certificate(
-                store, connection, now=timestamp, installation=adapter.installation,
-            )
-        except CapabilityCertificateError:
-            # Revoked/expired installations still boot, but cannot publish new
-            # active projections or enabled bindings.
-            continue
-        try:
-            ensure_codex_preview_certificate(
-                store, definition=profile, provider_definition=definition,
-                adapter=adapter, now=timestamp,
-            )
-        except CapabilityCertificateError as error:
-            if error.reason_code != "profile_revision_artifact_mismatch":
-                raise
-            # An already-corrupt immutable model projection is unavailable,
-            # not replaceable; it must not prevent unrelated host startup.
     from core.providers.agentic_migration import _roll_forward_enabled_codex_bindings
 
     _roll_forward_enabled_codex_bindings(

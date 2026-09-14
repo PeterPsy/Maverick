@@ -332,4 +332,4 @@ def _validate_provider_event(event: AgenticModelEvent, request_id: str, last_ord
 def _validate_upstream(observed: str | None, expected: str | None) -> None:
     normalized = str(observed or "").strip() or None
     if normalized != expected:
-        raise HostedAgenticLoopError("provider_upstream_not_certified")
+        raise HostedAgenticLoopError("provider_upstream_not_allowed")

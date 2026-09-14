@@ -53,7 +53,7 @@ class RuntimeExternalToolSurface:
     safe_to_retry: bool = False
     owner_kind: Literal["core", "app", "dynamic"] = "dynamic"
     schema_public: bool = False
-    certified_tcb_component: str | None = None
+    reviewed_schema_component: str | None = None
 
 
 @dataclass(frozen=True)
@@ -159,7 +159,7 @@ class RuntimeToolDescriptor:
     schema_owner_kind: str = "dynamic"
     schema_data_class: str = "unclassified"
     schema_trust_level: str = "untrusted_external"
-    certified_tcb_component: str | None = None
+    reviewed_schema_component: str | None = None
 
 
 @dataclass(frozen=True)
@@ -261,7 +261,7 @@ class RuntimeToolCatalogBuilder:
                             if definition.owner_kind == "core"
                             else "untrusted_external"
                         ),
-                        certified_tcb_component=definition.certified_tcb_component,
+                        reviewed_schema_component=definition.reviewed_schema_component,
                     )
                 )
             else:
@@ -300,7 +300,7 @@ class RuntimeToolCatalogBuilder:
                             if definition.owner_kind == "core"
                             else "untrusted_external"
                         ),
-                        certified_tcb_component=definition.certified_tcb_component,
+                        reviewed_schema_component=definition.reviewed_schema_component,
                     )
                 )
             else:
@@ -413,8 +413,8 @@ class RuntimeToolCatalogBuilder:
         self, surface: RuntimeExternalToolSurface, kind: RuntimeToolSurfaceKind
     ) -> RuntimeToolDescriptor:
         # The app-interface boundary is app-owned by construction. An app may
-        # describe its schema, but it cannot promote itself into the Core TCB by
-        # setting declaration fields on RuntimeExternalToolSurface.
+        # describe its schema, but it cannot promote itself into the reviewed
+        # Core catalog by setting declaration fields on RuntimeExternalToolSurface.
         app_owned = kind == "app-interface"
         return self._descriptor(
             handle=surface.handle,
@@ -441,8 +441,8 @@ class RuntimeToolCatalogBuilder:
                     else "untrusted_external"
                 )
             ),
-            certified_tcb_component=(
-                None if app_owned else surface.certified_tcb_component
+            reviewed_schema_component=(
+                None if app_owned else surface.reviewed_schema_component
             ),
         )
 
@@ -461,7 +461,7 @@ class RuntimeToolCatalogBuilder:
         schema_owner_kind: str = "dynamic",
         schema_data_class: str = "unclassified",
         schema_trust_level: str = "untrusted_external",
-        certified_tcb_component: str | None = None,
+        reviewed_schema_component: str | None = None,
     ) -> RuntimeToolDescriptor:
         return RuntimeToolDescriptor(
             provider_name=provider_tool_name(handle),
@@ -478,5 +478,5 @@ class RuntimeToolCatalogBuilder:
             schema_owner_kind=schema_owner_kind,
             schema_data_class=schema_data_class,
             schema_trust_level=schema_trust_level,
-            certified_tcb_component=certified_tcb_component,
+            reviewed_schema_component=reviewed_schema_component,
         )

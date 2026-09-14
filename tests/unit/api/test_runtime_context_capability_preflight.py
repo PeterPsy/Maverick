@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
@@ -63,7 +63,7 @@ class RuntimeContextCapabilityPreflightApiTest(AppReferenceApiTestSupport, unitt
             ),
             (
                 {"attachments": [{"content_type": "image/png"}]},
-                "agentic_attachment_modality_not_certified",
+                "agentic_attachment_modality_not_supported",
             ),
             (
                 {"app_references": [{"app_id": "crm"}]},
@@ -76,7 +76,7 @@ class RuntimeContextCapabilityPreflightApiTest(AppReferenceApiTestSupport, unitt
                 before = state.runtime_store.list_all_sessions()
                 with patch(
                     "core.api.runtime_api.preflight_execution_binding_context",
-                    side_effect=CapabilityCertificateError(reason_code),
+                    side_effect=AgenticRuntimeError(reason_code),
                 ), patch.object(
                     state.runtime_store,
                     "claim_client_message_id",

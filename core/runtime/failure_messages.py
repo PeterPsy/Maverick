@@ -7,10 +7,10 @@ import re
 
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PUBLIC_MESSAGES = {
-    "adapter_artifact_mismatch": (
+    "runtime_adapter_identity_mismatch": (
         "This chat uses an older runtime profile and must be upgraded before it can continue."
     ),
-    "adapter_version_mismatch": "The certified runtime adapter version is unavailable.",
+    "adapter_version_mismatch": "The configured runtime adapter version is unavailable.",
     "agent_step_limit_reached": "The runtime reached its step limit before completing the request.",
     "agent_tool_call_limit_reached": "The runtime reached its tool-call limit before completing the request.",
     "agent_cost_estimate_unavailable": (
@@ -46,7 +46,7 @@ _PUBLIC_MESSAGES = {
     "agent_time_limit_reached": "The runtime reached its wall-time limit.",
     "agent_tool_result_limit_reached": "The runtime reached its tool-result limit.",
     "agentic_app_references_not_effective": (
-        "The selected runtime profile is not certified for app references."
+        "The selected runtime profile does not support app references."
     ),
     "agentic_app_reference_metadata_invalid": (
         "An app reference has invalid server-verifiable metadata."
@@ -54,8 +54,8 @@ _PUBLIC_MESSAGES = {
     "agentic_attachment_metadata_invalid": (
         "An attachment lacks the server-verifiable media metadata required by this runtime."
     ),
-    "agentic_attachment_modality_not_certified": (
-        "The selected runtime profile is not certified for this attachment type."
+    "agentic_attachment_modality_not_supported": (
+        "The selected runtime profile does not support this attachment type."
     ),
     "agentic_cli_not_effective": "CLI access is not effective for this runtime turn.",
     "agentic_confirmation_not_effective": (
@@ -72,24 +72,13 @@ _PUBLIC_MESSAGES = {
     "agentic_recovery_not_effective": "Recovery is not effective for this runtime turn.",
     "agentic_shell_not_effective": "Shell access is not effective for this runtime turn.",
     "agentic_skill_catalog_not_effective": (
-        "The selected runtime profile is not certified for skills."
+        "The selected runtime profile does not support skills."
     ),
     "agentic_session_skill_catalog_immutable": (
         "The runtime session skill catalog is pinned and cannot be replaced by a turn."
     ),
     "agentic_skill_metadata_invalid": (
         "An invoked skill has invalid server-verifiable metadata."
-    ),
-    "certificate_revoked": "This model profile is no longer authorized.",
-    "certificate_expired": "This model profile certificate has expired.",
-    "certificate_inactive": "This model profile certificate is not active.",
-    "certificate_missing": "This model profile has no capability certificate.",
-    "certificate_missing_status": "This model profile certificate has no live status.",
-    "certificate_status_changed": "This model profile certificate authority changed during execution.",
-    "certificate_status_missing": "This model profile certificate has no live status.",
-    "certificate_tcb_drift": "The certified execution boundary has changed.",
-    "certificate_tcb_revision_fence_missing": (
-        "The certified execution boundary cannot be revalidated safely."
     ),
     "context_compaction_invalid": (
         "The runtime could not compact provider history without preserving its integrity."
@@ -98,11 +87,11 @@ _PUBLIC_MESSAGES = {
         "The runtime refused to compact history because an active tool result could lose its pairing."
     ),
     "context_compaction_unavailable": (
-        "The selected provider recipe has no certified history compactor."
+        "The selected provider recipe has no configured history compactor."
     ),
     "context_policy_invalid": "The selected runtime context policy is invalid.",
     "context_summary_too_large": (
-        "The governed context summary exceeds its certified size limit."
+        "The governed context summary exceeds its configured size limit."
     ),
     "context_window_reserve_unavailable": (
         "The request cannot preserve the context-window reserve required for a safe response."
@@ -150,7 +139,7 @@ _PUBLIC_MESSAGES = {
     "provider_budget_exceeded": "The model provider exhausted the configured token budget.",
     "provider_cancelled": "The model provider cancelled the request.",
     "provider_endpoint_parameters_unsupported": (
-        "The certified provider endpoint does not support every required request parameter."
+        "The configured provider endpoint does not support every required request parameter."
     ),
     "provider_endpoint_preflight_failed": (
         "The runtime could not verify the provider endpoint before dispatch."
@@ -172,7 +161,7 @@ _PUBLIC_MESSAGES = {
     ),
     "provider_execution_failed": "The model runtime could not complete the request.",
     "provider_mixed_text_and_tool_call": "The provider returned an incompatible text and tool-call sequence.",
-    "provider_no_eligible_endpoint": "No certified provider endpoint is currently available for this model.",
+    "provider_no_eligible_endpoint": "No allowed provider endpoint is currently available for this model.",
     "provider_overloaded": (
         "The model provider is temporarily overloaded. This chat and completed actions are preserved; "
         "continue shortly."
@@ -245,10 +234,10 @@ _PUBLIC_MESSAGES = {
     ),
     "tool_execution_unknown": "The runtime could not verify whether the tool completed.",
     "attachment_projection_not_supported": (
-        "The attachment cannot be projected through the certified workspace-reference contract."
+        "The attachment cannot be projected through the workspace-reference contract."
     ),
     "tool_capability_denied": "A tool requires a capability that is not effective for this turn.",
-    "tool_effect_unclassified": "A tool has no certified execution-effect classification.",
+    "tool_effect_unclassified": "A tool has no reviewed execution-effect classification.",
     "tool_execution_mode_denied": "A tool is not authorized in the effective execution mode.",
     "tool_not_found": (
         "The model requested a tool that is not available. The unavailable tool was not executed."
@@ -258,9 +247,9 @@ _PUBLIC_MESSAGES = {
         "The requested tool-result artifact chunk exceeds its governed transport limit."
     ),
     "tool_result_summary_limit_invalid": (
-        "The runtime cannot represent this tool result within its certified summary limit."
+        "The runtime cannot represent this tool result within its configured summary limit."
     ),
-    "tool_schema_not_certified": "A tool schema is outside the certified runtime boundary.",
+    "tool_schema_not_reviewed": "A tool schema is outside the reviewed Core runtime boundary.",
     "tool_workspace_mismatch": "A tool is outside the current workspace authority.",
     "workspace_profile_binding_disabled": "This workspace model profile is disabled.",
     "workspace_binding_disabled": "This workspace model binding is disabled.",

@@ -12,7 +12,6 @@ from core.providers.agentic_profiles import (
     provider_selection_from_execution_binding,
     resolve_workspace_agentic_profile,
 )
-from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.errors import (
     ProviderCapabilityError,
     ProviderError,
@@ -37,7 +36,6 @@ from core.providers.native_agent_builtins import (
     build_codex_native_installation,
 )
 from core.providers.provider_codex import CodexProviderAdapter
-from core.providers.provider_codex_reasoning import normalize_codex_model_options
 from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
@@ -79,10 +77,9 @@ class SpeechProviderActivation:
 
 @dataclass(frozen=True)
 class NativeAgentProviderActivation:
-    """Store-validated native provider activation without a workspace binding."""
+    """Validated native provider activation without a workspace binding."""
 
     definition: ProviderDefinition
-    connection_certificate_id: str
     profile_count: int
 
 
@@ -138,52 +135,15 @@ def register_builtin_providers(
         except ProviderNotFoundError:
             store.save_provider_definition(definition)
             continue
-        refreshed_model_options = definition.model_options
-        refreshed_default_model_family = definition.default_model_family
-        if _should_preserve_existing_codex_model_catalog(
-            existing,
-            definition,
-            refresh_model_catalog=refresh_model_catalog,
-        ):
-            refreshed_model_options = normalize_codex_model_options(existing.model_options)
-            refreshed_default_model_family = existing.default_model_family
         refreshed_definition = replace(
             definition,
             status=existing.status,
             created_at=existing.created_at,
             updated_at=existing.updated_at,
-            default_model_family=refreshed_default_model_family,
-            model_options=refreshed_model_options,
         )
         if refreshed_definition != existing:
             store.save_provider_definition(refreshed_definition)
     return definitions
-
-
-def _should_preserve_existing_codex_model_catalog(
-    existing: ProviderDefinition,
-    incoming: ProviderDefinition,
-    *,
-    refresh_model_catalog: bool,
-) -> bool:
-    if refresh_model_catalog or incoming.provider_id != "codex":
-        return False
-    incoming_model_ids = [option.model_id for option in incoming.model_options]
-    existing_model_ids = [option.model_id for option in existing.model_options]
-    if len(incoming_model_ids) != 1 or not _is_codex_fallback_model_catalog(incoming):
-        return False
-    return bool(
-        existing_model_ids
-        and existing_model_ids != incoming_model_ids
-        and not _is_codex_fallback_model_catalog(existing)
-    )
-
-
-def _is_codex_fallback_model_catalog(definition: ProviderDefinition) -> bool:
-    if definition.provider_id != "codex" or len(definition.model_options) != 1:
-        return False
-    description = definition.model_options[0].description or ""
-    return description.startswith("Default Codex model configured")
 
 
 def effective_provider_registry(
@@ -329,11 +289,7 @@ def activate_native_agent_provider(
     observability_store=None,
     now: datetime | None = None,
 ) -> NativeAgentProviderActivation:
-    """Activate a native provider only after its root and model pins validate."""
-    from core.providers.native_agent_certificates import (
-        native_connection_reference,
-        validate_native_connection_certificate,
-    )
+    """Activate a native provider after its runtime and model profiles validate."""
 
     timestamp = now or utcnow()
     active_registry = effective_provider_registry(
@@ -343,27 +299,17 @@ def activate_native_agent_provider(
     )
     definition = active_registry.get_provider_definition(provider_id)
     installation = active_registry.get_native_agent_installation(provider_id)
-    if provider_id == "codex" or not installation.certification_configured:
+    if provider_id == "codex" or not installation.contract_configured:
         raise ProviderCapabilityError("native_agent_activation_unsupported")
     if len(installation.model_provider_connections) != 1:
         raise ProviderCapabilityError("native_agent_connection_ambiguous")
     model_provider_id = installation.model_provider_connections[0].model_provider_id
-    certificate_id = native_connection_reference(
-        installation,
-        model_provider_id,
-    )
-    try:
-        certificate = store.get_capability_certificate(certificate_id)
-    except ProviderNotFoundError as error:
-        raise ProviderCapabilityError(
-            "native_agent_connection_certificate_missing"
-        ) from error
-    validate_native_connection_certificate(
-        store,
-        certificate,
-        installation=installation,
-        now=timestamp,
-    )
+    runtime_status = installation.inspector.inspect()
+    if runtime_status.availability != "installed" or runtime_status.health not in {
+        "healthy",
+        "degraded",
+    }:
+        raise ProviderCapabilityError("native_runtime_unavailable")
     from core.providers.native_agent_catalog import native_agent_catalog_models
 
     catalog_models = {
@@ -381,10 +327,8 @@ def activate_native_agent_provider(
     ]
     if not profiles:
         raise ProviderCapabilityError("native_agent_model_projection_missing")
-    from core.providers.certificate_service import (
-        validate_profile_certificate_execution_contract,
-    )
     from core.providers.native_agent_catalog import require_native_agent_model_available
+    from core.providers.execution_family_readiness import inspect_agentic_family_readiness
 
     for profile in profiles:
         profile_status = store.get_agentic_profile_definition_status(
@@ -398,31 +342,17 @@ def activate_native_agent_provider(
             raise ProviderCapabilityError(
                 "native_agent_model_projection_missing"
             )
-        projection = store.get_capability_certificate(
-            profile.capability_certificate_id
+        require_native_agent_model_available(active_registry, profile)
+        readiness = inspect_agentic_family_readiness(
+            definition=profile,
+            binding=None,
+            registry=active_registry,
+            store=store,
         )
-        projection_status = store.get_capability_certificate_status(
-            projection.certificate_id
-        )
-        if projection_status is None or projection_status.status != "active":
+        if not readiness.complete:
             raise ProviderCapabilityError(
-                "native_agent_model_projection_missing"
+                readiness.reason_code or "native_agent_model_projection_missing"
             )
-        validate_native_connection_certificate(
-            store,
-            projection,
-            installation=installation,
-            now=timestamp,
-        )
-        validate_profile_certificate_execution_contract(
-            profile=profile,
-            certificate=projection,
-        )
-        require_native_agent_model_available(
-            active_registry,
-            profile,
-            certificate=projection,
-        )
     active_definition = replace(
         definition,
         status="active",
@@ -434,7 +364,6 @@ def activate_native_agent_provider(
     if observability_store is not None:
         payload = {
             "provider_id": provider_id,
-            "connection_certificate_id": certificate_id,
             "profile_count": len(profiles),
         }
         record_platform_audit(
@@ -442,7 +371,7 @@ def activate_native_agent_provider(
             action="provider.native_agent.activate",
             status="succeeded",
             source_domain="providers",
-            detail=f"Activated certified native provider `{provider_id}`.",
+            detail=f"Activated native provider `{provider_id}`.",
             provider_id=provider_id,
             payload=payload,
             now=timestamp,
@@ -458,7 +387,6 @@ def activate_native_agent_provider(
         )
     return NativeAgentProviderActivation(
         definition=stored,
-        connection_certificate_id=certificate_id,
         profile_count=len(profiles),
     )
 
@@ -905,17 +833,10 @@ def configure_workspace_provider(
         now=now,
     )
     if provider_id == "codex":
-        profile, _binding = ensure_codex_workspace_profile(
+        ensure_codex_workspace_profile(
             store,
             definition=active_registry.get_provider_definition(provider_id),
             selection=selection,
-            now=now,
-        )
-        ensure_codex_preview_certificate(
-            store,
-            definition=profile,
-            provider_definition=active_registry.get_provider_definition(provider_id),
-            adapter=active_registry.get_agentic_runtime_adapter(provider_id),
             now=now,
         )
     if observability_store is not None:

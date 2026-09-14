@@ -756,7 +756,7 @@ Apps that declare `permissions.runtime.create_sessions: true` may ask the platfo
 
 Each request may include `agent_id`, optional `runtime_session_id`, `system_prompt` or a generic dependency-backed `system_prompt_request`, `skill_ids`, `skill_activation_mode`, turn-local `invoked_skill_ids`, `input_text`, `app_references`, and a callback action. If the requesting app has a selected `runtime-skills` dependency for `skill.catalog`, the platform persists that selected provider app id on the runtime session so session allowlists and turn-local invocations resolve from the same catalog. `implicit` activation exposes the session catalog to the runtime prompt; `explicit` activation requires stable skill IDs on the turn and never accepts a client filesystem path. `app_references` is a generic union: `type: "app"` carries a stable `app_id`, while `type: "entity"` carries `app_id`, `entity_type`, `entity_id`, and optional safe label, summary, existence, and deep-link metadata. The platform stamps the created session with the requesting app as `source_app_id`, submits the turn through the core runtime, and invokes the app callback with the created `runtime_session_id` and `turn_id` or an error. The callback lets the app persist its own projection state without the core writing app-owned data. Apps may reuse only user-visible runtime sessions through `runtime_session_id`; hidden inter-agent participant sessions are operable only through the core inter-agent service.
 
-Before reserving an app runtime stream or publishing a new agentic app session, Core resolves the workspace profile permitted for the authenticated actor, runs the central remote-agentic admission gate, and mints the immutable execution binding itself. An app may request a stable `workspace_profile_binding_id` and reasoning effort, but it cannot classify session data or supply provider authority, a capability certificate, an egress attestation, or an execution-binding snapshot. Core rechecks that the minted pin matches the exact authorized binding id and revision; any intervening governance change fails closed.
+Before reserving an app runtime stream or publishing a new agentic app session, Core resolves the workspace profile permitted for the authenticated actor, runs the central remote-agentic admission gate, and mints the immutable execution binding itself. An app may request a stable `workspace_profile_binding_id` and reasoning effort, but it cannot classify session data or supply provider authority, credentials, an egress attestation, or an execution-binding snapshot. Core rechecks that the minted pin matches the exact authorized binding id and revision; any intervening governance change fails closed.
 
 Apps may also return `runtime_turn_interrupt_requests` for turns that belong to a user-visible runtime session sourced by that same app. The core validates workspace, visibility, and source-app ownership, performs the generic interrupt operation, records the runtime terminal event, and dispatches the same source-app runtime event hook. The durable cancellation-intent CAS is the sole public ownership decision, so exactly one concurrent request reports `interrupted=true`. Terminal-outbox ownership is technical only: a worker or another caller may drain it without creating another successful interrupt result. The app still owns any product-level decision to mark its own node, job, or workflow as stopped or failed.
 
@@ -1098,7 +1098,7 @@ but never a raw provider credential.
 The CLI transport validates the complete native-adapter argv before process
 creation. Provider configuration overrides are denied by default; a supported
 native runtime's fixed shell-environment policy may be admitted only as exact
-certified values with a closed `include_only` key list. Any changed value or
+reviewed values with a closed `include_only` key list. Any changed value or
 additional key fails closed. Accepting those argv values does not forward the
 sidecar process environment: Core still constructs the bounded executor
 environment and credential mount itself.
@@ -2841,15 +2841,15 @@ is not authority by itself. Read-only calls may proceed only for a platform
 built-in whose app id, namespaced surface, source path, exact live descriptor
 digest, reparsed execution metadata, and exact executable-closure digest match
 the Core-owned effect audit. The closure covers the app contract, descriptor,
-entrypoint, app-local backend, and reviewed extra executable dependencies; its
-paths are also part of the certified-execution TCB. Core recalculates this
+entrypoint, app-local backend, and reviewed extra executable dependencies. Core
+recalculates this
 authority at dispatch after validation/confirmation, so a descriptor or code
 change between discovery/preflight and entrypoint execution fails before the
 effect boundary. Workspace-local and external bundles fail closed at this
 hosted preflight.
 Admitted reads remain subject to exact-result classification and egress policy.
 Mutating, destructive, or unclassified app calls are denied unless a future
-Core-certified pre-effect contract explicitly governs them; an app descriptor
+Core-reviewed pre-effect contract explicitly governs them; an app descriptor
 cannot self-promote a result to public or mint mutation authority. An operation
 that persists a preview record, runtime session, cache, lazy default, or read
 model is mutating even when its response resembles a read.

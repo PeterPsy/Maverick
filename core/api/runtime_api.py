@@ -49,7 +49,7 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create, require_runtime_session_operation
 from core.observability.service import append_platform_log
 from core.observability.startup_performance import startup_timer
-from core.providers.errors import CapabilityCertificateError, ProviderError
+from core.providers.errors import AgenticRuntimeError, ProviderError
 from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
     resolve_workspace_agentic_profile,
@@ -233,7 +233,6 @@ def _session_payload(
             "binding_id": text_binding.binding_id,
             "profile_id": text_binding.profile.profile_id,
             "profile_revision": text_binding.profile.revision,
-            "certificate_id": text_binding.certificate.certificate_id,
             "provider_id": text_binding.provider_id,
             "model_id": text_binding.model_id,
             "provider_routing_digest": text_binding.provider_routing_digest,
@@ -259,13 +258,6 @@ def _session_payload(
             "cost_policy": text_binding.profile.cost_policy,
             "retention_policy": text_binding.profile.retention_policy,
             "data_destination": text_binding.profile.data_destination,
-            "certificate": {
-                "certificate_id": text_binding.certificate.certificate_id,
-                "certificate_kind": text_binding.certificate.certificate_kind,
-                "workspace_tools": False,
-                "action_loop": False,
-                "workspace_actions": False,
-            },
             "message": "No workspace tools or actions.",
         }
     if session.execution_binding is not None:
@@ -287,7 +279,6 @@ def _session_payload(
             "profile_definition_revision": binding.profile_definition_revision,
             "workspace_binding_id": binding.workspace_binding_id,
             "workspace_binding_revision": binding.workspace_binding_revision,
-            "capability_certificate_id": binding.capability_certificate_id,
             "runtime_engine_id": binding.runtime_engine_id,
             "adapter_id": binding.adapter_id,
             "adapter_version": binding.adapter_version,
@@ -296,8 +287,9 @@ def _session_payload(
             "model_revision": binding.model_revision,
             "model_revision_policy": binding.model_revision_policy,
             "reasoning_effort": binding.reasoning_effort,
-            "certified_reasoning_efforts": binding.certified_reasoning_efforts,
+            "reasoning_efforts": binding.reasoning_efforts,
             "default_reasoning_effort": binding.default_reasoning_effort,
+            "capabilities": asdict(binding.capabilities_snapshot),
             "provider_protocol": binding.provider_protocol,
             "provider_api_version": binding.provider_api_version,
             "egress_policy_id": binding.egress_policy_id,
@@ -2049,7 +2041,7 @@ def _handle_session_app_references_prepare(
                 turn_id=f"app-reference-admission:{session.session_id}",
                 app_references=raw_references,
             )
-    except CapabilityCertificateError as error:
+    except AgenticRuntimeError as error:
         return json_response(
             start_response,
             {
@@ -2422,7 +2414,7 @@ def _prepare_runtime_turn_submission(
 ) -> tuple[RuntimeTurnSubmissionDraft | None, list[bytes] | None]:
     try:
         _reject_client_remote_data_declaration(body)
-    except CapabilityCertificateError as error:
+    except AgenticRuntimeError as error:
         _release_client_message_claim(state, release_claim_on_failure)
         return None, json_response(
             start_response,
@@ -2488,7 +2480,7 @@ def _prepare_runtime_turn_submission(
             attachments=raw_attachments,
             app_references=raw_app_references,
         )
-    except CapabilityCertificateError as error:
+    except AgenticRuntimeError as error:
         _release_client_message_claim(state, release_claim_on_failure)
         return None, json_response(
             start_response,
@@ -2585,7 +2577,7 @@ def _finalize_runtime_turn_submission_for_admitted_session(
                 attachments=draft.attachment_items,
                 app_references=draft.app_reference_items,
             )
-        except CapabilityCertificateError as error:
+        except AgenticRuntimeError as error:
             _release_client_message_claim(state, release_claim_on_failure)
             return draft, json_response(
                 start_response,
@@ -2703,7 +2695,7 @@ def _queue_runtime_turn_response(
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)
         return json_response(start_response, {"error": error.reason_code}, status="400 Bad Request")
-    except CapabilityCertificateError as error:
+    except AgenticRuntimeError as error:
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)
         return json_response(

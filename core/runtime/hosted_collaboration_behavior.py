@@ -39,7 +39,7 @@ _PRIVATE_MARKER = "customer SSN 123-45-6789"
 
 @cache_complete_behavior_probe(HOSTED_COLLABORATION_BEHAVIOR_IDS)
 def inspect_hosted_collaboration_behavior() -> tuple[str, ...]:
-    """Create via CLI, wait via MCP, and expose only certified projections."""
+    """Create via CLI, wait via MCP, and expose only reviewed projections."""
     try:
         return HOSTED_COLLABORATION_BEHAVIOR_IDS if _probe_workflow() else ()
     except Exception:

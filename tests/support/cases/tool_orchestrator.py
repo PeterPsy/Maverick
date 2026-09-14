@@ -6,7 +6,7 @@ from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
-from core.providers.capability_models import RuntimeCapabilitySet
+from core.providers.agentic_models import RuntimeCapabilitySet
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.tool_catalog import (
@@ -175,7 +175,6 @@ class _RuntimeToolOrchestratorFixture:
         return EffectiveRuntimeAuthority(
             execution_binding_id="binding-tools",
             turn_id="turn-tools",
-            certificate_id="certificate-tools",
             allowed_capabilities=RuntimeCapabilitySet(
                 streaming=True,
                 tool_orchestration=True,

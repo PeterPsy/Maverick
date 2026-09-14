@@ -65,7 +65,7 @@ def transform_exportable_content(
             structured = json.loads(text)
         except json.JSONDecodeError:
             return None, None, "egress_json_invalid"
-        # A certified Core tool schema describes fields; it does not contain
+        # A reviewed Core tool schema describes fields; it does not contain
         # their runtime values.  Applying value redaction to a property name
         # such as ``invocation_token`` replaces its schema object with a string
         # and produces an invalid provider contract.  The caller grants this

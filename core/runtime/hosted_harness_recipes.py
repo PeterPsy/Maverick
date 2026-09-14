@@ -95,7 +95,7 @@ class HostedHarnessRecipeManifest:
 
 
 def hosted_full_context_policy() -> AgenticContextPolicy:
-    """Return the common bounded policy certified by the P4 hosted recipes."""
+    """Return the common bounded policy declared by the hosted recipes."""
     return AgenticContextPolicy(
         revision=HOSTED_CONTEXT_POLICY_REVISION,
         max_request_input_tokens=262_144,
@@ -113,7 +113,7 @@ def hosted_full_context_policy() -> AgenticContextPolicy:
 
 
 def openrouter_full_context_policy() -> AgenticContextPolicy:
-    """Use GLM's certified million-token window with Codex-equivalent limits."""
+    """Use GLM's configured million-token window with Codex-equivalent limits."""
     return AgenticContextPolicy(
         revision="openrouter-full-context-v1",
         max_request_input_tokens=1_000_000,

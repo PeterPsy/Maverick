@@ -309,13 +309,6 @@ describe("selectedProviderForSession", () => {
               updated_at: null,
             },
           },
-          certificate_posture: {
-            certificate_id: "certificate-openrouter-12",
-            effective_status: "revoked",
-            eligibility: "ineligible",
-            expires_at: "2026-09-30T00:00:00Z",
-            pinned_evidence_digest: "evidence-digest",
-          },
           effective_capabilities: {
             status: "blocked",
             reason_code: "hosted_agent_runtime_disabled",
@@ -350,8 +343,7 @@ describe("selectedProviderForSession", () => {
     expect(selected?.label).toBe("OpenRouter GLM 5.3 Flash · Relace FP4 · fake-data preview");
     expect(selected?.description).toBe("openrouter → relace/fp4 · openrouter-chat-completions-v1");
     expect(selected?.agentic_containment_reason).toBe("hosted_agent_runtime_disabled");
-    expect(selected?.agentic_certificate_status).toBe("revoked");
-    expect(selected?.agentic_certificate_posture?.eligibility).toBe("ineligible");
+    expect(selected?.agentic_effective_capabilities?.status).toBe("blocked");
     expect(selected?.agentic_egress_policy?.allowed_remote_data_classes).toEqual(["public"]);
   });
 

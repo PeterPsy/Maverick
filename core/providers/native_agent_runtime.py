@@ -1,4 +1,4 @@
-"""Structured lifecycle facade for certified native-agent runtime adapters."""
+"""Structured lifecycle facade for native-agent runtime adapters."""
 
 from __future__ import annotations
 
@@ -35,7 +35,6 @@ from core.providers.native_agent_contract import (
 )
 from core.providers.provider_registry import RuntimeBackendAdapter
 from core.providers.native_model_revision import require_native_model_revision_transport
-from core.providers.errors import CapabilityCertificateError
 
 
 @dataclass(frozen=True)
@@ -233,9 +232,6 @@ class NativeAgentRuntimeController:
 
     def _validate_execution_identity(self, binding) -> None:
         require_native_model_revision_transport(binding)
-        approved = self.installation.runtime_artifact
-        if approved is not None and self.installation.inspector.artifact() != approved:
-            raise CapabilityCertificateError("native_runtime_artifact_mismatch")
 
     def _local_lifecycle(self) -> LocalProcessRuntimeLifecycle:
         lifecycle = self.engine_adapter.local_process_lifecycle

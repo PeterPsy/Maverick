@@ -125,7 +125,10 @@ class HostedAgenticTerminalGapTest(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self._assert_terminal_pairing_contained(cancelled)
 
-        for reason_code in ("runtime_actor_policy_denied", "certificate_revoked"):
+        for reason_code in (
+            "runtime_actor_policy_denied",
+            "workspace_profile_binding_disabled",
+        ):
             with self.subTest(reason_code=reason_code):
                 harness = HostedAgenticHarness(self)
                 revoked = False

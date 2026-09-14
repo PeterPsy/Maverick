@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 import hashlib
-import json
-from pathlib import Path
 
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
@@ -14,20 +12,16 @@ from core.providers.agentic_models import (
     AgenticProfileDefinitionStatus,
     WorkspaceAgenticProfileBinding,
     codex_routing_constraint,
+    codex_runtime_capabilities,
     codex_runtime_policy,
     default_actor_selection_policy,
 )
 from core.providers.errors import (
     AgenticProfileError,
-    CapabilityCertificateError,
     ProviderCredentialBindingError,
     ProviderNotFoundError,
 )
-from core.providers.certificate_service import (
-    runtime_adapter_artifact_digest,
-    validate_certificate_for_binding,
-    validate_profile_certificate_execution_contract,
-)
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.models import ProviderDefinition, ProviderSelection
 from core.providers.native_agent_catalog import native_catalog_admission
 from core.providers.provider_credentials import resolve_provider_binding
@@ -64,35 +58,6 @@ CODEX_PREVIOUS_PROFILE_REVISIONS = (
 )
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
-_CODEX_PROFILE_ARTIFACT_MANIFEST = json.loads(
-    Path(__file__).with_name("codex_profile_artifacts.json").read_text(encoding="utf-8")
-)
-if (
-    not isinstance(_CODEX_PROFILE_ARTIFACT_MANIFEST, dict)
-    or _CODEX_PROFILE_ARTIFACT_MANIFEST.get("schema_version") != "1"
-    or _CODEX_PROFILE_ARTIFACT_MANIFEST.get("adapter_id") != CODEX_ADAPTER_ID
-    or _CODEX_PROFILE_ARTIFACT_MANIFEST.get("current_revision")
-    != CODEX_PROFILE_REVISION
-    or not isinstance(_CODEX_PROFILE_ARTIFACT_MANIFEST.get("revisions"), dict)
-):
-    raise RuntimeError("codex_profile_artifact_manifest_revision_mismatch")
-CODEX_PROFILE_ARTIFACT_DIGESTS = {
-    str(revision): str(digest)
-    for revision, digest in _CODEX_PROFILE_ARTIFACT_MANIFEST["revisions"].items()
-}
-if CODEX_PROFILE_REVISION not in CODEX_PROFILE_ARTIFACT_DIGESTS:
-    raise RuntimeError("codex_profile_artifact_manifest_revision_mismatch")
-if any(
-    not revision.isdigit()
-    or len(digest) != 64
-    or any(character not in "0123456789abcdef" for character in digest)
-    for revision, digest in CODEX_PROFILE_ARTIFACT_DIGESTS.items()
-) or max(map(int, CODEX_PROFILE_ARTIFACT_DIGESTS)) != int(CODEX_PROFILE_REVISION):
-    raise RuntimeError("codex_profile_artifact_manifest_invalid")
-CODEX_PROFILE_ARTIFACT_DIGEST = CODEX_PROFILE_ARTIFACT_DIGESTS[
-    CODEX_PROFILE_REVISION
-]
-CAPABILITY_CERTIFICATE_PREFIX = "capability-certificate"
 DEFAULT_EGRESS_POLICY_ID = "local-runtime-no-remote-egress"
 DEFAULT_EGRESS_POLICY_REVISION = "1"
 
@@ -205,7 +170,7 @@ def _suspend_previous_codex_revisions(
     definition_id: str,
     now: datetime,
 ) -> None:
-    """Suspend preview definitions certified against earlier adapter bytes."""
+    """Suspend preview definitions built for earlier adapter identities."""
     for revision in CODEX_PREVIOUS_PROFILE_REVISIONS:
         status = store.get_agentic_profile_definition_status(
             definition_id,
@@ -324,30 +289,19 @@ def build_pinned_execution_binding(
     adapter_version = str(getattr(adapter, "adapter_version", ""))
     if definition.adapter_version_constraint != f"=={adapter_version}":
         raise AgenticProfileError("adapter_version_mismatch")
-    try:
-        certificate = store.get_capability_certificate(definition.capability_certificate_id)
-    except ProviderNotFoundError as error:
-        raise CapabilityCertificateError("certificate_missing") from error
     from core.providers.native_agent_catalog import require_native_agent_model_available
 
-    require_native_agent_model_available(registry, definition, certificate=certificate)
-    validate_full_workspace_contract_claim(
-        profile=definition,
-        certificate=certificate,
-    )
-    validate_profile_certificate_execution_contract(
-        profile=definition,
-        certificate=certificate,
-    )
+    require_native_agent_model_available(registry, definition)
+    validate_full_workspace_contract_claim(profile=definition)
     from core.providers.execution_family_readiness import inspect_agentic_family_readiness
 
     readiness = inspect_agentic_family_readiness(
-        definition=definition, certificate=certificate, binding=binding, registry=registry, store=store,
+        definition=definition, binding=binding, registry=registry, store=store,
     )
     if not readiness.complete:
         raise AgenticProfileError(readiness.reason_code or "full_workspace_contract_incomplete")
     normalized_reasoning_effort = _validated_reasoning_effort(
-        certificate,
+        definition,
         reasoning_effort=reasoning_effort,
     )
     selection = _selection_projection(
@@ -363,11 +317,10 @@ def build_pinned_execution_binding(
         profile_definition_revision=definition.revision,
         workspace_binding_id=binding.binding_id,
         workspace_binding_revision=binding.revision,
-        capability_certificate_id=definition.capability_certificate_id,
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=definition.adapter_id,
         adapter_version=adapter_version,
-        adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
+        adapter_identity_digest=runtime_adapter_identity_digest(adapter),
         model_provider_id=definition.model_provider_id,
         model_id=definition.model_id,
         model_revision=getattr(definition, "model_revision", None),
@@ -381,22 +334,18 @@ def build_pinned_execution_binding(
         routing_constraint=definition.routing_constraint,
         credential_binding_id=binding.credential_binding_id,
         reasoning_effort=selection.model_reasoning_effort,
-        certified_reasoning_efforts=certificate.certified_reasoning_efforts,
-        default_reasoning_effort=certificate.default_reasoning_effort,
+        reasoning_efforts=definition.reasoning_efforts,
+        default_reasoning_effort=definition.default_reasoning_effort,
+        capabilities=definition.capabilities,
         execution_mode=execution_mode,
         profile_policy_ceiling=definition.policy_ceiling,
         workspace_policy_ceiling=binding.workspace_policy_ceiling,
         egress_policy_id=binding.egress_policy_id,
         egress_policy_revision=binding.egress_policy_revision,
         created_at=timestamp,
-        certificate_evidence_digest=certificate.evidence_digest,
         legacy_inferred=legacy_inferred,
-        tcb_manifest_id=certificate.tcb_manifest_id,
-        tcb_manifest_version=certificate.tcb_manifest_version,
-        tcb_structure_digest=certificate.tcb_structure_digest,
-        tcb_live_digest=certificate.tcb_live_digest,
         full_workspace_contract_revision=(
-            getattr(certificate, "full_workspace_contract_revision", "")
+            getattr(definition, "full_workspace_contract_revision", "")
         ),
         execution_family=getattr(definition, "execution_family", ""),
         harness_recipe_id=getattr(definition, "harness_recipe_id", ""),
@@ -428,12 +377,6 @@ def build_pinned_execution_binding(
             "",
         ),
     )
-    validate_certificate_for_binding(
-        store,
-        binding=runtime_binding,
-        adapter=adapter,
-        now=timestamp,
-    )
     return runtime_binding
 
 
@@ -461,18 +404,18 @@ def _require_authorized_profile_snapshot(
 
 
 def _validated_reasoning_effort(
-    certificate,
+    definition: AgenticProfileDefinition,
     *,
     reasoning_effort: str | None,
 ) -> str | None:
     normalized = (
         str(reasoning_effort or "").strip()
-        or certificate.default_reasoning_effort
+        or definition.default_reasoning_effort
         or None
     )
     if normalized is None:
         return None
-    if normalized not in certificate.certified_reasoning_efforts:
+    if normalized not in definition.reasoning_efforts:
         raise AgenticProfileError("profile_reasoning_effort_unsupported")
     return normalized
 
@@ -518,7 +461,21 @@ def _codex_profile_definition(
         adapter_version_constraint=f"=={CODEX_ADAPTER_VERSION}",
         routing_constraint=codex_routing_constraint(),
         policy_ceiling=codex_runtime_policy(),
-        capability_certificate_id=f"{CAPABILITY_CERTIFICATE_PREFIX}:{definition_id}:{CODEX_PROFILE_REVISION}",
+        capabilities=codex_runtime_capabilities(),
+        reasoning_efforts=tuple(
+            item.effort
+            for option in definition.model_options
+            if option.model_id == model_id
+            for item in option.supported_reasoning_efforts
+        ),
+        default_reasoning_effort=next(
+            (
+                option.default_reasoning_effort
+                for option in definition.model_options
+                if option.model_id == model_id
+            ),
+            None,
+        ),
         created_at=now,
         egress_policy_id=DEFAULT_EGRESS_POLICY_ID,
         egress_policy_revision=DEFAULT_EGRESS_POLICY_REVISION,

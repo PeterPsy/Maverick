@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 import unittest
 from unittest.mock import patch
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.runtime.execution_binding import (
     RuntimeExecutionBinding,
     build_runtime_execution_binding,
@@ -17,15 +21,16 @@ from core.runtime.execution_binding import (
 class ExecutionBindingLegacyDigestTestCase(unittest.TestCase):
     def test_legacy_digest_validation_is_bounded_by_schema_groups(self) -> None:
         serialized = asdict(_execution_binding())
-        for field_name in (
-            "certified_reasoning_efforts",
-            "default_reasoning_effort",
-            "tcb_manifest_id",
-            "tcb_manifest_version",
-            "tcb_structure_digest",
-            "tcb_live_digest",
-        ):
-            serialized.pop(field_name)
+        serialized["certified_reasoning_efforts"] = serialized.pop(
+            "reasoning_efforts"
+        )
+        serialized.pop("capabilities_snapshot")
+        serialized["capability_certificate_id"] = "legacy-certificate"
+        serialized["certificate_evidence_digest"] = "a" * 64
+        serialized["tcb_manifest_id"] = "legacy-tcb"
+        serialized["tcb_manifest_version"] = "1"
+        serialized["tcb_structure_digest"] = "b" * 64
+        serialized["tcb_live_digest"] = "c" * 64
         for field_name in (
             "profile_policy_ceiling_snapshot",
             "workspace_policy_ceiling_snapshot",
@@ -42,7 +47,9 @@ class ExecutionBindingLegacyDigestTestCase(unittest.TestCase):
         ) as digest:
             rehydrated = execution_binding_from_document(serialized)
 
-        self.assertEqual(rehydrated.binding_digest, serialized["binding_digest"])
+        self.assertNotEqual(rehydrated.binding_digest, serialized["binding_digest"])
+        self.assertTrue(rehydrated.capabilities_snapshot.tool_orchestration)
+        self.assertFalse(rehydrated.capabilities_snapshot.confirmations)
         self.assertLessEqual(digest.call_count, 8)
 
 
@@ -54,12 +61,10 @@ def _execution_binding() -> RuntimeExecutionBinding:
         profile_definition_revision="1",
         workspace_binding_id="workspace-codex",
         workspace_binding_revision=0,
-        capability_certificate_id="certificate-codex",
-        certificate_evidence_digest="a" * 64,
         runtime_engine_id="codex",
         adapter_id="codex-app-server",
         adapter_version="test",
-        adapter_artifact_digest="b" * 64,
+        adapter_identity_digest="b" * 64,
         model_provider_id="codex",
         model_id="gpt-test",
         provider_protocol="codex-app-server-stdio",
@@ -67,8 +72,9 @@ def _execution_binding() -> RuntimeExecutionBinding:
         routing_constraint=codex_routing_constraint(),
         credential_binding_id=None,
         reasoning_effort=None,
-        certified_reasoning_efforts=(),
+        reasoning_efforts=(),
         default_reasoning_effort=None,
+        capabilities=codex_runtime_capabilities(),
         execution_mode="full-access",
         profile_policy_ceiling=codex_runtime_policy(),
         workspace_policy_ceiling=codex_runtime_policy(),

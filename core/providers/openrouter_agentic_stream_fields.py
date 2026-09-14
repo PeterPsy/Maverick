@@ -45,14 +45,14 @@ def validate_router_metadata(
 ) -> None:
     metadata = object_field(payload)
     if metadata.get("requested") != model_id or metadata.get("attempt") != 1:
-        raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+        raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
     endpoints = object_field(metadata.get("endpoints"))
     available = endpoints.get("available")
     if not isinstance(available, list):
-        raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+        raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
     selected = [item for item in available if isinstance(item, dict) and item.get("selected") is True]
     if len(selected) != 1:
-        raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+        raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
     selected_provider = required_text(selected[0].get("provider"))
     selected_model = required_text(selected[0].get("model"))
     allowed_models = {model_id, *resolved_model_ids}
@@ -64,18 +64,18 @@ def validate_router_metadata(
         )
         or selected_model not in allowed_models
     ):
-        raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+        raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
     attempts = metadata.get("attempts")
     if attempts is not None:
         if not isinstance(attempts, list) or len(attempts) != 1:
-            raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+            raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
         attempt = object_field(attempts[0])
         if (
             attempt.get("provider") != selected_provider
             or attempt.get("model") != selected_model
             or attempt.get("status") != 200
         ):
-            raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+            raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
 
 
 def reasoning_details(value: object) -> list[dict[str, object]]:

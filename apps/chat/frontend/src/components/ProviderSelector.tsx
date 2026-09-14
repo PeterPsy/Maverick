@@ -26,7 +26,6 @@ function providerSearchText(provider: ProviderItem) {
     provider.hosted_provider_id,
     provider.hosted_model_id,
     provider.agentic_rollout_status,
-    provider.agentic_certificate_status,
     provider.agentic_egress_policy_id,
     provider.execution_family_label,
     provider.execution_family_description,

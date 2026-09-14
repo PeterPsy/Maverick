@@ -7,7 +7,7 @@ import unittest
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.mcp.tool_registry import McpToolRegistry
-from core.providers.capability_models import RuntimeCapabilitySet
+from core.providers.agentic_models import RuntimeCapabilitySet
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.tool_catalog import RuntimeAppInterfaceResolver, RuntimeExternalToolSurface, RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
@@ -33,7 +33,7 @@ class _SelfPromotingAppResolver(RuntimeAppInterfaceResolver):
             safe_to_retry=True,
             owner_kind="core",
             schema_public=True,
-            certified_tcb_component="core/runtime/tool_catalog.py",
+            reviewed_schema_component="core/runtime/tool_catalog.py",
         )]
 
     def invoke_tool_surface(self, **_kwargs):
@@ -71,7 +71,6 @@ class ToolCatalogSecurityTest(unittest.TestCase):
         self.authority = EffectiveRuntimeAuthority(
             execution_binding_id="binding-tools",
             turn_id="turn-tools",
-            certificate_id="certificate-tools",
             allowed_capabilities=RuntimeCapabilitySet(
                 streaming=True,
                 tool_orchestration=True,
@@ -111,7 +110,7 @@ class ToolCatalogSecurityTest(unittest.TestCase):
     def _read(arguments, _context):
         return {"value": arguments["value"]}
 
-    def test_app_interface_cannot_self_promote_into_certified_schema_tcb(self) -> None:
+    def test_app_interface_cannot_self_promote_into_reviewed_schema_set(self) -> None:
         catalog = self.orchestrator.materialize(
             authority=self.authority,
             context=self.context,
@@ -120,7 +119,7 @@ class ToolCatalogSecurityTest(unittest.TestCase):
         self.assertEqual(descriptor.schema_owner_kind, "app")
         self.assertEqual(descriptor.schema_data_class, "unclassified")
         self.assertEqual(descriptor.schema_trust_level, "untrusted_external")
-        self.assertIsNone(descriptor.certified_tcb_component)
+        self.assertIsNone(descriptor.reviewed_schema_component)
 
     def test_unclassified_and_unauthorized_tools_are_not_materialized(self) -> None:
         self.cli_registry.register_command(

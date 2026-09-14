@@ -1,4 +1,4 @@
-"""Certified public projections for variable hosted tool results."""
+"""Reviewed public projections for variable hosted tool results."""
 
 from __future__ import annotations
 
@@ -95,28 +95,28 @@ _PLATFORM_ID = {
     "participant": re.compile(r"^iap_[0-9a-f]{32}$"),
 }
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_CERTIFIED_COMPONENT = "tool-schema-catalog"
+_REVIEWED_COMPONENT = "tool-schema-catalog"
 
 
-def definition_has_certified_result_projection(definition) -> bool:
+def definition_has_reviewed_result_projection(definition) -> bool:
     """Return whether one exact Core definition owns a reviewed projector."""
     expected = _expected_projection(definition)
     return bool(
         expected
         and getattr(definition, "owner_kind", None) == "core"
         and getattr(definition, "schema_public", False) is True
-        and getattr(definition, "certified_tcb_component", None)
-        == _CERTIFIED_COMPONENT
+        and getattr(definition, "reviewed_schema_component", None)
+        == _REVIEWED_COMPONENT
         and getattr(definition, "agentic_result_projection", None) == expected
     )
 
 
-def project_certified_tool_result(
+def project_reviewed_tool_result(
     definition,
     result: dict[str, object],
 ) -> dict[str, object] | None:
     """Drop all content fields and emit only contract-bounded lifecycle metadata."""
-    if not definition_has_certified_result_projection(definition):
+    if not definition_has_reviewed_result_projection(definition):
         return None
     contract = str(definition.agentic_result_projection)
     operation = next(
@@ -198,12 +198,12 @@ def project_certified_tool_result(
     return None
 
 
-def certified_tool_result_classification_projection(
+def reviewed_tool_result_classification_projection(
     definition,
     result: dict[str, object],
 ) -> RuntimeToolClassificationProjection | None:
-    """Authenticate and omit only identifiers emitted by a certified projector."""
-    if project_certified_tool_result(definition, result) != result:
+    """Authenticate and omit only identifiers emitted by a reviewed projector."""
+    if project_reviewed_tool_result(definition, result) != result:
         return None
     paths = tuple(
         (field_name,)
@@ -453,7 +453,7 @@ __all__ = [
     "INTER_AGENT_EFFECTS",
     "INTER_AGENT_MCP_PROJECTIONS",
     "INTER_AGENT_RESULT_PROJECTIONS",
-    "certified_tool_result_classification_projection",
-    "definition_has_certified_result_projection",
-    "project_certified_tool_result",
+    "reviewed_tool_result_classification_projection",
+    "definition_has_reviewed_result_projection",
+    "project_reviewed_tool_result",
 ]

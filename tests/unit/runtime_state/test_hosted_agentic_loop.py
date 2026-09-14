@@ -288,7 +288,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
             "recovery_required",
         )
 
-    def test_certificate_revocation_mid_step_blocks_tool_execution(self) -> None:
+    def test_profile_revocation_mid_step_blocks_tool_execution(self) -> None:
         revoked = False
 
         def revoke() -> None:
@@ -297,7 +297,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
 
         def refresh(_context):
             if revoked:
-                raise HostedAgenticLoopError("certificate_revoked")
+                raise HostedAgenticLoopError("workspace_profile_binding_disabled")
             return self.harness.authority
 
         client = DeterministicFakeAgenticClient(

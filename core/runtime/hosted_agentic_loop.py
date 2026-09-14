@@ -10,57 +10,6 @@ import json
 from typing import Callable
 from uuid import NAMESPACE_URL, uuid5
 
-import core.egress.agentic_models as agentic_egress_models_module
-import core.egress.agentic_policy as agentic_egress_policy_module
-import core.egress.agentic_transforms as agentic_egress_transforms_module
-import core.providers.agentic_reason_codes as agentic_reason_codes_module
-import core.runtime.hosted_agentic_budget as hosted_agentic_budget_module
-import core.runtime.hosted_agentic_budget_models as hosted_agentic_budget_models_module
-import core.runtime.hosted_agentic_budget_recovery as hosted_agentic_budget_recovery_module
-import core.runtime.hosted_agentic_finalization_budget as hosted_agentic_finalization_budget_module
-import core.runtime.hosted_finalization_policy as hosted_finalization_policy_module
-import core.runtime.hosted_agentic_policy as hosted_agentic_policy_module
-import core.runtime.hosted_agentic_request as hosted_agentic_request_module
-import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
-import core.runtime.hosted_agentic_state as hosted_agentic_state_module
-import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
-import core.runtime.hosted_agentic_transport as hosted_agentic_transport_module
-import core.runtime.hosted_agentic_tool_execution as hosted_agentic_tool_execution_module
-import core.runtime.hosted_app_effect_authority as hosted_app_effect_authority_module
-import core.runtime.hosted_builtin_app_execution as hosted_builtin_app_execution_module
-import core.runtime.hosted_context_management as hosted_context_management_module
-import core.runtime.hosted_harness_recipes as hosted_harness_recipes_module
-import core.runtime.hosted_tool_process_registry as hosted_tool_process_registry_module
-import core.runtime.hosted_tool_result_admission as hosted_tool_result_admission_module
-import core.runtime.hosted_tool_result_projections as hosted_tool_result_projections_module
-import core.runtime.hosted_workspace_snapshot as hosted_workspace_snapshot_module
-import core.runtime.hosted_workspace_shell as hosted_workspace_shell_module
-import core.runtime.hosted_process_output as hosted_process_output_module
-import core.runtime.confined_filesystem_delete as confined_filesystem_delete_module
-import core.runtime.confined_filesystem_mutation_support as confined_filesystem_mutation_support_module
-import core.runtime.confined_filesystem_mutations as confined_filesystem_mutations_module
-import core.runtime.confined_filesystem_search as confined_filesystem_search_module
-import core.runtime.full_workspace_contract as full_workspace_contract_module
-import core.runtime.output_compaction.cli_result as output_compaction_cli_result_module
-import core.runtime.provider_step_journal as provider_step_journal_module
-import core.runtime.runtime_cancellation as runtime_cancellation_module
-import core.runtime.semantic_context_blocks as semantic_context_blocks_module
-import core.runtime.semantic_envelope as semantic_envelope_module
-import core.runtime.semantic_envelope_models as semantic_envelope_models_module
-import core.runtime.semantic_tool_blocks as semantic_tool_blocks_module
-import core.runtime.hosted_agentic_tool_results as hosted_agentic_tool_results_module
-import core.runtime.hosted_provider_runtime as hosted_provider_runtime_module
-import core.runtime.tool_core_capabilities as tool_core_capabilities_module
-import core.runtime.tool_discovery_capabilities as tool_discovery_capabilities_module
-import core.runtime.tool_discovery_support as tool_discovery_support_module
-import core.runtime.tool_filesystem_listing as tool_filesystem_listing_module
-import core.runtime.tool_full_workspace_capabilities as tool_full_workspace_capabilities_module
-import core.runtime.tool_full_workspace_schemas as tool_full_workspace_schemas_module
-import core.runtime.tool_full_workspace_support as tool_full_workspace_support_module
-import core.runtime.tool_process_capabilities as tool_process_capabilities_module
-import core.runtime.tool_result_artifacts as tool_result_artifacts_module
-import core.runtime.tool_orchestrator as tool_orchestrator_module
-import core.runtime.workspace_instructions as workspace_instructions_module
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelRequest,
@@ -119,14 +68,12 @@ from core.runtime.hosted_context_management import (
     manage_hosted_provider_context,
     validate_hosted_request_context,
 )
-from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.provider_step_journal import ProviderStepJournal
 from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
-from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
@@ -174,64 +121,6 @@ class HostedAgenticLoop:
             private_state_service=private_state_service,
         )
 
-    @property
-    def artifact_components(self) -> tuple[object, ...]:
-        """Expose shared orchestration modules to the adapter artifact digest."""
-        return (
-            agentic_egress_models_module,
-            agentic_egress_policy_module,
-            agentic_egress_transforms_module,
-            agentic_reason_codes_module,
-            hosted_agentic_budget_module,
-            hosted_agentic_budget_models_module,
-            hosted_agentic_budget_recovery_module,
-            hosted_agentic_finalization_budget_module,
-            hosted_finalization_policy_module,
-            hosted_agentic_policy_module,
-            hosted_agentic_request_module,
-            hosted_agentic_recovery_module,
-            hosted_agentic_state_module,
-            hosted_agentic_stream_module,
-            hosted_agentic_transport_module,
-            hosted_agentic_tool_execution_module,
-            hosted_agentic_tool_results_module,
-            hosted_app_effect_authority_module,
-            hosted_builtin_app_execution_module,
-            hosted_context_management_module,
-            hosted_harness_recipes_module,
-            hosted_tool_process_registry_module,
-            hosted_tool_result_admission_module,
-            hosted_tool_result_projections_module,
-            hosted_workspace_snapshot_module,
-            hosted_workspace_shell_module,
-            hosted_process_output_module,
-            confined_filesystem_delete_module,
-            confined_filesystem_mutation_support_module,
-            confined_filesystem_mutations_module,
-            confined_filesystem_search_module,
-            full_workspace_contract_module,
-            output_compaction_cli_result_module,
-            hosted_provider_runtime_module,
-            tool_core_capabilities_module,
-            tool_discovery_capabilities_module,
-            tool_discovery_support_module,
-            tool_filesystem_listing_module,
-            tool_full_workspace_capabilities_module,
-            tool_full_workspace_schemas_module,
-            tool_full_workspace_support_module,
-            tool_process_capabilities_module,
-            tool_result_artifacts_module,
-            tool_orchestrator_module,
-            runtime_cancellation_module,
-            provider_step_journal_module,
-            semantic_context_blocks_module,
-            semantic_envelope_module,
-            semantic_envelope_models_module,
-            semantic_tool_blocks_module,
-            workspace_instructions_module,
-            build_core_runtime_tool_capabilities,
-            ConfinedWorkspaceFilesystem.list_entries,
-        )
 
     async def execute(
         self,

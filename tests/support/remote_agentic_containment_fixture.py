@@ -9,15 +9,10 @@ from types import SimpleNamespace
 from core.providers.maverick_agent_builtins import HOSTED_TOOL_LOOP_ADAPTER_VERSION
 from core.providers.agentic_models import WorkspaceAgenticProfileBinding, default_actor_selection_policy
 from core.providers.agentic_profiles import publish_codex_agentic_profile
-from core.providers.capability_models import (
-    CapabilityCertificate,
-    CapabilityCertificateStatus,
-    RuntimeCapabilitySet,
-)
 from core.providers.google_agentic_profile import ensure_google_agentic_preview_profile
 from core.providers.service import builtin_provider_registry, register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
-from core.runtime.execution_binding import build_runtime_execution_binding, canonical_digest
+from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -43,9 +38,6 @@ class RemoteAgenticContainmentFixture:
                 agentic_profile_definitions=FakeCollection(),
                 agentic_profile_definition_statuses=FakeCollection(),
                 workspace_agentic_profile_bindings=FakeCollection(),
-                capability_evidence=FakeCollection(),
-                capability_certificates=FakeCollection(),
-                capability_certificate_statuses=FakeCollection(),
             )
         )
         self.runtime_store = RuntimeDocumentStore(
@@ -90,11 +82,6 @@ class RemoteAgenticContainmentFixture:
         self.codex_status = self.provider_store.get_agentic_profile_definition_status(
             self.codex_binding.definition_id, self.codex_binding.definition_revision
         )
-        codex_certificate = self._save_v8_certificate(codex_definition, suite_id="codex-agentic-contract")
-        self.codex_certificate_status = self.provider_store.get_capability_certificate_status(
-            codex_certificate.certificate_id
-        )
-
         self.remote_definition = ensure_google_agentic_preview_profile(
             self.provider_store,
             adapter=SimpleNamespace(
@@ -123,65 +110,7 @@ class RemoteAgenticContainmentFixture:
             ),
             expected_revision=None,
         )
-        self.remote_certificate = self._save_v8_certificate(
-            self.remote_definition,
-            suite_id="google-agentic-contract",
-        )
         self.remote_session = self._save_remote_mismatch_session()
-
-    def _save_v8_certificate(self, definition, *, suite_id: str) -> CapabilityCertificate:
-        certificate = CapabilityCertificate(
-            certificate_id=definition.capability_certificate_id,
-            schema_version="1",
-            runtime_engine_id=definition.runtime_engine_id,
-            adapter_id=definition.adapter_id,
-            adapter_version=definition.adapter_version_constraint.removeprefix("=="),
-            adapter_artifact_digest="a" * 64,
-            model_provider_id=definition.model_provider_id,
-            model_id=definition.model_id,
-            model_revision=None,
-            provider_protocol=definition.provider_protocol,
-            provider_api_version=definition.provider_api_version,
-            certified_upstream_ids=definition.routing_constraint.allowed_upstream_ids,
-            routing_constraint_digest=canonical_digest(definition.routing_constraint),
-            certified_capabilities=RuntimeCapabilitySet(
-                streaming=True,
-                tool_orchestration=True,
-                cli=False,
-                mcp=False,
-                skill_catalog=False,
-                filesystem_list=True,
-                filesystem_read=True,
-                filesystem_write=False,
-                shell=False,
-                interrupt=True,
-                same_turn_steering=False,
-                recovery=False,
-                confirmation_resume=False,
-                provider_private_state=True,
-                attachment_modalities=(),
-            ),
-            certified_reasoning_efforts=("high",),
-            default_reasoning_effort="high",
-            suite_id=suite_id,
-            suite_version="8",
-            test_run_id="containment-fixture",
-            evidence_digest="b" * 64,
-            evidence_refs=("platform-evidence:test:containment",),
-            issued_at=NOW,
-            expires_at=NOW + timedelta(days=30),
-        )
-        self.provider_store.save_capability_certificate(certificate)
-        self.provider_store.save_capability_certificate_status(
-            CapabilityCertificateStatus(
-                certificate_id=certificate.certificate_id,
-                status="active",
-                revision=0,
-                updated_at=NOW,
-            ),
-            expected_revision=None,
-        )
-        return certificate
 
     def _save_remote_mismatch_session(self) -> RuntimeSessionRecord:
         binding = build_runtime_execution_binding(
@@ -191,11 +120,10 @@ class RemoteAgenticContainmentFixture:
             profile_definition_revision=self.remote_definition.revision,
             workspace_binding_id=self.remote_binding.binding_id,
             workspace_binding_revision=self.remote_binding.revision,
-            capability_certificate_id=self.remote_certificate.certificate_id,
             runtime_engine_id=self.remote_definition.runtime_engine_id,
             adapter_id=self.remote_definition.adapter_id,
             adapter_version="5",
-            adapter_artifact_digest=self.remote_certificate.adapter_artifact_digest,
+            adapter_identity_digest="a" * 64,
             model_provider_id=self.remote_definition.model_provider_id,
             model_id=self.remote_definition.model_id,
             provider_protocol=self.remote_definition.provider_protocol,
@@ -203,15 +131,15 @@ class RemoteAgenticContainmentFixture:
             routing_constraint=self.remote_definition.routing_constraint,
             credential_binding_id=None,
             reasoning_effort="high",
-            certified_reasoning_efforts=("high",),
+            reasoning_efforts=("high",),
             default_reasoning_effort="high",
+            capabilities=self.remote_definition.capabilities,
             execution_mode="sandbox",
             profile_policy_ceiling=self.remote_definition.policy_ceiling,
             workspace_policy_ceiling=self.remote_definition.policy_ceiling,
             egress_policy_id=self.remote_definition.egress_policy_id,
             egress_policy_revision=self.remote_definition.egress_policy_revision,
             created_at=NOW,
-            certificate_evidence_digest=self.remote_certificate.evidence_digest,
         )
         session = RuntimeSessionRecord(
             session_id=binding.session_id,
@@ -367,9 +295,6 @@ class RemoteAgenticContainmentFixture:
                 self.codex_binding.definition_id,
                 self.codex_binding.definition_revision,
             ),
-            self.provider_store.get_capability_certificate_status(
-                self.codex_certificate_status.certificate_id
-            ),
         )
 
     def _state_snapshot(self):
@@ -378,9 +303,6 @@ class RemoteAgenticContainmentFixture:
             self.provider_store.get_agentic_profile_definition_status(
                 self.remote_definition.definition_id,
                 self.remote_definition.revision,
-            ),
-            self.provider_store.get_capability_certificate_status(
-                self.remote_certificate.certificate_id
             ),
             self.runtime_store.get_session(self.remote_session.session_id),
             self.runtime_store.get_state(self.remote_session.session_id),

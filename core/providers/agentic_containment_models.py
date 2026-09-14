@@ -16,7 +16,7 @@ ContainmentMode = Literal["dry_run", "apply"]
 class RemoteContainmentTarget:
     """One redaction-safe planned provider-CAS or session-lifecycle transition."""
 
-    target_kind: Literal["binding", "profile", "certificate", "session"]
+    target_kind: Literal["binding", "profile", "session"]
     identity: str
     workspace_id: str | None
     model_provider_id: str
@@ -40,7 +40,6 @@ class RemoteAgenticContainmentReport:
     counts: dict[str, int]
     binding_targets: tuple[RemoteContainmentTarget, ...]
     profile_targets: tuple[RemoteContainmentTarget, ...]
-    certificate_targets: tuple[RemoteContainmentTarget, ...]
     session_targets: tuple[RemoteContainmentTarget, ...]
     session_inventory: tuple[RemoteAgenticSessionInventoryItem, ...]
     plan_digest: str

@@ -95,7 +95,6 @@ class AgenticWorkspaceBindingApiTest(unittest.TestCase):
     def test_raw_agentic_catalogs_require_workspace_authority(self) -> None:
         for path in (
             "/api/providers/agentic/profile-definitions",
-            "/api/providers/agentic/certificates",
         ):
             with self.subTest(path=path), patch(
                 "core.api.provider_api.require_provider_selection_authority",

@@ -36,9 +36,6 @@ class MaverickAgentOnboardingTest(unittest.TestCase):
             current,
             revision="67",
             adapter_version_constraint="==56",
-            capability_certificate_id=(
-                f"capability-certificate:{current.definition_id}:67"
-            ),
         )
         store.save_agentic_profile_definition(previous)
         store.save_agentic_profile_definition_status(

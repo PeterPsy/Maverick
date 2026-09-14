@@ -182,10 +182,6 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         self.assertEqual(pyproject["tool"]["setuptools"]["packages"]["find"]["include"], ["core*"])
         self.assertTrue(pyproject["tool"]["setuptools"]["packages"]["find"]["namespaces"])
         self.assertIn(
-            "codex_profile_artifacts.json",
-            pyproject["tool"]["setuptools"]["package-data"]["core.providers"],
-        )
-        self.assertIn(
             "hosted_builtin_app_effect_audit.json",
             pyproject["tool"]["setuptools"]["package-data"]["core.runtime"],
         )

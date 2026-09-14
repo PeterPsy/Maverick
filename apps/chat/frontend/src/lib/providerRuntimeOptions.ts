@@ -24,14 +24,12 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
       profile.selectable === true &&
       (profile.execution_family === "native_agent" || profile.execution_family === "maverick_agent") &&
       profile.family_contract_status === "complete" &&
-      profile.full_workspace_status === "certified" &&
+      profile.full_workspace_status === "available" &&
       nativeProfileRuntimeReady(payload, profile) &&
       profile.containment_status !== "NO-GO" &&
       profile.enabled &&
-      profile.certified === true &&
       profile.effective_capabilities?.status === "active" &&
-      (profile.rollout_status === "preview" || profile.rollout_status === "available") &&
-      profile.certificate?.effective_status === "active",
+      (profile.rollout_status === "preview" || profile.rollout_status === "available"),
   );
   if (agenticProfiles.length) {
     options.push(
@@ -61,8 +59,6 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           description: modelProvider?.label || profile.model_provider_id,
           status: "active",
           agentic_rollout_status: profile.rollout_status,
-          agentic_certificate_status: profile.certificate?.effective_status || null,
-          agentic_certificate_expires_at: profile.certificate?.expires_at || null,
           agentic_egress_policy_id: profile.egress_policy_id || null,
           agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
           agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,

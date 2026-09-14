@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from core.providers.certificate_service import validate_certificate_for_binding
 from core.providers.errors import ProviderError
 from core.recovery.continuation_admission import (
     COMPATIBLE_UPGRADE_SOURCE_REASONS,
@@ -46,14 +45,13 @@ def revalidate_continuation_handoff(
         adapter = state.provider_registry.get_agentic_runtime_adapter(
             target.runtime_engine_id
         )
-        source_reason = _certificate_problem(
+        source_reason = _runtime_problem(
             state,
             binding=source,
             adapter=adapter,
             now=now,
-            historical_native_source=True,
         )
-        target_reason = _certificate_problem(
+        target_reason = _runtime_problem(
             state,
             binding=target,
             adapter=adapter,
@@ -99,24 +97,21 @@ def revalidate_continuation_handoff(
     return target_reason is None
 
 
-def _certificate_problem(
+def _runtime_problem(
     state,
     *,
     binding,
     adapter,
     now: datetime,
-    historical_native_source: bool = False,
 ) -> str | None:
-    try:
-        validate_certificate_for_binding(
-            state.provider_store,
-            binding=binding,
-            adapter=adapter,
-            now=now,
-            historical_native_source=historical_native_source,
-        )
-    except ProviderError as error:
-        return _reason(error)
+    if (
+        str(getattr(adapter, "runtime_engine_id", ""))
+        != binding.runtime_engine_id
+        or str(getattr(adapter, "adapter_id", "")) != binding.adapter_id
+        or str(getattr(adapter, "adapter_version", ""))
+        != binding.adapter_version
+    ):
+        return "runtime_adapter_identity_mismatch"
     return None
 
 

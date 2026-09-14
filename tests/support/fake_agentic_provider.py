@@ -1,4 +1,4 @@
-"""Deterministic provider client for hosted-loop certification tests."""
+"""Deterministic provider client for hosted-loop contract tests."""
 
 from __future__ import annotations
 

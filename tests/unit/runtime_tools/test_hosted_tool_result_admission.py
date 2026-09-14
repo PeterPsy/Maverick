@@ -189,7 +189,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
                 entrypoint_path=None,
                 effect_class="read",
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             lambda _arguments, _context: {},
         )
@@ -233,7 +233,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
                 entrypoint_path="apps/fixture/cli.py",
                 effect_class="read",
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
                 agentic_result_data_class="public",
             ),
             lambda _arguments, _context: {},
@@ -270,7 +270,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
                 entrypoint_path="apps/fixture/cli.py",
                 effect_class="read",
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             lambda _arguments, _context: {},
         )
@@ -293,7 +293,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
                 entrypoint_path="apps/fixture/mcp.py",
                 effect_class="read",
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             lambda _arguments, _context: {},
         )

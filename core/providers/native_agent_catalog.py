@@ -1,4 +1,4 @@
-"""Model availability for certified native-runtime provider connections."""
+"""Model availability for native-runtime provider connections."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def native_agent_model_provider_connected(
     *,
     model_provider_id: str,
 ) -> bool:
-    """Return whether the certified integration connects to this provider."""
+    """Return whether the integration connects to this provider."""
     return any(
         connection.model_provider_id == model_provider_id
         for connection in installation.model_provider_connections
@@ -102,7 +102,7 @@ def native_agent_model_available(
     )
 
 
-def require_native_agent_model_available(registry, definition, *, certificate=None) -> None:
+def require_native_agent_model_available(registry, definition) -> None:
     """Fence model/revision/reasoning availability at every admission boundary."""
     from core.providers.errors import AgenticProfileError
     from core.providers.execution_families import effective_agentic_execution_family
@@ -128,10 +128,8 @@ def require_native_agent_model_available(registry, definition, *, certificate=No
         model.model_revision != definition.model_revision
         or model.revision_policy != definition.model_revision_policy
         or (definition.native_model_catalog_digest and definition.native_model_catalog_digest != model.digest)
-        or (certificate is not None and (
-            certificate.certified_reasoning_efforts != model.reasoning_efforts
-            or certificate.default_reasoning_effort != model.default_reasoning_effort
-        ))
+        or definition.reasoning_efforts != model.reasoning_efforts
+        or definition.default_reasoning_effort != model.default_reasoning_effort
     ):
         raise AgenticProfileError("native_agent_model_catalog_mismatch")
 

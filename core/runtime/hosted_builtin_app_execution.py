@@ -1,4 +1,4 @@
-"""Certified executable closure for hosted built-in app surfaces."""
+"""Reviewed executable closure for hosted built-in app surfaces."""
 
 from __future__ import annotations
 
@@ -113,11 +113,11 @@ def hosted_builtin_app_execution_digest(
     return digest.hexdigest()
 
 
-def certified_hosted_builtin_app_artifact_paths(
+def reviewed_hosted_builtin_app_artifact_paths(
     *,
     apps_root: Path,
 ) -> tuple[str, ...]:
-    """Return repository-relative closure roots included in the execution TCB."""
+    """Return repository-relative roots included in the reviewed closure."""
     values: set[str] = set()
     for app_id in HOSTED_BUILTIN_APP_IDS:
         for surface in ("cli", "mcp"):
@@ -306,7 +306,7 @@ def _require_regular_file_or_directory(app_root: Path, relative: str) -> None:
 
 __all__ = [
     "HOSTED_BUILTIN_APP_IDS",
-    "certified_hosted_builtin_app_artifact_paths",
+    "reviewed_hosted_builtin_app_artifact_paths",
     "hosted_builtin_app_execution_digest",
     "hosted_builtin_app_execution_roots",
 ]

@@ -303,7 +303,6 @@ function effectiveCodexCapabilities(): NonNullable<ProviderItem["agentic_effecti
       app_references: true,
       confirmations: false,
     },
-    tcb: { posture: "exact_local_contract" },
   };
 }
 

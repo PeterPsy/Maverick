@@ -1,4 +1,4 @@
-"""Fail-closed admission for certified remote agentic runtimes."""
+"""Fail-closed admission for remote agentic runtimes."""
 
 from __future__ import annotations
 
@@ -187,9 +187,9 @@ def require_remote_agentic_authority(
     )
     if reason is None:
         return
-    from core.providers.errors import CapabilityCertificateError
+    from core.providers.errors import AgenticRuntimeError
 
-    raise CapabilityCertificateError(reason)
+    raise AgenticRuntimeError(reason)
 
 
 def _resolve_workspace_attestation(

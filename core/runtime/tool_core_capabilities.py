@@ -62,7 +62,7 @@ MAX_FILESYSTEM_READ_BYTES = 262_144
 MAX_FILESYSTEM_WRITE_BYTES = 1_048_576
 MAX_SHELL_OUTPUT_BYTES = 131_072
 MAX_SHELL_TIMEOUT_SECONDS = 30
-CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
+REVIEWED_TOOL_SCHEMA_COMPONENT = "tool-schema-catalog"
 
 
 def build_core_runtime_tool_capabilities(
@@ -373,7 +373,7 @@ def _core_surface(
         safe_to_retry=safe_to_retry,
         owner_kind="core",
         schema_public=True,
-        certified_tcb_component=CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT,
+        reviewed_schema_component=REVIEWED_TOOL_SCHEMA_COMPONENT,
     )
 
 

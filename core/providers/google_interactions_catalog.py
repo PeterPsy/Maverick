@@ -193,7 +193,7 @@ def validate_google_interactions_catalog(
         model_name != f"models/{request.model_id}"
         # Google's stable-alias record currently omits this documented field.
         # Exact resource name and version remain mandatory; a supplied base id
-        # must still match, so omission cannot redirect the certified request.
+        # must still match, so omission cannot redirect the configured request.
         or not base_model_matches
         or request.model_revision_policy != "exact"
         or not str(request.model_revision or "").strip()
@@ -258,7 +258,7 @@ def _fetch_catalog(
 ) -> object:
     headers = {
         "Accept": "application/json",
-        "User-Agent": "Maverick-Agentic-Certification/1",
+        "User-Agent": "Maverick-Agentic/1",
     }
     if credential is not None:
         headers["x-goog-api-key"] = credential.reveal()

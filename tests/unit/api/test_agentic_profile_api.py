@@ -48,7 +48,7 @@ class AgenticProfileApiTest(unittest.TestCase):
         build_pinned_execution_binding(
             provider_store,
             registry,
-            session_id="session-certified-api",
+            session_id="session-direct-profile-api",
             workspace_id="default",
             execution_mode="sandbox",
         )
@@ -69,16 +69,17 @@ class AgenticProfileApiTest(unittest.TestCase):
         encoded = json.dumps(profile, default=str)
         self.assertNotIn("credential_binding_id", encoded)
         self.assertNotIn("secret_ref", encoded)
-        self.assertTrue(profile["certified"])
         self.assertTrue(profile["selectable"])
         self.assertEqual(profile["containment_status"], "GO")
-        self.assertEqual(profile["certificate"]["effective_status"], "active")
+        self.assertEqual(profile["full_workspace_status"], "available")
+        self.assertTrue(profile["capabilities"]["tool_orchestration"])
         effective = profile["effective_capabilities"]
         self.assertEqual(effective["status"], "active")
         self.assertTrue(effective["capabilities"]["skill_catalog"])
         self.assertTrue(effective["capabilities"]["app_references"])
         self.assertEqual(effective["capabilities"]["attachment_modalities"], ("file",))
-        self.assertEqual(effective["tcb"]["posture"], "exact_local_contract")
+        self.assertNotIn("tcb", effective)
+        self.assertNotIn("certificate", profile)
         self.assertNotIn("credential", json.dumps(effective, default=str).lower())
 
         runtime_binding = build_pinned_execution_binding(
@@ -116,8 +117,8 @@ class AgenticProfileApiTest(unittest.TestCase):
             runtime_binding.reasoning_effort,
         )
         self.assertEqual(
-            session_payload["execution_binding"]["certified_reasoning_efforts"],
-            runtime_binding.certified_reasoning_efforts,
+            session_payload["execution_binding"]["reasoning_efforts"],
+            runtime_binding.reasoning_efforts,
         )
         self.assertEqual(
             session_payload["execution_binding"]["default_reasoning_effort"],
@@ -192,7 +193,7 @@ class AgenticProfileApiTest(unittest.TestCase):
             self.assertEqual(
                 [option["effort"] for option in profiles[provider_id]["supported_reasoning_efforts"]],
                 (
-                    ["minimal", "low", "medium", "high"]
+                    ["high"]
                     if provider_id == "google-ai-studio"
                     else ["max", "high", "low"]
                 ),
@@ -203,7 +204,7 @@ class AgenticProfileApiTest(unittest.TestCase):
                 profiles[provider_id]["containment_reason"],
                 "hosted_agent_runtime_disabled",
             )
-            self.assertEqual(profiles[provider_id]["certificate_eligibility"], "ineligible")
+            self.assertNotIn("certificate_eligibility", profiles[provider_id])
             effective = profiles[provider_id]["effective_capabilities"]
             self.assertEqual(effective["status"], "blocked")
             self.assertEqual(effective["reason_code"], "hosted_agent_runtime_disabled")

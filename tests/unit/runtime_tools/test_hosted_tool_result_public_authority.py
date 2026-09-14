@@ -149,14 +149,14 @@ class HostedToolResultPublicAuthorityTest(unittest.TestCase):
         )
         self.assertFalse(tightened.admitted_before_effect)
 
-    def test_certified_core_result_contract_is_an_explicit_public_authority(
+    def test_reviewed_core_result_contract_is_an_explicit_public_authority(
         self,
     ) -> None:
         self.cli.register_command(
             CliCommandDefinition(
                 command_id="core.public-result",
                 path_segments=["core", "public-result"],
-                description="Certified public result fixture.",
+                description="Reviewed public result fixture.",
                 argument_schema={"type": "object"},
                 owner_kind="core",
                 owner_id="fixture-core",
@@ -172,7 +172,7 @@ class HostedToolResultPublicAuthorityTest(unittest.TestCase):
                 entrypoint_path=None,
                 effect_class="mutating",
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
                 agentic_result_data_class="public",
             ),
             lambda _arguments, _context: {},

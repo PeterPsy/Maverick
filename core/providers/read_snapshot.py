@@ -39,22 +39,6 @@ class ProviderReadSnapshot:
         return self._store.list_workspace_agentic_profile_bindings(workspace_id)
 
     @cache
-    def get_capability_evidence(self, evidence_digest: str):
-        return self._store.get_capability_evidence(evidence_digest)
-
-    @cache
-    def get_capability_certificate(self, certificate_id: str):
-        return self._store.get_capability_certificate(certificate_id)
-
-    @cache
-    def list_capability_certificates(self):
-        return self._store.list_capability_certificates()
-
-    @cache
-    def get_capability_certificate_status(self, certificate_id: str):
-        return self._store.get_capability_certificate_status(certificate_id)
-
-    @cache
     def get_provider_binding(self, binding_id: str):
         return self._store.get_provider_binding(binding_id)
 

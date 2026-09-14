@@ -24,7 +24,7 @@ from core.providers.agentic_default_migration import migrate_legacy_codex_defaul
 from core.providers.agentic_workspace_admin import (
     save_workspace_agentic_binding,
 )
-from core.providers.errors import AgenticProfileError, CapabilityCertificateError, ProviderNotFoundError
+from core.providers.errors import AgenticProfileError, AgenticRuntimeError, ProviderNotFoundError
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.errors import RuntimeProviderStateError
@@ -34,8 +34,8 @@ from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.store import RuntimeStore
 
 
-AGENTIC_SCHEMA_MIGRATION_ID = "agentic-runtime-schema-v2"
-AGENTIC_SCHEMA_VERSION = "2"
+AGENTIC_SCHEMA_MIGRATION_ID = "agentic-runtime-schema-v3"
+AGENTIC_SCHEMA_VERSION = "3"
 
 
 def migrate_agentic_runtime_schema(
@@ -83,8 +83,8 @@ def migrate_agentic_runtime_schema(
                     workspace_id=session.workspace_id, execution_mode=session.effective_mode,
                     reasoning_effort=selection.model_reasoning_effort, legacy_inferred=True, now=timestamp,
                 )
-            except (AgenticProfileError, CapabilityCertificateError):
-                # Unavailable/uncertified legacy sessions must not break host
+            except (AgenticProfileError, AgenticRuntimeError):
+                # Unavailable legacy sessions must not break host
                 # startup or acquire a substitute model's authority.
                 continue
             runtime_store.save_session(
@@ -138,9 +138,6 @@ def migrate_agentic_runtime_schema(
         "bindings": sorted(f"{item.binding_id}:{item.revision}" for item in bindings),
         "sessions": sorted(session.session_id for session in sessions),
         "inferred_session_count": inferred_session_count,
-        "certificates": sorted(
-            item.certificate_id for item in provider_store.list_capability_certificates()
-        ),
     }
     completed = AgenticMigrationRecord(
         migration_id=AGENTIC_SCHEMA_MIGRATION_ID,
@@ -170,21 +167,11 @@ def _roll_forward_enabled_codex_bindings(
     now: datetime,
 ) -> None:
     from core.providers.agentic_profiles import publish_codex_agentic_profile
-    from core.providers.certificate_projection import certificate_profile_status
-
     provider = registry.get_provider_definition("codex")
     current_profiles = {}
     for model in provider.model_options:
         profile = publish_codex_agentic_profile(provider_store, definition=provider, model_id=model.model_id, now=now)
-        try:
-            certificate = provider_store.get_capability_certificate(profile.capability_certificate_id)
-        except ProviderNotFoundError:
-            continue
-        if certificate_profile_status(
-            certificate, provider_store.get_capability_certificate_status(certificate.certificate_id),
-            definition=profile, adapter=registry.get_agentic_runtime_adapter("codex"), store=provider_store, now=now,
-        ) == "active":
-            current_profiles[profile.definition_id] = profile
+        current_profiles[profile.definition_id] = profile
     for workspace_id in sorted(workspace_ids):
         bindings = provider_store.list_workspace_agentic_profile_bindings(workspace_id)
         sources_by_authority: dict[

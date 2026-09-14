@@ -66,15 +66,13 @@ function agenticProfile(
     selectable: true,
     execution_family: "maverick_agent",
     family_contract_status: "complete",
-    full_workspace_status: "certified",
+    full_workspace_status: "available",
     full_workspace_contract_revision: "codex-baseline-v20",
     harness_recipe: {
       id: `recipe-${providerId}`,
       revision: "1",
     },
     containment_status: "GO",
-    certified: true,
-    certificate: { effective_status: "active" },
     effective_capabilities: {
       status: "active",
       reason_code: null,
@@ -143,17 +141,16 @@ describe("remote agentic provider runtime options", () => {
     expect(providers.some((provider) => provider.workspace_profile_binding_id === contained.workspace_profile_binding_id)).toBe(false);
   });
 
-  it("fails closed for missing certification or a non-active certificate", () => {
+  it("fails closed for unavailable, non-selectable, or missing effective profiles", () => {
     const modelId = "gemini-3.6-flash";
-    const missingCertification = agenticProfile("google-ai-studio", modelId);
-    missingCertification.workspace_profile_binding_id = "binding-missing-certification";
-    delete missingCertification.certified;
-    const inactiveCertificate = agenticProfile("google-ai-studio", modelId);
-    inactiveCertificate.workspace_profile_binding_id = "binding-inactive-certificate";
-    inactiveCertificate.certificate = { effective_status: "revoked" };
-    const activeCertificate = agenticProfile("google-ai-studio", modelId);
-    activeCertificate.workspace_profile_binding_id = "binding-active-certificate";
-    activeCertificate.certificate = { effective_status: "active" };
+    const unavailable = agenticProfile("google-ai-studio", modelId);
+    unavailable.workspace_profile_binding_id = "binding-unavailable";
+    unavailable.full_workspace_status = "unavailable";
+    const nonSelectable = agenticProfile("google-ai-studio", modelId);
+    nonSelectable.workspace_profile_binding_id = "binding-not-selectable";
+    nonSelectable.selectable = false;
+    const activeProfile = agenticProfile("google-ai-studio", modelId);
+    activeProfile.workspace_profile_binding_id = "binding-active";
     const missingEffectiveSnapshot = agenticProfile("google-ai-studio", modelId);
     missingEffectiveSnapshot.workspace_profile_binding_id = "binding-missing-effective";
     delete missingEffectiveSnapshot.effective_capabilities;
@@ -166,12 +163,12 @@ describe("remote agentic provider runtime options", () => {
       ],
       agentic_profiles: {
         default_binding_id: null,
-        items: [missingCertification, inactiveCertificate, missingEffectiveSnapshot, activeCertificate],
+        items: [unavailable, nonSelectable, missingEffectiveSnapshot, activeProfile],
       },
     });
 
     expect(providers.filter((provider) => provider.workspace_profile_binding_id)).toHaveLength(1);
-    expect(providers[0]?.workspace_profile_binding_id).toBe(activeCertificate.workspace_profile_binding_id);
+    expect(providers[0]?.workspace_profile_binding_id).toBe(activeProfile.workspace_profile_binding_id);
   });
 
   it("does not fall back to mutable model reasoning metadata", () => {
@@ -193,7 +190,7 @@ describe("remote agentic provider runtime options", () => {
     expect(providers[0]?.supported_reasoning_efforts).toEqual([]);
   });
 
-  it("uses reasoning choices pinned on the certified agentic profiles", () => {
+  it("uses reasoning choices declared by the agentic profiles", () => {
     const googleModelId = "gemini-3.6-flash";
     const openRouterModelId = "z-ai/glm-5.3-flash";
     const payload: ProviderPayload = {

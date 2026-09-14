@@ -8,14 +8,7 @@ import shlex
 import shutil
 import subprocess
 from threading import Lock
-from typing import Callable
 from time import monotonic
-from core.providers.native_runtime_artifact import (
-    ANTIGRAVITY_CLI_RUNTIME_ARTIFACT,
-    CODEX_PACKAGED_RUNTIME_ARTIFACT,
-    NativeRuntimeArtifact,
-    inspect_native_runtime_artifact,
-)
 from core.providers.antigravity_cli_sandbox import ANTIGRAVITY_DEFAULT_MODEL
 
 from core.providers.models import (
@@ -26,7 +19,6 @@ from core.providers.models import (
 from core.providers.native_agent_contract import (
     REQUIRED_NATIVE_OPERATIONS,
     NativeAgentAdapterManifest,
-    NativeAgentCertificateReference,
     NativeAgentEffectContract,
     NativeAgentHarnessRecipe,
     NativeAgentInstallation,
@@ -47,9 +39,6 @@ ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION = (
     "maverick-antigravity-native-sandbox-v3"
 )
 ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
-ANTIGRAVITY_NATIVE_CONNECTION_CERTIFICATE_ID = (
-    "native-connection:antigravity-cli:google:5"
-)
 _INSPECTION_CACHE_SECONDS = 5.0
 _INSPECTION_CACHE: dict[tuple[str, tuple[str, ...]], tuple[float, NativeRuntimeStatus]] = {}
 _INSPECTION_CACHE_LOCK = Lock()
@@ -64,16 +53,10 @@ class CommandNativeRuntimeInspector:
         *,
         version_args: tuple[str, ...] = ("--version",),
         timeout_seconds: float = 2.0,
-        artifact_command: Callable[[], str] | None = None,
     ) -> None:
         self._command = command
         self._version_args = version_args
         self._timeout_seconds = timeout_seconds
-        self._artifact_command = artifact_command
-
-    def artifact(self):
-        command = self._artifact_command() if self._artifact_command else self.discover()[1]
-        return inspect_native_runtime_artifact(command or "")
 
     def discover(self) -> tuple[NativeAvailability, str | None]:
         argv = shlex.split(self._command)
@@ -148,9 +131,7 @@ class CommandNativeRuntimeInspector:
 
 
 def build_codex_native_installation(adapter) -> NativeAgentInstallation:
-    """Describe the certified Codex app-server integration and its connection."""
-    from core.providers.agentic_profiles import CODEX_PROFILE_REVISION
-
+    """Describe the Codex app-server integration and its connection."""
     recipe_payload = {
         "recipe_id": "codex-native-app-server",
         "revision": NATIVE_AGENT_RECIPE_REVISION,
@@ -194,21 +175,15 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             approval_policy="maverick_common_approval_policy",
             sandbox_policy_revision=NATIVE_AGENT_SANDBOX_POLICY_REVISION,
         ),
-        certificate=NativeAgentCertificateReference(
-            connection_certificate_ids=(("codex", f"native-connection:codex:codex:{CODEX_PROFILE_REVISION}"),),
-            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-        ),
-        inspector=CommandNativeRuntimeInspector(
-            adapter.codex_command, artifact_command=lambda: adapter._runtime_command(adapter.codex_command),
-        ),
-        runtime_artifact=CODEX_PACKAGED_RUNTIME_ARTIFACT,
+        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+        inspector=CommandNativeRuntimeInspector(adapter.codex_command),
     )
 
 
 def build_antigravity_cli_candidate_definition(
     now: datetime | None = None,
 ) -> ProviderDefinition:
-    """Publish the executable Antigravity candidate; certification gates use."""
+    """Publish the executable Antigravity candidate; activation remains explicit."""
     timestamp = now or datetime.now(tz=UTC)
     return ProviderDefinition(
         provider_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
@@ -217,7 +192,7 @@ def build_antigravity_cli_candidate_definition(
             "Pinned Antigravity stream-json native-agent candidate. Execution "
             "uses a session-private copy of an operator-managed OAuth profile "
             "and remains disabled until "
-            "the exact adapter, recipe, model, and certificate are approved."
+            "the exact adapter, recipe, and model are enabled by an operator."
         ),
         kind="runtime_backend",
         provider_role="runtime_engine",
@@ -257,9 +232,8 @@ def build_antigravity_cli_candidate_definition(
 def build_antigravity_cli_candidate_installation(
     *,
     command: str = "agy",
-    runtime_artifact: NativeRuntimeArtifact = ANTIGRAVITY_CLI_RUNTIME_ARTIFACT,
 ) -> NativeAgentInstallation:
-    """Return a complete, content-pinned, but uncertified registration."""
+    """Return a complete, content-pinned candidate registration."""
     recipe_payload = {
         "recipe_id": "antigravity-cli-native-candidate",
         "revision": ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION,
@@ -305,13 +279,6 @@ def build_antigravity_cli_candidate_installation(
                 ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION
             ),
         ),
-        certificate=NativeAgentCertificateReference(
-            connection_certificate_ids=((
-                "google",
-                ANTIGRAVITY_NATIVE_CONNECTION_CERTIFICATE_ID,
-            ),),
-            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-        ),
+        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         inspector=CommandNativeRuntimeInspector(command),
-        runtime_artifact=runtime_artifact,
     )

@@ -6,7 +6,11 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import unittest
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.runtime.agentic_inventory import inventory_remote_agentic_sessions
 from core.runtime.agentic_inventory_steps import correlate_provider_steps
 from core.runtime.execution_binding import build_runtime_execution_binding
@@ -261,12 +265,10 @@ class RemoteAgenticInventoryTest(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="binding-remote",
             workspace_binding_revision=1,
-            capability_certificate_id="certificate-remote",
-            certificate_evidence_digest="c" * 64,
             runtime_engine_id="maverick-tool-loop",
             adapter_id="hosted-adapter",
             adapter_version="5",
-            adapter_artifact_digest="d" * 64,
+            adapter_identity_digest="d" * 64,
             model_provider_id="google-ai-studio",
             model_id="gemini-test",
             provider_protocol="google-interactions",
@@ -274,8 +276,9 @@ class RemoteAgenticInventoryTest(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
             profile_policy_ceiling=policy,
             workspace_policy_ceiling=policy,

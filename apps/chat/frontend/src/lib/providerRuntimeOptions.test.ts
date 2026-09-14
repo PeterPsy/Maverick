@@ -151,18 +151,13 @@ describe("provider runtime options", () => {
             selectable: true,
             execution_family: "native_agent",
             family_contract_status: "complete",
-            full_workspace_status: "certified",
+            full_workspace_status: "available",
             full_workspace_contract_revision: "codex-baseline-v20",
             harness_recipe: {
               id: "codex-native-app-server",
               revision: "1",
             },
             containment_status: "GO",
-            certified: true,
-            certificate: {
-              effective_status: "active",
-              expires_at: "2026-09-16T00:00:00Z",
-            },
             effective_capabilities: {
               status: "active",
               reason_code: null,
@@ -201,7 +196,6 @@ describe("provider runtime options", () => {
       default_model_family: "gpt-5.6-sol",
       label: "gpt-5.6-sol",
       description: "Codex",
-      agentic_certificate_status: "active",
       agentic_egress_policy_id: "remote-agentic-contained",
       agentic_allowed_tool_handles: ["mcp:storage_read"],
       agentic_max_estimated_cost_microusd: 250_000,

@@ -12,7 +12,7 @@ from core.runtime.tool_catalog import (
     RuntimeToolSurfaceResult,
 )
 from core.runtime.tool_discovery_support import (
-    CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT,
+    REVIEWED_TOOL_SCHEMA_COMPONENT,
     MAX_DISCOVERY_RESULTS,
     call_schema as _call_schema,
     cli_context as _cli_context,
@@ -115,8 +115,8 @@ class RuntimeToolDiscoveryBroker:
                 public=all(
                     item.owner_kind == "core"
                     and item.schema_public
-                    and item.certified_tcb_component
-                    == CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT
+                    and item.reviewed_schema_component
+                    == REVIEWED_TOOL_SCHEMA_COMPONENT
                     for item in page
                 ),
             )
@@ -218,8 +218,8 @@ class RuntimeToolDiscoveryBroker:
                 public=all(
                     item.owner_kind == "core"
                     and item.schema_public
-                    and item.certified_tcb_component
-                    == CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT
+                    and item.reviewed_schema_component
+                    == REVIEWED_TOOL_SCHEMA_COMPONENT
                     for item in page
                 ),
             )

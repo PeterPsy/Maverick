@@ -12,19 +12,11 @@ from core.providers.agentic_containment_models import (
 )
 from core.providers.agentic_containment_plan import build_remote_agentic_containment_plan
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
-from core.providers.capability_models import CapabilityCertificateStatus
-from core.providers.certificate_service import revoke_capability_certificate
-from core.providers.errors import (
-    AgenticProfileConflictError,
-    CapabilityCertificateConflictError,
-)
+from core.providers.errors import AgenticProfileConflictError
 from core.providers.store import ProviderStore
 from core.runtime.errors import RuntimeTransitionError
 from core.runtime.lifecycle_service import transition_runtime_session
 from core.runtime.store import RuntimeStore
-
-
-_REVOCATION_REASON = "phase0_remote_agentic_containment"
 
 
 class RemoteAgenticContainmentApplyError(ValueError):
@@ -86,7 +78,6 @@ def run_remote_agentic_containment(
         "remote_sessions_inventoried": len(plan["inventory"]),
         "bindings_to_disable": len(plan["bindings"]),
         "profiles_to_suspend": len(plan["profiles"]),
-        "certificates_to_revoke": len(plan["certificates"]),
         "sessions_to_quarantine": len(plan["sessions"]),
         **applied,
     }
@@ -103,7 +94,6 @@ def run_remote_agentic_containment(
         counts=counts,
         binding_targets=plan["bindings"],
         profile_targets=plan["profiles"],
-        certificate_targets=plan["certificates"],
         session_targets=plan["sessions"],
         session_inventory=plan["inventory"],
         plan_digest=plan["digest"],
@@ -163,30 +153,6 @@ def _apply_plan(
                     expected_revision=target.current_revision,
                 )
             counts["profiles_suspended"] += 1
-        for target in plan["certificates"]:
-            active_target = target
-            if target.current_revision is None:
-                provider_store.save_capability_certificate_status(
-                    CapabilityCertificateStatus(
-                        certificate_id=target.identity,
-                        status="revoked",
-                        revision=0,
-                        updated_at=now,
-                        revoked_at=now,
-                        revocation_reason=_REVOCATION_REASON,
-                    ),
-                    expected_revision=None,
-                )
-            else:
-                revoke_capability_certificate(
-                    provider_store,
-                    certificate_id=target.identity,
-                    expected_revision=target.current_revision,
-                    reason=_REVOCATION_REASON,
-                    now=now,
-                    observability_store=observability_store,
-                )
-            counts["certificates_revoked"] += 1
         for target in plan["sessions"]:
             active_target = target
             transition_runtime_session(
@@ -235,7 +201,6 @@ def _empty_applied_counts() -> dict[str, int]:
     return {
         "bindings_disabled": 0,
         "profiles_suspended": 0,
-        "certificates_revoked": 0,
         "sessions_quarantined": 0,
     }
 
@@ -243,7 +208,7 @@ def _empty_applied_counts() -> dict[str, int]:
 def _apply_failure_code(error: Exception) -> str:
     if isinstance(
         error,
-        (AgenticProfileConflictError, CapabilityCertificateConflictError),
+        AgenticProfileConflictError,
     ):
         return "provider_record_cas_conflict"
     if isinstance(error, RuntimeTransitionError):

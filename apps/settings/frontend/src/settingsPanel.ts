@@ -470,7 +470,7 @@ function agenticRuntimeSettingsCardHtml(
   );
   return `<section class="settings-card settings-platform settings-agentic-runtimes-card">
     ${modelSettingsHeadingHtml('account_tree', 'Agent runtimes')}
-    <p class="settings-card-copy">Enable complete certified profiles for new chats. Execution family and Full Workspace status are derived from immutable server contracts.</p>
+    <p class="settings-card-copy">Enable complete runtime profiles for new chats. Execution family and Full Workspace status are derived from server-owned contracts.</p>
     ${releaseDecision === 'NO-GO' ? `<p class="settings-platform-error settings-agentic-no-go"><strong>Remote agentic release: NO-GO</strong><br>Remote profiles remain visible for containment review but cannot be enabled or selected.</p>` : ''}
     ${visibleItems.some((item) => item.runtime_engine_id === 'codex') ? `<div class="settings-models-toolbar">
       <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
@@ -522,7 +522,7 @@ function nativeAgentInstallationHtml(item: NativeAgentStatus) {
       <span class="settings-model-summary-copy">
         <span class="settings-kicker">${escapeHtml(item.availability === 'installed' ? 'Installed runtime' : 'Runtime not installed')}</span>
         <strong>${escapeHtml(item.label)}</strong>
-        <small>${escapeHtml(model?.model_id || 'Model not certified')}</small>
+        <small>${escapeHtml(model?.model_id || 'Model unavailable')}</small>
       </span>
       <span class="settings-agentic-summary-badges">
         <span class="settings-pill ${available ? 'is-healthy' : 'is-warning'}">${available ? 'Available' : escapeHtml(humanizeAgenticCode(reason))}</span>
@@ -531,7 +531,7 @@ function nativeAgentInstallationHtml(item: NativeAgentStatus) {
     </summary>
     <div class="settings-model-content settings-agentic-runtime-content">
       ${nativeAgentMetadataHtml(item, model?.model_id)}
-      <p class="settings-platform-note">${available ? 'Runtime available; session selection still requires an enabled certified workspace profile.' : `Unavailable: ${escapeHtml(humanizeAgenticCode(reason))}`}</p>
+      <p class="settings-platform-note">${available ? 'Runtime available; session selection still requires an enabled workspace profile.' : `Unavailable: ${escapeHtml(humanizeAgenticCode(reason))}`}</p>
     </div>
   </details>`;
 }
@@ -554,7 +554,7 @@ function nativeAgentMetadataHtml(item: NativeAgentStatus, selectedModelId?: stri
     ${metadataRowHtml('Full Workspace', `${item.full_workspace_status} · ${item.full_workspace_contract_revision || 'revision unavailable'}`)}
     ${metadataRowHtml('Sandbox / approvals', `${item.effects.sandbox_policy_revision} · ${item.effects.approval_policy}`)}
     ${metadataRowHtml('Effect observation', `workspace confined ${item.effects.workspace_confined ? 'yes' : 'no'} · process supervised ${item.effects.process_tree_supervised ? 'yes' : 'no'} · structured events ${item.effects.structured_effect_events ? 'yes' : 'no'}`)}
-    ${metadataRowHtml('Installation certificate / rollout', `${item.certification_state} · ${item.provider_status}`)}
+    ${metadataRowHtml('Runtime contract / rollout', `${item.contract_state} · ${item.provider_status}`)}
   </dl>`;
 }
 
@@ -572,7 +572,6 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
     allowed_workspace_role_ids: ['admin', 'member'],
     allowed_agent_type_ids: []
   };
-  const certificate = item.certificate;
   const isRemote = item.execution_family === 'maverick_agent';
   const effectiveCapabilities = item.effective_capabilities;
   const contained = item.containment_status === 'NO-GO';
@@ -590,7 +589,6 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
     || (isRemote && effectiveCapabilities?.status !== 'active'
       ? effectiveCapabilities?.reason_code || 'effective capabilities unavailable'
       : '')
-    || certificate?.effective_status
     || 'Unavailable';
   const usageSummary = agenticModelUsageSummary(item, state);
   return `<details class="settings-model-accordion settings-agentic-runtime" data-settings-model-accordion="agentic-${escapeAttr(key)}">
@@ -602,7 +600,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       </span>
       <span class="settings-agentic-summary-badges">
         ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}
-        <span class="settings-pill ${item.full_workspace_status === 'certified' ? 'is-healthy' : 'is-warning'}">Full Workspace · ${escapeHtml(item.full_workspace_status || 'unavailable')}</span>
+        <span class="settings-pill ${item.full_workspace_status === 'available' ? 'is-healthy' : 'is-warning'}">Full Workspace · ${escapeHtml(item.full_workspace_status || 'unavailable')}</span>
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(unavailableReason))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
@@ -626,7 +624,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
           <small>Data destination ${escapeHtml(item.data_destination.display_label)}</small>
           <small>Egress policy ${escapeHtml(item.egress_policy.policy_id)}@${escapeHtml(item.egress_policy.revision)} · Core-classified data ${escapeHtml(item.egress_policy.allowed_remote_data_classes.join(', ') || 'none')}</small>
           <small>Data policy collection=${escapeHtml(item.data_policy.collection)} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'} · attestation ${escapeHtml(item.data_policy.attestation_state)}</small>
-          <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))} · Certificate ${escapeHtml(humanizeAgenticCode(certificate?.effective_status || 'missing'))} / ${escapeHtml(humanizeAgenticCode(item.certificate_eligibility))}</small>
+          <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))}</small>
         </span>
       </div>` : ''}
       ${item.execution_family === 'native_agent' && item.native_runtime
@@ -670,13 +668,12 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
 
 function agenticContractMetadataHtml(item: AgenticAdminItem) {
   const recipe = item.harness_recipe;
-  const certificate = item.certificate;
   const upstream = item.upstream_provider_ids.join(', ') || 'direct';
   const quantization = item.routing_constraint.allowed_quantizations.join(', ') || 'provider default';
   const modelRevision = item.model_revision || item.model_revision_policy || 'provider alias';
   const reasoningModes = (item.supported_reasoning_efforts || [])
     .map((option) => option.label || option.effort)
-    .join(', ') || 'none certified';
+    .join(', ') || 'none declared';
   return `<dl class="settings-agentic-metadata">
     ${metadataRowHtml('Provider → model', `${item.model_provider_id} → ${item.model_id} · ${modelRevision}`)}
     ${metadataRowHtml('Endpoint / upstream', `${item.routing_constraint.endpoint_id} · ${upstream} · ${quantization}`)}
@@ -687,7 +684,6 @@ function agenticContractMetadataHtml(item: AgenticAdminItem) {
     ${metadataRowHtml('Full Workspace', `${item.full_workspace_status} · ${item.full_workspace_contract_revision || 'revision unavailable'}`)}
     ${metadataRowHtml('Data policy', `collection ${item.data_policy.collection} · retention ${item.data_policy.retention || 'provider contract'} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'}`)}
     ${metadataRowHtml('Context / output / cost', `${item.profile_policy_ceiling.max_input_tokens} / ${item.profile_policy_ceiling.max_output_tokens} tokens · ${item.profile_policy_ceiling.max_estimated_cost_microusd === null ? 'no profile cost ceiling' : `${item.profile_policy_ceiling.max_estimated_cost_microusd} µUSD`}`)}
-    ${metadataRowHtml('Certificate', `${certificate?.certificate_id || 'missing'} · suite ${certificate?.suite_id || 'unavailable'}@${certificate?.suite_version || 'unavailable'} · expires ${certificate?.expires_at || 'unavailable'}`)}
     ${metadataRowHtml('Health / preflight', `${item.health} · ${item.live_preflight_status || 'unavailable'}${item.blocked_reason ? ` · ${humanizeAgenticCode(item.blocked_reason)}` : ''}`)}
   </dl>`;
 }
@@ -700,13 +696,12 @@ function agenticCapabilityStateHtml(item: AgenticAdminItem): string {
     : 'The active backend has not published this snapshot yet. Remote controls remain disabled.';
   const snapshotHtml = snapshot
     ? `<strong>Effective capabilities · ${escapeHtml(snapshot.status)}</strong>
-      <small>Snapshot ${escapeHtml(snapshot.snapshot_digest || 'unavailable')} · execution ${escapeHtml(snapshot.execution_mode || 'unavailable')} · TCB ${escapeHtml(String(snapshot.tcb?.posture || 'unavailable'))}</small>
+      <small>Snapshot ${escapeHtml(snapshot.snapshot_digest || 'unavailable')} · execution ${escapeHtml(snapshot.execution_mode || 'unavailable')}</small>
       ${snapshot.reason_code ? `<small>Reason ${escapeHtml(humanizeAgenticCode(snapshot.reason_code))}</small>` : ''}
       <small>Filesystem read ${capabilities.filesystem_read === true ? 'yes' : 'no'} · write ${capabilities.filesystem_write === true ? 'yes' : 'no'} · shell ${capabilities.shell === true ? 'yes' : 'no'} · CLI ${capabilities.cli === true ? 'yes' : 'no'} · MCP ${capabilities.mcp === true ? 'yes' : 'no'}</small>
       <small>Skills ${capabilities.skill_catalog === true ? 'yes' : 'no'} · app references ${capabilities.app_references === true ? 'yes' : 'no'} · attachment modes ${escapeHtml(Array.isArray(capabilities.attachment_modalities) ? capabilities.attachment_modalities.join(', ') || 'none' : 'none')} · confirmations ${capabilities.confirmations === true ? 'yes' : 'no'} · recovery ${capabilities.recovery === true ? 'yes' : 'no'}</small>
       <small>Provider ${escapeHtml(snapshot.provider?.provider_id || 'unavailable')} · upstream ${escapeHtml(snapshot.provider?.effective_upstream_ids?.join(', ') || 'none')} · health ${escapeHtml(snapshot.provider?.health_status || 'unavailable')}</small>
-      <small>Data classes ${escapeHtml(snapshot.data_policy?.allowed_remote_data_classes?.join(', ') || 'none')} · collection ${escapeHtml(snapshot.data_policy?.collection || 'deny')} · ZDR ${snapshot.data_policy?.require_zdr ? 'required' : 'not required'}</small>
-      <small>Certificate ${escapeHtml(snapshot.certificate?.certificate_id || 'unavailable')} · suite ${escapeHtml(snapshot.certificate?.suite_id || 'unavailable')}@${escapeHtml(snapshot.certificate?.suite_version || 'unavailable')} · expires ${escapeHtml(snapshot.certificate?.expires_at || 'unavailable')}</small>`
+      <small>Data classes ${escapeHtml(snapshot.data_policy?.allowed_remote_data_classes?.join(', ') || 'none')} · collection ${escapeHtml(snapshot.data_policy?.collection || 'deny')} · ZDR ${snapshot.data_policy?.require_zdr ? 'required' : 'not required'}</small>`
     : `<strong>Effective capabilities · unavailable</strong>
       <small>${escapeHtml(unavailableCopy)}</small>`;
   return `<div class="settings-provider-usage-unavailable settings-agentic-capability-state">

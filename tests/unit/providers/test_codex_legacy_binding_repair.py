@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 import unittest
 
 from core.providers.agentic_profiles import ensure_codex_workspace_profile
-from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.execution_family_readiness import (
     inspect_agentic_family_readiness,
 )
@@ -76,22 +75,15 @@ class CodexLegacyBindingRepairTest(unittest.TestCase):
         self.assertFalse(repaired.workspace_policy_ceiling.allow_filesystem_list)
         self.assertEqual(repaired.workspace_policy_ceiling.max_steps_per_turn, 32)
         self.assertEqual(repaired.revision, persisted.revision)
-        certificate = ensure_codex_preview_certificate(
-            self.store,
-            definition=profile,
-            provider_definition=self.codex,
-            adapter=self.registry.get_agentic_runtime_adapter("codex"),
-        )
         readiness = inspect_agentic_family_readiness(
             definition=profile,
-            certificate=certificate,
             binding=repaired,
             registry=self.registry,
             store=self.store,
         )
         self.assertFalse(readiness.complete)
         self.assertEqual(
-            certificate.certified_capabilities.attachment_modalities,
+            profile.capabilities.attachment_modalities,
             ("file",),
         )
 

@@ -27,6 +27,33 @@ ModelRevisionPolicy = Literal["exact", "provider_alias"]
 
 
 @dataclass(frozen=True)
+class RuntimeCapabilitySet:
+    """Behaviors implemented by one runtime profile.
+
+    Capabilities are part of the profile contract and have no independent
+    issuance, renewal, or expiry lifecycle.
+    """
+
+    streaming: bool
+    tool_orchestration: bool
+    cli: bool
+    mcp: bool
+    skill_catalog: bool
+    filesystem_list: bool
+    filesystem_read: bool
+    filesystem_write: bool
+    shell: bool
+    interrupt: bool
+    same_turn_steering: bool
+    recovery: bool
+    confirmation_resume: bool
+    provider_private_state: bool
+    attachment_modalities: tuple[str, ...]
+    app_references: bool = False
+    confirmations: bool = False
+
+
+@dataclass(frozen=True)
 class AgenticContextPolicy:
     """Profile-pinned context window, compaction, and interaction contract."""
 
@@ -108,7 +135,9 @@ class AgenticProfileDefinition:
     adapter_version_constraint: str
     routing_constraint: RoutingConstraint
     policy_ceiling: AgenticRuntimePolicy
-    capability_certificate_id: str
+    capabilities: RuntimeCapabilitySet
+    reasoning_efforts: tuple[str, ...]
+    default_reasoning_effort: str | None
     created_at: datetime
     egress_policy_id: str
     egress_policy_revision: str
@@ -203,6 +232,29 @@ def codex_runtime_policy() -> AgenticRuntimePolicy:
         require_confirmation_for_mutating=False,
         require_confirmation_for_destructive=False,
         allowed_remote_data_classes=(),
+    )
+
+
+def codex_runtime_capabilities() -> RuntimeCapabilitySet:
+    """Return the capabilities implemented by the Codex app-server adapter."""
+    return RuntimeCapabilitySet(
+        streaming=True,
+        tool_orchestration=True,
+        cli=True,
+        mcp=True,
+        skill_catalog=True,
+        filesystem_list=True,
+        filesystem_read=True,
+        filesystem_write=True,
+        shell=True,
+        interrupt=True,
+        same_turn_steering=True,
+        recovery=True,
+        confirmation_resume=False,
+        provider_private_state=False,
+        attachment_modalities=("file",),
+        app_references=True,
+        confirmations=False,
     )
 
 

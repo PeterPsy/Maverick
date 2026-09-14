@@ -268,8 +268,8 @@ export type NativeAgentStatus = {
     sandbox_policy_revision: string;
     approval_policy: string;
   };
-  certification_state: string;
-  full_workspace_status: 'certified' | 'unavailable';
+  contract_state: string;
+  full_workspace_status: 'available' | 'unavailable';
   full_workspace_contract_revision: string | null;
   selectable: boolean;
   unavailable_reason: string | null;
@@ -297,13 +297,6 @@ export type HostedTextProfileItem = {
     data_destination: string;
   };
   status: { status: string; reason_code: string | null };
-  certificate: {
-    certificate_id: string;
-    certificate_kind: 'hosted_text_capability';
-    workspace_tools: false;
-    action_loop: false;
-    workspace_actions: false;
-  };
   provider: { provider_id: string; label: string; status: string };
   cost?: Record<string, unknown>;
   selectable: boolean;
@@ -486,27 +479,6 @@ export type AgenticActorPolicy = {
   allowed_agent_type_ids: string[];
 };
 
-export type AgenticCertificate = {
-  certificate_id: string;
-  effective_status: string;
-  expires_at: string;
-  revoked_at: string | null;
-  status_revision: number | null;
-  certified_capabilities: Record<string, boolean | string[]>;
-  suite_id?: string;
-  suite_version?: string;
-  adapter_id?: string;
-  adapter_version?: string;
-  execution_family?: string | null;
-  full_workspace_contract_revision?: string | null;
-  tcb?: {
-    manifest_id: string | null;
-    manifest_version: string | null;
-    structure_digest: string | null;
-    live_digest: string | null;
-  };
-};
-
 export type AgenticEffectiveCapabilities = {
   status: 'active' | 'blocked';
   reason_code: string | null;
@@ -519,7 +491,7 @@ export type AgenticEffectiveCapabilities = {
     provider_id?: string;
     model_id?: string;
     protocol?: string;
-    certified_upstream_ids?: string[];
+    configured_upstream_ids?: string[];
     effective_upstream_ids?: string[];
     health_status?: string;
     health_revision?: string;
@@ -529,13 +501,6 @@ export type AgenticEffectiveCapabilities = {
     collection?: string;
     require_zdr?: boolean;
   };
-  certificate?: {
-    certificate_id?: string;
-    suite_id?: string;
-    suite_version?: string;
-    expires_at?: string | null;
-  };
-  tcb?: { posture?: string; [key: string]: unknown };
 };
 
 export type AgenticCredentialBinding = {
@@ -567,7 +532,8 @@ export type AgenticAdminItem = {
   family_contract_status: string;
   family_contract_reason: string | null;
   harness_recipe: AgenticHarnessRecipe;
-  full_workspace_status: 'certified' | 'unavailable';
+  capabilities: Record<string, boolean | string[]>;
+  full_workspace_status: 'available' | 'unavailable';
   full_workspace_contract_revision: string | null;
   native_runtime?: NativeAgentStatus | null;
   routing_constraint: {
@@ -581,7 +547,6 @@ export type AgenticAdminItem = {
   };
   profile_policy_ceiling: AgenticRuntimePolicy;
   rollout_status: string | null;
-  certificate: AgenticCertificate | null;
   credential_bindings: AgenticCredentialBinding[];
   binding: {
     binding_id: string;
@@ -606,7 +571,6 @@ export type AgenticAdminItem = {
   containment_reason: string | null;
   binding_status: 'missing' | 'enabled' | 'disabled';
   profile_status: string;
-  certificate_eligibility: string;
   effective_capabilities?: AgenticEffectiveCapabilities | null;
   upstream_provider_ids: string[];
   data_destination: {

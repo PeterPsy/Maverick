@@ -8,14 +8,11 @@ from datetime import UTC, datetime
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
     AgenticRuntimePolicy,
+    RuntimeCapabilitySet,
     WorkspaceAgenticProfileBinding,
 )
-from core.providers.capability_models import RuntimeCapabilitySet
-from core.providers.certificate_service import (
-    validate_certificate_for_binding_with_revision_fence,
-)
-from core.providers.certified_execution_tcb import is_exact_codex_identity
-from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
+from core.providers.errors import AgenticRuntimeError, ProviderNotFoundError
+from core.providers.execution_families import is_exact_codex_identity
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
@@ -63,7 +60,6 @@ class EffectiveRuntimeAuthority:
 
     execution_binding_id: str
     turn_id: str
-    certificate_id: str
     allowed_capabilities: RuntimeCapabilitySet
     allowed_tool_handles: tuple[str, ...]
     execution_mode: ExecutionMode
@@ -81,20 +77,11 @@ class EffectiveRuntimeAuthority:
     model_revision: str | None = None
     model_revision_policy: str = "provider_alias"
     provider_protocol: str = ""
-    certified_upstream_ids: tuple[str, ...] = ()
+    configured_upstream_ids: tuple[str, ...] = ()
     effective_upstream_ids: tuple[str, ...] = ()
     allowed_remote_data_classes: tuple[str, ...] = ()
     data_collection_policy: str = "deny"
     require_zdr: bool = False
-    certificate_suite_id: str = ""
-    certificate_suite_version: str = ""
-    certificate_expires_at: datetime | None = None
-    tcb_manifest_id: str = ""
-    tcb_manifest_version: str = ""
-    tcb_structure_digest: str = ""
-    tcb_live_digest: str = ""
-    tcb_revision_fence: str = ""
-    tcb_posture: str = "unavailable"
     full_workspace_contract_revision: str = ""
     execution_family: str = ""
     harness_recipe_id: str = ""
@@ -120,27 +107,31 @@ def resolve_effective_runtime_authority(
     actor_policy_allowed: bool = True,
     actor_policy_revision: str = "runtime-actor:unknown",
     now: datetime | None = None,
-    adapter_artifact_digest: str | None = None,
+    adapter_identity_digest: str | None = None,
 ) -> EffectiveRuntimeAuthority:
-    """Intersect certified capability with every pinned and live restriction."""
+    """Intersect profile capabilities with every pinned and live restriction."""
     timestamp = now or datetime.now(tz=UTC)
-    certificate, tcb_revision_fence = (
-        validate_certificate_for_binding_with_revision_fence(
-            store,
-            binding=binding,
-            adapter=adapter,
-            observed_upstream_id=observed_upstream_id,
-            now=timestamp,
-            adapter_artifact_digest=adapter_artifact_digest,
-        )
+    if (
+        str(getattr(adapter, "runtime_engine_id", ""))
+        != binding.runtime_engine_id
+        or str(getattr(adapter, "adapter_id", "")) != binding.adapter_id
+        or str(getattr(adapter, "adapter_version", ""))
+        != binding.adapter_version
+    ):
+        raise AgenticRuntimeError("runtime_adapter_identity_mismatch")
+    configured_upstreams = tuple(
+        binding.routing_constraint_snapshot.allowed_upstream_ids
     )
+    if observed_upstream_id and observed_upstream_id not in configured_upstreams:
+        raise AgenticRuntimeError("provider_upstream_not_allowed")
     if health_status not in {"healthy", "degraded"}:
-        raise CapabilityCertificateError("runtime_health_unavailable")
+        raise AgenticRuntimeError("runtime_health_unavailable")
     if not actor_policy_allowed:
-        raise CapabilityCertificateError("runtime_actor_policy_denied")
+        raise AgenticRuntimeError("runtime_actor_policy_denied")
     workspace_binding = validate_live_runtime_binding_governance(
         store,
         binding=binding,
+        allow_inactive_definition=True,
     )
     policy = intersect_runtime_policies(
         binding.profile_policy_ceiling_snapshot,
@@ -148,15 +139,15 @@ def resolve_effective_runtime_authority(
         workspace_binding.workspace_policy_ceiling,
     )
     policy_capabilities = _narrow_capabilities(
-        certificate.certified_capabilities,
+        binding.capabilities_snapshot,
         policy,
     )
     feature_capabilities, feature_revision = _feature_capability_ceiling(
         binding,
-        certificate.certified_capabilities,
+        binding.capabilities_snapshot,
     )
     health_capabilities = _health_capability_ceiling(
-        certificate.certified_capabilities,
+        binding.capabilities_snapshot,
         health_status=health_status,
     )
     execution_mode: ExecutionMode = (
@@ -165,11 +156,11 @@ def resolve_effective_runtime_authority(
         else "full-access"
     )
     execution_mode_capabilities = _execution_mode_capability_ceiling(
-        certificate.certified_capabilities,
+        binding.capabilities_snapshot,
         execution_mode=execution_mode,
     )
     capabilities = intersect_runtime_capabilities(
-        certificate.certified_capabilities,
+        binding.capabilities_snapshot,
         policy_capabilities,
         feature_capabilities,
         health_capabilities,
@@ -193,8 +184,7 @@ def resolve_effective_runtime_authority(
         provider_protocol=binding.provider_protocol,
     )
     # The exact local Codex app-server contract predates a live catalog API.
-    # Hosted runtimes, by contrast, treat an empty live handle set as no tool
-    # authority rather than as permission to fall back to the certificate.
+    # Hosted runtimes treat an empty live handle set as no tool authority.
     if tool_handles or not exact_codex:
         capabilities = _narrow_capabilities_to_live_handles(
             capabilities,
@@ -206,12 +196,9 @@ def resolve_effective_runtime_authority(
         policy=policy,
         allowed_handles=tool_handles,
     )
-    status = store.get_capability_certificate_status(certificate.certificate_id)
-    status_revision = 0 if status is None else status.revision
     authority = EffectiveRuntimeAuthority(
         execution_binding_id=binding.execution_binding_id,
         turn_id=turn_id,
-        certificate_id=certificate.certificate_id,
         allowed_capabilities=capabilities,
         allowed_tool_handles=tool_handles,
         execution_mode=execution_mode,
@@ -220,7 +207,6 @@ def resolve_effective_runtime_authority(
             f"profile:{binding.profile_definition_id}:{binding.profile_definition_revision}",
             f"workspace-snapshot:{binding.workspace_binding_id}:{binding.workspace_binding_revision}",
             f"workspace-live:{workspace_binding.binding_id}:{workspace_binding.revision}",
-            f"certificate-status:{certificate.certificate_id}:{status_revision}",
             f"egress:{binding.egress_policy_id}:{binding.egress_policy_revision}",
         ),
         health_revision=str(health_revision or "runtime-health:unknown"),
@@ -235,33 +221,14 @@ def resolve_effective_runtime_authority(
         model_revision=binding.model_revision,
         model_revision_policy=binding.model_revision_policy,
         provider_protocol=binding.provider_protocol,
-        certified_upstream_ids=tuple(certificate.certified_upstream_ids),
+        configured_upstream_ids=configured_upstreams,
         effective_upstream_ids=tuple(
             item
             for item in binding.routing_constraint_snapshot.allowed_upstream_ids
-            if item in certificate.certified_upstream_ids
         ),
         allowed_remote_data_classes=policy.allowed_remote_data_classes,
         data_collection_policy=binding.routing_constraint_snapshot.data_collection_policy,
         require_zdr=binding.routing_constraint_snapshot.require_zdr,
-        certificate_suite_id=certificate.suite_id,
-        certificate_suite_version=certificate.suite_version,
-        certificate_expires_at=certificate.expires_at,
-        tcb_manifest_id=certificate.tcb_manifest_id,
-        tcb_manifest_version=certificate.tcb_manifest_version,
-        tcb_structure_digest=certificate.tcb_structure_digest,
-        tcb_live_digest=certificate.tcb_live_digest,
-        tcb_revision_fence=tcb_revision_fence,
-        tcb_posture=(
-            "exact_local_contract"
-            if is_exact_codex_identity(
-                runtime_engine_id=certificate.runtime_engine_id,
-                adapter_id=certificate.adapter_id,
-                model_provider_id=certificate.model_provider_id,
-                provider_protocol=certificate.provider_protocol,
-            )
-            else "active"
-        ),
         full_workspace_contract_revision=(
             binding.full_workspace_contract_revision
         ),
@@ -295,33 +262,33 @@ def validate_live_runtime_binding_governance(
     binding: RuntimeExecutionBinding,
     allow_inactive_definition: bool = False,
 ) -> WorkspaceAgenticProfileBinding:
-    """Validate mutable workspace authority without rechecking certification."""
+    """Validate mutable workspace authority against current control-plane state."""
     try:
         workspace_binding = store.get_workspace_agentic_profile_binding(
             binding.workspace_binding_id
         )
     except ProviderNotFoundError as error:
-        raise CapabilityCertificateError("workspace_profile_binding_disabled") from error
+        raise AgenticRuntimeError("workspace_profile_binding_disabled") from error
     if workspace_binding.workspace_id != binding.workspace_id or not workspace_binding.enabled:
-        raise CapabilityCertificateError("workspace_profile_binding_disabled")
+        raise AgenticRuntimeError("workspace_profile_binding_disabled")
     if (
         workspace_binding.egress_policy_id != binding.egress_policy_id
         or workspace_binding.egress_policy_revision != binding.egress_policy_revision
     ):
-        raise CapabilityCertificateError("egress_policy_drift_unresolved")
+        raise AgenticRuntimeError("egress_policy_drift_unresolved")
     definition_status = store.get_agentic_profile_definition_status(
         binding.profile_definition_id,
         binding.profile_definition_revision,
     )
     if definition_status is None and not allow_inactive_definition:
-        raise CapabilityCertificateError("profile_definition_invalid")
+        raise AgenticRuntimeError("profile_definition_invalid")
     if definition_status is not None and definition_status.rollout_status == "disabled":
-        raise CapabilityCertificateError("profile_definition_invalid")
+        raise AgenticRuntimeError("profile_definition_invalid")
     if definition_status is not None and (
         definition_status.rollout_status == "suspended"
         and not allow_inactive_definition
     ):
-        raise CapabilityCertificateError("profile_definition_invalid")
+        raise AgenticRuntimeError("profile_definition_invalid")
     if binding.credential_binding_id:
         credential = resolve_provider_binding(
             store,
@@ -330,7 +297,7 @@ def validate_live_runtime_binding_governance(
             binding_id=binding.credential_binding_id,
         )
         if credential is None:
-            raise CapabilityCertificateError("credential_binding_unavailable")
+            raise AgenticRuntimeError("credential_binding_unavailable")
     return workspace_binding
 
 
@@ -372,7 +339,6 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
     capabilities = authority.allowed_capabilities
     return {
         "execution_binding_id": authority.execution_binding_id,
-        "certificate_id": authority.certificate_id,
         "authority_digest": authority.authority_digest,
         "execution_mode": authority.execution_mode,
         "egress_policy_id": authority.egress_policy_id,
@@ -381,7 +347,6 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
         "provider_health_status": authority.provider_health_status,
         "actor_policy_revision": authority.actor_policy_revision,
         "feature_flag_revision": authority.feature_flag_revision,
-        "tcb_posture": authority.tcb_posture,
         "full_workspace_contract_revision": (
             authority.full_workspace_contract_revision or None
         ),
@@ -426,7 +391,7 @@ def effective_runtime_capability_payload(
             "model_revision": authority.model_revision,
             "model_revision_policy": authority.model_revision_policy,
             "protocol": authority.provider_protocol,
-            "certified_upstream_ids": authority.certified_upstream_ids,
+            "configured_upstream_ids": authority.configured_upstream_ids,
             "effective_upstream_ids": authority.effective_upstream_ids,
             "health_status": authority.provider_health_status,
             "health_revision": authority.health_revision,
@@ -435,19 +400,6 @@ def effective_runtime_capability_payload(
             "allowed_remote_data_classes": authority.allowed_remote_data_classes,
             "collection": authority.data_collection_policy,
             "require_zdr": authority.require_zdr,
-        },
-        "certificate": {
-            "certificate_id": authority.certificate_id,
-            "suite_id": authority.certificate_suite_id,
-            "suite_version": authority.certificate_suite_version,
-            "expires_at": authority.certificate_expires_at,
-        },
-        "tcb": {
-            "manifest_id": authority.tcb_manifest_id or None,
-            "manifest_version": authority.tcb_manifest_version or None,
-            "structure_digest": authority.tcb_structure_digest or None,
-            "live_digest": authority.tcb_live_digest or None,
-            "posture": authority.tcb_posture,
         },
         "full_workspace_contract_revision": (
             authority.full_workspace_contract_revision or None
@@ -475,10 +427,10 @@ def effective_runtime_capability_payload(
 def blocked_runtime_capability_payload(
     reason_code: str,
     *,
-    certified_capabilities: RuntimeCapabilitySet | None = None,
+    profile_capabilities: RuntimeCapabilitySet | None = None,
 ) -> dict[str, object]:
     """Return a fail-closed UI/API snapshot when live authority is unavailable."""
-    reference = certified_capabilities or RuntimeCapabilitySet(
+    reference = profile_capabilities or RuntimeCapabilitySet(
         streaming=False,
         tool_orchestration=False,
         cli=False,
@@ -515,8 +467,6 @@ def blocked_runtime_capability_payload(
             "collection": "deny",
             "require_zdr": False,
         },
-        "certificate": {},
-        "tcb": {"posture": "ineligible"},
         "allowed_tool_handles": (),
     }
 
@@ -537,20 +487,20 @@ def validate_effective_context_capabilities(
     )
     capabilities = authority.allowed_capabilities
     if _has_items(invoked_skills) and not capabilities.skill_catalog:
-        raise CapabilityCertificateError("agentic_skill_catalog_not_effective")
+        raise AgenticRuntimeError("agentic_skill_catalog_not_effective")
     attachment_items = tuple(attachments or ())
     if attachment_items:
-        certified_modalities = set(capabilities.attachment_modalities)
+        supported_modalities = set(capabilities.attachment_modalities)
         for attachment in attachment_items:
             modality = _attachment_modality(attachment)
             if not modality:
-                raise CapabilityCertificateError("agentic_attachment_metadata_invalid")
-            if modality not in certified_modalities and "file" not in certified_modalities:
-                raise CapabilityCertificateError(
-                    "agentic_attachment_modality_not_certified"
+                raise AgenticRuntimeError("agentic_attachment_metadata_invalid")
+            if modality not in supported_modalities and "file" not in supported_modalities:
+                raise AgenticRuntimeError(
+                    "agentic_attachment_modality_not_supported"
                 )
     if _has_items(app_references) and not capabilities.app_references:
-        raise CapabilityCertificateError("agentic_app_references_not_effective")
+        raise AgenticRuntimeError("agentic_app_references_not_effective")
     operation_capabilities = {
         "filesystem_read": capabilities.filesystem_read,
         "filesystem_write": capabilities.filesystem_write,
@@ -571,9 +521,9 @@ def validate_effective_context_capabilities(
     }
     for operation in requested_operations:
         if operation not in operation_capabilities:
-            raise CapabilityCertificateError("agentic_context_operation_unknown")
+            raise AgenticRuntimeError("agentic_context_operation_unknown")
         if not operation_capabilities[operation]:
-            raise CapabilityCertificateError(reason_codes[operation])
+            raise AgenticRuntimeError(reason_codes[operation])
 
 
 def narrow_hosted_authority_to_policy(
@@ -632,30 +582,30 @@ def validate_agentic_context_shape(
     for item in skill_items:
         if isinstance(item, str):
             if not item.strip():
-                raise CapabilityCertificateError("agentic_skill_metadata_invalid")
+                raise AgenticRuntimeError("agentic_skill_metadata_invalid")
             continue
         skill_id = getattr(item, "skill_id", None)
         if not isinstance(skill_id, str) or not skill_id.strip():
-            raise CapabilityCertificateError("agentic_skill_metadata_invalid")
+            raise AgenticRuntimeError("agentic_skill_metadata_invalid")
     for value, reason_code in (
         (attachments, "agentic_attachment_metadata_invalid"),
         (app_references, "agentic_app_reference_metadata_invalid"),
     ):
         items = _sequence_items(value, reason_code=reason_code)
         if any(not isinstance(item, dict) for item in items):
-            raise CapabilityCertificateError(reason_code)
+            raise AgenticRuntimeError(reason_code)
 
 
 def reject_client_data_authority(payload: object) -> None:
     """Reject browser/app attempts to submit classification or egress authority."""
     if not isinstance(payload, dict):
-        raise CapabilityCertificateError("runtime_client_authority_not_accepted")
+        raise AgenticRuntimeError("runtime_client_authority_not_accepted")
     declared = payload.get("declared_remote_data_class")
     if declared is not None and declared != "":
-        raise CapabilityCertificateError("remote_data_declaration_not_accepted")
+        raise AgenticRuntimeError("remote_data_declaration_not_accepted")
     for key in _CLIENT_AUTHORITY_FIELDS:
         if key in payload and _client_authority_value_present(payload[key]):
-            raise CapabilityCertificateError("runtime_client_authority_not_accepted")
+            raise AgenticRuntimeError("runtime_client_authority_not_accepted")
     for field_name in ("attachments", "app_references"):
         values = payload.get(field_name)
         if not isinstance(values, (list, tuple)):
@@ -667,7 +617,7 @@ def reject_client_data_authority(payload: object) -> None:
                 key in value and _client_authority_value_present(value[key])
                 for key in _CLIENT_AUTHORITY_FIELDS
             ):
-                raise CapabilityCertificateError(
+                raise AgenticRuntimeError(
                     "runtime_client_authority_not_accepted"
                 )
 
@@ -675,7 +625,7 @@ def reject_client_data_authority(payload: object) -> None:
 def intersect_runtime_capabilities(
     *capabilities: RuntimeCapabilitySet,
 ) -> RuntimeCapabilitySet:
-    """Return a monotonic intersection; no input can overstate a certificate."""
+    """Return a monotonic intersection; no input can overstate a profile declaration."""
     if not capabilities:
         raise ValueError("At least one runtime capability set is required.")
     first = capabilities[0]
@@ -698,7 +648,7 @@ def intersect_runtime_capabilities(
 
 
 def _narrow_capabilities(
-    certified: RuntimeCapabilitySet,
+    declared: RuntimeCapabilitySet,
     policy: AgenticRuntimePolicy,
 ) -> RuntimeCapabilitySet:
     surfaces = set(policy.allowed_surface_kinds)
@@ -708,46 +658,46 @@ def _narrow_capabilities(
         and policy.tool_handle_mode != "none"
     )
     return replace(
-        certified,
-        tool_orchestration=certified.tool_orchestration and tools_allowed,
-        cli=certified.cli and "cli" in surfaces,
-        mcp=certified.mcp and "mcp" in surfaces,
-        skill_catalog=certified.skill_catalog and tools_allowed,
-        app_references=certified.app_references and "app-interface" in surfaces,
-        filesystem_list=certified.filesystem_list and policy.allow_filesystem_list,
-        filesystem_read=certified.filesystem_read and policy.allow_filesystem_read,
-        filesystem_write=certified.filesystem_write and policy.allow_filesystem_write,
-        shell=certified.shell and policy.allow_shell,
+        declared,
+        tool_orchestration=declared.tool_orchestration and tools_allowed,
+        cli=declared.cli and "cli" in surfaces,
+        mcp=declared.mcp and "mcp" in surfaces,
+        skill_catalog=declared.skill_catalog and tools_allowed,
+        app_references=declared.app_references and "app-interface" in surfaces,
+        filesystem_list=declared.filesystem_list and policy.allow_filesystem_list,
+        filesystem_read=declared.filesystem_read and policy.allow_filesystem_read,
+        filesystem_write=declared.filesystem_write and policy.allow_filesystem_write,
+        shell=declared.shell and policy.allow_shell,
     )
 
 
 def _feature_capability_ceiling(
     binding: RuntimeExecutionBinding,
-    certified: RuntimeCapabilitySet,
+    declared: RuntimeCapabilitySet,
 ) -> tuple[RuntimeCapabilitySet, str]:
     resolved = _runtime_feature_flags(binding)
     hosted_remote = binding.runtime_engine_id == "maverick-tool-loop"
-    ceiling = certified
+    ceiling = declared
     if not (
         resolved[MAVERICK_FEATURE_AGENTIC_PROFILES]
         and resolved[MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT]
     ):
-        ceiling = _disabled_capabilities(certified)
+        ceiling = _disabled_capabilities(declared)
     elif hosted_remote and not all(resolved.values()):
-        ceiling = _disabled_capabilities(certified)
+        ceiling = _disabled_capabilities(declared)
     else:
         ceiling = replace(
-            certified,
+            declared,
             confirmation_resume=(
-                certified.confirmation_resume
+                declared.confirmation_resume
                 and resolved[MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION]
             ),
             confirmations=(
-                certified.confirmations
+                declared.confirmations
                 and resolved[MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION]
             ),
             provider_private_state=(
-                certified.provider_private_state
+                declared.provider_private_state
                 and resolved[MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE]
             ),
         )
@@ -792,14 +742,14 @@ def _runtime_feature_flags(
 
 
 def _health_capability_ceiling(
-    certified: RuntimeCapabilitySet,
+    declared: RuntimeCapabilitySet,
     *,
     health_status: str,
 ) -> RuntimeCapabilitySet:
     if health_status == "healthy":
-        return certified
+        return declared
     return replace(
-        certified,
+        declared,
         tool_orchestration=False,
         cli=False,
         mcp=False,
@@ -812,13 +762,13 @@ def _health_capability_ceiling(
 
 
 def _execution_mode_capability_ceiling(
-    certified: RuntimeCapabilitySet,
+    declared: RuntimeCapabilitySet,
     *,
     execution_mode: ExecutionMode,
 ) -> RuntimeCapabilitySet:
     if execution_mode == "full-access":
-        return certified
-    return replace(certified, shell=False)
+        return declared
+    return replace(declared, shell=False)
 
 
 def _confirmation_capability_ceiling(
@@ -975,7 +925,7 @@ def _sequence_items(value: object, *, reason_code: str) -> tuple[object, ...]:
     if value is None:
         return ()
     if not isinstance(value, (list, tuple)):
-        raise CapabilityCertificateError(reason_code)
+        raise AgenticRuntimeError(reason_code)
     return tuple(value)
 
 
@@ -1050,13 +1000,13 @@ def _validate_policy(policy: AgenticRuntimePolicy) -> None:
         policy.max_output_tokens,
     )
     if any(value <= 0 for value in positive) or policy.max_parallel_tool_calls < 0:
-        raise CapabilityCertificateError("runtime_policy_limit_invalid")
+        raise AgenticRuntimeError("runtime_policy_limit_invalid")
     if policy.max_parallel_tool_calls > 0 and not parallel_tool_calls_enabled():
-        raise CapabilityCertificateError("parallel_tool_calls_disabled")
+        raise AgenticRuntimeError("parallel_tool_calls_disabled")
     if policy.max_estimated_cost_microusd is not None and policy.max_estimated_cost_microusd < 0:
-        raise CapabilityCertificateError("runtime_policy_cost_invalid")
+        raise AgenticRuntimeError("runtime_policy_cost_invalid")
     if policy.tool_handle_mode == "none" and policy.allowed_tool_handles:
-        raise CapabilityCertificateError("runtime_policy_tool_handles_invalid")
+        raise AgenticRuntimeError("runtime_policy_tool_handles_invalid")
     if policy.tool_handle_mode == "exact":
         if not policy.allowed_tool_handles or any("*" in value for value in policy.allowed_tool_handles):
-            raise CapabilityCertificateError("runtime_policy_tool_handles_invalid")
+            raise AgenticRuntimeError("runtime_policy_tool_handles_invalid")

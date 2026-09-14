@@ -32,13 +32,13 @@ AGENTIC_PROVIDER_TERMINAL_REASON_CODES = frozenset(
         "provider_request_rejected",
         "provider_resource_exhausted",
         "provider_response_invalid",
-        "provider_routing_not_certified",
+        "provider_routing_not_allowed",
         "provider_timeout",
         "provider_tool_call_index_invalid",
         "provider_tool_not_declared",
         "provider_tool_result_pairing_invalid",
         "provider_unavailable",
-        "provider_upstream_not_certified",
+        "provider_upstream_not_allowed",
     }
 )
 

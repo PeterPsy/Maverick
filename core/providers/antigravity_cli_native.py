@@ -26,24 +26,6 @@ class AntigravityCliNativeAdapter:
     local_process_lifecycle = None
     requires_resolved_launch_spec = True
 
-    @property
-    def artifact_components(self):
-        """Return every module able to change the native runtime wire behavior."""
-        from importlib import import_module
-
-        return tuple(
-            import_module(module_name)
-            for module_name in (
-                "core.providers.antigravity_cli_event_projection",
-                "core.providers.antigravity_cli_runtime_home",
-                "core.providers.antigravity_cli_sandbox",
-                "core.providers.antigravity_cli_session",
-                "core.providers.native_session_runtime",
-                "core.providers.native_structured_cli_transport",
-                "core.providers.provider_codex_wrappers",
-            )
-        )
-
     def __init__(self, *, command="agy", dependency_roots=None, auth_home=None):
         self.command = command
         self.auth_home = auth_home

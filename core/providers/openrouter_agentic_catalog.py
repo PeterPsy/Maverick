@@ -249,7 +249,7 @@ def _fetch_catalog(url: str, credential: EphemeralCredential) -> object:
         headers={
             "Authorization": f"Bearer {credential.reveal()}",
             "Accept": "application/json",
-            "User-Agent": "Maverick-Agentic-Certification/1",
+            "User-Agent": "Maverick-Agentic/1",
         },
     )
     opener = urllib_request.build_opener(_RejectRedirects())

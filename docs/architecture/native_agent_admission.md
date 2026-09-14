@@ -1,82 +1,57 @@
-# Native admission and historical text sessions
+# Native Agent Admission
 
-P5 readiness is server authority, not just UI presentation. New agentic pins
-must pass the same family/Full Workspace readiness check as Chat and Settings.
-Explicitly restricted workspace policies are never widened to make this gate
-pass: a partial agent remains unavailable. Existing immutable session pins are
-not rewritten by this admission change.
+Native agent admission is driven by the current installation contract, live
+model catalog, direct agentic profile and workspace policy.
 
-Catalog reconciliation is not an operator enable action. A later disabled
-successor is a tombstone for its binding lineage, including when its policy was
-edited or the catalog subsequently advertises another revision. Independent
-bindings with different authority remain independent. Only an explicit operator
-reenable can supersede the disabled decision.
+## Connection contract
 
-The same lineage gate is enforced for new pins and native UI readiness, not
-only when generating successors. A catalog rollback cannot restore admission
-through an enabled predecessor. Ancestry is inferred for old records from the
-shared authority and deterministic roll-forward ids; subsequent writes retain
-`lineage_binding_ids` so policy/credential edits cannot sever those links.
-Bindings record separate `admission_enabled_at`/`admission_disabled_at` decision
-timestamps. Only an explicit enable/disable transition (or explicit binding
-creation) advances them; reconciliation and default demotion never count as an
-operator reenable. Legacy disabled records are conservative tombstones until a
-new explicit enable supersedes them; disable wins equal timestamps. This gate
-does not change certificates or existing immutable pins: already pinned sessions
-retain their separate live binding/policy/certificate checks, without inheriting
-another lineage member's admission-only disable.
+A native installation declares its runtime engine, adapter/version, structured
+protocol, harness recipe, model-provider connection, sandbox/effect mapping and
+Full Workspace revision. Registration validates those fields and the callable
+lifecycle controller.
 
-Cold bootstrap follows the same rule: a legacy `ProviderSelection` is adopted
-only if that workspace has no agentic bindings. It never reenables a disabled
-binding or repromotes a demoted legacy default. For stores already affected by
-the former bootstrap replay, migration clears only the deterministic legacy
-binding's duplicate default flag when an explicit default is also present. It
-retains that binding's enabled state, policies, credentials, and existing pins;
-the explicit default is unchanged. Multiple explicit defaults remain ambiguous
-and fail closed rather than being resolved by timestamp or list order.
+The connection is model-catalog scoped rather than a hard-coded slug allowlist.
+An authenticated catalog refresh reconciles immutable model projections. A new
+model slug does not require a separate Maverick issuance step. A removed or
+ambiguous model is unavailable for new sessions.
 
-Historical `plain_hosted_chat` sessions without `hosted_text_binding` remain
-readable but fail dispatch with `hosted_text_legacy_binding_required`, before
-routing, credential access, or transport. Users must explicitly create a new
-pinned conversation; today's provider, upstream, or retention policy is never
-inferred retroactively for old messages.
+## New-session admission
 
-The native connection certificate is composite: its immutable
-`native_runtime_artifact` component pins the approved executable content hash
-and version, references the connection, and shares its evidence, issuance, and
-expiry. Both statuses are checked. Codex's one-time adoption uses the explicitly
-reviewed `codex-cli 0.153.4` artifact, not whichever executable discovery happens
-to find. Its actual standalone executable is resolved by the same command
-resolver as launch; changing the shim is irrelevant if it is not executed.
-Artifact replacement closes admission, live authority, launch, and resume. It
-does not manufacture a fresh certificate, test run, or validity window. The
-existing revision-14 Python bundle and immutable session/profile records stay
-unchanged. A runtime upgrade requires an explicitly approved artifact release.
+Core admits a native session only when:
 
-Exact model metadata is retained, but the current native transports select
-aliases only. They reject `native_agent_exact_revision_unsupported` at admission,
-certificate validation, launch, connect, execute, and resume. Previously persisted
-exact pins also fail closed: matching a discovery snapshot cannot substitute
-for a revision selector that the transport does not implement.
+- the provider and profile rollout are enabled;
+- an enabled workspace binding selects the exact profile;
+- the runtime is installed and healthy;
+- the current catalog contains the requested model/revision;
+- requested reasoning is declared by the profile;
+- installation, adapter, protocol, recipe and Full Workspace identities agree;
+- actor, execution-mode, feature, containment and workspace policy permit it.
 
-An immutable historical Codex connection root may attest a continuation source
-without becoming live execution authority. This exception is limited to roots
-whose stored adapter digest, when combined with the otherwise-current native
-installation contract and the historical root reference, reproduces the exact
-stored connection identity and still validates the certified runtime artifact,
-evidence, status, and validity window. The successor is independently pinned to
-the current certificate and must pass the normal compatibility/non-expansion
-proof. Legacy model certificates with no provable connection root, or roots
-whose installation contract changed, remain readable but cannot be resumed
-automatically.
+Persisted provider model metadata is not admission authority. UI state is not
+admission authority.
 
-After cold bootstrap publishes a new active Codex connection certificate and
-rolls compatible workspace bindings forward, Core automatically inventories
-Codex chat roots pinned to the prior certificate. It snapshots every compatible
-lineage before mutation and materializes the same audited continuation fork used
-by message admission, so the user-facing thread points at a current certified
-successor without waiting for another message. The pass is idempotent and does
-not rewrite either certificate or the predecessor. Snapshot failure blocks all
-writes for that workspace; one handoff failure remains resumable and does not
-prevent unrelated chat migrations or backend startup. Sessions without the
-historical proof above remain unchanged and fail closed.
+## Codex
+
+Codex uses the `codex-app-server` native contract. Its model profile revision is
+content-addressed from the current catalog model identity and reasoning choices.
+Adapter identity is derived from declared engine/adapter ids and versions rather
+than mutable source-file bytes.
+
+Consequently, an ordinary Codex update or newly advertised model cannot disable
+the runtime for lack of a renewed Maverick artifact. Current installation health,
+catalog reconciliation, profile binding and live policy remain authoritative.
+
+## Existing sessions and continuation
+
+An existing session retains its immutable execution binding. Every turn still
+revalidates live workspace, actor, health, model and policy authority.
+
+A compatible profile/binding evolution may fork a continuation child only after
+Core proves non-expansion, fences the predecessor, snapshots required private
+state and transfers provider-thread ownership. It never rewrites a predecessor.
+An incompatible change requires a new conversation or explicit transcript
+handoff.
+
+Runtime disablement, removed models, missing provider threads and failed
+non-expansion proofs fail closed with public reason codes. They are not repaired
+by changing a validity date.

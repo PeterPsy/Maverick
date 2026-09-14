@@ -23,7 +23,6 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.TestCase):
     def test_disabled_native_lineage_blocks_rollback_before_session_persistence(self) -> None:
         from core.providers.agentic_profiles import build_pinned_execution_binding
-        from core.providers.certificate_service import validate_certificate_for_binding
         from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
         from tests.support.native_agent_catalog import codex_snapshot
 
@@ -54,8 +53,7 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
             self.assertEqual(status, 409)
             self.assertEqual(payload["error"], "workspace_profile_lineage_disabled")
             self.assertEqual(state.runtime_store.list_all_sessions(), before)
-            validate_certificate_for_binding(state.provider_store, binding=pin,
-                                              adapter=state.provider_registry.get_agentic_runtime_adapter("codex"))
+            self.assertTrue(pin.capabilities_snapshot.tool_orchestration)
 
     def test_partial_native_policy_is_rejected_without_rewriting_restrictions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

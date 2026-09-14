@@ -46,7 +46,7 @@ class CliCommandDefinition:
     supports_idempotency: bool = False
     safe_to_retry: bool = False
     schema_public: bool = False
-    certified_tcb_component: str | None = None
+    reviewed_schema_component: str | None = None
     agentic_result_data_class: CliAgenticResultDataClass | None = None
     agentic_result_projection: str | None = None
     argument_effects: ToolArgumentEffectMap | None = None

@@ -1,4 +1,4 @@
-"""Immutable profile, status, certificate, and session pin for text-only APIs."""
+"""Immutable profile, status, and session pin for text-only APIs."""
 
 from __future__ import annotations
 
@@ -53,21 +53,6 @@ class HostedTextProfileStatus:
 
 
 @dataclass(frozen=True)
-class HostedTextCapabilityCertificate:
-    """Text-only capability statement, never an agentic certificate."""
-
-    certificate_id: str
-    certificate_kind: Literal["hosted_text_capability"]
-    profile_id: str
-    profile_revision: str
-    profile_digest: str
-    text_generation: Literal[True]
-    workspace_tools: Literal[False]
-    action_loop: Literal[False]
-    workspace_actions: Literal[False]
-
-
-@dataclass(frozen=True)
 class HostedTextExecutionBinding:
     """Self-digesting session pin for one text-only provider route."""
 
@@ -76,7 +61,6 @@ class HostedTextExecutionBinding:
     workspace_id: str
     profile: HostedTextProfileDefinition
     status: HostedTextProfileStatus
-    certificate: HostedTextCapabilityCertificate
     provider_routing_snapshot: dict[str, object]
     provider_routing_digest: str
     binding_digest: str
@@ -98,7 +82,6 @@ def build_hosted_text_profile(
 ) -> tuple[
     HostedTextProfileDefinition,
     HostedTextProfileStatus,
-    HostedTextCapabilityCertificate,
 ]:
     """Derive a separate immutable text profile from server-owned metadata."""
     if definition.provider_role != "model_provider":
@@ -173,7 +156,6 @@ def build_hosted_text_profile(
         retention_policy=retention_policy,
         data_destination=data_destination,
     )
-    profile_digest = canonical_digest(profile)
     state: HostedTextProfileState = (
         "available" if definition.status == "active" else "disabled"
     )
@@ -183,21 +165,7 @@ def build_hosted_text_profile(
         status=state,
         reason_code=None if state == "available" else "provider_disabled",
     )
-    certificate = HostedTextCapabilityCertificate(
-        certificate_id=(
-            f"hosted-text-certificate:{definition.provider_id}:"
-            f"{canonical_digest((profile.profile_id, profile.revision))[:16]}"
-        ),
-        certificate_kind="hosted_text_capability",
-        profile_id=profile.profile_id,
-        profile_revision=profile.revision,
-        profile_digest=profile_digest,
-        text_generation=True,
-        workspace_tools=False,
-        action_loop=False,
-        workspace_actions=False,
-    )
-    return profile, status, certificate
+    return profile, status
 
 
 def pin_hosted_text_execution_binding(
@@ -249,7 +217,7 @@ def pin_hosted_text_execution_binding(
     )
     if model is None:
         raise ProviderError("hosted_text_model_unavailable")
-    profile, status, certificate = build_hosted_text_profile(definition, model)
+    profile, status = build_hosted_text_profile(definition, model)
     if status.status != "available":
         raise ProviderError(status.reason_code or "hosted_text_profile_unavailable")
     routing_snapshot = hosted_text_provider_routing_snapshot(
@@ -265,7 +233,6 @@ def pin_hosted_text_execution_binding(
         workspace_id=workspace_id,
         profile=profile,
         status=status,
-        certificate=certificate,
         provider_routing_snapshot=routing_snapshot,
         provider_routing_digest=canonical_digest(routing_snapshot),
         binding_digest="",
@@ -296,12 +263,14 @@ def hosted_text_binding_from_document(
 ) -> HostedTextExecutionBinding:
     """Hydrate and verify one stored text-only session binding."""
     payload = dict(document)
+    original_digest = str(payload.get("binding_digest") or "")
+    if original_digest != canonical_digest(payload):
+        raise ValueError("Hosted text execution binding digest is invalid.")
     profile_document = payload.get("profile")
     status_document = payload.get("status")
-    certificate_document = payload.get("certificate")
     if not all(
         isinstance(item, Mapping)
-        for item in (profile_document, status_document, certificate_document)
+        for item in (profile_document, status_document)
     ):
         raise ValueError("Hosted text execution binding is incomplete.")
     profile_payload = dict(profile_document)  # type: ignore[arg-type]
@@ -309,14 +278,14 @@ def hosted_text_binding_from_document(
     profile_payload["output_modalities"] = tuple(profile_payload["output_modalities"])
     payload["profile"] = HostedTextProfileDefinition(**profile_payload)
     payload["status"] = HostedTextProfileStatus(**dict(status_document))  # type: ignore[arg-type]
-    payload["certificate"] = HostedTextCapabilityCertificate(
-        **dict(certificate_document)  # type: ignore[arg-type]
-    )
+    payload.pop("certificate", None)
     payload["provider_routing_snapshot"] = _json_snapshot(
         payload.get("provider_routing_snapshot")
     )
     payload.setdefault("legacy_inferred", False)
+    payload["binding_digest"] = ""
     binding = HostedTextExecutionBinding(**payload)
+    binding = replace(binding, binding_digest=canonical_digest(binding))
     _validate_hosted_text_binding(binding)
     return binding
 
@@ -335,7 +304,7 @@ def validate_hosted_text_execution_binding(
         return
     if definition is None or model is None or provider_routing_snapshot is None:
         raise ValueError("Hosted text live validation inputs are incomplete.")
-    live_profile, live_status, live_certificate = build_hosted_text_profile(
+    live_profile, live_status = build_hosted_text_profile(
         definition,
         model,
     )
@@ -344,7 +313,6 @@ def validate_hosted_text_execution_binding(
     if (
         live_profile != binding.profile
         or live_status != binding.status
-        or live_certificate != binding.certificate
     ):
         raise ProviderError("hosted_text_profile_drift")
     live_routing = _json_snapshot(provider_routing_snapshot)
@@ -357,19 +325,11 @@ def validate_hosted_text_execution_binding(
 
 def _validate_hosted_text_binding(binding: HostedTextExecutionBinding) -> None:
     profile = binding.profile
-    certificate = binding.certificate
     if (
         profile.execution_family != HOSTED_TEXT_EXECUTION_FAMILY
         or binding.status.profile_id != profile.profile_id
         or binding.status.profile_revision != profile.revision
         or binding.status.status != "available"
-        or certificate.certificate_kind != "hosted_text_capability"
-        or certificate.profile_id != profile.profile_id
-        or certificate.profile_revision != profile.revision
-        or certificate.profile_digest != canonical_digest(profile)
-        or certificate.workspace_tools
-        or certificate.action_loop
-        or certificate.workspace_actions
         or binding.provider_routing_digest
         != canonical_digest(binding.provider_routing_snapshot)
     ):
@@ -472,7 +432,6 @@ def _data_destination(definition: ProviderDefinition) -> str:
 
 
 __all__ = [
-    "HostedTextCapabilityCertificate",
     "HostedTextExecutionBinding",
     "HostedTextProfileDefinition",
     "HostedTextProfileStatus",

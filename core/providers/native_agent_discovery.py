@@ -20,7 +20,7 @@ from core.providers.antigravity_cli_runtime_home import (
     resolve_antigravity_source_home,
     validate_antigravity_oauth_source,
 )
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 from core.providers.native_agent_catalog import (
     NativeAgentCatalogModel,
     NativeAgentCatalogSnapshot,
@@ -121,7 +121,7 @@ def discover_codex_native_catalog(
             _CACHE.pop(source_id, None)
             return None
         _CACHE[source_id] = snapshot
-        # Keep the unchanged certified launch adapter's settings validator in
+        # Keep the unchanged reviewed launch adapter's settings validator in
         # sync with this same successful runtime observation (never fallback).
         adapter._store_model_options_cache(command, list(snapshot.model_options))
         return snapshot
@@ -163,7 +163,7 @@ def discover_antigravity_native_catalog(
             )
         )
     except (
-        CapabilityCertificateError,
+        AgenticRuntimeError,
         NativeStructuredCliError,
         OSError,
         RuntimeError,

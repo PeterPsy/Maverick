@@ -21,8 +21,8 @@ Ubuntu thread. Local turns and provider conversation state stay on the Mac;
 they are not inserted into Core's Ubuntu runtime catalog. The normal server
 mode remains unchanged. Cross-device transcript synchronization, remote Mac
 scheduling, general filesystem tools and arbitrary shell execution are outside
-this first acceptance boundary. The desktop runtime must not masquerade as a
-certified server execution family.
+this first acceptance boundary. The desktop runtime must not masquerade as an
+available server execution family.
 Entering local mode unmounts the server Chat controllers, including upload/drop
 listeners. V1 has no local attachment picker: file access is not silently routed
 back through Ubuntu.

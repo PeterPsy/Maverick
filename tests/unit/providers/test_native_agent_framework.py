@@ -7,8 +7,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from core.providers.agentic_profiles import CODEX_PROFILE_ARTIFACT_DIGEST
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.execution_families import (
     HOSTED_TEXT_EXECUTION_FAMILY,
     MAVERICK_AGENT_EXECUTION_FAMILY,
@@ -83,7 +82,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         controller = registry.get_native_agent_controller("codex")
 
         self.assertEqual(installation.execution_family, NATIVE_AGENT_EXECUTION_FAMILY)
-        self.assertTrue(installation.certification_configured)
+        self.assertTrue(installation.contract_configured)
         self.assertEqual(installation.manifest.protocol_kind, "app_server")
         self.assertEqual(installation.recipe.context_owner, "native_runtime")
         self.assertEqual(
@@ -98,8 +97,8 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         self.assertIs(controller.installation, installation)
         self.assertIs(registry.get_agentic_runtime_adapter("codex"), controller)
         self.assertEqual(
-            runtime_adapter_artifact_digest(registry.get_runtime_adapter("codex")),
-            CODEX_PROFILE_ARTIFACT_DIGEST,
+            len(runtime_adapter_identity_digest(registry.get_runtime_adapter("codex"))),
+            64,
         )
         self.assertEqual(registry.get_provider_definition("codex").status, "active")
 
@@ -108,7 +107,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         installation = registry.get_native_agent_installation("antigravity-cli")
         definition = registry.get_provider_definition("antigravity-cli")
 
-        self.assertTrue(installation.certification_configured)
+        self.assertTrue(installation.contract_configured)
         self.assertEqual(definition.status, "disabled")
         self.assertFalse(definition.requires_credentials)
         self.assertFalse(definition.capabilities.supports_api_key_auth)
@@ -177,39 +176,23 @@ class NativeAgentFrameworkTest(unittest.TestCase):
                 )
             )
 
-    def test_registry_rejects_certified_manifest_without_executable_adapter(self) -> None:
+    def test_registry_rejects_configured_contract_without_executable_adapter(self) -> None:
         registry = ProviderRegistry()
         candidate = build_antigravity_cli_candidate_installation()
-        certified = replace(
-            candidate,
-            certificate=replace(
-                candidate.certificate,
-                connection_certificate_ids=(("google", "certificate:google-native"),),
-                full_workspace_contract_revision="codex-baseline-v20",
-            ),
-        )
 
-        with self.assertRaisesRegex(ValueError, "certified_adapter_missing"):
+        with self.assertRaisesRegex(ValueError, "native_agent_runtime_adapter_missing"):
             registry.register_native_agent_installation(
-                certified,
+                candidate,
                 definition=build_antigravity_cli_candidate_definition(NOW),
             )
 
     def test_registry_rejects_present_but_incomplete_native_adapter(self) -> None:
         registry = ProviderRegistry()
         candidate = build_antigravity_cli_candidate_installation()
-        certified = replace(
-            candidate,
-            certificate=replace(
-                candidate.certificate,
-                connection_certificate_ids=(("google", "certificate:google-native"),),
-                full_workspace_contract_revision="codex-baseline-v20",
-            ),
-        )
 
         with self.assertRaisesRegex(ValueError, "runtime_adapter_incomplete"):
             registry.register_native_agent_installation(
-                certified,
+                candidate,
                 definition=build_antigravity_cli_candidate_definition(NOW),
                 runtime_adapter=_IncompleteNativeAdapter(),
             )

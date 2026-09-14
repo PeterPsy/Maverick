@@ -7,9 +7,6 @@ import re
 from typing import Literal, Protocol
 
 from core.providers.execution_families import NATIVE_AGENT_EXECUTION_FAMILY
-from core.providers.native_runtime_artifact import NativeRuntimeArtifact
-
-
 NativeProtocolKind = Literal[
     "app_server",
     "sdk",
@@ -122,14 +119,6 @@ class NativeAgentEffectContract:
 
 
 @dataclass(frozen=True)
-class NativeAgentCertificateReference:
-    """Connection certificate kept separate from adapter and recipe identities."""
-
-    connection_certificate_ids: tuple[tuple[str, str], ...]
-    full_workspace_contract_revision: str | None
-
-
-@dataclass(frozen=True)
 class NativeRuntimeStatus:
     """Redaction-safe install, version, health, and update observation."""
 
@@ -164,18 +153,17 @@ class NativeAgentInstallation:
     recipe: NativeAgentHarnessRecipe
     model_provider_connections: tuple[NativeAgentModelProviderConnection, ...]
     effects: NativeAgentEffectContract
-    certificate: NativeAgentCertificateReference
+    full_workspace_contract_revision: str | None
     inspector: NativeRuntimeInspector
-    runtime_artifact: NativeRuntimeArtifact | None = None
 
     @property
     def execution_family(self) -> str:
         return NATIVE_AGENT_EXECUTION_FAMILY
 
     @property
-    def certification_configured(self) -> bool:
-        """A reference permits wiring, not release: live store validation grants it."""
-        return bool(self.certificate.connection_certificate_ids)
+    def contract_configured(self) -> bool:
+        """Return whether the integration declares the Full Workspace contract."""
+        return bool(self.full_workspace_contract_revision)
 
 
 def validate_native_agent_installation(installation: NativeAgentInstallation) -> None:
@@ -225,21 +213,15 @@ def validate_native_agent_installation(installation: NativeAgentInstallation) ->
             raise ValueError("native_agent_model_provider_connection_duplicate")
         connection_ids.add(identity[0])
         catalog_ids.add(identity[1])
-    certificate = installation.certificate
-    if installation.certification_configured and (
-        not certificate.full_workspace_contract_revision
-        or {item[0] for item in certificate.connection_certificate_ids} != connection_ids
-        or len(certificate.connection_certificate_ids) != len(connection_ids)
-        or any(not item[1].strip() for item in certificate.connection_certificate_ids)
-    ):
-        raise ValueError("native_agent_certificate_contract_incomplete")
+    if not installation.full_workspace_contract_revision:
+        raise ValueError("native_agent_workspace_contract_missing")
 
 
 def validate_native_runtime_adapter(
     installation: NativeAgentInstallation,
     adapter: object,
 ) -> None:
-    """Require executable methods behind every certified native lifecycle."""
+    """Require executable methods behind every native lifecycle."""
     required_methods = {
         *_REQUIRED_NATIVE_RUNTIME_ADAPTER_METHODS,
         *(

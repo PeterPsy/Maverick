@@ -42,7 +42,7 @@ class _ToolCall:
 
 
 class OpenRouterChatStreamDecoder:
-    """Convert one certified stream into provider-neutral public events."""
+    """Convert one allowed stream into provider-neutral public events."""
 
     def __init__(
         self,
@@ -95,7 +95,7 @@ class OpenRouterChatStreamDecoder:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
             if self.provider_name is None:
                 raise OpenRouterAgenticProtocolError(
-                    "provider_upstream_not_certified"
+                    "provider_upstream_not_allowed"
                 )
             validate_router_metadata(
                 metadata,
@@ -165,11 +165,11 @@ class OpenRouterChatStreamDecoder:
             self.upstream_provider_names
             and provider_name not in self.upstream_provider_names
         ):
-            raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+            raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
         if self.provider_name is None:
             self.provider_name = provider_name
         elif provider_name != self.provider_name:
-            raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
+            raise OpenRouterAgenticProtocolError("provider_upstream_not_allowed")
         if self.generation_id is None:
             self.generation_id = generation_id
             return [self._event(
@@ -412,5 +412,5 @@ def _reject_json_constant(value: str) -> None:
 def _single_upstream_id(request: AgenticModelRequest) -> str:
     upstreams = tuple(request.routing_constraint.allowed_upstream_ids)
     if len(upstreams) != 1 or not str(upstreams[0] or "").strip():
-        raise OpenRouterAgenticProtocolError("provider_routing_not_certified")
+        raise OpenRouterAgenticProtocolError("provider_routing_not_allowed")
     return upstreams[0]

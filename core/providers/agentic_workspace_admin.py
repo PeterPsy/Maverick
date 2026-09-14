@@ -9,7 +9,6 @@ import hashlib
 from core.observability.service import record_platform_audit, record_platform_event
 from core.providers.agentic_models import (
     ActorSelectionPolicy,
-    AgenticProfileDefinition,
     WorkspaceAgenticProfileBinding,
     default_actor_selection_policy,
 )
@@ -18,8 +17,6 @@ from core.providers.agentic_workspace_policy import (
     egress_policy_for_definition,
     workspace_policy_from_patch,
 )
-from core.providers.builtin_certification import ensure_codex_preview_certificate
-from core.providers.certificate_projection import certificate_profile_status
 from core.providers.errors import (
     AgenticProfileError,
     ProviderCredentialBindingError,
@@ -90,13 +87,6 @@ def configure_workspace_agentic_default(
         model_id=selected_model_id,
         now=timestamp,
     )
-    ensure_codex_preview_certificate(
-        store,
-        definition=profile,
-        provider_definition=provider,
-        adapter=registry.get_agentic_runtime_adapter(provider_id),
-        now=timestamp,
-    )
     bindings = store.list_workspace_agentic_profile_bindings(workspace_id)
     existing = next(
         (
@@ -139,7 +129,7 @@ def configure_workspace_agentic_default(
         now=timestamp,
     )
     # This legacy projection is deliberately written last. The authoritative
-    # profile, certificate, and workspace binding must all succeed first, and
+    # profile and workspace binding must all succeed first, and
     # reasoning remains a per-session choice rather than workspace authority.
     store.save_provider_selection(desired_selection)
     return saved_binding
@@ -248,9 +238,6 @@ def save_workspace_agentic_binding(
         current_policy=None if existing is None else existing.workspace_policy_ceiling,
     )
     egress_policy_id, egress_policy_revision = egress_policy_for_definition(definition)
-    if enabled:
-        _require_active_certificate(store, registry, definition)
-
     revision = 0 if existing is None else existing.revision + 1
     created_at = timestamp if existing is None else existing.created_at
     desired = WorkspaceAgenticProfileBinding(
@@ -313,28 +300,6 @@ def save_workspace_agentic_binding(
         action="create" if existing is None else "update",
     )
     return saved
-
-
-def _require_active_certificate(
-    store: ProviderStore,
-    registry: ProviderRegistry,
-    definition: AgenticProfileDefinition,
-) -> None:
-    certificate = store.get_capability_certificate(definition.capability_certificate_id)
-    from core.providers.native_agent_catalog import require_native_agent_model_available
-
-    require_native_agent_model_available(registry, definition, certificate=certificate)
-    status = store.get_capability_certificate_status(certificate.certificate_id)
-    adapter = registry.get_agentic_runtime_adapter(definition.runtime_engine_id)
-    effective_status = certificate_profile_status(
-        certificate,
-        status,
-        store=store,
-        definition=definition,
-        adapter=adapter,
-    )
-    if effective_status != "active":
-        raise AgenticProfileError(f"capability_certificate_{effective_status}")
 
 
 def _actor_policy_has_principal(policy: ActorSelectionPolicy) -> bool:

@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.provider_credentials import bind_provider_credential
+from core.providers.hosted_text_profiles import pin_hosted_text_execution_binding
 from core.providers.service import builtin_provider_registry, register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.event_bus import RuntimeEventBus
@@ -101,6 +102,31 @@ class PlainHostedRuntimeTest(unittest.TestCase):
             observability_store=None,
         )
 
+    def create_plain_session(
+        self,
+        state,
+        *,
+        session_id: str,
+        hosted_provider_id: str | None = None,
+        hosted_model_id: str | None = None,
+    ):
+        binding = pin_hosted_text_execution_binding(
+            state,
+            session_id=session_id,
+            workspace_id="default",
+            hosted_provider_id=hosted_provider_id,
+            hosted_model_id=hosted_model_id,
+        )
+        return create_runtime_session(
+            state.runtime_store,
+            session_id=session_id,
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            hosted_text_binding=binding,
+            start_path=state.repository_root,
+        )
+
     def test_legacy_session_hydrates_runtime_mode_agentic(self) -> None:
         now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
         session = runtime_session_from_document(
@@ -148,15 +174,11 @@ class PlainHostedRuntimeTest(unittest.TestCase):
 
     def test_create_runtime_session_persists_hosted_model_override(self) -> None:
         state = self.make_state()
-        plain = create_runtime_session(
-            state.runtime_store,
+        plain = self.create_plain_session(
+            state,
             session_id="sess-openrouter",
-            workspace_id="default",
-            agent_id="chat",
-            runtime_mode="plain_hosted_chat",
             hosted_provider_id="openrouter",
             hosted_model_id="google/gemma-4-31b-it:free",
-            start_path=state.repository_root,
         )
 
         self.assertEqual(plain.hosted_provider_id, "openrouter")
@@ -165,13 +187,9 @@ class PlainHostedRuntimeTest(unittest.TestCase):
 
     def test_plain_hosted_sync_turn_emits_delta_final_and_completes(self) -> None:
         state = self.make_state()
-        session = create_runtime_session(
-            state.runtime_store,
+        session = self.create_plain_session(
+            state,
             session_id="sess-plain",
-            workspace_id="default",
-            agent_id="chat",
-            runtime_mode="plain_hosted_chat",
-            start_path=state.repository_root,
         )
 
         with (
@@ -199,13 +217,9 @@ class PlainHostedRuntimeTest(unittest.TestCase):
 
     def test_plain_hosted_provider_receives_governed_orchestration_context(self) -> None:
         state = self.make_state()
-        session = create_runtime_session(
-            state.runtime_store,
+        session = self.create_plain_session(
+            state,
             session_id="sess-governed-context",
-            workspace_id="default",
-            agent_id="chat",
-            runtime_mode="plain_hosted_chat",
-            start_path=state.repository_root,
         )
         governed_input = "Come sta andando?\n\n[Maverick governed orchestration read]\nRun is active."
 
@@ -230,15 +244,11 @@ class PlainHostedRuntimeTest(unittest.TestCase):
 
     def test_plain_hosted_turn_with_image_uses_multimodal_openrouter_model(self) -> None:
         state = self.make_state()
-        session = create_runtime_session(
-            state.runtime_store,
+        session = self.create_plain_session(
+            state,
             session_id="sess-openrouter-image",
-            workspace_id="default",
-            agent_id="chat",
-            runtime_mode="plain_hosted_chat",
             hosted_provider_id="openrouter",
             hosted_model_id="google/gemma-4-31b-it:free",
-            start_path=state.repository_root,
         )
         image_path = Path(session.workspace_root) / "storage" / "uploaded" / "image-1" / "pixel.png"
         image_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,15 +283,11 @@ class PlainHostedRuntimeTest(unittest.TestCase):
 
     def test_plain_hosted_text_only_model_blocks_image_attachments(self) -> None:
         state = self.make_state()
-        session = create_runtime_session(
-            state.runtime_store,
+        session = self.create_plain_session(
+            state,
             session_id="sess-openrouter-text-only",
-            workspace_id="default",
-            agent_id="chat",
-            runtime_mode="plain_hosted_chat",
             hosted_provider_id="openrouter",
             hosted_model_id="nvidia/nemotron-3-ultra-550b-a55b:free",
-            start_path=state.repository_root,
         )
         image_path = Path(session.workspace_root) / "storage" / "uploaded" / "image-1" / "pixel.png"
         image_path.parent.mkdir(parents=True, exist_ok=True)
@@ -310,13 +316,9 @@ class PlainHostedRuntimeTest(unittest.TestCase):
 
     def test_plain_hosted_async_turn_completes_without_codex(self) -> None:
         state = self.make_state()
-        session = create_runtime_session(
-            state.runtime_store,
+        session = self.create_plain_session(
+            state,
             session_id="sess-plain",
-            workspace_id="default",
-            agent_id="chat",
-            runtime_mode="plain_hosted_chat",
-            start_path=state.repository_root,
         )
 
         with (

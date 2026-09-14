@@ -12,18 +12,12 @@ from core.providers.agentic_models import (
     AgenticProfileDefinition,
     AgenticProfileDefinitionStatus,
     AgenticRuntimePolicy,
+    RuntimeCapabilitySet,
     RoutingConstraint,
     WorkspaceAgenticProfileBinding,
 )
-from core.providers.capability_models import (
-    CapabilityCertificate,
-    CapabilityCertificateStatus,
-    CapabilityEvidenceRecord,
-    RuntimeCapabilitySet,
-)
 from core.providers.errors import (
     AgenticProfileConflictError,
-    CapabilityCertificateConflictError,
     ProviderCredentialBindingError,
     ProviderNotFoundError,
 )
@@ -156,36 +150,6 @@ class ProviderStore(Protocol):
     def get_agentic_migration(self, migration_id: str) -> AgenticMigrationRecord | None:
         ...
 
-    def save_capability_evidence(self, record: CapabilityEvidenceRecord) -> CapabilityEvidenceRecord:
-        ...
-
-    def get_capability_evidence(self, evidence_digest: str) -> CapabilityEvidenceRecord:
-        ...
-
-    def save_capability_certificate(self, record: CapabilityCertificate) -> CapabilityCertificate:
-        ...
-
-    def get_capability_certificate(self, certificate_id: str) -> CapabilityCertificate:
-        ...
-
-    def list_capability_certificates(self) -> list[CapabilityCertificate]:
-        ...
-
-    def save_capability_certificate_status(
-        self,
-        record: CapabilityCertificateStatus,
-        *,
-        expected_revision: int | None,
-    ) -> CapabilityCertificateStatus:
-        ...
-
-    def get_capability_certificate_status(
-        self,
-        certificate_id: str,
-    ) -> CapabilityCertificateStatus | None:
-        ...
-
-
 @dataclass(frozen=True)
 class ProviderCollections:
     """Collection bundle for provider persistence."""
@@ -199,9 +163,6 @@ class ProviderCollections:
     agentic_profile_definition_statuses: DocumentCollection | None = None
     workspace_agentic_profile_bindings: DocumentCollection | None = None
     agentic_migrations: DocumentCollection | None = None
-    capability_evidence: DocumentCollection | None = None
-    capability_certificates: DocumentCollection | None = None
-    capability_certificate_statuses: DocumentCollection | None = None
 
 
 class ProviderDocumentStore:
@@ -219,11 +180,6 @@ class ProviderDocumentStore:
             collections.workspace_agentic_profile_bindings or InMemoryCollection()
         )
         self._agentic_migrations = collections.agentic_migrations or InMemoryCollection()
-        self._capability_evidence = collections.capability_evidence or InMemoryCollection()
-        self._capability_certificates = collections.capability_certificates or InMemoryCollection()
-        self._capability_certificate_statuses = (
-            collections.capability_certificate_statuses or InMemoryCollection()
-        )
 
     def _provider_definition(self, document: dict[str, Any]) -> ProviderDefinition:
         payload = dict(document)
@@ -446,83 +402,6 @@ class ProviderDocumentStore:
         document = self._agentic_migrations.find_one({"migration_id": migration_id})
         return None if document is None else AgenticMigrationRecord(**document)
 
-    def save_capability_evidence(self, record: CapabilityEvidenceRecord) -> CapabilityEvidenceRecord:
-        existing, inserted = self._capability_evidence.insert_one_if_absent(
-            {"evidence_digest": record.evidence_digest},
-            asdict(record),
-        )
-        if not inserted and self.get_capability_evidence(record.evidence_digest) != record:
-            raise CapabilityCertificateConflictError("certificate_evidence_immutable_conflict")
-        return record
-
-    def get_capability_evidence(self, evidence_digest: str) -> CapabilityEvidenceRecord:
-        document = self._capability_evidence.find_one({"evidence_digest": evidence_digest})
-        if document is None:
-            raise ProviderNotFoundError(f"Capability evidence `{evidence_digest}` was not found.")
-        payload = dict(document)
-        payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
-        for field_name in (
-            "tcb_manifest_id",
-            "tcb_manifest_version",
-            "tcb_structure_digest",
-            "tcb_live_digest",
-        ):
-            payload.setdefault(field_name, "")
-        return CapabilityEvidenceRecord(**payload)
-
-    def save_capability_certificate(self, record: CapabilityCertificate) -> CapabilityCertificate:
-        existing, inserted = self._capability_certificates.insert_one_if_absent(
-            {"certificate_id": record.certificate_id},
-            asdict(record),
-        )
-        if not inserted and _capability_certificate(existing) != record:
-            raise CapabilityCertificateConflictError("certificate_immutable_conflict")
-        return record
-
-    def get_capability_certificate(self, certificate_id: str) -> CapabilityCertificate:
-        document = self._capability_certificates.find_one({"certificate_id": certificate_id})
-        if document is None:
-            raise ProviderNotFoundError(f"Capability certificate `{certificate_id}` was not found.")
-        return _capability_certificate(document)
-
-    def list_capability_certificates(self) -> list[CapabilityCertificate]:
-        return [_capability_certificate(item) for item in self._capability_certificates.find({})]
-
-    def save_capability_certificate_status(
-        self,
-        record: CapabilityCertificateStatus,
-        *,
-        expected_revision: int | None,
-    ) -> CapabilityCertificateStatus:
-        current_document = self._capability_certificate_statuses.find_one(
-            {"certificate_id": record.certificate_id}
-        )
-        if record.status == "active" and (record.revoked_at is not None or record.revocation_reason is not None):
-            raise CapabilityCertificateConflictError("certificate_status_invalid")
-        if record.status == "revoked" and (record.revoked_at is None or not record.revocation_reason):
-            raise CapabilityCertificateConflictError("certificate_status_invalid")
-        if current_document is not None and current_document.get("status") == "revoked" and record.status != "revoked":
-            raise CapabilityCertificateConflictError("certificate_revocation_is_permanent")
-        try:
-            _save_revisioned_record(
-                self._capability_certificate_statuses,
-                identity={"certificate_id": record.certificate_id},
-                payload=asdict(record),
-                expected_revision=expected_revision,
-                label="Capability certificate status",
-            )
-        except AgenticProfileConflictError as error:
-            raise CapabilityCertificateConflictError("certificate_status_revision_conflict") from error
-        return record
-
-    def get_capability_certificate_status(
-        self,
-        certificate_id: str,
-    ) -> CapabilityCertificateStatus | None:
-        document = self._capability_certificate_statuses.find_one({"certificate_id": certificate_id})
-        return None if document is None else CapabilityCertificateStatus(**document)
-
-
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)
     payload.setdefault("model_revision", None)
@@ -546,6 +425,25 @@ def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefin
     payload["context_policy"] = _agentic_context_policy(
         payload.get("context_policy")
     )
+    payload.pop("capability_certificate_id", None)
+    capabilities = payload.get("capabilities")
+    if not isinstance(capabilities, dict):
+        capabilities = _legacy_profile_capabilities(payload)
+    capabilities = dict(capabilities)
+    capabilities.setdefault("filesystem_list", False)
+    capabilities.setdefault("app_references", False)
+    capabilities.setdefault("confirmations", False)
+    capabilities["attachment_modalities"] = tuple(
+        capabilities.get("attachment_modalities", ())
+    )
+    payload["capabilities"] = RuntimeCapabilitySet(**capabilities)
+    reasoning_efforts, default_reasoning_effort = _legacy_profile_reasoning(
+        payload
+    )
+    payload["reasoning_efforts"] = tuple(
+        payload.get("reasoning_efforts", reasoning_efforts)
+    )
+    payload.setdefault("default_reasoning_effort", default_reasoning_effort)
     _migrate_legacy_agentic_profile_egress(payload)
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
@@ -564,47 +462,45 @@ def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
         payload["egress_policy_revision"] = "2"
 
 
-def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
-    payload = dict(document)
-    payload["legacy_projection_certificate_ids"] = tuple(payload.get("legacy_projection_certificate_ids", ()))
-    payload.setdefault("model_revision_policy", "provider_alias")
-    payload["certified_upstream_ids"] = tuple(payload.get("certified_upstream_ids", ()))
-    payload["certified_reasoning_efforts"] = tuple(
-        payload.get("certified_reasoning_efforts", ())
-    )
-    payload.setdefault("default_reasoning_effort", None)
-    payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
-    capabilities = dict(payload["certified_capabilities"])
-    capabilities.setdefault("filesystem_list", False)
-    capabilities.setdefault("app_references", False)
-    capabilities.setdefault("confirmations", False)
-    capabilities["attachment_modalities"] = tuple(capabilities.get("attachment_modalities", ()))
-    payload["certified_capabilities"] = RuntimeCapabilitySet(**capabilities)
-    for field_name in (
-        "tcb_manifest_id",
-        "tcb_manifest_version",
-        "tcb_structure_digest",
-        "tcb_live_digest",
-    ):
-        payload.setdefault(field_name, "")
-    payload.setdefault("full_workspace_contract_revision", "")
-    for field_name in (
-        "execution_family",
-        "harness_recipe_id",
-        "harness_recipe_revision",
-        "harness_recipe_digest",
-        "provider_capability_catalog_digest",
-        "semantic_projection_compiler_revision",
-        "tool_contract_revision",
-        "context_policy_revision",
-        "provider_config_id",
-        "provider_config_revision",
-        "provider_config_digest",
-        "protocol_adapter_id",
-        "protocol_adapter_version",
-    ):
-        payload.setdefault(field_name, "")
-    return CapabilityCertificate(**payload)
+def _legacy_profile_capabilities(payload: dict[str, Any]) -> dict[str, object]:
+    """Upgrade legacy records without consulting retired issued metadata."""
+    native_codex = payload.get("provider_protocol") == "codex-app-server-stdio"
+    return {
+        "streaming": True,
+        "tool_orchestration": True,
+        "cli": True,
+        "mcp": True,
+        "skill_catalog": True,
+        "filesystem_list": True,
+        "filesystem_read": True,
+        "filesystem_write": True,
+        "shell": True,
+        "interrupt": True,
+        "same_turn_steering": native_codex,
+        "recovery": True,
+        "confirmation_resume": not native_codex,
+        "provider_private_state": not native_codex,
+        "attachment_modalities": ("file",),
+        "app_references": True,
+        "confirmations": not native_codex,
+    }
+
+
+def _legacy_profile_reasoning(
+    payload: dict[str, Any],
+) -> tuple[tuple[str, ...], str | None]:
+    protocol = str(payload.get("provider_protocol") or "")
+    model_id = str(payload.get("model_id") or "")
+    if protocol == "openrouter-chat-completions":
+        return ("max", "high", "low"), "max"
+    if protocol == "google-interactions":
+        return ("high",), "high"
+    if protocol == "codex-app-server-stdio":
+        efforts = ("low", "medium", "high", "xhigh")
+        if model_id not in {"gpt-5.5", "gpt-5.3-codex-spark"}:
+            efforts = (*efforts, "max")
+        return efforts, efforts[-1]
+    return (), None
 
 
 def _workspace_agentic_profile_binding(document: dict[str, Any]) -> WorkspaceAgenticProfileBinding:

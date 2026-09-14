@@ -525,758 +525,144 @@ recovery do not depend on a mutable future Agents app record.
 
 ### 6. AI provider management
 
-The core owns the abstraction layer for model providers and model backends.
+The Core owns the provider abstraction, credentials, model catalogs, workspace
+bindings, runtime adapters, routing and the live policy intersection. `Codex` is
+one supported runtime backend, not the definition of the Core.
 
-This includes:
+Provider definitions separate technical kind from execution role:
 
-- provider definitions
-- provider credentials and secret bindings
-- provider capability metadata
-- model selection contracts
-- runtime adapter selection
+- `runtime_engine` providers own their own agent loop, such as the Codex
+  app-server.
+- `model_provider` providers expose inference APIs. Maverick may provide the
+  agent loop around these APIs.
+- `speech_provider` providers expose speech-specific contracts.
 
-`Codex` is one supported runtime backend, not the architectural definition of the core itself.
+Agentic execution has two supported families:
 
-Provider definitions distinguish the technical provider kind from the role that
-the provider plays in Maverick:
+- **Native Agents (CLI)** use a structured native runtime and its own loop.
+  Admission requires a registered installation contract, an installed and
+  healthy runtime, an available model in its current catalog, an enabled
+  workspace profile and live actor/policy authority.
+- **Maverick Agents (API)** use a Core-owned loop around a provider protocol
+  adapter. The profile identifies the exact provider config, protocol adapter,
+  harness recipe, model, routing constraint, reasoning choices and Full
+  Workspace contract.
 
-- `runtime_engine` providers own a runtime or agent loop and may expose runtime
-  adapters.
-- `model_provider` providers expose hosted or remote inference capabilities such
-  as text generation without owning the runtime loop.
-- `speech_provider` providers expose remote speech capabilities as governable
-  metadata until a speech execution pipeline consumes them through official
-  core/app surfaces.
+A third **Text-only Models (API)** family has no workspace tools or action loop.
+A text session pins an immutable `HostedTextExecutionBinding` containing its
+provider/model profile, availability state and routing snapshot. It never enters
+the agentic loop and every dispatch revalidates the pinned route.
 
-The capability metadata must be modality-aware and conservative. Runtime
-selection remains separate from model routing: hosted model providers such as a
-low-latency text API must not be configured through the workspace runtime
-backend selection path unless they also implement a runtime engine contract.
+#### Direct agentic profile contract
 
-The system must be designed so that other backends and model providers can be supported without changing the app model.
+`AgenticProfileDefinition` directly declares:
 
-Native coding-agent integrations use the provider-neutral native-agent
-installation contract. Adapter protocol, harness recipe, model-provider
-connection, effect/sandbox mapping, and certificate reference are separate
-immutable records. The certificate covers the runtime-to-model-provider
-connection and its trusted adapter/harness boundary; it is not an allowlist of
-individual model slugs. Model availability is projected from the authoritative
-catalog published by that connected native runtime. Every model currently
-advertised by a certified connection inherits the integration certification,
-while its exact model id, revision policy, and reasoning choice remain pinned in
-the immutable profile and session binding. A model absent from the live catalog
-fails closed for new sessions without invalidating the connection certificate.
-Server admission and historical-session rules are specified in
-`docs/architecture/native_agent_admission.md`; UI readiness alone never grants
-authority and reconciliation never overrides an operator disable.
-Connection certificates are persisted immutable records with
-`certificate_scope=native_connection`, shared evidence, issuance/expiry, an
-adapter/recipe/effect/connection identity digest, and a permanent CAS-governed
-revocation status. Model projections reference that record and reuse its exact
-test run, evidence, issuance, and expiry; discovery never manufactures another
-certification run. Revoking a projection also revokes its connection. The bounded
-Codex migration adopts existing current-bundle evidence and the earliest expiry,
-preserves old immutable pins, and retains pre-migration certificates as permanent
-kill switches. Neither a new slug nor a restart can renew or reactivate a revoked
-or expired connection. Both full and cheap live-authority validation check it.
+- engine, adapter, provider, model and protocol identity;
+- routing and egress constraints;
+- reasoning efforts and default effort;
+- `RuntimeCapabilitySet`;
+- runtime policy ceiling;
+- Full Workspace revision, execution family and harness recipe;
+- protocol-adapter and provider-config identities.
 
-Native availability comes only from a successful structured response of the
-configured runtime, with a binary/source fingerprint and a bounded freshness
-window. Persisted provider options and fallback metadata never grant availability.
-Each model-provider maps to exactly one runtime catalog; duplicate or ambiguous
-mappings are rejected. Verified exact revisions and explicit alias policies are
-preserved rather than flattened to aliases. Bootstrap and every successful live
-refresh reconcile all model projections before atomically exposing the new
-catalog epoch to admission. A failed refresh or partial reconciliation closes
-that gate; no second restart is needed to expose newly advertised models.
-Workspace-binding writes and session pinning validate current model, revision,
-and reasoning metadata, so API preflight rejects unavailable models before
-claims, prepared locks, threads, or sessions are persisted. Model projection
-revisions are content-addressed independently of the certified adapter revision;
-already matching legacy Codex revision-14 pins are adopted without rewriting them.
-A native integration must expose machine-readable discovery, version,
-health, update status, launch/connect/resume, structured turn events and final
-output, steering, interrupt, recovery, process cleanup, and close operations.
-Only an official app-server/SDK/API, stable JSON-RPC/JSONL protocol, or
-documented structured headless CLI is admissible; terminal, ANSI, or free-text
-human UI scraping is rejected. Native effects must either use Maverick tools or
-run inside a supervised Maverick sandbox with structured effect events. An
-uncertified native installation is always clamped to `disabled`, including
-when stale persisted provider metadata says otherwise. Codex is registered
-through this generic contract without changing its existing app-server adapter
-or certified artifact digest. Registration verifies the callable inspector and
-the exact backend primitive used by each declared lifecycle operation before
-granting an executable controller; recovery is validated and executed through
-the supervised lifecycle `prewarm` primitive rather than a declarative command
-builder. `get_agentic_runtime_adapter()` returns that controller on the
-production path. The controller delegates the supervised local-process
-lifecycle, validates structured final events, and the provider-neutral executor
-turns a nominally successful blank result into `agent_final_output_empty`. The
-Antigravity CLI registration owns an executable persistent `stream-json`
-controller and supervised NDJSON transport rather than using the Codex bridge.
-Because that engine owns its process internally, it explicitly requests a
-Core-resolved launch specification. Antigravity uses its own cached OAuth login,
-not the Google AI Studio API key: the host operator provisions only the cached
-identity file into a private `MAVERICK_ANTIGRAVITY_HOME`, and Core copies it into
-each session-private HOME while replacing settings with its controlled sandbox
-and `proceed-in-sandbox` policy. The outer Bubblewrap mount keeps the workspace
-read-only to native tools and leaves only the private runtime subtree writable;
-confirmed mutations cross Core through the runtime-token `maverick` CLI/MCP
-wrapper. Exact selected workspace skills are copied into a read-only subtree of the private
-Antigravity home, and a changed skill digest retires the old process before
-reuse. Provider bindings and API-key environments are rejected on this path.
-Authenticated catalog discovery uses another ephemeral, confined copy and
-grants no model availability on binary, auth, or output drift. Engine-owned
-launch does not inherit the host HOME or expose OAuth material through public
-events.
-The obsolete Gemini CLI ACP candidate is retired. Antigravity's lifecycle proof
-and limitations are specified in
-`docs/architecture/antigravity_cli_native.md`.
-Suite 49 can certify the exact `antigravity-cli` to `google` connection through
-a strict bounded live receipt and independently reviewed natural Full Workspace
-evidence. Only an already trusted signature may publish the root connection
-certificate; catalog slugs receive evidence-preserving projections, removed
-models become unavailable, and superseded revisions are suspended. Provider activation is a distinct operator-only write
-that creates no workspace binding. It therefore remains disabled without that
-certificate, explicit activation, default-off global/provider flags, current
-workspace attestation, canary and release authority.
+Maverick does not issue, renew, expire or revoke a second capability document
+for that profile. There is no timer whose expiry can disable Codex or OpenRouter.
+A model or adapter update is handled as normal catalog/profile evolution: new
+sessions pin the current profile while historical session pins remain immutable.
+In particular, a newly advertised Codex model does not require a Maverick
+re-issuance step.
 
-Maverick Agent onboarding is likewise composition-driven. A trusted protocol
-adapter manifest owns transport, request/response codec, private state, usage,
-cancellation, and recovery identities; a provider config separately owns the
-exact HTTPS endpoint URL, upstream tags and effective provider/model identities,
-routing, credential logical name, retention, data destination, and a versioned
-token-cost policy used for both reservation and reported usage. Config,
-adapter, recipe, and profile protocol/API identities must agree, and recipe
-upstreams must equal the config route. The immutable profile, capability
-certificate, and runtime execution binding retain the provider-config
-id/revision/digest and protocol-adapter id/version. Registering a new trusted
-protocol factory composes a `HostedProviderRuntimeRegistry` without a branch in
-the Core-owned execution loop. Composition verifies that the client exposes the
-configured model, actual transport endpoint, routing/upstream/provider/model
-identity and the same cost-policy object used by the runtime estimator before a
-profile can be published. Another model compatible with that protocol therefore
-requires only new config/recipe/profile data, including its own route and price.
-The executable factory also supplies its independent implementation manifest;
-transport, request/response/private codecs, accounting, cancellation, and recovery
-must match the publication, rather than being copied from it. Composition requires
-a callable request client, private-state inspection, compaction, and preflight,
-and the exact request-ceiling estimator (not the usage-pricing method). Google
-Interactions rejects ZDR and data-collection-denial claims: its current transport
-does not implement or attest those guarantees.
-Finalization reserves are derived from the versioned token-cost policy and the
-recipe's input/output bounds, including the conversion between Core's input-byte
-admission estimate and the provider's request estimator. Onboarding rejects a
-profile whose cost, output, step, or time ceiling cannot fund finalization plus
-its recovery reserve. Adding a more expensive model therefore requires adequate
-profile budget data, not a provider-specific fixed reserve or a Core-loop branch.
-Discovery snapshots vendor model metadata into a digest but always returns
-`authority_granted=false` and no execution family. Publication classifies a
-profile as `maverick_agent` only after the complete Full Workspace contract,
-context, tool, streaming, usage, cancellation, and policy prerequisites are
-present; otherwise it cannot be published under that family.
-Production bootstrap assembles one builtin onboarding catalog, builds the
-hosted runtime registry from it, validates the composed engine, and publishes
-all registered profiles through the same catalog. Adding another model for an
-existing trusted protocol therefore changes its config/recipe/publication data,
-not the runtime-registry builder or bootstrap control flow.
+This simplification does not remove security boundaries. Before session creation
+and before provider requests or effects, Core still verifies the enabled
+workspace binding, actor policy, credential reference, installed runtime health,
+model availability, routing/upstream restrictions, execution mode, feature flags,
+egress/data policy and current authorized tool handles. Live state may only
+narrow the profile capabilities.
 
-A shared hosted adapter version change requires a new immutable revision for
-every bundled profile that pins it, including profiles for otherwise unchanged
-providers. Bootstrap preserves existing definitions and suspends superseded
-revisions through their separate rollout records. Google profile 70 pins hosted
-adapter 59; revisions 67, 68, and 69 retain their original adapter-56,
-adapter-57, and adapter-58 definitions respectively.
+A `RuntimeExecutionBinding` pins the direct profile snapshot into a session. It
+contains declared capabilities and reasoning efforts plus adapter identity,
+routing, policy, model, recipe and provider-config identities. Legacy stored
+fields from the retired issuance design are ignored during hydration and a new
+direct binding digest is computed. They grant no authority.
 
-Text-only API sessions have a third and disjoint identity path. Before a new
-session is persisted, Core resolves the exact hosted provider/model and creates
-a self-digesting `HostedTextExecutionBinding`. That binding embeds an immutable
-`HostedTextProfileDefinition`, an independent availability status, a
-`hosted_text_capability` certificate that explicitly fixes workspace tools,
-action loop, and workspace actions to false, plus the exact provider-routing
-snapshot. It is never passed to agentic provider-state initialization, the
-provider-step journal, tool orchestration, or an agentic certificate validator.
-Every text dispatch revalidates the binding and requests its pinned provider and
-model. Before transport, Core rebuilds the live profile from the current model
-and provider records and compares the entire pinned identity—including model
-and profile revisions, protocol/API version, endpoint, modalities, limits,
-cost, retention, and destination—plus the live routing snapshot. A
-missing/disabled route or any drift fails rather than selecting another
-provider or execution family. The transport receives the exact pinned endpoint
-and routing snapshot. Continuation may fork the binding identity but cannot
-change its route. Stored pre-P5 text sessions hydrate without manufacturing or
-rewriting a pin. An existing session cannot accept a different runtime family,
-provider, or model through a later app request, and text sessions cannot create
-agent children.
+`EffectiveRuntimeAuthority` is ephemeral and non-bearer. It intersects the
+pinned capability snapshot with profile policy, workspace policy, feature flags,
+health, execution mode and current tool authorization. Provider-private state,
+credentials and raw protocol data never enter public projections.
 
-The provider status boundary projects those three contracts directly for
-product clients. `GET /api/providers` returns the Core-owned catalog in the
-fixed order `native_agent`, `maverick_agent`, `hosted_text`; redaction-safe
-native installation status; agent profile family readiness; independent
-text-only profiles/status/certificates; and a presentation-only legacy
-selection map. Agent readiness is fail-closed: an agent is selectable only when
-its exact family composition is complete, Full Workspace is certified, its
-binding/rollout/certificate/effective authority are active, and a native
-runtime is installed and healthy. A narrowed binding does not become a
-read-only agent. The migration payload never writes provider selections or
-rewrites immutable session bindings; session governance may project the exact
-legacy Codex identity while retaining the stored binding bytes and reports that
-projection explicitly.
+Native integrations must expose machine-readable discovery, version, health,
+launch/connect/resume, structured events and final output, steering, interrupt,
+recovery, cleanup and close operations. Terminal scraping is not admissible.
+Native effects must run through Maverick tools or within a supervised workspace
+sandbox with structured effect handling.
 
-Settings and Chat consume this boundary with identical normative English copy
-and ordering: `Native Agents (CLI)`, `Maverick Agents (API)`, then `Text-only
-Models (API)`. Full Workspace is certificate-derived display state, never a
-browser control. There is no capability tier, `Full/Read-only` switch, or UI
-path that removes a required agent surface. Settings shows the redaction-safe
-provider/upstream, recipe, data policy, certificate, health, native
-install/version/sandbox, and text-profile limits required for administration;
-Chat shows the pinned destination/profile/recipe before creation. Text-only
-entries always state `No workspace tools or actions.` and cannot inherit an
-agent binding. Settings uses the server-owned `enable_eligible` disposition for
-every agent family; a disabled binding can be re-enabled after its independent
-blockers clear without a Codex-specific browser exception. An unavailable
-persisted new-session target leaves the picker unselected instead of falling
-through to another family. Existing Chat sessions continue to resolve their
-pinned runtime or hosted-text identity before considering any new-session
-default.
+Maverick Agent onboarding is composition-driven. A protocol-adapter manifest
+owns transport, codecs, private state, usage, cancellation and recovery. A
+provider config owns endpoint, upstream, model identity, routing, credentials,
+retention, destination and cost policy. A harness recipe owns prompt, context,
+tool and finalization behavior. Publication succeeds only when these identities
+and the Full Workspace contract agree.
 
-The core must also be installable and bootable with no AI provider configured or available.
+OpenRouter GLM uses the `openrouter-chat-completions` adapter with model
+`z-ai/glm-5.3-flash`, the Relace route, provider-private continuation state and
+the Core-owned hosted tool loop. Its direct profile exposes streaming, CLI/MCP,
+skills, filesystem operations, shell, app references, confirmations, interrupt
+and recovery. The supported reasoning efforts are `max`, `high` and `low`, with
+`max` as the default. Selection still requires an active OpenRouter credential
+binding and the live workspace policy checks described above.
 
-No provider is a valid initial platform state, not an installation failure.
+The provider status API projects these contracts directly. An agentic row is
+selectable only when the family contract is complete, Full Workspace is
+`available`, the binding and rollout are enabled, live effective authority is
+active, containment is `GO`, and any native runtime is installed and healthy.
+Settings and Chat consume the same server-owned projection. Browsers cannot add
+capabilities or alter data classification.
 
-Provider selection is an explicit later setup or admin action. Once configured, the persisted provider selection is the authoritative runtime backend choice for runtime turns, provider status, and recovery automation.
+The Core must remain installable and bootable with no AI provider configured.
+Provider selection is a later explicit admin action; missing providers fail on
+use and never cause silent fallback.
 
-Provider status APIs should represent this state directly:
-
-- `active_provider: null` when no provider is configured or the configured provider is unavailable
-- a stable `blocked_reason`, such as `no_provider_configured` or `provider_unavailable`
-- enough available-provider metadata for an authorized setup flow to choose a provider later
-
-Runtime creation, turn execution, and recovery work that need an AI backend should fail on use with a recoverable provider-status error when no provider is configured. They must not silently fall back to Codex or any other first registered adapter.
-
-Runtime-style providers must preserve conversation continuity inside a runtime session.
-
-For Codex specifically, the core must use the Codex app-server protocol, not one-off `codex exec` calls.
-
-The Codex adapter should own the provider-specific protocol:
-
-- start one local `codex app-server --listen stdio://` process for the runtime session
-- initialize the app-server process
-- prepare a session-local `CODEX_HOME` under the runtime root before launch
-- populate that runtime home from a configurable operator Codex home, using `MAVERICK_CODEX_HOME`, `CODEX_HOME`, or the current user's default Codex home
-- copy only required identity and configuration material into the runtime home, such as Codex auth, version, installation identity, sanitized config, and rules
-- avoid hardcoded host paths for Codex identity or configuration
-- keep runtime skills materialized separately through the selected workspace `skill.catalog` provider's data rather than loading user-global or core-bundled skills into every runtime
-- create a persistent Codex thread with `thread/start` when no provider thread exists
-- resume the existing Codex thread with `thread/resume` when a runtime session already has a provider thread id
-- submit each user turn with `turn/start` against the same provider thread id
-- admit later user messages into a regular active turn with `turn/steer`, including a stable client message id, only when the adapter declares same-turn input support and the Maverick turn is still correlated to the expected provider turn id
-- interrupt active work with the provider's turn interrupt method
-- keep the provider thread id as provider-runtime state, not as chat-app state
-- keep the local provider process warm for a short idle TTL after a terminal turn, then terminate it if the runtime session still has no queued or active turns, while keeping the provider thread id so a later turn can restart the backend and resume the same conversation
-
-On Linux systemd deployments, the core host should carry a negative OOM score
-adjustment so the platform control plane is less likely to be terminated during
-host memory pressure. Runtime provider processes must be reset to neutral OOM
-priority when launched. They must not receive a positive adjustment: doing so
-causes early-OOM daemons to terminate every active session before selecting the
-process that is actually consuming the most memory.
-
-The core runtime session remains the Maverick-owned lifecycle container.
-
-The provider thread is the selected backend's conversation container.
-
-Those two ids are intentionally different but must be linked by the core runtime state so a chat can be reopened, a browser can refresh, and the next turn still reaches the same provider conversation.
-
-The core also owns the workspace chat thread catalog that points at runtime sessions.
-
-A chat thread is the user-visible runtime conversation record. It stores the thread id, linked `runtime_session_id`, title, availability, source app metadata, optional project id, and `last_user_message_at` timestamp. Apps such as `chat` may render or update that record through core runtime APIs, but they must not persist a second app-owned thread catalog or delete runtime sessions themselves. The core runtime owns availability transitions: queued user turns mark the linked thread as `queued`, started turns mark it as `active`, and terminal turn outcomes or interrupts mark it as `free`. A user message admitted into the active turn updates recency without changing that turn's active availability. Thread catalog reads reconcile availability from runtime turns while accepted message events preserve the newer same-turn user-message timestamp.
-
-Chat may pre-create one hidden `chat_root` through `prepare_only`. Core keys that
-prepared aggregate by workspace, owner, and a persisted hash of the normalized
-session configuration; exact repeated or concurrent requests return the same
-`session_id` even while provider prewarm is pending. The first accepted turn
-promotes that same aggregate to `thread_visibility=user` and clears its prepared
-fingerprint. A periodic bounded worker converges each workspace-owner pool to at
-most two distinct prepared configurations, removes exact duplicates and entries
-older than 30 minutes, and always invokes the canonical full runtime cleanup path.
-Its selection and cleanup revalidate under the session lifecycle handoff and
-exclude user-visible sessions, sessions with turns, and
-`inter_agent_participant` sessions.
-
-The runtime thread catalog uses bounded payload shapes. `GET /api/runtime/threads` returns a recency-sorted page and accepts a bounded metadata query so shell search surfaces can backfill matching older threads. The initial `runtime.thread.snapshot` WebSocket frame returns the complete user-visible catalog as lightweight summary records, with `threads_page` metadata reporting that the snapshot has no remaining page. Mutating thread APIs return only the changed thread or removed ids plus a page hint; they must not reattach a full thread catalog to create, rename, read-receipt, delete, or clear responses. Multi-thread deletion preflights the complete bounded request before mutation, batches shared persistence cleanup once per collection, removes the selected catalog records with one delta event, and atomically stages the corresponding runtime roots for deferred physical purge. A client should submit an ordinary complete catalog selection in one request; if a selection exceeds the server bound, it must acknowledge each completed chunk independently so a later transport failure leaves only the unresolved chats selected for retry.
-
-Agents read completed or active user-visible conversations through the core-owned
-read-only CLI/MCP surfaces `core.runtime.threads.list`,
-`core.runtime.transcript.read`, and
-`core.runtime.transcript.message.read`. These surfaces are a safe message
-projection, not access to raw runtime events or session files. The catalog
-filters authorization before metadata search and pagination. Transcript reads
-use only the paged append-only event-history contract, capture physical append
-positions for both events and eligible turn-input fallbacks in one opaque
-`snapshot_cursor`, return stable message ids and explicit projection warnings,
-and use character-window continuation for long messages. Event ordering by
-`(created_at, event_id)` happens only after the immutable append boundary is
-applied, so retroactively timestamped events cannot enter an older snapshot.
-Turn records admitted before the turn boundary may supply missing user input,
-whose submission fields (`input_text`, client message id, creation time, and
-runtime mode) remain immutable across lifecycle updates. Mutable terminal state
-is never used by historical reads; every such input fallback produces a warning
-and makes `projection_complete` false. Empty event
-or turn positions are represented inside the same cursor and remain empty on
-replay after later writes. Returned conversation content is labeled
-`untrusted_conversation_data`; system/developer prompts, provider payloads and
-thread ids, runtime paths, environments, and raw tool output are not part of
-the default `messages` profile. Structured payload keys are canonicalized
-before sensitive-field filtering and share one global node/serialized-byte
-budget; truncation is explicit through structured-content completeness fields.
-
-Transcript authority is independent from execution mode. The target must remain
-a `thread_visibility=user` session in the caller's workspace, and the caller
-must be its owner, a workspace/platform admin, or hold a platform-minted
-`read_transcript` grant as the user or calling runtime session. Hidden
-`inter_agent_participant` sessions remain available only through their existing
-participant-transcript projection. Every allowed or denied transcript read is
-audited without conversation text; audit payloads contain only caller/target
-identifiers, authorization relation, profile, page/window counts, redaction
-state, and outcome.
+Runtime-style providers preserve conversation continuity. Codex uses the Codex
+app-server protocol rather than one-shot commands. Hosted adapters retain only
+bounded encrypted provider-private continuation state in Core runtime storage.
 
 ### 7. Execution policy
 
-The core owns:
+The Core owns sandbox/full-access resolution, workspace boundaries, tool policy,
+approvals and egress. Workspace metadata may narrow this policy but may not
+bypass it. The default workspace may use full access only when platform and
+workspace governance both allow it; non-default workspaces remain sandboxed.
 
-- sandbox policy
-- full-access policy
-- runtime execution mode enforcement
-- workspace execution boundary enforcement
-- network egress policy primitives for sidecars and app-owned network work
+Hosted agentic runtimes use one sequential Core loop. Provider clients are
+codec/transport boundaries and do not own budgets, tools, confirmation, retry,
+egress or recovery policy. The loop refreshes effective authority before each
+provider request and side effect, journals request identity before acceptance,
+and routes every tool through the official CLI, MCP, app-interface or Core
+capability surface.
 
-The workspace domain may declare metadata and governance state, but the effective runtime mode must still be resolved by `execution_policy/`.
+Tool-schema review is separate from provider/model admission. Only Core-owned
+schemas marked with the reviewed schema component may be projected directly to
+hosted models. App-owned and dynamic tools remain discoverable through bounded
+Core wrappers and are re-resolved at invocation time. This review marker has no
+issuance, expiry or renewal lifecycle and cannot enable a model profile.
 
-For the `default` workspace, the effective runtime mode is `full-access` by default when both platform policy and workspace governance allow it.
+Before executing an app-owned wrapper, Core verifies its live descriptor,
+source, effect declaration and executable closure. Mutating or destructive
+operations follow the normal confirmation and effect policy. Result
+classification, output limits and egress checks apply after execution as well as
+before it. A schema declaration alone never grants authority.
 
-For non-default workspaces, the effective runtime mode remains sandbox-only regardless of runtime request.
+Remote requests are built only from server-owned context and authorized tool
+schemas. Client-supplied authority metadata is rejected. Provider routing is
+pinned, fallbacks are disabled where the profile requires it, secrets are
+resolved through Core secret bindings, and errors are normalized before public
+persistence.
 
-Browser-controlled network work uses the core-owned `egress/` domain before navigation and after redirects. P0 browser egress is fail-closed: only `http` and `https` URLs are eligible, private, loopback, link-local, Docker bridge, host-gateway, and metadata endpoints are denied beneath DNS names, and local Maverick development targets such as `http://hostmachine:8000` require an explicit admin-enabled dev exception.
-
-Hosted agentic runtimes use one Core-owned sequential loop. Provider clients are
-codec/transport boundaries only; they do not own budgets, tool registries,
-confirmation, retry, egress, or recovery policy. The loop refreshes effective
-authority before each request and side effect, journals request identity before
-acceptance, and routes every tool through the existing CLI/MCP/app-interface/Core
-catalog and encrypted invocation ledger. Provider-private protocol bytes remain
-behind the matching codec service and public events are bounded, normalized,
-and private-field-free.
-
-Pre-certificate natural conformance uses a distinct, code-owned laboratory
-authority rather than fabricating a capability certificate. Production
-bootstrap never constructs or selects it. An operator must explicitly inject
-both a laboratory authority and a matching runtime registry into a disposable
-installation. The authority accepts only a trusted Ed25519-signed, expiring
-permit bound to the exact authorization reference, clean source commit,
-repository/workspace filesystem identities, TCB, adapter artifact, API-profile
-target, actor, credential binding, reasoning effort, reviewer reference, and
-durable budget-ledger policy. The normal hosted semantic, egress, tool,
-confirmation, provider-state, journal, recovery, and cleanup implementations
-remain in the path. A separate raw-transport fence reserves every generation
-before egress, revalidates the permit and current credential before and after
-pacing and during streaming, never refunds ambiguous calls, and halts the
-provider ledger on transport or provider-stream failure. Laboratory evidence
-can support the later behavioral report and autonomous post-evidence review;
-the permit itself grants no production admission, publication, or rollout
-authority.
-
-OpenRouter certification collection, per-scenario natural execution,
-independent merge/review, signing, and release are separate checked-in operator
-phases. Live collection and natural execution resolve the one production
-credential through Core secret storage instead of requiring a shell export.
-The release phase revalidates the signed run against the current source, TCB,
-adapter, profile, and trusted key; enables the new OpenRouter binding only as a
-non-default; retires only superseded OpenRouter authority; and fails unless the
-exact existing Codex default remains unchanged.
-
-Provider preflight is not the final authority boundary. After preflight and
-before the staged egress CAS, one shared last-mile guard re-resolves the full
-certificate/binding/feature/actor/health/Full Workspace authority, rechecks the
-prepared request against both that authority and the freshly read live policy,
-including every remote data class, catalog handle, surface kind, and
-filesystem/shell capability flag. The guard recomputes the policy-narrowed
-semantic authority projection as well, so skill, app-reference, and
-runtime-capability blocks are revoked even on a request whose tool catalog is
-empty. It then tightens the live budget/deadline and
-requires the fresh credential to match the process-local keyed fingerprint used
-by endpoint discovery. The full guard runs again in the task that constructs and
-first advances the lazy provider iterator. Every later advance uses a lightweight
-mutable-authority, TCB-filesystem, classification, credential, policy, and
-deadline fence, so revocation remains immediate without rehashing the complete
-TCB or rerunning Full Workspace behavior probes per SSE event.
-
-OpenRouter alias preflight pins the canonical resolved model slug, reasoning
-contract, endpoint identity, ZDR eligibility, context/output ceilings, and
-every routed parameter. Vendor catalog expiration remains a live fail-closed
-availability fence: a present date must be canonical and strictly in the
-future, while `null` means no scheduled expiry. Its exact administrative value
-is not part of the stable catalog identity and a vendor extension of that date
-does not force recertification; an expired, malformed, or missing field is
-still rejected before provider dispatch.
-The immutable profile identity names only verified routing facts; it must not
-claim an endpoint quantization that OpenRouter does not attest. Renaming such a
-profile is an explicit immutable-lineage migration: the new definition starts
-at revision 1 and its publication suspends every declared old definition and
-revision without rewriting old certificates or workspace bindings.
-
-Before egress, that loop compiles a Core-owned semantic-envelope schema. Its
-ordered blocks preserve platform, runtime/capability, workspace, agent, user,
-governed-context, attachment, app-reference, skill, tool, result, and
-provider-state provenance instead of flattening them into one prompt. The
-egress boundary preserves a public `trusted_platform` tool-schema block
-byte-for-byte after canonical JSON validation. Such a block describes runtime
-argument fields and contains no argument values; generic value redaction must
-not replace schema members such as `invocation_token` with redaction strings.
-All actor input, tool output, provider state, and every non-schema JSON block
-continue through the ordinary sensitive-value redactor. Tool-schema
-preservation is reachable only after the catalog has proved Core ownership and
-certified-TCB membership for the descriptor.
-
-The attachment projection carries the exact server-observed resource identity,
-revision, and digest plus its required UTF-8 or base64 encoding. Those
-server-owned fences are injected into every `filesystem.read` for that path,
-including the first chunk; caller omission or equivalent path spelling cannot
-turn the reference back into a mutable pathname. The
-runtime resolves the complete root-to-workdir `AGENTS.md` chain and complete
-invoked `SKILL.md` documents through descriptor-confined, version-fenced reads
-on every provider step, including continuation and recovery. A canonical source
-snapshot digest and a distinct compiler/version-bound destination projection
-digest are persisted in the provider-step journal. Provider codecs may render
-roles differently only through their certified deterministic projection; they
-may not omit a mandatory block or infer authority from instructions.
-
-Context-window admission evaluates the complete prepared request, not only the
-provider-private history. If history is below its ordinary trigger but the
-current user/tool/schema payload would consume the independent reserve, Core
-performs at most one forced, recipe-bound history compaction, rebuilds the
-request with new evidence, and validates it again. A second overflow fails
-closed before transport.
-
-Each hosted request reserves its conservative provider price ceiling before
-transport. When that request reports priced usage, Core replaces only the
-active reservation with the reported cost before considering the next step;
-if priced usage is absent, the worst-case reservation remains consumed. This
-keeps every next request safe against the turn ceiling without charging the
-maximum possible output repeatedly after low-cost tool steps.
-
-Textual tool results and descriptor-resolved workspace instructions may contain
-absolute host paths as untrusted document content. Egress first rewrites the
-exact workspace root to its `workspace://<workspace_id>` identity, then redacts
-any remaining recognized host path before remote export when the policy permits
-sensitive transforms. Workspace-instruction redaction is narrow to that
-server-resolved, version-fenced provenance; it does not treat instruction text
-as authority. The same remaining host path in user input, platform
-instructions, schemas, or provider state is still denied; path redaction never
-changes the allowed data class, provider, or upstream decision.
-
-The runtime adapter artifact digest covers the concrete adapter plus every
-declared operational class, function, and module for the shared loop and the
-installed provider codecs. Digest construction reads each resolved source file
-directly; it must never collapse a function to the built-in `function` type.
-Changing any declared codec, request builder, stream consumer, tool
-orchestrator, or filesystem module therefore invalidates the previous
-certificate. The certified execution TCB follows the same least-authority
-rule at package boundaries: HTTP participation is an explicit set of runtime,
-provider, settings, session, cleanup, and sidecar-invocation modules proven by
-the static local-import audit, never the entire `core/api` directory. A change
-to unrelated app-mount presentation or another unreferenced HTTP surface must
-not invalidate hosted-provider certificates; adding a new local dependency to
-a certified entrypoint remains fail-closed until that exact file is reviewed
-and added to the manifest.
-
-Sequential provider requests must explicitly disable parallel tool calls when
-the selected endpoint declares that control. If it does not, the request omits
-the unsupported parameter. The decoder retains every coherent indexed call;
-the preliminary ledger persists each call before resolution and the shared
-loop returns a durable `parallel_denied` result for every call without crossing
-an effect boundary. No secondary call may be silently discarded. One
-OpenAI-compatible tool call may be preceded by provisional assistant text; the
-codec keeps that text only in provider-private continuation state with the
-assistant tool call, executes the single call through the shared loop, and does
-not publish the provisional text as final output. Invalid or conflicting
-tool-call identities and indices remain fail-closed conditions.
-
-The provider-step journal is the continuation authority. A ready pairing can be
-used only by its original active turn and requires the exact source journal,
-turn, provider request, private-state generation, and non-tool input-lineage
-digest. Queue, token, prepare, continuation, and execute gates read persisted
-journal state. A normal new user turn cannot inherit a pairing or have its input
-silently ignored. Terminal limits, cancellation, authority/certificate
-revocation, egress denial, and execution failure must complete certified
-same-turn recovery or quarantine the pairing.
-
-Quarantine persists the allowlisted `recovery_required` session reason before
-best-effort private diagnostic detail, with bounded reread/retry for session and
-journal CAS. Diagnostic, audit, private-payload, or runtime-state projection
-failure cannot restore execution authority; a session CAS remains sufficient
-containment when the journal cannot be advanced.
-
-Final hosted text is encrypted into a deterministic Core-private outbox before
-the provider journal may complete or commit. The journal keeps only identity,
-digest, size, and separate output/completion delivery acknowledgements. Stable
-terminal event ids allow startup or same-turn retry to deliver the same output
-once without another provider request; an unprovable output is quarantined and
-never regenerated. Final text is absent from the journal and unauthorized APIs.
-
-Agentic execution failures cross the runtime boundary as a stable reason code,
-a mapped redaction-safe public message, and an optional bounded diagnostic
-reference. `runtime.turn.failed` persists those fields; numeric process exit
-codes remain diagnostics and are never the sole user-facing error.
-
-Execution-policy-owned workspace filesystem discovery is a separate read-only
-Core capability from file reads. `core-capability:filesystem.list` returns only
-bounded, deterministically ordered relative paths and entry types, limits depth
-and result count, never returns file content, never follows directory symlinks,
-and resolves its requested root inside the workspace boundary. Recursive
-traversal opens the root and every child descriptor-relative with
-`O_NOFOLLOW | O_DIRECTORY`; it never reopens a verified child by pathname, so a
-concurrent directory-to-symlink swap fails closed. Certification and policy
-must attest and grant listing independently from
-`core-capability:filesystem.read`.
-
-The code-owned Full Workspace Agent Contract is an atomic revisioned claim,
-not a menu of product tiers. Its Codex-derived baseline requires the complete
-workspace instruction, list/search/chunked-read, create/replace/edit/patch,
-move/delete, confined shell, managed process, CLI-discovery/invocation, and
-MCP-discovery/invocation handle set together with skills, file attachments,
-app references, confirmations, interrupt, and recovery capabilities. Profile,
-certificate, immutable execution binding, and every live authority refresh
-must retain the same contract revision. Losing one required live capability or
-handle makes the agent unavailable; Core does not materialize a partial agent.
-The claim also requires an executable result-policy gate plus successful
-certification-suite behavior coverage for complete execution, exact-byte
-classification, egress/error pairing, post-image/read-after-write behavior,
-and pre-effect guarantees across create, replace, edit, patch, move, delete,
-shell/process, and CLI/MCP scenarios. A declared mode string or the mere
-presence of a handle is not evidence. The live profile policy must retain all
-four contract surface kinds—`cli`, `mcp`, `app-interface`, and
-`core-capability`—as well as the exact wrapper handles; the public authority
-resolver is exercised against that complete profile rather than a hand-built
-substitute. Complete successful behavior evidence may
-be cached for the immutable code revision; an exception, empty result, or
-partial result is fail-closed for that evaluation and must remain retryable.
-Hosted candidates whose gate is
-incomplete must omit the Full Workspace revision and use the distinct
-`maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current code-owned hosted definitions bind their
-exact provider-config revisions and make that atomic claim only because the
-executable gate returns all 24 required result
-behaviors, including the concrete
-`shell.run` and `process.start/status/input/interrupt` handlers, real app-owned
-CLI/MCP reads with Core-audited conservative effect metadata and executable
-closure bytes, a real inter-agent CLI-create/MCP-wait workflow with bounded
-public result projections, raw/base64/chunk marker
-narrowing, revoke-then-rebuild, delayed-egress-after-revocation, transport
-revocation before the first and every subsequent provider-stream advance,
-overlay-commit rollback, and immutable shell/process workspace-snapshot probes
-that race post-spawn `.git` creation and rename. They remain
-uncertified, unbound, contained previews rather than a release authorization.
-
-Hosted filesystem mutations are descriptor-relative and version-fenced.
-Replacement uses Linux atomic exchange/no-replace primitives so a final-entry
-swap cannot overwrite an unobserved inode. Recursive deletion first validates
-the bounded tree, then atomically moves the exact top-level inode into a
-platform-only quarantine before descriptor-only cleanup. Search cursors bind a
-complete revalidated snapshot, query, scope, and pagination position. Every
-mutation re-resolves the applicable root-to-target `AGENTS.md` chain and can
-bind the caller-observed instruction-scope digest before crossing the effect
-boundary.
-
-Direct content replacement clones and verifies the pre-image mode, ownership,
-and bounded ACL/xattr set before exchange. A version-bound classification on
-the exact pre-image is monotonically rebound to the exact post-image and later
-read-after-write observation. The successful mutation's private session-ledger
-result carries the exact identity/revision/digest and reconstructs that lineage
-when the hosted loop builds its next filesystem orchestrator; move rebinds it
-to the destination. A created file remains unclassified without authoritative
-source taint or an active explicit runtime-public classification policy, and any
-out-of-band version change invalidates the transient lineage. Failed writes
-remove only the empty, identity-matching parents they created. Move validates
-the exact source before opening or creating the destination chain and removes
-new destination parents after a successful rollback.
-
-Mutable classification authority is carried as an exact id/kind/ref/revision/
-digest/policy tuple on canonical sources, durable tool records, semantic
-metadata, and encrypted provider-state envelopes. Original and projected
-filesystem, instruction, search, shell, process, CLI, and MCP result bytes are
-scanned before persistence, and marker detection may only make the class more
-restrictive. Reconstructed filesystem lineage, delayed tool pairing, semantic
-reuse, provider continuation, and final egress all revalidate the exact current
-authority tuple. Legacy, partial, changed, or revoked lineage becomes
-`unclassified`. A runtime-public issue/revoke record is authoritative only when
-its deterministic audit evidence is present, so an audit write failure cannot
-publish the mutation.
-
-Hosted shell commands stage a descriptor-confined immutable view at the fixed
-`/workspace` sandbox identity; they never bind the live workspace namespace
-into the sandbox. A caller that
-needs persistent command effects declares a bounded set of directory scopes and
-the exact `AGENTS.md` digest observed for each; the command runs against a
-private overlay. Core scans the complete bounded upper diff, rejects undeclared
-paths, instruction-file, non-UTF-8, deletion, symlink, newly-created directory,
-hardlink, and unsupported metadata effects. Ordinary xattrs, ownership/mode
-changes, metadata-only timestamps, and mutations of directory or overlay-root
-metadata are compared against descriptor-confined live or pre-execution
-metadata and rejected rather than silently discarded. File atime/mtime attached
-to an actual content create/replacement are representable and are materialized
-exactly, so read-modify-write editors and read-after-write tools retain their
-filesystem semantics. For a content replacement, the transaction clones and
-verifies the existing file's mode, ownership, ACL/xattr set; representable new
-file mode/ownership is applied explicitly. Existing or upper-layer link counts
-greater than one are rejected so Core never silently splits an inode relation.
-Core then re-resolves the instructions for every changed file. All UTF-8
-creates/replacements are staged in one private transaction and committed with
-retained pre-images. Each pre-image remains descriptor-pinned, its complete
-metadata/xattr snapshot is checked immediately before exchange, and every
-retained preservable field is checked again afterward; a failure or late race
-rolls the entire batch back in reverse order before any failure is reported. A
-root digest therefore cannot authorize a change governed by a nested
-`AGENTS.md`, and a rejected multi-file diff cannot leave an earlier file
-committed or erase a concurrent metadata change. Bubblewrap consumes the
-retained snapshot descriptor while constructing the read-only/overlay mount and
-closes it before target `exec`, so the command cannot bypass the mount with
-`openat(2)`. Managed processes retain
-the same private overlay until a successful terminal status. Terminal
-`process.status` is conservatively a mutating, non-retry-safe capability because
-it commits that overlay; commit failure crosses the mutation boundary and is
-reported with ambiguous-execution semantics while the batch itself is restored.
-Timeout, process failure, interrupt, or invalid diff discards the overlay.
-Platform `runtime/` is replaced by an empty mount point. During the bounded
-descriptor-relative, no-symlink staging traversal, Core omits every component
-named `.git` regardless of its type and rejects unsupported entries, exhausted
-limits, or concurrent namespace/content/metadata changes. The resulting
-snapshot remains fixed for the whole shell or managed-process lifetime, so a
-`.git` created or renamed in the live workspace after spawn cannot appear in
-either read-only or private-overlay mode. HOME and TMP are ephemeral, host
-absolute paths are not exposed, system
-tooling is read-only, and the network namespace is disconnected. Synchronous output is drained under
-a hard byte ceiling. Long commands use session-owned process handles with bounded streaming
-output, stdin, interrupt, timeout, process-group cleanup, durable redacted
-records, and the common orphan reaper. Cancellation is carried into synchronous
-Core surfaces: shell and managed-process execution terminate complete process
-groups, discard private overlays, and reach worker quiescence before the
-cancelled turn is released. The hosted adapter owns its managed-process
-registry; session close, explicit session termination, and idle reap finalize
-live handles, output capture/FDs, overlays, the global process registry, and
-durable terminal process status together.
-
-Transient prompt, agent-instruction, and governed-context blocks are not public
-by provenance. Production bootstrap always installs a closed Core-owned
-capture writer before provider dispatch. It conservatively classifies the exact
-prompt, agent instruction, reference metadata, and every governed-context
-control, summary, task/result, and artifact chunk, then stores the complete
-immutable manifest in the turn with one CAS. Detection of a sensitive marker
-may only narrow the result; absence of a marker remains `unclassified` unless
-an operator has issued the reserved CAS-revisioned runtime-public
-classification policy. That policy is server-owned, self-digesting, revocable,
-and revalidated at admission; it authorizes Core to emit a new classification
-bound to the exact source identity, revision, canonical-byte digest, policy
-revision, and authority record. It is not a browser declaration or a redaction
-inference. Source ids and digests alone never select or widen a class. Governed
-context restrictively joins those exact
-entries and remains untrusted; a missing manifest, unknown source, changed byte,
-or identity mismatch stays `unclassified`. Resource-returning tools propagate
-the exact observed resource classification, and edit/patch diffs retain their
-pre-image taint.
-
-Variable hosted tool output is also conservatively classified from its exact
-canonical bytes; marker absence remains `unclassified` without the same active
-runtime-public authority or an exact resource/result contract. A Luhn-valid PAN
-remains sensitive even when embedded in a longer hexadecimal token. Opaque
-attachment-fence identities and exact Core-minted tool-result identity metadata
-are omitted from marker scanning only through typed projections bound to the
-complete source payload. Filesystem, instruction, process, discovery, artifact,
-certified inter-agent, and compactor projections are minted at their owning
-Core boundary; discovery tokens are additionally HMAC-verified. Arbitrary
-fields with digest-like names and every user-controlled byte stay in scope.
-Classification envelopes returned directly by app, CLI, or MCP handlers are
-ignored; only in-process Core capabilities and the Core-owned admission resolver
-may attach a typed result projection.
-Read-only shell/process streams and CLI/MCP discovery/read results retain the
-complete payload through the common compactor. If their derived class is not
-allowed remotely, Core keeps the private result and sends a public, call-id
-paired `tool_result_egress_denied` error on the next provider request; it never
-silently drops pairing or relabels the bytes. Core-owned CLI/MCP definitions
-may provide an explicitly public result contract only when the definition,
-schema, and certified TCB ownership all agree; app declarations cannot
-self-promote. Shell and managed-process mutations execute first in the private
-overlay, classify the exact bounded result and intended effect evidence, and
-commit only after public-result admission. A denied result discards the
-overlay, so the effect does not precede its egress guarantee. The hosted Full
-Workspace claim is accepted only while the behavior probe covers every read and
-mutating scenario. Generic serialization, hashing, redaction, or source
-ownership never promotes content.
-
-Every semantic-envelope classification is additionally bound to the SHA-256 of
-the exact canonical bytes projected for that block. Composite sources use a
-restrictive join over every independently classified component. Attachment
-metadata is admitted separately from the referenced file and then joined;
-neither a client-controlled name nor other metadata can inherit the file's
-class. Skill catalogs preserve the lexical selected identity and reject a
-symlinked catalog component, skill directory, or `SKILL.md`. Skill blocks then
-project the complete descriptor-read `SKILL.md` itself and do not mix unbound
-catalog/state metadata into its classification. A digest
-mismatch is downgraded to `unclassified` before egress. Attachment-only turns
-omit the semantically absent empty prompt block.
-
-When a large result is replaced at request time by an artifact reference, its
-semantic source digest is recomputed over the exact reference/summary bytes
-shown to the provider. Data class, trust, source identity, and classification
-revision continue to carry the original result taint separately; the original
-payload digest remains the immutable private artifact identity.
-
-Materialized app references have a separate resource-side classification. Core
-derives a stable app/entity identity and an exact revision/digest from the
-server-materialized reference, then the production `PlatformState` resolver
-looks up the matching workspace resource-classification record. Missing or
-mismatched records remain `unclassified`; app-reference metadata admission
-cannot substitute for resource evidence or promote the reference to `public`.
-
-CLI and MCP access uses four fixed certified Core wrappers: discovery returns
-only definitions allowed by the authoritative registry invocation policy plus
-a registry/session-bound invocation token; run/call requires that token and
-re-enters the official runner, which rechecks current authority. Enabled app
-surfaces and collaboration/inter-agent commands therefore remain app/Core
-owned rather than being copied into a shadow registry. All tool results pass
-through the same bounded result compactor used by the Codex route before
-provider egress. Every installed app surface must declare a conservative
-static effect class; a mixed surface may additionally declare one exact
-top-level argument discriminator whose static class is the maximum severity of
-all enumerated values. Omitted discriminator behavior is explicit, while an
-unknown value, malformed nested argument payload, invalid declaration, or
-missing declaration is `unclassified` and denied before execution. Read-only
-app calls may proceed through the production wrapper only when their platform
-source identity, live descriptor digest, reparsed metadata, and exact executable
-closure digest match the Core-owned built-in effect audit. That closure includes
-the entrypoint, descriptor, app contract, app-local backend, and any reviewed
-extra executable dependency; the same paths are hashed by the certified TCB.
-Core repeats this authority check immediately at dispatch, after validation and
-confirmation, so code drift between catalog materialization and execution is
-denied before the effect boundary. Workspace-local and external app descriptors
-cannot self-authorize hosted execution. Exact result bytes still require
-ordinary classification and egress admission; app-owned metadata cannot mint a
-certified public-result contract or authorize a mutation. Website Studio's
-`build_preview` and `preview_document` are consequently classified as
-mutating, while persistent SQLite/file pre/post tests cover every remaining
-Website Studio CLI/MCP read action.
-
-Core-owned inter-agent CLI/MCP definitions declare their exact operation effect
-instead of inheriting `unclassified`: create/spawn/send/execute/resume are
-mutating, interrupt/close are destructive, and wait is read-only. Each is bound
-to a reviewed result-projection contract that drops prompts, messages, events,
-participant output, final answers, labels, cleanup reasons, and other content,
-exposing only bounded lifecycle metadata, safe platform ids or hashed
-references, counts, and booleans. A malformed result is replaced by a fixed
-public failure projection rather than falling back to the original bytes. The
-Full Workspace gate executes a production-composed CLI run creation followed by
-an MCP wait and verifies discovery-token authority and projection pairing end to
-end.
+The same live authority calculation is used for preflight, request dispatch,
+tool execution, continuation and recovery. Credential disablement, workspace
+binding changes, actor-policy changes, feature flags, health changes and egress
+policy changes can immediately narrow or stop future work without rewriting a
+session pin.
 
 ### 8. Secret management
 
@@ -1541,8 +927,8 @@ families with normal hostname verification and require their distinct exact
 unauthenticated-session errors before the hosted boundary is accepted.
 
 Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
-source of platform authority or satisfy capability, certificate, provider
-binding, admission, egress, recovery, confirmation, or revocation decisions.
+source of platform authority or satisfy provider binding, runtime admission,
+egress, recovery, confirmation, or revocation decisions.
 Unknown classification and unavailable policy fail closed to network-only. The
 normative policy mapping, rollout switches, transparent-cache behavior, and
 transport recovery boundaries are recorded in
@@ -2447,8 +1833,8 @@ The HTTP event and thread endpoints remain command, diagnostics, and operator su
 
 Bulk runtime-session diagnostics must project provider governance from one
 request-scoped registry and read-through provider snapshot. Repeated sessions
-may reuse parsed definition, certificate, evidence, binding, and adapter
-artifact inputs only within that request; each session still receives its own
+may reuse parsed profile, binding, provider catalog, and adapter identity inputs
+only within that request; each session still receives its own
 live authority projection, and no mutable governance result may survive into a
 later request.
 
@@ -2661,24 +2047,42 @@ The adapter may copy required files such as auth, version, installation identity
 
 The sanitized runtime config must remove inherited MCP server and plugin sections from the operator Codex home. Maverick runtime sessions should not automatically expose user-global Codex connector apps such as GitHub, Gmail, Photoshop, AllTrails, or Notion unless Maverick explicitly materializes an allowed tool surface for that runtime.
 
-The Codex adapter owns Maverick's managed Codex model selection for runtime agents. It should discover the visible Codex model catalog through the configured Codex binary, expose the viable model and reasoning-effort options through generic provider settings, and write the workspace-selected `model` plus the session-selected `model_reasoning_effort` into each runtime-scoped Codex config instead of inheriting those values from the operator home. Reasoning is not workspace-default authority. The fallback model is `gpt-5.6-sol`. New sessions default to the deepest supported single-agent reasoning effort: `max` when the model exposes it, otherwise the next deepest advertised effort. Codex `ultra` is a multi-agent execution mode rather than a reasoning effort and must not appear in the reasoning selector. Persisted model catalogs are normalized to this contract without requiring code changes when Codex adds or removes visible models. Codex certification belongs to this runtime/model-provider connection, so a newly advertised Codex model is immediately eligible under the same certified adapter and harness. The Core still creates a model-bound immutable profile and capability-certificate projection to pin catalog metadata, reasoning choices, and session identity; that projection does not represent a second independent certification run for the model.
+The Codex adapter owns Maverick's managed Codex model selection for runtime
+agents. It discovers the visible model catalog through the configured Codex
+binary, exposes viable models and reasoning efforts, and writes the selected
+`model` and turn/session reasoning effort into each runtime-scoped Codex config
+instead of inheriting them from the operator home. The fallback model is
+`gpt-5.6-sol`. New sessions choose the deepest supported single-agent effort;
+`ultra` remains a multi-agent mode and is not a reasoning choice.
 
-Persisted execution-binding digest compatibility remains fail closed. A newly materialized default may be excluded from legacy digest validation only as part of an explicit atomic schema-extension group; validation checks the bounded combinations of those groups rather than the power set of individual fields. Codex workspace-binding migration preserves every existing policy restriction, including an explicit false filesystem-list bit. It must not infer missing legacy-field provenance from a hydrated policy or broaden permissions automatically.
+The Core creates a model-bound immutable profile and copies its direct reasoning
+and capability contract into the session execution binding. A newly advertised
+Codex model becomes eligible through normal catalog reconciliation and does not
+require a separate issuance, renewal or expiry update. Persisted provider model
+metadata cannot override the current built-in/live Codex catalog.
 
-Every agentic model identity carries a revision policy in addition to provider
-and model id. `exact` requires a non-empty revision copied unchanged through
-the immutable profile, capability certificate, execution binding, governed
-recipe, provider request, and effective authority; authenticated live catalog
-preflight must compare the provider's returned revision with that exact value
-before transport. `provider_alias` is the explicit alternative for providers
-whose public id is an alias: the policy and its certified catalog identity are
-still pinned through those records, and the endpoint, resolved model, upstream,
-and fallback constraints remain fail closed. Certificate/binding or
-profile/certificate disagreement prevents authority creation. A legacy record
-may hydrate only to the explicit `provider_alias` default as one atomic
-digest-compatible schema extension; it does not become an exact revision claim.
+Every agentic model identity carries an `exact` or `provider_alias` revision
+policy. Exact revisions must remain identical across profile, binding, request
+and effective authority. Alias profiles still pin endpoint, resolved model,
+upstream and fallback restrictions. A legacy binding may hydrate to the explicit
+alias default only through the bounded compatibility decoder and never gains
+additional permissions.
 
-Selectable agentic profiles bind their supported reasoning efforts and default into the immutable capability certificate and copy that exact contract into the session execution binding. For a Native Agent this certificate is a model-bound projection of the certified runtime connection, not a separate model conformance decision; every model in the connected runtime's authoritative catalog receives that projection automatically. `/api/providers` may use provider model metadata only for labels and descriptions; selectable values come from the active certificate projection. Chat renders a per-session reasoning selector only when that list is non-empty and does not recover missing choices from mutable model metadata. Before session creation and on every live certificate validation, Core rejects a requested effort outside the pinned tuple or any mismatch between the certificate and binding. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate projection, publishes a corresponding current binding for every enabled historical binding of the same model without rewriting the old binding, and suspends prior revisions whose adapter artifact digest is no longer current. Adding a model slug reported by the unchanged certified Codex CLI does not require a new adapter certification revision. A continuation selects the current enabled binding for the source profile/model; it must not silently move a historical non-default-model chat to the workspace default model. The declared Codex artifact bundle includes every app-server transport, thread, protocol, notification, steering, state, skill-input, configuration-policy, hook, reasoning, wrapper, sandbox, continuation-home, and legacy bridge module that can change provider behavior. Its revision-to-digest manifest is append-only: a historical digest may never be rewritten, and changing any declared artifact without adding a revision fails bootstrap and CI with `profile_revision_artifact_mismatch`. Codex profile revision 7 is the first revision certified against the expanded app-server bundle; revision 8 adds continuation-lineage ownership of the physical Codex conversation store and typed missing-thread failures; revision 9 adds admission/process fencing, live handoff revalidation, lineage snapshots, and sandbox-home identity; revision 10 binds orchestration decisions to live catalog snapshots; revision 11 adds remote-agentic containment gates at turn-queue admission and provider-start handoff; revision 12 binds turn-queue admission to the persisted provider-step quarantine/pairing gate without changing Codex execution semantics; revision 13 classifies terminal app-server overloads, drains the authoritative turn completion before detaching the event sink, and propagates the structured failure through the legacy bridge; revision 14 classifies terminal cybersecurity-policy blocks without exposing raw provider errors. Revision 15 records the next packaged adapter bundle; revision 16 adds the governed Device Use bridge, while Device Use-bound sessions remain ineligible for automatic continuation because their external interaction ownership requires a separate audited transfer. Revision 17 preserves the direct v40 EventKit result budget across the native/Core control envelope. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
+Selectable profiles declare their reasoning-effort tuple and default directly.
+Chat renders only those values and never invents choices from mutable browser
+state. Core rejects an unsupported effort before session creation. A
+behavior-changing built-in adapter update publishes the current profile shape;
+historical session bindings remain immutable, and continuations use the same
+model rather than silently moving to a workspace default. Adapter identity is
+based on declared engine/adapter ids and versions, not a digest of mutable Python
+source files, so an ordinary Codex package/source change cannot disable all
+sessions. In Chat's compact model menu each row shows the model label, provider
+label and reasoning control without internal rollout or profile badges.
+
+Persisted execution-binding digest compatibility remains fail closed. A newly
+materialized default may be excluded from legacy digest validation only as part
+of an explicit atomic schema-extension group. Workspace-binding migration
+preserves every existing policy restriction and never broadens permissions.
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 
@@ -2860,40 +2264,23 @@ Deleting a chat thread is also a runtime ownership operation when the thread ref
 
 The chat product model is one logical runtime-thread invariant. Ordinarily one chat maps to one `session_kind=chat_root` runtime session, one selected-provider app-server context, and one canonical session root under `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`. When immutable execution authority changes compatibly, the same thread may point to a child runtime session and render the frozen predecessor plus child as one audited lineage. Automatic forks are limited to `chat_root`; hidden inter-agent and system sessions fail closed because their scheduler ownership would require a separate audited handoff. Continuation admission holds the same per-session message-admission and lifecycle fences used for ordinary turn creation. Any queued, active, or waiting turn on the predecessor or successor blocks ownership transfer. The predecessor keeps its original binding and history, rejects new turns, and is not listed as a second chat. For Codex, the provider thread id and its physical database/rollout store move as one ownership unit: the executable child uses the lineage-root `CODEX_HOME`, and Core must prove the predecessor app-server process is absent before transferring provider state or starting the child. A chat thread must not exist without a user-visible current runtime session, and every current `thread_visibility=user` runtime session in the active workspace must be represented by exactly one runtime thread before the chat list is returned. `thread_visibility=hidden` sessions are runtime-operational records for future inter-agent participants and must not appear as standalone chats. The initial runtime thread id should use the initial runtime session id; continuation rebinds only its `runtime_session_id` pointer so the user-facing thread identity remains stable. Runtime WebSocket snapshots carry the requested logical session id plus all physical lineage ids; Chat scopes events to that authenticated set and follows a live `runtime.continuation.forked` event onto its successor instead of discarding child events as foreign.
 
-After a certified profile or certificate rollout, Core automatically inventories
-every durable user-visible agentic `chat_root` and materializes every provably
-compatible continuation. Hidden prepared sessions are disposable preload state,
-not chats, and are excluded. Each durable lineage receives its own complete
-snapshot and fail-closed repair boundary, so a missing or corrupt provider store
-blocks only that lineage rather than every chat in the workspace. Failed partial
-snapshots are removed. Existing-session turn submission and prewarm both run
-continuation admission before validating live context capabilities or starting
-provider work; the capability preflight therefore evaluates the admitted current
-successor, never an obsolete predecessor certificate.
+When a profile or workspace binding changes compatibly, continuation admission
+may create a child session with a new direct execution binding while retaining
+the predecessor as immutable history. Existing-session turn submission and
+prewarm run admission before live capability preflight. Hidden prepared sessions
+are disposable and excluded from durable chat repair.
 
-Chat may keep one hidden prepared `chat_root` session for the next draft. Its idempotency fingerprint is computed after session admission from both normalized request configuration and the resolved immutable execution-binding identity, including binding revisions and the effective reasoning effort. Omitting a reasoning effort and explicitly selecting the certificate default therefore reuse one prepared session, while a real profile or binding revision cannot reuse a stale pin. The browser derives that effective default before launching preload work so React state settlement does not issue an abandoned first request with an equivalent configuration.
+Chat may keep one hidden prepared `chat_root` session for the next draft. Its
+idempotency fingerprint includes normalized request configuration, direct
+execution-binding identity, binding revision and effective reasoning effort.
+Equivalent default reasoning reuses the same prepared session; a real profile or
+binding change cannot reuse a stale pin.
 
-Every resumed handoff revalidates the source and successor certificates,
-workspace bindings, credential availability, egress governance, adapter
-artifact digest, and persisted compatibility proof against current live
-authority before another phase advances. An expired or artifact-stale
-intermediate target may be completed only as a fenced link and immediately
-continued to the newest compatible revision; admission follows at most a
-bounded number of such links and succeeds only on a direct current target. A
-revoked or otherwise incompatible successor is quarantined as non-executable
-and the handoff fails closed without moving provider state.
-
-For an initial native Codex predecessor, a prior connection root may be used
-only as non-executable continuation-source evidence. Core substitutes that
-root's immutable reference and adapter digest into the current installation
-contract and requires the result to reproduce the stored connection identity,
-runtime-artifact component, evidence, active status, and expiry exactly. The
-live adapter must then differ only by its artifact digest, after which the
-ordinary target and non-expansion proof applies. This neither rewrites nor
-reissues the old certificate and grants it no execution authority. A missing
-pre-connection root, a changed recipe/effect/installation contract, a revoked
-root, or any other unproven historical field still requires a new conversation
-and explicit transcript handoff.
+Every resumed handoff revalidates workspace bindings, credential availability,
+egress governance, adapter identity and the persisted non-expansion proof.
+Incompatible successors are quarantined and require a new conversation or an
+explicit transcript handoff. No update lifecycle for a separate capability
+document participates in this process.
 
 Session reads expose the redaction-safe admission states `direct`,
 `compatible_upgrade`, `upgrade_required`, and `provider_thread_missing`. Chat may
@@ -2913,19 +2300,6 @@ with canonical-path and symlink checks, bounded size, and SHA-256 entries in the
 manifest. Logs, transient caches, and unrelated provider homes remain excluded.
 The mutation then uses the same preflight inventory and never broadens its
 session scope between snapshot and handoff.
-
-Cold bootstrap also runs this snapshot-backed repair automatically after a new
-active Codex certificate, model profiles, and compatible workspace bindings
-have converged. It selects only `chat_root` lineages whose historical Codex
-connection identity and ordinary non-expansion proof classify them as
-`compatible_upgrade`; it never rewrites a predecessor or historical
-certificate. Each selected lineage is materialized through the same resumable
-handoff phase machine used by live message admission. Repeated bootstrap is
-idempotent and creates no additional snapshot after all candidates are direct.
-A workspace snapshot failure prevents every automatic mutation in that
-workspace, while a per-lineage handoff failure is audited and isolated so Core
-can start and unrelated compatible chats can still move. Unproven or
-incompatible sessions remain `upgrade_required`.
 
 The core owns the delete operation. `DELETE /api/runtime/threads/<thread_id>` removes the core thread record and performs full cleanup of the linked runtime session. `POST /api/runtime/threads/delete-batch` accepts up to 20 deduplicated thread ids, authorizes every resolvable thread before mutation, expands root and active inter-agent child sessions once, and returns an explicit `deleted` or `not_found` result for every requested id. `POST /api/runtime/threads/clear` applies the same batch cleanup operation to every runtime thread in the active workspace.
 

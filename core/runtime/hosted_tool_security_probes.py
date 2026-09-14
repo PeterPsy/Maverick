@@ -9,7 +9,7 @@ import tempfile
 
 from core.cli.command_registry import CliCommandRegistry
 from core.mcp.tool_registry import McpToolRegistry
-from core.providers.capability_models import RuntimeCapabilitySet
+from core.providers.agentic_models import RuntimeCapabilitySet
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 from core.runtime.public_content_classification import (
@@ -191,7 +191,6 @@ def _filesystem_read_authority() -> EffectiveRuntimeAuthority:
     return EffectiveRuntimeAuthority(
         execution_binding_id="security-probe-binding",
         turn_id="security-probe-turn",
-        certificate_id="security-probe-certificate",
         allowed_capabilities=RuntimeCapabilitySet(
             streaming=True,
             tool_orchestration=True,

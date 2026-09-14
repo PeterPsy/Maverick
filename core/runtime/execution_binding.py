@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 import hashlib
-from itertools import combinations
 import json
 from typing import Any
 from uuid import uuid4
@@ -16,6 +15,7 @@ from core.providers.agentic_models import (
     AgenticRuntimePolicy,
     ModelRevisionPolicy,
     RoutingConstraint,
+    RuntimeCapabilitySet,
 )
 
 
@@ -30,12 +30,10 @@ class RuntimeExecutionBinding:
     profile_definition_revision: str
     workspace_binding_id: str
     workspace_binding_revision: int
-    capability_certificate_id: str
-    certificate_evidence_digest: str
     runtime_engine_id: str
     adapter_id: str
     adapter_version: str
-    adapter_artifact_digest: str
+    adapter_identity_digest: str
     model_provider_id: str
     model_id: str
     provider_protocol: str
@@ -43,8 +41,9 @@ class RuntimeExecutionBinding:
     routing_constraint_snapshot: RoutingConstraint
     credential_binding_id: str | None
     reasoning_effort: str | None
-    certified_reasoning_efforts: tuple[str, ...]
+    reasoning_efforts: tuple[str, ...]
     default_reasoning_effort: str | None
+    capabilities_snapshot: RuntimeCapabilitySet
     execution_mode: ExecutionMode
     profile_policy_ceiling_snapshot: AgenticRuntimePolicy
     workspace_policy_ceiling_snapshot: AgenticRuntimePolicy
@@ -54,10 +53,6 @@ class RuntimeExecutionBinding:
     binding_digest: str
     created_at: datetime
     legacy_inferred: bool = False
-    tcb_manifest_id: str = ""
-    tcb_manifest_version: str = ""
-    tcb_structure_digest: str = ""
-    tcb_live_digest: str = ""
     full_workspace_contract_revision: str = ""
     execution_family: str = ""
     harness_recipe_id: str = ""
@@ -76,62 +71,6 @@ class RuntimeExecutionBinding:
     protocol_adapter_version: str = ""
 
 
-@dataclass(frozen=True)
-class _LegacySchemaFieldGroup:
-    """Fields introduced together by one persisted-binding schema extension."""
-
-    binding_fields: tuple[str, ...] = ()
-    policy_fields: tuple[str, ...] = ()
-
-
-_LEGACY_SCHEMA_FIELD_GROUPS = (
-    _LegacySchemaFieldGroup(
-        binding_fields=("certified_reasoning_efforts", "default_reasoning_effort"),
-    ),
-    _LegacySchemaFieldGroup(
-        binding_fields=(
-            "tcb_manifest_id",
-            "tcb_manifest_version",
-            "tcb_structure_digest",
-            "tcb_live_digest",
-        ),
-    ),
-    _LegacySchemaFieldGroup(
-        policy_fields=(
-            "profile_policy_ceiling_snapshot",
-            "workspace_policy_ceiling_snapshot",
-        ),
-    ),
-    _LegacySchemaFieldGroup(
-        binding_fields=("full_workspace_contract_revision",),
-    ),
-    _LegacySchemaFieldGroup(
-        binding_fields=(
-            "execution_family",
-            "harness_recipe_id",
-            "harness_recipe_revision",
-            "harness_recipe_digest",
-            "provider_capability_catalog_digest",
-            "semantic_projection_compiler_revision",
-            "tool_contract_revision",
-            "context_policy_snapshot",
-        ),
-    ),
-    _LegacySchemaFieldGroup(
-        binding_fields=("model_revision", "model_revision_policy"),
-    ),
-    _LegacySchemaFieldGroup(
-        binding_fields=(
-            "provider_config_id",
-            "provider_config_revision",
-            "provider_config_digest",
-            "protocol_adapter_id",
-            "protocol_adapter_version",
-        ),
-    ),
-)
-
-
 def build_runtime_execution_binding(
     *,
     session_id: str,
@@ -140,11 +79,10 @@ def build_runtime_execution_binding(
     profile_definition_revision: str,
     workspace_binding_id: str,
     workspace_binding_revision: int,
-    capability_certificate_id: str,
     runtime_engine_id: str,
     adapter_id: str,
     adapter_version: str,
-    adapter_artifact_digest: str,
+    adapter_identity_digest: str,
     model_provider_id: str,
     model_id: str,
     provider_protocol: str,
@@ -152,20 +90,16 @@ def build_runtime_execution_binding(
     routing_constraint: RoutingConstraint,
     credential_binding_id: str | None,
     reasoning_effort: str | None,
-    certified_reasoning_efforts: tuple[str, ...],
+    reasoning_efforts: tuple[str, ...],
     default_reasoning_effort: str | None,
+    capabilities: RuntimeCapabilitySet,
     execution_mode: ExecutionMode,
     profile_policy_ceiling: AgenticRuntimePolicy,
     workspace_policy_ceiling: AgenticRuntimePolicy,
     egress_policy_id: str,
     egress_policy_revision: str,
-    certificate_evidence_digest: str,
     created_at: datetime,
     legacy_inferred: bool = False,
-    tcb_manifest_id: str = "",
-    tcb_manifest_version: str = "",
-    tcb_structure_digest: str = "",
-    tcb_live_digest: str = "",
     full_workspace_contract_revision: str = "",
     execution_family: str = "",
     harness_recipe_id: str = "",
@@ -184,41 +118,16 @@ def build_runtime_execution_binding(
     protocol_adapter_version: str = "",
 ) -> RuntimeExecutionBinding:
     """Build one self-digesting immutable execution binding."""
-    if (
-        runtime_engine_id != "codex"
-        or adapter_id != "codex-app-server"
-        or model_provider_id != "codex"
-        or provider_protocol != "codex-app-server-stdio"
-    ) and not any(
-        (
-            tcb_manifest_id,
-            tcb_manifest_version,
-            tcb_structure_digest,
-            tcb_live_digest,
-        )
-    ):
-        # Lazy import avoids a module cycle: the TCB manifest itself uses the
-        # canonical digest helper defined in this module.
-        from core.providers.certified_execution_tcb import certified_tcb_identity
-
-        current_tcb = certified_tcb_identity()
-        tcb_manifest_id = current_tcb.manifest_id
-        tcb_manifest_version = current_tcb.manifest_version
-        tcb_structure_digest = current_tcb.structure_digest
-        tcb_live_digest = current_tcb.live_digest
-    for label, digest in (
-        ("certificate evidence", certificate_evidence_digest),
-        ("adapter artifact", adapter_artifact_digest),
-    ):
+    for label, digest in (("adapter identity", adapter_identity_digest),):
         if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest.lower()):
             raise ValueError(f"Runtime execution binding {label} digest must be SHA-256.")
     normalized_efforts, normalized_default_effort = _reasoning_contract(
-        certified_reasoning_efforts,
+        reasoning_efforts,
         default_reasoning_effort,
     )
     normalized_reasoning = str(reasoning_effort or "").strip() or None
     if normalized_reasoning is not None and normalized_reasoning not in normalized_efforts:
-        raise ValueError("Runtime execution binding reasoning effort is not certified.")
+        raise ValueError("Runtime execution binding reasoning effort is unsupported.")
     normalized_model_revision = str(model_revision or "").strip() or None
     if model_revision_policy not in {"exact", "provider_alias"} or (
         model_revision_policy == "exact" and normalized_model_revision is None
@@ -252,12 +161,10 @@ def build_runtime_execution_binding(
         profile_definition_revision=profile_definition_revision,
         workspace_binding_id=workspace_binding_id,
         workspace_binding_revision=workspace_binding_revision,
-        capability_certificate_id=capability_certificate_id,
-        certificate_evidence_digest=certificate_evidence_digest,
         runtime_engine_id=runtime_engine_id,
         adapter_id=adapter_id,
         adapter_version=adapter_version,
-        adapter_artifact_digest=adapter_artifact_digest,
+        adapter_identity_digest=adapter_identity_digest,
         model_provider_id=model_provider_id,
         model_id=model_id,
         provider_protocol=provider_protocol,
@@ -265,8 +172,9 @@ def build_runtime_execution_binding(
         routing_constraint_snapshot=routing_constraint,
         credential_binding_id=credential_binding_id,
         reasoning_effort=normalized_reasoning,
-        certified_reasoning_efforts=normalized_efforts,
+        reasoning_efforts=normalized_efforts,
         default_reasoning_effort=normalized_default_effort,
+        capabilities_snapshot=capabilities,
         execution_mode=execution_mode,
         profile_policy_ceiling_snapshot=profile_policy_ceiling,
         workspace_policy_ceiling_snapshot=workspace_policy_ceiling,
@@ -276,10 +184,6 @@ def build_runtime_execution_binding(
         binding_digest="",
         created_at=created_at,
         legacy_inferred=legacy_inferred,
-        tcb_manifest_id=tcb_manifest_id,
-        tcb_manifest_version=tcb_manifest_version,
-        tcb_structure_digest=tcb_structure_digest,
-        tcb_live_digest=tcb_live_digest,
         full_workspace_contract_revision=full_workspace_contract_revision,
         execution_family=execution_family,
         harness_recipe_id=harness_recipe_id,
@@ -320,25 +224,22 @@ def fork_runtime_execution_binding(
 
 
 def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutionBinding:
-    """Hydrate nested policy and routing records from a stored document."""
+    """Hydrate a binding and discard fields from the retired issued shape."""
     payload = dict(document)
-    legacy_compatible_field_groups = tuple(
-        group
-        for group in _LEGACY_SCHEMA_FIELD_GROUPS
-        if all(
-            _legacy_binding_field_has_fail_closed_default(payload, field_name)
-            for field_name in group.binding_fields
+    original_digest = str(payload.get("binding_digest") or "")
+    if original_digest != canonical_digest(payload):
+        raise ValueError(
+            "Runtime execution binding digest does not match its immutable payload."
         )
-        and all(
-            _legacy_policy_field_has_fail_closed_default(payload, field_name)
-            for field_name in group.policy_fields
-        )
-    )
-    explicitly_absent_field_groups = tuple(
-        group
-        for group in legacy_compatible_field_groups
-        if _legacy_schema_field_group_is_absent(payload, group)
-    )
+    for field_name in (
+        "capability_certificate_id",
+        "certificate_evidence_digest",
+        "tcb_manifest_id",
+        "tcb_manifest_version",
+        "tcb_structure_digest",
+        "tcb_live_digest",
+    ):
+        payload.pop(field_name, None)
     payload["routing_constraint_snapshot"] = _routing_constraint_from_document(
         payload["routing_constraint_snapshot"]
     )
@@ -348,15 +249,25 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload["workspace_policy_ceiling_snapshot"] = _policy_from_document(
         payload["workspace_policy_ceiling_snapshot"]
     )
-    payload["certified_reasoning_efforts"] = tuple(
-        payload.get("certified_reasoning_efforts", ())
+    payload["reasoning_efforts"] = tuple(
+        payload.pop(
+            "certified_reasoning_efforts",
+            payload.get("reasoning_efforts", ()),
+        )
     )
     payload.setdefault("default_reasoning_effort", None)
+    capabilities = payload.get("capabilities_snapshot")
+    if not isinstance(capabilities, dict):
+        capabilities = _legacy_capabilities_for_binding(payload)
+    capabilities = dict(capabilities)
+    capabilities.setdefault("filesystem_list", False)
+    capabilities.setdefault("app_references", False)
+    capabilities.setdefault("confirmations", False)
+    capabilities["attachment_modalities"] = tuple(
+        capabilities.get("attachment_modalities", ())
+    )
+    payload["capabilities_snapshot"] = RuntimeCapabilitySet(**capabilities)
     payload.setdefault("legacy_inferred", False)
-    payload.setdefault("tcb_manifest_id", "")
-    payload.setdefault("tcb_manifest_version", "")
-    payload.setdefault("tcb_structure_digest", "")
-    payload.setdefault("tcb_live_digest", "")
     payload.setdefault("full_workspace_contract_revision", "")
     payload.setdefault("execution_family", "")
     payload.setdefault("harness_recipe_id", "")
@@ -375,89 +286,9 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload["context_policy_snapshot"] = _context_policy_from_document(
         payload.get("context_policy_snapshot")
     )
+    payload["binding_digest"] = ""
     binding = RuntimeExecutionBinding(**payload)
-    digest_matches = binding.binding_digest == canonical_digest(binding)
-    if not digest_matches:
-        digest_matches = _matches_legacy_digest(
-            binding,
-            compatible_field_groups=legacy_compatible_field_groups,
-            explicitly_absent_field_groups=explicitly_absent_field_groups,
-        )
-    if not digest_matches:
-        raise ValueError("Runtime execution binding digest does not match its immutable payload.")
-    return binding
-
-
-def _matches_legacy_digest(
-    binding: RuntimeExecutionBinding,
-    *,
-    compatible_field_groups: tuple[_LegacySchemaFieldGroup, ...],
-    explicitly_absent_field_groups: tuple[_LegacySchemaFieldGroup, ...],
-) -> bool:
-    """Accept exact legacy digests for explicit atomic schema extensions only."""
-    current_payload = asdict(binding)
-    optional_field_groups = tuple(
-        group
-        for group in compatible_field_groups
-        if group not in explicitly_absent_field_groups
-    )
-    for group_count in range(len(optional_field_groups) + 1):
-        for optional_groups in combinations(optional_field_groups, group_count):
-            selected_groups = (*explicitly_absent_field_groups, *optional_groups)
-            if not selected_groups:
-                continue
-            legacy_payload = dict(current_payload)
-            for group in selected_groups:
-                for field_name in group.binding_fields:
-                    legacy_payload.pop(field_name, None)
-                for field_name in group.policy_fields:
-                    legacy_policy = dict(legacy_payload[field_name])
-                    legacy_policy.pop("allow_filesystem_list", None)
-                    legacy_payload[field_name] = legacy_policy
-            if binding.binding_digest == canonical_digest(legacy_payload):
-                return True
-    return False
-
-
-def _legacy_schema_field_group_is_absent(
-    payload: dict[str, Any],
-    group: _LegacySchemaFieldGroup,
-) -> bool:
-    """Return whether the source document necessarily omitted this extension."""
-    return any(field_name not in payload for field_name in group.binding_fields) or any(
-        "allow_filesystem_list" not in payload[field_name]
-        for field_name in group.policy_fields
-    )
-
-
-def _legacy_binding_field_has_fail_closed_default(
-    payload: dict[str, Any],
-    field_name: str,
-) -> bool:
-    if field_name not in payload:
-        return True
-    if field_name == "certified_reasoning_efforts":
-        return payload[field_name] in ([], ())
-    if field_name == "default_reasoning_effort":
-        return payload[field_name] is None
-    if field_name == "context_policy_snapshot":
-        return payload[field_name] is None
-    if field_name == "model_revision":
-        return payload[field_name] is None
-    if field_name == "model_revision_policy":
-        return payload[field_name] == "provider_alias"
-    return payload[field_name] == ""
-
-
-def _legacy_policy_field_has_fail_closed_default(
-    payload: dict[str, Any],
-    field_name: str,
-) -> bool:
-    policy = payload[field_name]
-    return (
-        "allow_filesystem_list" not in policy
-        or policy["allow_filesystem_list"] is False
-    )
+    return replace(binding, binding_digest=canonical_digest(binding))
 
 
 def canonical_digest(value: object) -> str:
@@ -496,16 +327,40 @@ def _context_policy_from_document(
     return AgenticContextPolicy(**dict(document))
 
 
+def _legacy_capabilities_for_binding(payload: dict[str, Any]) -> dict[str, object]:
+    """Upgrade a legacy session to the direct profile capability shape."""
+    native_codex = payload.get("provider_protocol") == "codex-app-server-stdio"
+    return {
+        "streaming": True,
+        "tool_orchestration": True,
+        "cli": True,
+        "mcp": True,
+        "skill_catalog": True,
+        "filesystem_list": True,
+        "filesystem_read": True,
+        "filesystem_write": True,
+        "shell": True,
+        "interrupt": True,
+        "same_turn_steering": native_codex,
+        "recovery": True,
+        "confirmation_resume": not native_codex,
+        "provider_private_state": not native_codex,
+        "attachment_modalities": ("file",),
+        "app_references": True,
+        "confirmations": not native_codex,
+    }
+
+
 def _reasoning_contract(
     efforts: tuple[str, ...],
     default_effort: str | None,
 ) -> tuple[tuple[str, ...], str | None]:
     normalized = tuple(str(value or "").strip() for value in efforts)
     if any(not value for value in normalized) or len(set(normalized)) != len(normalized):
-        raise ValueError("Runtime execution binding certified reasoning efforts are invalid.")
+        raise ValueError("Runtime execution binding reasoning efforts are invalid.")
     normalized_default = str(default_effort or "").strip() or None
     if normalized_default is not None and normalized_default not in normalized:
-        raise ValueError("Runtime execution binding default reasoning effort is not certified.")
+        raise ValueError("Runtime execution binding default reasoning effort is unsupported.")
     return normalized, normalized_default
 
 

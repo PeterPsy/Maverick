@@ -13,8 +13,12 @@ from core.providers.agentic_adapter import (
     RuntimeRecoveryContext,
     RuntimeTurnContext,
 )
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.errors import ProviderLaunchError, ProviderNotFoundError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.provider_legacy_agentic_bridge import LegacyRuntimeBackendAgenticBridge
@@ -26,10 +30,9 @@ from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_session import RuntimeSessionRecord
 from tests.support.fake_agentic_adapter import FakeHostedAgenticAdapter
-from tests.support.agentic_certification import (
-    certified_test_authority,
-    certified_test_provider_store,
-    fake_capability_evidence,
+from tests.support.agentic_runtime import (
+    direct_test_authority,
+    direct_test_provider_store,
 )
 
 
@@ -47,7 +50,6 @@ class AgenticAdapterContractTest(unittest.TestCase):
             default_model_family="fake-model-v1",
         )
         self.adapter = FakeHostedAgenticAdapter()
-        self.evidence = fake_capability_evidence(self.adapter, now=NOW)
         self.registry.register_provider_definition(self.definition)
         self.registry.register_agentic_runtime_adapter(self.adapter)
         self.binding = build_runtime_execution_binding(
@@ -57,11 +59,10 @@ class AgenticAdapterContractTest(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="binding-fake",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-fake",
             runtime_engine_id=self.adapter.runtime_engine_id,
             adapter_id=self.adapter.adapter_id,
             adapter_version=self.adapter.adapter_version,
-            adapter_artifact_digest=runtime_adapter_artifact_digest(self.adapter),
+            adapter_identity_digest=runtime_adapter_identity_digest(self.adapter),
             model_provider_id="fake-model-provider",
             model_id="fake-model-v1",
             provider_protocol="fake-stream-v1",
@@ -69,15 +70,15 @@ class AgenticAdapterContractTest(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="full-access",
             profile_policy_ceiling=codex_runtime_policy(),
             workspace_policy_ceiling=codex_runtime_policy(),
             egress_policy_id="fake-only",
             egress_policy_revision="1",
             created_at=NOW,
-            certificate_evidence_digest=self.evidence.evidence_digest,
         )
         self.session = RuntimeSessionRecord(
             session_id="session-fake",
@@ -109,10 +110,8 @@ class AgenticAdapterContractTest(unittest.TestCase):
             turn_generation=None,
             updated_at=NOW,
         )
-        self.provider_store = certified_test_provider_store(
+        self.provider_store = direct_test_provider_store(
             self.binding,
-            self.adapter,
-            evidence=self.evidence,
             now=NOW,
         )
 
@@ -127,7 +126,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             agentic_adapter=self.adapter,
             provider_state=self.provider_state,
             correlation_id="turn-fake",
-            effective_authority=certified_test_authority(
+            effective_authority=direct_test_authority(
                 self.provider_store, self.binding, self.adapter, turn_id="turn-fake", now=NOW
             ),
             event_sink=events.append,
@@ -156,7 +155,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             agentic_adapter=self.adapter,
             provider_state=self.provider_state,
             correlation_id="turn-empty-final",
-            effective_authority=certified_test_authority(
+            effective_authority=direct_test_authority(
                 self.provider_store,
                 self.binding,
                 self.adapter,
@@ -177,7 +176,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
                 input_text="hello",
                 agentic_adapter=self.adapter,
                 provider_state=self.provider_state,
-                correlation_id="turn-uncertified",
+                correlation_id="turn-direct-contract",
             )
 
     def test_public_provider_events_reject_nested_private_state_and_oversize_payloads(self) -> None:
@@ -218,20 +217,19 @@ class AgenticAdapterContractTest(unittest.TestCase):
         legacy = _LegacyAdapter(self.definition, tool_output=large_tool_output)
         self.registry.register_runtime_adapter(legacy)
         bridge = self.registry.get_agentic_runtime_adapter(self.definition.provider_id)
-        legacy_evidence = fake_capability_evidence(bridge, now=NOW)
         legacy_binding = replace(
             self.binding,
             adapter_id=bridge.adapter_id,
             adapter_version=bridge.adapter_version,
-            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
-            certificate_evidence_digest=legacy_evidence.evidence_digest,
+            adapter_identity_digest=runtime_adapter_identity_digest(bridge),
             binding_digest="",
         )
         from core.runtime.execution_binding import canonical_digest
         legacy_binding = replace(legacy_binding, binding_digest=canonical_digest(legacy_binding))
         legacy_session = replace(self.session, execution_binding=legacy_binding)
-        legacy_store = certified_test_provider_store(
-            legacy_binding, bridge, evidence=legacy_evidence, now=NOW
+        legacy_store = direct_test_provider_store(
+            legacy_binding,
+            now=NOW,
         )
         accepted: list[dict[str, object]] = []
         events: list[RuntimeExecutionEvent] = []
@@ -245,7 +243,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             agentic_adapter=bridge,
             provider_state=self.provider_state,
             correlation_id="turn-legacy",
-            effective_authority=certified_test_authority(
+            effective_authority=direct_test_authority(
                 legacy_store, legacy_binding, bridge, turn_id="turn-legacy", now=NOW
             ),
             launch_spec=_launch_spec(self.session),
@@ -276,13 +274,11 @@ class AgenticAdapterContractTest(unittest.TestCase):
         )
         self.registry.register_runtime_adapter(legacy)
         bridge = self.registry.get_agentic_runtime_adapter(self.definition.provider_id)
-        legacy_evidence = fake_capability_evidence(bridge, now=NOW)
         legacy_binding = replace(
             self.binding,
             adapter_id=bridge.adapter_id,
             adapter_version=bridge.adapter_version,
-            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
-            certificate_evidence_digest=legacy_evidence.evidence_digest,
+            adapter_identity_digest=runtime_adapter_identity_digest(bridge),
             binding_digest="",
         )
         from core.runtime.execution_binding import canonical_digest
@@ -291,10 +287,8 @@ class AgenticAdapterContractTest(unittest.TestCase):
             binding_digest=canonical_digest(legacy_binding),
         )
         legacy_session = replace(self.session, execution_binding=legacy_binding)
-        legacy_store = certified_test_provider_store(
+        legacy_store = direct_test_provider_store(
             legacy_binding,
-            bridge,
-            evidence=legacy_evidence,
             now=NOW,
         )
 
@@ -306,7 +300,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             agentic_adapter=bridge,
             provider_state=self.provider_state,
             correlation_id="turn-missing-thread",
-            effective_authority=certified_test_authority(
+            effective_authority=direct_test_authority(
                 legacy_store,
                 legacy_binding,
                 bridge,

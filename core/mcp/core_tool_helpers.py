@@ -47,7 +47,7 @@ def core_mcp_tool(
         supports_idempotency=supports_idempotency,
         safe_to_retry=safe_to_retry,
         schema_public=True,
-        certified_tcb_component="tool-schema-catalog",
+        reviewed_schema_component="tool-schema-catalog",
         agentic_result_data_class=agentic_result_data_class,
         agentic_result_projection=agentic_result_projection,
     )

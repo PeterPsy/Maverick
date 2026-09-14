@@ -150,7 +150,7 @@ class RuntimeToolOrchestratorTest(_RuntimeToolOrchestratorFixture, unittest.Test
                 effect_class="read",
                 safe_to_retry=True,
                 schema_public=True,
-                certified_tcb_component="tool-schema-catalog",
+                reviewed_schema_component="tool-schema-catalog",
             ),
             lambda _arguments, _context: original,
         )

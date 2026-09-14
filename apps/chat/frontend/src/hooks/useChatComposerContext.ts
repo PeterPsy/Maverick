@@ -147,7 +147,7 @@ export function useChatComposerContext({
 
   function handleReferenceAdd(reference: AppReference) {
     if (!appReferencesAllowed) {
-      setComposerError("The selected runtime profile is not certified for app references.");
+      setComposerError("The selected runtime profile does not allow app references.");
       return;
     }
     setSelectedReferences((current) => {

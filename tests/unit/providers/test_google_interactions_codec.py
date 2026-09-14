@@ -29,7 +29,7 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
             request.routing_constraint, data_collection_policy="deny", require_zdr=True,
         ))
         events = asyncio.run(_events(client, request))
-        self.assertEqual(events[-1].error_code, "provider_routing_not_certified")
+        self.assertEqual(events[-1].error_code, "provider_routing_not_allowed")
         self.assertEqual(transport.payloads, [])
 
     def test_distinct_json_sources_are_encoded_as_text_without_losing_block_boundaries(self) -> None:

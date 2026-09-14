@@ -12,7 +12,7 @@ import core.apps.runtime_requests as runtime_requests
 from core.api.platform_state import bootstrap_platform_state
 from core.providers.agentic_profiles import resolve_workspace_agentic_profile
 from core.providers.errors import ProviderError
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
@@ -77,7 +77,7 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
             {"attestation_revision": 99},
         ):
             with self.subTest(authority_fields=authority_fields), self.assertRaisesRegex(
-                CapabilityCertificateError,
+                AgenticRuntimeError,
                 "runtime_client_authority_not_accepted",
             ):
                 runtime_requests._preflight_runtime_request_before_persistence(
@@ -127,12 +127,12 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
         ) as build_binding, patch.object(
             runtime_requests,
             "preflight_execution_binding_context",
-            side_effect=CapabilityCertificateError(
+            side_effect=AgenticRuntimeError(
                 "agentic_app_references_not_effective"
             ),
         ) as capability_preflight:
             with self.assertRaisesRegex(
-                CapabilityCertificateError,
+                AgenticRuntimeError,
                 "agentic_app_references_not_effective",
             ):
                 runtime_requests._preflight_runtime_request_before_persistence(

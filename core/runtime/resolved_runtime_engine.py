@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter
-from core.providers.certificate_service import validate_certificate_for_binding
+from core.providers.errors import AgenticRuntimeError
 from core.providers.models import ProviderDefinition, ProviderSelection
 from core.providers.provider_registry import RuntimeBackendAdapter
 from core.runtime.agentic_runtime_service import update_runtime_provider_state
@@ -92,12 +92,9 @@ class ResolvedRuntimeEngine:
             return None
 
         def validate(upstream_id: str) -> None:
-            validate_certificate_for_binding(
-                provider_store,
-                binding=binding,
-                adapter=self.agentic_adapter,
-                observed_upstream_id=upstream_id,
-            )
+            allowed = binding.routing_constraint_snapshot.allowed_upstream_ids
+            if allowed and upstream_id not in allowed:
+                raise AgenticRuntimeError("provider_upstream_not_allowed")
 
         return validate
 

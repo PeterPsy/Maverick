@@ -183,13 +183,10 @@ function pinnedAgenticSessionProvider(
         || "remote_agentic_session_contained"
       : governance?.containment.reason_code || null,
     agentic_rollout_status: governance?.rollout_status || null,
-    agentic_certificate_status: governance?.certificate_posture.effective_status || null,
-    agentic_certificate_expires_at: governance?.certificate_posture.expires_at || null,
     agentic_egress_policy_id: governance?.egress_policy.policy_id || null,
     agentic_data_destination: governance?.data_destination || null,
     agentic_egress_policy: governance?.egress_policy || null,
     agentic_data_policy: governance?.data_policy || null,
-    agentic_certificate_posture: governance?.certificate_posture || null,
     agentic_effective_capabilities: governance?.effective_capabilities || null,
   };
 }

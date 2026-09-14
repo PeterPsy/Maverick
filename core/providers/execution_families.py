@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.providers.certified_execution_tcb import is_exact_codex_identity
-
-
 NATIVE_AGENT_EXECUTION_FAMILY = "native_agent"
 MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
 HOSTED_TEXT_EXECUTION_FAMILY = "hosted_text"
@@ -56,6 +53,22 @@ EXECUTION_FAMILIES = (
 )
 
 NO_WORKSPACE_ACTIONS_MESSAGE = "No workspace tools or actions."
+
+
+def is_exact_codex_identity(
+    *,
+    runtime_engine_id: str,
+    adapter_id: str,
+    model_provider_id: str,
+    provider_protocol: str,
+) -> bool:
+    """Recognize the built-in Codex integration from its closed identity tuple."""
+    return (
+        runtime_engine_id == "codex"
+        and adapter_id == "codex-app-server"
+        and model_provider_id == "codex"
+        and provider_protocol == "codex-app-server-stdio"
+    )
 
 
 def execution_family_catalog() -> tuple[ExecutionFamilyDefinition, ...]:

@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_models import codex_runtime_policy
-from core.providers.errors import CapabilityCertificateError
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.authority import (
     intersect_runtime_policies,
     runtime_feature_flag_revision,
@@ -162,7 +162,7 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
             {MAVERICK_FEATURE_PARALLEL_TOOL_CALLS: "0"},
             clear=False,
         ):
-            with self.assertRaises(CapabilityCertificateError) as raised:
+            with self.assertRaises(AgenticRuntimeError) as raised:
                 intersect_runtime_policies(policy)
         self.assertEqual(raised.exception.reason_code, "parallel_tool_calls_disabled")
 

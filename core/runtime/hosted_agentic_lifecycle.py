@@ -19,7 +19,7 @@ class HostedLifecycleRecoveryOutcome:
 
 
 def recover_hosted_agentic_session(state, *, session, trigger: str):
-    """Invoke recovery only for an adapter exposing the certified sync hook."""
+    """Invoke recovery only for an adapter exposing the supported sync hook."""
     binding = session.execution_binding
     if binding is None or session.runtime_mode != "agentic":
         return HostedLifecycleRecoveryOutcome(False, True, "not_applicable")

@@ -12,9 +12,13 @@ import unittest
 from unittest.mock import patch
 
 from core.api.application import create_application
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.providers.agentic_profiles import build_pinned_execution_binding
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.errors import ProviderCredentialBindingError, ProviderNotFoundError, ProviderSelectionError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_codex_config_policy import (
@@ -641,17 +645,10 @@ class ProvidersTestCase(unittest.TestCase):
         repo_root = self.make_repo_root()
         now = datetime.now(tz=UTC)
         from tests.support.native_agent_catalog import codex_snapshot
-        from core.providers.native_runtime_artifact import inspect_native_runtime_artifact
 
-        # This launch-shape fixture intentionally substitutes an executable;
-        # approve only that test artifact, never weaken production validation.
         command = repo_root / "codex-launch-fixture"
         command.write_text("#!/bin/sh\necho codex-launch-fixture-1\n")
         command.chmod(0o755)
-        approval = patch("core.providers.native_agent_builtins.CODEX_PACKAGED_RUNTIME_ARTIFACT",
-                         inspect_native_runtime_artifact(str(command)))
-        approval.start()
-        self.addCleanup(approval.stop)
 
         discovery = patch("core.providers.native_agent_reconciliation.discover_codex_native_catalog",
                           return_value=codex_snapshot("gpt-5.6-sol"))
@@ -1385,12 +1382,10 @@ class ProvidersTestCase(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="workspace-credentialed-fixture",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-credentialed-fixture",
-            certificate_evidence_digest="a" * 64,
             runtime_engine_id="credentialed",
             adapter_id=bridge.adapter_id,
             adapter_version=bridge.adapter_version,
-            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
+            adapter_identity_digest=runtime_adapter_identity_digest(bridge),
             model_provider_id="credentialed",
             model_id="credentialed",
             provider_protocol="legacy-runtime-backend",
@@ -1398,8 +1393,9 @@ class ProvidersTestCase(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=selection.binding_id,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
             profile_policy_ceiling=policy,
             workspace_policy_ceiling=policy,

@@ -65,7 +65,7 @@ class HostedTransportAuthorityGuard:
         )
 
     def authorize_transport(self) -> HostedTransportAuthorization:
-        """Run expensive certification checks at a transport-open boundary."""
+        """Run full authority checks at a transport-open boundary."""
         self.budget.check_time()
         authority = self.authority_refresher(self.context)
         authorization = self._authorize(authority)

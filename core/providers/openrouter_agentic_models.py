@@ -1,4 +1,4 @@
-"""Private models for the certified OpenRouter Chat Completions codec."""
+"""Private models for the OpenRouter Chat Completions codec."""
 
 from __future__ import annotations
 

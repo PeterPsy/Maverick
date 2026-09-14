@@ -10,7 +10,12 @@ from core.providers.agentic_data_policies import (
     REMOTE_PREVIEW_EGRESS_POLICY_ID,
     REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
 )
-from core.providers.google_agentic_profile import google_agentic_preview_policy
+from core.providers.google_agentic_profile import (
+    GOOGLE_DEFAULT_REASONING_EFFORT,
+    GOOGLE_REASONING_EFFORTS,
+    google_agentic_capabilities,
+    google_agentic_preview_policy,
+)
 from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
 from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
@@ -74,7 +79,9 @@ def google_publication(
         ),
         routing_constraint=GOOGLE_INTERACTIONS_PROVIDER_CONFIG.routing_constraint,
         policy_ceiling=google_agentic_preview_policy(),
-        capability_certificate_id=f"certificate:{model_id}:{profile_revision}",
+        capabilities=google_agentic_capabilities(),
+        reasoning_efforts=GOOGLE_REASONING_EFFORTS,
+        default_reasoning_effort=GOOGLE_DEFAULT_REASONING_EFFORT,
         created_at=NOW,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,

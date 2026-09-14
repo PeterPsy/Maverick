@@ -6,7 +6,11 @@ import json
 from types import SimpleNamespace
 import unittest
 
-from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_models import (
+    codex_routing_constraint,
+    codex_runtime_capabilities,
+    codex_runtime_policy,
+)
 from core.providers.agentic_protocol import (
     AgenticProviderPrivateState,
     AgenticSourceMetadata,
@@ -51,12 +55,10 @@ class ProviderPrivateStateServiceTest(unittest.TestCase):
             profile_definition_revision="1",
             workspace_binding_id="binding-fake",
             workspace_binding_revision=0,
-            capability_certificate_id="certificate-fake",
-            certificate_evidence_digest="a" * 64,
             runtime_engine_id="fake-hosted-engine",
             adapter_id="fake-hosted-adapter",
             adapter_version="1.2.3",
-            adapter_artifact_digest="b" * 64,
+            adapter_identity_digest="b" * 64,
             model_provider_id="fake-provider",
             model_id="fake-model",
             provider_protocol="fake-v1",
@@ -64,8 +66,9 @@ class ProviderPrivateStateServiceTest(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
-            certified_reasoning_efforts=(),
+            reasoning_efforts=(),
             default_reasoning_effort=None,
+            capabilities=codex_runtime_capabilities(),
             execution_mode="full-access",
             profile_policy_ceiling=codex_runtime_policy(),
             workspace_policy_ceiling=codex_runtime_policy(),

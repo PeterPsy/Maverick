@@ -15,7 +15,6 @@ from core.providers.agentic_protocol import (
     EphemeralCredential,
     HOSTED_FINALIZATION_INSTRUCTION,
 )
-from core.providers.agentic_filesystem_probe import FILESYSTEM_LIST_PROBE_TOOL_NAME
 from core.providers.openrouter_agentic_catalog import (
     OPENROUTER_AGENTIC_ENDPOINT_CATALOG,
     OPENROUTER_AGENTIC_MODELS_CATALOG,
@@ -32,7 +31,7 @@ from core.providers.openrouter_agentic_models import (
 from core.providers.openrouter_agentic_profile import openrouter_agentic_routing_constraint
 from core.providers.openrouter_agentic_request import openrouter_chat_payload
 from core.providers.openrouter_agentic_state import decode_openrouter_chat_state
-
+from core.runtime.tool_schema import provider_tool_name
 
 SUPPORTED = [
     "max_tokens",
@@ -41,6 +40,7 @@ SUPPORTED = [
     "tool_choice",
     "tools",
 ]
+FILESYSTEM_LIST_TOOL_NAME = provider_tool_name("core-capability:filesystem.list")
 
 
 class OpenRouterAgenticCatalogTest(unittest.TestCase):
@@ -428,7 +428,7 @@ def _request() -> AgenticModelRequest:
         ),
         tool_definitions=(
             AgenticToolDefinition(
-                FILESYSTEM_LIST_PROBE_TOOL_NAME,
+                FILESYSTEM_LIST_TOOL_NAME,
                 "List synthetic files.",
                 {"type": "object"},
             ),

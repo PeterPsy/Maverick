@@ -138,9 +138,9 @@ produces `execution_unknown` instead of automatic replay. Prompt instructions
 cannot expand this authority.
 
 Provider-visible schemas are not trusted merely because a registry discovers
-them. Only explicitly public Core-owned schemas covered by the exact TCB may
-egress. App-owned, dynamic CLI/MCP, omitted, or uncertified surfaces block the
-request with an allowlisted structured reason instead of being silently hidden.
+them. Only explicitly reviewed Core-owned base schemas may be projected directly.
+App-owned and dynamic CLI/MCP schemas use bounded discovery/invocation wrappers;
+unreviewed base schemas block the request with an allowlisted structured reason.
 
 ### Remote model content exfiltration
 
@@ -177,7 +177,7 @@ identity/revision/digest; source ownership alone cannot select a class. Governed
 context joins every captured control, summary, task/result, and artifact entry
 and stays untrusted.
 Non-resource CLI, MCP, shell, and process output has no generic public-content
-fallback: exact result bytes require the runtime-public policy or a certified
+fallback: exact result bytes require the runtime-public policy or a reviewed
 Core result contract, and a denied result is retained privately while only a
 public call-paired error reaches the provider. Core inter-agent CLI/MCP tools
 use operation-specific effects and reviewed public projectors that retain only
@@ -185,8 +185,8 @@ bounded lifecycle metadata; invalid shapes are replaced without copying handler
 bytes. Shell/process workspace effects remain in a private overlay until the
 exact result is admitted, then commit; denial discards them. App claims are
 ignored without removing read-only discovery/use. An admitted built-in app read
-must match both its audited descriptor and executable closure in the TCB, with a
-second live check at dispatch. Direct replace/edit/patch and move
+must match both its audited descriptor and executable closure, with a second
+live check at dispatch. Direct replace/edit/patch and move
 propagate exact version-bound pre-image taint to their post-image. Authenticated
 same-session mutation results bind the exact observation across orchestrator
 rebuilds; creation has no public fallback.
@@ -209,38 +209,28 @@ admitted metadata cannot classify the underlying reference by itself.
 Residual risk remains because content classification and prompt/tool-result
 provenance are security-critical enforcement paths. Phase-1 repository tests
 cover false-promotion and leakage-safe metadata, but remote agentic execution
-stays disabled and independently contained until complete live/behavioral
-certification, recovery, leakage review, canary, and the broader production
-blockers are closed.
+stays independently governed until complete live/behavioral testing, recovery,
+leakage review, canary, and the broader production blockers are closed.
 
-### Profile, certificate, or routing substitution
+### Profile or routing substitution
 
 An attacker may try to substitute a profile revision, credential binding,
-adapter artifact, provider model, protocol, endpoint, or router upstream after a
-session is created. A provider may also silently route to an uncertified
-upstream.
+adapter identity, provider model, protocol, endpoint or upstream after a session
+is created. A provider may also silently route to an unapproved upstream.
 
-The runtime session embeds an immutable execution binding. Capability derives
-from an unexpired, unrevoked certificate matching the exact adapter artifact,
-provider, model, protocol, routing digest, and effective upstream. Workspace
-defaults are not consulted after session creation. Live state may only narrow
-the pinned ceiling. OpenRouter agentic requests use an explicit certified
-upstream allowlist, no fallback, required parameters, denied data collection,
-and policy-required ZDR; no eligible endpoint means no request.
+The runtime session embeds an immutable direct execution binding. It pins the
+profile/binding revisions, declared capabilities and reasoning, adapter,
+provider/model/protocol, routing constraint, provider config, harness recipe and
+policy ceilings. Workspace defaults are not consulted after session creation.
+Live state may only narrow the pin.
 
-The certificate also binds the one code-owned certified-execution TCB manifest
-and digest. It covers every authority-changing Core path plus Chat/Settings
-governance. Suite construction, artifact bundle, signature/publication,
-execution binding, and live status derive from that same manifest; the
-publisher recomputes it. Drift in runtime API, classifier, input composition,
-ledger/store, lifecycle, codec/transport, or UI governance invalidates remote
-authority before create, continuation, refresh, or dispatch. Legacy remote
-certificates with no valid TCB identity fail closed. Manifest v9 prevents a
-covered module from outsourcing authority or provider content to an unhashed
-local dependency: six code-owned contracts statically walk the relevant import
-closures and package initializers, including
-`core/inter_agent/generalist_context.py`; any reached path outside the artifact
-set fails identity calculation.
+Before dispatch Core re-resolves the enabled workspace binding, actor, credential,
+model/runtime health, feature flags, containment, endpoint/upstream and egress
+policy. OpenRouter requests use the profile's explicit upstream/fallback and
+parameter constraints; no eligible endpoint means no request. Adapter identity
+uses declared engine/adapter ids and versions rather than mutable source bytes,
+so source changes do not create a time-based outage, while identity or routing
+substitution still fails closed.
 
 ### Confirmation and side-effect replay
 
@@ -277,7 +267,7 @@ Hosted adapters pin terminal resources for one final request and at most one
 recovery. Provider requests and tool proposals use separate durable counters;
 journal schema v3 restores request reservations, usage, tool charges, and
 result bytes after restart. Proposal and accepted charge share one CAS; a
-terminal request above its certified per-attempt cost allocation fails before
+terminal request above its configured per-attempt cost allocation fails before
 transport, and each allocation covers a complete request at the hosted input
 ceiling, including retained context/provider state and admitted tool results.
 Live policy only narrows. Required credentials and coarse eligibility are
@@ -588,7 +578,7 @@ The near-term goals are:
 - per-content remote-provider egress decisions plus independent remote admission
 - revisioned server-owned attestation separated from resource classification
   and egress, with a fail-closed provenance/trust/data-class join
-- a single deterministic certified-execution TCB and certified public schemas
+- reviewed Core-owned base tool schemas and live executable-closure checks
 - descriptor-relative race-safe workspace filesystem primitives
 - one effective-capability intersection shared by admission, runtime, API, Chat,
   and Settings

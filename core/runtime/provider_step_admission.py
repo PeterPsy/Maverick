@@ -13,6 +13,20 @@ def provider_step_admission_reason(
     allow_same_turn_pairing: bool = False,
 ) -> str | None:
     """Return a stable reason when persisted WAL state cannot admit ordinary work."""
+    if allow_same_turn_pairing:
+        try:
+            owner = store.get_turn(str(turn_id or ""))
+            session = store.get_session(session_id)
+        except Exception:
+            return "provider_pairing_ambiguous"
+        if (
+            owner is None
+            or owner.turn_id != turn_id
+            or owner.session_id != session_id
+            or owner.workspace_id != session.workspace_id
+            or owner.status not in {"active", "waiting_for_tool_confirmation"}
+        ):
+            return "provider_pairing_ambiguous"
     try:
         records = store.list_provider_step_journals(session_id=session_id)
     except Exception:

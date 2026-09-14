@@ -105,80 +105,43 @@ hosted adapter follows the same universal loop and full-access contract.
   cancellation checks and page-entry classification joins.
 - [x] Restore the bounded turn-side prewarm delay/join; only the client-facing
   prepare call remains non-blocking, with no unmeasured cold-start claim.
+- [x] Bind hosted full-access runtime bearers to one live turn and revoke them
+  on every terminal turn transition; keep native process tokens intentionally
+  session-scoped.
+- [x] Extract a bounded filesystem scanner with deterministic per-directory
+  ordering and multipage cursor coverage.
+- [x] Cover an interrupted OpenRouter tool step with a fresh adapter instance,
+  same-turn journal recovery and no repeated tool effect.
 - [x] Record the final post-commit OpenRouter GLM and Codex restart smoke below.
 
 ## Validation record
 
-The universal-loop change was validated on 2026-09-14 with 378 provider tests,
-190 runtime-state tests, 166 runtime-tool tests, and 27 egress tests passing.
-The focused parity coverage exercises the shared Codex/OpenRouter capability
-contract, live full-access list/read/search/write/edit/patch/move/delete,
-installed `git`, `rg` and authenticated `maverick` CLI execution, managed
-process start/status/stdin/interrupt, parallel Google and OpenRouter tool
-calls, independent invalid-call recovery, and restart journal reconciliation.
-The hosted runtime installs the same Maverick wrapper used by native runtimes,
-adds installed vendored CLI paths without hard-coded package locations, and
-uses a turn-scoped bearer so a CLI subcall is admitted during its owning
-provider step while pending steps from another turn remain blocked.
+Current 2026-09-14 validation passes 1,227 root unit tests with five skips, 381
+provider tests, 204 runtime-state tests, 171 runtime-tool tests, 28 egress tests
+and 350 API tests. The complete fast run passes every functional area and app
+shard; its only non-zero checks are the three existing repository convention
+baselines for file-size/layout/reference budgets.
 
-The staged snapshot later committed as `12b1f61b` passed 1,223 root unit tests
-with five skips. Focused suites passed 380 provider tests, 202 runtime-state
-tests, 170 runtime-tool tests, 28 egress tests and 350 API tests. The fast suite
-passed its unit, runtime, runtime-state, app-hosting, process, stream, script
-and all app shards. Its only remaining failures are the three pre-existing
-repository convention baselines for file-size/layout/reference budgets.
+The controlled in-flight recovery test interrupts the OpenRouter loop after a
+filesystem result and provider step are durably committed, constructs a fresh
+adapter over the same store, reconciles the journal and completes the original
+turn. The second provider request contains the persisted result and the tool
+ledger contains one invocation, proving that recovery does not repeat the
+effect. This test also protects current and persisted compatible budget journal
+schemas.
 
-The final live OpenRouter sequence used session
-`b2eae95d-a5e4-42d4-b401-c6404e258353`. Turn
-`63d34bb6-9a9d-4824-976c-f6f985caa3a5` emitted two independent
-`filesystem.read` calls in one provider response; both `started` events were
-persisted before either `completed` event, and both results reached the final
-answer. Turn `ed20d639-50a0-43c3-87ce-607972ae2689` then completed one
-`shell.run` containing `git --version`, `rg --version` and
-`maverick core cli list --json`, all at exit code zero. After a backend restart,
-turn `737507c2-0f2b-418b-a3c7-7c58b25946c6` completed another filesystem tool
-and final response in the same session.
+The live parity smoke used OpenRouter session
+`b2eae95d-a5e4-42d4-b401-c6404e258353` for concurrent filesystem reads and a
+shell call containing `git`, `rg` and authenticated `maverick` CLI execution.
+The same session accepted a new tool turn after restart. Codex session
+`b1610ebb-6a15-4ed9-a328-709babcf22f2` likewise completed filesystem and CLI
+work before restart and a new tool turn afterwards. These live checks establish
+persisted-session continuity; the controlled fault test above establishes
+in-flight same-turn recovery.
 
-After commit `12b1f61b` and a further backend restart, both persisted sessions
-were healthy and continued normally. OpenRouter turn
-`4f40aec8-00d4-4cf3-9dc1-6cdff2bae11f` completed a filesystem read and final
-response. Codex session `b1610ebb-6a15-4ed9-a328-709babcf22f2`, which had
-already completed two reads plus a shell turn containing the same three CLI
-checks, completed post-restart turn `50c936a6-5906-4d06-abab-e905b19af803`
-with another tool result and final response.
-
-An isolated snapshot of the exact staged change passed all 1,214 root unit
-tests with five skips. The fast suite also passed its API, runtime,
-runtime-state, app-hosting, process, stream, script, and all 67 app shards. Its
-remaining failures were the four pre-existing convention checks for accumulated
-file-size/layout/reference budgets. A shared-working-tree run also observed one
-continuation-fixture error from concurrent work that is excluded from this
-commit. The one profile expectation exposed by this change was updated and
-passes in the complete 378-test provider suite.
-
-The 2026-09-14 live validation used the enabled direct OpenRouter binding in
-workspace `default` with `max` reasoning and Full Workspace mode. Session
-`b034ef59-d443-4bc2-b8c5-807ebadd0ec8` completed in two provider steps after a
-governed `core-capability:filesystem.list` call. The proposed, started and
-completed tool events were persisted, the expected final marker was returned,
-usage was recorded and no runtime error occurred.
-
-Codex remained installed, healthy and selectable after the same backend
-restart. Prepared session `ceb73c4b-b3c4-4f0c-902d-acaa57bba00d` started in
-Full Workspace mode with provider `codex`.
-
-The complete Python unit discovery passed 1,207 tests with five skips. The Chat
-and Settings focused frontend suites and builds passed. The fast suite passed
-all functional areas; its four failures were pre-existing repository convention
-checks for file size/layout/reference budgets. One unrelated temporary-directory
-cleanup race in the Chat/Codex project-delete test passed immediately when rerun
-in isolation.
-
-The active JSON control plane stores direct profile capability and reasoning
-fields. Workspace bindings and immutable session pins preserve selection state,
-while live runtime checks can only narrow what a profile declares.
-
-The persistence migration normalized 96 session bindings and 16 completed
-continuation handoffs to that direct schema. One already-invalid historical
-binding was closed as failed while preserving its transcript; strict hydration
-then succeeded for all 101 persisted sessions and all 16 handoffs.
+Historical counts of 1,207, 1,214 and 1,223 tests were intermediate delivery
+snapshots and are superseded by the current result above. The direct control
+plane migration normalized 96 session bindings and 16 completed continuation
+handoffs; strict hydration then succeeded for all persisted sessions and
+handoffs while preserving the transcript of one already-invalid binding closed
+as failed.

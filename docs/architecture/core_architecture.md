@@ -673,6 +673,10 @@ replay cannot export bytes that the original step excluded.
 The loop refreshes effective authority before each provider request and side
 effect, journals request identity before acceptance, and routes tools through
 the official CLI, MCP, app-interface or Core capability surface.
+When execution re-enters an interrupted hosted turn, the prepare context carries
+that exact turn id. Only a committed same-turn pairing may pass preparation;
+the loop restores compatible journal budget schemas, reuses the persisted tool
+result and continues without repeating the effect.
 
 Tool-schema review is separate from provider/model admission. Only Core-owned
 schemas marked with the reviewed schema component may be projected directly to
@@ -698,8 +702,11 @@ id and selected upstream must still match the pinned egress route.
 Full-access directory listing and text search scan incrementally and cooperate
 with turn cancellation. They cap visited entries, aggregate bytes read and
 bytes read per file, report partial-scan metadata, and retain only the requested
-page. Listing and search audit classification joins the exact entry or match
-paths included in that page rather than classifying only the aggregate root.
+page. The bounded scanner orders each visited directory before emitting entries,
+so an unchanged scan has a stable digest and multipage cursors do not depend on
+the order returned by the host filesystem. Listing and search audit
+classification joins the exact entry or match paths included in that page
+rather than classifying only the aggregate root.
 
 Remote requests are built only from server-owned context and authorized tool
 schemas. Client-supplied authority metadata is rejected. Provider routing is
@@ -2103,7 +2110,7 @@ Workspace-scoped runtime thread records are persisted under `workspaces/<workspa
 
 The core must not append every agent's session metadata, thread metadata, history, or operational records into installation-level shared JSON files because replay, cleanup, and restart recovery would degrade as total server history grows and would mix workspace-owned runtime state with platform control-plane state. Installation-level runtime persistence is reserved for platform security records such as runtime API token lifecycle state.
 
-Runtime API tokens issued into provider launch environments must have store-backed lifecycle records keyed by token id. Runtime CLI and SDK APIs must reject tokens that are unregistered, expired, revoked, or mismatched against the session workspace and effective mode. This lets the platform revoke one runtime token without trusting bearer-token signature validity alone for the rest of the token TTL.
+Runtime API tokens issued into provider launch environments must have store-backed lifecycle records keyed by token id. Runtime CLI and SDK APIs must reject tokens that are unregistered, expired, revoked, or mismatched against the session workspace and effective mode. This lets the platform revoke one runtime token without trusting bearer-token signature validity alone for the rest of the token TTL. Long-lived native provider processes use session-scoped records. A hosted full-access tool process instead receives a token carrying `runtime_turn_id`; validation always requires that exact turn to exist, belong to the token session and workspace, and remain active or waiting for confirmation. Every terminal turn transition revokes all such records, so a bearer retained by a managed child process has no authority after its owning turn ends.
 
 The source of Codex identity/configuration is configurable and path-agnostic:
 

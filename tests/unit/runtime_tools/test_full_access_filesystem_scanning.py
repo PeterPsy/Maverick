@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.egress.classification import validated_classification
 from core.runtime.full_access_filesystem import FullAccessFilesystem
@@ -20,6 +22,54 @@ class _CancelAfter:
 
 
 class FullAccessFilesystemScanningTest(unittest.TestCase):
+    def test_listing_pages_are_stable_when_scandir_order_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("charlie.txt", "alpha.txt", "bravo.txt"):
+                (root / name).write_text(name, encoding="utf-8")
+            entries = list(os.scandir(root))
+            scans = iter((entries, list(reversed(entries))))
+
+            class _Scandir:
+                def __init__(self, values):
+                    self.values = values
+
+                def __enter__(self):
+                    return iter(self.values)
+
+                def __exit__(self, *_args):
+                    return False
+
+            filesystem = FullAccessFilesystem(
+                workspace_id="default",
+                workspace_root=root,
+            )
+            with patch(
+                "core.runtime.full_access_filesystem_scanner.os.scandir",
+                side_effect=lambda _path: _Scandir(next(scans)),
+            ):
+                first = filesystem.list_entries(
+                    ".",
+                    max_depth=1,
+                    page_size=2,
+                )
+                second = filesystem.list_entries(
+                    ".",
+                    max_depth=1,
+                    page_size=2,
+                    cursor=first.payload["next_cursor"],
+                )
+
+            self.assertEqual(
+                [entry["name"] for entry in first.payload["entries"]],
+                ["alpha.txt", "bravo.txt"],
+            )
+            self.assertEqual(
+                [entry["name"] for entry in second.payload["entries"]],
+                ["charlie.txt"],
+            )
+            self.assertEqual(first.payload["snapshot_id"], second.payload["snapshot_id"])
+
     def test_list_streams_only_up_to_physical_entry_limit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

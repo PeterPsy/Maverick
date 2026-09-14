@@ -58,6 +58,13 @@ class RuntimeProcessControlTestCase(unittest.TestCase):
             start_new_session=True,
         )
         try:
+            deadline = time.monotonic() + 1
+            while (
+                not runtime_processes_alive_for_session("sess-lost-codex-process")
+                and process.poll() is None
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
             self.assertTrue(
                 runtime_processes_alive_for_session("sess-lost-codex-process")
             )

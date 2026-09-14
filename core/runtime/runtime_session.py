@@ -129,6 +129,7 @@ class RuntimeApiTokenRecord:
     status: RuntimeApiTokenStatus
     issued_at: datetime
     expires_at: datetime
+    runtime_turn_id: str | None = None
     revoked_at: datetime | None = None
 
 

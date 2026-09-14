@@ -66,6 +66,7 @@ class RuntimePrepareContext:
     provider_state: RuntimeProviderState
     local_launch_spec: RuntimeBackendLaunchSpec | None = None
     invoked_skills: tuple[object, ...] = ()
+    correlation_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import base64
-from collections import deque
-from dataclasses import dataclass
 import hashlib
 import json
-import os
 from pathlib import Path
 
 from core.egress.classification import (
@@ -21,12 +18,12 @@ from core.runtime.confined_filesystem import (
 from core.runtime.full_access_filesystem_mutations import (
     FullAccessFilesystemMutationMixin,
 )
+from core.runtime.full_access_filesystem_scanner import FullAccessFilesystemScanner
 from core.runtime.full_access_filesystem_support import (
     cursor as encode_cursor,
     cursor_state,
     decode_utf8,
     file_digest,
-    file_type,
     require_expected,
     stat_revision,
 )
@@ -90,16 +87,15 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
             )
             raise RuntimeToolError(reason)
         offset, expected_snapshot = cursor_state(cursor)
-        state = _FilesystemScanState()
+        scanner = FullAccessFilesystemScanner(self.max_scan_entries)
         digest = _JsonArrayDigest()
         page: list[dict[str, object]] = []
         entry_paths: list[Path] = []
         total_count = 0
-        for entry, entry_path in self._walk(
+        for entry, entry_path in scanner.walk(
             path,
             max_depth=max_depth,
             execution_control=execution_control,
-            state=state,
         ):
             digest.add(entry)
             if offset <= total_count < offset + page_size:
@@ -122,7 +118,7 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
                 if next_offset < total_count
                 else None
             ),
-            "scan_truncated": state.truncated,
+            "scan_truncated": scanner.truncated,
             "scan_entry_limit": self.max_scan_entries,
             "snapshot_id": snapshot,
             "resource_identity": observation.resource_identity,
@@ -158,7 +154,7 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
             raise RuntimeToolError(reason)
         needle = query if case_sensitive else query.casefold()
         offset, expected_snapshot = cursor_state(cursor)
-        state = _FilesystemScanState()
+        scanner = FullAccessFilesystemScanner(self.max_scan_entries)
         digest = _JsonArrayDigest()
         page: list[dict[str, object]] = []
         page_paths: list[Path] = []
@@ -166,11 +162,10 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
         scanned_bytes = 0
         truncated_file_count = 0
         search_truncated = False
-        for entry, candidate in self._walk(
+        for entry, candidate in scanner.walk(
             path,
             max_depth=max_depth,
             execution_control=execution_control,
-            state=state,
         ):
             if entry["type"] != "file":
                 continue
@@ -232,7 +227,7 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
                 else None
             ),
             "scan_truncated": (
-                state.truncated or search_truncated or truncated_file_count > 0
+                scanner.truncated or search_truncated or truncated_file_count > 0
             ),
             "scan_entry_limit": self.max_scan_entries,
             "scanned_bytes": scanned_bytes,
@@ -294,44 +289,6 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
         if binary:
             payload["encoding"] = "base64"
         return ConfinedFilesystemResult(payload, self._classification(observation))
-
-    def _walk(self, root, *, max_depth, execution_control, state):
-        pending = deque([(Path(root), 0)])
-        while pending:
-            self._check_execution(execution_control)
-            current_path, depth = pending.popleft()
-            try:
-                with os.scandir(current_path) as iterator:
-                    directories: list[Path] = []
-                    for child in iterator:
-                        self._check_execution(execution_control)
-                        if state.scanned_entries >= self.max_scan_entries:
-                            state.truncated = True
-                            return
-                        state.scanned_entries += 1
-                        path = Path(child.path)
-                        try:
-                            info = path.lstat()
-                        except OSError:
-                            continue
-                        kind = file_type(info.st_mode)
-                        yield (
-                            {
-                                "path": str(path),
-                                "name": child.name,
-                                "type": kind,
-                                "depth": depth + 1,
-                                "size_bytes": (
-                                    info.st_size if kind == "file" else None
-                                ),
-                            },
-                            path,
-                        )
-                        if kind == "directory" and depth + 1 < max_depth:
-                            directories.append(path)
-            except OSError:
-                continue
-            pending.extend((directory, depth + 1) for directory in directories)
 
     @staticmethod
     def _check_execution(execution_control) -> None:
@@ -406,12 +363,6 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
 
 
 __all__ = ["FullAccessFilesystem"]
-
-
-@dataclass
-class _FilesystemScanState:
-    scanned_entries: int = 0
-    truncated: bool = False
 
 
 class _JsonArrayDigest:

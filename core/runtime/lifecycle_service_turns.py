@@ -136,6 +136,12 @@ def transition_runtime_turn(
         save_session_started_at = time.perf_counter()
         store.save_session(replace(session, last_progress_at=timestamp, updated_at=timestamp))
         _record_transition_timing(timing_payload, "save_session_ms", save_session_started_at)
+        if saved.status in {"completed", "failed", "cancelled", "timed-out"}:
+            store.revoke_api_tokens_for_turn(
+                session_id=saved.session_id,
+                turn_id=saved.turn_id,
+                now=timestamp,
+            )
         if update_thread:
             thread_update_started_at = time.perf_counter()
             _update_thread_for_turn_transition(store, saved)

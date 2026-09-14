@@ -121,6 +121,11 @@ def runtime_api_token_record_from_claims(claims: RuntimeApiTokenClaims) -> Runti
         status="active",
         issued_at=datetime.fromtimestamp(int(claims["issued_at"]), tz=UTC),
         expires_at=datetime.fromtimestamp(int(claims["expires_at"]), tz=UTC),
+        runtime_turn_id=(
+            str(claims["runtime_turn_id"])
+            if claims.get("runtime_turn_id")
+            else None
+        ),
     )
 
 
@@ -159,6 +164,7 @@ def validate_workspace_api_token_lifecycle(
         record.session_id != str(claims["runtime_session_id"])
         or record.workspace_id != str(claims["workspace_id"])
         or record.mode != str(claims["mode"])
+        or record.runtime_turn_id != claims.get("runtime_turn_id")
     ):
         return None, "runtime_token_mismatch"
     try:
@@ -180,8 +186,33 @@ def validate_workspace_api_token_lifecycle(
         allow_same_turn_pairing=bool(claims.get("runtime_turn_id")),
     )
     if journal_reason is not None:
+        if record.runtime_turn_id and _turn_is_inactive(
+            store,
+            session_id=record.session_id,
+            workspace_id=record.workspace_id,
+            turn_id=record.runtime_turn_id,
+        ):
+            store.revoke_api_token(record.token_id, now=timestamp)
         return None, journal_reason
     return claims, None
+
+
+def _turn_is_inactive(
+    store: RuntimeStore,
+    *,
+    session_id: str,
+    workspace_id: str,
+    turn_id: str,
+) -> bool:
+    try:
+        turn = store.get_turn(turn_id)
+    except Exception:
+        return True
+    return (
+        turn.session_id != session_id
+        or turn.workspace_id != workspace_id
+        or turn.status not in {"active", "waiting_for_tool_confirmation"}
+    )
 
 
 def _sign(encoded_payload: str) -> str:

@@ -8,6 +8,9 @@ from typing import Iterable
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 
 
+_SUPPORTED_JOURNAL_SCHEMA_VERSIONS = frozenset({"3", "4", "5"})
+
+
 @dataclass(frozen=True)
 class RestoredHostedBudgetAccounting:
     steps: int = 0
@@ -98,7 +101,7 @@ def _validate_restore_record(record: object) -> None:
         request_max_output = getattr(record, "request_max_output_tokens", 0)
         estimated_input = getattr(record, "budget_estimated_input_tokens", 0)
         if (
-            schema_version != "3"
+            schema_version not in _SUPPORTED_JOURNAL_SCHEMA_VERSIONS
             or not isinstance(request_control_digest, str)
             or len(request_control_digest) != 64
             or request_phase

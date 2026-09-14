@@ -113,6 +113,7 @@ async def execute_agentic_runtime_turn(
             provider_state=provider_state,
             local_launch_spec=local_launch_spec,
             invoked_skills=tuple(invoked_skills or ()),
+            correlation_id=correlation_id,
         )
     )
     if not prepared.ready:

@@ -286,7 +286,7 @@ class HostedAgenticFinalOutputRecoveryTest(unittest.TestCase):
                 turn_id="turn-new",
                 allow_same_turn_pairing=True,
             ),
-            "provider_state_ambiguous",
+            "provider_pairing_ambiguous",
         )
         self.assertIsNone(
             provider_step_admission_reason(

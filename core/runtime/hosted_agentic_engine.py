@@ -118,6 +118,8 @@ class HostedAgenticEngineAdapter:
         journal_reason = provider_step_admission_reason(
             self.loop.tool_ledger.store,
             session_id=persisted_session.session_id,
+            turn_id=context.correlation_id,
+            allow_same_turn_pairing=context.correlation_id is not None,
         )
         if journal_reason is not None:
             return RuntimePrepareResult(

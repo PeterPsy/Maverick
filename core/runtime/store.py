@@ -607,6 +607,15 @@ class RuntimeStore(Protocol):
     def revoke_api_token(self, token_id: str, *, now: datetime | None = None) -> RuntimeApiTokenRecord | None:
         ...
 
+    def revoke_api_tokens_for_turn(
+        self,
+        *,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> int:
+        ...
+
     def claim_client_message_id(
         self,
         *,
@@ -1283,6 +1292,31 @@ class RuntimeDocumentStore:
         revoked = replace(record, status="revoked", revoked_at=now or datetime.now(tz=UTC))
         self.save_api_token(revoked)
         return revoked
+
+    def revoke_api_tokens_for_turn(
+        self,
+        *,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> int:
+        if self.collections.api_tokens is None:
+            return 0
+        timestamp = now or datetime.now(tz=UTC)
+        active = self.collections.api_tokens.find(
+            {
+                "session_id": session_id,
+                "runtime_turn_id": turn_id,
+                "status": "active",
+            }
+        )
+        for document in active:
+            self.collections.api_tokens.update_one(
+                {"token_id": document["token_id"], "status": "active"},
+                {"$set": {"status": "revoked", "revoked_at": timestamp}},
+                upsert=False,
+            )
+        return len(active)
 
     def get_session(self, session_id: str) -> RuntimeSessionRecord:
         query = self._session_query(session_id)

@@ -116,11 +116,15 @@ hosted adapter follows the same universal loop and full-access contract.
 
 ## Validation record
 
-Current 2026-09-14 validation passes 1,227 root unit tests with five skips, 381
+Current 2026-09-14 validation passes 1,225 root unit tests with five skips, 381
 provider tests, 204 runtime-state tests, 171 runtime-tool tests, 28 egress tests
-and 350 API tests. The complete fast run passes every functional area and app
-shard; its only non-zero checks are the three existing repository convention
-baselines for file-size/layout/reference budgets.
+and 350 API tests. A complete fast run on detached commit `8c9bc9ae` reached
+every functional area and app shard. Its persistent failures are the three
+existing repository convention baselines for file-size/layout/reference
+budgets. Two load-sensitive timing assertions that passed in root discovery
+failed in their repeated area shards and then passed three consecutive focused
+runs. One Browser check could not resolve the main checkout's `node_modules`
+from the detached worktree and passed immediately in the primary checkout.
 
 The controlled in-flight recovery test interrupts the OpenRouter loop after a
 filesystem result and provider step are durably committed, constructs a fresh

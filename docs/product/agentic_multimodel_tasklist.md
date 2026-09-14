@@ -80,9 +80,9 @@ hosted adapter follows the same universal loop and full-access contract.
 
 - [ ] Keep a focused composer regression for repeated profile revisions and
   default-binding priority.
-- [ ] Run an OpenRouter GLM agentic smoke after adapter, routing, tool-loop or
+- [x] Run an OpenRouter GLM agentic smoke after adapter, routing, tool-loop or
   effective-authority changes.
-- [ ] Run an independent Codex start/turn smoke after provider catalog changes.
+- [x] Run an independent Codex start/turn smoke after provider catalog changes.
 - [ ] Extend governed-tool integration coverage as new Full Workspace actions
   are added.
 - [ ] Improve operator diagnostics for credential, route, upstream and policy
@@ -105,7 +105,7 @@ hosted adapter follows the same universal loop and full-access contract.
   cancellation checks and page-entry classification joins.
 - [x] Restore the bounded turn-side prewarm delay/join; only the client-facing
   prepare call remains non-blocking, with no unmeasured cold-start claim.
-- [ ] Record the final post-commit OpenRouter GLM and Codex restart smoke below.
+- [x] Record the final post-commit OpenRouter GLM and Codex restart smoke below.
 
 ## Validation record
 
@@ -113,11 +113,39 @@ The universal-loop change was validated on 2026-09-14 with 378 provider tests,
 190 runtime-state tests, 166 runtime-tool tests, and 27 egress tests passing.
 The focused parity coverage exercises the shared Codex/OpenRouter capability
 contract, live full-access list/read/search/write/edit/patch/move/delete,
-installed `git` and `rg`, managed process start/status/stdin/interrupt, parallel
-Google and OpenRouter tool calls, independent invalid-call recovery, and
-restart journal reconciliation. The backend also restarted successfully while
-the implementation was in progress; final restart health is checked after the
-change is committed.
+installed `git`, `rg` and authenticated `maverick` CLI execution, managed
+process start/status/stdin/interrupt, parallel Google and OpenRouter tool
+calls, independent invalid-call recovery, and restart journal reconciliation.
+The hosted runtime installs the same Maverick wrapper used by native runtimes,
+adds installed vendored CLI paths without hard-coded package locations, and
+uses a turn-scoped bearer so a CLI subcall is admitted during its owning
+provider step while pending steps from another turn remain blocked.
+
+The staged snapshot later committed as `12b1f61b` passed 1,223 root unit tests
+with five skips. Focused suites passed 380 provider tests, 202 runtime-state
+tests, 170 runtime-tool tests, 28 egress tests and 350 API tests. The fast suite
+passed its unit, runtime, runtime-state, app-hosting, process, stream, script
+and all app shards. Its only remaining failures are the three pre-existing
+repository convention baselines for file-size/layout/reference budgets.
+
+The final live OpenRouter sequence used session
+`b2eae95d-a5e4-42d4-b401-c6404e258353`. Turn
+`63d34bb6-9a9d-4824-976c-f6f985caa3a5` emitted two independent
+`filesystem.read` calls in one provider response; both `started` events were
+persisted before either `completed` event, and both results reached the final
+answer. Turn `ed20d639-50a0-43c3-87ce-607972ae2689` then completed one
+`shell.run` containing `git --version`, `rg --version` and
+`maverick core cli list --json`, all at exit code zero. After a backend restart,
+turn `737507c2-0f2b-418b-a3c7-7c58b25946c6` completed another filesystem tool
+and final response in the same session.
+
+After commit `12b1f61b` and a further backend restart, both persisted sessions
+were healthy and continued normally. OpenRouter turn
+`4f40aec8-00d4-4cf3-9dc1-6cdff2bae11f` completed a filesystem read and final
+response. Codex session `b1610ebb-6a15-4ed9-a328-709babcf22f2`, which had
+already completed two reads plus a shell turn containing the same three CLI
+checks, completed post-restart turn `50c936a6-5906-4d06-abab-e905b19af803`
+with another tool result and final response.
 
 An isolated snapshot of the exact staged change passed all 1,214 root unit
 tests with five skips. The fast suite also passed its API, runtime,

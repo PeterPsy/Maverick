@@ -63,7 +63,11 @@ def runtime_continuation_handoff_from_document(
     payload = dict(document)
     target_binding = payload.get("target_execution_binding")
     if isinstance(target_binding, dict):
-        payload["target_execution_binding"] = execution_binding_from_document(target_binding)
+        if payload.get("target_binding_digest") != target_binding.get("binding_digest"):
+            raise ValueError("Runtime continuation handoff target binding digest is inconsistent.")
+        binding = execution_binding_from_document(target_binding)
+        payload["target_execution_binding"] = binding
+        payload["target_binding_digest"] = binding.binding_digest
     elif not isinstance(target_binding, RuntimeExecutionBinding):
         raise ValueError("Runtime continuation handoff target binding is invalid.")
     payload["compatible_capabilities"] = tuple(

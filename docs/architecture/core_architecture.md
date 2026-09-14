@@ -588,6 +588,10 @@ stored value when the current field is absent. Other legacy fields from the
 retired issuance design are ignored and a new direct binding digest is computed.
 They grant no authority. This lets startup read existing sessions and run normal
 restart recovery without recreating agents or rewriting stored snapshots by hand.
+Continuation handoff hydration also validates the target digest against the
+original embedded binding before normalizing both to the direct binding digest.
+Completed historical handoffs remain readable during automatic restart recovery;
+an inconsistent original reference or embedded digest is still rejected.
 
 `EffectiveRuntimeAuthority` is ephemeral and non-bearer. It intersects the
 pinned capability snapshot with profile policy, workspace policy, feature flags,

@@ -19,8 +19,33 @@ from core.runtime.execution_binding import (
 
 
 class ExecutionBindingLegacyDigestTestCase(unittest.TestCase):
+    def test_current_binding_round_trip_preserves_immutable_snapshot(self) -> None:
+        binding = _execution_binding()
+
+        self.assertEqual(execution_binding_from_document(asdict(binding)), binding)
+
+    def test_retired_adapter_digest_is_renamed_after_validation(self) -> None:
+        binding = _execution_binding()
+        serialized = asdict(binding)
+        serialized["adapter_artifact_digest"] = serialized.pop("adapter_identity_digest")
+        serialized["binding_digest"] = canonical_digest(serialized)
+
+        self.assertEqual(execution_binding_from_document(serialized), binding)
+        self.assertIn("adapter_artifact_digest", serialized)
+        self.assertNotIn("adapter_identity_digest", serialized)
+
+    def test_tampered_retired_adapter_digest_is_rejected(self) -> None:
+        serialized = asdict(_execution_binding())
+        serialized["adapter_artifact_digest"] = serialized.pop("adapter_identity_digest")
+        serialized["binding_digest"] = canonical_digest(serialized)
+        serialized["adapter_artifact_digest"] = "c" * 64
+
+        with self.assertRaisesRegex(ValueError, "digest does not match"):
+            execution_binding_from_document(serialized)
+
     def test_legacy_digest_validation_is_bounded_by_schema_groups(self) -> None:
         serialized = asdict(_execution_binding())
+        serialized["adapter_artifact_digest"] = serialized.pop("adapter_identity_digest")
         serialized["certified_reasoning_efforts"] = serialized.pop(
             "reasoning_efforts"
         )
@@ -48,6 +73,8 @@ class ExecutionBindingLegacyDigestTestCase(unittest.TestCase):
             rehydrated = execution_binding_from_document(serialized)
 
         self.assertNotEqual(rehydrated.binding_digest, serialized["binding_digest"])
+        self.assertEqual(rehydrated.adapter_identity_digest, serialized["adapter_artifact_digest"])
+        self.assertNotIn("adapter_artifact_digest", asdict(rehydrated))
         self.assertTrue(rehydrated.capabilities_snapshot.tool_orchestration)
         self.assertFalse(rehydrated.capabilities_snapshot.confirmations)
         self.assertLessEqual(digest.call_count, 8)

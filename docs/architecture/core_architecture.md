@@ -581,9 +581,13 @@ narrow the profile capabilities.
 
 A `RuntimeExecutionBinding` pins the direct profile snapshot into a session. It
 contains declared capabilities and reasoning efforts plus adapter identity,
-routing, policy, model, recipe and provider-config identities. Legacy stored
-fields from the retired issuance design are ignored during hydration and a new
-direct binding digest is computed. They grant no authority.
+routing, policy, model, recipe and provider-config identities. Hydration first
+validates the original stored binding digest, then maps the retired
+`adapter_artifact_digest` field to `adapter_identity_digest`, preserving the
+stored value when the current field is absent. Other legacy fields from the
+retired issuance design are ignored and a new direct binding digest is computed.
+They grant no authority. This lets startup read existing sessions and run normal
+restart recovery without recreating agents or rewriting stored snapshots by hand.
 
 `EffectiveRuntimeAuthority` is ephemeral and non-bearer. It intersects the
 pinned capability snapshot with profile policy, workspace policy, feature flags,

@@ -231,6 +231,10 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
         raise ValueError(
             "Runtime execution binding digest does not match its immutable payload."
         )
+    if "adapter_artifact_digest" in payload:
+        payload.setdefault(
+            "adapter_identity_digest", payload.pop("adapter_artifact_digest")
+        )
     for field_name in (
         "capability_certificate_id",
         "certificate_evidence_digest",

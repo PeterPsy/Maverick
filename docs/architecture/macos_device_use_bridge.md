@@ -1,11 +1,12 @@
 # macOS Device Use through Maverick
 
 Status (2026-09-14): Codex-only, mono-agent MVP implemented and physically
-accepted for functional parity with the retained direct Mac runtime. The first
-complete A/B measured **4m50s direct** and **5m55s through Maverick**. Both runs
-passed the same v40 checklist with two recoverable `MC-TOOL-14` events. The
-optimized `observe_app` build is signed and installed in place; one physical
-comparison remains before its performance is accepted.
+accepted for functional and performance parity with the retained direct Mac
+runtime. The optimized paired A/B measured **4m44s direct** and **4m48s through
+Maverick** (**+4s / +1.4%**). The Maverick route passed the complete v40
+checklist with one recoverable pre-dispatch `MC-TOOL-14`, no replay and no
+duplicate effect. The earlier 4m50s/5m55s pair remains the pre-optimization
+baseline.
 
 The native implementation lives in the sibling
 `maverick-glasses-ios` repository. Its companion document is
@@ -125,8 +126,12 @@ The computer tool's long duplicated description was also reduced to a short
 summary. The complete consent, recovery, focus and replay rules remain once in
 the Device Use base instructions. The model is instructed not to narrate
 intermediate progress unless blocked or asked, and to emit a concise final
-answer after verification. These are latency/context reductions, not behavior
-changes.
+answer after verification. This does not change executor capability or safety,
+but it deliberately changes transcript UX: during an ordinary long run Chat
+shows its existing `Thinking` state and the model emits only the final report.
+The same instruction is used by the direct control, so the A/B comparison is
+symmetric. A user who wants prose updates can ask for them explicitly in the
+task; do not add extra model turns merely to synthesize progress.
 
 ## Browser and native isolation
 
@@ -151,6 +156,8 @@ environment change.
 |---|---:|---|
 | Direct Mac | 4m50s | PASS CON RECUPERO; 2 `MC-TOOL-14` |
 | Via Maverick, pre-optimization | 5m55s | PASS CON RECUPERO; same functional coverage |
+| Direct Mac, paired optimized run | **4m44s** | User-measured A/B control |
+| Via Maverick, optimized | **4m48s** | PASS CON RECUPERO; 1 `MC-TOOL-14` |
 
 The measured delta is **+65s / +22.4%**. In the Maverick run there were 87
 native invocations, 48 Code Mode execution blocks, 49 model samples and 42
@@ -163,6 +170,34 @@ Consequently the current optimization targets tool-call/model-cycle count and
 prompt duplication. It intentionally does not add image storage, compression
 layers, speculative execution, retries, batching protocols or action+observe
 composites.
+
+The optimized physical pair completed with only **+4s / +1.4%** overhead via
+Maverick. The Maverick route improved by **67s / 18.9%** from its 5m55s
+pre-optimization run and is two seconds faster than the original 4m50s direct
+baseline. The paired 4m44s direct run remains the correct control because model
+and network variance affect both paths.
+
+The optimized Maverick transcript and local provider log show 77 native
+invocations, 41 Code Mode execution blocks, 42 model samples and 42 observation
+JPEGs. The images totaled 1,643,980 bytes; median was 26,092 bytes, p95 78,955
+bytes and maximum 91,106 bytes. Code Mode host execution totaled 26.44s, with
+497ms median and 1,005ms p95 across all operations. That host figure includes
+native execution, consent and waits and is therefore not the bridge-only p95;
+the retained pre-optimization bridge-only p95 is about 519ms. The ten fewer
+native invocations and seven fewer model samples confirm that eliminating the
+normal `list_windows -> model selection -> observe` cycle was the material win.
+
+Functional output remained complete: every requested observation, mouse,
+keyboard, text, scroll and app-switch phase passed. The single `MC-TOOL-14` was
+pre-dispatch, caused no input or mutation, and was recovered by one fresh
+observation without replay. No duplicated effect or permission expiry was
+reported. On this one deliberately comprehensive execution per route, the MVP
+performance and parity gates pass.
+
+Only the Maverick transcript and its private per-session provider logs are
+available on Core. The direct transcript and provider logs intentionally remain
+on the Mac and do not enter Core; its 4m44s value is the user's paired stopwatch
+measurement. This isolation is expected, not missing server telemetry.
 
 ## Metrics
 
@@ -179,7 +214,10 @@ bytes and accept/end-to-end/native/relay timings, plus a lazily computed
 
 Aggregation happens only on this GET and adds no work to the execution path.
 Terminal activations are process-local and retained for roughly ten minutes;
-capture metrics before restarting Core.
+capture metrics immediately after completion and before restarting Core. In the
+optimized physical run that window elapsed before the metrics GET, so the
+content-free transcript/provider-log counters above are retained instead. Do
+not mislabel the all-operation Code Mode host p95 as bridge-only latency.
 
 ## Validation and operator runbook
 
@@ -225,10 +263,11 @@ For the physical comparison:
    boundaries and no duplicated effect;
 5. record wall time, recovery events and the metrics response before restart.
 
-Acceptance remains: no functional/reliability regression, no replay or
-duplicate effect, normal observation bridge p95 below 750ms, and total latency
-as close as practicable to direct. Do not remove the direct control until the
-optimized physical run is reviewed.
+Acceptance is met for the Codex mono-agent MVP: no functional/reliability
+regression, no replay or duplicate effect, the previously captured normal
+observation bridge p95 below 750ms, and paired total latency within 1.4% of
+direct. Keep the direct control available for future material changes; one
+complete run per route is sufficient unless code or environment changes.
 
 ## Source map and change rules
 

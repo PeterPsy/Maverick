@@ -4,11 +4,11 @@ This document describes the retained direct-provider A/B control. The
 Codex-via-Maverick executor route is documented separately in
 [`macos_device_use_bridge.md`](macos_device_use_bridge.md).
 
-Status (2026-09-14): retained and physically accepted A/B control. A complete
-v40 direct run passed with recovery in **4m50s**. The same task through Maverick
-passed in **5m55s** before the current observation-path optimization. The native
-executor is shared by both routes; only model ownership and image transport
-differ.
+Status (2026-09-14): retained and physically accepted A/B control. The paired
+optimized v40 runs completed in **4m44s direct** and **4m48s via Maverick**,
+only **+4s / +1.4%** through Core. The earlier baselines were 4m50s direct and
+5m55s through Maverick. The native executor is shared by both routes; only
+model ownership and image transport differ.
 
 Current per-task consent is unlimited for the exact active turn and approved app
 set: there is no time or action-count ceiling. It is still revoked by turn end,
@@ -69,11 +69,21 @@ only call correlation plus the JPEG in `turn/steer`; full metadata appears once
 in the tool result. These reductions apply to both direct and Maverick routes
 without changing the screenshot, snapshot or safety checks.
 
+Both routes also share the concise-output instruction: unless the user asks for
+updates or the task is blocked, the model does not narrate intermediate tool
+progress. A long run therefore shows the existing `Thinking` status followed by
+the final report. This is an intentional latency/context trade-off, not a
+streaming failure; asking for progress in the task re-enables it. It changes
+transcript presentation, not computer-use capability.
+
 Codex uses a dedicated private HOME, fixed OpenAI provider, no inherited MCP,
 plugins, hooks or project instructions, disabled shell tools and code-mode,
 read-only sandbox and fail-closed approval responses. Only the pinned bundled
 binary is launched. Provider logs/rollouts are private local operational data;
 ephemeral threads avoid intentionally archiving screen observations.
+Consequently Core cannot inspect the direct transcript or its provider logs by
+design. Direct A/B wall times must be recorded on the Mac; this is not a missing
+Core event path.
 
 ## Credential provisioning
 

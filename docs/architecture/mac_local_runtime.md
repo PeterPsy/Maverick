@@ -84,6 +84,9 @@ ephemeral threads avoid intentionally archiving screen observations.
 Consequently Core cannot inspect the direct transcript or its provider logs by
 design. Direct A/B wall times must be recorded on the Mac; this is not a missing
 Core event path.
+The 4m44s/4m48s comparison uses the same user stopwatch boundary. Core also
+persisted its Maverick turn as 299.86s, but has no equivalent direct interval;
+do not compare those two different measurement boundaries.
 
 ## Credential provisioning
 

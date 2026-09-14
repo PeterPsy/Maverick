@@ -199,6 +199,13 @@ available on Core. The direct transcript and provider logs intentionally remain
 on the Mac and do not enter Core; its 4m44s value is the user's paired stopwatch
 measurement. This isolation is expected, not missing server telemetry.
 
+The paired stopwatch is the comparison-of-record because it used the same user
+boundary for both routes. Independently, Core persisted the Maverick turn from
+14:13:48.109 to 14:18:47.964 UTC (**299.86s**): 2.65s to provider acceptance,
+270.25s until the first final-output delta and 26.93s to stream the final report.
+This distinct server interval has no matching direct measurement and must not be
+mixed into the +4s paired delta.
+
 ## Metrics
 
 While an activation is retained, authenticated

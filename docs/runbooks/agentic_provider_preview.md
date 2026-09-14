@@ -1,12 +1,7 @@
-# Agentic Provider Activation Runbook
+# OpenRouter GLM Agent Activation Runbook
 
-This runbook activates a direct agentic profile for new sessions. It does not
-create model authority; the profile already declares the runtime contract.
-
-## Scope
-
-The primary hosted target is OpenRouter GLM 5.3 Flash using the Maverick-owned
-agent loop. Google API activation is outside this runbook.
+This runbook activates the direct OpenRouter GLM profile for new sessions.
+Google API activation is outside this runbook.
 
 ## Preconditions
 
@@ -36,8 +31,8 @@ Inspect provider status and confirm:
 - reasoning efforts are `max`, `high`, `low`;
 - endpoint/upstream and data destination match the profile.
 
-A browser field is never sufficient evidence of authority. The server-owned
-`selectable` and effective-capability projection are decisive.
+A browser field is never sufficient authority. The server-owned `selectable` and
+effective-capability projection are decisive.
 
 ## Activation
 
@@ -49,6 +44,17 @@ selection are separate operations.
 Never rewrite existing runtime session bindings. New chats pin the current
 direct profile. Existing chats retain their immutable session pin and pass live
 policy checks on each turn.
+
+## Model and adapter updates
+
+Publish or reconcile a new immutable profile revision when model, adapter,
+routing or capability behavior changes. Keep prior revisions available to
+historical sessions. New sessions resolve the enabled current binding.
+
+The administration surface may show revision history. Chat groups rows by
+execution family/provider/model and renders only the configured default or the
+newest eligible revision. Do not delete historical bindings merely to clean the
+composer.
 
 ## Smoke test
 
@@ -79,13 +85,12 @@ Stop activation if any of these occur:
 - leaked secret, host path or provider-private payload;
 - cancellation/recovery cannot reach a deterministic terminal state.
 
-Disable the workspace binding or provider feature flag to stop new work. Do not
-repair an outage by changing dates or issuing another capability artifact; fix
-the profile, adapter, provider config, credentials or live policy that actually
-failed.
+Disable the workspace binding or provider feature flag to stop new work. Fix the
+profile, adapter, provider config, credentials or live policy that failed, then
+repeat the read-only verification and smoke test.
 
 ## Codex stability
 
 OpenRouter changes must not restart Codex, rewrite Codex bindings or alter Codex
-session history. Codex model/catalog changes follow normal profile reconciliation
-and do not require a Maverick renewal step.
+session history. Codex model/catalog changes follow normal profile
+reconciliation and are tested independently.

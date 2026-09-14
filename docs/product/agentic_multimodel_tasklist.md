@@ -1,8 +1,15 @@
-# Agentic Multi-Model Runtime — Current Delivery Checklist
+# Agentic Multi-Model Runtime — Delivery and Development Plan
 
 Updated: 2026-09-14
 
-## Delivered architecture
+## Product objective
+
+Provide OpenRouter `z-ai/glm-5.3-flash` as a Full Workspace agent driven by the
+Maverick tool loop, with a user experience comparable to the native Codex path.
+Codex must remain independently usable throughout OpenRouter changes. Google API
+integration is not part of the current delivery objective.
+
+## Delivered runtime
 
 - [x] Native Agent and Maverick Agent execution families.
 - [x] Direct immutable profile capabilities and reasoning choices.
@@ -14,22 +21,24 @@ Updated: 2026-09-14
 - [x] OpenRouter Chat Completions adapter for `z-ai/glm-5.3-flash`.
 - [x] Full Workspace OpenRouter profile with `max`, `high`, `low` reasoning.
 - [x] Direct OpenRouter dispatch without a mutable per-step catalog veto.
-- [x] Codex native app-server catalog projection without a renewal dependency.
-- [x] Chat and Settings selection based on direct server readiness.
+- [x] Native Codex app-server catalog projection.
 - [x] Separate text-only provider path with no actions.
 
-## Removed obsolete architecture
+## Profile management
 
-- [x] Separate issued capability records and status collections.
-- [x] Expiry, renewal, revocation and evidence-publication workflows for model
-  admission.
-- [x] Provider-specific probe publication scripts that could change runtime
-  authority.
-- [x] Source-byte artifact guard that could disable Codex after an update.
-- [x] Browser expiry/status badges and client eligibility filters.
-- [x] API, CLI and MCP endpoints for the retired lifecycle.
+- Profile definitions are immutable and revisioned.
+- Rollout state determines whether a profile can be selected.
+- A workspace binding determines enablement, credential reference, actor/policy
+  narrowing and the default selection.
+- Core computes live effective authority from the direct profile plus current
+  workspace, provider, runtime, model, credential, egress and tool state.
+- Model or adapter updates create/reconcile the current profile revision for new
+  sessions; existing sessions retain their immutable binding.
+- Administration surfaces may expose revision history. Chat and Settings show
+  one entry per execution family/provider/model, preferring the configured
+  default and otherwise the newest eligible revision.
 
-## Security boundaries retained
+## Security boundaries
 
 - [x] Authentication and workspace authorization.
 - [x] Core secret/provider credential bindings.
@@ -41,17 +50,33 @@ Updated: 2026-09-14
 - [x] Request/tool journals, budgets, cancellation and recovery.
 - [x] Public/private payload separation and redaction.
 
-## Acceptance
+## Acceptance completed
 
-- [x] Backend restarted on the new persistence/API shape.
+- [x] Backend restarted on the direct persistence/API shape.
 - [x] Health and provider projections verified after restart.
 - [x] Existing OpenRouter secret binding detected without exposing its value.
 - [x] OpenRouter GLM selectable in the target workspace.
-- [x] Real bounded OpenRouter agentic turn completes with a governed tool call.
-- [x] Codex remains selectable and can start a normal native session.
+- [x] Real bounded OpenRouter agentic turn completed with a governed tool call.
+- [x] Codex remained selectable and started a normal native session.
+- [x] Composer groups repeated historical revisions into one model entry.
+- [x] Persisted session pins and completed handoffs use the current direct
+  binding schema.
 - [x] Focused Python, Chat and Settings suites pass.
-- [x] Fast suite passes except independently documented repository-baseline
-  convention failures.
+- [x] Fast functional areas pass apart from independently documented repository
+  convention baselines.
+
+## Ongoing development plan
+
+- [ ] Keep a focused composer regression for repeated profile revisions and
+  default-binding priority.
+- [ ] Run an OpenRouter GLM agentic smoke after adapter, routing, tool-loop or
+  effective-authority changes.
+- [ ] Run an independent Codex start/turn smoke after provider catalog changes.
+- [ ] Extend governed-tool integration coverage as new Full Workspace actions
+  are added.
+- [ ] Improve operator diagnostics for credential, route, upstream and policy
+  failures without exposing secrets or provider-private state.
+- [ ] Keep Chat, Settings and `/api/providers` selection semantics aligned.
 
 ## Validation record
 
@@ -64,17 +89,20 @@ usage was recorded and no runtime error occurred.
 
 Codex remained installed, healthy and selectable after the same backend
 restart. Prepared session `ceb73c4b-b3c4-4f0c-902d-acaa57bba00d` started in
-Full Workspace mode with provider `codex` and no issued-capability fields.
+Full Workspace mode with provider `codex`.
 
-The complete Python unit discovery passed 1,202 tests with five skips. The Chat
+The complete Python unit discovery passed 1,207 tests with five skips. The Chat
 and Settings focused frontend suites and builds passed. The fast suite passed
-all functional areas; its four failures are the pre-existing repository
-convention checks for file size/layout/reference budgets. One unrelated
-temporary-directory cleanup race in the Chat/Codex project-delete test passed
-immediately when rerun in isolation.
+all functional areas; its four failures were pre-existing repository convention
+checks for file size/layout/reference budgets. One unrelated temporary-directory
+cleanup race in the Chat/Codex project-delete test passed immediately when rerun
+in isolation.
 
-The active JSON control plane was upgraded in place: all profile definitions
-now carry direct capability and reasoning fields, the three retired issued
-capability collections are absent, and the obsolete private signing secret and
-encrypted value were removed. Historical session records remain immutable and
-their ignored legacy metadata grants no authority.
+The active JSON control plane stores direct profile capability and reasoning
+fields. Workspace bindings and immutable session pins preserve selection state,
+while live runtime checks can only narrow what a profile declares.
+
+The persistence migration normalized 96 session bindings and 16 completed
+continuation handoffs to that direct schema. One already-invalid historical
+binding was closed as failed while preserving its transcript; strict hydration
+then succeeded for all 101 persisted sessions and all 16 handoffs.

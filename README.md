@@ -93,8 +93,8 @@ For local service installs, hosted evaluation, MongoDB, nginx, certbot, systemd,
 - **Apps:** product behavior packaged under `apps/<app_id>/` with an `app_contract.json`.
 - **Widgets:** small app-owned surfaces that can render inside other apps without source imports.
 - **Runtime agents and skills:** provider-backed agent sessions that use workspace-owned skills and runtime roots.
-- **Provider abstraction:** Codex is the default concrete runtime backend today. Hosted model providers such as OpenRouter are separate text-generation providers for fast/plain hosted chat and do not replace the agentic Codex runtime.
-- **Remote agentic containment:** Google/OpenRouter API agents and uncertified native connections remain **NO-GO**. P6 separates deterministic collection, exact-target synthetic live receipts, independent natural behavioral evidence, trusted signing, and later security/canary/release decisions. Ordinary checks are fixture-only; neither a green subprocess nor a fixture/protocol-only run can be signed as a complete certificate. Existing Codex and text-only paths remain separate. See [P6 certification boundary](docs/architecture/agentic_certification_p6.md).
+- **Provider abstraction:** Codex supplies the native agent loop. OpenRouter GLM can run as a Full Workspace agent through the Core-owned hosted tool loop, while plain hosted chat remains a separate text-only path.
+- **Agentic provider governance:** Immutable model profiles declare capabilities, reasoning, routing and policy. Workspace bindings select profiles, and Core intersects them with live credentials, health, actor, egress and tool authority before every provider request or effect.
 - **Persistence abstraction:** JSON is the default local control-plane adapter; MongoDB is optional for hosted evaluation.
 
 ## Apps Are The Integration Layer

@@ -148,7 +148,6 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                     },
                 },
             )
-            self.assertNotIn("certificate_posture", governance)
             self.assertEqual(governance["effective_capabilities"]["status"], "blocked")
             self.assertFalse(any(
                 value
@@ -178,10 +177,7 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         )
         self.assertEqual(remote_item["binding_status"], "disabled")
         self.assertEqual(remote_item["profile_status"], "suspended")
-        self.assertNotIn("certificate", remote_item)
-        self.assertNotIn("certificate_eligibility", remote_item)
         self.assertEqual(remote_item["effective_capabilities"]["status"], "blocked")
-        self.assertNotIn("tcb", remote_item["effective_capabilities"])
         self.assertEqual(
             remote_item["data_destination"],
             {

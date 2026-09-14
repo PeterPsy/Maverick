@@ -297,7 +297,6 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertTrue(hosted["profiles"])
         for item in hosted["profiles"]:
             self.assertEqual(item["profile"]["execution_family"], "hosted_text")
-            self.assertNotIn("certificate", item)
             self.assertEqual(
                 item["workspace_actions_message"],
                 "No workspace tools or actions.",

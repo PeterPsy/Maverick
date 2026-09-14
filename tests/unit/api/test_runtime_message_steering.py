@@ -78,7 +78,7 @@ class RuntimeMessageSteeringApiTestCase(AppReferenceApiTestSupport, unittest.Tes
                 "core.api.runtime_api.attempt_runtime_message_steer",
                 return_value=RuntimeMessageSteerAttempt(
                     status="fallback",
-                    reason="same_turn_steering_not_certified",
+                    reason="same_turn_steering_unavailable",
                 ),
             ), patch(
                 "core.api.runtime_api.submit_runtime_turn_async",
@@ -113,7 +113,7 @@ class RuntimeMessageSteeringApiTestCase(AppReferenceApiTestSupport, unittest.Tes
             payload["steering_fallback"],
             {
                 "delivery": "safe_next_turn",
-                "reason": "same_turn_steering_not_certified",
+                "reason": "same_turn_steering_unavailable",
             },
         )
 

@@ -278,7 +278,6 @@ def hosted_text_binding_from_document(
     profile_payload["output_modalities"] = tuple(profile_payload["output_modalities"])
     payload["profile"] = HostedTextProfileDefinition(**profile_payload)
     payload["status"] = HostedTextProfileStatus(**dict(status_document))  # type: ignore[arg-type]
-    payload.pop("certificate", None)
     payload["provider_routing_snapshot"] = _json_snapshot(
         payload.get("provider_routing_snapshot")
     )

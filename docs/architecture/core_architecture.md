@@ -565,12 +565,10 @@ the agentic loop and every dispatch revalidates the pinned route.
 - Full Workspace revision, execution family and harness recipe;
 - protocol-adapter and provider-config identities.
 
-Maverick does not issue, renew, expire or revoke a second capability document
-for that profile. There is no timer whose expiry can disable Codex or OpenRouter.
-A model or adapter update is handled as normal catalog/profile evolution: new
-sessions pin the current profile while historical session pins remain immutable.
-In particular, a newly advertised Codex model does not require a Maverick
-re-issuance step.
+This profile is the declared capability source. A model or adapter update is
+handled as normal catalog/profile evolution: new sessions pin the current
+profile while historical session pins remain immutable. Newly advertised Codex
+models are reconciled from the current native catalog.
 
 This simplification does not remove security boundaries. Before session creation
 and before provider requests or effects, Core still verifies the enabled
@@ -581,17 +579,10 @@ narrow the profile capabilities.
 
 A `RuntimeExecutionBinding` pins the direct profile snapshot into a session. It
 contains declared capabilities and reasoning efforts plus adapter identity,
-routing, policy, model, recipe and provider-config identities. Hydration first
-validates the original stored binding digest, then maps the retired
-`adapter_artifact_digest` field to `adapter_identity_digest`, preserving the
-stored value when the current field is absent. Other legacy fields from the
-retired issuance design are ignored and a new direct binding digest is computed.
-They grant no authority. This lets startup read existing sessions and run normal
-restart recovery without recreating agents or rewriting stored snapshots by hand.
-Continuation handoff hydration also validates the target digest against the
-original embedded binding before normalizing both to the direct binding digest.
-Completed historical handoffs remain readable during automatic restart recovery;
-an inconsistent original reference or embedded digest is still rejected.
+routing, policy, model, recipe and provider-config identities. Hydration
+validates the stored binding digest before constructing the direct binding.
+Continuation handoff hydration also requires the target digest to match the
+embedded binding. An inconsistent reference or embedded digest is rejected.
 
 `EffectiveRuntimeAuthority` is ephemeral and non-bearer. It intersects the
 pinned capability snapshot with profile policy, workspace policy, feature flags,
@@ -659,8 +650,8 @@ capability surface.
 Tool-schema review is separate from provider/model admission. Only Core-owned
 schemas marked with the reviewed schema component may be projected directly to
 hosted models. App-owned and dynamic tools remain discoverable through bounded
-Core wrappers and are re-resolved at invocation time. This review marker has no
-issuance, expiry or renewal lifecycle and cannot enable a model profile.
+Core wrappers and are re-resolved at invocation time. This review marker only
+classifies the tool schema and cannot enable a model profile.
 
 Before executing an app-owned wrapper, Core verifies its live descriptor,
 source, effect declaration and executable closure. Mutating or destructive
@@ -2072,10 +2063,9 @@ instead of inheriting them from the operator home. The fallback model is
 `ultra` remains a multi-agent mode and is not a reasoning choice.
 
 The Core creates a model-bound immutable profile and copies its direct reasoning
-and capability contract into the session execution binding. A newly advertised
-Codex model becomes eligible through normal catalog reconciliation and does not
-require a separate issuance, renewal or expiry update. Persisted provider model
-metadata cannot override the current built-in/live Codex catalog.
+and capability contract into the session execution binding. Newly advertised
+Codex models become eligible through normal catalog reconciliation. Persisted
+provider model metadata cannot override the current built-in/live Codex catalog.
 
 Every agentic model identity carries an `exact` or `provider_alias` revision
 policy. Exact revisions must remain identical across profile, binding, request

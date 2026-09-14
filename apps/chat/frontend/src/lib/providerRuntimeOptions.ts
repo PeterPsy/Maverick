@@ -19,27 +19,32 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
       : EXECUTION_FAMILY_CATALOG
     ).map((family, index) => [family.family_id, { ...family, index }]),
   );
-  const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
-    (profile) =>
-      profile.selectable === true &&
-      (profile.execution_family === "native_agent" || profile.execution_family === "maverick_agent") &&
-      profile.family_contract_status === "complete" &&
-      profile.full_workspace_status === "available" &&
-      nativeProfileRuntimeReady(payload, profile) &&
-      profile.containment_status !== "NO-GO" &&
-      profile.enabled &&
-      profile.effective_capabilities?.status === "active" &&
-      (profile.rollout_status === "preview" || profile.rollout_status === "available"),
+  const agenticProfiles = selectAgenticProfiles(
+    (payload.agentic_profiles?.items || []).filter(
+      (profile) =>
+        profile.selectable === true &&
+        (profile.execution_family === "native_agent" || profile.execution_family === "maverick_agent") &&
+        profile.family_contract_status === "complete" &&
+        profile.full_workspace_status === "available" &&
+        nativeProfileRuntimeReady(payload, profile) &&
+        profile.containment_status !== "NO-GO" &&
+        profile.enabled &&
+        profile.effective_capabilities?.status === "active" &&
+        (profile.rollout_status === "preview" || profile.rollout_status === "available"),
+    ),
+    payload.agentic_profiles?.default_binding_id || null,
   );
   if (agenticProfiles.length) {
     options.push(
-      ...agenticProfiles.map((profile) => {
+      ...agenticProfiles.map(({ profile, selectionIds }) => {
         const engine = [payload.active_provider, ...(payload.available_providers || [])].find(
           (provider) => provider?.provider_id === profile.runtime_engine_id,
         );
         const modelProvider = providerForAgenticProfile(payload, profile);
         const model = modelProvider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
         const reasoning = reasoningForAgenticProfile(payload, profile);
+        const isDefault = profile.is_default
+          || profile.workspace_profile_binding_id === payload.agentic_profiles?.default_binding_id;
         return decorateExecutionFamily({
           ...(engine || {
             description: "Pinned agentic runtime profile",
@@ -47,7 +52,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
             status: "active",
             default_model_family: profile.model_id,
           }),
-          provider_id: profile.is_default
+          provider_id: isDefault
             ? profile.runtime_engine_id
             : `agentic:${encodeURIComponent(profile.workspace_profile_binding_id)}`,
           provider_role: "runtime_engine",
@@ -76,7 +81,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           harness_recipe: profile.harness_recipe || null,
           provider_detail: agenticProviderDetail(profile),
           profile_detail: agenticProfileDetail(profile),
-          legacy_selection_ids: [profile.workspace_profile_binding_id],
+          legacy_selection_ids: selectionIds,
           capabilities: {
             ...(engine?.capabilities || {}),
             supports_skills: profile.effective_capabilities?.capabilities.skill_catalog === true,
@@ -131,6 +136,71 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
     dedupeProviders(options),
     payload.selection_migration?.records || [],
   );
+}
+
+const naturalProfileOrder = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "variant",
+});
+
+type AgenticProfileSelection = {
+  profile: AgenticProfileItem;
+  selectionIds: string[];
+};
+
+function selectAgenticProfiles(
+  profiles: readonly AgenticProfileItem[],
+  defaultBindingId: string | null,
+): AgenticProfileSelection[] {
+  const selections = new Map<string, AgenticProfileSelection>();
+  for (const profile of profiles) {
+    const key = JSON.stringify([
+      profile.execution_family,
+      profile.model_provider_id,
+      profile.model_id,
+    ]);
+    const current = selections.get(key);
+    if (!current) {
+      selections.set(key, {
+        profile,
+        selectionIds: [profile.workspace_profile_binding_id],
+      });
+      continue;
+    }
+    if (!current.selectionIds.includes(profile.workspace_profile_binding_id)) {
+      current.selectionIds.push(profile.workspace_profile_binding_id);
+    }
+    if (compareAgenticProfiles(profile, current.profile, defaultBindingId) > 0) {
+      current.profile = profile;
+    }
+  }
+  return Array.from(selections.values());
+}
+
+function compareAgenticProfiles(
+  left: AgenticProfileItem,
+  right: AgenticProfileItem,
+  defaultBindingId: string | null,
+): number {
+  return agenticProfilePriority(left, defaultBindingId)
+    - agenticProfilePriority(right, defaultBindingId)
+    || naturalProfileOrder.compare(left.definition_revision, right.definition_revision)
+    || naturalProfileOrder.compare(left.definition_id, right.definition_id)
+    || naturalProfileOrder.compare(
+      left.workspace_profile_binding_id,
+      right.workspace_profile_binding_id,
+    );
+}
+
+function agenticProfilePriority(
+  profile: AgenticProfileItem,
+  defaultBindingId: string | null,
+): number {
+  if (profile.workspace_profile_binding_id === defaultBindingId) return 4;
+  if (profile.is_default) return 3;
+  if (profile.enabled) return 2;
+  if (profile.selectable) return 1;
+  return 0;
 }
 
 function nativeProfileRuntimeReady(payload: ProviderPayload, profile: AgenticProfileItem): boolean {

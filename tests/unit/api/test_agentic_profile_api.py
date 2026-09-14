@@ -78,8 +78,6 @@ class AgenticProfileApiTest(unittest.TestCase):
         self.assertTrue(effective["capabilities"]["skill_catalog"])
         self.assertTrue(effective["capabilities"]["app_references"])
         self.assertEqual(effective["capabilities"]["attachment_modalities"], ("file",))
-        self.assertNotIn("tcb", effective)
-        self.assertNotIn("certificate", profile)
         self.assertNotIn("credential", json.dumps(effective, default=str).lower())
 
         runtime_binding = build_pinned_execution_binding(
@@ -204,7 +202,6 @@ class AgenticProfileApiTest(unittest.TestCase):
                 profiles[provider_id]["containment_reason"],
                 "hosted_agent_runtime_disabled",
             )
-            self.assertNotIn("certificate_eligibility", profiles[provider_id])
             effective = profiles[provider_id]["effective_capabilities"]
             self.assertEqual(effective["status"], "blocked")
             self.assertEqual(effective["reason_code"], "hosted_agent_runtime_disabled")

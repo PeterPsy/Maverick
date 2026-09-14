@@ -11,9 +11,9 @@ Full Workspace revision. Registration validates those fields and the callable
 lifecycle controller.
 
 The connection is model-catalog scoped rather than a hard-coded slug allowlist.
-An authenticated catalog refresh reconciles immutable model projections. A new
-model slug does not require a separate Maverick issuance step. A removed or
-ambiguous model is unavailable for new sessions.
+An authenticated catalog refresh reconciles immutable model projections. New
+model slugs become available through that reconciliation; removed or ambiguous
+models are unavailable for new sessions.
 
 ## New-session admission
 
@@ -37,9 +37,9 @@ content-addressed from the current catalog model identity and reasoning choices.
 Adapter identity is derived from declared engine/adapter ids and versions rather
 than mutable source-file bytes.
 
-Consequently, an ordinary Codex update or newly advertised model cannot disable
-the runtime for lack of a renewed Maverick artifact. Current installation health,
-catalog reconciliation, profile binding and live policy remain authoritative.
+Ordinary Codex updates and newly advertised models follow the same catalog
+reconciliation path. Current installation health, catalog state, profile binding
+and live policy remain authoritative.
 
 ## Existing sessions and continuation
 
@@ -53,5 +53,5 @@ An incompatible change requires a new conversation or explicit transcript
 handoff.
 
 Runtime disablement, removed models, missing provider threads and failed
-non-expansion proofs fail closed with public reason codes. They are not repaired
-by changing a validity date.
+non-expansion proofs fail closed with public reason codes. Operators correct the
+runtime, catalog, profile or policy state that caused the failure.

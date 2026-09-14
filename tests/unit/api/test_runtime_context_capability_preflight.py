@@ -58,7 +58,7 @@ class RuntimeContextCapabilityPreflightApiTest(AppReferenceApiTestSupport, unitt
     def test_unsupported_context_fails_before_claim_session_or_provider_work(self) -> None:
         cases = (
             (
-                {"skill_ids": ["uncertified-skill"]},
+                {"skill_ids": ["unavailable-skill"]},
                 "agentic_skill_catalog_not_effective",
             ),
             (

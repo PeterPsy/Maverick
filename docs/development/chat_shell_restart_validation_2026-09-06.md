@@ -5,8 +5,8 @@
 The authorized Core restart completed at 06:38:07 UTC on 2026-09-06
 (`maverick-core.service`, PID 2805199). `/health` returns HTTP 200.
 The session-owned Gemini ACP lifecycle from `0ef4940f` is now loaded. That
-commit did not change Base Shell, Chat, or the PWA SDK. Gemini remains disabled;
-this verification does not enable Gemini or certify Google/OpenRouter.
+commit did not change Base Shell, Chat, or the PWA SDK. Hosted API profiles
+remain disabled in this historical verification.
 
 Read-only official App Store and Chat CLI calls returned the existing 17 pinned
 app IDs and correctly named projects. No pin order, project, workspace routing,
@@ -85,9 +85,9 @@ steering test was received by this assistant during its active runtime turn.
 A read-only copy of live provider metadata was validated in memory. Codex
 profile revision 14 and digest
 `33b483337b160ba8281b3ad17176030905ee0b83f2067d5eee911ef6517eab55`
-remain unchanged. A new pin was admitted in the clone, preserving the operator's
-default and shared evidence expiry. The executable remains `codex-cli 0.153.4`.
-No certified Codex adapter module was modified.
+remain unchanged. A new pin was admitted in the clone while preserving the
+operator's default. The executable remains `codex-cli 0.153.4`. No Codex adapter
+module was modified.
 
 The existing mobile utility-panel browser fixture now supplies the runtime
 engine role and runtime-backend kind already required by the provider selector.
@@ -110,8 +110,8 @@ already initialized `PlatformState.provider_registry`. Each omission rebuilt a
 registry and repeated adoption/reconciliation of the same native catalog.
 They now pass the existing registry through the existing resolver API. Fresh
 catalog discovery, reconciliation after a catalog change, explicit refresh, and
-all certificate/admission checks remain in that resolver; no response cache or
-new certification authority was introduced.
+all admission checks remain in that resolver; no response cache or new authority
+source was introduced.
 
 Measured on the same host (diagnostic observations, not latency guarantees):
 
@@ -134,9 +134,9 @@ compatible system libraries; the browser measurements above are Chromium results
 Startup-fix verification: 408 provider tests and 333 API tests passed, including
 the new registry-identity regressions for app backend metadata, ordinary status,
 and explicit catalog refresh. The focused app-mount/provider suite passed 63
-tests. Unused-import and whitespace checks passed. Codex revision, artifact
-digest, operator default, new-pin eligibility, and shared evidence expiry were
-rechecked using only in-memory copies and remain unchanged.
+tests. Unused-import and whitespace checks passed. Codex revision, adapter
+identity, operator default and new-pin eligibility were rechecked using only
+in-memory copies and remain unchanged.
 
 ## Operational restart and failed project-read recovery
 

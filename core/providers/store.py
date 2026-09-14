@@ -425,7 +425,6 @@ def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefin
     payload["context_policy"] = _agentic_context_policy(
         payload.get("context_policy")
     )
-    payload.pop("capability_certificate_id", None)
     capabilities = payload.get("capabilities")
     if not isinstance(capabilities, dict):
         capabilities = _legacy_profile_capabilities(payload)
@@ -463,7 +462,7 @@ def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
 
 
 def _legacy_profile_capabilities(payload: dict[str, Any]) -> dict[str, object]:
-    """Upgrade legacy records without consulting retired issued metadata."""
+    """Upgrade profile records created before direct capability snapshots."""
     native_codex = payload.get("provider_protocol") == "codex-app-server-stdio"
     return {
         "streaming": True,

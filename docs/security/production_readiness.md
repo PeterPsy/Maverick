@@ -38,9 +38,8 @@ Unacceptable current uses:
 
 ## Agentic Multi-Model Runtime Gate
 
-ADR-0010 defines direct agentic profiles for native and hosted runtimes. Removing
-the retired issued-capability lifecycle does not close any production launch
-blocker. Hosted agentic activation remains an explicit administrator decision
+ADR-0010 defines direct agentic profiles for native and hosted runtimes. Hosted
+agentic activation remains an explicit administrator decision
 and continues to require credentials, workspace policy, containment, sandbox,
 egress, tool-effect, recovery and monitoring controls.
 
@@ -73,7 +72,7 @@ Core-owned base tool schemas require the reviewed schema marker. Dynamic
 CLI/MCP/app tools use discovery/invocation wrappers and are revalidated against
 live app bindings, actor policy, effect declarations, executable closure and
 result classification. This tool review boundary is separate from provider
-admission and has no renewal or expiry behavior.
+admission and cannot enable a provider or model.
 
 Runtime-public classification policy and workspace declarations remain
 operator-owned, CAS-revisioned and revocable. App/client declarations never

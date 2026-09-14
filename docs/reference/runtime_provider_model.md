@@ -36,12 +36,22 @@ An `AgenticProfileDefinition` is immutable and directly declares:
 - provider config and protocol-adapter identity;
 - context/tool contract revisions.
 
-A separate rollout status controls whether a definition is preview, available,
-suspended or disabled. A workspace binding selects one definition, optional
-credential reference, actor policy, policy narrowing and default status.
+Rollout status controls whether a definition is preview, available, suspended or
+disabled. A workspace binding selects one definition, optional credential
+reference, actor policy, policy narrowing and default status. Profile
+capabilities are the declared capability source.
 
-Maverick does not maintain a second issued or expiring capability lifecycle.
-Profile capabilities are the sole declared capability source.
+## Revision selection
+
+A model, adapter or contract update publishes or reconciles a new immutable
+profile revision. New sessions resolve the current eligible workspace binding;
+existing sessions retain the revision pinned at creation. The administration API
+may return multiple revisions for diagnostics and history.
+
+Chat and Settings group selectable rows by execution family, model provider and
+model. They prefer the configured default binding and otherwise the newest
+eligible revision. All binding ids in a group remain migration aliases so a
+stored client selection continues to resolve without showing duplicate rows.
 
 ## Direct capabilities
 
@@ -67,8 +77,8 @@ A `RuntimeExecutionBinding` pins:
 - family, Full Workspace and harness identities;
 - context/tool contract identities.
 
-The binding is self-digesting. Client data cannot create or modify it. Legacy
-retired fields are discarded during hydration and never grant authority.
+The binding is self-digesting. Client data cannot create or modify it. Hydration
+validates the stored digest before constructing the current direct binding.
 
 ## Effective authority
 
@@ -88,10 +98,10 @@ Codex is a `native_agent` using the `codex-app-server` adapter. Its current mode
 catalog and reasoning metadata are discovered from the configured Codex runtime.
 Each model gets a content-addressed model profile projection.
 
-A new catalog slug or ordinary Codex update does not require a Maverick renewal.
-Availability depends on the live installation/catalog, the direct profile,
-workspace binding and normal policy checks. Persisted model metadata does not
-override the current built-in/live catalog.
+Catalog and package updates follow normal reconciliation. Availability depends
+on the live installation/catalog, direct profile, workspace binding and policy
+checks. Persisted model metadata does not override the current built-in/live
+catalog.
 
 Codex sessions use a sanitized runtime-specific home. Global connectors and
 unapproved inherited configuration are removed. Runtime processes are supervised
@@ -144,10 +154,8 @@ routing elsewhere.
 Core-owned static tool schemas may carry `reviewed_schema_component` with the
 fixed reviewed catalog id. Dynamic CLI/MCP/app tools are not copied into base
 provider requests. They are exposed through discovery/invocation wrappers with
-live actor, workspace, app-binding, effect and output checks.
-
-Tool review is independent of model/profile admission and has no time-based
-lifecycle.
+live actor, workspace, app-binding, effect and output checks. Tool review is
+independent of model/profile admission.
 
 ## Fail-closed conditions
 

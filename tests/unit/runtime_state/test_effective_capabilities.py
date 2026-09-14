@@ -175,8 +175,6 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.assertEqual(authority.actor_policy_revision, "actor:1")
         projection = effective_runtime_capability_payload(authority)
         self.assertNotIn("credential", str(projection).lower())
-        self.assertNotIn("certificate", projection)
-        self.assertNotIn("tcb", projection)
 
         with self.assertRaisesRegex(
             AgenticRuntimeError,

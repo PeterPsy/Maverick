@@ -103,6 +103,76 @@ function agenticProfile(
 }
 
 describe("remote agentic provider runtime options", () => {
+  it("shows one composer option for repeated revisions of the same model", () => {
+    const modelId = "gpt-5.6-sol";
+    const revision15 = agenticProfile("codex", modelId);
+    const revision16 = agenticProfile("codex", modelId);
+    const revision17 = agenticProfile("codex", modelId);
+    for (const [revision, profile] of [
+      ["15", revision15],
+      ["16", revision16],
+      ["17", revision17],
+    ] as const) {
+      profile.workspace_profile_binding_id = `binding-codex-sol-${revision}`;
+      profile.definition_id = `profile-codex-sol-${revision}`;
+      profile.definition_revision = revision;
+      profile.runtime_engine_id = "codex";
+      profile.execution_family = "native_agent";
+    }
+
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [
+        modelProvider("codex", "Codex", modelId, "GPT-5.6-Sol"),
+      ],
+      agentic_profiles: {
+        default_binding_id: null,
+        items: [revision15, revision17, revision16],
+      },
+    });
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]?.workspace_profile_binding_id).toBe("binding-codex-sol-17");
+    expect(providers[0]?.profile_detail).toContain("profile-codex-sol-17@17");
+    expect(providers[0]?.legacy_selection_ids).toEqual([
+      "binding-codex-sol-15",
+      "binding-codex-sol-17",
+      "binding-codex-sol-16",
+    ]);
+  });
+
+  it("keeps the configured default when a newer revision of that model exists", () => {
+    const modelId = "gpt-6-astra";
+    const configuredDefault = agenticProfile("codex", modelId);
+    configuredDefault.workspace_profile_binding_id = "binding-codex-astra-15";
+    configuredDefault.definition_revision = "15";
+    configuredDefault.runtime_engine_id = "codex";
+    configuredDefault.execution_family = "native_agent";
+    const newer = {
+      ...configuredDefault,
+      workspace_profile_binding_id: "binding-codex-astra-17",
+      definition_revision: "17",
+    };
+
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [
+        modelProvider("codex", "Codex", modelId, "GPT-6-Astra"),
+      ],
+      agentic_profiles: {
+        default_binding_id: configuredDefault.workspace_profile_binding_id,
+        items: [newer, configuredDefault],
+      },
+    });
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]?.workspace_profile_binding_id).toBe(
+      configuredDefault.workspace_profile_binding_id,
+    );
+  });
+
   it("uses the server selectable projection while excluding suspended profiles", () => {
     const modelId = "gemini-3.6-flash";
     const preview = agenticProfile("google-ai-studio", modelId, "preview");

@@ -224,26 +224,13 @@ def fork_runtime_execution_binding(
 
 
 def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutionBinding:
-    """Hydrate a binding and discard fields from the retired issued shape."""
+    """Hydrate and validate a direct runtime execution binding."""
     payload = dict(document)
     original_digest = str(payload.get("binding_digest") or "")
     if original_digest != canonical_digest(payload):
         raise ValueError(
             "Runtime execution binding digest does not match its immutable payload."
         )
-    if "adapter_artifact_digest" in payload:
-        payload.setdefault(
-            "adapter_identity_digest", payload.pop("adapter_artifact_digest")
-        )
-    for field_name in (
-        "capability_certificate_id",
-        "certificate_evidence_digest",
-        "tcb_manifest_id",
-        "tcb_manifest_version",
-        "tcb_structure_digest",
-        "tcb_live_digest",
-    ):
-        payload.pop(field_name, None)
     payload["routing_constraint_snapshot"] = _routing_constraint_from_document(
         payload["routing_constraint_snapshot"]
     )
@@ -253,12 +240,7 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload["workspace_policy_ceiling_snapshot"] = _policy_from_document(
         payload["workspace_policy_ceiling_snapshot"]
     )
-    payload["reasoning_efforts"] = tuple(
-        payload.pop(
-            "certified_reasoning_efforts",
-            payload.get("reasoning_efforts", ()),
-        )
-    )
+    payload["reasoning_efforts"] = tuple(payload.get("reasoning_efforts", ()))
     payload.setdefault("default_reasoning_effort", None)
     capabilities = payload.get("capabilities_snapshot")
     if not isinstance(capabilities, dict):
@@ -332,7 +314,7 @@ def _context_policy_from_document(
 
 
 def _legacy_capabilities_for_binding(payload: dict[str, Any]) -> dict[str, object]:
-    """Upgrade a legacy session to the direct profile capability shape."""
+    """Upgrade sessions created before direct capability snapshots."""
     native_codex = payload.get("provider_protocol") == "codex-app-server-stdio"
     return {
         "streaming": True,

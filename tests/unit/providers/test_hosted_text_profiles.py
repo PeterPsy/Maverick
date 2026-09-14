@@ -116,7 +116,6 @@ class HostedTextProfilesTest(unittest.TestCase):
 
         self.assertEqual(binding.profile.execution_family, "hosted_text")
         self.assertEqual(binding.status.status, "available")
-        self.assertFalse(hasattr(binding, "certificate"))
 
     def test_binding_round_trips_and_rejects_profile_tampering(self) -> None:
         binding = self.pin()
@@ -150,7 +149,6 @@ class HostedTextProfilesTest(unittest.TestCase):
             payload["hosted_text_profile"]["message"],
             "No workspace tools or actions.",
         )
-        self.assertNotIn("certificate", payload["hosted_text_profile"])
         self.assertEqual(
             self.runtime_store.list_provider_step_journals(
                 session_id=session.session_id

@@ -92,6 +92,21 @@ hosted adapter follows the same universal loop and full-access contract.
   shell/CLI, parallel reads, managed processes, writes, MCP/skills, restart and
   self-correction after a tool error.
 
+## Review hardening
+
+- [x] Replace the ambiguous zero parallelism value with an explicit
+  `unbounded` contract while accepting legacy session pins.
+- [x] Keep provider/upstream routing enforcement active in audit-only mode.
+- [x] Enforce aggregate result bytes in the actual provider payload and persist
+  restart-stable omitted-result identities.
+- [x] Extract the concurrent batch executor from the hosted loop and cover
+  sibling failure plus cancellation.
+- [x] Stream full-access list/search scans with entry/read limits,
+  cancellation checks and page-entry classification joins.
+- [x] Restore the bounded turn-side prewarm delay/join; only the client-facing
+  prepare call remains non-blocking, with no unmeasured cold-start claim.
+- [ ] Record the final post-commit OpenRouter GLM and Codex restart smoke below.
+
 ## Validation record
 
 The universal-loop change was validated on 2026-09-14 with 378 provider tests,

@@ -345,7 +345,7 @@ class SemanticEnvelopeGovernanceTest(unittest.TestCase):
             journal.semantic_projection_compiler_id,
             request.semantic_projection_compiler_id,
         )
-        self.assertEqual(journal.schema_version, "4")
+        self.assertEqual(journal.schema_version, "5")
 
     @staticmethod
     def _request(harness: HostedAgenticHarness, context: RuntimeTurnContext):

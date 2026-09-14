@@ -140,6 +140,12 @@ provider-private history, independent call/result pairing, cancellation,
 normalized errors, token accounting and recovery. Each request refreshes live
 authority before network egress and before each tool effect.
 
+Parallelism is expressed as the explicit `unbounded` policy contract: every
+call emitted in one provider step is independently executed, up to the existing
+per-turn call budget. Provider-visible result bytes remain physically bounded;
+an overflowing result is journaled as omitted and paired with a structured
+error without cancelling its siblings.
+
 ## Persistence
 
 Control-plane persistence contains profiles, rollout status, workspace bindings,
@@ -171,6 +177,8 @@ profiles enforce containment, data classification, egress transformation and
 configured approvals. In an explicit full-access profile, classification and
 egress are audit/telemetry signals only: they do not redact, transform, compact
 or veto content, and no confirmation is added unless that profile requests it.
+Audit-only content handling still enforces the pinned destination provider and
+upstream route; it cannot redirect exported bytes to an unselected transport.
 Operational test reports are validation evidence, not runtime authority.
 
 ## Consequences

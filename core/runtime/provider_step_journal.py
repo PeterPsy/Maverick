@@ -13,7 +13,7 @@ from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.store import RuntimeStore
 
 
-PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "4"
+PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "5"
 ProviderStepFaultHook = Callable[[str, ProviderStepJournalRecord], None]
 PROVEN_PROVIDER_TERMINAL_FAILURES = frozenset(
     {
@@ -186,6 +186,7 @@ class ProviderStepJournal:
             proposal_ids=(),
             disposition_ids=(),
             result_ids=(),
+            budget_omitted_result_ids=(),
             observed_call_count=0,
             budget_tool_call_charges=0,
             budget_tool_result_bytes=0,
@@ -456,6 +457,32 @@ class ProviderStepJournal:
             record,
             "tool_result_budget_recorded",
             budget_tool_result_bytes=total_bytes,
+            now=now,
+        )
+
+    def omit_result_for_budget(
+        self,
+        record: ProviderStepJournalRecord,
+        result_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> ProviderStepJournalRecord:
+        """Persist that private result bytes must not cross the provider boundary."""
+        if result_id in record.budget_omitted_result_ids:
+            return record
+        if (
+            result_id not in record.result_ids
+            or record.commit_status != "pending"
+            or record.pairing_status != "pending"
+        ):
+            raise RuntimeProviderStateError("provider_tool_result_budget_invalid")
+        return self._update(
+            record,
+            "tool_result_budget_omitted",
+            budget_omitted_result_ids=(
+                *record.budget_omitted_result_ids,
+                result_id,
+            ),
             now=now,
         )
 

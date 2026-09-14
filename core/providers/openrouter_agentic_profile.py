@@ -9,6 +9,7 @@ from core.providers.agentic_models import (
     AgenticRuntimePolicy,
     RoutingConstraint,
     RuntimeCapabilitySet,
+    UNBOUNDED_PARALLEL_TOOL_CALLS,
 )
 from core.providers.agentic_data_policies import (
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
@@ -36,8 +37,8 @@ from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-glm-5-3-flash-relace"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "2"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ("1",)
+OPENROUTER_AGENTIC_PROFILE_REVISION = "3"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ("1", "2")
 OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS = tuple(
     (
         "agentic-profile-openrouter-glm-5-3-flash-relace-fp4",
@@ -77,7 +78,7 @@ def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
     return AgenticRuntimePolicy(
         max_steps_per_turn=256,
         max_tool_calls_per_turn=256,
-        max_parallel_tool_calls=0,
+        max_parallel_tool_calls=UNBOUNDED_PARALLEL_TOOL_CALLS,
         max_wall_time_seconds=86_400,
         max_tool_result_bytes=1_048_576,
         max_total_tool_result_bytes=16_777_216,

@@ -470,7 +470,10 @@ class HostedAgenticRecovery:
                     "provider_tool_stream_not_reconstructible",
                     record,
                 )
-            record, execution_unknown = self._recover_tool_results(record)
+            record, execution_unknown = self._recover_tool_results(
+                record,
+                binding=binding,
+            )
             if execution_unknown:
                 raise _RecoveryAmbiguous(
                     "tool_execution_ambiguous",
@@ -585,9 +588,27 @@ class HostedAgenticRecovery:
     def _recover_tool_results(
         self,
         record: ProviderStepJournalRecord,
+        *,
+        binding,
     ) -> tuple[ProviderStepJournalRecord, int]:
         execution_unknown = 0
         total_result_bytes = 0
+        prior_result_bytes = sum(
+            item.budget_tool_result_bytes
+            for item in self.journal.store.list_provider_step_journals(
+                session_id=record.session_id,
+                turn_id=record.turn_id,
+            )
+            if item.step_index < record.step_index
+        )
+        result_ceiling = min(
+            binding.profile_policy_ceiling_snapshot.max_total_tool_result_bytes,
+            binding.workspace_policy_ceiling_snapshot.max_total_tool_result_bytes,
+        )
+        per_result_ceiling = min(
+            binding.profile_policy_ceiling_snapshot.max_tool_result_bytes,
+            binding.workspace_policy_ceiling_snapshot.max_tool_result_bytes,
+        )
         for call_index, proposal_id in enumerate(record.proposal_ids):
             invocation = self.tool_ledger.store.get_tool_invocation(proposal_id)
             forced_denial: tuple[str, str] | None = None
@@ -600,11 +621,6 @@ class HostedAgenticRecovery:
                 forced_denial = (
                     "budget_denied",
                     "agent_tool_call_limit_reached",
-                )
-            elif record.observed_call_count > 1:
-                forced_denial = (
-                    "parallel_denied",
-                    "provider_parallel_tool_calls_forbidden",
                 )
             if forced_denial is not None:
                 resolution_status, failure_reason = forced_denial
@@ -700,11 +716,28 @@ class HostedAgenticRecovery:
                 bool,
             ):
                 serialized_size = max(serialized_size, original_size)
-            total_result_bytes += serialized_size
-        record = self.journal.record_tool_result_bytes(
-            record,
-            total_bytes=total_result_bytes,
-        )
+            if invocation.state == "succeeded":
+                if invocation.result_id in record.budget_omitted_result_ids:
+                    continue
+                fits = (
+                    serialized_size <= per_result_ceiling
+                    and prior_result_bytes
+                    + total_result_bytes
+                    + serialized_size
+                    <= result_ceiling
+                )
+                if fits:
+                    total_result_bytes += serialized_size
+                else:
+                    record = self.journal.omit_result_for_budget(
+                        record,
+                        invocation.result_id,
+                    )
+        if total_result_bytes > record.budget_tool_result_bytes:
+            record = self.journal.record_tool_result_bytes(
+                record,
+                total_bytes=total_result_bytes,
+            )
         record = self.journal.complete_dispositions(record)
         record = self.journal.mark_pairing_ready(record)
         return record, execution_unknown

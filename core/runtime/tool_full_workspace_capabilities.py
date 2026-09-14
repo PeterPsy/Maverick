@@ -126,17 +126,22 @@ def build_full_workspace_capabilities(
 
     def search(arguments, context, _idempotency_key):
         _require_context(context, filesystem.workspace_id)
-        result = filesystem.search_text(
-            tool_path(str(arguments.get("path") or "."), allow_root=True),
-            query=str(arguments.get("query") or ""),
-            max_depth=_integer(
+        search_arguments = {
+            "query": str(arguments.get("query") or ""),
+            "max_depth": _integer(
                 arguments.get("max_depth", 4), minimum=1, maximum=8
             ),
-            page_size=_integer(
+            "page_size": _integer(
                 arguments.get("max_results", 100), minimum=1, maximum=500
             ),
-            cursor=_optional_string(arguments.get("cursor")),
-            case_sensitive=arguments.get("case_sensitive") is not False,
+            "cursor": _optional_string(arguments.get("cursor")),
+            "case_sensitive": arguments.get("case_sensitive") is not False,
+        }
+        if full_access:
+            search_arguments["execution_control"] = context.execution_control
+        result = filesystem.search_text(
+            tool_path(str(arguments.get("path") or "."), allow_root=True),
+            **search_arguments,
         )
         return _projected_core_result(
             result.payload,

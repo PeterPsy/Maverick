@@ -197,7 +197,10 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
                 self.assertEqual(terminal.commit_status, "committed")
                 self.assertEqual(terminal.pairing_status, "ready")
                 self.assertEqual(terminal.budget_tool_call_charges, 1)
-                self.assertGreater(terminal.budget_tool_result_bytes, 0)
+                if crash_point in {"proposal", "authorization"}:
+                    self.assertEqual(terminal.budget_tool_result_bytes, 0)
+                else:
+                    self.assertGreater(terminal.budget_tool_result_bytes, 0)
                 self.assertEqual(
                     harness.store.get_provider_step_journal(record.journal_id).revision,
                     revision,

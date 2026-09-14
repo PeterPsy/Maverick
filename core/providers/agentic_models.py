@@ -25,6 +25,9 @@ AttachmentProjectionMode = Literal["workspace_reference", "native_or_reference"]
 SteeringDeliveryMode = Literal["provider_native", "safe_next_turn"]
 ModelRevisionPolicy = Literal["exact", "provider_alias"]
 
+ParallelToolCallLimit = Literal["unbounded"]
+UNBOUNDED_PARALLEL_TOOL_CALLS: ParallelToolCallLimit = "unbounded"
+
 
 @dataclass(frozen=True)
 class RuntimeCapabilitySet:
@@ -77,7 +80,10 @@ class AgenticRuntimePolicy:
 
     max_steps_per_turn: int
     max_tool_calls_per_turn: int
-    max_parallel_tool_calls: int
+    # This compatibility-named field is not an independent concurrency limit.
+    # New bindings persist the explicit ``unbounded`` contract; hydration still
+    # accepts legacy zero-valued session pins in authority validation.
+    max_parallel_tool_calls: ParallelToolCallLimit
     max_wall_time_seconds: int
     max_tool_result_bytes: int
     max_total_tool_result_bytes: int
@@ -215,7 +221,7 @@ def codex_runtime_policy() -> AgenticRuntimePolicy:
     return AgenticRuntimePolicy(
         max_steps_per_turn=256,
         max_tool_calls_per_turn=256,
-        max_parallel_tool_calls=0,
+        max_parallel_tool_calls=UNBOUNDED_PARALLEL_TOOL_CALLS,
         max_wall_time_seconds=86_400,
         max_tool_result_bytes=1_048_576,
         max_total_tool_result_bytes=16_777_216,

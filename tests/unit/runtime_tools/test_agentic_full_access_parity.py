@@ -5,6 +5,10 @@ from types import SimpleNamespace
 import time
 import unittest
 
+from core.cli.command_registry import CliCommandRegistry
+from core.cli.models import CliCommandDefinition, CliInvocationPolicy
+from core.mcp.models import McpInvocationPolicy, McpToolDefinition
+from core.mcp.tool_registry import McpToolRegistry
 from core.providers.agentic_models import (
     codex_runtime_capabilities,
     codex_runtime_policy,
@@ -76,6 +80,7 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                 start_path=workspace,
             )
             registry = HostedToolProcessRegistry(store=store)
+            cli_registry, mcp_registry = _discovery_registries()
             surfaces = {
                 item.definition.handle: item
                 for item in build_core_runtime_tool_capabilities(
@@ -83,6 +88,8 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                     workspace_root=workspace,
                     runtime_root=runtime,
                     process_registry=registry,
+                    cli_registry=cli_registry,
+                    mcp_registry=mcp_registry,
                     execution_mode="full-access",
                 )
             }
@@ -101,13 +108,21 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                     "core-capability:process.status",
                     "core-capability:process.input",
                     "core-capability:process.interrupt",
+                    "core-capability:cli.list",
+                    "core-capability:cli.run",
+                    "core-capability:mcp.list",
+                    "core-capability:mcp.call",
                 }.issubset(surfaces)
             )
             context = SimpleNamespace(
                 workspace_id="default",
                 session_id="session-parity",
+                agent_id="chat",
+                actor_id="user-1",
                 execution_mode="full-access",
                 execution_control=None,
+                platform_role=None,
+                workspace_role="member",
             )
 
             listing = surfaces["core-capability:filesystem.list"].handler(
@@ -136,6 +151,37 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                 {"path": str(outside), "query": "marker"}, context, None
             )
             self.assertEqual(search.payload["result_count"], 1)
+
+            cli_listing = surfaces["core-capability:cli.list"].handler(
+                {}, context, None
+            )
+            cli_result = surfaces["core-capability:cli.run"].handler(
+                {
+                    "command_id": "fixture.echo",
+                    "invocation_token": cli_listing.payload["commands"][0][
+                        "invocation_token"
+                    ],
+                    "arguments": {"value": "cli-ok"},
+                },
+                context,
+                None,
+            )
+            self.assertEqual(cli_result.payload, {"echo": "cli-ok"})
+            mcp_listing = surfaces["core-capability:mcp.list"].handler(
+                {}, context, None
+            )
+            mcp_result = surfaces["core-capability:mcp.call"].handler(
+                {
+                    "tool_name": "fixture.lookup",
+                    "invocation_token": mcp_listing.payload["tools"][0][
+                        "invocation_token"
+                    ],
+                    "arguments": {"value": "mcp-ok"},
+                },
+                context,
+                None,
+            )
+            self.assertEqual(mcp_result.payload, {"found": "mcp-ok"})
 
             written = outside / "written.txt"
             surfaces["core-capability:filesystem.write"].handler(
@@ -171,7 +217,7 @@ class AgenticFullAccessParityTest(unittest.TestCase):
             )
             self.assertFalse(moved.exists())
 
-            required_cli = ("git", "rg")
+            required_cli = ("git", "rg", "maverick")
             for name in required_cli:
                 self.assertIsNotNone(shutil.which(name), f"missing required CLI: {name}")
             shell = surfaces["core-capability:shell.run"].handler(
@@ -181,10 +227,9 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                         "-c",
                         "; ".join(
                             [
-                                *(
-                                    f"printf 'cli:{name}\\n'; {name} --version"
-                                    for name in required_cli
-                                ),
+                                "printf 'cli:git\\n'; git --version",
+                                "printf 'cli:rg\\n'; rg --version",
+                                "printf 'cli:maverick\\n'; maverick --help",
                                 "printf 'workspace:%s mode:%s\\n' "
                                 '"$MAVERICK_WORKSPACE_ID" '
                                 '"$MAVERICK_EFFECTIVE_MODE"',
@@ -256,6 +301,61 @@ def _runtime_store() -> RuntimeDocumentStore:
             threads=FakeCollection(),
         )
     )
+
+
+def _discovery_registries():
+    cli = CliCommandRegistry()
+    cli.register_command(
+        CliCommandDefinition(
+            command_id="fixture.echo",
+            path_segments=["fixture", "echo"],
+            description="Echo a parity fixture.",
+            argument_schema={"type": "object"},
+            owner_kind="core",
+            owner_id="core",
+            workspace_id=None,
+            exposure_scope="core_global",
+            invocation_policy=CliInvocationPolicy(
+                operator_only=False,
+                required_platform_role=None,
+                sandbox_agent_allowed=True,
+                requires_workspace_context=True,
+                requires_full_access=False,
+            ),
+            entrypoint_path=None,
+            effect_class="read",
+            safe_to_retry=True,
+            schema_public=True,
+            reviewed_schema_component="tool-schema-catalog",
+        ),
+        lambda arguments, _context: {"echo": arguments.get("value")},
+    )
+    mcp = McpToolRegistry()
+    mcp.register_tool(
+        McpToolDefinition(
+            tool_name="fixture.lookup",
+            description="Lookup a parity fixture.",
+            input_schema={"type": "object"},
+            output_schema=None,
+            owner_kind="core",
+            owner_id="core",
+            workspace_id=None,
+            exposure_scope="core_global",
+            invocation_policy=McpInvocationPolicy(
+                operator_only=False,
+                sandbox_agent_allowed=True,
+                requires_workspace_context=True,
+                requires_full_access=False,
+            ),
+            entrypoint_path=None,
+            effect_class="read",
+            safe_to_retry=True,
+            schema_public=True,
+            reviewed_schema_component="tool-schema-catalog",
+        ),
+        lambda arguments, _context: {"found": arguments.get("value")},
+    )
+    return cli, mcp
 
 
 if __name__ == "__main__":

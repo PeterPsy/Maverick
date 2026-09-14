@@ -96,6 +96,7 @@ class ProviderStepJournalRecord:
     proposal_ids: tuple[str, ...]
     disposition_ids: tuple[str, ...]
     result_ids: tuple[str, ...]
+    budget_omitted_result_ids: tuple[str, ...]
     observed_call_count: int
     budget_tool_call_charges: int
     budget_tool_result_bytes: int
@@ -139,7 +140,12 @@ def provider_step_journal_from_document(
 ) -> ProviderStepJournalRecord:
     """Hydrate tuple/envelope fields while rejecting malformed persisted state."""
     payload = dict(document)
-    for field_name in ("proposal_ids", "disposition_ids", "result_ids"):
+    for field_name in (
+        "proposal_ids",
+        "disposition_ids",
+        "result_ids",
+        "budget_omitted_result_ids",
+    ):
         payload[field_name] = tuple(payload.get(field_name, ()))
     envelope = payload.get("staged_provider_state")
     if isinstance(envelope, Mapping):

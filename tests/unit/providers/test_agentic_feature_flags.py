@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_models import codex_runtime_policy
+from core.providers.errors import AgenticRuntimeError
 from core.runtime.authority import (
     intersect_runtime_policies,
     runtime_feature_flag_revision,
@@ -150,14 +151,26 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
             enabled = runtime_feature_flag_revision(binding)
         self.assertNotEqual(disabled, enabled)
 
-    def test_parallel_policy_is_not_gated_by_a_feature_flag(self) -> None:
-        policy = replace(codex_runtime_policy(), max_parallel_tool_calls=2)
+    def test_parallel_policy_is_explicitly_unbounded(self) -> None:
+        policy = codex_runtime_policy()
         with patch.dict(
             os.environ,
             {"MAVERICK_FEATURE_PARALLEL_TOOL_CALLS": "0"},
             clear=False,
         ):
-            self.assertEqual(intersect_runtime_policies(policy).max_parallel_tool_calls, 2)
+            self.assertEqual(
+                intersect_runtime_policies(policy).max_parallel_tool_calls,
+                "unbounded",
+            )
+            self.assertEqual(
+                intersect_runtime_policies(
+                    replace(policy, max_parallel_tool_calls=0)  # type: ignore[arg-type]
+                ).max_parallel_tool_calls,
+                "unbounded",
+            )
+        with self.assertRaises(AgenticRuntimeError) as raised:
+            intersect_runtime_policies(replace(policy, max_parallel_tool_calls=2))
+        self.assertEqual(raised.exception.reason_code, "runtime_policy_limit_invalid")
 
 
 if __name__ == "__main__":

@@ -181,7 +181,10 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             ).rollout_status,
             "suspended",
         )
-        self.assertEqual(OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS, ("1",))
+        self.assertEqual(
+            OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
+            ("1", "2"),
+        )
 
 
 if __name__ == "__main__":

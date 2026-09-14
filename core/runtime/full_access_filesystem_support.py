@@ -69,12 +69,6 @@ def file_type(mode: int) -> str:
     return "other"
 
 
-def digest_json(value) -> str:
-    return hashlib.sha256(
-        json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    ).hexdigest()
-
-
 def cursor(offset: int, digest: str) -> str:
     raw = json.dumps(
         {"offset": offset, "digest": digest},
@@ -83,24 +77,30 @@ def cursor(offset: int, digest: str) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-def cursor_offset(value, *, expected_digest: str) -> int:
+def cursor_state(value) -> tuple[int, str | None]:
+    """Decode a cursor before a streaming scan has calculated its digest."""
     if value is None:
-        return 0
+        return 0, None
     try:
         raw = base64.urlsafe_b64decode(str(value) + "=" * (-len(str(value)) % 4))
         payload = json.loads(raw)
-        if payload["digest"] != expected_digest or int(payload["offset"]) < 0:
+        offset = int(payload["offset"])
+        digest = str(payload["digest"])
+        if (
+            offset < 0
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
             raise ValueError
-        return int(payload["offset"])
+        return offset, digest
     except (ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
         raise RuntimeToolError("filesystem_cursor_invalid") from error
 
 
 __all__ = [
     "cursor",
-    "cursor_offset",
+    "cursor_state",
     "decode_utf8",
-    "digest_json",
     "file_digest",
     "file_type",
     "require_expected",

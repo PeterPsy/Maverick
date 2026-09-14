@@ -137,15 +137,20 @@ def build_core_runtime_tool_capabilities(
             or not 1 <= page_size <= MAX_FILESYSTEM_LIST_RESULTS
         ):
             raise RuntimeToolError("tool_arguments_invalid")
-        result = filesystem.list_entries(
-            tool_path(str(arguments.get("path") or "."), allow_root=True),
-            max_depth=max_depth,
-            page_size=page_size,
-            cursor=(
+        list_arguments = {
+            "max_depth": max_depth,
+            "page_size": page_size,
+            "cursor": (
                 str(arguments["cursor"])
                 if isinstance(arguments.get("cursor"), str)
                 else None
             ),
+        }
+        if full_access:
+            list_arguments["execution_control"] = context.execution_control
+        result = filesystem.list_entries(
+            tool_path(str(arguments.get("path") or "."), allow_root=True),
+            **list_arguments,
         )
         return RuntimeToolSurfaceResult(
             result.payload,

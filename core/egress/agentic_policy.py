@@ -105,12 +105,21 @@ class AgenticEgressEvaluator:
         timestamp = now or datetime.now(tz=UTC)
         source = canonical_egress_content(content)
         source_digest = _content_digest(self._digest_key, source)
-        reason = None if policy.audit_only else self._deny_reason(
-            block=block, destination_provider_id=destination_provider_id,
-            destination_upstream_id=destination_upstream_id, policy=policy,
-            source=source, data_attestation=data_attestation,
+        reason = self._routing_deny_reason(
+            destination_provider_id=destination_provider_id,
+            destination_upstream_id=destination_upstream_id,
+            policy=policy,
         )
-        exported: bytes | None = source if policy.audit_only else None
+        if reason is None and not policy.audit_only:
+            reason = self._content_deny_reason(
+                block=block,
+                policy=policy,
+                source=source,
+                data_attestation=data_attestation,
+            )
+        exported: bytes | None = (
+            source if reason is None and policy.audit_only else None
+        )
         transformation: str | None = None
         if reason is None and not policy.audit_only:
             exported, transformation, reason = transform_exportable_content(
@@ -259,20 +268,40 @@ class AgenticEgressEvaluator:
         return decision
 
     @staticmethod
-    def _deny_reason(
+    def _routing_deny_reason(
         *,
-        block: AgenticEgressContentBlock,
         destination_provider_id: str,
         destination_upstream_id: str | None,
+        policy: AgenticEgressPolicy,
+    ) -> str | None:
+        if not policy.policy_id or not policy.revision:
+            return "egress_policy_invalid"
+        if (
+            not destination_provider_id
+            or destination_provider_id not in policy.allowed_provider_ids
+        ):
+            return "egress_destination_denied"
+        if policy.allowed_upstream_ids:
+            if destination_upstream_id not in policy.allowed_upstream_ids:
+                return "egress_upstream_denied"
+        elif destination_upstream_id is not None:
+            return "egress_upstream_denied"
+        return None
+
+    @staticmethod
+    def _content_deny_reason(
+        *,
+        block: AgenticEgressContentBlock,
         policy: AgenticEgressPolicy,
         source: bytes,
         data_attestation: WorkspaceDataAttestation | None,
     ) -> str | None:
         if len(source) > MAX_EGRESS_BLOCK_BYTES:
             return "egress_block_too_large"
-        if not policy.policy_id or not policy.revision:
-            return "egress_policy_invalid"
-        if block.data_class not in _KNOWN_DATA_CLASSES or block.data_class in _ALWAYS_DENIED_DATA_CLASSES:
+        if (
+            block.data_class not in _KNOWN_DATA_CLASSES
+            or block.data_class in _ALWAYS_DENIED_DATA_CLASSES
+        ):
             return "egress_data_class_denied"
         if block.data_class == "workspace_internal_fake":
             attestation_reason = _fake_data_attestation_denial(
@@ -287,13 +316,6 @@ class AgenticEgressEvaluator:
             return "egress_trust_unknown"
         if block.data_class not in policy.allowed_data_classes:
             return "egress_data_class_not_allowed"
-        if not destination_provider_id or destination_provider_id not in policy.allowed_provider_ids:
-            return "egress_destination_denied"
-        if policy.allowed_upstream_ids:
-            if destination_upstream_id not in policy.allowed_upstream_ids:
-                return "egress_upstream_denied"
-        elif destination_upstream_id is not None:
-            return "egress_upstream_denied"
         return None
 
     def _audit(self, workspace_id: str, decision: AgenticEgressDecision) -> None:

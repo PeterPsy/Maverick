@@ -19,6 +19,61 @@ class _StartupSentinel(RuntimeError):
 
 
 class HostedAgenticRecoveryReconciliationTest(unittest.TestCase):
+    def test_restart_persists_budget_omission_without_charging_private_result(self) -> None:
+        harness = HostedAgenticHarness(self)
+        limited_policy = replace(
+            harness.policy,
+            max_total_tool_result_bytes=1,
+        )
+        harness.policy = limited_policy
+        harness.binding = replace(
+            harness.binding,
+            profile_policy_ceiling_snapshot=limited_policy,
+            workspace_policy_ceiling_snapshot=limited_policy,
+        )
+        harness.session = replace(
+            harness.session,
+            execution_binding=harness.binding,
+        )
+        adapter = harness.adapter(DeterministicFakeAgenticClient())
+        record, outcome, _envelope = self._tool_step(
+            harness,
+            adapter,
+            request_id="request-budget-omission",
+        )
+        prepared = harness.orchestrator.prepare_observed_tool(
+            outcome.invocation,
+            requested_catalog=harness.orchestrator.materialize(
+                authority=harness.authority,
+                context=adapter.loop.actor_context_resolver(None),
+            ),
+            authority=harness.authority,
+            context=adapter.loop.actor_context_resolver(None),
+            policy=_no_confirmation_policy(),
+        )
+        harness.orchestrator.execute_authorized(
+            prepared.invocation,
+            authority=harness.authority,
+            context=adapter.loop.actor_context_resolver(None),
+            policy=_no_confirmation_policy(),
+        )
+
+        recovered = asyncio.run(
+            adapter.recover(
+                RuntimeRecoveryContext(
+                    harness.session,
+                    harness.binding,
+                    harness.store.get_provider_state("session-hosted"),
+                    "backend_restart",
+                )
+            )
+        )
+        terminal = harness.store.get_provider_step_journal(record.journal_id)
+
+        self.assertTrue(recovered.recovered)
+        self.assertEqual(terminal.budget_tool_result_bytes, 0)
+        self.assertEqual(len(terminal.budget_omitted_result_ids), 1)
+
     def test_crash_after_effect_boundary_is_execution_unknown_and_never_repeated(self) -> None:
         harness = HostedAgenticHarness(self)
         adapter = harness.adapter(DeterministicFakeAgenticClient())

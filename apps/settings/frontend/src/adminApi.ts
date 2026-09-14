@@ -453,7 +453,7 @@ export type ProviderStatus = {
 export type AgenticRuntimePolicy = {
   max_steps_per_turn: number;
   max_tool_calls_per_turn: number;
-  max_parallel_tool_calls: number;
+  max_parallel_tool_calls: 'unbounded' | 0;
   max_wall_time_seconds: number;
   max_tool_result_bytes: number;
   max_total_tool_result_bytes: number;

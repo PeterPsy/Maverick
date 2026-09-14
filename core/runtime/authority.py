@@ -9,6 +9,7 @@ from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
     AgenticRuntimePolicy,
     RuntimeCapabilitySet,
+    UNBOUNDED_PARALLEL_TOOL_CALLS,
     WorkspaceAgenticProfileBinding,
 )
 from core.providers.errors import AgenticRuntimeError, ProviderNotFoundError
@@ -311,7 +312,7 @@ def intersect_runtime_policies(*policies: AgenticRuntimePolicy) -> AgenticRuntim
     return AgenticRuntimePolicy(
         max_steps_per_turn=min(item.max_steps_per_turn for item in policies),
         max_tool_calls_per_turn=min(item.max_tool_calls_per_turn for item in policies),
-        max_parallel_tool_calls=min(item.max_parallel_tool_calls for item in policies),
+        max_parallel_tool_calls=UNBOUNDED_PARALLEL_TOOL_CALLS,
         max_wall_time_seconds=min(item.max_wall_time_seconds for item in policies),
         max_tool_result_bytes=min(item.max_tool_result_bytes for item in policies),
         max_total_tool_result_bytes=min(item.max_total_tool_result_bytes for item in policies),
@@ -998,7 +999,11 @@ def _validate_policy(policy: AgenticRuntimePolicy) -> None:
         policy.max_input_tokens,
         policy.max_output_tokens,
     )
-    if any(value <= 0 for value in positive) or policy.max_parallel_tool_calls < 0:
+    if (
+        any(value <= 0 for value in positive)
+        or policy.max_parallel_tool_calls
+        not in {UNBOUNDED_PARALLEL_TOOL_CALLS, 0}
+    ):
         raise AgenticRuntimeError("runtime_policy_limit_invalid")
     if policy.max_estimated_cost_microusd is not None and policy.max_estimated_cost_microusd < 0:
         raise AgenticRuntimeError("runtime_policy_cost_invalid")

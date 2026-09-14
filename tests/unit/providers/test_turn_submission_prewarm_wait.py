@@ -27,12 +27,14 @@ class TurnSubmissionPrewarmWaitTestCase(unittest.TestCase):
         complete_prewarm = submit_runtime_turn_async.__globals__["_complete_session_prewarm"]
         wait_for_prewarm = submit_runtime_turn_async.__globals__["_wait_for_session_prewarm"]
         default_timeout = submit_runtime_turn_async.__globals__["_PREWARM_JOIN_TIMEOUT_SECONDS"]
+        default_delay = submit_runtime_turn_async.__globals__["_PREWARM_AFTER_TURN_DELAY_SECONDS"]
         prewarm = register_prewarm(session.session_id)
         self.assertIsNotNone(prewarm)
         assert prewarm is not None
 
         try:
-            self.assertLessEqual(default_timeout, 0.3)
+            self.assertEqual(default_timeout, 0.25)
+            self.assertEqual(default_delay, 0.05)
             self.assertFalse(
                 wait_for_prewarm(
                     session.session_id,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from threading import Barrier
 import unittest
@@ -57,6 +58,64 @@ class _ScriptedTransport:
 
 
 class HostedAgenticMultiCallTest(unittest.TestCase):
+    def test_parallel_result_budget_omits_only_overflowing_payload(self) -> None:
+        harness = HostedAgenticHarness(
+            self,
+            model_provider_id="openrouter",
+            model_id=OPENROUTER_AGENTIC_MODEL_ID,
+            provider_protocol="openrouter-chat-completions",
+            provider_api_version="v1",
+            routing_constraint=openrouter_agentic_routing_constraint(),
+        )
+        harness.policy = replace(
+            harness.policy,
+            max_total_tool_result_bytes=len(b'{"value":1}'),
+        )
+        transport = _ScriptedTransport(
+            [
+                _openrouter_parallel_stream(harness.read_tool_name),
+                _openrouter_text_stream("openrouter-final", "complete"),
+            ]
+        )
+        adapter = harness.adapter(
+            OpenRouterAgenticClient(transport=transport),
+            credential=EphemeralCredential("fixture-openrouter-key"),
+            private_codec=HostedProviderPrivateCodec(
+                OPENROUTER_AGENTIC_CODEC_ID,
+                OPENROUTER_AGENTIC_CODEC_VERSION,
+                OPENROUTER_AGENTIC_SCHEMA_VERSION,
+                OPENROUTER_AGENTIC_CONTENT_TYPE,
+            ),
+            private_state_inspector=inspect_openrouter_chat_state,
+            cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
+        )
+
+        result, _events = _execute(harness, adapter)
+
+        self.assertEqual(result.output_text, "complete")
+        self.assertEqual(harness.cli_calls, 2)
+        tool_messages = [
+            item
+            for item in transport.payloads[1]["messages"]
+            if item.get("role") == "tool"
+        ]
+        self.assertEqual(json.loads(tool_messages[0]["content"]), {"value": 1})
+        self.assertEqual(
+            json.loads(tool_messages[1]["content"]),
+            {
+                "error": "agent_tool_result_limit_reached",
+                "result_omitted": True,
+            },
+        )
+        journal = harness.store.list_provider_step_journals(
+            session_id="session-hosted"
+        )[0]
+        self.assertEqual(
+            journal.budget_tool_result_bytes,
+            len(b'{"value":1}'),
+        )
+        self.assertEqual(len(journal.budget_omitted_result_ids), 1)
+
     def test_parallel_overflow_runs_admitted_call_and_pairs_budget_error(self) -> None:
         harness = HostedAgenticHarness(
             self,

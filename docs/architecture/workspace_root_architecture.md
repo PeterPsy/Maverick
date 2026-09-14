@@ -352,7 +352,10 @@ Full-access shell/process execution inherits the installed host command
 environment while keeping the session runtime `bin/` directory first on
 `PATH`, so `maverick`, `git`, `rg`, and other installed CLIs are available. It
 does not stage a copy-on-write workspace or automatically mask `.git`, host
-paths or tool output.
+paths or tool output. Direct listing/search still use cooperative cancellation
+and physical scan/read ceilings: these implementation bounds prevent a broad
+host path from exhausting the backend without changing which paths the model
+may request.
 
 Provider processes that operate on workspace files should start in the workspace root.
 

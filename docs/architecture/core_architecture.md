@@ -650,14 +650,22 @@ Provider clients are codec/transport boundaries and do not own tools,
 confirmation, retry, egress or recovery policy. When a provider emits several
 tool calls in one step, Core prepares every call, runs authorized calls
 concurrently, and pairs every success or error independently; one failed call
-does not cancel its siblings. The loop does not interpret the legacy
-`max_parallel_tool_calls` policy field as a concurrency kill switch.
+does not cancel its siblings. New policy snapshots persist
+`max_parallel_tool_calls="unbounded"`; the compatibility-named field is an
+explicit contract marker, not a concurrency kill switch. Legacy zero-valued
+session pins hydrate with the same meaning, while positive per-batch limits are
+rejected because the universal loop does not implement a second hidden limit.
 
 For new turns the complete authorized catalog remains available at every model
 step. Core does not hide tools or inject a behavioral finalization instruction
 when a tool/result ceiling is reached. A call that exceeds a quantitative limit
 is paired with its own structured error so the model can recover. Historical
 persisted finalization journals remain readable only for restart recovery.
+All calls in an admitted batch finish independently, but a successful result
+that does not fit the per-result or aggregate transport byte ceiling is replaced
+with a small pairable `agent_tool_result_limit_reached` result. The private
+result remains in the ledger, and its omitted result id is journaled so restart
+replay cannot export bytes that the original step excluded.
 
 The loop refreshes effective authority before each provider request and side
 effect, journals request identity before acceptance, and routes tools through
@@ -681,6 +689,14 @@ and egress observations are persisted for audit and telemetry, but they do not
 filter, redact, compact, replace or reject model-visible content. The
 full-access filesystem, shell and managed-process tools use the live host
 namespace and installed CLI environment instead of the confined snapshot.
+Audit-only content handling does not weaken transport integrity: the provider
+id and selected upstream must still match the pinned egress route.
+
+Full-access directory listing and text search scan incrementally and cooperate
+with turn cancellation. They cap visited entries, aggregate bytes read and
+bytes read per file, report partial-scan metadata, and retain only the requested
+page. Listing and search audit classification joins the exact entry or match
+paths included in that page rather than classifying only the aggregate root.
 
 Remote requests are built only from server-owned context and authorized tool
 schemas. Client-supplied authority metadata is rejected. Provider routing is
@@ -693,6 +709,12 @@ tool execution, continuation and recovery. Credential disablement, workspace
 binding changes, actor-policy changes, feature flags, health changes and egress
 policy changes can immediately narrow or stop future work without rewriting a
 session pin.
+
+Prepared-session creation dispatches prewarm without a client-side wait. Turn
+execution retains the short prewarm scheduling delay and bounded join, avoiding
+an immediate prewarm/turn race. This is a transport behavior guarantee, not a
+claim that provider cold-start latency has improved without an end-to-end
+measurement.
 
 ### 8. Secret management
 

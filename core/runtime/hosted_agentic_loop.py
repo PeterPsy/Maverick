@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 import asyncio
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 import json
 from typing import Callable
@@ -13,7 +13,6 @@ from uuid import NAMESPACE_URL, uuid5
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelRequest,
-    AgenticToolCall,
     AgenticToolResult,
 )
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
@@ -60,9 +59,13 @@ from core.runtime.hosted_agentic_transport import (
     HostedTransportAuthorityGuard,
     preflight_and_commit_hosted_request,
 )
-from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
-from core.runtime.hosted_agentic_tool_execution import (
-    execute_hosted_authorized_tool,
+from core.runtime.hosted_agentic_tool_results import (
+    TOOL_RESULT_BUDGET_ERROR,
+    make_agentic_tool_result,
+)
+from core.runtime.hosted_agentic_tool_batch import (
+    PreparedHostedToolCall,
+    execute_hosted_tool_batch,
 )
 from core.runtime.hosted_context_management import (
     manage_hosted_provider_context,
@@ -78,16 +81,6 @@ from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.runtime.research_runtime import research_provider_catalog
 from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
-
-
-@dataclass
-class _PreparedHostedToolCall:
-    call: AgenticToolCall
-    outcome: RuntimeToolInvocationOutcome
-    orchestrator: object
-    authority: object
-    actor_context: object
-    tool_policy: object
 
 
 class HostedAgenticLoop:
@@ -284,15 +277,20 @@ class HostedAgenticLoop:
                 recovery_actor,
             )
             for invocation in self.recovery.pairing_results(pairing_source):
-                result, is_error = normalized_tool_result(
-                    recovery_orchestrator,
-                    RuntimeToolInvocationOutcome(invocation),
-                    context_policy=context_policy,
-                    allowed_remote_data_classes=(
-                        authority.allowed_remote_data_classes
-                    ),
-                    full_access=recovery_actor.execution_mode == "full-access",
-                )
+                if invocation.result_id in pairing_source.budget_omitted_result_ids:
+                    result, is_error = dict(TOOL_RESULT_BUDGET_ERROR), True
+                else:
+                    result, is_error = normalized_tool_result(
+                        recovery_orchestrator,
+                        RuntimeToolInvocationOutcome(invocation),
+                        context_policy=context_policy,
+                        allowed_remote_data_classes=(
+                            authority.allowed_remote_data_classes
+                        ),
+                        full_access=(
+                            recovery_actor.execution_mode == "full-access"
+                        ),
+                    )
                 tool_results.append(
                     make_agentic_tool_result(
                         provider_tool_call_id=invocation.provider_tool_call_id,
@@ -756,7 +754,7 @@ class HostedAgenticLoop:
             step_results: list[AgenticToolResult] = []
             post_pairing_failure: str | None = None
             tool_policy = hosted_tool_policy(authority, budget.policy)
-            prepared_calls: list[_PreparedHostedToolCall] = []
+            prepared_calls: list[PreparedHostedToolCall] = []
             for call_index, call in enumerate(response.tool_calls):
                 outcome = observed.get(call.provider_tool_call_id)
                 if outcome is None:
@@ -839,7 +837,7 @@ class HostedAgenticLoop:
                         outcome.invocation.disposition_id,
                     )
                 prepared_calls.append(
-                    _PreparedHostedToolCall(
+                    PreparedHostedToolCall(
                         call=call,
                         outcome=outcome,
                         orchestrator=tool_orchestrator,
@@ -904,41 +902,14 @@ class HostedAgenticLoop:
                         tool_event_payload(outcome, display_state="executing"),
                     )
                     execution_indexes.append(index)
-            if execution_indexes:
-                execution_results = await asyncio.gather(
-                    *(
-                        execute_hosted_authorized_tool(
-                            tool_orchestrator=prepared_calls[index].orchestrator,
-                            outcome=prepared_calls[index].outcome,
-                            authority=prepared_calls[index].authority,
-                            context=prepared_calls[index].actor_context,
-                            policy=prepared_calls[index].tool_policy,
-                            budget=budget,
-                            cancellation=cancellation,
-                            poll_seconds=self.confirmation_poll_seconds,
-                        )
-                        for index in execution_indexes
-                    ),
-                    return_exceptions=True,
-                )
-                for index, result in zip(
-                    execution_indexes,
-                    execution_results,
-                    strict=True,
-                ):
-                    if isinstance(result, BaseException):
-                        if isinstance(result, asyncio.CancelledError):
-                            raise result
-                        if (
-                            isinstance(result, HostedAgenticLoopError)
-                            and result.reason_code == "runtime_cancelled"
-                        ):
-                            raise result
-                        result = self._terminalize_tool_exception(
-                            prepared_calls[index].orchestrator,
-                            prepared_calls[index].outcome,
-                        )
-                    prepared_calls[index].outcome = result
+            await execute_hosted_tool_batch(
+                prepared_calls,
+                execution_indexes,
+                budget=budget,
+                cancellation=cancellation,
+                poll_seconds=self.confirmation_poll_seconds,
+                terminalize=self._terminalize_tool_exception,
+            )
 
             for item in prepared_calls:
                 call = item.call
@@ -1007,19 +978,16 @@ class HostedAgenticLoop:
                     except HostedAgenticLoopError as error:
                         if error.reason_code != "agent_tool_result_limit_reached":
                             raise
-                        # A concurrently executed batch can cross the aggregate
-                        # byte ceiling only after its effects are complete. Keep
-                        # exact call/result pairing, then close result capacity
-                        # for later calls instead of rewriting this result.
-                        budget.total_tool_result_bytes = (
-                            budget.policy.max_total_tool_result_bytes
-                        )
+                        # Effects are already complete, but private result bytes
+                        # never cross the aggregate provider boundary.  Persist
+                        # the omission so restart replay makes the same choice.
                         step_journal = (
-                            self.provider_step_journal.record_tool_result_bytes(
+                            self.provider_step_journal.omit_result_for_budget(
                                 step_journal,
-                                total_bytes=budget.total_tool_result_bytes,
+                                outcome.invocation.result_id,
                             )
                         )
+                        result, is_error = dict(TOOL_RESULT_BUDGET_ERROR), True
                     else:
                         step_journal = (
                             self.provider_step_journal.record_tool_result_bytes(

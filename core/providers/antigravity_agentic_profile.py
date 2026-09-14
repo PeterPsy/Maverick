@@ -13,6 +13,7 @@ from core.providers.agentic_models import (
     AgenticRuntimePolicy,
     RoutingConstraint,
     RuntimeCapabilitySet,
+    UNBOUNDED_PARALLEL_TOOL_CALLS,
 )
 from core.providers.agentic_data_policies import (
     REMOTE_PREVIEW_EGRESS_POLICY_ID,
@@ -28,7 +29,7 @@ from core.runtime.full_workspace_contract import (
 )
 
 
-ANTIGRAVITY_PROFILE_REVISION = "4"
+ANTIGRAVITY_PROFILE_REVISION = "5"
 ANTIGRAVITY_CONTEXT_POLICY = AgenticContextPolicy(
     revision="antigravity-native-context-v1",
     max_request_input_tokens=262_144,
@@ -63,7 +64,7 @@ def antigravity_native_policy() -> AgenticRuntimePolicy:
     return AgenticRuntimePolicy(
         max_steps_per_turn=64,
         max_tool_calls_per_turn=48,
-        max_parallel_tool_calls=0,
+        max_parallel_tool_calls=UNBOUNDED_PARALLEL_TOOL_CALLS,
         max_wall_time_seconds=900,
         max_tool_result_bytes=1_500_000,
         max_total_tool_result_bytes=8_000_000,

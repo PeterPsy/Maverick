@@ -9,6 +9,12 @@ from core.providers.agentic_protocol import AgenticSourceMetadata, AgenticToolRe
 from core.runtime.tool_models import ToolInvocationRecord
 
 
+TOOL_RESULT_BUDGET_ERROR = {
+    "error": "agent_tool_result_limit_reached",
+    "result_omitted": True,
+}
+
+
 def pairing_safe_tool_result(
     result: dict[str, object],
     *,
@@ -110,4 +116,8 @@ def make_agentic_tool_result(
     )
 
 
-__all__ = ["make_agentic_tool_result", "pairing_safe_tool_result"]
+__all__ = [
+    "TOOL_RESULT_BUDGET_ERROR",
+    "make_agentic_tool_result",
+    "pairing_safe_tool_result",
+]

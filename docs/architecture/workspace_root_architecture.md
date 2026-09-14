@@ -739,7 +739,8 @@ That means:
 
 - the core owns runtime execution and backend selection
 - the app `agents` owns workspace-specific agent definitions
-- those definitions may include a shared base prompt plus a role-specific prompt
+- new workspaces start with no preinstalled agent definitions
+- each custom definition contributes only its own instructions and explicit skill allowlist
 
 The first provider implementation should not blur these concerns:
 
@@ -787,10 +788,9 @@ If the browser refreshes or the user leaves and reopens the chat, the UI reloads
 
 Examples of app-owned agent definition content:
 
-- common system prompt fragments
-- role-specific prompt instructions
+- agent-specific prompt instructions
 - naming and description
-- optional app-owned configuration metadata
+- an explicit optional skill allowlist
 
 These definitions belong to the workspace data plane under the `agents` app.
 

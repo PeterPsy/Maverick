@@ -7,7 +7,6 @@ import {
   RuntimeTurn,
   getAgentDefinition,
   interruptRuntimeTurn,
-  previewAgentPrompt,
   selectProvider,
 } from "../api/client";
 import { ActiveAppContext, promptWithActiveAppContext } from "../lib/activeAppContext";
@@ -113,8 +112,8 @@ function loadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: string, 
   if (cached) {
     return cached;
   }
-  const pending = Promise.all([getAgentDefinition(agentCatalogAppId, agentTypeId), previewAgentPrompt(agentCatalogAppId, agentTypeId)])
-    .then(([definitionPayload, promptPayload]) => {
+  const pending = getAgentDefinition(agentCatalogAppId, agentTypeId)
+    .then((definitionPayload) => {
       const definition = definitionPayload.agent_definition;
       if (!definitionPayload.exists || !definition) {
         throw new Error("Selected agent is no longer available.");
@@ -123,10 +122,10 @@ function loadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: string, 
         agent_id: definition.name,
         agent_role_id: definition.role_id,
         agent_type_id: definition.id,
-        renderedPrompt: promptPayload.rendered || "",
+        renderedPrompt: definition.instructions || "",
         skill_catalog_app_id: "skills",
         skill_ids: definition.skill_ids || [],
-        skill_activation_mode: definition.skill_activation_mode || "implicit",
+        skill_activation_mode: "explicit" as const,
         source_app_id: agentCatalogAppId,
         title: definition.name,
       };

@@ -102,29 +102,17 @@ def prompt_preview(data_root: Path, body: dict) -> dict:
     role = get_role(data_root, agent_type["role_id"])
     if role is None:
         raise AgentsValidationError(f"Unknown role id: {agent_type['role_id']}")
-    common_prompt = read_common_prompt(data_root)
     sections = [
-        {"id": "common_prompt", "title": "Common Prompt", "content": common_prompt.strip()},
-        {"id": "role", "title": role["name"], "content": role["instructions"].strip()},
-        {
-            "id": "agent_type",
-            "title": "Agent Type",
-            "content": (
-                f"Name: {agent_type['name']}\n"
-                f"Trace verbosity: {agent_type['trace_verbosity']}\n"
-                f"Skill activation: {agent_type.get('skill_activation_mode', 'implicit')}\n"
-                f"Skills: {', '.join(agent_type['skill_ids']) if agent_type['skill_ids'] else 'all enabled workspace skills'}"
-            ),
-        },
+        {"id": "instructions", "title": agent_type["name"], "content": role["instructions"].strip()},
     ]
-    rendered = "\n\n".join(f"## {section['title']}\n{section['content']}" for section in sections if section["content"])
+    rendered = role["instructions"].strip()
     return {
         "sections": sections,
         "rendered": rendered,
         "revision_id": agent_runtime_revision(
             agent_type=agent_type,
             role=role,
-            common_prompt=common_prompt,
+            common_prompt="",
         ),
     }
 

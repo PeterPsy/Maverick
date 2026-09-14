@@ -161,9 +161,6 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
 
     expect(container.querySelector('[aria-label="Full access runtime"]')).toBeNull();
     expect(container.querySelector('[aria-label="Policy-limited runtime"]')).not.toBeNull();
-    const governance = container.querySelector<HTMLElement>(".chatapp-agentic-profile-chip");
-    expect(governance?.title).toContain("snapshot effective-snapshot-digest");
-    expect(governance?.title).toContain("filesystem read yes / write no");
-    expect(governance?.title).toContain("provider google-ai-studio");
+    expect(container.querySelector(".chatapp-agentic-profile-chip")).toBeNull();
   });
 });

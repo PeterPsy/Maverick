@@ -45,14 +45,13 @@ def compact_catalog(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     query = str(body.get("query") or body.get("q") or "").strip().casefold()
     limit = _bounded_int(body.get("limit"), default=50, minimum=1, maximum=100)
     role_records = list_roles(data_root)
-    common_prompt = read_common_prompt(data_root)
     roles_by_id = {str(item.get("id") or ""): item for item in role_records}
     roles = [_compact_role(item) for item in role_records]
     agent_types = [
         _compact_agent_type(
             item,
             role=roles_by_id.get(str(item.get("role_id") or "")),
-            common_prompt=common_prompt,
+            common_prompt="",
         )
         for item in list_agent_types(data_root)
     ]
@@ -88,12 +87,10 @@ def get_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, Any
         "agent_definition": _definition_payload(
             agent_type=agent_type,
             role=role,
-            common_prompt=read_common_prompt(data_root),
+            common_prompt="",
             include_content=True,
         ),
     }
-    if bool(body.get("include_common_prompt")):
-        payload["common_prompt"] = read_common_prompt(data_root)
     return payload
 
 
@@ -129,7 +126,7 @@ def upsert_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, 
     skill_activation_mode = str(
         body.get("skill_activation_mode")
         or (existing_agent_type or {}).get("skill_activation_mode")
-        or "implicit"
+        or "explicit"
     ).strip()
     if skill_activation_mode not in {"implicit", "explicit"}:
         raise AgentsValidationError("Field `skill_activation_mode` must be `implicit` or `explicit`.")
@@ -177,7 +174,7 @@ def upsert_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, 
         "agent_definition": _definition_payload(
             agent_type=agent_type,
             role=role,
-            common_prompt=read_common_prompt(data_root),
+            common_prompt="",
             include_content=include_content,
         ),
     }

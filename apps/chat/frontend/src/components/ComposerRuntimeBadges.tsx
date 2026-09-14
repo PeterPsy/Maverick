@@ -60,7 +60,7 @@ export function ComposerRuntimeBadges({
           title: effectiveExecutionMode === "full-access" ? "Full access runtime" : "Sandbox runtime",
         };
   const showAgenticProfile = Boolean(
-    selectedProvider?.workspace_profile_binding_id && (!locked || contained),
+    contained && selectedProvider?.workspace_profile_binding_id,
   );
   const governanceTitle = [
     selectedProvider?.label,

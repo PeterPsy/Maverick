@@ -25,7 +25,6 @@ import {
   prepareRuntimeSessionAppReferences,
   prewarmRuntimeSession,
   prewarmSpeechWorker,
-  previewAgentPrompt,
   recordRuntimeTurnClientMetrics,
   searchAppReferences,
   sendRuntimeTurn,
@@ -117,7 +116,6 @@ vi.mock("./api/client", () => ({
   prepareRuntimeSessionAppReferences: vi.fn(),
   prewarmRuntimeSession: vi.fn(),
   prewarmSpeechWorker: vi.fn(),
-  previewAgentPrompt: vi.fn(),
   recordRuntimeTurnClientMetrics: vi.fn(),
   searchAppReferences: vi.fn(),
   closeInterAgentRun: vi.fn(),
@@ -360,8 +358,10 @@ beforeEach(() => {
     },
   });
   vi.mocked(listAgentCatalog).mockResolvedValue({ agent_types: [socialVideoAgent] });
-  vi.mocked(getAgentDefinition).mockResolvedValue({ exists: true, agent_definition: socialVideoAgent });
-  vi.mocked(previewAgentPrompt).mockResolvedValue({ rendered: "Agent prompt" });
+  vi.mocked(getAgentDefinition).mockResolvedValue({
+    exists: true,
+    agent_definition: { ...socialVideoAgent, instructions: "Agent prompt" },
+  });
   vi.mocked(prepareRuntimeSessionAppReferences).mockResolvedValue({
     session_id: "session-prepared",
     status: "ready",
@@ -514,7 +514,6 @@ describe("App agent catalog dependency refresh", () => {
 
     await waitForAssertion(() => {
       expect(getAgentDefinition).toHaveBeenCalledWith("agents", socialVideoAgent.id);
-      expect(previewAgentPrompt).toHaveBeenCalledWith("agents", socialVideoAgent.id);
     });
   });
 

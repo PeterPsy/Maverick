@@ -8,7 +8,6 @@ import {
   useState,
 } from "react";
 import type { AgentTypeSummary } from "../api/client";
-import { isResearchRunner, RESEARCH_RUNNER_ID } from "../lib/runtimeProfiles";
 
 type AgentMenuOption = {
   agentTypeId: string;
@@ -22,13 +21,6 @@ const defaultAgentOption: AgentMenuOption = {
   description: "Use all capabilities allowed by the workspace.",
   key: "default",
   label: "Free Agent",
-};
-
-const researchAgentOption: AgentMenuOption = {
-  agentTypeId: RESEARCH_RUNNER_ID,
-  description: "Clean context with read-only web search and open tools.",
-  key: "research",
-  label: "Research",
 };
 
 function normalizeAgentQuery(value: string) {
@@ -59,14 +51,10 @@ function agentToMenuOption(agent: AgentTypeSummary): AgentMenuOption {
 
 function buildMenuOptions(
   agents: AgentTypeSummary[],
-  researchAvailable: boolean,
   normalizedQuery = "",
 ) {
   return [
-    ...[
-      defaultAgentOption,
-      ...(researchAvailable ? [researchAgentOption] : []),
-    ].filter((option) => optionMatchesQuery(option, normalizedQuery)),
+    ...[defaultAgentOption].filter((option) => optionMatchesQuery(option, normalizedQuery)),
     ...agents.map(agentToMenuOption),
   ];
 }
@@ -77,7 +65,6 @@ export function AgentSelector({
   loading = false,
   locked,
   onSelect,
-  researchAvailable = false,
   selectedAgentTypeId,
 }: {
   agents: AgentTypeSummary[];
@@ -85,7 +72,6 @@ export function AgentSelector({
   loading?: boolean;
   locked: boolean;
   onSelect: (agentTypeId: string) => void;
-  researchAvailable?: boolean;
   selectedAgentTypeId: string;
 }) {
   const menuId = useId();
@@ -97,11 +83,9 @@ export function AgentSelector({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeIndexRef = useRef(0);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentTypeId) || null;
-  const label = isResearchRunner(selectedAgentTypeId)
-    ? "Research"
-    : loading && !selectedAgent
-      ? "Loading agents..."
-      : selectedAgent?.name || "Free Agent";
+  const label = loading && !selectedAgent
+    ? "Loading agents..."
+    : selectedAgent?.name || "Free Agent";
   const isDisabled = disabled || locked;
   const normalizedQuery = normalizeAgentQuery(query);
   const filteredAgents = useMemo(
@@ -109,8 +93,8 @@ export function AgentSelector({
     [agents, normalizedQuery],
   );
   const menuOptions = useMemo(
-    () => buildMenuOptions(filteredAgents, researchAvailable, normalizedQuery),
-    [filteredAgents, normalizedQuery, researchAvailable],
+    () => buildMenuOptions(filteredAgents, normalizedQuery),
+    [filteredAgents, normalizedQuery],
   );
   const activeOption = menuOptions[activeIndex] || menuOptions[0];
   const activeOptionId = activeOption ? `${menuId}-option-${activeOption.key}` : undefined;
@@ -124,7 +108,7 @@ export function AgentSelector({
   }
 
   function openMenu() {
-    const unfilteredOptions = buildMenuOptions(agents, researchAvailable);
+    const unfilteredOptions = buildMenuOptions(agents);
     setQuery("");
     const nextActiveIndex = selectedOptionIndex(unfilteredOptions);
     activeIndexRef.current = nextActiveIndex;
@@ -202,11 +186,7 @@ export function AgentSelector({
   function handleQueryChange(value: string) {
     const nextNormalizedQuery = normalizeAgentQuery(value);
     const nextFilteredAgents = agents.filter((agent) => agentMatchesQuery(agent, nextNormalizedQuery));
-    const nextOptions = buildMenuOptions(
-      nextFilteredAgents,
-      researchAvailable,
-      nextNormalizedQuery,
-    );
+    const nextOptions = buildMenuOptions(nextFilteredAgents, nextNormalizedQuery);
     const nextActiveIndex = selectedOptionIndex(nextOptions);
     setQuery(value);
     activeIndexRef.current = nextActiveIndex;

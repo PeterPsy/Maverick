@@ -1,10 +1,12 @@
 # Agents
 
-Workspace app for managing agent roles, prompt composition, and agent type definitions.
+Workspace app for managing intentional custom agent definitions.
 
 ## Contract Notes
 
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
+- The app ships no preinstalled agents. Free Agent and Research are fixed Chat runners, not catalog records.
+- Historical bundled agents and the retired workspace wrappers are removed once from existing workspaces.
 - Agents declares a required `runtime-skills` dependency on the `skill.catalog` interface. The UI resolves the selected provider through the generic dependency payload instead of hardcoding the Skills app id.
 - Bundled skill templates live under `skills/`; the contract declares `agents-ops`.
 - The app currently exposes reference entities for `agent_type` and `role_prompt`.
@@ -13,7 +15,7 @@ Workspace app for managing agent roles, prompt composition, and agent type defin
 - The main Agents iframe no longer renders an internal sidebar. It listens for `maverick.app.navigate` with `agent_type_id` or `app_page: "agent-types/<id>"` to select an agent, and `new_agent` plus `new_agent_request_id` to open the create modal. When selection changes, it emits `maverick.app.selection-changed` so shell-hosted Agents widgets can keep their active row synchronized with the detail iframe.
 - Agents does not own runtime execution or orchestration. It owns only agent definitions, role prompts, and prompt preview; a future optional Orchestrations/Fleet app may consume those definitions only if that app exists and is installed.
 - Runtime execution belongs to Chat or another installed runtime-owning app through the generic core runtime surfaces. Agents does not launch runtime sessions or persist runtime instances.
-- Agent types persist `skill_activation_mode`. The legacy/default `implicit` mode exposes all enabled workspace skills when `skill_ids` is empty and narrows that set when it is non-empty. `explicit` keeps the catalog out of the baseline prompt and treats non-empty `skill_ids` as the allowlist for turn-local `$skill-id` invocations. Hidden inter-agent messages, static participant tasks, and dynamic orchestration tasks carry only their exact `invoked_skill_ids`; the assigned set remains an allowlist and is never expanded automatically, including when it is empty. Adaptive orchestration receives compact activation-mode and allowlist metadata so it can select a valid task-local subset without loading prompt content.
+- New custom agents use explicit skill activation. Their runtime prompt is only their own instructions; no common prompt or generated metadata is injected.
 
 ## CLI And MCP Operations
 

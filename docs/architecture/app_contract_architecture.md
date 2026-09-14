@@ -625,7 +625,7 @@ Examples:
 
 - Storage owns uploaded files and generated artifacts.
 - Chat owns projects and chat-specific UI state; core runtime owns chat thread records and transcript events.
-- Agents owns agent types, agent instances, and prompt material.
+- Agents owns only intentional workspace agent definitions; Free Agent and Research are fixed Chat runners rather than catalog records.
 - A record-centric app may own accounts, contacts, deals, activities, and relationships.
 - Memory may link these records into a workspace knowledge graph.
 

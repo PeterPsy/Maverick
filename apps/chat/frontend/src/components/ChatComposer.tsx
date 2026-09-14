@@ -6,6 +6,7 @@ import type { DeviceUseMode, DeviceUsePermission, NativeDeviceUseSnapshot } from
 import { hasInvalidAttachments } from "../lib/attachments";
 import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
 import type { MentionItem } from "../lib/mentions";
+import { isResearchRunner, RESEARCH_RUNNER_ID } from "../lib/runtimeProfiles";
 import { useComposerEditor } from "../hooks/useComposerEditor";
 import { useMentionPicker } from "../hooks/useMentionPicker";
 import { AgentSelector } from "./AgentSelector";
@@ -134,6 +135,7 @@ export function ChatComposer({
   usage = null,
   value,
 }: ChatComposerProps) {
+  const researchEnabled = isResearchRunner(selectedAgentTypeId);
   const [caretIndex, setCaretIndex] = useState(value.length);
   const [multiAgentMenuOpen, setMultiAgentMenuOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -350,15 +352,33 @@ export function ChatComposer({
                       }}
                     />
                   ) : null}
-                  <AgentSelector
-                    agents={agents}
-                    disabled={disabled || isSending || deviceUseEnabled}
-                    loading={agentCatalogLoading}
-                    locked={agentSelectorLocked}
-                    onSelect={onSelectAgent}
-                    researchAvailable={researchAvailable}
-                    selectedAgentTypeId={selectedAgentTypeId}
-                  />
+                  {researchAvailable || researchEnabled ? (
+                    <button
+                      aria-label={researchEnabled ? "Disable Research" : "Enable Research"}
+                      aria-pressed={researchEnabled}
+                      className={`chatapp-composer__tool-button ${researchEnabled ? "is-active" : ""}`}
+                      disabled={disabled || isSending || deviceUseEnabled || agentSelectorLocked}
+                      onClick={() => {
+                        onSelectAgent(researchEnabled ? "" : RESEARCH_RUNNER_ID);
+                      }}
+                      title={researchEnabled ? "Disable isolated web research" : "Enable isolated web research"}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className="material-symbols-rounded">
+                        travel_explore
+                      </span>
+                    </button>
+                  ) : null}
+                  {!researchEnabled ? (
+                    <AgentSelector
+                      agents={agents}
+                      disabled={disabled || isSending || deviceUseEnabled}
+                      loading={agentCatalogLoading}
+                      locked={agentSelectorLocked}
+                      onSelect={onSelectAgent}
+                      selectedAgentTypeId={selectedAgentTypeId}
+                    />
+                  ) : null}
                   <ComposerRuntimeBadges
                     activeProviderId={activeProviderId}
                     disabled={disabled || isSending || deviceUseEnabled}

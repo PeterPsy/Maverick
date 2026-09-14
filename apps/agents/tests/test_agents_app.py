@@ -26,7 +26,7 @@ sys.path.insert(0, str(AGENTS_BACKEND))
 
 from seeds import seed_defaults
 from service import app_events_for_action, app_events_for_result, handle_action
-from store import delete_role, list_agent_types, list_roles
+from store import delete_role, list_agent_types, list_roles, save_agent_type, save_role
 
 
 class AgentsAppTestCase(unittest.TestCase):
@@ -116,42 +116,95 @@ class AgentsAppTestCase(unittest.TestCase):
         self.assertIn({"required": ["role_instructions"]}, instruction_requirements)
         self.assertIn({"required": ["prompt"]}, instruction_requirements)
 
-    def test_seed_defaults_create_all_roles_and_agent_types(self) -> None:
+    def test_new_catalog_has_no_preinstalled_agents(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
             result = seed_defaults(data_root)
 
-            self.assertEqual(result["role_count"], 14)
-            self.assertEqual(result["agent_type_count"], 14)
-            self.assertEqual(len(list_roles(data_root)), 14)
-            self.assertEqual(len(list_agent_types(data_root)), 14)
-            self.assertTrue((data_root / "roles" / "server-coding-engineer" / "ROLE.md").is_file())
+            self.assertEqual(result["role_count"], 0)
+            self.assertEqual(result["agent_type_count"], 0)
+            self.assertEqual(list_roles(data_root), [])
+            self.assertEqual(list_agent_types(data_root), [])
+            self.assertEqual((data_root / "common_prompt.md").read_text(encoding="utf-8"), "")
+
+    def test_existing_historical_catalog_is_retired_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "agents"
+            save_role(
+                data_root,
+                {
+                    "id": "general-operator",
+                    "name": "General Operator",
+                    "instructions": "Old bundled instructions.",
+                },
+            )
+            save_role(
+                data_root,
+                {
+                    "id": "piero-linkedin-content-os",
+                    "name": "Piero LinkedIn Content OS",
+                    "instructions": "Old orphan role.",
+                },
+            )
+            save_agent_type(
+                data_root,
+                {
+                    "id": "agent-type-general-operator",
+                    "name": "General Operator",
+                    "role_id": "general-operator",
+                },
+            )
+            (data_root / "common_prompt.md").write_text("Old common prompt.\n", encoding="utf-8")
+
+            result = seed_defaults(data_root)
+
+            self.assertEqual(result["retired_agent_type_count"], 1)
+            self.assertEqual(result["retired_role_count"], 2)
+            self.assertEqual(list_agent_types(data_root), [])
+            self.assertEqual(list_roles(data_root), [])
+            self.assertEqual((data_root / "common_prompt.md").read_text(encoding="utf-8"), "")
+            self.assertEqual(seed_defaults(data_root)["retired_agent_type_count"], 0)
 
     def test_service_rejects_deleting_referenced_role(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
-            seed_defaults(data_root)
+            handle_action(
+                data_root,
+                {
+                    "action": "upsert_agent_definition",
+                    "id": "example-specialist",
+                    "name": "Example Specialist",
+                    "instructions": "Handle one focused task.",
+                },
+            )
 
             with self.assertRaises(ValueError):
-                delete_role(data_root, "server-coding-engineer")
+                delete_role(data_root, "example-specialist")
 
     def test_backend_catalog_and_prompt_preview(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
+            handle_action(
+                data_root,
+                {
+                    "action": "upsert_agent_definition",
+                    "id": "example-specialist",
+                    "name": "Example Specialist",
+                    "instructions": "Handle one focused task.",
+                },
+            )
             status, payload = handle_action(data_root, {"action": "catalog"})
             preview_status, preview_payload = handle_action(
                 data_root,
-                {"action": "preview_prompt", "id": "server-coding-engineer"},
+                {"action": "preview_prompt", "id": "example-specialist"},
             )
 
             self.assertEqual(status, 200)
             self.assertEqual(preview_status, 200)
-            self.assertEqual(len(payload["roles"]), 14)
-            self.assertIn("Server Coding Engineer", preview_payload["rendered"])
-            self.assertIn("Skills: all enabled workspace skills", preview_payload["rendered"])
-            self.assertIn("Skill activation: implicit", preview_payload["rendered"])
+            self.assertEqual(len(payload["roles"]), 1)
+            self.assertEqual(preview_payload["rendered"], "Handle one focused task.")
             self.assertNotIn("instances", payload)
-            self.assertEqual(payload["agent_types"][0]["skill_activation_mode"], "implicit")
+            self.assertEqual(payload["agent_types"][0]["skill_activation_mode"], "explicit")
         self.assertNotIn("default_execution_mode", payload["agent_types"][0])
         self.assertNotIn("execution_mode_policy", payload["agent_types"][0])
         self.assertNotIn("Execution mode", preview_payload["rendered"])
@@ -160,6 +213,15 @@ class AgentsAppTestCase(unittest.TestCase):
     def test_default_action_returns_compact_operations_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
+            handle_action(
+                data_root,
+                {
+                    "action": "upsert_agent_definition",
+                    "id": "example-specialist",
+                    "name": "Example Specialist",
+                    "instructions": "Handle one focused task.",
+                },
+            )
             status, payload = handle_action(data_root, {})
             compact_status, compact = handle_action(data_root, {"action": "catalog.compact", "limit": 5})
             full_status, full = handle_action(data_root, {"action": "catalog"})
@@ -169,9 +231,9 @@ class AgentsAppTestCase(unittest.TestCase):
             self.assertIn("upsert_agent_definition", payload["operations"])
             self.assertEqual(compact_status, 200)
             self.assertEqual(compact["payload_profile"], "compact")
-            self.assertLess(len(json.dumps(compact)), len(json.dumps(full)))
             self.assertNotIn("common_prompt", compact)
             self.assertNotIn("instructions", compact["roles"][0])
+            self.assertIn("instructions", full["roles"][0])
             self.assertIn("skill_ids", compact["agent_types"][0])
             self.assertTrue(compact["agent_types"][0]["revision_id"].startswith("sha256:"))
             self.assertEqual(full_status, 200)
@@ -179,6 +241,15 @@ class AgentsAppTestCase(unittest.TestCase):
     def test_runtime_revision_binds_compact_definition_and_prompt_material(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
+            handle_action(
+                data_root,
+                {
+                    "action": "upsert_agent_definition",
+                    "id": "example-specialist",
+                    "name": "Example Specialist",
+                    "instructions": "Handle one focused task.",
+                },
+            )
             _, compact = handle_action(
                 data_root,
                 {"action": "catalog.compact", "entity_type": "agent_type", "limit": 100},
@@ -204,7 +275,7 @@ class AgentsAppTestCase(unittest.TestCase):
                 data_root,
                 {"action": "catalog.compact", "entity_type": "agent_type", "limit": 100},
             )
-            self.assertNotEqual(item["revision_id"], changed["agent_types"][0]["revision_id"])
+            self.assertEqual(item["revision_id"], changed["agent_types"][0]["revision_id"])
 
     def test_upsert_agent_definition_is_idempotent_and_compact_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -262,6 +333,15 @@ class AgentsAppTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
             seed_defaults(data_root)
+            handle_action(
+                data_root,
+                {
+                    "action": "create_role",
+                    "id": "custom-test",
+                    "name": "Custom Test Agent",
+                    "instructions": "Handle the custom test.",
+                },
+            )
 
             create_status, create_payload = handle_action(
                 data_root,
@@ -270,7 +350,7 @@ class AgentsAppTestCase(unittest.TestCase):
                     "id": "agent-type-custom-test",
                     "name": "Custom Test Agent",
                     "description": "Temporary test agent.",
-                    "role_id": "agent-builder",
+                    "role_id": "custom-test",
                     "skill_ids": [],
                     "trace_verbosity": "compact",
                     "enabled": True,
@@ -282,6 +362,7 @@ class AgentsAppTestCase(unittest.TestCase):
             )
             self.assertEqual(create_status, 200)
             self.assertEqual(create_payload["agent_type"]["id"], "agent-type-custom-test")
+            self.assertEqual(create_payload["agent_type"]["skill_activation_mode"], "explicit")
             self.assertIn("skill_ids", create_payload["agent_type"])
             self.assertNotIn("codex_skill_ids", create_payload["agent_type"])
             self.assertNotIn("default_execution_mode", create_payload["agent_type"])

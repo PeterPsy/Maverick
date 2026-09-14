@@ -190,6 +190,7 @@ async function renderComposer({
   isolatedResearch = false,
   onSelectDeviceUseMode,
   researchAvailable = false,
+  selectedAgentTypeId = "",
 }: {
   agentOptions?: AgentTypeSummary[];
   agentCatalogLoading?: boolean;
@@ -210,6 +211,7 @@ async function renderComposer({
   onSubmit?: () => void;
   onSelectDeviceUseMode?: (mode: DeviceUseMode) => void;
   researchAvailable?: boolean;
+  selectedAgentTypeId?: string;
   transcriptionChunkedDictationSupported?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
@@ -264,7 +266,7 @@ async function renderComposer({
         researchAvailable={researchAvailable}
         queuedCount={0}
         queuedPreview={null}
-        selectedAgentTypeId=""
+        selectedAgentTypeId={selectedAgentTypeId}
         transcriptionChunkedDictationSupported={transcriptionChunkedDictationSupported}
         transcriptionProviderAppId={transcriptionProviderAppId}
         transcriptionProviderAvailable={transcriptionProviderAvailable}
@@ -1227,17 +1229,10 @@ describe("ChatComposer reference search", () => {
     expect(element.textContent).not.toContain("Operations Reviewer");
   });
 
-  it("offers Research only when its fixed runtime is available", async () => {
+  it("offers Research as a dedicated composer control", async () => {
     const onSelectAgent = vi.fn();
     const { element } = await renderComposer({ onSelectAgent, researchAvailable: true });
-    const agentButton = element.querySelector('[aria-label="Agent runner: Free Agent"]');
-
-    await act(async () => {
-      (agentButton as HTMLButtonElement).click();
-    });
-    const research = Array.from(element.querySelectorAll(".chatapp-agent-menu__item")).find(
-      (button) => button.textContent?.includes("Research"),
-    );
+    const research = element.querySelector('[aria-label="Enable Research"]');
     expect(research).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -1246,12 +1241,31 @@ describe("ChatComposer reference search", () => {
     expect(onSelectAgent).toHaveBeenCalledWith("__research__");
   });
 
+  it("turns off active Research from the same composer control", async () => {
+    const onSelectAgent = vi.fn();
+    const { element } = await renderComposer({
+      isolatedResearch: true,
+      onSelectAgent,
+      researchAvailable: true,
+      selectedAgentTypeId: "__research__",
+    });
+    const research = element.querySelector('[aria-label="Disable Research"]');
+    expect(research?.getAttribute("aria-pressed")).toBe("true");
+    expect(element.querySelector('[aria-label="Agent runner: Free Agent"]')).toBeNull();
+
+    await act(async () => {
+      (research as HTMLButtonElement).click();
+    });
+    expect(onSelectAgent).toHaveBeenCalledWith("");
+  });
+
   it("removes workspace tools from the Research composer", async () => {
     const { element } = await renderComposer({
       deviceUseAvailable: true,
       isolatedResearch: true,
       onCapturePageArea: () => undefined,
       researchAvailable: true,
+      selectedAgentTypeId: "__research__",
     });
 
     expect(element.querySelector('[aria-label="Add attachments"]')).toBeNull();
@@ -1259,7 +1273,8 @@ describe("ChatComposer reference search", () => {
     expect(element.querySelector('[aria-label="Capture page area"]')).toBeNull();
     expect(element.querySelector('[aria-label="Apps and references"]')).toBeNull();
     expect(element.querySelector('[aria-label="Multi-agent mode: Off"]')).toBeNull();
-    expect(element.querySelector('[aria-label="Agent runner: Free Agent"]')).toBeTruthy();
+    expect(element.querySelector('[aria-label="Disable Research"]')).toBeTruthy();
+    expect(element.querySelector('[aria-label="Agent runner: Free Agent"]')).toBeNull();
   });
 
   it("selects a filtered agent runner with ArrowDown and Enter", async () => {

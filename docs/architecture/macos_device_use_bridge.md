@@ -4,8 +4,8 @@ Status (2026-09-14): Codex-only, mono-agent MVP implemented and physically
 accepted for functional parity with the retained direct Mac runtime. The first
 complete A/B measured **4m50s direct** and **5m55s through Maverick**. Both runs
 passed the same v40 checklist with two recoverable `MC-TOOL-14` events. The
-optimized `observe_app` build described below still requires one signed install
-and one physical comparison before its performance is accepted.
+optimized `observe_app` build is signed and installed in place; one physical
+comparison remains before its performance is accepted.
 
 The native implementation lives in the sibling
 `maverick-glasses-ios` repository. Its companion document is
@@ -205,6 +205,16 @@ smokes and signing checks. Install only through the existing
 `.github/workflows/macos-build.yml` dispatch with `install_and_open=true` while
 `MaverickMac` is closed. The installer atomically replaces the same
 `~/Applications/MaverickMac.app`; never create a second app bundle.
+
+Current native evidence: commit `dce9d2750cb8` passed **268 Swift tests** and
+**35 Python tests**, the credential-free Codex/image and real Peekaboo 4.3.1
+smokes, Apple Development signing, same-turn single-JPEG verification and
+two-way identity continuity. Install run
+[`34850689377`](https://github.com/giuntiocram/maverick-glasses-ios/actions/runs/34850689377)
+atomically updated the existing app and requested launch. Its designated
+requirement SHA-256 remained
+`99971ab861e3c0a730e2e780d47e3da996557ebd4745a445e0f80a7369ccf937`.
+This proves build/sign/install integrity, not the remaining physical latency run.
 
 For the physical comparison:
 

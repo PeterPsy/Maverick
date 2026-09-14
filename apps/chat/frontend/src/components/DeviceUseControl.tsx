@@ -45,7 +45,7 @@ export function DeviceUseControl({
 
   return (
     <>
-      <div className={`chatapp-device-use-control is-${mode}`} aria-label="Device Use">
+      <div className="chatapp-device-use-control" aria-label="Device Use">
         <button
           aria-haspopup="dialog"
           aria-label="Apri impostazioni Device Use"
@@ -193,7 +193,7 @@ function DeviceUseSettingsModal({
           <legend>Conferme</legend>
           <div className="chatapp-device-use-modal__radios">
             <Radio label="Ogni azione" checked={consentMode === "perAction"} onChange={() => { setConsentMode("perAction"); setSaved(false); }} />
-            <Radio label="Una per incarico, senza limite" checked={consentMode === "perTask"} onChange={() => { setConsentMode("perTask"); setSaved(false); }} />
+            <Radio label="Una per incarico" checked={consentMode === "perTask"} onChange={() => { setConsentMode("perTask"); setSaved(false); }} />
           </div>
         </fieldset>
         <button

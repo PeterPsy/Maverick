@@ -9,6 +9,7 @@ import json
 
 from core.providers.agentic_lineage_admission import (
     binding_authority_digest as _binding_authority_digest,
+    normalized_binding_policy,
     rolled_binding_id as _rolled_binding_id,
     lineage_admission_disabled,
 )
@@ -210,21 +211,21 @@ def _roll_forward_enabled_codex_bindings(
             current = current_profiles[source.definition_id]
             if lineage_admission_disabled(source, bindings):
                 continue
+            policy = normalized_binding_policy(source.workspace_policy_ceiling)
             if (
                 source.egress_policy_id != current.egress_policy_id
                 or source.egress_policy_revision != current.egress_policy_revision
                 or canonical_digest(
                     intersect_runtime_policies(
                         current.policy_ceiling,
-                        source.workspace_policy_ceiling,
+                        policy,
                     )
                 )
-                != canonical_digest(source.workspace_policy_ceiling)
+                != canonical_digest(policy)
             ):
                 continue
             if any(_binding_matches_current_source(item, current, source) for item in bindings):
                 continue
-            policy = source.workspace_policy_ceiling
             binding_id = _rolled_binding_id(source, current.revision)
             existing = next(
                 (item for item in bindings if item.binding_id == binding_id),

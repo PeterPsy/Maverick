@@ -178,6 +178,63 @@ class CodexProfileRolloutTest(unittest.TestCase):
             set(policies),
         )
 
+    def test_migration_normalizes_legacy_parallel_zero_once(self) -> None:
+        current_profile = publish_codex_agentic_profile(
+            self.provider_store,
+            definition=self.codex,
+            model_id="alternate-history-model",
+            now=NOW,
+        )
+        legacy_policy = replace(
+            current_profile.policy_ceiling,
+            max_parallel_tool_calls=0,  # type: ignore[arg-type]
+        )
+        previous_profile = self._historical_profile(
+            replace(current_profile, policy_ceiling=legacy_policy),
+            revision="17.legacy-parallel-zero",
+        )
+        self.provider_store.save_workspace_agentic_profile_binding(
+            WorkspaceAgenticProfileBinding(
+                binding_id="legacy-parallel-zero-binding",
+                workspace_id="default",
+                definition_id=previous_profile.definition_id,
+                definition_revision=previous_profile.revision,
+                credential_binding_id=None,
+                enabled=True,
+                is_default=False,
+                actor_policy=default_actor_selection_policy(),
+                workspace_policy_ceiling=legacy_policy,
+                egress_policy_id=previous_profile.egress_policy_id,
+                egress_policy_revision=previous_profile.egress_policy_revision,
+                revision=0,
+                created_at=NOW,
+                updated_at=NOW,
+            ),
+            expected_revision=None,
+        )
+
+        for _attempt in range(2):
+            _roll_forward_enabled_codex_bindings(
+                self.provider_store,
+                self.registry,
+                workspace_ids={"default"},
+                now=NOW,
+            )
+
+        current_bindings = [
+            binding
+            for binding in self.provider_store.list_workspace_agentic_profile_bindings(
+                "default"
+            )
+            if binding.definition_revision == current_profile.revision
+        ]
+        self.assertEqual(len(current_bindings), 1)
+        self.assertEqual(
+            current_bindings[0].workspace_policy_ceiling.max_parallel_tool_calls,
+            "unbounded",
+        )
+        self.assertEqual(current_bindings[0].revision, 0)
+
     def test_migration_skips_an_enabled_binding_with_missing_definition(self) -> None:
         profile = publish_codex_agentic_profile(
             self.provider_store,

@@ -3,15 +3,28 @@
 from dataclasses import replace
 import hashlib
 
+from core.providers.agentic_models import UNBOUNDED_PARALLEL_TOOL_CALLS
 from core.providers.errors import AgenticProfileError
 from core.runtime.execution_binding import canonical_digest
+
+
+def normalized_binding_policy(policy):
+    """Canonicalize persisted policy spellings before lineage comparison."""
+    if policy.max_parallel_tool_calls == 0:
+        return replace(
+            policy,
+            max_parallel_tool_calls=UNBOUNDED_PARALLEL_TOOL_CALLS,
+        )
+    return policy
 
 
 def binding_authority_digest(binding):
     return canonical_digest({
         "credential_binding_id": binding.credential_binding_id,
         "actor_policy": binding.actor_policy,
-        "workspace_policy_ceiling": binding.workspace_policy_ceiling,
+        "workspace_policy_ceiling": normalized_binding_policy(
+            binding.workspace_policy_ceiling
+        ),
         "egress_policy_id": binding.egress_policy_id,
         "egress_policy_revision": binding.egress_policy_revision,
     })
@@ -91,5 +104,11 @@ def record_lineage_decision(desired, existing, bindings, *, operator_decision, n
                    admission_enabled_at=enabled_at, admission_disabled_at=disabled_at)
 
 
-__all__ = ["binding_authority_digest", "rolled_binding_id", "lineage_admission_disabled",
-           "require_lineage_admission", "record_lineage_decision"]
+__all__ = [
+    "binding_authority_digest",
+    "normalized_binding_policy",
+    "rolled_binding_id",
+    "lineage_admission_disabled",
+    "require_lineage_admission",
+    "record_lineage_decision",
+]

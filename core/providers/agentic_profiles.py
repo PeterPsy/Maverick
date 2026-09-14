@@ -37,7 +37,7 @@ from core.runtime.agentic_feature_flags import (
 from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
 
 
-CODEX_PROFILE_REVISION = "17"
+CODEX_PROFILE_REVISION = "18"
 CODEX_PREVIOUS_PROFILE_REVISIONS = (
     "1",
     "2",
@@ -55,6 +55,7 @@ CODEX_PREVIOUS_PROFILE_REVISIONS = (
     "14",
     "15",
     "16",
+    "17",
 )
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"

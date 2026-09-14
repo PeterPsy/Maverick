@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 from types import SimpleNamespace
 import time
 import unittest
+from unittest.mock import patch
 
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
@@ -81,6 +83,8 @@ class AgenticFullAccessParityTest(unittest.TestCase):
             )
             registry = HostedToolProcessRegistry(store=store)
             cli_registry, mcp_registry = _discovery_registries()
+            rg_path = shutil.which("rg")
+            self.assertIsNotNone(rg_path, "missing required CLI: rg")
             surfaces = {
                 item.definition.handle: item
                 for item in build_core_runtime_tool_capabilities(
@@ -91,6 +95,8 @@ class AgenticFullAccessParityTest(unittest.TestCase):
                     cli_registry=cli_registry,
                     mcp_registry=mcp_registry,
                     execution_mode="full-access",
+                    runtime_api_token="test-runtime-token",
+                    runtime_path_entries=(str(Path(rg_path).parent),),
                 )
             }
             self.assertTrue(
@@ -217,38 +223,59 @@ class AgenticFullAccessParityTest(unittest.TestCase):
             )
             self.assertFalse(moved.exists())
 
-            required_cli = ("git", "rg", "maverick")
-            for name in required_cli:
+            required_host_cli = ("git", "rg")
+            for name in required_host_cli:
                 self.assertIsNotNone(shutil.which(name), f"missing required CLI: {name}")
-            shell = surfaces["core-capability:shell.run"].handler(
-                {
-                    "argv": [
-                        "/bin/sh",
-                        "-c",
-                        "; ".join(
-                            [
-                                "printf 'cli:git\\n'; git --version",
-                                "printf 'cli:rg\\n'; rg --version",
-                                "printf 'cli:maverick\\n'; maverick --help",
-                                "printf 'workspace:%s mode:%s\\n' "
-                                '"$MAVERICK_WORKSPACE_ID" '
-                                '"$MAVERICK_EFFECTIVE_MODE"',
-                            ]
-                        ),
-                    ],
-                    "cwd": str(outside),
-                },
-                context,
-                None,
-            )
+            with patch.dict(
+                "os.environ",
+                {"PATH": "/usr/local/bin:/usr/bin:/bin"},
+            ):
+                shell = surfaces["core-capability:shell.run"].handler(
+                    {
+                        "argv": [
+                            "/bin/sh",
+                            "-c",
+                            "; ".join(
+                                [
+                                    "printf 'cli:git\\n'; git --version",
+                                    "printf 'cli:rg\\n'; rg --version",
+                                    "printf 'cli:maverick\\n'; maverick --help",
+                                    "printf 'maverick-path:%s\\n' \"$(command -v maverick)\"",
+                                    "test -n \"$MAVERICK_RUNTIME_API_TOKEN\" && printf 'token:present\\n'",
+                                    "printf 'workspace:%s mode:%s\\n' "
+                                    '"$MAVERICK_WORKSPACE_ID" '
+                                    '"$MAVERICK_EFFECTIVE_MODE"',
+                                ]
+                            ),
+                        ],
+                        "cwd": str(outside),
+                    },
+                    context,
+                    None,
+                )
             self.assertEqual(shell["exit_code"], 0)
-            for name in required_cli:
+            for name in (*required_host_cli, "maverick"):
                 self.assertIn(f"cli:{name}", shell["output"].lower())
+            runtime_maverick = (
+                workspace
+                / "runtime"
+                / "sessions"
+                / "session-parity"
+                / "bin"
+                / "maverick"
+            )
+            self.assertIn(f"maverick-path:{runtime_maverick}", shell["output"])
+            self.assertIn("token:present", shell["output"])
             self.assertIn("workspace:default mode:full-access", shell["output"])
 
             started = surfaces["core-capability:process.start"].handler(
                 {
-                    "argv": ["/bin/sh", "-c", "read line; printf 'received:%s' \"$line\""],
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        "read line; printf 'received:%s maverick:%s' "
+                        '"$line" "$(command -v maverick)"',
+                    ],
                     "cwd": str(outside),
                 },
                 context,
@@ -271,6 +298,7 @@ class AgenticFullAccessParityTest(unittest.TestCase):
             self.assertIsNotNone(status)
             self.assertEqual(status["status"], "exited")
             self.assertIn("received:hello", status["output"])
+            self.assertIn(f"maverick:{runtime_maverick}", status["output"])
 
             sleeping = surfaces["core-capability:process.start"].handler(
                 {"argv": ["/bin/sh", "-c", "sleep 30"], "cwd": str(outside)},

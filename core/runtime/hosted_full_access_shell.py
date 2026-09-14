@@ -9,6 +9,7 @@ import subprocess
 import time
 
 from core.runtime.hosted_process_termination import terminate_hosted_process
+from core.runtime.runtime_cli_wrapper import write_runtime_maverick_wrapper
 from core.runtime.runtime_paths import RuntimePathResolver
 from core.runtime.tool_errors import RuntimeToolError
 
@@ -18,24 +19,39 @@ def full_access_process_environment(
     workspace_id: str,
     session_id: str,
     workspace_root: Path,
+    runtime_api_token: str | None = None,
+    additional_path_entries: tuple[str, ...] = (),
 ) -> dict[str, str]:
-    """Inherit the host CLI environment and prepend the session-owned shim bin."""
+    """Prepare the host CLI environment and session-owned runtime shims."""
     environment = dict(os.environ)
     session_root = workspace_root / "runtime" / "sessions" / session_id
     session_bin = session_root / "bin"
+    write_runtime_maverick_wrapper(session_bin / "maverick")
     inherited_path = environment.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+    path_entries = dict.fromkeys(
+        (
+            str(session_bin),
+            *additional_path_entries,
+            *inherited_path.split(os.pathsep),
+        )
+    )
     environment.update(
         {
-            "PATH": f"{session_bin}:{inherited_path}",
+            "PATH": os.pathsep.join(entry for entry in path_entries if entry),
             "MAVERICK_EFFECTIVE_MODE": "full-access",
             "MAVERICK_RUNTIME_BIN": str(session_bin),
             "MAVERICK_RUNTIME_ROOT": str(session_root),
             "MAVERICK_RUNTIME_SESSION_ID": session_id,
             "MAVERICK_RUNTIME_ENGINE_ID": "maverick-hosted-tool-process",
+            "MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE": "provider_compact",
             "MAVERICK_WORKSPACE_ID": workspace_id,
             "MAVERICK_WORKSPACE_ROOT": str(workspace_root),
         }
     )
+    if runtime_api_token:
+        environment["MAVERICK_RUNTIME_API_TOKEN"] = runtime_api_token
+    else:
+        environment.pop("MAVERICK_RUNTIME_API_TOKEN", None)
     return environment
 
 

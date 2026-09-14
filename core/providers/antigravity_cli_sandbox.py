@@ -12,9 +12,7 @@ from core.providers.antigravity_cli_runtime_home import (
     ensure_antigravity_runtime_skills_root,
     prepare_antigravity_runtime_home,
 )
-from core.providers.provider_codex_wrappers import (
-    _write_workspace_maverick_wrapper,
-)
+from core.runtime.runtime_cli_wrapper import write_runtime_maverick_wrapper
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
 from core.runtime.workspace_sandbox import build_bwrap_command
@@ -58,7 +56,7 @@ def antigravity_stream_launch_spec(
     runtime_bin = runtime / "bin"
     runtime_bin.mkdir(parents=True, exist_ok=True, mode=0o700)
     runtime_bin.chmod(0o700)
-    _write_workspace_maverick_wrapper(runtime_bin / "maverick")
+    write_runtime_maverick_wrapper(runtime_bin / "maverick")
     log_path = runtime / "antigravity-cli.log"
 
     argv = [

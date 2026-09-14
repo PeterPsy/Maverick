@@ -56,6 +56,8 @@ def build_full_workspace_capabilities(
     process_registry: HostedToolProcessRegistry | None,
     result_classification_resolver=None,
     full_access: bool = False,
+    runtime_api_token: str | None = None,
+    runtime_path_entries: tuple[str, ...] = (),
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build additional workspace surfaces over the shared filesystem anchor."""
 
@@ -473,6 +475,8 @@ def build_full_workspace_capabilities(
                 runtime_root=runtime_root,
                 result_classification_resolver=result_classification_resolver,
                 full_access=full_access,
+                runtime_api_token=runtime_api_token,
+                runtime_path_entries=runtime_path_entries,
             )
         )
     return tuple(surfaces)

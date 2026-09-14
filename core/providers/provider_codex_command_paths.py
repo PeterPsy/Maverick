@@ -280,3 +280,21 @@ class CodexCommandPathMixin:
             and resolved.parent.name in {"codex", "bin"}
             and "vendor" in resolved.parts
         )
+
+
+def resolve_codex_vendored_tool(
+    tool_name: str,
+    *,
+    codex_command: str | None = None,
+) -> Path | None:
+    """Resolve a CLI shipped beside the installed Codex native binary."""
+    if not tool_name or Path(tool_name).name != tool_name:
+        return None
+    resolver = CodexCommandPathMixin()
+    command = (
+        str(codex_command or "").strip()
+        or os.environ.get("MAVERICK_CODEX_COMMAND", "").strip()
+        or "codex"
+    )
+    standalone = Path(resolver._runtime_command(command))
+    return resolver._vendored_codex_tool_binary(standalone, tool_name)

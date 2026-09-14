@@ -86,6 +86,8 @@ def build_core_runtime_tool_capabilities(
     workspace_spawn_observer: Callable[[str], None] | None = None,
     attachment_read_fences: tuple[RuntimeAttachmentReadFence, ...] = (),
     execution_mode: str = "sandbox",
+    runtime_api_token: str | None = None,
+    runtime_path_entries: tuple[str, ...] = (),
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build sandboxed or direct full-access Core capabilities."""
     full_access = execution_mode == "full-access"
@@ -321,6 +323,8 @@ def build_core_runtime_tool_capabilities(
                     workspace_id=workspace_id,
                     session_id=context.session_id,
                     workspace_root=workspace_root,
+                    runtime_api_token=runtime_api_token,
+                    additional_path_entries=runtime_path_entries,
                 ),
                 timeout_seconds=timeout,
                 max_output_bytes=MAX_SHELL_OUTPUT_BYTES,
@@ -414,6 +418,8 @@ def build_core_runtime_tool_capabilities(
         process_registry=process_registry,
         result_classification_resolver=result_classification_resolver,
         full_access=full_access,
+        runtime_api_token=runtime_api_token,
+        runtime_path_entries=runtime_path_entries,
     )
     discovery = (
         build_discovery_first_capabilities(

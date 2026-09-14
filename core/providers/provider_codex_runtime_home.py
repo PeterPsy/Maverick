@@ -15,7 +15,7 @@ from core.providers.provider_codex_reasoning import (
     codex_default_reasoning_effort,
     normalize_codex_model_options,
 )
-from core.providers.provider_codex_wrappers import _write_workspace_maverick_wrapper
+from core.runtime.runtime_cli_wrapper import write_runtime_maverick_wrapper
 from core.runtime.runtime_session import RuntimeSessionRecord
 if TYPE_CHECKING:
     from core.runtime.execution import RuntimeExecutionResult
@@ -178,7 +178,7 @@ class CodexRuntimeHomeMixin:
     def _prepare_runtime_bin(self, session: RuntimeSessionRecord, *, host_command: str | None = None) -> Path:
         runtime_bin = Path(session.runtime_root) / "bin"
         runtime_bin.mkdir(parents=True, exist_ok=True)
-        _write_workspace_maverick_wrapper(runtime_bin / "maverick")
+        write_runtime_maverick_wrapper(runtime_bin / "maverick")
         write_codex_post_tool_use_hook(runtime_bin / CODEX_POST_TOOL_USE_HOOK_NAME)
         sandbox_launcher = runtime_bin / "workspace_sandbox.py"
         shutil.copy2(Path(__file__).resolve().parents[1] / "runtime" / "workspace_sandbox.py", sandbox_launcher)

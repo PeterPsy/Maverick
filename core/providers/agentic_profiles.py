@@ -226,6 +226,9 @@ def resolve_workspace_agentic_profile(
         binding = defaults[0] if defaults else None
     if binding is None or not binding.enabled:
         raise AgenticProfileError("workspace_profile_binding_disabled")
+    from core.providers.agentic_lineage_admission import require_lineage_admission
+
+    require_lineage_admission(store, binding)
     definition = store.get_agentic_profile_definition(
         binding.definition_id,
         binding.definition_revision,
@@ -277,9 +280,6 @@ def build_pinned_execution_binding(
         binding_id=workspace_binding_id,
         workspace_store=workspace_store,
     )
-    from core.providers.agentic_lineage_admission import require_lineage_admission
-
-    require_lineage_admission(store, binding)
     _require_authorized_profile_snapshot(
         definition=definition,
         binding=binding,

@@ -31,6 +31,7 @@ def issue_workspace_api_token(
     workspace_id: str,
     runtime_session_id: str,
     effective_mode: str = "sandbox",
+    runtime_turn_id: str | None = None,
     ttl_seconds: int = DEFAULT_TOKEN_TTL_SECONDS,
     now: datetime | None = None,
 ) -> str:
@@ -45,6 +46,8 @@ def issue_workspace_api_token(
         "issued_at": timestamp,
         "expires_at": timestamp + max(1, int(ttl_seconds)),
     }
+    if runtime_turn_id:
+        payload["runtime_turn_id"] = runtime_turn_id
     encoded = _base64_url(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     signature = _sign(encoded)
     return f"{encoded}.{signature}"
@@ -75,6 +78,7 @@ def verify_workspace_api_token(token: str, *, now: datetime | None = None) -> Ru
     token_id = payload.get("token_id")
     issued_at = payload.get("issued_at")
     expires_at = payload.get("expires_at")
+    runtime_turn_id = payload.get("runtime_turn_id")
     if mode not in {"sandbox", "full-access"}:
         return None
     if not isinstance(token_id, str) or not token_id:
@@ -83,11 +87,15 @@ def verify_workspace_api_token(token: str, *, now: datetime | None = None) -> Ru
         return None
     if not isinstance(expires_at, int):
         return None
+    if runtime_turn_id is not None and (
+        not isinstance(runtime_turn_id, str) or not runtime_turn_id
+    ):
+        return None
     if issued_at >= expires_at:
         return None
     if expires_at <= int((now or datetime.now(tz=UTC)).timestamp()):
         return None
-    return {
+    claims: RuntimeApiTokenClaims = {
         "workspace_id": workspace_id,
         "runtime_session_id": runtime_session_id,
         "mode": mode,
@@ -95,6 +103,9 @@ def verify_workspace_api_token(token: str, *, now: datetime | None = None) -> Ru
         "issued_at": issued_at,
         "expires_at": expires_at,
     }
+    if runtime_turn_id is not None:
+        claims["runtime_turn_id"] = runtime_turn_id
+    return claims
 
 
 def runtime_api_token_record_from_claims(claims: RuntimeApiTokenClaims) -> RuntimeApiTokenRecord:
@@ -161,6 +172,12 @@ def validate_workspace_api_token_lifecycle(
     journal_reason = provider_step_admission_reason(
         store,
         session_id=session.session_id,
+        turn_id=(
+            str(claims["runtime_turn_id"])
+            if claims.get("runtime_turn_id")
+            else None
+        ),
+        allow_same_turn_pairing=bool(claims.get("runtime_turn_id")),
     )
     if journal_reason is not None:
         return None, journal_reason

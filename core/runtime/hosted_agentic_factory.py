@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import time
 
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
@@ -17,6 +18,7 @@ from core.providers.maverick_agent_builtins import (
 )
 from core.providers.maverick_agent_onboarding import MaverickAgentOnboardingCatalog
 from core.providers.provider_credentials import resolve_provider_binding
+from core.providers.provider_codex_command_paths import resolve_codex_vendored_tool
 from core.providers.provider_registry import ProviderRegistry
 from core.runtime.authority import (
     intersect_runtime_policies,
@@ -73,6 +75,10 @@ from core.runtime.semantic_envelope import HostedSemanticEnvelopeCompiler
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
+from core.runtime.workspace_api_token import (
+    issue_workspace_api_token,
+    register_workspace_api_token,
+)
 from core.workspaces.data_governance import resource_classification_for_observation
 from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
@@ -102,6 +108,38 @@ def build_hosted_agentic_engine_adapter(
     )
     process_registry = HostedToolProcessRegistry(store=state.runtime_store)
     adapter_holder: dict[str, HostedAgenticEngineAdapter] = {}
+    runtime_cli_tokens: dict[tuple[str, str], tuple[str, str, float]] = {}
+    vendored_rg = resolve_codex_vendored_tool("rg")
+    runtime_cli_path_entries = (
+        (str(vendored_rg.parent),) if vendored_rg is not None else ()
+    )
+
+    def runtime_cli_token(context, actor) -> str | None:
+        if actor.execution_mode != "full-access":
+            return None
+        key = (context.session.workspace_id, context.session.session_id)
+        turn_id = str(context.correlation_id)
+        cached = runtime_cli_tokens.get(key)
+        if (
+            cached is not None
+            and cached[0] == turn_id
+            and cached[2] > time.monotonic()
+        ):
+            return cached[1]
+        try:
+            token = issue_workspace_api_token(
+                workspace_id=key[0],
+                runtime_session_id=key[1],
+                effective_mode="full-access",
+                runtime_turn_id=turn_id,
+            )
+            register_workspace_api_token(state.runtime_store, token)
+        except RuntimeError as error:
+            raise HostedAgenticLoopError(
+                "runtime_cli_authentication_unavailable"
+            ) from error
+        runtime_cli_tokens[key] = (turn_id, token, time.monotonic() + 3_300)
+        return token
 
     def policy_resolver(context):
         try:
@@ -223,6 +261,8 @@ def build_hosted_agentic_engine_adapter(
             ledger=state.runtime_tool_ledger,
             workspace_store=state.workspace_store,
             process_registry=process_registry,
+            runtime_api_token=runtime_cli_token(context, actor),
+            runtime_path_entries=runtime_cli_path_entries,
             live_allowed_remote_data_classes_resolver=lambda: tuple(
                 authority_refresher(context).allowed_remote_data_classes
             ),
@@ -279,6 +319,8 @@ def _tool_orchestrator(
     ledger,
     workspace_store,
     process_registry,
+    runtime_api_token=None,
+    runtime_path_entries=(),
     live_allowed_remote_data_classes_resolver=None,
 ) -> RuntimeToolOrchestrator:
     # Registry builders load app-hosting integration, which depends on the API
@@ -409,6 +451,8 @@ def _tool_orchestrator(
                     getattr(context, "input_sources", ())
                 ),
                 execution_mode=actor.execution_mode,
+                runtime_api_token=runtime_api_token,
+                runtime_path_entries=runtime_path_entries,
             ),
             result_classification_resolver=result_admission_resolver,
             result_preflight_resolver=result_preflight_resolver,

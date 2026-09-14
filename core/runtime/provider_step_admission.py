@@ -19,7 +19,12 @@ def provider_step_admission_reason(
         return "provider_state_ambiguous"
     if any(item.commit_status == "recovery_required" for item in records):
         return "runtime_session_recovery_required"
-    if any(item.commit_status == "pending" for item in records):
+    pending = [item for item in records if item.commit_status == "pending"]
+    if pending and not (
+        len(pending) == 1
+        and allow_same_turn_pairing
+        and turn_id == pending[0].turn_id
+    ):
         return "provider_state_ambiguous"
     committed_finals = [
         item

@@ -37,6 +37,8 @@ def build_process_capabilities(
     runtime_root,
     result_classification_resolver=None,
     full_access=False,
+    runtime_api_token=None,
+    runtime_path_entries=(),
 ):
     """Build process start/status/input/interrupt surfaces for one workspace."""
 
@@ -81,6 +83,8 @@ def build_process_capabilities(
                     workspace_id=context.workspace_id,
                     session_id=context.session_id,
                     workspace_root=workspace_root,
+                    runtime_api_token=runtime_api_token,
+                    additional_path_entries=runtime_path_entries,
                 ),
                 timeout_seconds=timeout_seconds,
             )

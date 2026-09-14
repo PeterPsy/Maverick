@@ -1475,10 +1475,13 @@ export function App() {
               const connection = connectionById.get(thread.connection_id);
               const route = threadRoute(thread, connection, primaryScope.mailbox);
               const isDraft = thread.item_kind === 'draft' && Boolean(thread.draft_id);
+              const isSelected = isDraft
+                ? Boolean(selectedDraft && selectedDraft.id === thread.draft_id)
+                : selectedThread?.id === thread.id;
               return (
                 <article
                   key={thread.id}
-                  className={`thread-row ${selectedThread?.id === thread.id || selectedDraft?.id === thread.draft_id ? 'selected' : ''} ${
+                  className={`thread-row ${isSelected ? 'selected' : ''} ${
                     draggingThreadId === thread.id ? 'is-dragging' : ''
                   }`}
                   draggable={!isDraft}

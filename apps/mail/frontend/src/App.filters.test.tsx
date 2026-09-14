@@ -85,6 +85,19 @@ describe('Live Mail sidebar filtering', () => {
     expect(vi.mocked(callBackend)).toHaveBeenCalledTimes(backendReads);
   });
 
+  it('marks only the opened thread as selected', async () => {
+    await mount();
+    const threadRows = [...container.querySelectorAll<HTMLElement>('.thread-row')];
+    expect(threadRows).toHaveLength(2);
+    expect(threadRows.filter((row) => row.classList.contains('selected'))).toHaveLength(0);
+
+    await act(async () => threadRows[0].querySelector<HTMLButtonElement>('.thread-row__body')!.click());
+
+    const selectedRows = [...container.querySelectorAll<HTMLElement>('.thread-row.selected')];
+    expect(selectedRows).toHaveLength(1);
+    expect(selectedRows[0].textContent).toContain('A inbox');
+  });
+
   it('filters the whole loaded collection, not only the first backend or UI page', async () => {
     data = Array.from({ length: 251 }, (_, index) => thread(`Mail ${index}`, [index < 200 ? 'inbox' : 'sent']));
     await mount();

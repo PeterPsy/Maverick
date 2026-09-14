@@ -104,7 +104,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         )
         self.assertEqual(payload["reasoning"], {"effort": "high"})
         self.assertEqual(payload["stream_options"], {"include_usage": True})
-        self.assertIs(payload["parallel_tool_calls"], True)
+        self.assertNotIn("parallel_tool_calls", payload)
 
     def test_request_accepts_only_catalog_advertised_reasoning_efforts(self) -> None:
         for effort in ("max", "high", "low"):

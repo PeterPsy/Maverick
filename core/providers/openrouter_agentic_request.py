@@ -59,7 +59,6 @@ def openrouter_chat_payload(
             for tool in request.tool_definitions
         ]
         payload["tool_choice"] = "auto"
-        payload["parallel_tool_calls"] = True
     if request.reasoning_effort is not None:
         effort = request.reasoning_effort.strip().lower()
         if effort not in OPENROUTER_AGENTIC_REASONING_EFFORTS:

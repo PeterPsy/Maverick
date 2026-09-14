@@ -183,7 +183,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
         self.assertEqual(
             OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
-            ("1", "2"),
+            ("1", "2", "3"),
         )
 
 

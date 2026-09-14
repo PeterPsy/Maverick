@@ -140,6 +140,12 @@ provider-private history, independent call/result pairing, cancellation,
 normalized errors, token accounting and recovery. Each request refreshes live
 authority before network egress and before each tool effect.
 
+The pinned Relace endpoint can emit several tool calls in one response but does
+not advertise the optional OpenAI `parallel_tool_calls` request parameter.
+Therefore the OpenRouter codec omits that hint instead of making
+`require_parameters=true` reject an otherwise supported tool request. Core
+still consumes and executes every emitted call concurrently.
+
 Parallelism is expressed as the explicit `unbounded` policy contract: every
 call emitted in one provider step is independently executed, up to the existing
 per-turn call budget. Provider-visible result bytes remain physically bounded;

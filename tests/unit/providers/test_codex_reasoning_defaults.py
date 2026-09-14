@@ -12,7 +12,7 @@ def reasoning(effort: str) -> ProviderReasoningOption:
 
 
 class CodexReasoningDefaultsTest(unittest.TestCase):
-    def test_codex_uses_max_and_excludes_multi_agent_ultra(self) -> None:
+    def test_codex_prefers_extra_high_and_excludes_multi_agent_ultra(self) -> None:
         option = ProviderModelOption(
             model_id="gpt-5.6-sol",
             label="GPT-5.6-Sol",
@@ -31,13 +31,13 @@ class CodexReasoningDefaultsTest(unittest.TestCase):
         definition = build_codex_definition(model_options=[option])
         normalized = definition.model_options[0]
 
-        self.assertEqual(normalized.default_reasoning_effort, "max")
+        self.assertEqual(normalized.default_reasoning_effort, "xhigh")
         self.assertEqual(
             [item.effort for item in normalized.supported_reasoning_efforts],
             ["low", "medium", "high", "xhigh", "max"],
         )
 
-    def test_codex_uses_the_deepest_supported_single_agent_effort(self) -> None:
+    def test_codex_uses_extra_high_when_max_is_unavailable(self) -> None:
         option = ProviderModelOption(
             model_id="gpt-5.5",
             label="GPT-5.5",
@@ -54,6 +54,24 @@ class CodexReasoningDefaultsTest(unittest.TestCase):
         normalized = normalize_codex_model_option(option)
 
         self.assertEqual(normalized.default_reasoning_effort, "xhigh")
+
+    def test_codex_falls_back_to_max_when_extra_high_is_unavailable(self) -> None:
+        option = ProviderModelOption(
+            model_id="gpt-test",
+            label="GPT Test",
+            description=None,
+            default_reasoning_effort="medium",
+            supported_reasoning_efforts=[
+                reasoning("low"),
+                reasoning("medium"),
+                reasoning("high"),
+                reasoning("max"),
+            ],
+        )
+
+        normalized = normalize_codex_model_option(option)
+
+        self.assertEqual(normalized.default_reasoning_effort, "max")
 
 
 if __name__ == "__main__":

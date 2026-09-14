@@ -7,13 +7,13 @@ from dataclasses import replace
 from core.providers.models import ProviderModelOption
 
 
-CODEX_DEFAULT_REASONING_EFFORT = "max"
+CODEX_DEFAULT_REASONING_EFFORT = "xhigh"
 CODEX_MULTI_AGENT_EFFORTS = frozenset({"ultra"})
-CODEX_REASONING_PREFERENCE = ("max", "xhigh", "high", "medium", "low", "minimal")
+CODEX_REASONING_PREFERENCE = ("xhigh", "max", "high", "medium", "low", "minimal")
 
 
 def codex_default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
-    """Choose Maverick's deepest single-agent reasoning effort for one Codex model."""
+    """Choose Maverick's preferred single-agent reasoning effort for one Codex model."""
     if option is None:
         return CODEX_DEFAULT_REASONING_EFFORT
     supported = [

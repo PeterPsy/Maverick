@@ -98,6 +98,9 @@ Codex is a `native_agent` using the `codex-app-server` adapter. Its current mode
 catalog and reasoning metadata are discovered from the configured Codex runtime.
 Each model gets a content-addressed model profile projection.
 
+The workspace default is GPT-5.6-Sol with `xhigh` (Extra high) reasoning. A user
+may still choose another supported model or reasoning level for a new session.
+
 Catalog and package updates follow normal reconciliation. Availability depends
 on the live installation/catalog, direct profile, workspace binding and policy
 checks. Persisted model metadata does not override the current built-in/live

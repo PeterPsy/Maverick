@@ -469,7 +469,7 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(payload["active_provider"]["provider_id"], "codex")
         self.assertEqual(payload["model_settings"]["selected_model_id"], "gpt-5.6-sol")
         self.assertIsNone(payload["model_settings"]["selected_reasoning_effort"])
-        self.assertEqual(payload["model_settings"]["default_reasoning_effort"], "max")
+        self.assertEqual(payload["model_settings"]["default_reasoning_effort"], "xhigh")
         self.assertIsNone(
             state.provider_store.get_provider_selection("default").model_reasoning_effort
         )

@@ -23,7 +23,7 @@ from core.runtime.tool_orchestrator import (
 )
 
 
-_MAX_PAIRING_CLEANUP_SECONDS = 0.1
+_TOOL_RESULT_PAIRING_SECONDS = 0.05
 
 
 async def execute_hosted_authorized_tool(
@@ -37,14 +37,11 @@ async def execute_hosted_authorized_tool(
     cancellation: RuntimeCancellationSignal,
     poll_seconds: float,
 ) -> RuntimeToolInvocationOutcome:
-    """Run synchronous tool code without allowing it to consume terminal time."""
+    """Run synchronous tool code until cancellation or the turn deadline."""
     raise_if_hosted_cancelled(cancellation)
-    cleanup_seconds = min(
-        _MAX_PAIRING_CLEANUP_SECONDS,
-        budget.finalization_policy.finalization_time_reserve_seconds_per_attempt
-        / 2,
+    deadline = budget.tool_execution_deadline(
+        cleanup_seconds=_TOOL_RESULT_PAIRING_SECONDS
     )
-    deadline = budget.tool_execution_deadline(cleanup_seconds=cleanup_seconds)
     lease_seconds = max(0.0, deadline - budget.monotonic())
     control = RuntimeToolExecutionControl(
         deadline_monotonic=deadline,
@@ -89,7 +86,7 @@ async def execute_hosted_authorized_tool(
                 break
             remaining = deadline - budget.monotonic()
             if remaining <= 0:
-                failure_reason = "agent_finalization_time_reserve_reached"
+                failure_reason = "agent_tool_timeout"
                 break
             await asyncio.wait((task,), timeout=min(poll_seconds, remaining))
         if failure_reason is None and cancellation.is_set():

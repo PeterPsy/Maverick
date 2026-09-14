@@ -27,28 +27,24 @@ def filesystem_search_schema() -> dict[str, object]:
     )
 
 
-def filesystem_edit_schema() -> dict[str, object]:
+def filesystem_edit_schema(*, full_access: bool = False) -> dict[str, object]:
     return _object(
         {
             "path": _path(),
             "old_text": {"type": "string", "minLength": 1, "maxLength": 1_048_576},
             "new_text": {"type": "string", "maxLength": 1_048_576},
             "expected_occurrences": {"type": "integer", "minimum": 1, "maximum": 10_000},
-            **_expected_version_properties(),
-            **_instruction_digest_property(),
+            **({} if full_access else _expected_version_properties()),
+            **({} if full_access else _instruction_digest_property()),
         },
-        required=(
-            "path",
-            "old_text",
-            "new_text",
-            "expected_resource_identity",
-            "expected_resource_revision",
-            "instruction_scope_digest",
+        required=("path", "old_text", "new_text") if full_access else (
+            "path", "old_text", "new_text", "expected_resource_identity",
+            "expected_resource_revision", "instruction_scope_digest",
         ),
     )
 
 
-def filesystem_patch_schema() -> dict[str, object]:
+def filesystem_patch_schema(*, full_access: bool = False) -> dict[str, object]:
     operation = _object(
         {
             "old_text": {"type": "string", "minLength": 1, "maxLength": 1_048_576},
@@ -66,58 +62,56 @@ def filesystem_patch_schema() -> dict[str, object]:
                 "minItems": 1,
                 "maxItems": 128,
             },
-            **_expected_version_properties(),
-            **_instruction_digest_property(),
+            **({} if full_access else _expected_version_properties()),
+            **({} if full_access else _instruction_digest_property()),
         },
-        required=(
-            "path",
-            "operations",
-            "expected_resource_identity",
-            "expected_resource_revision",
-            "instruction_scope_digest",
+        required=("path", "operations") if full_access else (
+            "path", "operations", "expected_resource_identity",
+            "expected_resource_revision", "instruction_scope_digest",
         ),
     )
 
 
-def filesystem_move_schema() -> dict[str, object]:
+def filesystem_move_schema(*, full_access: bool = False) -> dict[str, object]:
     return _object(
         {
             "source_path": _path(),
             "destination_path": _path(),
             "create_parents": {"type": "boolean"},
-            "source_instruction_scope_digest": _instruction_digest_schema(),
-            "destination_instruction_scope_digest": _instruction_digest_schema(),
-            **_expected_version_properties(),
+            **(
+                {}
+                if full_access
+                else {
+                    "source_instruction_scope_digest": _instruction_digest_schema(),
+                    "destination_instruction_scope_digest": _instruction_digest_schema(),
+                    **_expected_version_properties(),
+                }
+            ),
         },
-        required=(
-            "source_path",
-            "destination_path",
-            "expected_resource_identity",
-            "expected_resource_revision",
-            "source_instruction_scope_digest",
+        required=("source_path", "destination_path") if full_access else (
+            "source_path", "destination_path", "expected_resource_identity",
+            "expected_resource_revision", "source_instruction_scope_digest",
             "destination_instruction_scope_digest",
         ),
     )
 
 
-def filesystem_delete_schema() -> dict[str, object]:
+def filesystem_delete_schema(*, full_access: bool = False) -> dict[str, object]:
     return _object(
         {
             "path": _path(),
             "recursive": {"type": "boolean"},
-            **_expected_version_properties(),
-            **_instruction_digest_property(),
+            **({} if full_access else _expected_version_properties()),
+            **({} if full_access else _instruction_digest_property()),
         },
-        required=(
-            "path",
-            "expected_resource_identity",
-            "expected_resource_revision",
+        required=("path",) if full_access else (
+            "path", "expected_resource_identity", "expected_resource_revision",
             "instruction_scope_digest",
         ),
     )
 
 
-def process_start_schema() -> dict[str, object]:
+def process_start_schema(*, full_access: bool = False) -> dict[str, object]:
     return _object(
         {
             "argv": _argv(),
@@ -127,9 +121,13 @@ def process_start_schema() -> dict[str, object]:
                 "minimum": 1,
                 "maximum": 3_600,
             },
-            "mutation_scopes": workspace_mutation_scopes_schema(),
+            **(
+                {}
+                if full_access
+                else {"mutation_scopes": workspace_mutation_scopes_schema()}
+            ),
         },
-        required=("argv", "mutation_scopes"),
+        required=("argv",) if full_access else ("argv", "mutation_scopes"),
     )
 
 
@@ -177,7 +175,11 @@ def process_interrupt_schema() -> dict[str, object]:
     )
 
 
-def extended_filesystem_write_schema(max_bytes: int) -> dict[str, object]:
+def extended_filesystem_write_schema(
+    max_bytes: int,
+    *,
+    full_access: bool = False,
+) -> dict[str, object]:
     return _object(
         {
             "path": _path(),
@@ -185,10 +187,12 @@ def extended_filesystem_write_schema(max_bytes: int) -> dict[str, object]:
             "create_only": {"type": "boolean"},
             "replace_only": {"type": "boolean"},
             "create_parents": {"type": "boolean"},
-            **_expected_version_properties(),
-            **_instruction_digest_property(),
+            **({} if full_access else _expected_version_properties()),
+            **({} if full_access else _instruction_digest_property()),
         },
-        required=("path", "content", "instruction_scope_digest"),
+        required=("path", "content") if full_access else (
+            "path", "content", "instruction_scope_digest"
+        ),
     )
 
 

@@ -395,6 +395,7 @@ def _tool_orchestrator(
                 attachment_read_fences=runtime_attachment_read_fences(
                     getattr(context, "input_sources", ())
                 ),
+                execution_mode=actor.execution_mode,
             ),
             result_classification_resolver=result_admission_resolver,
             result_preflight_resolver=result_preflight_resolver,

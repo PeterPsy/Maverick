@@ -330,18 +330,29 @@ process control. It must not pass a session's private
 `runtime/sessions/<runtime_session_id>/` root into that workspace-level
 contract; provider conversation state continues to use the session root.
 
-Full-workspace access never makes `runtime/` agent-owned workspace content.
-Core filesystem capabilities reject that top-level component, omit it from
-recursive listing/search, and use it only for platform-private process output,
-workspace snapshots, and deletion quarantine. Hosted shell and managed-process
+`runtime/` remains platform-owned operational state rather than agent-owned
+workspace content. Access behavior depends on the explicit execution mode.
+
+Sandbox filesystem capabilities reject the top-level `runtime/` component and
+omit it from recursive listing/search. Sandbox shell and managed-process
 commands receive a bounded descriptor-confined staged snapshot, not a bind of
 the live workspace namespace. Staging creates only an empty `runtime/` mount
 point and omits every `.git` component recursively; bubblewrap replaces both
 `/workspace/runtime` and fixed `/runtime` with private scratch mounts. The
-snapshot is retained for the process lifetime, so a live post-spawn create or
-rename cannot reveal Git or control-plane metadata. Mutation overlays remain
-private and are committed only through the ordinary live-workspace,
-instruction-bound, rollback-safe effect transaction.
+snapshot is retained for the process lifetime, and mutation overlays are
+committed only through the live-workspace, instruction-bound effect
+transaction.
+
+An explicitly authorized full-access session instead uses the live host
+filesystem and process namespace. Its filesystem, shell and process surfaces
+share one path resolver. The resolver accepts `.`, relative paths,
+`workspace://<workspace_id>/...`, and absolute host paths; sandbox mode accepts
+the same syntax but rejects a resolved path outside its workspace boundary.
+Full-access shell/process execution inherits the installed host command
+environment while keeping the session runtime `bin/` directory first on
+`PATH`, so `maverick`, `git`, `rg`, and other installed CLIs are available. It
+does not stage a copy-on-write workspace or automatically mask `.git`, host
+paths or tool output.
 
 Provider processes that operate on workspace files should start in the workspace root.
 

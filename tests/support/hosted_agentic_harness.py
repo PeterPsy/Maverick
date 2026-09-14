@@ -82,6 +82,7 @@ class HostedAgenticHarness:
         routing_constraint=None,
         filesystem_list: bool = False,
         recipe=None,
+        execution_mode: str = "full-access",
     ) -> None:
         feature_flags = patch.dict(
             os.environ,
@@ -105,6 +106,7 @@ class HostedAgenticHarness:
         workspace_root.mkdir(parents=True, exist_ok=True)
         self.filesystem_list = filesystem_list
         self.recipe = recipe
+        self.execution_mode = execution_mode
         self.provider_config_id = (
             "" if recipe is None else f"fixture-config:{recipe.recipe_id}"
         )
@@ -133,6 +135,7 @@ class HostedAgenticHarness:
         self.mcp_calls = 0
         self.read_result: dict[str, object] | None = None
         self.read_delay_seconds = 0.0
+        self.read_barrier = None
         self.turn_statuses: list[tuple[str, str]] = []
         self.audit = FakeCollection()
         self.store = RuntimeDocumentStore(
@@ -229,7 +232,7 @@ class HostedAgenticHarness:
                 else recipe.support_flags.reasoning_efforts[-1]
             ),
             capabilities=self.capabilities,
-            execution_mode="full-access",
+            execution_mode=self.execution_mode,
             profile_policy_ceiling=self.policy,
             workspace_policy_ceiling=self.policy,
             egress_policy_id="fixture-public-remote",
@@ -262,8 +265,8 @@ class HostedAgenticHarness:
             workspace_id="default",
             agent_id="chat",
             status="running",
-            requested_mode="full-access",
-            effective_mode="full-access",
+            requested_mode=self.execution_mode,
+            effective_mode=self.execution_mode,
             workspace_root=str(self.root / "workspaces" / "default"),
             workdir=str(self.root / "workspaces" / "default"),
             runtime_root=str(self.root / "workspaces" / "default" / "runtime"),
@@ -431,7 +434,7 @@ class HostedAgenticHarness:
                 platform_role=None,
                 workspace_role="member",
                 session_id="session-hosted",
-                execution_mode="full-access",
+                execution_mode=self.execution_mode,
             ),
             credential_resolver=(
                 credential_resolver
@@ -472,7 +475,7 @@ class HostedAgenticHarness:
                 if self.filesystem_list
                 else ("cli:fixture.read", "mcp:fixture_mutate")
             ),
-            execution_mode="full-access",
+            execution_mode=self.execution_mode,
             egress_policy_id=self.binding.egress_policy_id,
             allowed_remote_data_classes=("public",),
             policy_revision_set=("policy:test:1",),
@@ -548,6 +551,7 @@ class HostedAgenticHarness:
                         resource_classification_resolver=(
                             self._classify_fixture_resource
                         ),
+                        execution_mode=self.execution_mode,
                     )
                     if self.filesystem_list
                     else ()
@@ -558,6 +562,8 @@ class HostedAgenticHarness:
         )
 
     def _read(self, arguments, _context):
+        if self.read_barrier is not None:
+            self.read_barrier.wait(timeout=2)
         if self.read_delay_seconds > 0:
             time.sleep(self.read_delay_seconds)
         self.cli_calls += 1

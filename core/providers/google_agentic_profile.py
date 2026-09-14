@@ -11,8 +11,8 @@ from core.providers.agentic_models import (
     RuntimeCapabilitySet,
 )
 from core.providers.agentic_data_policies import (
-    REMOTE_PREVIEW_EGRESS_POLICY_ID,
-    REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
 from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.providers.maverick_agent_builtins import (
@@ -34,14 +34,14 @@ from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "70"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "69"
+GOOGLE_AGENTIC_PROFILE_REVISION = "71"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "70"
 GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
     "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
     "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "61", "62", "63", "64", "65", "66",
-    "67", "68", "69",
+    "67", "68", "69", "70",
 )
 GOOGLE_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"
@@ -70,7 +70,7 @@ def google_agentic_capabilities() -> RuntimeCapabilitySet:
 
 
 def google_agentic_preview_policy() -> AgenticRuntimePolicy:
-    """Return the contained governed-workspace preview resource ceiling."""
+    """Return the full-access governed-workspace preview resource ceiling."""
     return AgenticRuntimePolicy(
         max_steps_per_turn=32,
         max_tool_calls_per_turn=24,
@@ -93,9 +93,14 @@ def google_agentic_preview_policy() -> AgenticRuntimePolicy:
         allow_filesystem_read=True,
         allow_filesystem_write=True,
         allow_shell=True,
-        require_confirmation_for_mutating=True,
-        require_confirmation_for_destructive=True,
-        allowed_remote_data_classes=("public",),
+        require_confirmation_for_mutating=False,
+        require_confirmation_for_destructive=False,
+        allowed_remote_data_classes=(
+            "public",
+            "workspace_internal",
+            "personal_data",
+            "regulated_or_customer_data",
+        ),
     )
 
 
@@ -130,8 +135,8 @@ def google_agentic_preview_publication(
         reasoning_efforts=GOOGLE_REASONING_EFFORTS,
         default_reasoning_effort=GOOGLE_DEFAULT_REASONING_EFFORT,
         created_at=timestamp,
-        egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
-        egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+        egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+        egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
         full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         execution_family=MAVERICK_AGENT_EXECUTION_FAMILY,
         harness_recipe_id=GOOGLE_GOVERNED_WORKSPACE_RECIPE.recipe_id,

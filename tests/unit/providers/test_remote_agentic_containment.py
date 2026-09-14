@@ -124,9 +124,14 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
             self.assertEqual(
                 governance["egress_policy"],
                 {
-                    "policy_id": "remote-agentic-contained",
-                    "revision": "2",
-                    "allowed_remote_data_classes": ("public",),
+                    "policy_id": "remote-agentic-full-workspace",
+                    "revision": "1",
+                    "allowed_remote_data_classes": (
+                        "public",
+                        "workspace_internal",
+                        "personal_data",
+                        "regulated_or_customer_data",
+                    ),
                 },
             )
             self.assertEqual(
@@ -135,8 +140,8 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                     "collection": "provider_contract",
                     "require_zdr": False,
                     "retention": "provider_contract",
-                    "authority_mode": "fake_data_attestation",
-                    "attestation_required": True,
+                    "authority_mode": "workspace_binding",
+                    "attestation_required": False,
                     "attestation_state": "not_attested",
                     "attestation": {
                         "state": "not_attested",
@@ -193,9 +198,14 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         self.assertEqual(
             remote_item["egress_policy"],
             {
-                "policy_id": "remote-agentic-contained",
-                "revision": "2",
-                "allowed_remote_data_classes": ("public",),
+                "policy_id": "remote-agentic-full-workspace",
+                "revision": "1",
+                "allowed_remote_data_classes": (
+                    "public",
+                    "workspace_internal",
+                    "personal_data",
+                    "regulated_or_customer_data",
+                ),
             },
         )
         self.assertEqual(
@@ -204,8 +214,8 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 "collection": "provider_contract",
                 "require_zdr": False,
                 "retention": "provider_contract",
-                "authority_mode": "fake_data_attestation",
-                "attestation_required": True,
+                "authority_mode": "workspace_binding",
+                "attestation_required": False,
                 "attestation_state": "not_attested",
                 "attestation": {
                     "state": "not_attested",

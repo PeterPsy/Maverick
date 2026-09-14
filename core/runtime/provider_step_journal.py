@@ -722,7 +722,6 @@ class ProviderStepJournal:
             or record.step_status != "staged"
             or record.disposition_status != "complete"
             or len(record.result_ids) != len(record.proposal_ids)
-            or record.budget_tool_result_bytes < 1
         ):
             raise RuntimeProviderStateError("provider_pairing_not_reconstructible")
         timestamp = now or datetime.now(tz=UTC)

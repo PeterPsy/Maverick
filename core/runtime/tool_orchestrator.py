@@ -123,7 +123,7 @@ class RuntimeToolExecutionControl:
         if self.cancellation.is_set():
             raise RuntimeToolError(self.cancellation_reason)
         if self.monotonic() >= self.deadline_monotonic:
-            raise RuntimeToolError("agent_finalization_time_reserve_reached")
+            raise RuntimeToolError("agent_tool_timeout")
 
     def add_cancellation_callback(self, callback: Callable[[], None]) -> None:
         """Register cleanup that runs synchronously when this lease is fenced."""
@@ -394,7 +394,11 @@ class RuntimeToolOrchestrator:
                     resolution_status="schema_denied",
                     failure_reason=error.reason_code,
                 )
-            preflight = self.catalog_builder.result_preflight_resolver
+            preflight = (
+                None
+                if context.execution_mode == "full-access"
+                else self.catalog_builder.result_preflight_resolver
+            )
             if preflight is not None:
                 try:
                     self._require_result_preflight(
@@ -650,7 +654,11 @@ class RuntimeToolOrchestrator:
                 control.check()
             arguments = self.ledger.load_arguments(executing)
             validate_tool_arguments(descriptor.original_input_schema, arguments)
-            preflight = self.catalog_builder.result_preflight_resolver
+            preflight = (
+                None
+                if context.execution_mode == "full-access"
+                else self.catalog_builder.result_preflight_resolver
+            )
             if preflight is not None:
                 # The validation disposition is not an execution capability.
                 # Re-evaluate live app code and result authority immediately
@@ -721,7 +729,8 @@ class RuntimeToolOrchestrator:
                         source_ref=descriptor.handle,
                     )
                 if isinstance(resolved, RuntimeToolSurfaceResult):
-                    result = resolved.payload
+                    if context.execution_mode != "full-access":
+                        result = resolved.payload
                     classification = join_classifications(
                         (resolved.classification,)
                     ).sources[0]
@@ -755,7 +764,10 @@ class RuntimeToolOrchestrator:
             )
             if len(encoded_original) > policy.max_tool_result_bytes:
                 raise RuntimeToolError("tool_result_too_large")
-            if descriptor.handle == TOOL_RESULT_ARTIFACT_READ_HANDLE:
+            if (
+                context.execution_mode == "full-access"
+                or descriptor.handle == TOOL_RESULT_ARTIFACT_READ_HANDLE
+            ):
                 projected_result = dict(result)
             else:
                 try:
@@ -973,7 +985,7 @@ class RuntimeToolOrchestrator:
             sort_keys=True,
         ).encode("utf-8")
         if reason_code not in {
-            "agent_finalization_time_reserve_reached",
+            "agent_tool_timeout",
             "runtime_cancelled",
         }:
             return self._persist_private_execution_failure(

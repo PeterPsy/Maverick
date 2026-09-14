@@ -47,10 +47,16 @@ pin; new sessions use the current selectable profile.
 
 ### Maverick Agents
 
-Maverick Agents use a hosted inference API while Core owns the action loop,
-tools, confirmations, context, provider-private continuation state, budgets,
-finalization and recovery. Protocol adapters remain provider codecs/transports;
-they do not become policy authorities.
+Maverick Agents use a hosted inference API while Core owns one universal action
+loop, tools, context, provider-private continuation state, resource accounting
+and recovery. Protocol adapters translate request, stream and tool-call
+protocols; they do not direct model behavior or become policy authorities.
+
+Every authorized tool remains in the catalog for every new-turn step. A batch
+of tool calls is executed concurrently with independent success/error pairing.
+Core does not force sequencing, close the catalog, or reserve a tool-less final
+step. Persisted legacy finalization records are supported only as a bounded
+restart-recovery case.
 
 The OpenRouter implementation targets `z-ai/glm-5.3-flash` through the Relace
 route and the `openrouter-chat-completions` adapter. It declares the Full
@@ -94,8 +100,10 @@ pinned profile with:
 - egress and remote-data policy;
 - currently authorized tool handles.
 
-The result is ephemeral, non-bearer and can only narrow the session pin. Browser
-payloads cannot add capabilities, classify data or supply provider authority.
+The result is ephemeral and non-bearer. Browser payloads cannot add
+capabilities, classify data or supply provider authority. An explicit
+full-access profile authorizes the complete runtime catalog; narrower profiles
+continue to intersect it with their declared tool and effect policy.
 
 ## Tool safety
 
@@ -106,6 +114,12 @@ live app bindings, actor policy, execution mode, effects and output policy.
 
 The reviewed-schema marker only distinguishes Core-owned schema projections from
 untrusted dynamic schema input. It does not enable a provider or model.
+
+Filesystem, shell and process tools use a shared path resolver. Sandbox mode
+confines resolved paths and effects to the workspace. Full-access mode permits
+relative, workspace-URI and absolute host paths, runs against the live host
+filesystem/process environment, and exposes installed CLIs. Confirmations are
+applied only when the selected profile explicitly requests them.
 
 ## OpenRouter routing and state
 
@@ -121,10 +135,10 @@ serve. OpenRouter enforces the requested route, parameter and ZDR constraints,
 and the adapter validates the actual streamed provider/model identity before
 accepting output.
 
-The adapter supports streamed text and tool calls, bounded provider-private
-history, call/result pairing, cancellation, normalized errors, token accounting,
-finalization and recovery. Each request revalidates live authority before
-network egress and before each tool effect.
+The adapter supports streamed text and parallel tool-call batches, bounded
+provider-private history, independent call/result pairing, cancellation,
+normalized errors, token accounting and recovery. Each request refreshes live
+authority before network egress and before each tool effect.
 
 ## Persistence
 
@@ -151,9 +165,12 @@ binding, policy, health and effective capabilities.
 
 ## Security properties
 
-Authentication, authorization, credentials, containment, sandboxing, egress,
-data classification, approvals, tool effect review, output classification,
-budgets, cancellation and live policy revalidation remain mandatory.
+Authentication, authorization, credentials, execution-mode selection, resource
+ceilings, cancellation and recovery remain Core responsibilities. Sandbox
+profiles enforce containment, data classification, egress transformation and
+configured approvals. In an explicit full-access profile, classification and
+egress are audit/telemetry signals only: they do not redact, transform, compact
+or veto content, and no confirmation is added unless that profile requests it.
 Operational test reports are validation evidence, not runtime authority.
 
 ## Consequences
@@ -162,6 +179,6 @@ Operational test reports are validation evidence, not runtime authority.
 - API and UI contracts have one declared capability source of truth.
 - Codex availability follows its current installation, catalog, profile and live
   policy state.
-- OpenRouter GLM uses the same governed session and tool boundaries as the rest
-  of the runtime.
+- OpenRouter GLM and Codex expose the same operational Full Workspace
+  capabilities even though their wire protocols and loop ownership differ.
 - A profile bug is fixed in code/profile data and covered by tests.

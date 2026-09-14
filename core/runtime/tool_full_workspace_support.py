@@ -103,6 +103,7 @@ def commit_text_change(
     evidence,
     mutation_guard,
     operation_count,
+    project_classification=True,
 ):
     if before == after:
         raise RuntimeToolError("filesystem_edit_no_change")
@@ -141,7 +142,11 @@ def commit_text_change(
     return RuntimeToolSurfaceResult(
         payload,
         written.classification,
-        filesystem_mutation_classification_projection(payload),
+        (
+            filesystem_mutation_classification_projection(payload)
+            if project_classification
+            else None
+        ),
     )
 
 

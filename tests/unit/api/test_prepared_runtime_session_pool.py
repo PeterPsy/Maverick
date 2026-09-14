@@ -121,7 +121,7 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertEqual(len(prepared), 1)
             self.assertIsNotNone(prepared[0].prepared_session_fingerprint)
 
-    def test_pending_after_two_second_wait_reuses_the_same_session_id(self) -> None:
+    def test_pending_prewarm_reuses_the_same_session_without_waiting(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             state, app, cookie = self._platform(temp_dir)
             with patch("core.api.runtime_api.prewarm_runtime_session_async") as start_prewarm, patch(
@@ -138,11 +138,7 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertEqual(first["session_id"], second["session_id"])
             self.assertFalse(first["prewarm_completed"])
             self.assertFalse(second["prewarm_completed"])
-            self.assertEqual(wait_for_prewarm.call_count, 2)
-            self.assertEqual(
-                [call.kwargs["timeout_seconds"] for call in wait_for_prewarm.call_args_list],
-                [2.0, 2.0],
-            )
+            wait_for_prewarm.assert_not_called()
             self.assertEqual(start_prewarm.call_count, 2)
             self.assertEqual(len(self._prepared_chat_sessions(state)), 1)
 
@@ -154,10 +150,15 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
                 return_value=PENDING_PREWARM,
             ):
                 _status, implicit_default, _headers = self._prepare(app, cookie)
+                implicit_session = state.runtime_store.get_session(
+                    implicit_default["session_id"]
+                )
                 _status, explicit_default, _headers = self._prepare(
                     app,
                     cookie,
-                    reasoning_effort="max",
+                    reasoning_effort=(
+                        implicit_session.execution_binding.reasoning_effort
+                    ),
                 )
 
             self.assertEqual(

@@ -69,7 +69,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "70")
+        self.assertEqual(profile.revision, GOOGLE_AGENTIC_PROFILE_REVISION)
         self.assertEqual(profile.adapter_version_constraint, "==59")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.model_revision, GOOGLE_AGENTIC_MODEL_REVISION)
@@ -84,6 +84,10 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertTrue(profile.capabilities.cli)
         self.assertTrue(profile.capabilities.mcp)
         self.assertTrue(profile.capabilities.filesystem_write)
+        self.assertFalse(profile.policy_ceiling.require_confirmation_for_mutating)
+        self.assertFalse(
+            profile.policy_ceiling.require_confirmation_for_destructive
+        )
         self.assertEqual(
             (
                 profile.provider_config_id,
@@ -103,11 +107,19 @@ class GoogleAgenticProfileTest(unittest.TestCase):
                 GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.protocol_adapter_version,
             ),
         )
-        self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
+        self.assertEqual(
+            profile.policy_ceiling.allowed_remote_data_classes,
+            (
+                "public",
+                "workspace_internal",
+                "personal_data",
+                "regulated_or_customer_data",
+            ),
+        )
         self.assertEqual(production_classification.data_class, "unclassified")
         self.assertIsNone(production_classification.classification_revision)
-        self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
-        self.assertEqual(profile.egress_policy_revision, "2")
+        self.assertEqual(profile.egress_policy_id, "remote-agentic-full-workspace")
+        self.assertEqual(profile.egress_policy_revision, "1")
         self.assertEqual(
             profile.full_workspace_contract_revision,
             FULL_WORKSPACE_CONTRACT_REVISION,

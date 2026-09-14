@@ -19,7 +19,7 @@ def _with_current_digest(authority):
 
 class HostedTransportSemanticPolicyTest(unittest.TestCase):
     def test_live_data_policy_narrowing_after_lazy_refresh_blocks_transport(self) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         live_policy = harness.policy
         refresh_calls = 0
 
@@ -91,6 +91,7 @@ class HostedTransportSemanticPolicyTest(unittest.TestCase):
                 harness = HostedAgenticHarness(
                     self,
                     filesystem_list=filesystem_list,
+                    execution_mode="sandbox",
                 )
                 live_policy = harness.policy
                 refresh_calls = 0
@@ -135,7 +136,7 @@ class HostedTransportSemanticPolicyTest(unittest.TestCase):
                 )
 
     def test_live_app_reference_surface_narrowing_blocks_lazy_transport(self) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         authority = _with_current_digest(replace(
             harness.authority,
             allowed_capabilities=replace(
@@ -211,10 +212,14 @@ class HostedTransportSemanticPolicyTest(unittest.TestCase):
             [{"reason_code": "runtime_authority_projection_changed"}],
         )
 
-    def test_toolless_request_revalidates_live_semantic_capabilities(self) -> None:
+    def test_complete_catalog_still_revalidates_live_semantic_policy(self) -> None:
         for with_skill in (False, True):
             with self.subTest(with_skill=with_skill):
-                harness = HostedAgenticHarness(self, max_tool_calls=1)
+                harness = HostedAgenticHarness(
+                    self,
+                    max_tool_calls=1,
+                    execution_mode="sandbox",
+                )
                 authority = harness.authority
                 invoked_skills = None
                 if with_skill:
@@ -297,7 +302,16 @@ class HostedTransportSemanticPolicyTest(unittest.TestCase):
 
                 self.assertEqual(refresh_calls, 8)
                 self.assertEqual(len(preflight_requests), 2)
-                self.assertEqual(preflight_requests[1].tool_definitions, ())
+                self.assertEqual(
+                    tuple(
+                        item.name
+                        for item in preflight_requests[1].tool_definitions
+                    ),
+                    tuple(
+                        item.name
+                        for item in preflight_requests[0].tool_definitions
+                    ),
+                )
                 self.assertEqual(
                     any(
                         block.provenance == "skill_fragment"
@@ -313,7 +327,7 @@ class HostedTransportSemanticPolicyTest(unittest.TestCase):
                         for event in events
                         if event.event_type == "runtime.error"
                     ],
-                    [{"reason_code": "runtime_authority_projection_changed"}],
+                    [{"reason_code": "tool_not_authorized"}],
                 )
 
 

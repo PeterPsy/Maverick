@@ -38,6 +38,7 @@ _PUBLIC_MESSAGES = {
     "agent_finalization_time_reserve_reached": (
         "The runtime stopped the request to preserve its finalization deadline."
     ),
+    "agent_tool_timeout": "A tool exceeded the current turn deadline.",
     "agent_finalization_tool_call_forbidden": (
         "The model requested a tool after the governed tool catalog was closed."
     ),

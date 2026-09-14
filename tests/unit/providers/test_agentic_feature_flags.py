@@ -9,7 +9,6 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_models import codex_runtime_policy
-from core.providers.errors import AgenticRuntimeError
 from core.runtime.authority import (
     intersect_runtime_policies,
     runtime_feature_flag_revision,
@@ -23,10 +22,8 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_PARALLEL_TOOL_CALLS,
     MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
     feature_enabled,
-    parallel_tool_calls_enabled,
     provider_preview_feature,
     require_agentic_feature,
 )
@@ -44,7 +41,6 @@ _NORMATIVE_FLAGS = (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
-    MAVERICK_FEATURE_PARALLEL_TOOL_CALLS,
 )
 
 
@@ -68,7 +64,6 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
             ):
                 with self.subTest(name=name):
                     self.assertFalse(feature_enabled(name))
-            self.assertFalse(parallel_tool_calls_enabled())
 
     def test_every_flag_is_independently_disabled(self) -> None:
         for disabled in _NORMATIVE_FLAGS:
@@ -155,20 +150,11 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
             enabled = runtime_feature_flag_revision(binding)
         self.assertNotEqual(disabled, enabled)
 
-    def test_parallel_policy_requires_its_independent_flag(self) -> None:
+    def test_parallel_policy_is_not_gated_by_a_feature_flag(self) -> None:
         policy = replace(codex_runtime_policy(), max_parallel_tool_calls=2)
         with patch.dict(
             os.environ,
-            {MAVERICK_FEATURE_PARALLEL_TOOL_CALLS: "0"},
-            clear=False,
-        ):
-            with self.assertRaises(AgenticRuntimeError) as raised:
-                intersect_runtime_policies(policy)
-        self.assertEqual(raised.exception.reason_code, "parallel_tool_calls_disabled")
-
-        with patch.dict(
-            os.environ,
-            {MAVERICK_FEATURE_PARALLEL_TOOL_CALLS: "1"},
+            {"MAVERICK_FEATURE_PARALLEL_TOOL_CALLS": "0"},
             clear=False,
         ):
             self.assertEqual(intersect_runtime_policies(policy).max_parallel_tool_calls, 2)

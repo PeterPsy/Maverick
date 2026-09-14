@@ -24,10 +24,6 @@ class HostedTransportAuthorization:
     credential: EphemeralCredential | None
 
 
-class HostedRequestPhaseRefreshRequired(HostedAgenticLoopError):
-    """Signal that a prepared exploration catalog is no longer transportable."""
-
-
 class HostedTransportAuthorityGuard:
     """Bind preflight and transport while separating full and cheap checks."""
 
@@ -69,12 +65,6 @@ class HostedTransportAuthorityGuard:
         self.budget.check_time()
         authority = self.authority_refresher(self.context)
         authorization = self._authorize(authority)
-        exhaustion_reason = self.budget.tool_catalog_exhaustion_reason
-        if (
-            self.prepared_request.request.request_phase == "exploration"
-            and exhaustion_reason is not None
-        ):
-            raise HostedRequestPhaseRefreshRequired(exhaustion_reason)
         self._authorized_authority = authority
         return authorization
 
@@ -206,7 +196,6 @@ def _credential_fingerprint(
 
 
 __all__ = [
-    "HostedRequestPhaseRefreshRequired",
     "HostedTransportAuthorization",
     "HostedTransportAuthorityGuard",
     "preflight_and_commit_hosted_request",

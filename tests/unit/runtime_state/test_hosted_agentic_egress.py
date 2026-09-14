@@ -22,7 +22,7 @@ from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 
 class HostedAgenticEgressTest(unittest.TestCase):
-    def test_tool_result_host_paths_are_redacted_before_the_next_request(self) -> None:
+    def test_full_access_tool_result_is_audited_without_transformation(self) -> None:
         harness = HostedAgenticHarness(self)
         harness.read_result = {
             "workspace_file": f"{harness.session.workspace_root}/AGENTS.md",
@@ -44,19 +44,20 @@ class HostedAgenticEgressTest(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0)
         exported = json.loads(client.requests[1].tool_results[0].content)
-        self.assertEqual(exported["workspace_file"], "workspace://default/AGENTS.md")
+        self.assertEqual(
+            exported["workspace_file"],
+            f"{harness.session.workspace_root}/AGENTS.md",
+        )
         self.assertEqual(
             exported["host_reference"],
-            "The installation root is `<redacted-host-path>`.",
+            "The installation root is `/home/ubuntu/projects/maverick-v3`.",
         )
         decisions = harness.store.list_egress_decisions(session_id="session-hosted")
         tool_result = next(
             decision for decision in decisions if decision.provenance == "tool_result"
         )
-        self.assertEqual(
-            tool_result.transformation,
-            "workspace_path_reference+host_path_redaction",
-        )
+        self.assertIsNone(tool_result.transformation)
+        self.assertEqual(tool_result.reason_code, "egress_audit_only")
 
     def test_app_owned_dynamic_and_unreviewed_tool_schemas_fail_before_dispatch(self) -> None:
         harness = HostedAgenticHarness(self)

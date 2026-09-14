@@ -8,10 +8,12 @@ import json
 from core.egress.classification import fail_closed_classification
 from core.runtime.tool_catalog import RuntimeToolSurfaceResult
 from core.runtime.hosted_tool_process_registry import hosted_process_environment
+from core.runtime.hosted_full_access_shell import full_access_process_environment
 from core.runtime.hosted_workspace_effects import (
     parse_hosted_workspace_mutation_scopes,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.runtime_paths import RuntimePathResolver
 from core.runtime.tool_full_workspace_schemas import (
     process_input_schema,
     process_interrupt_schema,
@@ -34,6 +36,7 @@ def build_process_capabilities(
     workspace_root,
     runtime_root,
     result_classification_resolver=None,
+    full_access=False,
 ):
     """Build process start/status/input/interrupt surfaces for one workspace."""
 
@@ -44,28 +47,63 @@ def build_process_capabilities(
         if context.execution_control is not None:
             context.execution_control.check()
         argv = argv_argument(arguments.get("argv"))
-        cwd = str(arguments.get("cwd") or ".")
-        mutation_scopes = parse_hosted_workspace_mutation_scopes(
-            arguments.get("mutation_scopes")
+        cwd = str(
+            RuntimePathResolver(
+                workspace_id=context.workspace_id,
+                workspace_root=workspace_root,
+                execution_mode="full-access" if full_access else "sandbox",
+            ).resolve(
+                str(arguments.get("cwd") or "."),
+                allow_root=True,
+            ).absolute
         )
-        result = registry.start(
-            filesystem=filesystem,
-            workspace_id=context.workspace_id,
-            session_id=context.session_id,
-            workspace_root=workspace_root,
-            runtime_root=runtime_root,
-            argv=argv,
-            cwd=cwd,
-            environment=hosted_process_environment(session_id=context.session_id),
-            timeout_seconds=integer_argument(
-                arguments.get("timeout_seconds", 300),
-                minimum=1,
-                maximum=3_600,
-            ),
-            mutation_scopes=mutation_scopes,
-            result_classification_resolver=result_classification_resolver,
-            result_context=context,
+        mutation_scopes = (
+            ()
+            if full_access
+            else parse_hosted_workspace_mutation_scopes(
+                arguments.get("mutation_scopes")
+            )
         )
+        timeout_seconds = integer_argument(
+            arguments.get("timeout_seconds", 300),
+            minimum=1,
+            maximum=3_600,
+        )
+        if full_access:
+            result = registry.start_full_access(
+                workspace_id=context.workspace_id,
+                session_id=context.session_id,
+                workspace_root=workspace_root,
+                runtime_root=runtime_root,
+                argv=argv,
+                cwd=cwd,
+                environment=full_access_process_environment(
+                    workspace_id=context.workspace_id,
+                    session_id=context.session_id,
+                    workspace_root=workspace_root,
+                ),
+                timeout_seconds=timeout_seconds,
+            )
+        else:
+            resolved = RuntimePathResolver(
+                workspace_id=context.workspace_id,
+                workspace_root=workspace_root,
+                execution_mode="sandbox",
+            ).resolve(cwd, allow_root=True)
+            result = registry.start(
+                filesystem=filesystem,
+                workspace_id=context.workspace_id,
+                session_id=context.session_id,
+                workspace_root=workspace_root,
+                runtime_root=runtime_root,
+                argv=argv,
+                cwd=resolved.for_confined_filesystem(),
+                environment=hosted_process_environment(session_id=context.session_id),
+                timeout_seconds=timeout_seconds,
+                mutation_scopes=mutation_scopes,
+                result_classification_resolver=result_classification_resolver,
+                result_context=context,
+            )
         _register_process_cancellation(
             registry,
             process_id=str(result.get("process_id") or ""),
@@ -148,15 +186,15 @@ def build_process_capabilities(
     return (
         full_workspace_surface(
             "process.start",
-            "Start a long-running confined workspace process.",
-            process_start_schema(),
+            "Start a long-running process in the authorized execution mode.",
+            process_start_schema(full_access=full_access),
             "destructive",
             start,
             modes=("full-access",),
         ),
         full_workspace_surface(
             "process.status",
-            "Poll bounded output and commit governed effects on terminal success.",
+            "Poll bounded process output and terminal status.",
             process_status_schema(),
             "mutating",
             status,
@@ -185,7 +223,9 @@ def _classified_result(result, *, handle, arguments, context, resolver):
     if resolver is not None:
         classification = resolver(handle, arguments, result, context)
         if isinstance(classification, RuntimeToolSurfaceResult):
-            return classification
+            if context.execution_mode != "full-access":
+                return classification
+            return RuntimeToolSurfaceResult(result, classification.classification)
         if classification is None:
             classification = _fallback_classification(
                 result,

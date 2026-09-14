@@ -132,7 +132,7 @@ def openrouter_full_context_policy() -> AgenticContextPolicy:
 
 GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-google-interactions-governed-workspace",
-    revision="26",
+    revision="27",
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
     model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
@@ -154,7 +154,7 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
         supports_empty_tool_catalog=True,
         supports_tool_choice_none=False,
         omits_tools_when_empty=True,
-        parallel_tool_calls=False,
+        parallel_tool_calls=True,
         cooperative_cancellation=True,
         continuation_mode="core-managed-stateless-history",
         reasoning_efforts=("high",),
@@ -167,7 +167,7 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-openrouter-chat-governed-workspace",
-    revision="29",
+    revision="30",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
@@ -189,7 +189,7 @@ OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
         supports_empty_tool_catalog=True,
         supports_tool_choice_none=True,
         omits_tools_when_empty=True,
-        parallel_tool_calls=False,
+        parallel_tool_calls=True,
         cooperative_cancellation=True,
         continuation_mode="core-managed-chat-history",
         reasoning_efforts=OPENROUTER_AGENTIC_REASONING_EFFORTS,

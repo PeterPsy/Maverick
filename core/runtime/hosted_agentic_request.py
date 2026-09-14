@@ -56,11 +56,7 @@ if TYPE_CHECKING:
     from core.workspaces.data_governance import WorkspaceDataAttestation
 
 
-HOSTED_TOOL_USE_INSTRUCTION = (
-    "Use only function names declared in the current request. Never invent, rename, or infer "
-    "a function name. If the declared functions cannot perform a requested operation, explain "
-    "that limitation instead of attempting a function call."
-)
+HOSTED_TOOL_USE_INSTRUCTION = "Maverick runtime tools are available for this turn."
 
 
 @dataclass(frozen=True)
@@ -505,18 +501,19 @@ class HostedAgenticRequestBuilder:
             raise HostedAgenticLoopError(
                 "runtime_authority_projection_changed"
             )
-        if any(
+        full_access = authority.execution_mode == "full-access"
+        if not full_access and any(
             handle not in authority.allowed_tool_handles
             for handle in prepared.tool_handles
         ):
             raise HostedAgenticLoopError("tool_not_authorized")
-        if any(
+        if not full_access and any(
             metadata.source_data_class
             not in authority.allowed_remote_data_classes
             for metadata in prepared.request.source_metadata
         ):
             raise HostedAgenticLoopError("egress_data_class_denied")
-        if policy is not None:
+        if policy is not None and not full_access:
             validate_hosted_request_policy(
                 source_data_classes=tuple(
                     metadata.source_data_class
@@ -536,6 +533,8 @@ class HostedAgenticRequestBuilder:
                 raise HostedAgenticLoopError(
                     "runtime_authority_projection_changed"
                 )
+        if full_access:
+            return
         if self.classification_revalidator is None:
             if any(
                 _metadata_requires_live_authority(metadata)
@@ -755,11 +754,12 @@ class HostedAgenticRequestBuilder:
         if semantic_block is None:
             raise HostedAgenticLoopError("semantic_envelope_incomplete")
         classification = _semantic_classification(semantic_block)
-        classification = self._revalidate_provider_state_sources(
-            context,
-            state,
-            classification,
-        )
+        if not egress_policy.audit_only:
+            classification = self._revalidate_provider_state_sources(
+                context,
+                state,
+                classification,
+            )
         exported, metadata = self._evaluate(
             context=context,
             content_block_id=f"{request_id}:provider-state",
@@ -804,7 +804,7 @@ class HostedAgenticRequestBuilder:
             "agentic_egress_enforcement_disabled",
         )
         classification = classification or self.classifier(context, provenance, content)
-        if self.classification_revalidator is not None:
+        if self.classification_revalidator is not None and not egress_policy.audit_only:
             try:
                 classification = self.classification_revalidator(
                     context,

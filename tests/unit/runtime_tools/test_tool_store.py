@@ -118,7 +118,7 @@ class RuntimeToolStoreTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             RuntimeToolError,
-            "agent_finalization_time_reserve_reached",
+            "agent_tool_timeout",
         ):
             self.ledger.transition(
                 expired,
@@ -150,7 +150,7 @@ class RuntimeToolStoreTest(unittest.TestCase):
         with patch.object(collection, "_write_documents", side_effect=delayed_write):
             with self.assertRaisesRegex(
                 RuntimeToolError,
-                "agent_finalization_time_reserve_reached",
+                "agent_tool_timeout",
             ):
                 self.ledger.transition(
                     executing,

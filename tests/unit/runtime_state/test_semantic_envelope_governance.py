@@ -19,7 +19,7 @@ from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 
 class SemanticEnvelopeGovernanceTest(unittest.TestCase):
     def test_semantic_block_rejects_a_classification_for_different_bytes(self) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         mismatched = validated_classification(
             data_class="public",
             provenance="user_input",
@@ -237,7 +237,7 @@ class SemanticEnvelopeGovernanceTest(unittest.TestCase):
     def test_revoked_transitive_provider_state_fails_before_continuation_egress(
         self,
     ) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         context = RuntimeTurnContext(
             session=harness.session,
             binding=harness.binding,

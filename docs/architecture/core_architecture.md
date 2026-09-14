@@ -640,12 +640,28 @@ approvals and egress. Workspace metadata may narrow this policy but may not
 bypass it. The default workspace may use full access only when platform and
 workspace governance both allow it; non-default workspaces remain sandboxed.
 
-Hosted agentic runtimes use one sequential Core loop. Provider clients are
-codec/transport boundaries and do not own budgets, tools, confirmation, retry,
-egress or recovery policy. The loop refreshes effective authority before each
-provider request and side effect, journals request identity before acceptance,
-and routes every tool through the official CLI, MCP, app-interface or Core
-capability surface.
+Hosted agentic runtimes use one provider-neutral Core loop:
+
+```text
+model -> tool calls -> execution -> individual results -> model -> ...
+```
+
+Provider clients are codec/transport boundaries and do not own tools,
+confirmation, retry, egress or recovery policy. When a provider emits several
+tool calls in one step, Core prepares every call, runs authorized calls
+concurrently, and pairs every success or error independently; one failed call
+does not cancel its siblings. The loop does not interpret the legacy
+`max_parallel_tool_calls` policy field as a concurrency kill switch.
+
+For new turns the complete authorized catalog remains available at every model
+step. Core does not hide tools or inject a behavioral finalization instruction
+when a tool/result ceiling is reached. A call that exceeds a quantitative limit
+is paired with its own structured error so the model can recover. Historical
+persisted finalization journals remain readable only for restart recovery.
+
+The loop refreshes effective authority before each provider request and side
+effect, journals request identity before acceptance, and routes tools through
+the official CLI, MCP, app-interface or Core capability surface.
 
 Tool-schema review is separate from provider/model admission. Only Core-owned
 schemas marked with the reviewed schema component may be projected directly to
@@ -655,9 +671,16 @@ classifies the tool schema and cannot enable a model profile.
 
 Before executing an app-owned wrapper, Core verifies its live descriptor,
 source, effect declaration and executable closure. Mutating or destructive
-operations follow the normal confirmation and effect policy. Result
-classification, output limits and egress checks apply after execution as well as
-before it. A schema declaration alone never grants authority.
+operations follow the confirmation policy explicitly selected for the session;
+the standard full-access profile does not add confirmations of its own. A
+schema declaration alone never grants authority.
+
+Sandbox sessions retain governed result classification, projection, output
+limits and egress enforcement. In full-access sessions the same classification
+and egress observations are persisted for audit and telemetry, but they do not
+filter, redact, compact, replace or reject model-visible content. The
+full-access filesystem, shell and managed-process tools use the live host
+namespace and installed CLI environment instead of the confined snapshot.
 
 Remote requests are built only from server-owned context and authorized tool
 schemas. Client-supplied authority metadata is rejected. Provider routing is

@@ -70,7 +70,7 @@ class HostedFilesystemMutationLineageIntegrationTest(unittest.TestCase):
             platform_role="admin",
             workspace_role="owner",
             session_id=harness.session.session_id,
-            execution_mode="full-access",
+            execution_mode="sandbox",
         )
         context = SimpleNamespace(session=harness.session)
         process_registry = HostedToolProcessRegistry(store=state.runtime_store)
@@ -101,6 +101,7 @@ class HostedFilesystemMutationLineageIntegrationTest(unittest.TestCase):
                 "core-capability:filesystem.write",
             ),
             allowed_remote_data_classes=("public",),
+            execution_mode="sandbox",
             authority_digest="",
         )
         authority = replace(authority, authority_digest=canonical_digest(authority))
@@ -222,7 +223,7 @@ class HostedFilesystemMutationLineageIntegrationTest(unittest.TestCase):
             platform_role="admin",
             workspace_role="owner",
             session_id=harness.session.session_id,
-            execution_mode="full-access",
+            execution_mode="sandbox",
         )
         context = SimpleNamespace(session=harness.session)
         process_registry = HostedToolProcessRegistry(store=state.runtime_store)
@@ -252,6 +253,7 @@ class HostedFilesystemMutationLineageIntegrationTest(unittest.TestCase):
                 "core-capability:filesystem.read",
                 "core-capability:filesystem.write",
             ),
+            execution_mode="sandbox",
             authority_digest="",
         )
         authority = replace(

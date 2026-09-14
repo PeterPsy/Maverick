@@ -71,6 +71,7 @@ class AgenticEgressPolicy:
     allowed_provider_ids: tuple[str, ...]
     allowed_upstream_ids: tuple[str, ...]
     transform_sensitive_text: bool = True
+    audit_only: bool = False
 
 
 @dataclass(frozen=True)

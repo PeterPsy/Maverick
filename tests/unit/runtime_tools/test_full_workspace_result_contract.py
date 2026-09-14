@@ -78,9 +78,8 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
 
         self.assertTrue(report.complete)
         self.assertEqual(report.missing_result_behaviors, ())
-        self.assertEqual(
-            tuple(verified),
-            FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS,
+        self.assertTrue(
+            set(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS).issubset(verified)
         )
 
     def test_result_gate_names_every_mutating_filesystem_workflow(self) -> None:
@@ -111,13 +110,18 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
             inspect_hosted_shell_process_behavior.cache_clear()
             self.assertEqual(inspect_hosted_shell_process_behavior(), ())
 
-    def test_result_gate_executes_revocation_and_marker_negative_probes(self) -> None:
+    def test_sandbox_probes_remain_available_without_governing_full_access(self) -> None:
+        verified = inspect_hosted_tool_result_behavior()
+        sandbox_behaviors = {
+            "security:filesystem.marker-narrowing",
+            "security:filesystem.revoke-rebuild",
+            "security:tool-result.revoke-egress",
+        }
         self.assertTrue(
-            {
-                "security:filesystem.marker-narrowing",
-                "security:filesystem.revoke-rebuild",
-                "security:tool-result.revoke-egress",
-            }.issubset(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS)
+            sandbox_behaviors.issubset(verified)
+        )
+        self.assertTrue(
+            sandbox_behaviors.isdisjoint(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS)
         )
 
     def test_maverick_agent_family_requires_an_atomic_full_contract(self) -> None:

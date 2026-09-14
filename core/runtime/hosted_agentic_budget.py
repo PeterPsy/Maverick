@@ -125,7 +125,11 @@ class HostedAgenticBudget:
         ):
             raise HostedAgenticLoopError("agent_finalization_reserve_violation")
         if self.monotonic() > plan.deadline:
-            raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
+            raise HostedAgenticLoopError(
+                "agent_time_limit_reached"
+                if phase == "exploration"
+                else "agent_finalization_reserve_unavailable"
+            )
         estimated_input = estimate_hosted_request_tokens(request)
         if self.accounted_input_tokens + estimated_input > self.policy.max_input_tokens:
             raise HostedAgenticLoopError("agent_input_token_limit_reached")
@@ -210,11 +214,6 @@ class HostedAgenticBudget:
         self.check_tool_call()
         self.tool_calls += 1
 
-    def require_finalization_reserve(self) -> None:
-        """Fail closed if live policy/time drift consumed the protected reserve."""
-        if not self.snapshot().finalization_reserved:
-            raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
-
     def tool_execution_deadline(self, *, cleanup_seconds: float) -> float:
         """Return an active-step deadline that leaves time to persist tool pairing."""
         if (
@@ -224,7 +223,7 @@ class HostedAgenticBudget:
             or cleanup_seconds < 0
             or self._active_deadline is None
         ):
-            raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
+            raise HostedAgenticLoopError("agent_tool_timeout")
         return self._active_deadline - cleanup_seconds
 
     def add_tool_result(self, size_bytes: int) -> None:
@@ -380,7 +379,7 @@ class HostedAgenticBudget:
     def check_time(self) -> None:
         now = self.monotonic()
         if self._active_deadline is not None and now > self._active_deadline:
-            raise HostedAgenticLoopError("agent_finalization_time_reserve_reached")
+            raise HostedAgenticLoopError("agent_tool_timeout")
         if now - self.started_at > self.policy.max_wall_time_seconds:
             raise HostedAgenticLoopError("agent_time_limit_reached")
 

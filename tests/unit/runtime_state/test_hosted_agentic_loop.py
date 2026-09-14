@@ -40,7 +40,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
         )
         return result, events, active_adapter
 
-    def test_fake_provider_runs_sequential_tool_loop_and_keeps_private_state_out_of_events(self) -> None:
+    def test_fake_provider_runs_universal_tool_loop_and_keeps_private_state_out_of_events(self) -> None:
         client = DeterministicFakeAgenticClient(tool_name=self.harness.read_tool_name)
 
         result, events, _adapter = self.execute(client)

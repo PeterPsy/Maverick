@@ -29,7 +29,6 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
     MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
     feature_enabled,
-    parallel_tool_calls_enabled,
     provider_preview_feature,
 )
 
@@ -1001,8 +1000,6 @@ def _validate_policy(policy: AgenticRuntimePolicy) -> None:
     )
     if any(value <= 0 for value in positive) or policy.max_parallel_tool_calls < 0:
         raise AgenticRuntimeError("runtime_policy_limit_invalid")
-    if policy.max_parallel_tool_calls > 0 and not parallel_tool_calls_enabled():
-        raise AgenticRuntimeError("parallel_tool_calls_disabled")
     if policy.max_estimated_cost_microusd is not None and policy.max_estimated_cost_microusd < 0:
         raise AgenticRuntimeError("runtime_policy_cost_invalid")
     if policy.tool_handle_mode == "none" and policy.allowed_tool_handles:

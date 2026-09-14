@@ -105,17 +105,14 @@ class AgenticEgressEvaluator:
         timestamp = now or datetime.now(tz=UTC)
         source = canonical_egress_content(content)
         source_digest = _content_digest(self._digest_key, source)
-        reason = self._deny_reason(
-            block=block,
-            destination_provider_id=destination_provider_id,
-            destination_upstream_id=destination_upstream_id,
-            policy=policy,
-            source=source,
-            data_attestation=data_attestation,
+        reason = None if policy.audit_only else self._deny_reason(
+            block=block, destination_provider_id=destination_provider_id,
+            destination_upstream_id=destination_upstream_id, policy=policy,
+            source=source, data_attestation=data_attestation,
         )
-        exported: bytes | None = None
+        exported: bytes | None = source if policy.audit_only else None
         transformation: str | None = None
-        if reason is None:
+        if reason is None and not policy.audit_only:
             exported, transformation, reason = transform_exportable_content(
                 source,
                 content_type=block.content_type,
@@ -134,7 +131,13 @@ class AgenticEgressEvaluator:
                 ),
             )
         allowed = reason is None and exported is not None
-        reason_code = "egress_allowed" if allowed else str(reason or "egress_denied")
+        reason_code = (
+            "egress_audit_only"
+            if allowed and policy.audit_only
+            else "egress_allowed"
+            if allowed
+            else str(reason or "egress_denied")
+        )
         attestation_id = (
             data_attestation.attestation_id
             if block.data_class == "workspace_internal_fake"

@@ -55,7 +55,7 @@ class HostedAgenticTerminalGapTest(unittest.TestCase):
             == "recovery_required"
         )
 
-    def test_finalization_recovery_and_cost_limits_contain_terminal_pairing(self) -> None:
+    def test_step_and_cost_limits_contain_terminal_pairing(self) -> None:
         step_harness = HostedAgenticHarness(self, max_tool_calls=1)
         step_result = self._execute(
             step_harness,
@@ -66,7 +66,7 @@ class HostedAgenticTerminalGapTest(unittest.TestCase):
         )
         self.assertEqual(
             step_result.failure_reason_code,
-            "agent_finalization_recovery_exhausted",
+            "agent_step_limit_reached",
         )
         self._assert_terminal_pairing_contained(step_harness)
 

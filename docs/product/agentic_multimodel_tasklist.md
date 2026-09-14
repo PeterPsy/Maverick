@@ -6,8 +6,9 @@ Updated: 2026-09-14
 
 Provide OpenRouter `z-ai/glm-5.3-flash` as a Full Workspace agent driven by the
 Maverick tool loop, with a user experience comparable to the native Codex path.
-Codex must remain independently usable throughout OpenRouter changes. Google API
-integration is not part of the current delivery objective.
+Codex must remain independently usable throughout OpenRouter changes. New Google
+endpoint onboarding is not part of this delivery, but the existing Google
+hosted adapter follows the same universal loop and full-access contract.
 
 ## Delivered runtime
 
@@ -18,6 +19,16 @@ integration is not part of the current delivery objective.
   intersection.
 - [x] Core-owned hosted tool loop with streaming, confirmations, recovery and
   provider-private state.
+- [x] Provider-neutral tool loop with concurrent execution and independent
+  result/error pairing for multi-call batches.
+- [x] Complete authorized tool catalog retained across model steps, without a
+  runtime-directed tool-less finalization phase.
+- [x] Shared relative/workspace-URI/absolute path normalization for filesystem,
+  shell and managed-process tools.
+- [x] Direct full-access host filesystem, process and installed-CLI execution;
+  sandbox confinement remains available for narrower profiles.
+- [x] Full-access egress/classification audit without payload transformation or
+  content filtering.
 - [x] OpenRouter Chat Completions adapter for `z-ai/glm-5.3-flash`.
 - [x] Full Workspace OpenRouter profile with `max`, `high`, `low` reasoning.
 - [x] Direct OpenRouter dispatch without a mutable per-step catalog veto.
@@ -43,7 +54,7 @@ integration is not part of the current delivery objective.
 - [x] Authentication and workspace authorization.
 - [x] Core secret/provider credential bindings.
 - [x] Runtime sandbox/full-access policy.
-- [x] Remote data classification and egress policy.
+- [x] Enforced sandbox egress policy and audit-only full-access egress policy.
 - [x] Containment and feature flags.
 - [x] Reviewed Core tool schemas and dynamic wrapper revalidation.
 - [x] Effect classification and confirmation.
@@ -77,8 +88,30 @@ integration is not part of the current delivery objective.
 - [ ] Improve operator diagnostics for credential, route, upstream and policy
   failures without exposing secrets or provider-private state.
 - [ ] Keep Chat, Settings and `/api/providers` selection semantics aligned.
+- [ ] Keep the Codex/OpenRouter parity matrix current for filesystem,
+  shell/CLI, parallel reads, managed processes, writes, MCP/skills, restart and
+  self-correction after a tool error.
 
 ## Validation record
+
+The universal-loop change was validated on 2026-09-14 with 378 provider tests,
+190 runtime-state tests, 166 runtime-tool tests, and 27 egress tests passing.
+The focused parity coverage exercises the shared Codex/OpenRouter capability
+contract, live full-access list/read/search/write/edit/patch/move/delete,
+installed `git` and `rg`, managed process start/status/stdin/interrupt, parallel
+Google and OpenRouter tool calls, independent invalid-call recovery, and
+restart journal reconciliation. The backend also restarted successfully while
+the implementation was in progress; final restart health is checked after the
+change is committed.
+
+An isolated snapshot of the exact staged change passed all 1,214 root unit
+tests with five skips. The fast suite also passed its API, runtime,
+runtime-state, app-hosting, process, stream, script, and all 67 app shards. Its
+remaining failures were the four pre-existing convention checks for accumulated
+file-size/layout/reference budgets. A shared-working-tree run also observed one
+continuation-fixture error from concurrent work that is excluded from this
+commit. The one profile expectation exposed by this change was updated and
+passes in the complete 378-test provider suite.
 
 The 2026-09-14 live validation used the enabled direct OpenRouter binding in
 workspace `default` with `max` reasoning and Full Workspace mode. Session

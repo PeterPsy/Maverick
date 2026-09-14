@@ -1,10 +1,10 @@
-"""Shared sequential orchestration loop for hosted agentic model providers."""
+"""Shared provider-neutral orchestration loop for hosted agentic models."""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 import asyncio
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 import json
 from typing import Callable
@@ -13,6 +13,7 @@ from uuid import NAMESPACE_URL, uuid5
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelRequest,
+    AgenticToolCall,
     AgenticToolResult,
 )
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
@@ -56,7 +57,6 @@ from core.runtime.hosted_agentic_stream import (
     consume_hosted_provider_step,
 )
 from core.runtime.hosted_agentic_transport import (
-    HostedRequestPhaseRefreshRequired,
     HostedTransportAuthorityGuard,
     preflight_and_commit_hosted_request,
 )
@@ -77,6 +77,16 @@ from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
+
+
+@dataclass
+class _PreparedHostedToolCall:
+    call: AgenticToolCall
+    outcome: RuntimeToolInvocationOutcome
+    orchestrator: object
+    authority: object
+    actor_context: object
+    tool_policy: object
 
 
 class HostedAgenticLoop:
@@ -267,17 +277,20 @@ class HostedAgenticLoop:
         )
         if pairing_source is not None:
             effective_context = replace(context, effective_authority=authority)
+            recovery_actor = self.actor_context_resolver(effective_context)
+            recovery_orchestrator = self.tool_orchestrator_resolver(
+                effective_context,
+                recovery_actor,
+            )
             for invocation in self.recovery.pairing_results(pairing_source):
                 result, is_error = normalized_tool_result(
-                    self.tool_orchestrator_resolver(
-                        effective_context,
-                        self.actor_context_resolver(effective_context),
-                    ),
+                    recovery_orchestrator,
                     RuntimeToolInvocationOutcome(invocation),
                     context_policy=context_policy,
                     allowed_remote_data_classes=(
                         authority.allowed_remote_data_classes
                     ),
+                    full_access=recovery_actor.execution_mode == "full-access",
                 )
                 tool_results.append(
                     make_agentic_tool_result(
@@ -417,33 +430,18 @@ class HostedAgenticLoop:
                     turn_id=context.correlation_id,
                     request_lineage_digest=request_lineage_digest,
                 )
-                try:
-                    reservation = budget.begin_step(
-                        request,
-                        provider_runtime.cost_estimator(request),
-                        phase=phase,
-                    )
-                except HostedAgenticLoopError as error:
-                    if (
-                        phase == "exploration"
-                        and error.reason_code
-                        == "agent_finalization_reserve_unavailable"
-                    ):
-                        phase = "finalization"
-                        continue
-                    raise
-                try:
-                    request = await preflight_and_commit_hosted_request(
-                        request_builder=self.request_builder,
-                        prepared_request=prepared_request,
-                        request_preflight=provider_runtime.request_preflight,
-                        require_preflight=provider_runtime.recipe is not None,
-                        transport_guard=transport_guard,
-                    )
-                except HostedRequestPhaseRefreshRequired:
-                    budget.discard_uncommitted_step()
-                    phase = "finalization"
-                    continue
+                reservation = budget.begin_step(
+                    request,
+                    provider_runtime.cost_estimator(request),
+                    phase=phase,
+                )
+                request = await preflight_and_commit_hosted_request(
+                    request_builder=self.request_builder,
+                    prepared_request=prepared_request,
+                    request_preflight=provider_runtime.request_preflight,
+                    require_preflight=provider_runtime.recipe is not None,
+                    transport_guard=transport_guard,
+                )
                 request_control_digest = hosted_request_control_digest(request)
                 break
             private_state.persist_request_identity(context, request)
@@ -754,9 +752,9 @@ class HostedAgenticLoop:
             if not response.tool_calls:
                 raise HostedAgenticLoopError("provider_response_invalid")
             step_results: list[AgenticToolResult] = []
-            parallel_denied = len(response.tool_calls) > 1
             post_pairing_failure: str | None = None
             tool_policy = hosted_tool_policy(authority, budget.policy)
+            prepared_calls: list[_PreparedHostedToolCall] = []
             for call_index, call in enumerate(response.tool_calls):
                 outcome = observed.get(call.provider_tool_call_id)
                 if outcome is None:
@@ -773,17 +771,16 @@ class HostedAgenticLoop:
                         resolution_status="budget_denied",
                         failure_reason="agent_tool_call_limit_reached",
                     )
-                elif parallel_denied:
+                elif budget.remaining_tool_result_bytes == 0:
                     outcome = tool_orchestrator.deny_observed_tool(
                         outcome.invocation,
-                        resolution_status="parallel_denied",
-                        failure_reason="provider_parallel_tool_calls_forbidden",
+                        resolution_status="budget_denied",
+                        failure_reason="agent_tool_result_limit_reached",
                     )
                 else:
                     try:
                         authority = self.authority_refresher(context)
                         budget.tighten(self.policy_resolver(context))
-                        budget.require_finalization_reserve()
                         actor_context = self.actor_context_resolver(
                             replace(context, effective_authority=authority)
                         )
@@ -824,12 +821,6 @@ class HostedAgenticLoop:
                             "runtime.tool_call.awaiting_confirmation",
                             tool_event_payload(outcome),
                         )
-                        outcome = await self._await_confirmation(
-                            context=context,
-                            cancellation=cancellation,
-                            budget=budget,
-                            outcome=outcome,
-                        )
                 if outcome.invocation.state in {
                     "denied",
                     "failed",
@@ -845,23 +836,130 @@ class HostedAgenticLoop:
                         step_journal,
                         outcome.invocation.disposition_id,
                     )
+                prepared_calls.append(
+                    _PreparedHostedToolCall(
+                        call=call,
+                        outcome=outcome,
+                        orchestrator=tool_orchestrator,
+                        authority=authority,
+                        actor_context=actor_context,
+                        tool_policy=tool_policy,
+                    )
+                )
+
+            confirmation_indexes = [
+                index
+                for index, item in enumerate(prepared_calls)
+                if item.outcome.awaiting_confirmation
+            ]
+            if confirmation_indexes:
+                confirmation_results = await asyncio.gather(
+                    *(
+                        self._await_confirmation(
+                            context=context,
+                            cancellation=cancellation,
+                            budget=budget,
+                            outcome=prepared_calls[index].outcome,
+                        )
+                        for index in confirmation_indexes
+                    ),
+                    return_exceptions=True,
+                )
+                for index, result in zip(
+                    confirmation_indexes,
+                    confirmation_results,
+                    strict=True,
+                ):
+                    if isinstance(result, BaseException):
+                        if isinstance(result, asyncio.CancelledError):
+                            raise result
+                        if (
+                            isinstance(result, HostedAgenticLoopError)
+                            and result.reason_code == "runtime_cancelled"
+                        ):
+                            raise result
+                        record = self.tool_ledger.store.get_tool_invocation(
+                            prepared_calls[index].outcome.invocation.invocation_id
+                        )
+                        if record.state == "awaiting_confirmation":
+                            record = self.tool_ledger.transition(
+                                record,
+                                "expired",
+                                failure_reason="tool_confirmation_failed",
+                            )
+                        prepared_calls[index].outcome = RuntimeToolInvocationOutcome(
+                            record
+                        )
+                    else:
+                        prepared_calls[index].outcome = result
+
+            execution_indexes: list[int] = []
+            for index, item in enumerate(prepared_calls):
+                outcome = item.outcome
                 if outcome.invocation.state == "authorized":
                     yield event(
                         "runtime.tool_call.started",
                         tool_event_payload(outcome, display_state="executing"),
                     )
-                    outcome = await execute_hosted_authorized_tool(
-                        tool_orchestrator=tool_orchestrator,
-                        outcome=outcome,
-                        authority=authority,
-                        context=actor_context,
-                        policy=tool_policy,
-                        budget=budget,
-                        cancellation=cancellation,
-                        poll_seconds=self.confirmation_poll_seconds,
+                    execution_indexes.append(index)
+            if execution_indexes:
+                execution_results = await asyncio.gather(
+                    *(
+                        execute_hosted_authorized_tool(
+                            tool_orchestrator=prepared_calls[index].orchestrator,
+                            outcome=prepared_calls[index].outcome,
+                            authority=prepared_calls[index].authority,
+                            context=prepared_calls[index].actor_context,
+                            policy=prepared_calls[index].tool_policy,
+                            budget=budget,
+                            cancellation=cancellation,
+                            poll_seconds=self.confirmation_poll_seconds,
+                        )
+                        for index in execution_indexes
+                    ),
+                    return_exceptions=True,
+                )
+                for index, result in zip(
+                    execution_indexes,
+                    execution_results,
+                    strict=True,
+                ):
+                    if isinstance(result, BaseException):
+                        if isinstance(result, asyncio.CancelledError):
+                            raise result
+                        if (
+                            isinstance(result, HostedAgenticLoopError)
+                            and result.reason_code == "runtime_cancelled"
+                        ):
+                            raise result
+                        result = self._terminalize_tool_exception(
+                            prepared_calls[index].orchestrator,
+                            prepared_calls[index].outcome,
+                        )
+                    prepared_calls[index].outcome = result
+
+            for item in prepared_calls:
+                call = item.call
+                outcome = item.outcome
+                tool_orchestrator = item.orchestrator
+                call_authority = item.authority
+                if outcome.invocation.state in {
+                    "denied",
+                    "failed",
+                    "cancelled",
+                    "expired",
+                    "execution_unknown",
+                } and outcome.invocation.result_id is None:
+                    outcome = RuntimeToolInvocationOutcome(
+                        self.tool_ledger.attach_terminal_result(outcome.invocation)
                     )
                 if outcome.invocation.result_id is None:
                     raise HostedAgenticLoopError("tool_result_unavailable")
+                if outcome.invocation.disposition_id is not None:
+                    step_journal = self.provider_step_journal.add_disposition(
+                        step_journal,
+                        outcome.invocation.disposition_id,
+                    )
                 step_journal = self.provider_step_journal.add_result(
                     step_journal,
                     outcome.invocation.result_id,
@@ -871,21 +969,17 @@ class HostedAgenticLoop:
                         "runtime.tool_call.execution_unknown",
                         tool_event_payload(outcome),
                     )
-                    raise HostedAgenticLoopError("tool_execution_unknown")
                 result, is_error = normalized_tool_result(
                     tool_orchestrator,
                     outcome,
                     context_policy=context_policy,
                     allowed_remote_data_classes=(
-                        authority.allowed_remote_data_classes
+                        call_authority.allowed_remote_data_classes
+                    ),
+                    full_access=(
+                        item.actor_context.execution_mode == "full-access"
                     ),
                 )
-                tool_event_type = (
-                    "runtime.tool_call.completed"
-                    if outcome.invocation.state == "succeeded"
-                    else "runtime.tool_call.failed"
-                )
-                yield event(tool_event_type, tool_event_payload(outcome))
                 serialized_size = len(
                     json.dumps(
                         result,
@@ -905,15 +999,41 @@ class HostedAgenticLoop:
                     original_size, bool
                 ):
                     serialized_size = max(serialized_size, original_size)
-                step_journal = self.provider_step_journal.record_tool_result_bytes(
-                    step_journal,
-                    total_bytes=(
-                        step_journal.budget_tool_result_bytes + serialized_size
-                    ),
+                if not is_error:
+                    try:
+                        budget.add_tool_result(serialized_size)
+                    except HostedAgenticLoopError as error:
+                        if error.reason_code != "agent_tool_result_limit_reached":
+                            raise
+                        # A concurrently executed batch can cross the aggregate
+                        # byte ceiling only after its effects are complete. Keep
+                        # exact call/result pairing, then close result capacity
+                        # for later calls instead of rewriting this result.
+                        budget.total_tool_result_bytes = (
+                            budget.policy.max_total_tool_result_bytes
+                        )
+                        step_journal = (
+                            self.provider_step_journal.record_tool_result_bytes(
+                                step_journal,
+                                total_bytes=budget.total_tool_result_bytes,
+                            )
+                        )
+                    else:
+                        step_journal = (
+                            self.provider_step_journal.record_tool_result_bytes(
+                                step_journal,
+                                total_bytes=(
+                                    step_journal.budget_tool_result_bytes
+                                    + serialized_size
+                                ),
+                            )
+                        )
+                tool_event_type = (
+                    "runtime.tool_call.completed"
+                    if outcome.invocation.state == "succeeded"
+                    else "runtime.tool_call.failed"
                 )
-                budget.add_tool_result(serialized_size)
-                budget.tighten(self.policy_resolver(context))
-                egress_policy = hosted_egress_policy(context, budget.policy)
+                yield event(tool_event_type, tool_event_payload(outcome))
                 step_results.append(
                     make_agentic_tool_result(
                         provider_tool_call_id=call.provider_tool_call_id,
@@ -1002,6 +1122,36 @@ class HostedAgenticLoop:
     def _resume_turn(self, invocation_id: str) -> None:
         if self.turn_status_callback is not None:
             self.turn_status_callback("active", invocation_id)
+
+    def _terminalize_tool_exception(
+        self,
+        orchestrator,
+        outcome: RuntimeToolInvocationOutcome,
+    ) -> RuntimeToolInvocationOutcome:
+        """Convert one unexpected worker failure without cancelling its siblings."""
+        record = self.tool_ledger.store.get_tool_invocation(
+            outcome.invocation.invocation_id
+        )
+        if record.state == "executing":
+            terminal = orchestrator.interrupt_started_execution(
+                record,
+                failure_reason="tool_execution_failed",
+            )
+        elif record.state == "authorized":
+            terminal = RuntimeToolInvocationOutcome(
+                self.tool_ledger.transition(
+                    record,
+                    "cancelled",
+                    failure_reason="tool_execution_failed",
+                )
+            )
+        else:
+            terminal = RuntimeToolInvocationOutcome(record)
+        if terminal.invocation.result_id is None:
+            terminal = RuntimeToolInvocationOutcome(
+                self.tool_ledger.attach_terminal_result(terminal.invocation)
+            )
+        return terminal
 
     def recover_session(self, context, *, trigger: str):
         """Synchronous lifecycle hook used by startup, admission and prepare."""

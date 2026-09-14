@@ -6,12 +6,10 @@ import time
 import unittest
 from unittest.mock import patch
 
-from core.providers.agentic_protocol import HOSTED_FINALIZATION_INSTRUCTION
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import HostedFinalizationPolicy
-from core.runtime.hosted_agentic_request import hosted_request_control_digest
 from core.runtime.tool_orchestrator import RuntimeToolExecutionControl
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
@@ -44,7 +42,7 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         )
         return result, events
 
-    def test_last_tool_exhausts_only_tool_budget_and_forces_toolless_final_step(self) -> None:
+    def test_last_tool_exhausts_only_tool_budget_and_keeps_full_catalog(self) -> None:
         client = DeterministicFakeAgenticClient(
             tool_name=self.harness.read_tool_name
         )
@@ -56,31 +54,17 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         first, final = client.requests
         self.assertEqual(first.request_phase, "exploration")
         self.assertTrue(first.tool_definitions)
-        self.assertEqual(final.request_phase, "finalization")
-        self.assertEqual(final.tool_definitions, ())
+        self.assertEqual(final.request_phase, "exploration")
+        self.assertEqual(
+            [tool.name for tool in final.tool_definitions],
+            [tool.name for tool in first.tool_definitions],
+        )
         self.assertEqual(len(final.tool_results), 1)
-        self.assertEqual(
-            final.content_blocks[-1].provenance,
-            "finalization_instruction",
-        )
-        self.assertEqual(
-            [
-                block.content.decode()
+        self.assertFalse(
+            any(
+                block.provenance == "finalization_instruction"
                 for block in final.content_blocks
-                if block.provenance == "finalization_instruction"
-            ],
-            [HOSTED_FINALIZATION_INSTRUCTION],
-        )
-        mutated_final = replace(
-            final,
-            content_blocks=(
-                *final.content_blocks[:-1],
-                replace(final.content_blocks[-1], trust_level="trusted_actor"),
-            ),
-        )
-        self.assertNotEqual(
-            hosted_request_control_digest(final),
-            hosted_request_control_digest(mutated_final),
+            )
         )
         self.assertFalse(
             any(event.event_type == "runtime.error" for event in events)
@@ -90,10 +74,10 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         )
         self.assertEqual(
             [(item.request_phase, item.budget_tool_call_charges) for item in journals],
-            [("exploration", 1), ("finalization", 0)],
+            [("exploration", 1), ("exploration", 0)],
         )
 
-    def test_unexpected_finalization_tool_is_budget_denied_then_recovers_once(self) -> None:
+    def test_tool_over_budget_is_paired_as_an_error_without_hiding_catalog(self) -> None:
         client = DeterministicFakeAgenticClient(
             tool_sequence=(
                 self.harness.read_tool_name,
@@ -106,11 +90,11 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(
             [request.request_phase for request in client.requests],
-            ["exploration", "finalization", "finalization_recovery"],
+            ["exploration", "exploration", "exploration"],
         )
-        self.assertTrue(client.requests[0].tool_definitions)
-        self.assertEqual(client.requests[1].tool_definitions, ())
-        self.assertEqual(client.requests[2].tool_definitions, ())
+        self.assertTrue(
+            all(request.tool_definitions for request in client.requests)
+        )
         invocations = self.harness.store.list_tool_invocations(
             session_id="session-hosted"
         )
@@ -118,7 +102,7 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(invocations[1].resolution_status, "budget_denied")
         self.assertEqual(
             invocations[1].failure_reason,
-            "agent_finalization_tool_call_forbidden",
+            "agent_tool_call_limit_reached",
         )
         self.assertEqual(invocations[1].state, "denied")
         self.assertFalse(
@@ -129,7 +113,7 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
             "running",
         )
 
-    def test_second_unexpected_finalization_tool_quarantines_without_fourth_request(self) -> None:
+    def test_repeated_over_budget_tools_remain_independent_and_recover(self) -> None:
         client = DeterministicFakeAgenticClient(
             tool_sequence=(
                 self.harness.read_tool_name,
@@ -140,15 +124,11 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
 
         result, events = self.execute(client)
 
-        self.assertEqual(result.exit_code, 1)
-        self.assertEqual(
-            result.failure_reason_code,
-            "agent_finalization_recovery_exhausted",
-        )
-        self.assertEqual(len(client.requests), 3)
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(len(client.requests), 4)
         self.assertEqual(
             [request.request_phase for request in client.requests],
-            ["exploration", "finalization", "finalization_recovery"],
+            ["exploration", "exploration", "exploration", "exploration"],
         )
         invocations = self.harness.store.list_tool_invocations(
             session_id="session-hosted"
@@ -158,13 +138,12 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
             ["succeeded", "budget_denied", "budget_denied"],
         )
         session = self.harness.store.get_session("session-hosted")
-        self.assertEqual(session.status, "recovery_required")
-        self.assertEqual(session.recovery_reason_code, "provider_pairing_ambiguous")
+        self.assertEqual(session.status, "running")
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "agent_finalization_recovery_exhausted"}],
+            [],
         )
-        self.assertFalse(
+        self.assertTrue(
             any(event.event_type == "runtime.output.final" for event in events)
         )
 
@@ -221,7 +200,7 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
             [{"reason_code": "provider_credential_authorization_missing"}],
         )
 
-    def test_unavailable_terminal_reserve_is_visible_before_provider_transport(self) -> None:
+    def test_terminal_reserve_does_not_prevent_provider_transport(self) -> None:
         client = DeterministicFakeAgenticClient()
         adapter = self.harness.adapter(
             client,
@@ -236,25 +215,17 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
 
         result, events = self.execute(client, adapter=adapter)
 
-        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.exit_code, 0)
         self.assertEqual(
-            result.failure_reason_code,
-            "agent_finalization_reserve_unavailable",
-        )
-        self.assertIn("final answer", result.public_error_message)
-        self.assertEqual(client.requests, [])
-        self.assertEqual(
-            self.harness.store.list_egress_decisions(
-                session_id="session-hosted"
-            ),
-            [],
+            [request.request_phase for request in client.requests],
+            ["exploration"],
         )
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "agent_finalization_reserve_unavailable"}],
+            [],
         )
 
-    def test_request_specific_cost_preflight_falls_back_before_egress_commit(self) -> None:
+    def test_request_cost_is_not_reserved_for_a_runtime_directed_final_step(self) -> None:
         self.harness.policy = replace(
             self.harness.policy,
             max_estimated_cost_microusd=100,
@@ -279,7 +250,7 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(
             [request.request_phase for request in client.requests],
-            ["finalization"],
+            ["exploration"],
         )
         decisions = self.harness.store.list_egress_decisions(
             session_id="session-hosted"
@@ -290,15 +261,15 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
                 "platform_instruction",
                 "runtime_context",
                 "runtime_capabilities",
+                "tool_schema",
                 "user_input",
-                "finalization_instruction",
             },
         )
         self.assertFalse(
             any(event.event_type == "runtime.error" for event in events)
         )
 
-    def test_slow_tool_is_fenced_before_it_consumes_finalization_time(self) -> None:
+    def test_tool_may_use_time_that_was_previously_reserved_for_finalization(self) -> None:
         clock = _Clock()
 
         def budget_factory(policy, finalization_policy, **kwargs):
@@ -344,21 +315,18 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(
             [request.request_phase for request in client.requests],
-            ["exploration", "finalization"],
+            ["exploration", "exploration"],
         )
         invocation = self.harness.store.list_tool_invocations(
             session_id="session-hosted"
         )[0]
-        self.assertEqual(invocation.state, "failed")
-        self.assertEqual(
-            invocation.failure_reason,
-            "agent_finalization_time_reserve_reached",
-        )
+        self.assertEqual(invocation.state, "succeeded")
+        self.assertIsNone(invocation.failure_reason)
         self.assertIsNotNone(invocation.result_id)
-        self.assertIsNone(invocation.result_private_ref)
+        self.assertIsNotNone(invocation.result_private_ref)
         self.assertEqual(
             client.requests[-1].tool_results[0].content,
-            b'{"error":"agent_finalization_time_reserve_reached"}',
+            b'{"value":4}',
         )
         self.assertFalse(
             any(event.event_type == "runtime.error" for event in events)
@@ -396,7 +364,7 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(
             [request.request_phase for request in client.requests],
-            ["exploration", "finalization"],
+            ["exploration", "exploration"],
         )
         invocation = self.harness.store.list_tool_invocations(
             session_id="session-hosted"
@@ -404,13 +372,13 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(invocation.state, "failed")
         self.assertEqual(
             invocation.failure_reason,
-            "agent_finalization_time_reserve_reached",
+            "agent_tool_timeout",
         )
         self.assertIsNotNone(invocation.result_id)
         self.assertIsNone(invocation.result_private_ref)
         self.assertEqual(
             client.requests[-1].tool_results[0].content,
-            b'{"error":"agent_finalization_time_reserve_reached"}',
+            b'{"error":"agent_tool_timeout"}',
         )
         self.assertFalse(
             any(event.event_type == "runtime.error" for event in events)
@@ -490,7 +458,7 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(invocation.state, "failed")
         self.assertEqual(
             invocation.failure_reason,
-            "agent_finalization_time_reserve_reached",
+            "agent_tool_timeout",
         )
 
 

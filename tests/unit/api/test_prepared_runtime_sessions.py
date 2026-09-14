@@ -166,7 +166,7 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertTrue(all(result is not None for result in results))
         self.assertEqual(sorted(getattr(result, "reference_cache_hit") for result in results), [False, True])
 
-    def test_prepare_only_session_waits_for_hot_provider_and_reports_readiness(self) -> None:
+    def test_prepare_only_session_dispatches_prewarm_without_client_delay(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -205,14 +205,13 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
 
             self.assertEqual(status, 201)
             prewarm.assert_called_once()
-            wait_for_prewarm.assert_called_once()
-            self.assertEqual(wait_for_prewarm.call_args.kwargs["timeout_seconds"], 2.0)
+            wait_for_prewarm.assert_not_called()
             self.assertEqual(payload["prewarm_status"], "completed")
             self.assertTrue(payload["prewarm_completed"])
             self.assertTrue(payload["provider_thread_ready"])
             self.assertEqual(payload["prewarm_total_ms"], 321.5)
 
-    def test_runtime_session_prewarm_endpoint_waits_for_hot_provider_and_reports_readiness(self) -> None:
+    def test_runtime_session_prewarm_endpoint_avoids_blocking_wait(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -259,7 +258,7 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
 
             self.assertEqual(status, 200)
             prewarm.assert_called_once()
-            self.assertEqual(prewarm.call_args.kwargs["wait_seconds"], 2.0)
+            self.assertEqual(prewarm.call_args.kwargs["wait_seconds"], 0.0)
             self.assertEqual(payload["session_id"], session_id)
             self.assertEqual(payload["prewarm_status"], "completed")
             self.assertTrue(payload["prewarm_completed"])

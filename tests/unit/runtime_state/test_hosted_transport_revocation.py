@@ -12,7 +12,7 @@ from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 class HostedTransportRevocationTest(unittest.TestCase):
     def test_revocation_during_endpoint_preflight_blocks_transport(self) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         live = True
 
         def revalidate(_context, classification):
@@ -63,7 +63,7 @@ class HostedTransportRevocationTest(unittest.TestCase):
         )
 
     def test_revocation_after_request_journal_blocks_lazy_transport(self) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         live = True
 
         def revalidate(_context, classification):

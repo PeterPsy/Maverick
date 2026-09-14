@@ -57,10 +57,10 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 class HostedHarnessRecipeTest(unittest.TestCase):
     def test_review_closure_publishes_new_immutable_recipe_identities(self) -> None:
         for recipe, expected_revision, expected_context_revision in (
-            (GOOGLE_GOVERNED_WORKSPACE_RECIPE, "26", "p4-context-v4"),
+            (GOOGLE_GOVERNED_WORKSPACE_RECIPE, "27", "p4-context-v4"),
             (
                 OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
-                "29",
+                "30",
                 "openrouter-full-context-v1",
             ),
         ):

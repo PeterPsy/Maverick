@@ -230,34 +230,53 @@ def _roll_forward_enabled_codex_bindings(
                 (item for item in bindings if item.binding_id == binding_id),
                 None,
             )
-            saved = save_workspace_agentic_binding(
-                provider_store,
-                registry,
-                workspace_id=workspace_id,
-                definition_id=current.definition_id,
-                definition_revision=current.revision,
-                credential_binding_id=source.credential_binding_id,
-                enabled=True,
-                is_default=source.is_default,
-                actor_policy=source.actor_policy,
-                policy_patch={
-                    "max_steps_per_turn": policy.max_steps_per_turn,
-                    "max_tool_calls_per_turn": policy.max_tool_calls_per_turn,
-                    "max_wall_time_seconds": policy.max_wall_time_seconds,
-                    "max_output_tokens": policy.max_output_tokens,
-                    "max_estimated_cost_microusd": policy.max_estimated_cost_microusd,
-                    "allowed_remote_data_classes": list(policy.allowed_remote_data_classes),
-                    "tool_access_enabled": policy.tool_handle_mode != "none",
-                    "require_confirmation_for_mutating": policy.require_confirmation_for_mutating,
-                    "require_confirmation_for_destructive": policy.require_confirmation_for_destructive,
-                },
-                binding_id=binding_id,
-                expected_revision=(
-                    None if existing is None else existing.revision
-                ),
-                now=now,
-                record_operator_decision=False,
-            )
+            try:
+                saved = save_workspace_agentic_binding(
+                    provider_store,
+                    registry,
+                    workspace_id=workspace_id,
+                    definition_id=current.definition_id,
+                    definition_revision=current.revision,
+                    credential_binding_id=source.credential_binding_id,
+                    enabled=True,
+                    is_default=source.is_default,
+                    actor_policy=source.actor_policy,
+                    policy_patch={
+                        "max_steps_per_turn": policy.max_steps_per_turn,
+                        "max_tool_calls_per_turn": policy.max_tool_calls_per_turn,
+                        "max_wall_time_seconds": policy.max_wall_time_seconds,
+                        "max_output_tokens": policy.max_output_tokens,
+                        "max_estimated_cost_microusd": (
+                            policy.max_estimated_cost_microusd
+                        ),
+                        "allowed_remote_data_classes": list(
+                            policy.allowed_remote_data_classes
+                        ),
+                        "tool_access_enabled": policy.tool_handle_mode != "none",
+                        "require_confirmation_for_mutating": (
+                            policy.require_confirmation_for_mutating
+                        ),
+                        "require_confirmation_for_destructive": (
+                            policy.require_confirmation_for_destructive
+                        ),
+                    },
+                    binding_id=binding_id,
+                    expected_revision=(
+                        None if existing is None else existing.revision
+                    ),
+                    now=now,
+                    record_operator_decision=False,
+                )
+            except AgenticProfileError as error:
+                if str(error) not in {
+                    "native_agent_installation_missing",
+                    "native_agent_model_unavailable",
+                }:
+                    raise
+                # Startup must remain recoverable while a native provider or
+                # its live catalog is temporarily unavailable. The existing
+                # immutable binding stays intact and can roll forward later.
+                continue
             if saved.workspace_policy_ceiling != policy:
                 saved = provider_store.save_workspace_agentic_profile_binding(
                     replace(

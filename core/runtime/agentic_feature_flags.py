@@ -15,7 +15,6 @@ MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT = "MAVERICK_FEATURE_AGENTIC_EGRESS_E
 MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW = "MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW"
 MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW = "MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW"
 MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW = "MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW"
-MAVERICK_FEATURE_PARALLEL_TOOL_CALLS = "MAVERICK_FEATURE_PARALLEL_TOOL_CALLS"
 
 _DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
 _ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -24,7 +23,6 @@ _DEFAULTS = {
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: False,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: False,
     MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW: False,
-    MAVERICK_FEATURE_PARALLEL_TOOL_CALLS: False,
 }
 
 
@@ -62,8 +60,3 @@ def provider_preview_feature(model_provider_id: str) -> tuple[str, str] | None:
     if model_provider_id == "openrouter":
         return MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW, "openrouter_agentic_preview_disabled"
     return None
-
-
-def parallel_tool_calls_enabled() -> bool:
-    """Parallel tool calls remain opt-in independently of provider policy."""
-    return feature_enabled(MAVERICK_FEATURE_PARALLEL_TOOL_CALLS, default=False)

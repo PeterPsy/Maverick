@@ -331,7 +331,7 @@ class ProvidersTestCase(unittest.TestCase):
         persisted_options = provider_store.get_provider_definition("codex").model_options
         self.assertEqual(
             [option.default_reasoning_effort for option in persisted_options],
-            ["max", "xhigh"],
+            ["xhigh", "xhigh"],
         )
         self.assertEqual(
             [item.effort for item in persisted_options[0].supported_reasoning_efforts],
@@ -1182,7 +1182,7 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertFalse((runtime_home / "skills" / ".system" / "SKILL.md").exists())
         runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
         self.assertIn('model = "gpt-5.6-sol"', runtime_config)
-        self.assertIn('model_reasoning_effort = "max"', runtime_config)
+        self.assertIn('model_reasoning_effort = "xhigh"', runtime_config)
         self.assertNotIn('model = "gpt-5.4"', runtime_config)
         self.assertNotIn('model_reasoning_effort = "medium"', runtime_config)
         self.assertIn("experimental_use_unified_exec_tool = false", runtime_config)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
-import json
 import os
 from types import SimpleNamespace
 import unittest
@@ -139,7 +138,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                     {"error": "tool_result_egress_denied"},
                 )
 
-    def test_persisted_tool_result_revalidates_authority_before_egress(
+    def test_full_access_result_classification_revocation_remains_audit_only(
         self,
     ) -> None:
         harness = HostedAgenticHarness(self)
@@ -197,7 +196,6 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                     "-c",
                     "printf REVOCATION_PRIVATE_MARKER",
                 ],
-                "mutation_scopes": [],
             },
             authority=authority,
             context=actor,
@@ -228,13 +226,13 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             orchestrator,
             outcome,
             allowed_remote_data_classes=("public",),
+            full_access=True,
         )
 
-        self.assertTrue(is_error)
-        self.assertEqual(normalized, {"error": "tool_result_egress_denied"})
-        self.assertNotIn("REVOCATION_PRIVATE_MARKER", json.dumps(normalized))
+        self.assertFalse(is_error)
+        self.assertIn("REVOCATION_PRIVATE_MARKER", normalized["output"])
 
-    def test_production_preflight_denies_shell_mutation_before_effect(self) -> None:
+    def test_production_full_access_shell_is_not_blocked_by_egress_policy(self) -> None:
         harness = HostedAgenticHarness(self)
         with patch.dict(
             os.environ,
@@ -285,12 +283,6 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             provider_tool_call_id="call-preflight-shell",
             arguments={
                 "argv": ["/bin/sh", "-c", "printf escaped > must-not-exist.txt"],
-                "mutation_scopes": [
-                    {
-                        "path": ".",
-                        "instruction_scope_digest": "a" * 64,
-                    }
-                ],
             },
             authority=authority,
             context=actor,
@@ -303,12 +295,9 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(outcome.invocation.state, "denied")
-        self.assertEqual(
-            outcome.invocation.failure_reason,
-            "tool_result_egress_not_guaranteed",
-        )
-        self.assertFalse(target.exists())
+        self.assertEqual(outcome.invocation.state, "succeeded")
+        self.assertIsNone(outcome.invocation.failure_reason)
+        self.assertEqual(target.read_text(encoding="utf-8"), "escaped")
 
     @staticmethod
     def _install_runtime_capture_turn(

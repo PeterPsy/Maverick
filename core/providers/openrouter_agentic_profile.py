@@ -36,8 +36,8 @@ from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-glm-5-3-flash-relace"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "1"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ()
+OPENROUTER_AGENTIC_PROFILE_REVISION = "2"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = ("1",)
 OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS = tuple(
     (
         "agentic-profile-openrouter-glm-5-3-flash-relace-fp4",

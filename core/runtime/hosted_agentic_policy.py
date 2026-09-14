@@ -62,12 +62,19 @@ def destination_upstream(context) -> str | None:
 
 def hosted_egress_policy(context, policy) -> AgenticEgressPolicy:
     binding = context.binding
+    authority = getattr(context, "effective_authority", None)
+    execution_mode = str(
+        getattr(authority, "execution_mode", "")
+        or getattr(context.session, "effective_mode", "")
+    )
     return AgenticEgressPolicy(
         policy_id=binding.egress_policy_id,
         revision=binding.egress_policy_revision,
         allowed_data_classes=policy.allowed_remote_data_classes,
         allowed_provider_ids=(binding.model_provider_id,),
         allowed_upstream_ids=binding.routing_constraint_snapshot.allowed_upstream_ids,
+        transform_sensitive_text=execution_mode != "full-access",
+        audit_only=execution_mode == "full-access",
     )
 
 
@@ -153,25 +160,28 @@ def normalized_tool_result(
     *,
     context_policy=None,
     allowed_remote_data_classes: tuple[str, ...],
+    full_access: bool = False,
 ) -> tuple[dict[str, object], bool]:
     record = outcome.invocation
     if record.state == "succeeded":
         classification = orchestrator.persisted_result_classification(record)
         result = orchestrator.ledger.load_result(record)
-        projected = project_hosted_tool_result(
-            result,
-            invocation=record,
-            context_policy=context_policy,
+        projected = result if full_access else project_hosted_tool_result(
+            result, invocation=record, context_policy=context_policy,
         )
         # Preserve provider call/result pairing without exporting denied bytes.
         # The original private result remains available only in the ledger.
+        if full_access:
+            return projected, False
         return pairing_safe_tool_result(
             projected,
             is_error=False,
             result_data_class=classification.data_class,
             allowed_remote_data_classes=allowed_remote_data_classes,
         )
-    if record.state in {"denied", "expired", "failed", "cancelled"}:
+    if record.state in {
+        "denied", "expired", "failed", "cancelled", "execution_unknown"
+    }:
         if record.result_private_ref:
             return orchestrator.ledger.load_result(record), True
         return {"error": record.failure_reason or f"tool_{record.state}"}, True

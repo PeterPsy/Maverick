@@ -61,8 +61,8 @@ def select_hosted_request_phase(
         return "finalization_recovery"
     if recovery_attempts:
         raise HostedAgenticLoopError("agent_finalization_recovery_exhausted")
-    if _exploration_must_stop(budget):
-        return "finalization"
+    # New turns never hide the tool catalog or direct the model into a special
+    # terminal phase. Historical finalization records above remain recoverable.
     return "exploration"
 
 
@@ -73,7 +73,11 @@ def plan_hosted_step(
     """Fail before request construction if the phase cannot retain reserves."""
     future_attempts = _future_finalization_attempts(budget, phase)
     if budget.remaining_provider_steps < 1 + future_attempts:
-        raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
+        raise HostedAgenticLoopError(
+            "agent_step_limit_reached"
+            if phase == "exploration"
+            else "agent_finalization_reserve_unavailable"
+        )
     protected_output = (
         future_attempts
         * budget.finalization_policy.finalization_max_output_tokens
@@ -85,7 +89,13 @@ def plan_hosted_step(
         else budget.finalization_policy.finalization_max_output_tokens
     )
     max_output_tokens = min(output_ceiling, available_output)
-    if max_output_tokens < 1 or (
+    if max_output_tokens < 1:
+        raise HostedAgenticLoopError(
+            "agent_output_token_limit_reached"
+            if phase == "exploration"
+            else "agent_finalization_reserve_unavailable"
+        )
+    if (
         phase != "exploration"
         and max_output_tokens
         < budget.finalization_policy.finalization_max_output_tokens
@@ -109,11 +119,9 @@ def plan_hosted_step(
         0.0 if phase == "exploration" else time_per_attempt
     )
     remaining_time = budget.remaining_wall_time_seconds
-    if (
-        phase == "exploration" and remaining_time <= protected_time
-    ) or (
-        phase != "exploration" and remaining_time < required_time
-    ):
+    if phase == "exploration" and remaining_time <= protected_time:
+        raise HostedAgenticLoopError("agent_time_limit_reached")
+    if phase != "exploration" and remaining_time < required_time:
         raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
     return HostedAgenticStepPlan(
         phase=phase,
@@ -167,28 +175,12 @@ def hosted_budget_snapshot(
     )
 
 
-def _exploration_must_stop(budget: HostedAgenticBudget) -> bool:
-    reserve = budget.finalization_policy
-    remaining_cost = budget.remaining_cost_microusd
-    return (
-        budget.remaining_tool_calls == 0
-        or budget.remaining_tool_result_bytes == 0
-        or budget.remaining_provider_steps <= reserve.reserved_provider_steps
-        or budget.remaining_output_tokens <= reserve.reserved_output_tokens
-        or budget.remaining_wall_time_seconds <= reserve.reserved_time_seconds
-        or (
-            remaining_cost is not None
-            and remaining_cost <= reserve.reserved_cost_microusd
-        )
-    )
-
-
 def _future_finalization_attempts(
     budget: HostedAgenticBudget,
     phase: HostedAgenticRequestPhase,
 ) -> int:
     if phase == "exploration":
-        return budget.finalization_policy.reserved_provider_steps
+        return 0
     if phase == "finalization":
         return budget.finalization_policy.max_recovery_attempts
     if phase == "finalization_recovery":

@@ -56,7 +56,7 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
             [{"reason_code": "agent_output_token_limit_reached"}],
         )
 
-    def test_preflight_cannot_consume_active_finalization_deadline_then_open_transport(self) -> None:
+    def test_preflight_cannot_consume_active_tool_deadline_then_open_transport(self) -> None:
         harness = HostedAgenticHarness(self)
         clock = _Clock()
 
@@ -69,7 +69,7 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
             )
 
         def preflight(_request, _credential):
-            clock.value = 4.6
+            clock.value = 5.1
             return SimpleNamespace(snapshot_digest="7" * 64)
 
         client = DeterministicFakeAgenticClient()
@@ -98,7 +98,7 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
         self.assertEqual(client.requests, [])
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "agent_finalization_time_reserve_reached"}],
+            [{"reason_code": "agent_tool_timeout"}],
         )
 
     def test_runtime_capability_projection_change_during_preflight_fails_closed(self) -> None:
@@ -221,7 +221,7 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
         self.assertGreaterEqual(revalidation_calls, 1)
 
     def test_live_egress_policy_narrowing_during_preflight_blocks_transport(self) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         remote_data_allowed = True
 
         def refresh(_context):

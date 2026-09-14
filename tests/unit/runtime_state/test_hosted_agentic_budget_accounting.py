@@ -87,7 +87,7 @@ class HostedAgenticBudgetAccountingTest(unittest.TestCase):
         self.assertEqual(budget.tool_calls, 2)
         self.assertEqual(
             budget.select_phase(pairing_source=None, existing_records=()),
-            "finalization",
+            "exploration",
         )
 
     def test_public_snapshot_exposes_every_finalization_control_without_content(self) -> None:
@@ -111,10 +111,10 @@ class HostedAgenticBudgetAccountingTest(unittest.TestCase):
         budget = self.budget(clock=clock)
         budget.begin_step(self.request, 10, phase="exploration")
 
-        clock.value = 2.01
+        clock.value = 4.01
         with self.assertRaisesRegex(
             HostedAgenticLoopError,
-            "agent_finalization_time_reserve_reached",
+            "agent_tool_timeout",
         ):
             budget.check_time()
 

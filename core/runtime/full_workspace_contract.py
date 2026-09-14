@@ -50,13 +50,6 @@ FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS = (
     "core-capability:mcp.list",
     "core-capability:mcp.call",
     "collaboration:cli-create-mcp-wait",
-    "security:filesystem.marker-narrowing",
-    "security:filesystem.revoke-rebuild",
-    "security:tool-result.revoke-egress",
-    "security:request.revoke-transport",
-    "security:stream.revoke-advance",
-    "security:workspace-effect.revoke-commit",
-    "security:workspace.git-masked",
 )
 
 

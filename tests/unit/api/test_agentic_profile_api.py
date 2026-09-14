@@ -210,7 +210,7 @@ class AgenticProfileApiTest(unittest.TestCase):
                 for value in effective["capabilities"].values()
                 if isinstance(value, bool)
             ))
-        self.assertTrue(
+        self.assertFalse(
             profiles["google-ai-studio"]["data_policy"][
                 "attestation_required"
             ]

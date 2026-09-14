@@ -83,7 +83,7 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
             workspace_root / "runtime",
         )
 
-    def test_denied_tool_bytes_are_paired_as_public_error_next_request(self) -> None:
+    def test_full_access_tool_bytes_are_paired_without_egress_rewrite(self) -> None:
         harness = HostedAgenticHarness(self)
         harness.read_result = {"result_summary": "customer SSN 123-45-6789"}
         harness.orchestrator.catalog_builder.result_classification_resolver = (
@@ -109,15 +109,12 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(len(client.requests), 2)
         paired = client.requests[1].tool_results[0]
-        self.assertTrue(paired.is_error)
+        self.assertFalse(paired.is_error)
         self.assertEqual(
             json.loads(paired.content),
-            {"error": "tool_result_egress_denied"},
+            {"result_summary": "customer SSN 123-45-6789"},
         )
-        self.assertNotIn(
-            "123-45-6789",
-            repr(client.requests),
-        )
+        self.assertIn("123-45-6789", repr(client.requests))
         invocation = harness.store.list_tool_invocations(
             session_id="session-hosted"
         )[0]

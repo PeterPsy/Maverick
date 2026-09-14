@@ -508,7 +508,7 @@ class RuntimeToolLedger:
             return self.store.update_tool_invocation(updated, expected_revision=record.revision)
         except RuntimeToolExecutionLeaseExpiredError as error:
             raise RuntimeToolError(
-                "agent_finalization_time_reserve_reached"
+                "agent_tool_timeout"
             ) from error
         except Exception as error:
             raise RuntimeToolRevisionError("tool_invocation_revision_conflict") from error

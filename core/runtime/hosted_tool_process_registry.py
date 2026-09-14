@@ -27,6 +27,7 @@ from core.runtime.hosted_tool_result_admission import (
 )
 from core.runtime.hosted_process_output import HostedProcessOutputCapture
 from core.runtime.hosted_process_termination import terminate_hosted_process
+from core.runtime.runtime_paths import RuntimePathResolver
 from core.runtime.lifecycle_service_turns import (
     create_runtime_process,
     transition_runtime_process,
@@ -56,7 +57,7 @@ class _LiveHostedToolProcess:
     session_id: str
     workspace_id: str
     effect_overlay: HostedWorkspaceEffectOverlay | None
-    workspace_snapshot: HostedWorkspaceSnapshot
+    workspace_snapshot: HostedWorkspaceSnapshot | None
     workspace_effects: dict[str, object] | None = None
     result_classification_resolver: object | None = None
     result_context: object | None = None
@@ -238,6 +239,117 @@ class HostedToolProcessRegistry:
             if not snapshot_transferred:
                 prepared.workspace_snapshot.discard()
             prepared.close()
+
+    def start_full_access(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+        workspace_root: Path,
+        runtime_root: Path,
+        argv: list[str],
+        cwd: str,
+        environment: dict[str, str],
+        timeout_seconds: int,
+    ) -> dict[str, object]:
+        """Start a host process for a policy-authorized full-access session."""
+        process_id = f"agent-process-{uuid4().hex}"
+        resolved_cwd = RuntimePathResolver(
+            workspace_id=workspace_id,
+            workspace_root=workspace_root,
+            execution_mode="full-access",
+        ).resolve(cwd, allow_root=True).absolute
+        if not resolved_cwd.is_dir():
+            raise RuntimeToolError("filesystem_path_not_directory")
+        output_directory = runtime_root / "agent-processes"
+        output_path = output_directory / f"{process_id}.output"
+        record = None
+        output_fd: int | None = None
+        output_handle = None
+        output_capture = None
+        process: subprocess.Popen[bytes] | None = None
+        try:
+            output_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            record = create_runtime_process(
+                self.store,
+                process_id=process_id,
+                session_id=session_id,
+                command=_redacted_command(argv),
+                cwd=str(resolved_cwd),
+            )
+            output_fd = os.open(
+                output_path,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0),
+                0o600,
+            )
+            output_handle = os.fdopen(os.dup(output_fd), "wb", buffering=0)
+            process = subprocess.Popen(
+                argv,
+                cwd=resolved_cwd,
+                env=environment,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+            if self.spawn_observer is not None:
+                self.spawn_observer("process")
+            output_capture = HostedProcessOutputCapture(
+                process=process,
+                output_handle=output_handle,
+                timeout_seconds=timeout_seconds,
+            )
+            output_capture.start()
+            register_runtime_process(session_id, process)
+            transition_runtime_process(
+                self.store,
+                process_id=record.process_id,
+                target_status="running",
+                stdin_open=True,
+                stdout_open=True,
+            )
+            with self._lock:
+                self._live[process_id] = _LiveHostedToolProcess(
+                    process=process,
+                    output_fd=output_fd,
+                    output_capture=output_capture,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    effect_overlay=None,
+                    workspace_snapshot=None,
+                )
+            return {
+                "process_id": process_id,
+                "status": "running",
+                "output_offset": 0,
+                "workspace_effects_pending": False,
+                "mutation_scope_count": 0,
+            }
+        except Exception as error:
+            if process is not None:
+                terminate_hosted_process(process)
+                unregister_runtime_process(session_id, process)
+            if output_capture is not None:
+                output_capture.wait()
+            elif output_handle is not None:
+                output_handle.close()
+            if output_fd is not None:
+                os.close(output_fd)
+            output_path.unlink(missing_ok=True)
+            if record is not None:
+                transition_runtime_process(
+                    self.store,
+                    process_id=record.process_id,
+                    target_status="failed",
+                    failure_reason=(
+                        error.reason_code
+                        if isinstance(error, RuntimeToolError)
+                        else "process_start_failed"
+                    ),
+                )
+            if isinstance(error, RuntimeToolError):
+                raise
+            raise RuntimeToolError("process_start_failed") from error
 
     def status(
         self,
@@ -628,7 +740,8 @@ class HostedToolProcessRegistry:
         capture_finished = live.output_capture.wait()
         if live.effect_overlay is not None:
             live.effect_overlay.discard()
-        live.workspace_snapshot.discard()
+        if live.workspace_snapshot is not None:
+            live.workspace_snapshot.discard()
         if not capture_finished:
             raise RuntimeToolError("process_output_capture_failed")
         try:

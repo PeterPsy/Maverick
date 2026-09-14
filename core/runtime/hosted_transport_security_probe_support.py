@@ -167,7 +167,7 @@ def build_transport_probe_context(root: Path):
                 attachment_modalities=(),
             ),
             allowed_tool_handles=(),
-            execution_mode="full-access",
+            execution_mode="sandbox",
             egress_policy_id="security-probe-public",
             policy_revision_set=("security-probe:1",),
             health_revision="security-probe-health:1",

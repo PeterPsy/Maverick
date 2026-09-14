@@ -186,7 +186,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
     def test_attachment_metadata_is_joined_and_attachment_only_omits_empty_prompt(
         self,
     ) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, execution_mode="sandbox")
         authority = replace(
             harness.authority,
             allowed_tool_handles=(

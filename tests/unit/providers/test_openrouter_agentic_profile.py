@@ -61,7 +61,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
 
         self.assertEqual(status.rollout_status, "available")
         self.assertEqual(profile.definition_id, OPENROUTER_AGENTIC_PROFILE_ID)
-        self.assertEqual(profile.revision, "1")
+        self.assertEqual(profile.revision, OPENROUTER_AGENTIC_PROFILE_REVISION)
         self.assertEqual(profile.adapter_version_constraint, "==59")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "z-ai/glm-5.3-flash")
@@ -181,7 +181,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             ).rollout_status,
             "suspended",
         )
-        self.assertEqual(OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS, ())
+        self.assertEqual(OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS, ("1",))
 
 
 if __name__ == "__main__":

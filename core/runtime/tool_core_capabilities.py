@@ -14,6 +14,11 @@ from core.runtime.confined_filesystem import (
     FilesystemRaceHook,
     ResourceClassificationResolver,
 )
+from core.runtime.full_access_filesystem import FullAccessFilesystem
+from core.runtime.hosted_full_access_shell import (
+    full_access_process_environment,
+    run_full_access_command,
+)
 from core.runtime.tool_catalog import (
     RuntimeCoreCapabilitySurface,
     RuntimeExternalToolSurface,
@@ -56,6 +61,7 @@ from core.runtime.tool_result_classification import (
     filesystem_mutation_classification_projection,
     filesystem_read_classification_projection,
 )
+from core.runtime.runtime_paths import RuntimePathResolver
 
 
 MAX_FILESYSTEM_READ_BYTES = 262_144
@@ -79,15 +85,40 @@ def build_core_runtime_tool_capabilities(
     result_classification_resolver=None,
     workspace_spawn_observer: Callable[[str], None] | None = None,
     attachment_read_fences: tuple[RuntimeAttachmentReadFence, ...] = (),
+    execution_mode: str = "sandbox",
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
-    """Build workspace-bound Core capabilities over one fd-relative boundary."""
-    filesystem = ConfinedWorkspaceFilesystem(
+    """Build sandboxed or direct full-access Core capabilities."""
+    full_access = execution_mode == "full-access"
+    if execution_mode not in {"sandbox", "full-access"}:
+        raise RuntimeToolError("tool_execution_mode_mismatch")
+    filesystem = (
+        FullAccessFilesystem(
+            workspace_id=workspace_id,
+            workspace_root=workspace_root,
+            classification_resolver=resource_classification_resolver,
+        )
+        if full_access
+        else ConfinedWorkspaceFilesystem(
+            workspace_id=workspace_id,
+            workspace_root=workspace_root,
+            classification_resolver=resource_classification_resolver,
+            race_hook=filesystem_race_hook,
+        )
+    )
+    path_resolver = RuntimePathResolver(
         workspace_id=workspace_id,
         workspace_root=workspace_root,
-        classification_resolver=resource_classification_resolver,
-        race_hook=filesystem_race_hook,
+        execution_mode=execution_mode,
     )
     resolved_runtime_root = runtime_root or (workspace_root / "runtime")
+
+    def tool_path(value: object, *, allow_root: bool) -> str:
+        resolved = path_resolver.resolve(value, allow_root=allow_root)
+        return (
+            str(resolved.absolute)
+            if full_access
+            else resolved.for_confined_filesystem()
+        )
 
     def filesystem_list(
         arguments: dict[str, object],
@@ -107,7 +138,7 @@ def build_core_runtime_tool_capabilities(
         ):
             raise RuntimeToolError("tool_arguments_invalid")
         result = filesystem.list_entries(
-            str(arguments.get("path") or "."),
+            tool_path(str(arguments.get("path") or "."), allow_root=True),
             max_depth=max_depth,
             page_size=page_size,
             cursor=(
@@ -119,7 +150,11 @@ def build_core_runtime_tool_capabilities(
         return RuntimeToolSurfaceResult(
             result.payload,
             result.classification,
-            filesystem_listing_classification_projection(result.payload),
+            (
+                None
+                if full_access
+                else filesystem_listing_classification_projection(result.payload)
+            ),
         )
 
     def filesystem_read(
@@ -142,7 +177,7 @@ def build_core_runtime_tool_capabilities(
         encoding = str(arguments.get("encoding") or "utf-8")
         if encoding not in {"utf-8", "base64"}:
             raise RuntimeToolError("tool_arguments_invalid")
-        path = str(arguments.get("path") or "")
+        path = tool_path(arguments.get("path"), allow_root=False)
         expected_identity = _optional_string(
             arguments.get("expected_resource_identity")
         )
@@ -183,7 +218,11 @@ def build_core_runtime_tool_capabilities(
         return RuntimeToolSurfaceResult(
             result.payload,
             result.classification,
-            filesystem_read_classification_projection(result.payload),
+            (
+                None
+                if full_access
+                else filesystem_read_classification_projection(result.payload)
+            ),
         )
 
     def filesystem_write(
@@ -197,19 +236,21 @@ def build_core_runtime_tool_capabilities(
             raise RuntimeToolError("tool_arguments_invalid")
         if len(content.encode("utf-8")) > MAX_FILESYSTEM_WRITE_BYTES:
             raise RuntimeToolError("filesystem_write_too_large")
-        path = str(arguments.get("path") or "")
-        guard = prepare_mutation_instruction_guard(
-            filesystem,
-            workspace_root=workspace_root,
-            path=path,
-            expected_digest=_required_string(
-                arguments.get("instruction_scope_digest")
-            ),
-            affected_instruction_prefixes=mutation_affected_instruction_prefixes(
-                path,
-                target_is_directory=False,
-            ),
-        )
+        path = tool_path(arguments.get("path"), allow_root=False)
+        guard = None
+        if not full_access:
+            guard = prepare_mutation_instruction_guard(
+                filesystem,
+                workspace_root=workspace_root,
+                path=path,
+                expected_digest=_required_string(
+                    arguments.get("instruction_scope_digest")
+                ),
+                affected_instruction_prefixes=mutation_affected_instruction_prefixes(
+                    path,
+                    target_is_directory=False,
+                ),
+            )
         result = filesystem.write_text(
             path,
             content=content,
@@ -224,11 +265,18 @@ def build_core_runtime_tool_capabilities(
             ),
             mutation_guard=guard,
         )
-        payload = {**result.payload, **guard.evidence}
+        payload = {
+            **result.payload,
+            **({} if guard is None else guard.evidence),
+        }
         return RuntimeToolSurfaceResult(
             payload,
             result.classification,
-            filesystem_mutation_classification_projection(payload),
+            (
+                None
+                if full_access
+                else filesystem_mutation_classification_projection(payload)
+            ),
         )
 
     def shell_run(
@@ -257,7 +305,23 @@ def build_core_runtime_tool_capabilities(
             or not 1 <= timeout <= MAX_SHELL_TIMEOUT_SECONDS
         ):
             raise RuntimeToolError("tool_arguments_invalid")
-        cwd = str(arguments.get("cwd") or ".")
+        cwd = tool_path(str(arguments.get("cwd") or "."), allow_root=True)
+        if full_access:
+            return run_full_access_command(
+                workspace_id=workspace_id,
+                workspace_root=workspace_root,
+                argv=argv,
+                cwd=cwd,
+                environment=full_access_process_environment(
+                    workspace_id=workspace_id,
+                    session_id=context.session_id,
+                    workspace_root=workspace_root,
+                ),
+                timeout_seconds=timeout,
+                max_output_bytes=MAX_SHELL_OUTPUT_BYTES,
+                execution_control=context.execution_control,
+                spawn_observer=workspace_spawn_observer,
+            )
         return run_hosted_workspace_command(
             filesystem,
             workspace_root=workspace_root,
@@ -284,7 +348,9 @@ def build_core_runtime_tool_capabilities(
             definition=_core_surface(
                 handle="core-capability:filesystem.list",
                 description=(
-                    "List a stable, paginated workspace snapshot without reading file content."
+                    "List a paginated host directory without reading file content."
+                    if full_access
+                    else "List a stable, paginated workspace snapshot without reading file content."
                 ),
                 input_schema=filesystem_list_schema(),
                 effect_class="read",
@@ -297,7 +363,9 @@ def build_core_runtime_tool_capabilities(
             definition=_core_surface(
                 handle="core-capability:filesystem.read",
                 description=(
-                    "Read one mutation-detecting UTF-8 or base64 byte chunk through a workspace descriptor."
+                    "Read one UTF-8 or base64 byte chunk from a host path."
+                    if full_access
+                    else "Read one mutation-detecting UTF-8 or base64 byte chunk through a workspace descriptor."
                 ),
                 input_schema=_filesystem_read_schema(),
                 effect_class="read",
@@ -309,9 +377,14 @@ def build_core_runtime_tool_capabilities(
         RuntimeCoreCapabilitySurface(
             definition=_core_surface(
                 handle="core-capability:filesystem.write",
-                description="Atomically write through a verified workspace parent descriptor.",
+                description=(
+                    "Atomically write a UTF-8 host file."
+                    if full_access
+                    else "Atomically write through a verified workspace parent descriptor."
+                ),
                 input_schema=extended_filesystem_write_schema(
-                    MAX_FILESYSTEM_WRITE_BYTES
+                    MAX_FILESYSTEM_WRITE_BYTES,
+                    full_access=full_access,
                 ),
                 effect_class="mutating",
             ),
@@ -321,8 +394,8 @@ def build_core_runtime_tool_capabilities(
         RuntimeCoreCapabilitySurface(
             definition=_core_surface(
                 handle="core-capability:shell.run",
-                description="Run one argv command from a retained workspace directory descriptor.",
-                input_schema=_shell_schema(),
+                description="Run one argv command in the authorized host environment.",
+                input_schema=_shell_schema(full_access=full_access),
                 effect_class="destructive",
             ),
             handler=shell_run,
@@ -335,6 +408,7 @@ def build_core_runtime_tool_capabilities(
         runtime_root=resolved_runtime_root,
         process_registry=process_registry,
         result_classification_resolver=result_classification_resolver,
+        full_access=full_access,
     )
     discovery = (
         build_discovery_first_capabilities(
@@ -442,7 +516,7 @@ def _filesystem_read_schema() -> dict[str, object]:
     }
 
 
-def _shell_schema() -> dict[str, object]:
+def _shell_schema(*, full_access: bool) -> dict[str, object]:
     return {
         "type": "object",
         "properties": {
@@ -458,8 +532,12 @@ def _shell_schema() -> dict[str, object]:
                 "minimum": 1,
                 "maximum": MAX_SHELL_TIMEOUT_SECONDS,
             },
-            "mutation_scopes": workspace_mutation_scopes_schema(),
+            **(
+                {}
+                if full_access
+                else {"mutation_scopes": workspace_mutation_scopes_schema()}
+            ),
         },
-        "required": ["argv", "mutation_scopes"],
+        "required": ["argv"] if full_access else ["argv", "mutation_scopes"],
         "additionalProperties": False,
     }

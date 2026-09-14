@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from threading import Barrier
 import unittest
 
 from core.providers.agentic_protocol import EphemeralCredential
@@ -56,7 +57,7 @@ class _ScriptedTransport:
 
 
 class HostedAgenticMultiCallTest(unittest.TestCase):
-    def test_parallel_overflow_consumes_remaining_tool_budget_and_closes_catalog(self) -> None:
+    def test_parallel_overflow_runs_admitted_call_and_pairs_budget_error(self) -> None:
         harness = HostedAgenticHarness(
             self,
             max_tool_calls=1,
@@ -97,16 +98,16 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
                     session_id="session-hosted"
                 )
             ],
-            ["parallel_denied", "budget_denied"],
+            ["succeeded", "budget_denied"],
         )
         journals = harness.store.list_provider_step_journals(
             session_id="session-hosted"
         )
         self.assertEqual(journals[0].budget_tool_call_charges, 1)
-        self.assertEqual(journals[1].request_phase, "finalization")
-        self.assertNotIn("tools", transport.payloads[1])
+        self.assertEqual(journals[1].request_phase, "exploration")
+        self.assertIn("tools", transport.payloads[1])
 
-    def test_google_parallel_calls_are_both_ledgered_denied_and_paired(self) -> None:
+    def test_google_parallel_calls_execute_and_pair_separately(self) -> None:
         harness = HostedAgenticHarness(
             self,
             model_provider_id="google-ai-studio",
@@ -135,6 +136,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
             ),
             cost_estimator=GOOGLE_REQUEST_COST_ESTIMATOR,
         )
+        harness.read_barrier = Barrier(2)
 
         result, events = _execute(harness, adapter)
 
@@ -145,7 +147,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
             ["google-call-1", "google-call-2"],
         )
 
-    def test_openrouter_index_above_zero_is_ledgered_denied_and_paired(self) -> None:
+    def test_openrouter_parallel_calls_execute_concurrently_and_pair_separately(self) -> None:
         harness = HostedAgenticHarness(
             self,
             model_provider_id="openrouter",
@@ -172,6 +174,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
             private_state_inspector=inspect_openrouter_chat_state,
             cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
         )
+        harness.read_barrier = Barrier(2)
 
         result, events = _execute(harness, adapter)
 
@@ -187,6 +190,44 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
             ["openrouter-call-1", "openrouter-call-2"],
         )
 
+    def test_invalid_parallel_call_does_not_cancel_valid_sibling(self) -> None:
+        harness = HostedAgenticHarness(
+            self,
+            model_provider_id="openrouter",
+            model_id=OPENROUTER_AGENTIC_MODEL_ID,
+            provider_protocol="openrouter-chat-completions",
+            provider_api_version="v1",
+            routing_constraint=openrouter_agentic_routing_constraint(),
+        )
+        stream = _openrouter_parallel_stream(harness.read_tool_name)
+        calls = stream[0]["choices"][0]["delta"]["tool_calls"]
+        calls[0]["function"]["arguments"] = json.dumps({"invalid": True})
+        transport = _ScriptedTransport(
+            [stream, _openrouter_text_stream("openrouter-recovered", "recovered")]
+        )
+        adapter = harness.adapter(
+            OpenRouterAgenticClient(transport=transport),
+            credential=EphemeralCredential("fixture-openrouter-key"),
+            private_codec=HostedProviderPrivateCodec(
+                OPENROUTER_AGENTIC_CODEC_ID,
+                OPENROUTER_AGENTIC_CODEC_VERSION,
+                OPENROUTER_AGENTIC_SCHEMA_VERSION,
+                OPENROUTER_AGENTIC_CONTENT_TYPE,
+            ),
+            private_state_inspector=inspect_openrouter_chat_state,
+            cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
+        )
+
+        result, _events = _execute(harness, adapter)
+
+        self.assertEqual(result.output_text, "recovered")
+        records = harness.store.list_tool_invocations(session_id="session-hosted")
+        self.assertEqual(
+            [item.resolution_status for item in records],
+            ["schema_denied", "succeeded"],
+        )
+        self.assertEqual(harness.cli_calls, 1)
+
     def _assert_parallel_accounting(self, harness, events) -> None:
         records = harness.store.list_tool_invocations(session_id="session-hosted")
         self.assertEqual(len(records), 2)
@@ -196,24 +237,24 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
         )
         self.assertEqual(
             [item.resolution_status for item in records],
-            ["parallel_denied", "parallel_denied"],
+            ["succeeded", "succeeded"],
         )
-        self.assertEqual(harness.cli_calls, 0)
+        self.assertEqual(harness.cli_calls, 2)
         event_types = [item.event_type for item in events]
         proposed = [
             index
             for index, event_type in enumerate(event_types)
             if event_type == "runtime.tool_call.proposed"
         ]
-        failed = [
+        completed = [
             index
             for index, event_type in enumerate(event_types)
-            if event_type == "runtime.tool_call.failed"
+            if event_type == "runtime.tool_call.completed"
         ]
         self.assertEqual(len(proposed), 2)
-        self.assertEqual(len(failed), 2)
-        self.assertLess(max(proposed), min(failed))
-        self.assertNotIn("runtime.tool_call.started", event_types)
+        self.assertEqual(len(completed), 2)
+        self.assertLess(max(proposed), min(completed))
+        self.assertEqual(event_types.count("runtime.tool_call.started"), 2)
         journals = harness.store.list_provider_step_journals(
             session_id="session-hosted"
         )

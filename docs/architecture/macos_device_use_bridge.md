@@ -1,13 +1,20 @@
 # macOS Device Use through Maverick
 
-Status: Codex-only, mono-agent MVP implemented for A/B evaluation. The Core,
-Chat and native bridge tests pass in the Linux checkout. A signed macOS build
-and physical end-to-end run are still required before this path is production
-evidence.
+Status (2026-09-14): Codex-only, mono-agent MVP implemented and physically
+accepted for functional parity with the retained direct Mac runtime. The first
+complete A/B measured **4m50s direct** and **5m55s through Maverick**. Both runs
+passed the same v40 checklist with two recoverable `MC-TOOL-14` events. The
+optimized `observe_app` build described below still requires one signed install
+and one physical comparison before its performance is accepted.
 
-## Decision
+The native implementation lives in the sibling
+`maverick-glasses-ios` repository. Its companion document is
+`docs/maverick-macos-device-use.md` there. Keep the two sides and their contract
+digest in lockstep.
 
-Maverick Chat owns the conversation and Codex runtime. `MaverickMac` is a
+## Decision and scope
+
+Maverick Chat owns the conversation and Codex runtime. `MaverickMac` is only a
 revocable executor for the existing macOS v40 tools:
 
 ```text
@@ -21,177 +28,224 @@ Chat iframe
   -> same active Codex turn
 ```
 
-The old direct-provider runtime remains available as the A/B control. Device
-Use does not copy OpenAI credentials to the Mac and does not put tool arguments,
-results or screenshots through the WebView. JavaScript can only request
-`status`, `start` and `stop`; the native app opens the executor WebSocket
-directly.
+The direct-provider runtime remains available as the A/B control. Device Use
+does not copy OpenAI credentials to the Mac and does not expose tool arguments,
+results or screenshots to the WebView. JavaScript may request only `status`,
+`start` and `stop`; the native app opens the executor WebSocket directly.
 
-The composer button is rendered only after the macOS native bridge returns a
-positive availability response. The ordinary browser has no bridge and never
-renders it.
+The composer button appears only when Chat is hosted by `MaverickMac` and its
+native status probe succeeds. A normal browser has no bridge, so the web app
+does not render the button.
 
-## MVP envelope
+This route deliberately accepts one runtime shape:
 
-This route deliberately accepts exactly one runtime shape:
-
-- agent and source app: `chat`;
-- runtime engine: Codex app-server;
-- model: `gpt-6-astra`;
-- reasoning effort: `high`;
-- execution mode: read-only sandbox;
-- one agent, no multi-agent orchestration;
+- agent and source app `chat`;
+- Codex app-server, model `gpt-6-astra`, effort `high`;
+- read-only provider sandbox;
+- one agent, without multi-agent orchestration;
 - no skills, attachments, app references, MCP servers, project instructions,
   hooks, plugins, shell or filesystem tools;
-- dynamic tools: `mac_computer`, `mac_peekaboo`, `mac_calendar`.
+- dynamic tools `mac_computer`, `mac_peekaboo` and `mac_calendar`.
 
-This is narrower than the long-term multimodel design on purpose. It makes the
-benchmark compare the same model, effort, native executor, app set and consent
-policy as the direct Mac path. Extending provider codecs or multi-agent
-ownership is not part of this MVP.
+This narrow envelope is intentional: the benchmark compares the same model,
+effort, executor, approved apps and consent policy. Provider expansion and
+multi-agent device ownership are not hidden requirements of this MVP.
 
 ## Activation and authority
 
-`POST /api/device-use/activations` requires the current authenticated browser
-session and a bounded native-window generation. Core returns a random bearer
-ticket valid for 60 seconds and usable once. The ticket is retained only as a
-SHA-256 digest in memory.
+`POST /api/device-use/activations` requires the authenticated browser session
+and current native-window generation. Core returns a random bearer ticket valid
+for 60 seconds and usable once; only its SHA-256 digest remains in memory.
 
-The native socket must present that ticket and then an exact hello:
+The native socket presents the ticket and an exact hello:
 
 - protocol `maverick.device-use.v1`;
 - executor contract `macos-v40`;
-- frozen tool-contract digest
-  `6135e7975fc6d510723fc146c76133f1fb3c23a5a4d9b53935c5149d4c477752`;
+- tool-contract digest
+  `c990c06470cb6252edc762a731525b15b0f1f600070c7bc33ab4f15f6c5ae756`;
+- model `gpt-6-astra`, effort `high`;
 - one selected app contained in the locally approved running-app set.
 
-Core binds the redeemed activation to exactly one workspace, user, browser
-auth session and persisted runtime session. A second binding is rejected. A
-new activation for the same login supersedes the earlier lease. Logout,
-explicit stop, runtime cleanup, turn interruption, native disconnect, protocol
-failure, timeout and backend restart all fail closed. Persisted sessions never
-reconstruct the process-local executor after a restart.
+Core binds the redeemed activation to one workspace, user, browser auth session
+and runtime session. A new activation for that login supersedes the previous
+lease. Logout, Stop, interruption, navigation/scope change, socket loss,
+protocol failure and backend restart fail closed. Persisted sessions never
+reconstruct a process-local device lease; start a new Device Use chat instead.
 
-Device sessions may continue only while their exact pinned Codex authority and
-ephemeral native lease remain live. They never enter the generic compatible
-continuation/fork path, because a successor without the same physical lease
-would silently become a workspace runtime. Start a new Device Use chat instead.
+One invocation runs at a time and every invocation is attempt `1`. The native
+executor remains authoritative for app membership, observation freshness,
+scene/focus ownership, secure fields, confirmations, stop, lock and sleep.
+Per-task consent has no time or action-count ceiling inside the exact active
+turn and approved app set. Turn end, Stop, lock/sleep, scope change or a blocking
+error revokes it. Sensitive external effects still require their dedicated
+native confirmation.
 
-The current MVP intentionally uses an ephemeral one-use activation rather than
-a durable paired-device credential. Stable device enrollment, offline device
-inventory and reconnect are follow-up work, not hidden properties of this
-implementation.
+## Invocation and image protocol
 
-## Invocation protocol
+Each `device_use.invoke.v1` contains the activation/session/turn identities,
+provider thread and turn, invocation and call IDs, tool, canonical JSON
+arguments plus digest, frozen contract digest, original task text, deadline and
+attempt. The Mac hashes the exact argument bytes before parsing them.
 
-Core serializes physical work through one bounded executor queue. Every
-`device_use.invoke.v1` contains:
+The Mac first sends an explicit accepted frame, executes through the existing
+v40 `ComputerTools` dispatcher, and returns a validated text result. A successful
+observation may additionally return one JPEG. JPEG framing, dimensions, the
+4 MB bound, call identity and SHA-256 digest are checked before Core forwards it.
+EventKit retains the direct-runtime result budget: the inner result is bounded
+at 401 KB and the WebSocket control frame at 512 KB.
 
-- activation, runtime session, Maverick turn, provider thread and provider turn;
-- invocation and provider call IDs;
-- tool, a bounded canonical JSON argument string and its SHA-256 digest;
-- frozen contract digest;
-- original user task text for native per-task consent;
-- deadline and fixed attempt `1`.
+For an observation, Core sends one minimal `turn/steer` containing call
+correlation and the JPEG, then returns the original text metadata as the dynamic
+tool result. Metadata is not duplicated in the steer message, image bytes are
+not duplicated in the tool result, and no second model turn is started. Tool
+execution stays off the app-server stdout reader so the steer acknowledgement
+cannot deadlock.
 
-The Mac acknowledges receipt, invokes the existing v40 `ComputerTools`
-dispatcher and returns one validated text result. Observations additionally
-send a separately framed JPEG with invocation/call identity and an independently
-checked image digest. Images are bounded below 4 MB and validated as a
-single-frame JPEG on the Mac.
+A disconnect or timeout after dispatch is
+`device_use_execution_unknown`. Neither Core nor the Mac retries or replays it.
+Codex terminalization sends an ordered turn-end frame, immediately releasing
+native observations and per-task consent.
 
-Text results preserve the direct v40 executor budget: EventKit may return just
-under 200 KB before the result is wrapped. The native/Core WebSocket control
-frame is therefore bounded at 512 KB and the validated inner result at 401 KB,
-covering worst-case JSON escaping plus fixed envelope fields without making the
-relay unbounded.
+## Fast observation path
 
-The Mac hashes the exact canonical argument bytes before parsing or executing
-them. When Codex reaches a terminal turn, Core sends an ordered turn-end frame
-so native observation state and per-task consent are released immediately.
+`mac_peekaboo.observe_app` is the normal first observation for an approved app.
+It is a single read-only native call that:
 
-Core injects the JPEG with `turn/steer` while the same Codex tool call is still
-pending, then releases a text-only tool result. Tool execution is handled off
-the app-server stdout reader so the steer acknowledgement cannot deadlock. A
-disconnect or timeout after dispatch is `device_use_execution_unknown`; Core
-never retries or replays it.
+1. resolves one stable, unique, safe main scene for the exact approved PID;
+2. inserts that exact current root `window_id` internally;
+3. executes the existing Peekaboo exact-window observation;
+4. returns the same snapshot, AX metadata and JPEG as `observe`.
 
-The supported Codex app-server versions gate `dynamicTools` and `environments`
-behind the experimental protocol capability. Core therefore declares
-`capabilities.experimentalApi` during `initialize` only for a Device Use
-runtime. Ordinary Codex chat runtimes keep the stable handshake and do not opt
-into the experimental API. Codex 0.153 exposes dynamic tools through its
-`functions.exec` code-mode host even while general `code_mode`, shell and
-filesystem tools are disabled. For Device Use only, Core mounts the bundled
-`codex-code-mode-host` read-only into the sandbox beside the Codex binary; a
-missing host fails launch instead of producing a model-visible unusable tool.
+It does not activate the app or weaken any PID/window/scene check. Use
+`list_windows` followed by `observe` only when the user targets a specific
+non-main window or `observe_app` reports ambiguity. This removes an avoidable
+model round trip from the common `list_windows -> choose -> observe` sequence.
 
-The native executor remains authoritative for app membership, observation and
-snapshot freshness, focus, scene ownership, secure fields, local per-action or
-per-task consent, sensitive-effect confirmation, stop, sleep and lock
-invalidation. The Core bridge does not weaken those checks.
+The computer tool's long duplicated description was also reduced to a short
+summary. The complete consent, recovery, focus and replay rules remain once in
+the Device Use base instructions. The model is instructed not to narrate
+intermediate progress unless blocked or asked, and to emit a concise final
+answer after verification. These are latency/context reductions, not behavior
+changes.
 
 ## Browser and native isolation
 
-The base shell accepts Device Use messages only from its registered Chat frame
-for the current workspace and login generation. Replies use a transferred
-`MessagePort`. Unknown fields are stripped before calling the native handler.
+The base shell accepts messages only from its registered Chat frame for the
+current workspace/login generation and replies through a transferred
+`MessagePort`. WKWebView exposes the handler only to the trusted same-origin
+main frame. Native validation pins workspace, generation, activation UUID,
+ticket bounds and `/ws/device-use/executor`; WSS derives from the configured
+HTTPS origin, never caller input.
 
-WKWebView exposes the message handler only to the same-origin main frame. The
-native command validator pins the workspace, generation, exact activation UUID,
-ticket bounds and exact `/ws/device-use/executor` path. The WSS URL is derived
-from the configured HTTPS origin; callers cannot supply another host.
+Tickets do not appear in public status, runtime or thread payloads. Approved-app
+identities and raw bindings are private. Screenshots and native payloads never
+enter JavaScript or Storage.
 
-Activation tickets are never returned by status endpoints, runtime session
-payloads, thread payloads or native status snapshots. The raw persisted binding
-and approved-app identities are removed from public runtime serialization;
-public status exposes only the app count. Device instructions are injected only
-into the private ephemeral Codex thread.
+## Performance evidence
 
-## Measurement
+One complete physical run is sufficient for this MVP because it already
+contains dozens of model and native calls. Repeat only after a material code or
+environment change.
 
-`GET /api/device-use/activations/{activation_id}/metrics` returns content-free
-per-invocation evidence for the owning browser login:
+| Path | Total | Result |
+|---|---:|---|
+| Direct Mac | 4m50s | PASS CON RECUPERO; 2 `MC-TOOL-14` |
+| Via Maverick, pre-optimization | 5m55s | PASS CON RECUPERO; same functional coverage |
 
-- dispatch-to-native-accept time;
-- dispatch-to-result time;
-- bridge end-to-end time;
-- native execution time reported by the Mac;
-- derived relay overhead;
-- JPEG byte count, effect class and terminal status.
+The measured delta is **+65s / +22.4%**. In the Maverick run there were 87
+native invocations, 48 Code Mode execution blocks, 49 model samples and 42
+observation images. Native host/bridge time was about 23s excluding consent;
+one-call bridge p95 was about 519ms, already below the 750ms target. Most of the
+remaining time was model iteration, including model cycles between
+`list_windows` and `observe`, plus about 30.6s spent producing the final report.
 
-It never returns arguments, task text, tool output or image bytes. Run the
-comparison with the same Codex account, `gpt-6-astra`, high effort, approved app
-set, consent mode, initial app state and network. Separate cold and warm runs.
-For deterministic transport comparison, issue the same v40 action sequence in
-both paths; for agentic comparison, repeat the same natural-language task and
-record total duration, tool count, errors and recovery.
+Consequently the current optimization targets tool-call/model-cycle count and
+prompt duplication. It intentionally does not add image storage, compression
+layers, speculative execution, retries, batching protocols or action+observe
+composites.
 
-Suggested MVP acceptance thresholds remain:
+## Metrics
 
-- total median no worse than direct +10%;
-- total p95 no worse than direct +20%;
-- normal-observation bridge overhead p95 below 750 ms;
-- no reliability regression, duplicate effect or replay.
+While an activation is retained, authenticated
+`GET /api/device-use/activations/{activation_id}/metrics` returns no task text,
+arguments, output or pixels. It includes per-invocation effect/status, image
+bytes and accept/end-to-end/native/relay timings, plus a lazily computed
+`summary` with:
 
-Do not remove the direct runtime until physical A/B runs meet those thresholds.
+- tool and action counts;
+- image count and total bytes;
+- count, total, p50 and p95 for dispatch-to-accept, bridge end-to-end, native
+  execution and relay overhead.
 
-## Physical acceptance checklist
+Aggregation happens only on this GET and adds no work to the execution path.
+Terminal activations are process-local and retained for roughly ten minutes;
+capture metrics before restarting Core.
 
-1. Build and sign the macOS package on Apple silicon; run the full Swift suite.
-2. Open Chat in `MaverickMac` and verify the Device Use button is absent in an
-   ordinary browser but present in the native app.
-3. Select the same approved app set and consent mode used by the direct path.
-4. Exercise all three tools: foreground observe/control, Peekaboo exact-window
-   observe/control and EventKit read/write/readback.
-5. Verify same-turn screenshot interpretation, then stop during a pending local
-   confirmation and during a dispatched action.
-6. Verify logout, navigation, screen lock, sleep, socket loss and Core restart
-   revoke the lease with no replay.
-7. Inspect network traffic: native image bytes go only to Maverick Core; Core is
-   the only component forwarding them to Codex/OpenAI.
-8. Export the metrics endpoint and execute cold/warm deterministic and agentic
-   A/B runs against the retained direct mode.
+## Validation and operator runbook
 
-Unit tests and a Linux frontend build are not evidence that macOS permissions,
-signing, physical actions or provider latency passed this checklist.
+Core, from `/home/ubuntu/projects/maverick-v3`:
+
+```bash
+python3 -m unittest \
+  tests.unit.providers.test_codex_device_use \
+  tests.unit.device_use.test_device_use_service \
+  tests.unit.api.test_device_use_api
+python3 -m compileall -q core/device_use \
+  core/providers/codex_app_server_device_use.py
+```
+
+Native structural checks on Linux, from `maverick-glasses-ios`:
+
+```bash
+PYTHONPATH=scripts python3 -m unittest scripts.test_mac_integrations
+```
+
+The signed Mac runner must then run `swift test`, release build, bundled-runtime
+smokes and signing checks. Install only through the existing
+`.github/workflows/macos-build.yml` dispatch with `install_and_open=true` while
+`MaverickMac` is closed. The installer atomically replaces the same
+`~/Applications/MaverickMac.app`; never create a second app bundle.
+
+For the physical comparison:
+
+1. verify the button appears only in `MaverickMac`;
+2. use the same warm/cold state, account, network, approved apps and consent;
+3. run the complete v40 task once direct and once via Maverick;
+4. verify all three tool families, same-turn images, stop/lock/socket-loss
+   boundaries and no duplicated effect;
+5. record wall time, recovery events and the metrics response before restart.
+
+Acceptance remains: no functional/reliability regression, no replay or
+duplicate effect, normal observation bridge p95 below 750ms, and total latency
+as close as practicable to direct. Do not remove the direct control until the
+optimized physical run is reviewed.
+
+## Source map and change rules
+
+Core source of truth:
+
+- `core/device_use/contract.py`: model pin, tool schemas, instructions, digest;
+- `core/device_use/service.py`: lease, queue, protocol, journal and metrics;
+- `core/providers/codex_app_server_device_use.py`: dynamic-tool/image adapter;
+- `core/api/device_use_api.py`: activation and metrics HTTP surface;
+- `core/api/device_use_websocket.py`: native WSS endpoint;
+- `apps/chat` and `apps/base-shell`: composer control and native-only broker.
+
+Native source of truth in `maverick-glasses-ios`:
+
+- `DeviceUseBridge.swift`: WSS contract and lifecycle;
+- `IntegratedComputerTools.swift`: shared v40 dispatcher;
+- `PeekabooTools.swift`: exact-window and `observe_app` execution;
+- `ObservationDelivery.swift`: same-turn image delivery;
+- `TaskConsent.swift`: per-action/per-task authority.
+
+When a schema, action, bound or instruction changes: update Core and native
+definitions together, recompute the canonical digest, update both pinned digest
+constants/tests, run both suites, deploy/restart Core, then build/install the
+same Mac app. A digest mismatch must remain a hard connection failure.
+
+Preserve these invariants when adding features: one physical lease, serialized
+actions, fresh observations, explicit accepted frames, no automatic replay,
+one image per observation, no WebView payloads, native consent as final
+authority, and content-free telemetry. Add complexity only for a measured
+bottleneck or a required capability.

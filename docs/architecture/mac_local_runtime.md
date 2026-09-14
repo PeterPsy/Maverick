@@ -4,10 +4,18 @@ This document describes the retained direct-provider A/B control. The
 Codex-via-Maverick executor route is documented separately in
 [`macos_device_use_bridge.md`](macos_device_use_bridge.md).
 
-Status: development implementation; focused tests and native runner build pass.
-Real-account import and a local authenticated text reply are confirmed. Physical
-Notes/search/scroll and lock/restart checks are physically accepted; v18 extended
-control acceptance and production distribution remain pending.
+Status (2026-09-14): retained and physically accepted A/B control. A complete
+v40 direct run passed with recovery in **4m50s**. The same task through Maverick
+passed in **5m55s** before the current observation-path optimization. The native
+executor is shared by both routes; only model ownership and image transport
+differ.
+
+Current per-task consent is unlimited for the exact active turn and approved app
+set: there is no time or action-count ceiling. It is still revoked by turn end,
+Stop, lock/sleep, scope change or a blocking error, and sensitive effects retain
+their explicit confirmation. Earlier version sections below are chronological
+implementation history; their old bounded-consent descriptions are not current
+behavior.
 
 ## Decision
 
@@ -40,17 +48,26 @@ raw protocol events or filesystem paths are returned through JavaScript.
 
 The native executor implements bounded tools. It refuses unapproved apps,
 locked/sleeping sessions, expired observations and stale focus. Every mutation
-requires native authorization: per-action by default; v18 optionally uses a
-one-turn, exact-app-set grant of at most 40 actions / 5 minutes. This grant is
-not a model-authored sensitivity label or a native semantic risk classifier.
-Stopping invalidates outstanding observations/approvals before killing Codex.
-There is no automatic replay after an ambiguous process failure.
+requires native authorization: per-action by default, or an unlimited one-turn
+grant for the exact approved app set when the user explicitly selects per-task
+consent. This grant is not a model-authored sensitivity label or a native
+semantic risk classifier. Stopping invalidates outstanding observations and
+approvals before killing Codex. There is no automatic replay after an ambiguous
+process failure.
 
 V10 delivers observation JPEGs as same-turn Codex image attachments using
 `turn/steer` before releasing a text-only tool response. Images are not duplicated
 in the tool output. The native pipeline and pending admission remain serialized,
 generation-fenced and bound to the active thread/turn; no second model turn or
 Ubuntu image relay is introduced.
+
+The current shared executor also exposes read-only `mac_peekaboo.observe_app`.
+It resolves one stable safe main window for the approved PID and observes that
+exact window in one native call; `list_windows` plus `observe` remains available
+for a specific non-main window or ambiguity. Current observation delivery puts
+only call correlation plus the JPEG in `turn/steer`; full metadata appears once
+in the tool result. These reductions apply to both direct and Maverick routes
+without changing the screenshot, snapshot or safety checks.
 
 Codex uses a dedicated private HOME, fixed OpenAI provider, no inherited MCP,
 plugins, hooks or project instructions, disabled shell tools and code-mode,

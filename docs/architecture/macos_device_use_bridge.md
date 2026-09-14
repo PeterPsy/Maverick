@@ -116,6 +116,12 @@ the app-server stdout reader so the steer acknowledgement cannot deadlock. A
 disconnect or timeout after dispatch is `device_use_execution_unknown`; Core
 never retries or replays it.
 
+The supported Codex app-server versions gate `dynamicTools` and `environments`
+behind the experimental protocol capability. Core therefore declares
+`capabilities.experimentalApi` during `initialize` only for a Device Use
+runtime. Ordinary Codex chat runtimes keep the stable handshake and do not opt
+into the experimental API.
+
 The native executor remains authoritative for app membership, observation and
 snapshot freshness, focus, scene ownership, secure fields, local per-action or
 per-task consent, sensitive-effect confirmation, stop, sleep and lock

@@ -17,6 +17,15 @@ from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
+def codex_initialize_params(*, session: RuntimeSessionRecord) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "clientInfo": {"name": "maverick", "version": "3.0.0"},
+    }
+    if getattr(session, "device_use_binding", None) is not None:
+        params["capabilities"] = {"experimentalApi": True}
+    return params
+
+
 def codex_thread_params(
     *,
     session: RuntimeSessionRecord,

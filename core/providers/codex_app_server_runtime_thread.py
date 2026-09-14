@@ -14,6 +14,7 @@ from core.providers.codex_app_server_runtime_resume import (
     local_resume_archive_problem,
     resume_error_is_missing_thread,
 )
+from core.providers.codex_app_server_runtime_thread_params import codex_initialize_params
 from core.providers.codex_app_server_runtime_thread_params import codex_thread_params as _thread_params
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
@@ -86,7 +87,7 @@ def _ensure_runtime(
         _send_request(
             runtime,
             "initialize",
-            {"clientInfo": {"name": "maverick", "version": "3.0.0"}},
+            codex_initialize_params(session=session),
             timeout=APP_SERVER_INITIALIZE_TIMEOUT_SECONDS,
         )
     except Exception:

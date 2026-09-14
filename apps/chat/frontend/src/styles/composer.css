@@ -9,3 +9,9 @@
 @import "./composer/multi-agent.css";
 @import "./composer/usage.css";
 @import "./composer/device-use.css";
+
+/* Keep every textual composer action at the same regular weight. */
+.chatapp-composer button,
+.chatapp-composer button :not(.material-symbols-rounded) {
+  font-weight: 400;
+}

@@ -292,12 +292,15 @@ Recommended split:
 
 ### 4. Runtime orchestration
 
-The first macOS direct-provider client is described in
-`docs/architecture/mac_local_runtime.md`. It hosts a separate local Codex
-conversation and native tool executor; Ubuntu does not relay its images or
-claim ownership of its local thread as a server runtime session. Credential
-provisioning is an explicit operator-only encrypted export, not a browser or
-ordinary agent-facing secret delivery surface.
+The macOS Device Use path is described in
+`docs/architecture/macos_device_use_bridge.md`. Maverick Core owns the Codex
+turn, transcript, provider credentials, tool-call ledger and same-turn image
+injection; the signed Mac app is only the native executor reached over the
+authenticated device WebSocket. Chat exposes Off, bounded On and explicit
+Full authority through its macOS-only composer control. There is no separate
+local provider conversation, credential export or browser-mediated tool path.
+The retired direct-provider design is recorded only as removed history in
+`docs/architecture/mac_local_runtime.md` and must not be reintroduced.
 
 The core owns the generic runtime model for agent execution.
 

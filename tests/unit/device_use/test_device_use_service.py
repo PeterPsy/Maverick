@@ -22,7 +22,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
     def test_contract_digest_is_the_frozen_macos_v40_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "6135e7975fc6d510723fc146c76133f1fb3c23a5a4d9b53935c5149d4c477752",
+            "c990c06470cb6252edc762a731525b15b0f1f600070c7bc33ab4f15f6c5ae756",
         )
 
     def connected(self):
@@ -108,6 +108,11 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertEqual(metrics["invocations"][0]["image_bytes"], len(jpeg))
         self.assertEqual(metrics["invocations"][0]["native_duration_ms"], 12.0)
         self.assertIsNotNone(metrics["invocations"][0]["bridge_end_to_end_ms"])
+        self.assertEqual(metrics["summary"]["tool_counts"], {"mac_computer": 1})
+        self.assertEqual(metrics["summary"]["action_counts"], {"mac_computer.observe": 1})
+        self.assertEqual(metrics["summary"]["image_count"], 1)
+        self.assertEqual(metrics["summary"]["image_bytes"], len(jpeg))
+        self.assertEqual(metrics["summary"]["native_duration_ms"]["count"], 1)
         service.end_turn(
             binding,
             runtime_session_id="runtime-1",
@@ -148,6 +153,36 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         service.disconnect_executor(binding.activation_id)
         worker.join(timeout=1)
         self.assertEqual(str(errors[0]), "device_use_execution_unknown")
+
+    def test_observe_app_is_a_read_only_image_observation(self):
+        service, binding, outbound = self.connected()
+        results = []
+        worker = threading.Thread(target=lambda: results.append(service.invoke(
+            binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+            provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+            call_id="observe-main", tool_name="mac_peekaboo",
+            arguments={"action": "observe_app", "bundle_id": "com.apple.Safari"},
+            task_text="observe", timeout_seconds=1,
+        )))
+        worker.start(); frame = outbound.get(timeout=1)
+        jpeg = b"\xff\xd8main-window\xff\xd9"
+        service.accept_invocation(binding.activation_id, frame)
+        service.deliver_result(binding.activation_id, {
+            "invocation_id": frame["invocation_id"], "call_id": "observe-main",
+            "arguments_digest": frame["arguments_digest"],
+            "result": {"success": True, "contentItems": [{"type": "inputText", "text": "main"}]},
+            "has_image": True, "image_sha256": hashlib.sha256(jpeg).hexdigest(),
+        })
+        service.deliver_image(binding.activation_id, encode_image_frame(
+            invocation_id=frame["invocation_id"], call_id="observe-main", jpeg=jpeg,
+        ))
+        worker.join(timeout=1)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(results[0].image_jpeg, jpeg)
+        metric = service.activation_metrics(
+            binding.activation_id, owner_user_id="user-1", workspace_id="default",
+        )["invocations"][0]
+        self.assertEqual(metric["effect_class"], "read")
 
     def test_eventkit_result_budget_matches_the_direct_v40_executor(self):
         service, binding, outbound = self.connected()

@@ -141,7 +141,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             self.service.deliver_result(self.binding.activation_id, {
                 "invocation_id": frame["invocation_id"], "call_id": "call",
                 "arguments_digest": frame["arguments_digest"],
-                "result": {"success": True, "contentItems": [{"type": "inputText", "text": "metadata"}]},
+                "result": {"success": True, "contentItems": [{"type": "inputText", "text": "PRIVATE_DYNAMIC_METADATA"}]},
                 "has_image": True, "image_sha256": hashlib.sha256(jpeg).hexdigest(),
             })
             # Use the service encoder so identity fields and framing remain exact.
@@ -152,10 +152,16 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             worker.join(timeout=1)
         self.assertFalse(worker.is_alive())
         steer_input = steer.call_args.args[2]["input"]
+        self.assertNotIn("PRIVATE_DYNAMIC_METADATA", steer_input[0]["text"])
+        self.assertIn("call", steer_input[0]["text"])
         self.assertEqual(steer_input[1]["type"], "image")
         self.assertTrue(steer_input[1]["url"].startswith("data:image/jpeg;base64,"))
         response = json.loads(stdin.getvalue())
         self.assertEqual(response["id"], 7)
+        self.assertEqual(
+            response["result"]["contentItems"][0]["text"],
+            "PRIVATE_DYNAMIC_METADATA",
+        )
         self.assertNotIn("base64", json.dumps(response["result"]))
 
     def test_provider_exit_revokes_and_unregisters_the_device_lease(self):

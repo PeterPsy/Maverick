@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 import hashlib
@@ -498,7 +498,12 @@ class DeviceUseService:
             image_sha256 = str(frame.get("image_sha256") or "").strip()
             if has_image:
                 if (
-                    pending.record.action != "observe"
+                    (pending.record.tool_name, pending.record.action)
+                    not in {
+                        ("mac_computer", "observe"),
+                        ("mac_peekaboo", "observe"),
+                        ("mac_peekaboo", "observe_app"),
+                    }
                     or result.get("success") is not True
                     or not _is_sha256(image_sha256)
                 ):
@@ -570,6 +575,7 @@ class DeviceUseService:
                 "execution_unknown_count": sum(
                     item.status == "execution_unknown" for item in records
                 ),
+                "summary": _metric_summary(records),
                 "invocations": [_metric_payload(item) for item in records],
             }
 
@@ -949,4 +955,44 @@ def _metric_payload(record: DeviceUseInvocationJournalRecord) -> dict[str, objec
         "relay_overhead_ms": relay_overhead_ms,
         "image_bytes": record.image_bytes,
         "failure_reason_code": record.failure_reason_code,
+    }
+
+
+def _metric_summary(
+    records: list[DeviceUseInvocationJournalRecord],
+) -> dict[str, object]:
+    payloads = [_metric_payload(record) for record in records]
+
+    def timings(name: str) -> dict[str, object]:
+        values = sorted(
+            float(payload[name])
+            for payload in payloads
+            if isinstance(payload.get(name), (int, float))
+            and not isinstance(payload.get(name), bool)
+        )
+        if not values:
+            return {"count": 0, "total_ms": 0.0, "p50_ms": None, "p95_ms": None}
+
+        def percentile(fraction: float) -> float:
+            index = max(0, math.ceil(len(values) * fraction) - 1)
+            return round(values[index], 3)
+
+        return {
+            "count": len(values),
+            "total_ms": round(sum(values), 3),
+            "p50_ms": percentile(0.50),
+            "p95_ms": percentile(0.95),
+        }
+
+    return {
+        "tool_counts": dict(sorted(Counter(record.tool_name for record in records).items())),
+        "action_counts": dict(sorted(Counter(
+            f"{record.tool_name}.{record.action}" for record in records
+        ).items())),
+        "image_count": sum(record.image_bytes > 0 for record in records),
+        "image_bytes": sum(record.image_bytes for record in records),
+        "dispatch_to_accept_ms": timings("dispatch_to_accept_ms"),
+        "bridge_end_to_end_ms": timings("bridge_end_to_end_ms"),
+        "native_duration_ms": timings("native_duration_ms"),
+        "relay_overhead_ms": timings("relay_overhead_ms"),
     }

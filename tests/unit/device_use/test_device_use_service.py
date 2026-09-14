@@ -15,15 +15,37 @@ from core.device_use.errors import (
     DeviceUseAuthorizationError,
     DeviceUseUnavailableError,
 )
+from core.device_use.models import device_use_binding_from_document
 from core.device_use.service import DeviceUseService, encode_image_frame
 
 
 class DeviceUseServiceTestCase(unittest.TestCase):
-    def test_contract_digest_is_the_frozen_macos_v40_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v41_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
             "c990c06470cb6252edc762a731525b15b0f1f600070c7bc33ab4f15f6c5ae756",
         )
+
+    def test_persisted_binding_requires_mode_and_full_does_not_treat_discovery_as_scope(self):
+        document = {
+            "activation_id": "activation-1",
+            "workspace_id": "default",
+            "owner_user_id": "user-1",
+            "protocol_version": DEVICE_USE_PROTOCOL_VERSION,
+            "executor_contract": DEVICE_USE_EXECUTOR_CONTRACT,
+            "tool_contract_digest": DEVICE_USE_TOOL_CONTRACT_DIGEST,
+            "mode": "full",
+            "initial_app": "com.example.NewApp",
+            "approved_apps": ["com.apple.Safari"],
+            "created_at": datetime(2026, 9, 14, tzinfo=UTC),
+        }
+        binding = device_use_binding_from_document(document)
+        self.assertIsNotNone(binding)
+        self.assertEqual(binding.mode, "full")
+        with self.assertRaisesRegex(ValueError, "mode"):
+            device_use_binding_from_document({key: value for key, value in document.items() if key != "mode"})
+        with self.assertRaisesRegex(ValueError, "initial app"):
+            device_use_binding_from_document({**document, "mode": "on"})
 
     def connected(self):
         service = DeviceUseService()
@@ -39,6 +61,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
             protocol_version=DEVICE_USE_PROTOCOL_VERSION,
             executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+            mode="on",
             initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"],
             outbound=outbound,
@@ -50,6 +73,57 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         )
         service.bind_session(binding, session_id="runtime-1")
         return service, binding, outbound
+
+    def test_full_mode_has_no_app_catalog_or_request_count_ceiling(self):
+        service = DeviceUseService()
+        activation, ticket = service.create_activation(
+            owner_user_id="user-1",
+            auth_session_id="auth-1",
+            workspace_id="default",
+            session_generation="generation-1",
+        )
+        outbound: queue.Queue = queue.Queue(maxsize=8)
+        apps = [f"com.example.App{index}" for index in range(40)]
+        public = service.connect_executor(
+            ticket=ticket,
+            protocol_version=DEVICE_USE_PROTOCOL_VERSION,
+            executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
+            tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+            mode="full",
+            initial_app=apps[0],
+            approved_apps=apps,
+            outbound=outbound,
+        )
+        binding = service.binding_snapshot(
+            activation["activation_id"],
+            owner_user_id="user-1",
+            workspace_id="default",
+        )
+        service.bind_session(binding, session_id="runtime-full")
+        self.assertEqual(public["mode"], "full")
+        self.assertEqual(binding.mode, "full")
+        self.assertEqual(len(binding.approved_apps), 40)
+        service._seen_calls[(binding.activation_id, "turn-full")] = {
+            f"previous-{index}" for index in range(512)
+        }
+        errors = []
+        worker = threading.Thread(target=lambda: self._capture_error(errors, lambda: service.invoke(
+            binding=binding,
+            runtime_session_id="runtime-full",
+            turn_id="turn-full",
+            provider_thread_id="provider-thread",
+            provider_turn_id="provider-turn",
+            call_id="call-513",
+            tool_name="mac_computer",
+            arguments={"action": "observe"},
+            task_text="continue",
+            timeout_seconds=1,
+        )))
+        worker.start()
+        self.assertEqual(outbound.get(timeout=1)["call_id"], "call-513")
+        service.disconnect_executor(binding.activation_id)
+        worker.join(timeout=1)
+        self.assertEqual(str(errors[0]), "device_use_execution_unknown")
 
     def test_invocation_pairs_text_and_binary_image_without_replay(self):
         service, binding, outbound = self.connected()
@@ -235,6 +309,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
             protocol_version=DEVICE_USE_PROTOCOL_VERSION,
             executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+            mode="on",
             initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"],
             outbound=outbound,
@@ -262,6 +337,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
                 protocol_version=DEVICE_USE_PROTOCOL_VERSION,
                 executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
                 tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+                mode="on",
                 initial_app="com.apple.Safari",
                 approved_apps=["com.apple.Safari"],
                 outbound=queue.Queue(maxsize=8),

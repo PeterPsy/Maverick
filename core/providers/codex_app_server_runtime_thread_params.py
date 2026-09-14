@@ -43,6 +43,7 @@ def codex_thread_params(
             "environments": [],
             "dynamicTools": device_use_dynamic_tools(),
             "baseInstructions": device_use_base_instructions(
+                mode=binding.mode,
                 approved_apps=binding.approved_apps,
                 initial_app=binding.initial_app,
             ),

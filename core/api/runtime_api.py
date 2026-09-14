@@ -234,6 +234,7 @@ def _session_payload(
                 "status": "offline",
                 "ready": False,
                 "bound": True,
+                "mode": session.device_use_binding.mode,
                 "reason": "device_use_executor_unavailable",
             }
     if session.hosted_text_binding is not None:
@@ -474,6 +475,23 @@ def _thread_detail_payload_with_runtime(
     payload["hosted_provider_id"] = runtime_session.hosted_provider_id
     payload["hosted_model_id"] = runtime_session.hosted_model_id
     payload["device_use_enabled"] = runtime_session.device_use_binding is not None
+    if runtime_session.device_use_binding is not None:
+        binding = runtime_session.device_use_binding
+        try:
+            payload["device_use"] = state.device_use_service.public_activation(
+                binding.activation_id,
+                owner_user_id=binding.owner_user_id,
+                workspace_id=binding.workspace_id,
+            )
+        except DeviceUseError:
+            payload["device_use"] = {
+                "activation_id": binding.activation_id,
+                "status": "offline",
+                "ready": False,
+                "bound": True,
+                "mode": binding.mode,
+                "reason": "device_use_executor_unavailable",
+            }
     return payload
 
 

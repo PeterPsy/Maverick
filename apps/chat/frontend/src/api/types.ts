@@ -546,6 +546,7 @@ export type ChatThread = ChatThreadSummary & {
   provider_id?: string | null;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;
+  device_use?: DeviceUseActivation | null;
 };
 
 export type ChatProject = {
@@ -679,6 +680,7 @@ export type DeviceUseActivation = {
   reason?: string | null;
   model_id?: string;
   reasoning_effort?: string;
+  mode?: "on" | "full" | null;
   initial_app?: string | null;
   approved_app_count?: number;
   ticket?: string;

@@ -16,6 +16,7 @@ import type {
 import type { ChatSurfaceProps } from "../components/ChatSurface";
 import type { ExecutionMode } from "../components/ChatComposer";
 import type { ComposerAttachment } from "../lib/attachments";
+import type { DeviceUseMode, DeviceUsePermission, NativeDeviceUseSnapshot } from "../lib/deviceUse";
 import type { MentionItem } from "../lib/mentions";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
 import { runtimeActivityLabel } from "../lib/runtimeActivity";
@@ -51,6 +52,8 @@ type UseChatControllerPresentationParams = {
   deviceUseEnabled: boolean;
   deviceUseError: string | null;
   deviceUseLocked: boolean;
+  deviceUseMode: DeviceUseMode;
+  deviceUseSnapshot: NativeDeviceUseSnapshot;
   runtimeAdmissionBlocked: boolean;
   composerMentionItems: MentionItem[];
   chatUsage: ChatUsageSummary | null;
@@ -73,7 +76,10 @@ type UseChatControllerPresentationParams = {
   handleReasoningEffortChange: (effort: string) => void;
   handleSend: (inputOverride?: string) => void;
   handleStopTurn: () => void;
-  handleToggleDeviceUse: () => void;
+  handleConfigureDeviceUse: (settings: NativeDeviceUseSnapshot["settings"]) => Promise<void>;
+  handleRefreshDeviceUse: () => Promise<NativeDeviceUseSnapshot>;
+  handleRequestDeviceUsePermission: (permission: DeviceUsePermission) => void;
+  handleSelectDeviceUseMode: (mode: DeviceUseMode) => void;
   hasLoadedHistory: boolean;
   isBootstrapping: boolean;
   isHistoryLoading: boolean;
@@ -133,6 +139,8 @@ export function useChatControllerPresentation({
   deviceUseEnabled,
   deviceUseError,
   deviceUseLocked,
+  deviceUseMode,
+  deviceUseSnapshot,
   runtimeAdmissionBlocked,
   composerMentionItems,
   chatUsage,
@@ -155,7 +163,10 @@ export function useChatControllerPresentation({
   handleReasoningEffortChange,
   handleSend,
   handleStopTurn,
-  handleToggleDeviceUse,
+  handleConfigureDeviceUse,
+  handleRefreshDeviceUse,
+  handleRequestDeviceUsePermission,
+  handleSelectDeviceUseMode,
   hasLoadedHistory,
   isBootstrapping,
   isHistoryLoading,
@@ -263,6 +274,8 @@ export function useChatControllerPresentation({
       deviceUseBusy,
       deviceUseEnabled,
       deviceUseLocked,
+      deviceUseMode,
+      deviceUseSnapshot,
       disabled: isThreadLoading || runtimeAdmissionBlocked || Boolean(historicalReadOnlyReason),
       error: effectiveComposerError,
       executionMode,
@@ -285,7 +298,10 @@ export function useChatControllerPresentation({
       onReasoningEffortChange: handleReasoningEffortChange,
       onStopTurn: handleStopTurn,
       onSubmit: handleSend,
-      onToggleDeviceUse: handleToggleDeviceUse,
+      onConfigureDeviceUse: handleConfigureDeviceUse,
+      onRefreshDeviceUse: handleRefreshDeviceUse,
+      onRequestDeviceUsePermission: handleRequestDeviceUsePermission,
+      onSelectDeviceUseMode: handleSelectDeviceUseMode,
       providers,
       reasoningEffort,
       researchAvailable,

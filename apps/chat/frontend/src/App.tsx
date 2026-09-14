@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import type { ChatThread } from "./api/client";
 import { ChatSurface } from "./components/ChatSurface";
-import { ChatExecutionMode } from "./components/ChatExecutionMode";
 import { useChatAppController } from "./hooks/useChatAppController";
 import { useChatShellMessages } from "./hooks/useChatShellMessages";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
@@ -59,6 +58,5 @@ function ServerChatApp({
 }
 
 export function App(props: Parameters<typeof ServerChatApp>[0] = {}) {
-  // Unmount server controllers in local mode, including their upload/drop listeners.
-  return <ChatExecutionMode><ServerChatApp {...props} /></ChatExecutionMode>;
+  return <ServerChatApp {...props} />;
 }

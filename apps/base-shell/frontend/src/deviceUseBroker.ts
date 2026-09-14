@@ -24,12 +24,26 @@ export class DeviceUseBroker {
     const activationId = event.data?.activationId;
     const ticket = event.data?.ticket;
     const websocketPath = event.data?.websocketPath;
+    const mode = event.data?.mode;
     const startValid = action !== "start" || (
       typeof activationId === "string" && /^[0-9a-f-]{36}$/.test(activationId)
       && typeof ticket === "string" && ticket.length >= 32 && ticket.length <= 256
       && websocketPath === "/ws/device-use/executor"
+      && ["on", "full"].includes(mode)
     );
-    if (this.disposed || this.active.size >= 4 || !["status", "start", "stop"].includes(action) || !startValid) {
+    const configureValid = action !== "configure" || (
+      typeof event.data?.selectedApp === "string"
+      && event.data.selectedApp.length <= 256
+      && Array.isArray(event.data?.additionalApps)
+      && event.data.additionalApps.length <= 23
+      && event.data.additionalApps.every((item: unknown) => typeof item === "string" && item.length <= 256)
+      && ["perAction", "perTask"].includes(event.data?.consentMode)
+    );
+    const permissionValid = action !== "permission"
+      || ["screen", "accessibility", "input"].includes(event.data?.permission);
+    if (this.disposed || this.active.size >= 4
+        || !["status", "start", "stop", "configure", "permission"].includes(action)
+        || !startValid || !configureValid || !permissionValid) {
       port.postMessage({ ok: false }); port.close(); return;
     }
     if (!this.native) {
@@ -39,7 +53,13 @@ export class DeviceUseBroker {
       action,
       workspace: this.scope.workspaceId,
       generation: this.scope.sessionGeneration,
-      ...(action === "start" ? { activationId, ticket, websocketPath } : {}),
+      ...(action === "start" ? { activationId, ticket, websocketPath, mode } : {}),
+      ...(action === "configure" ? {
+        selectedApp: event.data.selectedApp,
+        additionalApps: event.data.additionalApps,
+        consentMode: event.data.consentMode,
+      } : {}),
+      ...(action === "permission" ? { permission: event.data.permission } : {}),
     };
     this.active.add(port);
     void this.native.postMessage(request).then((result) => {
@@ -53,10 +73,5 @@ export class DeviceUseBroker {
     this.disposed = true;
     for (const port of this.active) port.close();
     this.active.clear();
-    void this.native?.postMessage({
-      action: "stop",
-      workspace: this.scope.workspaceId,
-      generation: this.scope.sessionGeneration,
-    }).catch(() => undefined);
   }
 }

@@ -131,6 +131,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 protocol_version=DEVICE_USE_PROTOCOL_VERSION,
                 executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
                 tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
+                mode="on",
                 initial_app="com.apple.Safari",
                 approved_apps=["com.apple.Safari"],
                 outbound=queue.Queue(maxsize=8),
@@ -155,6 +156,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 )
             self.assertEqual(status, 201)
             self.assertTrue(session["device_use_enabled"])
+            self.assertEqual(session["device_use"]["mode"], "on")
             self.assertNotIn("device_use_binding", session)
             self.assertEqual(session["execution_binding"]["runtime_engine_id"], "codex")
             self.assertEqual(session["execution_binding"]["model_id"], "gpt-6-astra")
@@ -239,6 +241,7 @@ class DeviceUseWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
                         "protocol_version": DEVICE_USE_PROTOCOL_VERSION,
                         "executor_contract": DEVICE_USE_EXECUTOR_CONTRACT,
                         "tool_contract_digest": DEVICE_USE_TOOL_CONTRACT_DIGEST,
+                        "mode": "on",
                         "initial_app": "com.apple.Safari",
                         "approved_apps": ["com.apple.Safari"],
                     }
@@ -274,6 +277,7 @@ class DeviceUseWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             if "device_use.ready.v1" in str(item.get("text"))
         )
         self.assertEqual(ready["activation_id"], activation["activation_id"])
+        self.assertEqual(ready["mode"], "on")
         self.assertTrue(ready["ready"])
 
         await incoming.put({"type": "websocket.disconnect"})

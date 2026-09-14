@@ -2,6 +2,7 @@ import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ChatUsageSummary, ProviderItem } from "../api/client";
 import type { MultiAgentComposerMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
+import type { DeviceUseMode, DeviceUsePermission, NativeDeviceUseSnapshot } from "../lib/deviceUse";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
 import type { MentionItem } from "../lib/mentions";
@@ -14,6 +15,7 @@ import { ComposerActions } from "./ComposerActions";
 import { ComposerDictationButton } from "./ComposerDictationButton";
 import { ComposerRuntimeBadges } from "./ComposerRuntimeBadges";
 import { ComposerUtilities } from "./ComposerUtilities";
+import { DeviceUseControl } from "./DeviceUseControl";
 import { MentionPanel } from "./MentionPanel";
 import { QueuedMessageNotice } from "./QueuedMessageNotice";
 
@@ -31,6 +33,8 @@ export type ChatComposerProps = {
   deviceUseBusy?: boolean;
   deviceUseEnabled?: boolean;
   deviceUseLocked?: boolean;
+  deviceUseMode?: DeviceUseMode;
+  deviceUseSnapshot?: NativeDeviceUseSnapshot;
   error: string | null;
   executionMode: ExecutionMode | null;
   isEmptyMode?: boolean;
@@ -54,7 +58,10 @@ export type ChatComposerProps = {
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
   onSubmit: () => void;
-  onToggleDeviceUse?: () => void;
+  onConfigureDeviceUse?: (settings: NativeDeviceUseSnapshot["settings"]) => Promise<void>;
+  onRefreshDeviceUse?: () => Promise<NativeDeviceUseSnapshot>;
+  onRequestDeviceUsePermission?: (permission: DeviceUsePermission) => void;
+  onSelectDeviceUseMode?: (mode: DeviceUseMode) => void;
   providers: ProviderItem[];
   reasoningEffort?: string;
   researchAvailable?: boolean;
@@ -83,6 +90,8 @@ export function ChatComposer({
   deviceUseBusy = false,
   deviceUseEnabled = false,
   deviceUseLocked = false,
+  deviceUseMode = "off",
+  deviceUseSnapshot,
   error,
   executionMode,
   isEmptyMode = false,
@@ -106,7 +115,10 @@ export function ChatComposer({
   onRemoveAttachment,
   onStopTurn,
   onSubmit,
-  onToggleDeviceUse,
+  onConfigureDeviceUse,
+  onRefreshDeviceUse,
+  onRequestDeviceUsePermission,
+  onSelectDeviceUseMode,
   providers,
   reasoningEffort = "",
   researchAvailable = false,
@@ -279,22 +291,19 @@ export function ChatComposer({
                     onCapturePageArea={onCapturePageArea}
                   />
                 ) : null}
-                {!isolatedResearch && deviceUseAvailable && onToggleDeviceUse ? (
-                  <button
-                    aria-label={deviceUseEnabled ? "Device Use attivo" : "Attiva Device Use"}
-                    aria-pressed={deviceUseEnabled}
-                    className={`chatapp-composer__tool-button chatapp-device-use-button ${deviceUseEnabled ? "is-active" : ""}`}
-                    disabled={disabled || deviceUseBusy || deviceUseLocked}
-                    onClick={onToggleDeviceUse}
-                    title={deviceUseLocked
-                      ? "Device Use è fissato per questa chat"
-                      : deviceUseEnabled ? "Disattiva Device Use" : "Attiva Device Use via Maverick"}
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="material-symbols-rounded">
-                      desktop_windows
-                    </span>
-                  </button>
+                {!isolatedResearch && deviceUseAvailable && deviceUseSnapshot
+                    && onConfigureDeviceUse && onRefreshDeviceUse
+                    && onRequestDeviceUsePermission && onSelectDeviceUseMode ? (
+                  <DeviceUseControl
+                    busy={deviceUseBusy}
+                    locked={deviceUseLocked}
+                    mode={deviceUseMode}
+                    onConfigure={onConfigureDeviceUse}
+                    onModeChange={onSelectDeviceUseMode}
+                    onRefresh={onRefreshDeviceUse}
+                    onRequestPermission={onRequestDeviceUsePermission}
+                    snapshot={deviceUseSnapshot}
+                  />
                 ) : null}
                 <ComposerUtilities>
                   {!isolatedResearch && onCapturePageArea ? (

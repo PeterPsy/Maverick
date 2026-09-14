@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+from dataclasses import replace
 from pathlib import Path
 import queue
 from types import SimpleNamespace
@@ -33,8 +34,8 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
-            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v40",
-            tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, initial_app="com.apple.Safari",
+            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v41",
+            tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="on", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
         self.binding = self.service.binding_snapshot(
@@ -58,6 +59,16 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             "mac_computer", "mac_peekaboo", "mac_calendar",
         })
         self.assertEqual(params["config"], {"mcp_servers": {}, "project_doc_max_bytes": 0})
+
+    def test_full_mode_instructions_remove_native_authority_limits(self):
+        params = codex_thread_params(
+            session=SimpleNamespace(device_use_binding=replace(self.binding, mode="full")),
+            launch_spec=SimpleNamespace(working_directory="/private/device-work", execution_mode="sandbox"),
+        )
+        instructions = params["baseInstructions"]
+        self.assertIn("There is no application allowlist", instructions)
+        self.assertIn("Only an explicit Stop or a positively detected screen lock", instructions)
+        self.assertNotIn("Never operate credential or security UI", instructions)
 
     def test_device_runtime_routes_dynamic_tools_through_code_mode_host(self):
         features = tomllib.loads(DEVICE_USE_CODEX_CONFIG)["features"]

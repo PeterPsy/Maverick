@@ -6,10 +6,28 @@ import {
   type ChatThread,
   type ProviderItem,
 } from "../api/client";
-import { requestNativeDeviceUse } from "../lib/deviceUse";
+import {
+  requestNativeDeviceUse,
+  type DeviceUseConsentMode,
+  type DeviceUseMode,
+  type DeviceUsePermission,
+  type NativeDeviceUseSnapshot,
+} from "../lib/deviceUse";
 
 const REQUIRED_MODEL = "gpt-6-astra";
 const REQUIRED_EFFORT = "high";
+
+const emptySnapshot: NativeDeviceUseSnapshot = {
+  available: false,
+  active: false,
+  activationId: null,
+  mode: "off",
+  phase: "idle",
+  notice: "",
+  apps: [],
+  permissions: { screen: false, accessibility: false, input: false },
+  settings: { selectedApp: "", additionalApps: [], consentMode: "perAction" },
+};
 
 function compatibleProvider(providers: ProviderItem[]): ProviderItem | null {
   return providers.find((provider) => (
@@ -43,88 +61,131 @@ export function useDeviceUse({
   providers: ProviderItem[];
   onPrepare: (providerId: string, reasoningEffort: string) => Promise<void> | void;
 }) {
-  const [available, setAvailable] = useState(false);
+  const [snapshot, setSnapshot] = useState<NativeDeviceUseSnapshot>(emptySnapshot);
   const [activationId, setActivationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stoppedThreadId, setStoppedThreadId] = useState<string | null>(null);
   const activationRef = useRef<string | null>(null);
   activationRef.current = activationId;
 
-  useEffect(() => {
-    let current = true;
-    void requestNativeDeviceUse("status").then((snapshot) => {
-      if (!current) return;
-      setAvailable(snapshot.available);
-      if (snapshot.active && snapshot.activationId) {
-        void getDeviceUseActivation(snapshot.activationId).then((activation) => {
-          if (current && !activation.bound) setActivationId(snapshot.activationId);
-        }).catch(() => undefined);
-      }
-    }).catch(() => {
-      if (current) setAvailable(false);
-    });
-    return () => {
-      current = false;
-      void requestNativeDeviceUse("stop").catch(() => undefined);
-    };
+  const refresh = useCallback(async () => {
+    try {
+      const current = await requestNativeDeviceUse("status");
+      setSnapshot(current);
+      return current;
+    } catch {
+      setSnapshot(emptySnapshot);
+      return emptySnapshot;
+    }
   }, []);
 
-  useEffect(() => {
-    // Once Core has materialized the Device Use thread, the activation is no
-    // longer reusable authority for another new chat. The native socket stays
-    // alive and the persisted thread remains the source of truth.
-    if (activeThread?.device_use_enabled) setActivationId(null);
-  }, [activeThread?.device_use_enabled]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
-  const enabled = activeThread
-    ? Boolean(activeThread.device_use_enabled)
-    : Boolean(activationId);
+  useEffect(() => {
+    if (!activeThread?.device_use_enabled) setStoppedThreadId(null);
+    if (activeThread?.device_use_enabled) setActivationId(null);
+  }, [activeThread?.device_use_enabled, activeThread?.thread_id]);
+
+  const threadMode = activeThread?.device_use?.mode === "full" ? "full" : "on";
+  const mode: DeviceUseMode = activeThread?.device_use_enabled
+    ? (stoppedThreadId === activeThread.thread_id ? "off" : threadMode)
+    : activationId ? snapshot.mode : "off";
+  const enabled = mode !== "off";
   const locked = Boolean(activeThread);
 
-  const toggle = useCallback(async () => {
-    if (busy || locked) return;
+  const stopCurrent = useCallback(async () => {
+    const current = activationRef.current || activeThread?.device_use?.activation_id || null;
+    setActivationId(null);
+    if (activeThread?.thread_id) setStoppedThreadId(activeThread.thread_id);
+    await Promise.allSettled([
+      ...(current ? [stopDeviceUseActivation(current)] : []),
+      requestNativeDeviceUse("stop").then(setSnapshot),
+    ]);
+  }, [activeThread?.device_use?.activation_id, activeThread?.thread_id]);
+
+  const selectMode = useCallback(async (nextMode: DeviceUseMode) => {
+    if (busy || nextMode === mode) return;
     setBusy(true);
     setError(null);
-    if (activationRef.current) {
-      const current = activationRef.current;
-      setActivationId(null);
-      await Promise.allSettled([
-        stopDeviceUseActivation(current),
-        requestNativeDeviceUse("stop"),
-      ]);
-      setBusy(false);
-      return;
-    }
-    const provider = compatibleProvider(providers);
-    if (!provider) {
-      setError("Device Use richiede il profilo Codex gpt-6-astra con effort High.");
-      setBusy(false);
-      return;
-    }
-    let createdId = "";
     try {
+      if (nextMode === "off") {
+        await stopCurrent();
+        return;
+      }
+      if (activeThread) {
+        throw new Error("La modalità è fissata per questa chat. Avvia una nuova chat per riattivarla o cambiarla.");
+      }
+      const provider = compatibleProvider(providers);
+      if (!provider) throw new Error("Device Use richiede il profilo Codex gpt-6-astra con effort High.");
+      if (activationRef.current) await stopCurrent();
       await onPrepare(provider.provider_id, REQUIRED_EFFORT);
       const activation = await createDeviceUseActivation(crypto.randomUUID());
-      createdId = activation.activation_id;
+      const createdId = activation.activation_id;
       if (!activation.ticket || activation.websocket_path !== "/ws/device-use/executor") {
         throw new Error("Attivazione Device Use incompleta.");
       }
-      const native = await requestNativeDeviceUse("start", {
-        activationId: createdId,
-        ticket: activation.ticket,
-        websocketPath: activation.websocket_path,
-      });
-      if (!native.available) throw new Error("Device Use è disponibile solo nell'app Maverick per macOS.");
-      await waitUntilReady(createdId);
-      setActivationId(createdId);
+      try {
+        const native = await requestNativeDeviceUse("start", {
+          activationId: createdId,
+          ticket: activation.ticket,
+          websocketPath: activation.websocket_path,
+          mode: nextMode,
+        });
+        if (!native.available) throw new Error("Device Use è disponibile solo nell'app Maverick per macOS.");
+        await waitUntilReady(createdId);
+        setSnapshot(native);
+        setActivationId(createdId);
+      } catch (activationError) {
+        void stopDeviceUseActivation(createdId).catch(() => undefined);
+        void requestNativeDeviceUse("stop").catch(() => undefined);
+        throw activationError;
+      }
     } catch (activationError) {
-      if (createdId) void stopDeviceUseActivation(createdId).catch(() => undefined);
-      void requestNativeDeviceUse("stop").catch(() => undefined);
       setError(activationError instanceof Error ? activationError.message : "Impossibile attivare Device Use.");
     } finally {
       setBusy(false);
     }
-  }, [busy, locked, onPrepare, providers]);
+  }, [activeThread, busy, mode, onPrepare, providers, stopCurrent]);
 
-  return { activationId, available, busy, enabled, error, locked, toggle };
+  const configure = useCallback(async (settings: {
+    selectedApp: string;
+    additionalApps: string[];
+    consentMode: DeviceUseConsentMode;
+  }) => {
+    if (busy || enabled) return;
+    setBusy(true); setError(null);
+    try {
+      setSnapshot(await requestNativeDeviceUse("configure", settings));
+    } catch (settingsError) {
+      setError(settingsError instanceof Error ? settingsError.message : "Impossibile salvare le impostazioni.");
+      throw settingsError;
+    } finally { setBusy(false); }
+  }, [busy, enabled]);
+
+  const requestPermission = useCallback(async (permission: DeviceUsePermission) => {
+    if (busy || enabled) return;
+    setBusy(true); setError(null);
+    try {
+      setSnapshot(await requestNativeDeviceUse("permission", { permission }));
+      window.setTimeout(() => { void refresh(); }, 600);
+    } catch (permissionError) {
+      setError(permissionError instanceof Error ? permissionError.message : "Permesso non disponibile.");
+    } finally { setBusy(false); }
+  }, [busy, enabled, refresh]);
+
+  return {
+    activationId,
+    available: snapshot.available,
+    busy,
+    configure,
+    enabled,
+    error,
+    locked,
+    mode,
+    refresh,
+    requestPermission,
+    selectMode,
+    snapshot,
+  };
 }

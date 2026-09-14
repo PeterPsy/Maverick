@@ -67,6 +67,7 @@ class _Activation:
     protocol_version: str = ""
     executor_contract: str = ""
     tool_contract_digest: str = ""
+    mode: str = ""
     initial_app: str = ""
     approved_apps: tuple[str, ...] = ()
     outbound: queue.Queue[dict[str, object] | None] | None = None
@@ -152,6 +153,7 @@ class DeviceUseService:
         protocol_version: str,
         executor_contract: str,
         tool_contract_digest: str,
+        mode: str,
         initial_app: str,
         approved_apps: list[str] | tuple[str, ...],
         outbound: queue.Queue[dict[str, object] | None],
@@ -169,14 +171,16 @@ class DeviceUseService:
             ):
                 self._stop_locked(activation, "device_use_contract_mismatch")
                 raise DeviceUseUnavailableError("device_use_contract_mismatch")
-            apps = _approved_app_ids(approved_apps)
+            access_mode = _device_use_mode(mode)
+            apps = _approved_app_ids(approved_apps, unlimited=access_mode == "full")
             selected = _bundle_identifier(initial_app)
-            if selected not in apps:
+            if access_mode == "on" and selected not in apps:
                 raise DeviceUseUnavailableError("device_use_initial_app_not_approved")
             activation.ticket_digest = ""
             activation.protocol_version = protocol_version
             activation.executor_contract = executor_contract
             activation.tool_contract_digest = tool_contract_digest
+            activation.mode = access_mode
             activation.initial_app = selected
             activation.approved_apps = apps
             activation.outbound = outbound
@@ -219,6 +223,7 @@ class DeviceUseService:
                 protocol_version=activation.protocol_version,
                 executor_contract=activation.executor_contract,
                 tool_contract_digest=activation.tool_contract_digest,
+                mode=activation.mode,  # type: ignore[arg-type]
                 initial_app=activation.initial_app,
                 approved_apps=activation.approved_apps,
                 created_at=activation.created_at,
@@ -359,7 +364,9 @@ class DeviceUseService:
             activation = self._activation_for_binding_locked(binding, session_id=session_id)
             seen_key = (activation.activation_id, turn)
             seen = self._seen_calls.setdefault(seen_key, set())
-            if call in seen or len(seen) >= MAX_CALLS_PER_TURN:
+            if call in seen or (
+                binding.mode == "on" and len(seen) >= MAX_CALLS_PER_TURN
+            ):
                 raise DeviceUseAuthorizationError("device_use_duplicate_or_exhausted_call")
             seen.add(call)
             self._pending[invocation_id] = pending
@@ -623,6 +630,7 @@ class DeviceUseService:
             protocol_version=activation.protocol_version,
             executor_contract=activation.executor_contract,
             tool_contract_digest=activation.tool_contract_digest,
+            mode=activation.mode,  # type: ignore[arg-type]
             initial_app=activation.initial_app,
             approved_apps=activation.approved_apps,
             created_at=activation.created_at,
@@ -791,6 +799,7 @@ class DeviceUseService:
             "tool_contract_digest": DEVICE_USE_TOOL_CONTRACT_DIGEST,
             "model_id": DEVICE_USE_MODEL_ID,
             "reasoning_effort": DEVICE_USE_REASONING_EFFORT,
+            "mode": activation.mode or None,
             "ready": activation.status in {"ready", "bound"},
             "approved_app_count": len(activation.approved_apps),
             "bound": bool(activation.bound_session_id),
@@ -905,13 +914,26 @@ def _bundle_identifier(value: object) -> str:
     return normalized
 
 
-def _approved_app_ids(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
-    if not isinstance(values, (list, tuple)) or not values or len(values) > MAX_APPROVED_APPS:
+def _approved_app_ids(
+    values: list[str] | tuple[str, ...], *, unlimited: bool = False
+) -> tuple[str, ...]:
+    if (
+        not isinstance(values, (list, tuple))
+        or not values
+        or (not unlimited and len(values) > MAX_APPROVED_APPS)
+    ):
         raise DeviceUseAuthorizationError("device_use_approved_apps_invalid")
     apps = tuple(sorted({_bundle_identifier(item) for item in values}))
     if not apps:
         raise DeviceUseAuthorizationError("device_use_approved_apps_invalid")
     return apps
+
+
+def _device_use_mode(value: object) -> str:
+    mode = str(value or "").strip()
+    if mode not in {"on", "full"}:
+        raise DeviceUseAuthorizationError("device_use_mode_invalid")
+    return mode
 
 
 def _is_sha256(value: str) -> bool:

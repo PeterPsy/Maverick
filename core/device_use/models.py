@@ -17,6 +17,7 @@ DeviceUseActivationStatus = Literal[
     "expired",
 ]
 DeviceUseEffectClass = Literal["read", "control"]
+DeviceUseMode = Literal["on", "full"]
 DeviceUseInvocationStatus = Literal[
     "dispatched",
     "accepted",
@@ -38,6 +39,7 @@ class DeviceUseSessionBinding:
     protocol_version: str
     executor_contract: str
     tool_contract_digest: str
+    mode: DeviceUseMode
     initial_app: str
     approved_apps: tuple[str, ...]
     created_at: datetime
@@ -93,6 +95,9 @@ def device_use_binding_from_document(value: object) -> DeviceUseSessionBinding |
     created_at = value.get("created_at")
     if not isinstance(created_at, datetime):
         raise ValueError("Device-use binding timestamp is invalid.")
+    mode = str(value.get("mode") or "").strip()
+    if mode not in {"on", "full"}:
+        raise ValueError("Device-use mode is invalid.")
     binding = DeviceUseSessionBinding(
         activation_id=_required_text(value.get("activation_id"), "activation_id"),
         workspace_id=_required_text(value.get("workspace_id"), "workspace_id"),
@@ -100,11 +105,12 @@ def device_use_binding_from_document(value: object) -> DeviceUseSessionBinding |
         protocol_version=_required_text(value.get("protocol_version"), "protocol_version"),
         executor_contract=_required_text(value.get("executor_contract"), "executor_contract"),
         tool_contract_digest=_required_text(value.get("tool_contract_digest"), "tool_contract_digest"),
+        mode=mode,  # type: ignore[arg-type]
         initial_app=_required_text(value.get("initial_app"), "initial_app"),
         approved_apps=tuple(_required_text(item, "approved_app") for item in approved_apps),
         created_at=created_at,
     )
-    if binding.initial_app not in binding.approved_apps:
+    if binding.mode == "on" and binding.initial_app not in binding.approved_apps:
         raise ValueError("Device-use initial app must be approved.")
     return binding
 

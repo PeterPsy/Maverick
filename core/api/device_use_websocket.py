@@ -13,7 +13,7 @@ from core.shared.entrypoints import EntrypointShutdownController
 
 
 DEVICE_USE_EXECUTOR_WS_PATH = "/ws/device-use/executor"
-# A direct v40 EventKit read can contain just under 200 KB of JSON. Encoding
+# A v41 EventKit read can contain just under 200 KB of JSON. Encoding
 # that JSON string in the result envelope may escape it close to twice, so the
 # transport needs a larger—but still fixed—control-frame ceiling.
 MAX_DEVICE_CONTROL_FRAME_BYTES = 512_000
@@ -57,6 +57,7 @@ async def stream_device_use_executor(
             protocol_version=str(hello.get("protocol_version") or ""),
             executor_contract=str(hello.get("executor_contract") or ""),
             tool_contract_digest=str(hello.get("tool_contract_digest") or ""),
+            mode=str(hello.get("mode") or ""),
             initial_app=str(hello.get("initial_app") or ""),
             approved_apps=(
                 hello.get("approved_apps")

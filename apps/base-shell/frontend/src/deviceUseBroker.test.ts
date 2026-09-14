@@ -25,13 +25,34 @@ describe("Device Use broker", () => {
     const broker = new DeviceUseBroker(scope, native);
     const { event } = request("start", {
       activationId: "01234567-89ab-cdef-0123-456789abcdef",
-      ticket: "t".repeat(64), websocketPath: "/ws/device-use/executor", path: "/private",
+      ticket: "t".repeat(64), websocketPath: "/ws/device-use/executor", mode: "full", path: "/private",
     });
     broker.handle(event); await Promise.resolve(); await Promise.resolve();
     expect(native.postMessage).toHaveBeenCalledWith({
       action: "start", activationId: "01234567-89ab-cdef-0123-456789abcdef",
       ticket: "t".repeat(64), websocketPath: "/ws/device-use/executor",
+      mode: "full",
       workspace: "default", generation: "login-1",
+    });
+  });
+
+  it("forwards only bounded native settings fields", async () => {
+    const native = { postMessage: vi.fn(async () => ({ available: true, phase: "idle" })) };
+    const broker = new DeviceUseBroker(scope, native);
+    const { event } = request("configure", {
+      selectedApp: "com.apple.Notes",
+      additionalApps: ["com.apple.TextEdit"],
+      consentMode: "perTask",
+      privateValue: "discarded",
+    });
+    broker.handle(event); await Promise.resolve(); await Promise.resolve();
+    expect(native.postMessage).toHaveBeenCalledWith({
+      action: "configure",
+      selectedApp: "com.apple.Notes",
+      additionalApps: ["com.apple.TextEdit"],
+      consentMode: "perTask",
+      workspace: "default",
+      generation: "login-1",
     });
   });
 

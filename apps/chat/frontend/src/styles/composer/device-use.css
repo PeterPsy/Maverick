@@ -1,0 +1,114 @@
+.chatapp-device-use-control {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.16rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.14);
+  border-radius: 0.62rem;
+  background: rgba(var(--maverick-contrast-rgb), 0.055);
+  color: var(--maverick-text);
+}
+
+.chatapp-device-use-control.is-full {
+  border-color: color-mix(in srgb, var(--maverick-accent) 46%, transparent);
+  background: color-mix(in srgb, var(--maverick-accent) 12%, transparent);
+}
+
+.chatapp-device-use-control__settings,
+.chatapp-device-use-control__modes button {
+  border: 0;
+  background: transparent;
+  color: var(--maverick-text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chatapp-device-use-control__settings {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.65rem;
+  padding: 0;
+  border-radius: 0.42rem;
+}
+
+.chatapp-device-use-control__settings:hover { background: rgba(var(--maverick-contrast-rgb), 0.09); color: var(--maverick-text); }
+.chatapp-device-use-control__settings .material-symbols-rounded { font-size: 1rem; }
+
+.chatapp-device-use-control__modes {
+  display: inline-flex;
+  gap: 0.08rem;
+  padding-left: 0.14rem;
+  border-left: 1px solid rgba(var(--maverick-contrast-rgb), 0.11);
+}
+
+.chatapp-device-use-control__modes button {
+  min-width: 2.15rem;
+  height: 1.55rem;
+  padding: 0 0.38rem;
+  border-radius: 0.4rem;
+  font-size: 0.64rem;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+}
+
+.chatapp-device-use-control__modes button:hover:not(:disabled) { color: var(--maverick-text); background: rgba(var(--maverick-contrast-rgb), 0.08); }
+.chatapp-device-use-control__modes button.is-active { color: var(--maverick-bg); background: rgba(var(--maverick-contrast-rgb), 0.82); }
+.chatapp-device-use-control.is-full .chatapp-device-use-control__modes button.is-active { background: var(--maverick-accent); color: white; }
+.chatapp-device-use-control__modes button:disabled { cursor: not-allowed; opacity: 0.48; }
+.chatapp-device-use-control__settings:focus-visible,
+.chatapp-device-use-control__modes button:focus-visible,
+.chatapp-device-use-modal button:focus-visible,
+.chatapp-device-use-modal select:focus-visible,
+.chatapp-device-use-modal input:focus-visible { outline: 2px solid var(--maverick-accent); outline-offset: 2px; }
+
+.chatapp-device-use-modal { width: min(39rem, 100%); }
+.chatapp-device-use-modal__mode {
+  display: flex;
+  gap: 0.72rem;
+  align-items: center;
+  padding: 0.88rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.11);
+  border-radius: 0.8rem;
+  background: rgba(var(--maverick-contrast-rgb), 0.035);
+}
+.chatapp-device-use-modal__mode.is-full { border-color: color-mix(in srgb, var(--maverick-accent) 45%, transparent); background: color-mix(in srgb, var(--maverick-accent) 10%, transparent); }
+.chatapp-device-use-modal__mode > .material-symbols-rounded { font-size: 1.35rem; color: var(--maverick-accent); }
+.chatapp-device-use-modal__mode strong { display: block; font-size: 0.86rem; }
+.chatapp-device-use-modal__mode p,
+.chatapp-device-use-modal__section-heading p,
+.chatapp-device-use-modal__hint { margin: 0.15rem 0 0; color: var(--maverick-text-muted); font-size: 0.7rem; line-height: 1.4; }
+.chatapp-device-use-modal__section-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.chatapp-device-use-modal__section-heading h3 { margin: 0; }
+.chatapp-device-use-modal__refresh { border: 0; background: transparent; color: var(--maverick-accent); font: inherit; font-size: 0.72rem; font-weight: 680; cursor: pointer; }
+.chatapp-device-use-modal__field { display: grid; gap: 0.35rem; color: var(--maverick-text-soft); font-size: 0.72rem; }
+.chatapp-device-use-modal__field select {
+  width: 100%; min-height: 2.45rem; padding: 0 0.7rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.13); border-radius: 0.62rem;
+  background: rgba(var(--maverick-contrast-rgb), 0.04); color: var(--maverick-text); font: inherit;
+}
+.chatapp-device-use-modal__fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.chatapp-device-use-modal__fieldset legend { margin-bottom: 0.4rem; color: var(--maverick-text-soft); font-size: 0.72rem; }
+.chatapp-device-use-modal__app-list {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.3rem 0.8rem;
+  max-height: 8rem; overflow-y: auto; padding: 0.7rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.09); border-radius: 0.66rem;
+}
+.chatapp-device-use-modal__app-list label,
+.chatapp-device-use-modal__radios label { display: flex; align-items: center; gap: 0.45rem; min-width: 0; color: var(--maverick-text); font-size: 0.72rem; }
+.chatapp-device-use-modal__app-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatapp-device-use-modal__radios { display: flex; flex-wrap: wrap; gap: 0.8rem; }
+.chatapp-device-use-modal__save { justify-self: start; }
+.chatapp-device-use-modal__permissions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.chatapp-device-use-modal__permissions article { display: grid; gap: 0.55rem; padding: 0.7rem; border: 1px solid rgba(var(--maverick-contrast-rgb), 0.09); border-radius: 0.68rem; background: rgba(var(--maverick-contrast-rgb), 0.025); }
+.chatapp-device-use-modal__permissions article > div { display: grid; gap: 0.2rem; }
+.chatapp-device-use-modal__permissions span { font-size: 0.72rem; }
+.chatapp-device-use-modal__permissions strong { color: var(--maverick-text-muted); font-size: 0.66rem; }
+.chatapp-device-use-modal__permissions strong.is-granted { color: var(--maverick-accent); }
+.chatapp-device-use-modal__permissions button { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--maverick-accent); font: inherit; font-size: 0.7rem; font-weight: 680; cursor: pointer; }
+.chatapp-device-use-modal__notice { margin: 0; padding: 0.65rem; border-radius: 0.58rem; background: rgba(var(--maverick-contrast-rgb), 0.05); color: var(--maverick-text-soft); font-size: 0.7rem; }
+
+@media (max-width: 640px) {
+  .chatapp-device-use-modal__app-list,
+  .chatapp-device-use-modal__permissions { grid-template-columns: 1fr; }
+}

@@ -105,6 +105,14 @@ The OpenRouter profile pins its endpoint, model identity, allowed upstream,
 fallback policy, parameters and provider config. Core resolves the API key from
 its secret binding and never persists or returns it.
 
+Core validates the exact request envelope but does not perform a separate live
+vendor-catalog probe before each completion step. The vendor catalog is useful
+for operator discovery, not runtime bearer authority: mutable or undocumented
+catalog status values cannot veto a request that the configured OpenRouter
+endpoint can serve. OpenRouter enforces the requested route, parameter and ZDR
+constraints, and the adapter validates the actual streamed provider/model
+identity before accepting output.
+
 The adapter supports streamed text and tool calls, bounded provider-private
 history, call/result pairing, cancellation, normalized errors, token accounting,
 finalization and recovery. Each request revalidates live authority before

@@ -11,9 +11,6 @@ from core.providers.google_interactions_catalog import (
 )
 from core.providers.google_interactions_request import google_interaction_payload
 from core.providers.google_interactions_state import decode_google_interaction_state
-from core.providers.openrouter_agentic_catalog import (
-    preflight_openrouter_agentic_catalog,
-)
 from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError
 from core.providers.openrouter_agentic_request import openrouter_chat_payload
 from core.providers.openrouter_agentic_state import decode_openrouter_chat_state
@@ -85,10 +82,8 @@ def preflight_google_interactions_request(
 def preflight_openrouter_completion_request(
     request: AgenticModelRequest,
     credential: EphemeralCredential | None,
-    *,
-    upstream_provider_names: tuple[str, ...] = (),
 ) -> HostedEndpointRequestSnapshot:
-    """Require live support for exploration and tool-less finalization."""
+    """Validate the exact OpenRouter request envelope before dispatch."""
     if credential is None:
         raise OpenRouterAgenticProtocolError("provider_authentication_failed")
     state = decode_openrouter_chat_state(request.provider_private_state)
@@ -111,11 +106,6 @@ def preflight_openrouter_completion_request(
         )
     ):
         raise OpenRouterAgenticProtocolError("provider_endpoint_parameters_unsupported")
-    catalog = preflight_openrouter_agentic_catalog(
-        request,
-        credential=credential,
-        upstream_provider_names=upstream_provider_names,
-    )
     projection = {
         "model_id": request.model_id,
         "request_phase": request.request_phase,
@@ -126,38 +116,14 @@ def preflight_openrouter_completion_request(
         "tool_choice_mode": "provider-default" if final else "auto",
         "reasoning_mode": str(request.reasoning_effort or "default"),
         "max_output_tokens": request.max_output_tokens,
-        "live_catalog_snapshot_digest": catalog.catalog_snapshot_digest,
     }
     return HostedEndpointRequestSnapshot(
-        **{
-            key: value
-            for key, value in projection.items()
-            if key != "live_catalog_snapshot_digest"
-        },
+        **projection,
         snapshot_digest=canonical_digest(projection),
     )
 
-
-@dataclass(frozen=True)
-class OpenRouterCompletionRequestPreflight:
-    """Bind configured router provider identities into live preflight."""
-
-    upstream_provider_names: tuple[str, ...]
-
-    def __call__(
-        self,
-        request: AgenticModelRequest,
-        credential: EphemeralCredential | None,
-    ) -> HostedEndpointRequestSnapshot:
-        return preflight_openrouter_completion_request(
-            request,
-            credential,
-            upstream_provider_names=self.upstream_provider_names,
-        )
-
 __all__ = [
     "HostedEndpointRequestSnapshot",
-    "OpenRouterCompletionRequestPreflight",
     "preflight_google_interactions_request",
     "preflight_openrouter_completion_request",
 ]

@@ -619,6 +619,14 @@ and recovery. The supported reasoning efforts are `max`, `high` and `low`, with
 `max` as the default. Selection still requires an active OpenRouter credential
 binding and the live workspace policy checks described above.
 
+OpenRouter requests validate the pinned request envelope locally and are then
+sent to the configured Chat Completions endpoint. Maverick does not fetch a
+second mutable vendor endpoint catalog before every model step and does not let
+undocumented catalog health codes become a separate admission lifecycle. The
+router still receives the pinned upstream, fallback, parameter, collection and
+ZDR controls, while the streamed response decoder rejects an unexpected model
+or provider and normalizes real transport/provider failures.
+
 The provider status API projects these contracts directly. An agentic row is
 selectable only when the family contract is complete, Full Workspace is
 `available`, the binding and rollout are enabled, live effective authority is

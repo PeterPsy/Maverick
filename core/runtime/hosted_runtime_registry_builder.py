@@ -22,8 +22,8 @@ from core.providers.hosted_context_compactors import (
     compact_openrouter_history,
 )
 from core.providers.hosted_endpoint_preflight import (
-    OpenRouterCompletionRequestPreflight,
     preflight_google_interactions_request,
+    preflight_openrouter_completion_request,
 )
 from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
@@ -163,9 +163,7 @@ def _openrouter_chat_runtime(
         private_state_inspector=inspect_openrouter_chat_state,
         recipe=recipe,
         context_compactor=compact_openrouter_history,
-        request_preflight=OpenRouterCompletionRequestPreflight(
-            upstream_provider_names=config.upstream_provider_names,
-        ),
+        request_preflight=preflight_openrouter_completion_request,
         implementation_manifest=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
     )
 

@@ -30,9 +30,6 @@ from core.providers.maverick_agent_builtins import (
     OPENROUTER_CHAT_PROTOCOL_ADAPTER,
     OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
-from core.providers.openrouter_agentic_catalog import (
-    OpenRouterAgenticCatalogSnapshot,
-)
 from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError
 from core.providers.openrouter_agentic_profile import (
     openrouter_agentic_capabilities,
@@ -171,40 +168,14 @@ class HostedHarnessRecipeTest(unittest.TestCase):
         self.assertNotEqual(exploration.snapshot_digest, final.snapshot_digest)
 
     def test_openrouter_final_preflight_omits_tools_without_requiring_none(self) -> None:
-        catalog = OpenRouterAgenticCatalogSnapshot(
-            upstream_id="relace",
-            resolved_model_id="z-ai/glm-5.3-flash-20260826",
-            reasoning_efforts=("max", "high", "low"),
-            default_reasoning_effort="max",
-            reasoning_mandatory=True,
-            supported_parameters=(
-                "max_tokens",
-                "reasoning",
-                "reasoning_effort",
-                "tool_choice",
-                "tools",
-            ),
-            model_metadata_record_digest="d" * 64,
-            model_catalog_record_digest="a" * 64,
-            zdr_catalog_record_digest="b" * 64,
-            supports_tool_choice_none=True,
-            context_length=1_048_576,
-            max_completion_tokens=131_072,
-            catalog_snapshot_digest="c" * 64,
+        exploration = preflight_openrouter_completion_request(
+            _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=False),
+            EphemeralCredential("synthetic-openrouter-key"),
         )
-        with patch(
-            "core.providers.hosted_endpoint_preflight."
-            "preflight_openrouter_agentic_catalog",
-            return_value=catalog,
-        ):
-            exploration = preflight_openrouter_completion_request(
-                _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=False),
-                EphemeralCredential("synthetic-openrouter-key"),
-            )
-            final = preflight_openrouter_completion_request(
-                _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=True),
-                EphemeralCredential("synthetic-openrouter-key"),
-            )
+        final = preflight_openrouter_completion_request(
+            _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=True),
+            EphemeralCredential("synthetic-openrouter-key"),
+        )
 
         self.assertEqual(exploration.tool_choice_mode, "auto")
         self.assertEqual(exploration.tool_catalog_mode, "declared")
@@ -212,7 +183,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
         self.assertEqual(final.tool_catalog_mode, "omitted")
         self.assertNotEqual(exploration.snapshot_digest, final.snapshot_digest)
 
-    def test_openrouter_final_preflight_rejects_legacy_empty_catalog_before_live_catalog(self) -> None:
+    def test_openrouter_final_preflight_rejects_legacy_empty_catalog(self) -> None:
         request = _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=True)
         with patch(
             "core.providers.hosted_endpoint_preflight.openrouter_chat_payload",
@@ -227,9 +198,7 @@ class HostedHarnessRecipeTest(unittest.TestCase):
                 },
                 [],
             ),
-        ), patch(
-            "core.providers.hosted_endpoint_preflight.preflight_openrouter_agentic_catalog",
-        ) as catalog, self.assertRaisesRegex(
+        ), self.assertRaisesRegex(
             OpenRouterAgenticProtocolError,
             "provider_endpoint_parameters_unsupported",
         ):
@@ -237,8 +206,6 @@ class HostedHarnessRecipeTest(unittest.TestCase):
                 request,
                 EphemeralCredential("synthetic-openrouter-key"),
             )
-
-        catalog.assert_not_called()
 
 
 def _binding(recipe):

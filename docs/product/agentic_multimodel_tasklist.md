@@ -13,6 +13,7 @@ Updated: 2026-09-14
   provider-private state.
 - [x] OpenRouter Chat Completions adapter for `z-ai/glm-5.3-flash`.
 - [x] Full Workspace OpenRouter profile with `max`, `high`, `low` reasoning.
+- [x] Direct OpenRouter dispatch without a mutable per-step catalog veto.
 - [x] Codex native app-server catalog projection without a renewal dependency.
 - [x] Chat and Settings selection based on direct server readiness.
 - [x] Separate text-only provider path with no actions.

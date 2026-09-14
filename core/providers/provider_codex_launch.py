@@ -335,6 +335,7 @@ class CodexLaunchMixin:
                 runtime_bin=runtime_bin,
                 execution_mode=session.effective_mode,
                 host_command=host_command,
+                require_code_mode_host=getattr(session, "device_use_binding", None) is not None,
             ),
             env_overrides=env,
             credential_binding_id=credential_binding_id,

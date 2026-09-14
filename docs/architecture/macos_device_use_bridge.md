@@ -120,7 +120,11 @@ The supported Codex app-server versions gate `dynamicTools` and `environments`
 behind the experimental protocol capability. Core therefore declares
 `capabilities.experimentalApi` during `initialize` only for a Device Use
 runtime. Ordinary Codex chat runtimes keep the stable handshake and do not opt
-into the experimental API.
+into the experimental API. Codex 0.153 exposes dynamic tools through its
+`functions.exec` code-mode host even while general `code_mode`, shell and
+filesystem tools are disabled. For Device Use only, Core mounts the bundled
+`codex-code-mode-host` read-only into the sandbox beside the Codex binary; a
+missing host fails launch instead of producing a model-visible unusable tool.
 
 The native executor remains authoritative for app membership, observation and
 snapshot freshness, focus, scene ownership, secure fields, local per-action or

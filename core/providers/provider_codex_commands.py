@@ -10,6 +10,7 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 
+from core.providers.errors import ProviderLaunchError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
 from core.providers.provider_codex_reasoning import (
     CODEX_DEFAULT_REASONING_EFFORT,
@@ -170,6 +171,7 @@ class CodexCommandMixin:
         runtime_bin: Path | None = None,
         execution_mode: str,
         host_command: str | None = None,
+        require_code_mode_host: bool = False,
     ) -> list[str]:
         host_command = host_command or self._runtime_command(self.codex_command)
         command = [host_command]
@@ -181,10 +183,22 @@ class CodexCommandMixin:
         sandbox_launcher = (runtime_bin or runtime_root / "bin") / "workspace_sandbox.py"
         dependency_args = self._dependency_root_args(host_command)
         host_command_path = Path(host_command)
+        code_mode_host = (
+            host_command_path.with_name("codex-code-mode-host")
+            if require_code_mode_host
+            else None
+        )
+        if code_mode_host is not None and not code_mode_host.is_file():
+            raise ProviderLaunchError("codex_device_use_code_mode_host_missing")
         if self._is_standalone_codex_binary(host_command_path):
             sandbox_command = runtime_root / "bin" / "codex"
             dependency_args = ["--dependency-file", f"{host_command_path}={sandbox_command}"]
             command[0] = str(sandbox_command)
+            if code_mode_host is not None:
+                dependency_args.extend([
+                    "--dependency-file",
+                    f"{code_mode_host}={runtime_root / 'bin' / code_mode_host.name}",
+                ])
             rg = self._vendored_codex_tool_binary(host_command_path, "rg")
             if rg is not None:
                 dependency_args.extend(["--dependency-file", f"{rg}={runtime_root / 'bin' / 'rg'}"])

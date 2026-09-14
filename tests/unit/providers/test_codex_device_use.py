@@ -3,13 +3,16 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+from pathlib import Path
 import queue
 from types import SimpleNamespace
 import threading
+import tomllib
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.device_use.contract import DEVICE_USE_TOOL_CONTRACT_DIGEST
+from core.device_use.contract import DEVICE_USE_CODEX_CONFIG, DEVICE_USE_TOOL_CONTRACT_DIGEST
 from core.device_use.errors import DeviceUseUnavailableError
 from core.device_use.runtime_registry import register_device_use_session, unregister_device_use_session
 from core.device_use.service import DeviceUseService
@@ -17,6 +20,8 @@ from core.providers.codex_app_server_device_use import process_device_use_reques
 from core.providers.codex_app_server_device_use_requests import stop_device_use_runtime
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime
 from core.providers.codex_app_server_runtime_thread_params import codex_thread_params
+from core.providers.errors import ProviderLaunchError
+from core.providers.provider_codex import CodexProviderAdapter
 
 
 class CodexDeviceUseTestCase(unittest.TestCase):
@@ -53,6 +58,66 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             "mac_computer", "mac_peekaboo", "mac_calendar",
         })
         self.assertEqual(params["config"], {"mcp_servers": {}, "project_doc_max_bytes": 0})
+
+    def test_device_runtime_routes_dynamic_tools_through_code_mode_host(self):
+        features = tomllib.loads(DEVICE_USE_CODEX_CONFIG)["features"]
+
+        self.assertIs(features["code_mode"], False)
+        self.assertIs(features["code_mode_host"], True)
+
+    def test_device_runtime_mounts_the_bundled_code_mode_host(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            vendor_bin = root / "vendor" / "target" / "bin"
+            vendor_bin.mkdir(parents=True)
+            codex = vendor_bin / "codex"
+            code_mode_host = vendor_bin / "codex-code-mode-host"
+            codex.touch()
+            code_mode_host.touch()
+            runtime_root = root / "runtime"
+
+            command = CodexProviderAdapter()._build_command(
+                workspace_root=root,
+                runtime_root=runtime_root,
+                runtime_home=runtime_root / "codex-home",
+                execution_mode="sandbox",
+                host_command=str(codex),
+                require_code_mode_host=True,
+            )
+            standard_command = CodexProviderAdapter()._build_command(
+                workspace_root=root,
+                runtime_root=runtime_root,
+                runtime_home=runtime_root / "codex-home",
+                execution_mode="sandbox",
+                host_command=str(codex),
+            )
+
+        self.assertIn(
+            f"{code_mode_host}={runtime_root / 'bin' / code_mode_host.name}",
+            command,
+        )
+        self.assertNotIn(str(code_mode_host), standard_command)
+
+    def test_device_runtime_fails_closed_without_the_bundled_host(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            vendor_bin = root / "vendor" / "target" / "bin"
+            vendor_bin.mkdir(parents=True)
+            codex = vendor_bin / "codex"
+            codex.touch()
+
+            with self.assertRaisesRegex(
+                ProviderLaunchError,
+                "codex_device_use_code_mode_host_missing",
+            ):
+                CodexProviderAdapter()._build_command(
+                    workspace_root=root,
+                    runtime_root=root / "runtime",
+                    runtime_home=root / "runtime" / "codex-home",
+                    execution_mode="sandbox",
+                    host_command=str(codex),
+                    require_code_mode_host=True,
+                )
 
     def test_image_is_steered_while_reader_remains_available_then_text_result_returns(self):
         stdin = io.StringIO()

@@ -41,8 +41,8 @@ shell_snapshot = false
 workspace_dependencies = false
 skill_search = false
 skip_host_skill_discovery = true
-[features.code_mode]
-enabled = false
+code_mode = false
+code_mode_host = true
 [analytics]
 enabled = false
 """

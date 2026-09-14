@@ -161,7 +161,12 @@ def publish_codex_agentic_profile(
             ),
             expected_revision=None,
         )
-    _suspend_previous_codex_revisions(store, definition_id=profile.definition_id, now=timestamp)
+    _suspend_previous_codex_revisions(
+        store,
+        definition_id=profile.definition_id,
+        current_revision=profile.revision,
+        now=timestamp,
+    )
     return profile
 
 
@@ -169,10 +174,20 @@ def _suspend_previous_codex_revisions(
     store: ProviderStore,
     *,
     definition_id: str,
+    current_revision: str,
     now: datetime,
 ) -> None:
     """Suspend preview definitions built for earlier adapter identities."""
-    for revision in CODEX_PREVIOUS_PROFILE_REVISIONS:
+    previous_revisions = {
+        *CODEX_PREVIOUS_PROFILE_REVISIONS,
+        *(
+            profile.revision
+            for profile in store.list_agentic_profile_definitions()
+            if profile.definition_id == definition_id
+            and profile.revision != current_revision
+        ),
+    }
+    for revision in sorted(previous_revisions):
         status = store.get_agentic_profile_definition_status(
             definition_id,
             revision,

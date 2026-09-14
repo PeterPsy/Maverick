@@ -328,6 +328,23 @@ class AgenticProfilesTest(unittest.TestCase):
                 ),
                 expected_revision=None,
             )
+        content_addressed_previous = replace(
+            profile,
+            revision="17.previous-catalog-digest",
+        )
+        self.provider_store.save_agentic_profile_definition(
+            content_addressed_previous
+        )
+        self.provider_store.save_agentic_profile_definition_status(
+            AgenticProfileDefinitionStatus(
+                definition_id=profile.definition_id,
+                definition_revision=content_addressed_previous.revision,
+                rollout_status="preview",
+                revision=0,
+                updated_at=NOW,
+            ),
+            expected_revision=None,
+        )
         ensure_codex_workspace_profile(
             self.provider_store,
             definition=self.codex,
@@ -340,6 +357,13 @@ class AgenticProfilesTest(unittest.TestCase):
                 revision,
             )
             self.assertEqual(status.rollout_status, "suspended")
+        content_addressed_status = (
+            self.provider_store.get_agentic_profile_definition_status(
+                profile.definition_id,
+                content_addressed_previous.revision,
+            )
+        )
+        self.assertEqual(content_addressed_status.rollout_status, "suspended")
 
     def test_all_builtin_codex_models_publish_direct_capabilities(self) -> None:
         runtime_store = RuntimeDocumentStore(

@@ -9,14 +9,23 @@ from core.providers.codex_skill_inputs import (
     codex_provider_input_text,
     codex_skill_input_items,
 )
+from core.runtime.research_runtime import runtime_session_is_research
 
 
-def codex_turn_input(session, runtime, input_text: str, invoked_skills) -> tuple[bool, list[dict[str, object]]]:
+def codex_turn_input(
+    session,
+    runtime,
+    input_text: str,
+    invoked_skills,
+) -> tuple[bool, bool, list[dict[str, object]]]:
     """Keep Device Use prompts free of workspace skills and instruction wrappers."""
     device_use = getattr(session, "device_use_binding", None) is not None
+    research = runtime_session_is_research(session)
+    if research:
+        return False, True, [{"type": "text", "text": input_text}]
     if device_use:
-        return True, [{"type": "text", "text": input_text}]
-    return False, [
+        return True, False, [{"type": "text", "text": input_text}]
+    return False, False, [
         {
             "type": "text",
             "text": codex_provider_input_text(
@@ -63,6 +72,7 @@ def finish_device_use_turn(runtime, runtime_turn_id: str | None) -> None:
 def codex_turn_start_params(
     *,
     device_use: bool,
+    research: bool,
     provider_thread_id: str,
     turn_input: list[dict[str, object]],
     launch_spec,
@@ -71,6 +81,12 @@ def codex_turn_start_params(
     params: dict[str, object] = {"threadId": provider_thread_id, "input": turn_input}
     if device_use:
         params["effort"] = DEVICE_USE_REASONING_EFFORT
+    elif research:
+        params.update({
+            "approvalPolicy": "never",
+            "sandboxPolicy": {"type": "readOnly"},
+            "environments": [],
+        })
     else:
         params.update({
             "approvalPolicy": "never",

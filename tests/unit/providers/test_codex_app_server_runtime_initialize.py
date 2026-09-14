@@ -29,12 +29,35 @@ class CodexAppServerRuntimeInitializeTestCase(unittest.TestCase):
             },
         )
 
-    def _initialize_params(self, *, device_use_binding):
+    def test_research_runtime_negotiates_environment_isolation(self) -> None:
+        params = self._initialize_params(
+            device_use_binding=None,
+            runtime_profile="research",
+        )
+
+        self.assertEqual(
+            params,
+            {
+                "clientInfo": {
+                    "name": "research-client",
+                    "version": "1.0.0",
+                },
+                "capabilities": {"experimentalApi": True},
+            },
+        )
+
+    def _initialize_params(
+        self,
+        *,
+        device_use_binding,
+        runtime_profile="workspace",
+    ):
         session = SimpleNamespace(
             session_id=f"session-initialize-{device_use_binding is not None}",
             workspace_id="default",
             runtime_root="/tmp/runtime-initialize",
             device_use_binding=device_use_binding,
+            runtime_profile=runtime_profile,
         )
         launch_spec = SimpleNamespace(
             command=["codex", "app-server"],

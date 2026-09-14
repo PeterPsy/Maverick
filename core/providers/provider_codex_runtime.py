@@ -26,10 +26,12 @@ from core.providers.provider_codex_reasoning import (
     codex_default_reasoning_effort,
     normalize_codex_model_options,
 )
+from core.providers.provider_codex_research import CodexResearchRuntimeMixin
 from core.providers.provider_codex_runtime_home import CodexRuntimeHomeMixin
 from core.providers.provider_codex_steering import CodexSteeringMixin
 from core.providers.provider_codex_usage import CodexUsageTransport, read_codex_subscription_usage
 from core.providers.provider_codex_wrappers import refresh_workspace_maverick_wrappers
+from core.runtime.research_runtime import RESEARCH_NATIVE_WEB_RUNTIME
 
 if TYPE_CHECKING:
     from core.runtime.execution import RuntimeExecutionResult
@@ -165,6 +167,7 @@ class CodexProviderAdapter(
     CodexModelMixin,
     CodexLaunchMixin,
     CodexCommandMixin,
+    CodexResearchRuntimeMixin,
     CodexRuntimeHomeMixin,
     CodexRuntimeConfigMixin,
     CodexCommandPathMixin,
@@ -172,6 +175,7 @@ class CodexProviderAdapter(
 ):
     adapter_id = "codex-app-server"
     adapter_version = "2"
+    research_runtime_kind = RESEARCH_NATIVE_WEB_RUNTIME
     synchronizes_runtime_skills = True
 
     def __init__(

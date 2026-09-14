@@ -13,12 +13,19 @@ export function isResearchRunner(agentTypeId: string | null | undefined): boolea
 export function providerSupportsResearch(provider: ProviderItem | null | undefined): boolean {
   if (
     provider?.provider_role !== "runtime_engine"
-    || provider.runtime_engine_id !== "maverick-tool-loop"
-    || provider.execution_family !== "maverick_agent"
     || provider.status !== "active"
     || provider.selectable === false
     || provider.full_workspace_status !== "available"
     || provider.agentic_effective_capabilities?.status !== "active"
+    || provider.research_compatible !== true
+  ) {
+    return false;
+  }
+  if (provider.execution_family === "native_agent") {
+    return true;
+  }
+  if (
+    provider.execution_family !== "maverick_agent"
     || provider.agentic_effective_capabilities.capabilities.tool_orchestration !== true
     || provider.agentic_effective_capabilities.capabilities.mcp !== true
   ) {

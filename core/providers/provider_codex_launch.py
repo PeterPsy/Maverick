@@ -11,7 +11,6 @@ import subprocess
 from typing import TYPE_CHECKING, Callable
 
 from core.providers.errors import ProviderLaunchError
-from core.providers.codex_device_use_home import device_use_workdir
 from core.providers.models import (
     ProviderCapabilitySet,
     ProviderDefinition,
@@ -24,6 +23,7 @@ from core.providers.provider_codex_reasoning import (
     codex_default_reasoning_effort,
     normalize_codex_model_options,
 )
+from core.providers.provider_codex_research import codex_launch_scope
 from core.runtime.execution_events import RuntimeExecutionEventSink
 from core.runtime.runtime_session import RuntimeSessionRecord
 
@@ -303,20 +303,20 @@ class CodexLaunchMixin:
         """Build one runtime launch spec for the local Codex backend."""
         self.validate_backend()
         selected_model, selected_reasoning = self.validate_model_settings(model_id, model_reasoning_effort)
+        scope = codex_launch_scope(session)
         runtime_root = Path(session.runtime_root)
         workspace_root = Path(session.workspace_root)
-        workdir = device_use_workdir(session, runtime_root)
         host_command = self._runtime_command(self.codex_command)
         runtime_bin = self._prepare_runtime_bin(session, host_command=host_command)
         runtime_home = self._runtime_home(session)
         env = self._build_subprocess_env(
-            workdir=workdir,
-            workspace_root=workspace_root,
+            workdir=scope.workdir,
+            workspace_root=scope.workspace_root,
             runtime_root=runtime_root,
             runtime_home=runtime_home,
             runtime_bin=runtime_bin,
             session=session,
-            execution_mode=session.effective_mode,
+            execution_mode=scope.command_execution_mode,
             secret_env=secret_env,
         )
         runtime_home = self._prepare_runtime_home(
@@ -329,26 +329,24 @@ class CodexLaunchMixin:
         return RuntimeBackendLaunchSpec(
             provider_id="codex",
             command=self._build_command(
-                workspace_root=workspace_root,
+                workspace_root=scope.workspace_root,
                 runtime_root=runtime_root,
                 runtime_home=runtime_home,
                 runtime_bin=runtime_bin,
-                execution_mode=session.effective_mode,
+                execution_mode=scope.command_execution_mode,
                 host_command=host_command,
-                require_code_mode_host=getattr(session, "device_use_binding", None) is not None,
+                require_code_mode_host=scope.require_code_mode_host,
             ),
             env_overrides=env,
             credential_binding_id=credential_binding_id,
             resolved_secret_refs=list(resolved_secret_refs or []),
-            working_directory=str(workdir),
+            working_directory=str(scope.workdir),
             execution_mode=session.effective_mode,
-            readable_roots=self._readable_roots(
-                workspace_root=workspace_root,
-                execution_mode=session.effective_mode,
+            readable_roots=scope.readable_roots or self._readable_roots(
+                workspace_root=workspace_root, execution_mode=session.effective_mode,
             ),
-            writable_roots=self._writable_roots(
-                workspace_root=workspace_root,
-                execution_mode=session.effective_mode,
+            writable_roots=scope.writable_roots or self._writable_roots(
+                workspace_root=workspace_root, execution_mode=session.effective_mode,
             ),
         )
 

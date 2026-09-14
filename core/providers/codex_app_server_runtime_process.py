@@ -90,9 +90,7 @@ def execute_codex_app_server_turn(
                 "provider_thread_id": provider_thread_id,
             },
         )
-    device_use, turn_input = codex_turn_input(
-        session, runtime, input_text, invoked_skills
-    )
+    device_use, research, turn_input = codex_turn_input(session, runtime, input_text, invoked_skills)
     if on_provider_startup_event is not None:
         on_provider_startup_event("event_sink_reset_started", {})
     event_sink_reset_started_at = time.perf_counter()
@@ -152,6 +150,7 @@ def execute_codex_app_server_turn(
             "turn/start",
             codex_turn_start_params(
                 device_use=device_use,
+                research=research,
                 provider_thread_id=provider_thread_id,
                 turn_input=turn_input,
                 launch_spec=launch_spec,

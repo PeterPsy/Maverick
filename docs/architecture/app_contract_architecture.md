@@ -2832,7 +2832,13 @@ may resolve only Browser's exact `web_search` and `web_open` MCP handles, both
 declared read effects backed by isolated ephemeral Browser sessions. Browser
 egress validation, executable-closure audit, result classification, and live
 authority checks still apply; no descriptor may broaden Research into
-interactive browsing, workspace reads, writes, shell, or delegation.
+interactive browsing, workspace reads, writes, shell, or delegation. This is
+the hosted API implementation of the central Research profile. Native runtimes
+are not given these Maverick handles: they are selectable only when their
+adapter declares and enforces the reviewed native web-only contract. Codex then
+receives only its provider-native live web search in an ephemeral, instruction-
+free, auth-only runtime; unreviewed native adapters remain unavailable for
+Research.
 
 Full-workspace hosted profiles reach CLI and MCP through discovery-first Core
 wrappers rather than embedding every enabled app schema in the provider's base

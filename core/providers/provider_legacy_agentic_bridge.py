@@ -44,6 +44,9 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
         self.runtime_engine_id = adapter.provider_definition().provider_id
         self.adapter_id = str(getattr(adapter, "adapter_id", self.adapter_id))
         self.adapter_version = str(getattr(adapter, "adapter_version", self.adapter_version))
+        self.research_runtime_kind = str(
+            getattr(adapter, "research_runtime_kind", "") or ""
+        )
         self.local_process_lifecycle = self
 
     async def validate(self, context: RuntimeValidationContext) -> RuntimeHealth:

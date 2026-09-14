@@ -65,6 +65,9 @@ class NativeAgentRuntimeController:
         self.runtime_engine_id = installation.manifest.runtime_engine_id
         self.adapter_id = installation.manifest.adapter_id
         self.adapter_version = installation.manifest.adapter_version
+        self.research_runtime_kind = str(
+            getattr(engine_adapter, "research_runtime_kind", "") or ""
+        )
         self.local_process_lifecycle = (
             self
             if engine_adapter.local_process_lifecycle is not None

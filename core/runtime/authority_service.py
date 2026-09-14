@@ -26,6 +26,7 @@ from core.runtime.execution_binding import canonical_digest
 from core.runtime.remote_agentic_admission import require_remote_agentic_authority
 from core.runtime.research_runtime import (
     isolate_research_authority,
+    research_runtime_kind,
     research_tool_candidates,
     runtime_session_is_research,
     validate_research_authority,
@@ -94,8 +95,10 @@ def resolve_runtime_authority_snapshot(
             tuple(handle_resolver(binding)) if callable(handle_resolver) else ()
         )
     if runtime_session_is_research(session):
+        runtime_kind = research_runtime_kind(binding, adapter)
         currently_authorized_tool_handles = research_tool_candidates(
-            currently_authorized_tool_handles
+            currently_authorized_tool_handles,
+            runtime_kind=runtime_kind,
         )
     active_provider_store = provider_store or state.provider_store
     actor_allowed, actor_revision = live_runtime_actor_policy(
@@ -117,8 +120,11 @@ def resolve_runtime_authority_snapshot(
         adapter_identity_digest=adapter_identity_digest,
     )
     if runtime_session_is_research(session):
-        authority = isolate_research_authority(authority)
-        validate_research_authority(binding, authority)
+        authority = isolate_research_authority(
+            authority,
+            runtime_kind=runtime_kind,
+        )
+        validate_research_authority(binding, authority, adapter=adapter)
     return authority
 
 
@@ -186,7 +192,7 @@ def revalidate_runtime_authority_snapshot(
     if effective_mode != authority.execution_mode:
         raise AgenticRuntimeError("runtime_execution_mode_changed")
     if runtime_session_is_research(session):
-        validate_research_authority(binding, authority)
+        validate_research_authority(binding, authority, adapter=adapter)
     return authority
 
 
@@ -294,7 +300,8 @@ def preflight_execution_binding_context(
     handle_resolver = getattr(adapter, "currently_authorized_tool_handles", None)
     handles = tuple(handle_resolver(binding)) if callable(handle_resolver) else ()
     if runtime_profile == "research":
-        handles = research_tool_candidates(handles)
+        runtime_kind = research_runtime_kind(binding, adapter)
+        handles = research_tool_candidates(handles, runtime_kind=runtime_kind)
     authority = resolve_effective_runtime_authority(
         state.provider_store,
         binding=binding,
@@ -308,8 +315,11 @@ def preflight_execution_binding_context(
         actor_policy_revision=actor_policy_revision,
     )
     if runtime_profile == "research":
-        authority = isolate_research_authority(authority)
-        validate_research_authority(binding, authority)
+        authority = isolate_research_authority(
+            authority,
+            runtime_kind=runtime_kind,
+        )
+        validate_research_authority(binding, authority, adapter=adapter)
     validate_effective_context_capabilities(
         authority,
         invoked_skills=invoked_skills,

@@ -83,6 +83,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           full_workspace_status: profile.full_workspace_status,
           full_workspace_contract_revision: profile.full_workspace_contract_revision || null,
           harness_recipe: profile.harness_recipe || null,
+          research_compatible: profile.research_compatible === true,
           provider_detail: agenticProviderDetail(profile),
           profile_detail: agenticProfileDetail(profile),
           legacy_selection_ids: selectionIds,

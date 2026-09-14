@@ -86,6 +86,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             "codex-baseline-v21",
         )
         self.assertEqual(profile["harness_recipe"]["id"], "codex-native-app-server")
+        self.assertTrue(profile["research_compatible"])
         self.assertTrue(profile["selectable"])
         admin = workspace_agentic_admin_status(state, workspace_id="default")["items"][0]
         self.assertTrue(admin["supported_reasoning_efforts"])
@@ -135,6 +136,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         )
         self.assertEqual(profile["full_workspace_status"], "available")
         self.assertTrue(profile["capabilities"]["tool_orchestration"])
+        self.assertTrue(profile["research_compatible"])
         self.assertTrue(profile["selectable"])
         self.assertIsNone(profile["unavailable_reason"])
 

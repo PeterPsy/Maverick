@@ -73,6 +73,7 @@ class AgenticProfileApiTest(unittest.TestCase):
         self.assertEqual(profile["containment_status"], "GO")
         self.assertEqual(profile["full_workspace_status"], "available")
         self.assertTrue(profile["capabilities"]["tool_orchestration"])
+        self.assertTrue(profile["research_compatible"])
         effective = profile["effective_capabilities"]
         self.assertEqual(effective["status"], "active")
         self.assertTrue(effective["capabilities"]["skill_catalog"])

@@ -1887,14 +1887,20 @@ Chat may request the fixed `runtime_profile=research` only for a new agentic
 session in an effectively full-access workspace. This profile is a Core-owned
 runner, not an Agents catalog entity. Its semantic envelope excludes platform,
 workspace, agent, skill, attachment, app-reference, filesystem, shell, and
-inter-agent context; only the current conversation and exact Browser
-`web_search`/`web_open` schemas and results may reach the provider. Core narrows
-and revalidates live authority to those two read-only handles on every turn and
-rejects any attempt to add workspace context. A new chat creates a fresh
-provider session, while later turns retain only that chat's provider history.
-This removes Maverick-specific bias as far as the integration can control it;
-provider and service safety policy remains outside this profile and is never
-represented as removable.
+inter-agent context. Hosted Maverick-agent profiles inherit the exact Browser
+`web_search`/`web_open` surface. A native adapter may opt in only by declaring
+the reviewed `native-web-only-v1` contract and enforcing its provider-native
+equivalent; Codex uses an ephemeral auth-only app-server thread with native live
+web search, an empty sandboxed workdir, and no base/developer instructions,
+project documents, environment context, skills, MCP servers, local tools, or
+Maverick runtime token. Core narrows and revalidates live authority on every
+turn and rejects unknown native transports or attempts to add workspace
+context. Thus new hosted API models inherit Research automatically, while a new
+CLI/native adapter remains fail-closed until it can prove the same isolation.
+A new chat creates a fresh provider session, while later turns retain only that
+chat's provider history. This removes Maverick-specific bias as far as the
+integration can control it; provider and service safety policy remains outside
+this profile and is never represented as removable.
 
 Turn submission is implemented through a dedicated runtime service so future CLI, MCP, WebSocket, or automation surfaces can reuse the same orchestration without embedding execution logic in HTTP route handlers.
 

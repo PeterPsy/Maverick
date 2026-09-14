@@ -9,6 +9,8 @@ from core.providers.errors import AgenticRuntimeError
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.provider_input_context import runtime_provider_input_sources
 from core.runtime.research_runtime import (
+    RESEARCH_HOSTED_WEB_RUNTIME,
+    RESEARCH_NATIVE_WEB_RUNTIME,
     RESEARCH_WEB_TOOL_HANDLES,
     assert_research_runtime_input_allowed,
     isolate_research_authority,
@@ -28,16 +30,30 @@ from tests.support.hosted_agentic_harness import HostedAgenticHarness
 class ResearchRuntimeTest(unittest.TestCase):
     @staticmethod
     def research_catalog() -> RuntimeToolCatalog:
-        return RuntimeToolCatalog(
-            tuple(
+        descriptors = []
+        for index, handle in enumerate(RESEARCH_WEB_TOOL_HANDLES):
+            field = "query" if handle.endswith("web_search") else "url"
+            schema = {
+                "type": "object",
+                "properties": {
+                    field: {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500 if field == "query" else 4096,
+                    }
+                },
+                "required": [field],
+                "additionalProperties": False,
+            }
+            descriptors.append(
                 RuntimeToolDescriptor(
                     provider_name=f"research_tool_{index}",
                     handle=handle,
                     surface_kind="mcp",
                     source_id=handle.removeprefix("mcp:"),
                     description="Read the public web.",
-                    input_schema={"type": "object"},
-                    original_input_schema={"type": "object"},
+                    input_schema=schema,
+                    original_input_schema=schema,
                     output_schema=None,
                     effect_class="read",
                     supports_idempotency=False,
@@ -47,8 +63,9 @@ class ResearchRuntimeTest(unittest.TestCase):
                     schema_trust_level="trusted_platform",
                     reviewed_schema_component="tool-schema-catalog",
                 )
-                for index, handle in enumerate(RESEARCH_WEB_TOOL_HANDLES)
             )
+        return RuntimeToolCatalog(
+            tuple(descriptors)
         )
 
     def test_policy_and_live_authority_are_narrowed_to_web_reads(self) -> None:
@@ -80,7 +97,8 @@ class ResearchRuntimeTest(unittest.TestCase):
                     shell=True,
                     app_references=True,
                 ),
-            )
+            ),
+            runtime_kind=RESEARCH_HOSTED_WEB_RUNTIME,
         )
         self.assertEqual(authority.allowed_tool_handles, RESEARCH_WEB_TOOL_HANDLES)
         self.assertTrue(authority.allowed_capabilities.mcp)
@@ -89,10 +107,56 @@ class ResearchRuntimeTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.filesystem_write)
         self.assertFalse(authority.allowed_capabilities.shell)
         self.assertFalse(authority.allowed_capabilities.app_references)
-        validate_research_authority(
-            replace(harness.binding, runtime_engine_id="maverick-tool-loop"),
-            authority,
+        binding = replace(
+            harness.binding,
+            runtime_engine_id="maverick-tool-loop",
+            execution_family="maverick_agent",
         )
+        validate_research_authority(
+            binding,
+            authority,
+            adapter=SimpleNamespace(
+                runtime_engine_id=binding.runtime_engine_id,
+                adapter_id=binding.adapter_id,
+                research_runtime_kind=RESEARCH_HOSTED_WEB_RUNTIME,
+            ),
+        )
+
+    def test_native_research_authority_has_no_maverick_tools_or_context(self) -> None:
+        harness = HostedAgenticHarness(self)
+        binding = replace(
+            harness.binding,
+            runtime_engine_id="codex",
+            adapter_id="codex-app-server",
+            model_provider_id="codex",
+            provider_protocol="codex-app-server-stdio",
+            execution_family="native_agent",
+        )
+        authority = isolate_research_authority(
+            harness.authority,
+            runtime_kind=RESEARCH_NATIVE_WEB_RUNTIME,
+        )
+        adapter = SimpleNamespace(
+            runtime_engine_id="codex",
+            adapter_id="codex-app-server",
+            research_runtime_kind=RESEARCH_NATIVE_WEB_RUNTIME,
+        )
+
+        self.assertEqual(authority.allowed_tool_handles, ())
+        self.assertFalse(authority.allowed_capabilities.tool_orchestration)
+        self.assertFalse(authority.allowed_capabilities.mcp)
+        self.assertFalse(authority.allowed_capabilities.cli)
+        self.assertFalse(authority.allowed_capabilities.filesystem_read)
+        self.assertFalse(authority.allowed_capabilities.filesystem_write)
+        self.assertFalse(authority.allowed_capabilities.shell)
+        validate_research_authority(binding, authority, adapter=adapter)
+
+        adapter.research_runtime_kind = ""
+        with self.assertRaisesRegex(
+            AgenticRuntimeError,
+            "research_runtime_unavailable",
+        ):
+            validate_research_authority(binding, authority, adapter=adapter)
 
     def test_provider_catalog_uses_only_neutral_web_tool_names(self) -> None:
         session = SimpleNamespace(runtime_profile="research")
@@ -100,6 +164,33 @@ class ResearchRuntimeTest(unittest.TestCase):
         self.assertEqual(
             tuple(item.provider_name for item in catalog.descriptors),
             ("web_search", "web_open"),
+        )
+        self.assertTrue(
+            all(item.schema_owner_kind == "core" for item in catalog.descriptors)
+        )
+        self.assertTrue(
+            all(
+                item.reviewed_schema_component == "tool-schema-catalog"
+                for item in catalog.descriptors
+            )
+        )
+
+    def test_provider_catalog_rejects_drifted_browser_schema(self) -> None:
+        session = SimpleNamespace(runtime_profile="research")
+        catalog = self.research_catalog()
+        drifted = replace(
+            catalog,
+            descriptors=(
+                replace(catalog.descriptors[0], original_input_schema={"type": "object"}),
+                catalog.descriptors[1],
+            ),
+        )
+
+        projected = research_provider_catalog(session, drifted)
+
+        self.assertEqual(
+            tuple(item.provider_name for item in projected.descriptors),
+            ("web_open",),
         )
 
     def test_runtime_profile_round_trips_and_legacy_records_default_to_workspace(self) -> None:

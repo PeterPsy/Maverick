@@ -19,6 +19,7 @@ from core.providers.provider_codex_reasoning import (
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.workspace_api_token import issue_workspace_api_token
+from core.runtime.research_runtime import runtime_session_is_research
 
 if TYPE_CHECKING:
     from core.runtime.execution import RuntimeExecutionResult
@@ -261,6 +262,16 @@ class CodexCommandMixin:
 
         env["CODEX_HOME"] = str(runtime_home)
         env["HOME"] = str(runtime_home)
+        if runtime_session_is_research(session):
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            env["TMPDIR"] = str(runtime_root)
+            env["TMP"] = str(runtime_root)
+            env["TEMP"] = str(runtime_root)
+            env.pop("PYTHONPATH", None)
+            for key in tuple(env):
+                if key.startswith("MAVERICK_"):
+                    env.pop(key, None)
+            return env
         env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
         env["MAVERICK_WORKSPACE_ID"] = session.workspace_id
         env["MAVERICK_RUNTIME_ROOT"] = str(runtime_root)

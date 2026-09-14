@@ -80,6 +80,7 @@ from core.runtime.authority import (
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
+from core.runtime.research_runtime import research_runtime_kind
 from core.runtime.routing import resolve_runtime_execution_mode
 from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.usage.quota import record_provider_quota_snapshots
@@ -729,6 +730,17 @@ def workspace_agentic_profile_status(
             if selectable
             else None
         )
+        try:
+            research_compatible = bool(
+                research_runtime_kind(
+                    definition,
+                    registry.get_agentic_runtime_adapter(
+                        definition.runtime_engine_id
+                    ),
+                )
+            )
+        except ProviderError:
+            research_compatible = False
         items.append(
             {
                 "workspace_profile_binding_id": binding.binding_id,
@@ -818,6 +830,7 @@ def workspace_agentic_profile_status(
                 "max_estimated_cost_microusd": binding.workspace_policy_ceiling.max_estimated_cost_microusd,
                 "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
                 "effective_capabilities": effective_capabilities,
+                "research_compatible": research_compatible,
             }
         )
     items.sort(key=lambda item: (not bool(item["is_default"]), str(item["display_name"])))

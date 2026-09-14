@@ -59,6 +59,7 @@ describe("genericAgenticRuntimeConfig", () => {
     const provider = agenticProvider({
       runtime_engine_id: "maverick-tool-loop",
       execution_family: "maverick_agent",
+      research_compatible: true,
       full_workspace_status: "available",
       agentic_effective_tool_handle_mode: "all_currently_authorized",
       agentic_effective_capabilities: {
@@ -103,6 +104,51 @@ describe("genericAgenticRuntimeConfig", () => {
       source_app_id: "chat",
       system_prompt: "",
       title: "Research",
+    });
+  });
+
+  it("builds the same Research profile for a compatible native model", () => {
+    const provider = agenticProvider({
+      provider_id: "codex",
+      runtime_engine_id: "codex",
+      execution_family: "native_agent",
+      research_compatible: true,
+      full_workspace_status: "available",
+      agentic_effective_capabilities: {
+        status: "active",
+        reason_code: null,
+        snapshot_digest: "codex-research-capabilities",
+        execution_mode: "full-access",
+        capabilities: {
+          streaming: true,
+          tool_orchestration: true,
+          cli: true,
+          mcp: true,
+          skill_catalog: true,
+          filesystem_list: true,
+          filesystem_read: true,
+          filesystem_write: true,
+          shell: true,
+          interrupt: true,
+          same_turn_steering: true,
+          recovery: true,
+          confirmation_resume: true,
+          provider_private_state: true,
+          attachment_modalities: ["file"],
+          app_references: true,
+          confirmations: true,
+        },
+      },
+    });
+
+    expect(researchRuntimeConfig(provider, "xhigh")).toMatchObject({
+      agent_id: "research",
+      runtime_profile: "research",
+      requested_mode: "full-access",
+      workspace_profile_binding_id: "binding-google-gemini-35-pro",
+      reasoning_effort: "xhigh",
+      system_prompt: "",
+      skill_ids: [],
     });
   });
 });

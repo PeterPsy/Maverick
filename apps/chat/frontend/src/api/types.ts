@@ -143,6 +143,7 @@ export type ProviderItem = {
   full_workspace_status?: "available" | "unavailable";
   full_workspace_contract_revision?: string | null;
   harness_recipe?: AgenticHarnessRecipe | null;
+  research_compatible?: boolean;
   provider_detail?: string | null;
   profile_detail?: string | null;
   legacy_selection_ids?: string[];
@@ -356,6 +357,7 @@ export type AgenticProfileItem = {
   effective_tool_handle_mode?: "none" | "exact" | "all_currently_authorized";
   max_estimated_cost_microusd?: number | null;
   effective_capabilities?: AgenticEffectiveCapabilities;
+  research_compatible?: boolean;
 };
 
 export type DependencyProviderCandidate = {

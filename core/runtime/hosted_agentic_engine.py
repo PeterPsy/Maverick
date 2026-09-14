@@ -33,6 +33,7 @@ from core.runtime.provider_private_state import (
 from core.runtime.provider_step_admission import provider_step_admission_reason
 from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.service import transition_runtime_turn
+from core.runtime.research_runtime import RESEARCH_HOSTED_WEB_RUNTIME
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class HostedAgenticEngineAdapter:
     """Process-independent adapter sharing one policy/tool loop across providers."""
 
     local_process_lifecycle = None
+    research_runtime_kind = RESEARCH_HOSTED_WEB_RUNTIME
 
     def __init__(
         self,

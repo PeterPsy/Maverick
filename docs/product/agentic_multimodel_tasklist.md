@@ -120,13 +120,14 @@ hosted adapter follows the same universal loop and full-access contract.
 
 ## Validation record
 
-Current 2026-09-15 validation passes 1,233 root unit tests with five skips, 387
+Current 2026-09-15 validation passes 1,232 root unit tests with five skips, 387
 provider tests, 208 runtime-state tests, 172 runtime-tool tests, 26 integration
 recovery tests, 28 egress tests and 350 API tests. The final complete fast run
 reached every root and app shard. Its persistent failures remain the three
 existing repository convention baselines for file-size/layout/reference
-budgets. One Chat cleanup race failed while app shards ran concurrently and
-passed immediately in a focused rerun.
+budgets. One Browser check could not resolve the primary checkout's
+`node_modules` from the detached validation worktree and passed immediately in
+the primary checkout.
 
 The controlled in-flight recovery test interrupts the OpenRouter loop after a
 filesystem result and provider step are durably committed, then enters

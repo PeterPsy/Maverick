@@ -20,7 +20,6 @@ import {
   resumeInterAgentRun,
   sendInterAgentDirective,
   selectedDependencyProviderAppId,
-  selectedSharedDependencyProviderAppId,
   synthesizeSpeech,
   transcribeSpeech,
   transcribeSpeechBlob,
@@ -65,29 +64,6 @@ function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPay
         stale_provider_app_ids: [],
         blocked_reason: null,
       },
-      {
-        alias: "agent-prompt-materializer",
-        interface: "agent.prompt-materializer",
-        version: "^1",
-        required: false,
-        cardinality: "one",
-        description: "Agent prompt materializer",
-        status,
-        candidates: [
-          {
-            app_id: "agents",
-            name: "Agents",
-            version: "0.1.0",
-            interface: "agent.prompt-materializer",
-            interface_version: "1",
-            description: "Agent prompt materializer",
-            surfaces: ["backend"],
-          },
-        ],
-        selected_provider_app_ids: selectedProviderAppIds,
-        stale_provider_app_ids: [],
-        blocked_reason: null,
-      },
     ],
   };
 }
@@ -113,17 +89,6 @@ describe("Chat API dependency helpers", () => {
     expect(selectedDependencyProviderAppId(payload, "agent-catalog")).toBe("");
   });
 
-  it("uses one provider only when catalog and prompt materializer both resolve", () => {
-    expect(selectedSharedDependencyProviderAppId(dependencyPayload(["agents"]), ["agent-catalog", "agent-prompt-materializer"])).toBe("agents");
-    expect(selectedSharedDependencyProviderAppId(dependencyPayload([]), ["agent-catalog", "agent-prompt-materializer"])).toBe("agents");
-
-    const payload = dependencyPayload([]);
-    payload.dependencies[1].status = "missing_provider";
-    payload.dependencies[1].candidates = [];
-    payload.dependencies[1].blocked_reason = "No prompt materializer.";
-
-    expect(selectedSharedDependencyProviderAppId(payload, ["agent-catalog", "agent-prompt-materializer"])).toBe("");
-  });
 });
 
 describe("deleteProject", () => {

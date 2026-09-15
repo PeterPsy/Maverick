@@ -140,6 +140,19 @@ class SkillsAppTestCase(unittest.TestCase):
                 self.assertNotIn("app_contract_architecture", content)
                 self.assertNotIn("app_sdk_architecture", content)
 
+    def test_prompt_library_is_one_on_demand_read_only_template(self) -> None:
+        content = (
+            Path(__file__).resolve().parents[1]
+            / "skills"
+            / "prompt-library"
+            / "SKILL.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("/api/prompts/search", content)
+        self.assertIn("/api/prompts/<id>", content)
+        self.assertIn("never import or cache the full", content)
+        self.assertIn("Do not\ncall save, improve", content)
+
     def test_app_creator_requires_an_app_owned_compact_icon(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         content = (app_root / "skills" / "maverick-app-creator" / "SKILL.md").read_text(encoding="utf-8")

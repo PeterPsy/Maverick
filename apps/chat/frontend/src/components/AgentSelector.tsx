@@ -28,7 +28,7 @@ function normalizeAgentQuery(value: string) {
 }
 
 function normalizedAgentSearchText(agent: AgentTypeSummary) {
-  return [agent.name, agent.description, agent.role_id].join(" ").toLowerCase();
+  return [agent.name, agent.description].join(" ").toLowerCase();
 }
 
 function agentMatchesQuery(agent: AgentTypeSummary, normalizedQuery: string) {

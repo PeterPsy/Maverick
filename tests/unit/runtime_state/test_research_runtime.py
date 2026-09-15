@@ -140,6 +140,7 @@ class ResearchRuntimeTest(unittest.TestCase):
             runtime_engine_id="codex",
             adapter_id="codex-app-server",
             research_runtime_kind=RESEARCH_NATIVE_WEB_RUNTIME,
+            research_runtime_available=lambda _binding: True,
         )
 
         self.assertEqual(authority.allowed_tool_handles, ())
@@ -151,6 +152,14 @@ class ResearchRuntimeTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.shell)
         validate_research_authority(binding, authority, adapter=adapter)
 
+        adapter.research_runtime_available = lambda _binding: False
+        with self.assertRaisesRegex(
+            AgenticRuntimeError,
+            "research_runtime_unavailable",
+        ):
+            validate_research_authority(binding, authority, adapter=adapter)
+
+        adapter.research_runtime_available = lambda _binding: True
         adapter.research_runtime_kind = ""
         with self.assertRaisesRegex(
             AgenticRuntimeError,

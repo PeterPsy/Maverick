@@ -18,6 +18,7 @@ tool_actions = {
     "agents_catalog_compact": "catalog.compact",
     "agents_get_agent_definition": "get_agent_definition",
     "agents_upsert_agent_definition": "upsert_agent_definition",
+    "agents_delete_agent_definition": "delete_agent_definition",
     "agents_reference_manifest": "references.manifest",
     "agents_reference_search": "references.search",
     "agents_reference_resolve": "references.resolve",

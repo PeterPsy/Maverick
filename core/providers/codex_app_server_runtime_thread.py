@@ -14,7 +14,6 @@ from core.providers.codex_app_server_runtime_resume import (
     local_resume_archive_problem,
     resume_error_is_missing_thread,
 )
-from core.providers.codex_app_server_runtime_thread_params import codex_initialize_params
 from core.providers.codex_app_server_runtime_thread_params import codex_thread_params as _thread_params
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
@@ -28,6 +27,8 @@ from core.providers.codex_prompt_budget import configure_codex_prompt_budget
 from core.providers.errors import ProviderLaunchError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.provider_codex import remove_codex_system_skills
+from core.providers.codex_research_initialize import initialize_codex_runtime
+from core.runtime.research_runtime import runtime_session_is_research
 from core.runtime.process_control import (
     configure_runtime_process_oom_score,
     register_runtime_process,
@@ -76,6 +77,7 @@ def _ensure_runtime(
                 or f"{session.runtime_root}/codex-home"
             ),
             device_use_binding=getattr(session, "device_use_binding", None),
+            research=runtime_session_is_research(session),
         )
         runtime.reader_thread = threading.Thread(target=_reader_loop, args=(runtime,), daemon=True, name=f"codex-app-server-{session.session_id}")
         _RUNTIMES[session.session_id] = runtime
@@ -84,10 +86,10 @@ def _ensure_runtime(
         start_device_use_request_worker(runtime)
 
     try:
-        _send_request(
+        initialize_codex_runtime(
             runtime,
-            "initialize",
-            codex_initialize_params(session=session),
+            session=session,
+            send_request=_send_request,
             timeout=APP_SERVER_INITIALIZE_TIMEOUT_SECONDS,
         )
     except Exception:

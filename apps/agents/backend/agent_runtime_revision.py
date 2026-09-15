@@ -1,4 +1,4 @@
-"""Stable revision over every field used to materialize an agent runtime."""
+"""Stable revision for a self-contained agent definition."""
 
 from __future__ import annotations
 
@@ -7,31 +7,22 @@ import json
 from typing import Any
 
 
-def agent_runtime_revision(
-    *,
-    agent_type: dict[str, Any],
-    role: dict[str, Any],
-    common_prompt: str,
-) -> str:
+def agent_runtime_revision(agent: dict[str, Any]) -> str:
     document = {
-        "agent_type": {
-            key: agent_type.get(key)
-            for key in (
-                "id",
-                "name",
-                "description",
-                "role_id",
-                "skill_ids",
-                "skill_activation_mode",
-                "trace_verbosity",
-                "enabled",
-            )
-        },
-        "role": {
-            key: role.get(key)
-            for key in ("id", "name", "description", "instructions")
-        },
-        "common_prompt": str(common_prompt or ""),
+        key: agent.get(key)
+        for key in (
+            "id",
+            "name",
+            "description",
+            "instructions",
+            "skill_ids",
+            "enabled",
+        )
     }
-    encoded = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    encoded = json.dumps(
+        document,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
     return f"sha256:{hashlib.sha256(encoded.encode('utf-8')).hexdigest()}"

@@ -56,7 +56,7 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                     "status": "resolved",
                     "selected_provider_app_ids": ["agents"],
                 }
-                for alias in ("agent-catalog", "agent-prompt-materializer")
+                for alias in ("agent-catalog",)
             ]
         }
 
@@ -86,6 +86,7 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                             "id": "agent-type-coder",
                             "name": "Coder Specialist",
                             "description": "Implements and tests code changes.",
+                            "instructions": "You are the server-owned coder specialist.",
                             "skill_ids": ["storage-ops"],
                             "skill_activation_mode": "explicit",
                             "enabled": True,
@@ -94,12 +95,7 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                         },
                     }
                 }
-            return {
-                "json": {
-                    "rendered": "You are the server-owned coder specialist.",
-                    "revision_id": "revision-1",
-                }
-            }
+            raise AssertionError(f"unexpected action: {action}")
 
         with (
             patch("core.api.orchestration_agent_catalog.resolve_app_dependencies", return_value=dependencies),
@@ -159,7 +155,7 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                     "status": "resolved",
                     "selected_provider_app_ids": ["agents"],
                 }
-                for alias in ("agent-catalog", "agent-prompt-materializer")
+                for alias in ("agent-catalog",)
             ]
         }
         compact_calls = 0
@@ -195,6 +191,7 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                             "id": "agent-type-coder",
                             "name": "Coder Specialist",
                             "description": "Implements code.",
+                            "instructions": "Coder revision 2.",
                             "skill_ids": ["storage"],
                             "skill_activation_mode": "explicit",
                             "enabled": True,
@@ -202,7 +199,7 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                         },
                     }
                 }
-            return {"json": {"rendered": "Coder revision 2.", "revision_id": "revision-2"}}
+            raise AssertionError(f"unexpected action: {action}")
 
         with (
             patch("core.api.orchestration_agent_catalog.resolve_app_dependencies", return_value=dependencies),

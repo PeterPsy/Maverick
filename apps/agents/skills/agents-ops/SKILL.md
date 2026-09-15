@@ -1,12 +1,14 @@
 ---
 name: agents-ops
-description: Manage Maverick agent roles, agent types, prompt previews, and agent catalog data through the Agents app.
+description: Manage self-contained Maverick custom agent definitions through the Agents app.
 ---
 
 # Agents Ops
 
-Use the Agents app surfaces to inspect and manage workspace agent definitions.
+Use `app.agents.agents_catalog_compact` to browse custom agents and
+`app.agents.agents_get_agent_definition` to read one. Create or update exactly
+one record with `app.agents.agents_upsert_agent_definition`; its behavior is
+only `instructions` plus explicitly selected `skill_ids`. Use
+`app.agents.agents_delete_agent_definition` to delete it.
 
-Prefer `app.agents.maverick_agents_app` with no arguments for the compact operation manifest, `app.agents.agents_catalog_compact` for catalog reads, and `app.agents.agents_upsert_agent_definition` for create/update work. Keep role and agent type changes scoped to workspace-owned agents data, and do not edit core runtime internals to change agent behavior.
-
-Agent execution requires the generic Maverick runtime launch contract. Until that contract is available, treat runtime start and delegation actions as unavailable instead of faking live execution.
+Free Agent and Research are fixed Chat runners, not catalog records.

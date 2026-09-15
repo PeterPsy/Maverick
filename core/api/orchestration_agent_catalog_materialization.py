@@ -128,35 +128,24 @@ def _materialize_agent_snapshot(
         raise CatalogRevisionChanged(agent_type_id)
     if not _compact_matches_definition(compact_item, definition):
         raise CatalogRevisionChanged(agent_type_id)
-    prompt_payload = invoke_agent_provider(
-        source,
-        alias="agent-prompt-materializer",
-        body={"action": "preview_prompt", "agent_type_id": agent_type_id},
-    )
     expected_revision = str(compact_item.get("revision_id") or "").strip()
     definition_revision = str(definition.get("revision_id") or "").strip()
-    prompt_revision = str(prompt_payload.get("revision_id") or "").strip()
-    if expected_revision and (
-        definition_revision != expected_revision or prompt_revision != expected_revision
-    ):
-        raise CatalogRevisionChanged(agent_type_id)
-    if definition_revision and prompt_revision and definition_revision != prompt_revision:
+    if expected_revision and definition_revision != expected_revision:
         raise CatalogRevisionChanged(agent_type_id)
     return AgentParticipantSnapshot(
         agent_type_id=agent_type_id,
         label=str(definition.get("name") or agent_type_id).strip(),
         system_prompt=with_root_active_context(
-            str(prompt_payload.get("rendered") or "").strip(),
+            str(definition.get("instructions") or "").strip(),
             source.root_system_prompt,
         ),
         skill_ids=string_items(definition.get("skill_ids")),
-        skill_catalog_app_id=skill_catalog_app_id(source, definition, prompt_payload),
-        skill_activation_mode=str(definition.get("skill_activation_mode") or "implicit"),
+        skill_catalog_app_id=skill_catalog_app_id(source, definition),
+        skill_activation_mode="explicit",
         provider_id=source.provider_app_id,
         revision_id=(
             expected_revision
             or definition_revision
-            or prompt_revision
             or str(definition.get("updated_at") or "").strip()
             or None
         ),
@@ -187,7 +176,7 @@ def _catalog_from_snapshots(
     enabled_skills = EnabledWorkspaceSkillCatalog(state=CATALOG_AVAILABLE, skill_ids=())
     if requires_explicit_catalog(source.root_snapshot, items):
         try:
-            selected_skill_catalog_app_id = skill_catalog_app_id(source, {}, {})
+            selected_skill_catalog_app_id = skill_catalog_app_id(source, {})
         except InterAgentValidationError:
             enabled_skills = EnabledWorkspaceSkillCatalog(state=CATALOG_UNAVAILABLE, skill_ids=())
         else:
@@ -259,9 +248,7 @@ def _compact_revision_fields(item: dict[str, Any]) -> dict[str, Any]:
             "id",
             "name",
             "description",
-            "role_id",
             "skill_ids",
-            "skill_activation_mode",
             "enabled",
             "updated_at",
             "revision_id",
@@ -276,7 +263,7 @@ def _compact_matches_definition(compact: dict[str, Any], definition: dict[str, A
         return False
     if any(
         str(definition.get(key) or "").strip() != str(compact.get(key) or "").strip()
-        for key in ("name", "description", "skill_activation_mode")
+        for key in ("name", "description")
     ):
         return False
     return string_items(definition.get("skill_ids")) == string_items(compact.get("skill_ids"))

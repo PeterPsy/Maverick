@@ -120,7 +120,7 @@ function loadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: string, 
       }
       return {
         agent_id: definition.name,
-        agent_role_id: definition.role_id,
+        agent_role_id: "",
         agent_type_id: definition.id,
         renderedPrompt: definition.instructions || "",
         skill_catalog_app_id: "skills",

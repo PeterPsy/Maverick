@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from core.providers.service import build_resolved_runtime_backend_launch_spec, build_runtime_backend_launch_spec
-from core.providers.service import prepare_runtime_skills
 from core.runtime.turn_submission_launch_cache import (
     build_runtime_launch_context_fingerprint,
     cache_runtime_launch_context,
@@ -19,8 +18,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.service import record_runtime_event
 from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.workspace_api_token import register_workspace_api_token
-from core.skills.catalog import DEFAULT_SKILL_CATALOG_APP_ID
-from core.skills.service import list_available_workspace_skills, resolve_runtime_skills
+from core.runtime.turn_submission_skills import resolve_and_prepare_runtime_skills
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -705,32 +703,9 @@ def _build_launch_spec_for_execution(
             observability_store=state.observability_store,
         )
     launch_spec_ms = (time.perf_counter() - started_at) * 1000
-    skill_resolve_started_at = time.perf_counter()
-    skills = (
-        resolve_runtime_skills(session, start_path=state.repository_root)
-        if session.skill_ids
-        else list_available_workspace_skills(
-            workspace_id=session.workspace_id,
-            start_path=state.repository_root,
-            app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
-        )
+    skills, skill_resolve_ms, skill_prepare_ms = resolve_and_prepare_runtime_skills(
+        state, session=session, runtime_adapter=runtime_adapter
     )
-    skill_resolve_ms = (time.perf_counter() - skill_resolve_started_at) * 1000
-    skill_prepare_ms = 0.0
-    if runtime_adapter is not None and (
-        skills
-        or bool(
-            getattr(runtime_adapter, "synchronizes_runtime_skills", False)
-        )
-    ):
-        skill_prepare_started_at = time.perf_counter()
-        prepare_runtime_skills(
-            state.provider_store,
-            session=session,
-            skills=skills,
-            runtime_adapter=runtime_adapter,
-        )
-        skill_prepare_ms = (time.perf_counter() - skill_prepare_started_at) * 1000
     token = spec.env_overrides.get("MAVERICK_RUNTIME_API_TOKEN")
     if token:
         register_workspace_api_token(state.runtime_store, token)

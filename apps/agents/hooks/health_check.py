@@ -1,4 +1,4 @@
-"""Health check hook for the agents app."""
+"""Health check hook for the Agents app."""
 
 from __future__ import annotations
 
@@ -8,14 +8,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from store import list_agent_types, list_roles
+from store import list_agent_definitions
 
 
 payload = json.loads(sys.stdin.read() or "{}")
 data_root = Path(payload["data_root"])
-result = {
-    "status": "ok",
-    "role_count": len(list_roles(data_root)),
-    "agent_type_count": len(list_agent_types(data_root)),
-}
-print(json.dumps(result))
+print(json.dumps({"status": "ok", "agent_count": len(list_agent_definitions(data_root))}))

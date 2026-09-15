@@ -45,7 +45,10 @@ CODEX_RESEARCH_DISABLED_FEATURES = (
     "view_image",
     "workspace_dependencies",
 )
-CODEX_RESEARCH_ENABLED_FEATURES = ("code_mode_host",)
+CODEX_RESEARCH_ENABLED_FEATURES = (
+    "code_mode_host",
+    "skip_host_skill_discovery",
+)
 
 
 def codex_research_config() -> dict[str, Any]:
@@ -66,7 +69,10 @@ def codex_research_config() -> dict[str, Any]:
                 feature: True for feature in CODEX_RESEARCH_ENABLED_FEATURES
             },
         },
-        "skills": {"include_instructions": False},
+        "skills": {
+            "bundled": {"enabled": False},
+            "include_instructions": False,
+        },
         "tools": {
             "experimental_request_user_input": {"enabled": False},
             "update_plan": {"enabled": False},
@@ -100,7 +106,9 @@ def codex_thread_params(
             "cwd": launch_spec.working_directory,
             "approvalPolicy": "never",
             "sandbox": "read-only",
-            "ephemeral": True,
+            # Research keeps one private Codex archive per Maverick chat so a
+            # later process can resume the same isolated conversation.
+            "ephemeral": False,
             "environments": [],
             "baseInstructions": "",
             "developerInstructions": "",

@@ -960,16 +960,9 @@ async function handleAgentsBackend(route: Route) {
       exists: true,
       agent_definition: {
         ...researcherAgentSummary(),
-        role_name: "Researcher",
-        role_description: "Researches with citations.",
         instructions: "Research with citations.",
       },
     });
-    return;
-  }
-  if (body.action === "preview_prompt") {
-    expectPostBody(route, body, { action: "preview_prompt", agent_type_id: RESEARCHER_AGENT_ID });
-    await fulfillJson(route, { rendered: "Research with citations." });
     return;
   }
   await fulfillUnhandledBackend(route, "Agents backend", body);
@@ -1216,19 +1209,6 @@ function dependencyPayload() {
         blocked_reason: null,
       },
       {
-        alias: "agent-prompt-materializer",
-        interface: "agent.prompt-materializer",
-        version: "^1",
-        required: false,
-        cardinality: "one",
-        description: "Agent prompt materializer",
-        status: "resolved",
-        candidates: [{ ...agentsCandidate, interface: "agent.prompt-materializer", description: "Agent prompt materializer" }],
-        selected_provider_app_ids: ["agents"],
-        stale_provider_app_ids: [],
-        blocked_reason: null,
-      },
-      {
         alias: "text-to-speech",
         interface: "speech.synthesis",
         version: "^1",
@@ -1273,9 +1253,7 @@ function researcherAgentSummary() {
     id: RESEARCHER_AGENT_ID,
     name: "Researcher",
     description: "Researches with citations.",
-    role_id: "researcher",
     skill_ids: ["storage", "browser"],
-    trace_verbosity: "compact",
     enabled: true,
   };
 }

@@ -33,7 +33,7 @@ export function DeleteAgentTypeDialog({ agentName, deleting, onCancel, onConfirm
         <header className="modal-header">
           <div>
             <h2 id="delete-agent-title">Delete Agent</h2>
-            <p id="delete-agent-description">Remove this agent type from the workspace catalog.</p>
+            <p id="delete-agent-description">Remove this agent from the workspace catalog.</p>
           </div>
           <button className="icon-action" type="button" onClick={onCancel} aria-label="Close" disabled={deleting}>
             <X size={16} aria-hidden="true" />

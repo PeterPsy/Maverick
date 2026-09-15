@@ -77,6 +77,10 @@ class NativeAgentRuntimeController:
             getattr(engine_adapter, "requires_resolved_launch_spec", False)
         )
 
+    def research_runtime_available(self, binding: object) -> bool:
+        attest = getattr(self.engine_adapter, "research_runtime_available", None)
+        return bool(callable(attest) and attest(binding))
+
     def discover(self) -> tuple[str, str | None]:
         return self.installation.inspector.discover()
 

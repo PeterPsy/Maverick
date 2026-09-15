@@ -16,7 +16,7 @@ from core.inter_agent.models import AgentParticipantSnapshot, InterAgentParticip
 
 
 CHAT_APP_ID = "chat"
-AGENT_PROVIDER_ALIASES = ("agent-catalog", "agent-prompt-materializer")
+AGENT_PROVIDER_ALIASES = ("agent-catalog",)
 
 
 def build_orchestration_agent_catalog(

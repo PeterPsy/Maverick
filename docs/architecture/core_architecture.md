@@ -1483,7 +1483,13 @@ Creating a new empty chat thread must not preallocate or start a runtime session
 
 Runtime sessions are user-visible by default for legacy compatibility: missing `session_kind` is interpreted as `chat_root`, and missing `thread_visibility` is interpreted as `user`. Explicit `inter_agent_participant` sessions are the exception: they must be hidden, omitted visibility on a participant is normalized to `hidden`, and explicit `thread_visibility=user` is invalid for that kind. Invalid persisted visibility values fail closed and must not make a runtime session appear in user-facing thread catalogs. Sessions with `thread_visibility=hidden`, such as `inter_agent_participant` child sessions, may have turns, runtime events, provider state, and process records, but must not create a `RuntimeThreadRecord`, appear in Chat catalogs, or be opened through runtime thread APIs. Direct attempts to create or open a runtime thread for a hidden session must fail with `runtime_session_hidden`. Direct raw runtime HTTP routes and runtime session WebSocket streams must also apply server-side visibility: hidden sessions are excluded from `GET /api/runtime/sessions`, rejected from direct session, event, turn, submit-turn, cleanup, and turn-interrupt HTTP access, and rejected by `WS /ws/runtime/sessions/<session_id>`. App-owned runtime launch, interrupt, and cleanup request envelopes must apply the same hidden-session rejection and may not operate hidden inter-agent participants outside the inter-agent service.
 
-When a provider such as the built-in `agents` app is installed and enabled in the active workspace and satisfies both `agent.catalog` and `agent.prompt-materializer`, `chat` may use that provider's backend surface to initialize a draft chat with a selected agent prompt and skill metadata. This is an app-to-app use of official app backend surfaces, not a core dependency: the core must not read Agents data, parse role files, or special-case the Chat/Agents relationship. Chat may expose the selection in its composer before the first user turn; once a runtime session exists, that session keeps its original app-provided prompt and agent metadata.
+When a provider such as the built-in `agents` app is installed and enabled in
+the active workspace and satisfies `agent.catalog`, `chat` may initialize a
+draft chat from one self-contained agent definition. The same record carries
+identity, instructions, enabled state, and an explicit skill allowlist; there
+is no second prompt-materializer dependency. This is app-to-app use of an
+official backend surface, not a Core dependency. Chat may expose the selection
+before the first turn; an existing runtime session keeps its original snapshot.
 
 For example, the Agents app may create a generic core runtime session and ask the shell to open Chat with:
 
@@ -1890,14 +1896,19 @@ workspace, agent, skill, attachment, app-reference, filesystem, shell, and
 inter-agent context. Hosted Maverick-agent profiles inherit the exact Browser
 `web_search`/`web_open` surface. A native adapter may opt in only by declaring
 the reviewed `native-web-only-v1` contract and enforcing its provider-native
-equivalent; Codex uses an ephemeral auth-only app-server thread with native live
+equivalent; Codex uses a chat-durable, auth-only app-server thread with native live
 web search, an empty sandboxed workdir, and no base/developer instructions,
 project documents, environment context, skills, MCP servers, local tools, or
-Maverick runtime token. Core narrows and revalidates live authority on every
-turn and rejects unknown native transports or attempts to add workspace
-context. Thus new hosted API models inherit Research automatically, while a new
-CLI/native adapter remains fail-closed until it can prove the same isolation.
-A new chat creates a fresh provider session, while later turns retain only that
+Maverick runtime token. Research short-circuits workspace skill resolution and
+never calls provider skill preparation, and Codex disables bundled skills and
+skips host skill discovery.
+Codex also starts from an environment
+allowlist, requires an exact reviewed runtime version, verifies the private
+home reported at initialization, and terminates if a structured non-web tool
+event appears. Core rejects unknown or unattested native transports. Thus new
+hosted API models inherit Research automatically, while a new CLI/native
+adapter remains fail-closed until it proves the same isolation. A new chat
+creates a fresh private provider thread; later processes resume only that
 chat's provider history. This removes Maverick-specific bias as far as the
 integration can control it; provider and service safety policy remains outside
 this profile and is never represented as removable.
@@ -2193,6 +2204,12 @@ It must not copy user-global, plugin-provided, or repository-local skills into t
 Maverick core has no preinstalled runtime skills. Skills are extension data owned by a workspace `skill.catalog` provider. The built-in Skills app is the canonical provider and seeds bundled skill templates from `apps/*/skills/` into `workspaces/<workspace_id>/data/skills/skills/` during install and migration. Another selected `skill.catalog` provider may own the same kind of editable catalog under its own workspace data root. Operators enable or disable workspace skill copies from that selected provider's editable workspace data.
 
 At turn launch, the runtime materializes skills from the workspace-owned skill catalog selected for the runtime session. The canonical default provider is the built-in Skills app. If a runtime-owning app declares and selects a `runtime-skills` dependency for the `skill.catalog` interface, the runtime session must persist that selected provider app id and resolve both explicit `skill_ids` and implicit default skills from that provider's workspace data. Direct core runtime session creation through `/api/runtime/sessions` follows the same rule for the request `source_app_id` when that source app has a selected `runtime-skills` dependency, and may also accept an explicitly supplied `skill_catalog_app_id` only after validating that the app is an enabled `skill.catalog` provider in the workspace. `skill_activation_mode=implicit` preserves the legacy behavior: an empty `skill_ids` selection exposes every enabled skill and a non-empty selection narrows the catalog. `skill_activation_mode=explicit` keeps the automatic catalog out of the Codex prompt; a turn may supply only stable `invoked_skill_ids`, which core validates against the enabled catalog and any session allowlist before resolving a session-local materialized `SKILL.md` into a structured Codex skill input. A participant `skill_ids` snapshot is only an allowlist: static participant records, direct inter-agent messages, and persisted dynamic orchestration tasks carry their exact invocation set, never expand an empty request to the allowlist or catalog, and remain subject to the per-turn limit of 32. The adaptive planner receives a server-owned capability index. Every explicit non-empty allowlist is intersected with the currently enabled catalog before it is advertised; an empty intersection is reported as `none available`, while an enumeration failure is reported separately as `catalog unavailable`. Enabled IDs live in deduplicated shared scopes instead of being repeated per agent. Agent and skill pages share a global per-prompt character budget, advertise validated continuation cursors, and let the planner issue lookup-only JSON turns before producing a persistable plan or control decision. The initial planning turn may include one shared skill page; later safe points send only the bounded capability index unless the planner requests another page. Explicit tasks must choose their required subset from retrieved scope pages and failure feedback remains visible at the next control safe point. Successful same-turn steers atomically append their validated IDs to the turn receipt so compaction and backend-restart recovery preserve every skill activated during that turn. Missing legacy fields default to `implicit`; missing legacy participant invocation receipts default to an empty list; clients never supply filesystem paths.
+
+The fixed Research profile is the exception: its resolved and materialized
+skill set is always empty, independent of stored session fields, catalog
+contents, or provider synchronization behavior. Its reviewed Codex profile
+also disables bundled skills and host skill discovery so the provider does not
+create a `codex-home/skills` tree in the private home.
 
 Materialized runtime skills and rules must be copied into the session-local runtime home for sandbox sessions, not symlinked to source repository or operator home paths outside the workspace boundary. Explicit invocation must fail closed if the expected runtime copy is missing, is a symlink, or resolves outside `codex-home/skills`; absolute runtime paths must not be emitted in API payloads, transcript events, or logs.
 

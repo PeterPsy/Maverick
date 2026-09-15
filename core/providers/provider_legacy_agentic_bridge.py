@@ -49,6 +49,10 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
         )
         self.local_process_lifecycle = self
 
+    def research_runtime_available(self, binding: object) -> bool:
+        attest = getattr(self.legacy_adapter, "research_runtime_available", None)
+        return bool(callable(attest) and attest(binding))
+
     async def validate(self, context: RuntimeValidationContext) -> RuntimeHealth:
         return await self.health(RuntimeHealthContext(binding=context.binding))
 

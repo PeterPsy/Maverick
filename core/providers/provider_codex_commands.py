@@ -17,6 +17,7 @@ from core.providers.provider_codex_reasoning import (
     codex_default_reasoning_effort,
     normalize_codex_model_options,
 )
+from core.providers.provider_codex_research import codex_research_environment
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.workspace_api_token import issue_workspace_api_token
 from core.runtime.research_runtime import runtime_session_is_research
@@ -233,7 +234,15 @@ class CodexCommandMixin:
         base_env: dict[str, str] | None = None,
     ) -> dict[str, str]:
         env = dict(base_env or os.environ)
+        research = runtime_session_is_research(session)
+        if research and secret_env:
+            raise ProviderLaunchError(
+                "codex_research_secret_environment_forbidden",
+                reason_code="research_runtime_unavailable",
+            )
         env.update(secret_env or {})
+        if research:
+            env = codex_research_environment(env)
         path_entries = [entry for entry in str(env.get("PATH") or "").split(os.pathsep) if entry]
         prepend_entries: list[str] = [str(runtime_bin)]
 
@@ -262,15 +271,11 @@ class CodexCommandMixin:
 
         env["CODEX_HOME"] = str(runtime_home)
         env["HOME"] = str(runtime_home)
-        if runtime_session_is_research(session):
+        if research:
             runtime_root.mkdir(parents=True, exist_ok=True)
             env["TMPDIR"] = str(runtime_root)
             env["TMP"] = str(runtime_root)
             env["TEMP"] = str(runtime_root)
-            env.pop("PYTHONPATH", None)
-            for key in tuple(env):
-                if key.startswith("MAVERICK_"):
-                    env.pop(key, None)
             return env
         env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
         env["MAVERICK_WORKSPACE_ID"] = session.workspace_id

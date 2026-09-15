@@ -47,9 +47,7 @@ const agents: AgentTypeSummary[] = [
     id: "agent-type-social-video-content-strategist",
     name: "Social Video Content Strategist",
     description: "Turns notes into high-retention social video scripts.",
-    role_id: "social-video-content-strategist",
     skill_ids: [],
-    trace_verbosity: "compact",
     enabled: true,
   },
 ];
@@ -60,9 +58,7 @@ const searchableAgents: AgentTypeSummary[] = [
     id: "agent-type-ops-reviewer",
     name: "Operations Reviewer",
     description: "Finds workflow gaps before customer handoff.",
-    role_id: "ops-reviewer",
     skill_ids: [],
-    trace_verbosity: "compact",
     enabled: true,
   },
 ];
@@ -1198,7 +1194,7 @@ describe("ChatComposer reference search", () => {
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
 
     await act(async () => {
-      changeInputValue(searchInput as HTMLInputElement, "ops-reviewer");
+      changeInputValue(searchInput as HTMLInputElement, "Operations");
     });
 
     expect(element.textContent).not.toContain("Free Agent");

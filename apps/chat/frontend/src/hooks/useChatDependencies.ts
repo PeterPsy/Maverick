@@ -10,7 +10,6 @@ import {
   prewarmSpeechWorker,
   ProviderItem,
   selectedDependencyProviderAppId,
-  selectedSharedDependencyProviderAppId,
 } from "../api/client";
 import {
   initialProviderSelectionId,
@@ -19,7 +18,6 @@ import {
 import { clearAgentRuntimeConfigCache } from "./useChatRuntimeControls";
 
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
-const AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS = "agent-prompt-materializer";
 const TEXT_TO_SPEECH_DEPENDENCY_ALIAS = "text-to-speech";
 const SPEECH_TO_TEXT_DEPENDENCY_ALIAS = "speech-to-text";
 
@@ -78,10 +76,10 @@ export function useChatDependencies() {
       setAgentCatalogLoading(true);
       setAgentCatalogLoaded(false);
       try {
-        const providerAppId = selectedSharedDependencyProviderAppId(dependencies, [
+        const providerAppId = selectedDependencyProviderAppId(
+          dependencies,
           AGENT_CATALOG_DEPENDENCY_ALIAS,
-          AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS,
-        ]);
+        );
         await loadAgentOptionsFromProvider(providerAppId);
       } catch {
         clearAgentOptions({ resetStatus: false });

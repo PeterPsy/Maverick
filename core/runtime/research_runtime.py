@@ -67,7 +67,9 @@ def research_runtime_kind(binding: object, adapter: object) -> str | None:
     if family == "maverick_agent" and declared == RESEARCH_HOSTED_WEB_RUNTIME:
         return declared
     if family == "native_agent" and declared == RESEARCH_NATIVE_WEB_RUNTIME:
-        return declared
+        attest = getattr(adapter, "research_runtime_available", None)
+        if callable(attest) and attest(binding):
+            return declared
     return None
 
 

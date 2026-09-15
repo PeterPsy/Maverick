@@ -6,28 +6,32 @@ type NewAgentModalProps = {
   skills: SkillSummary[];
   saving: boolean;
   onClose: () => void;
-  onCreate: (payload: { name: string; prompt: string; skillIds: string[] }) => Promise<void>;
+  onCreate: (payload: { name: string; instructions: string; skillIds: string[] }) => Promise<void>;
 };
 
 export function NewAgentModal({ open, skills, saving, onClose, onCreate }: NewAgentModalProps) {
   const [name, setName] = useState('');
-  const [prompt, setPrompt] = useState('');
+  const [instructions, setInstructions] = useState('');
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setName('');
-    setPrompt('');
-    setSelectedSkillIds(skills.map((skill) => skill.id));
-  }, [skills, open]);
+    setInstructions('');
+    setSelectedSkillIds([]);
+  }, [open]);
 
   if (!open) return null;
 
-  const canSubmit = Boolean(name.trim() && prompt.trim()) && !saving;
+  const canSubmit = Boolean(name.trim() && instructions.trim()) && !saving;
 
   async function submit() {
     if (!canSubmit) return;
-    await onCreate({ name: name.trim(), prompt: prompt.trim(), skillIds: selectedSkillIds });
+    await onCreate({
+      name: name.trim(),
+      instructions: instructions.trim(),
+      skillIds: selectedSkillIds,
+    });
   }
 
   function toggleSkill(skillId: string) {
@@ -42,7 +46,7 @@ export function NewAgentModal({ open, skills, saving, onClose, onCreate }: NewAg
         <header className="modal-header">
           <div>
             <h2 id="new-agent-title">New Agent</h2>
-            <p>Create an agent with its own role prompt and default skills.</p>
+            <p>Add instructions and only the skills this agent needs.</p>
           </div>
           <button className="icon-action" type="button" onClick={onClose} aria-label="Close">
             <span className="material-symbols-rounded" aria-hidden="true">close</span>
@@ -53,8 +57,8 @@ export function NewAgentModal({ open, skills, saving, onClose, onCreate }: NewAg
           <label>Name
             <input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
           </label>
-          <label>Prompt
-            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={10} />
+          <label>Instructions
+            <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={10} />
           </label>
 
           <details className="skill-collapsible" open>

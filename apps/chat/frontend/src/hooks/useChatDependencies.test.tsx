@@ -265,7 +265,6 @@ function dependencyPayload(agentProviderAppIds: string[] = []): AppDependenciesP
     status: "resolved",
     dependencies: [
       dependency("agent-catalog", "agent.catalog", agentProviderAppIds),
-      dependency("agent-prompt-materializer", "agent.prompt-materializer", agentProviderAppIds),
       dependency("text-to-speech", "speech.synthesis", ["speech"]),
       dependency("speech-to-text", "speech.transcription", ["speech"]),
     ],

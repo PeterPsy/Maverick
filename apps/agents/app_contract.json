@@ -2,15 +2,15 @@
   "app_id": "agents",
   "contract_version": "1.0",
   "name": "Agents",
-  "version": "0.1.0",
-  "description": "Workspace app for managing agent roles, prompt composition, and agent type definitions.",
+  "version": "0.2.0",
+  "description": "Workspace app for self-contained custom agent definitions.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
       "interface": "agent.catalog",
       "version": "1",
-      "description": "Agent type and role prompt catalog.",
+      "description": "Self-contained agent definition catalog.",
       "surfaces": [
         "backend",
         "cli",
@@ -18,16 +18,6 @@
         "reference",
         "view",
         "widget"
-      ]
-    },
-    {
-      "interface": "agent.prompt-materializer",
-      "version": "1",
-      "description": "Agent prompt and skill metadata materialization.",
-      "surfaces": [
-        "backend",
-        "cli",
-        "mcp"
       ]
     }
   ],
@@ -77,6 +67,7 @@
       "agents_set_view_filter",
       "agents_set_custom_view",
       "agents_clear_custom_view",
+      "agents_delete_agent_definition",
       "agents_reference_manifest",
       "agents_reference_search",
       "agents_reference_resolve",
@@ -94,7 +85,7 @@
     "data_events": [
       {
         "resource": "configuration",
-        "description": "Emitted when agent roles, agent types, or the common prompt change through official Agents app surfaces."
+        "description": "Emitted when self-contained agent definitions change through official Agents surfaces."
       },
       {
         "resource": "view-state",
@@ -106,8 +97,7 @@
         "view_id": "agents",
         "display_name": "Agents",
         "entity_types": [
-          "agent_type",
-          "role_prompt"
+          "agent_type"
         ],
         "state_actions": [
           {
@@ -123,7 +113,7 @@
           {
             "action": "set_custom_view",
             "standard": true,
-            "description": "Show a curated set of agent and role references."
+            "description": "Show a curated set of agent references."
           },
           {
             "action": "clear_custom_view",
@@ -138,15 +128,7 @@
     "reference_entities": [
       {
         "entity_type": "agent_type",
-        "display_name": "Agent Type",
-        "searchable": true,
-        "resolvable": true,
-        "summarizable": true,
-        "deep_link_supported": true
-      },
-      {
-        "entity_type": "role_prompt",
-        "display_name": "Role Prompt",
+        "display_name": "Agent",
         "searchable": true,
         "resolvable": true,
         "summarizable": true,
@@ -204,11 +186,9 @@
   },
   "storage": {
     "storage_kind": "json",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
-      "data/agents/common_prompt.md",
-      "data/agents/roles",
-      "data/agents/agent_types.json",
+      "data/agents/agents.json",
       "data/agents/view_state.json"
     ],
     "indices": null,

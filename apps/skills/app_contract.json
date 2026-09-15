@@ -66,9 +66,10 @@
     ],
     "skills": [
       "generate-image",
-      "maverick-app-design",
       "maverick-app-creator",
+      "maverick-app-design",
       "maverick-code-skill",
+      "prompt-library",
       "skills-ops"
     ],
     "views": [

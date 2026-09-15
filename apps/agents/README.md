@@ -1,29 +1,21 @@
 # Agents
 
-Workspace app for managing intentional custom agent definitions.
+Workspace app for intentional custom agent definitions.
 
 ## Contract Notes
 
-- Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
-- The app ships no preinstalled agents. Free Agent and Research are fixed Chat runners, not catalog records.
-- Historical bundled agents and the retired workspace wrappers are removed once from existing workspaces.
-- Agents declares a required `runtime-skills` dependency on the `skill.catalog` interface. The UI resolves the selected provider through the generic dependency payload instead of hardcoding the Skills app id.
-- Bundled skill templates live under `skills/`; the contract declares `agents-ops`.
-- The app currently exposes reference entities for `agent_type` and `role_prompt`.
-- The app now declares persisted `view_surfaces` for query filters and curated agent or role selections.
-- Agents declares `base-shell` sidebar widgets for `shell.sidebar.primary` and `shell.sidebar.footer`. The app-owned primary widget renders agent search/list state, while the footer widget owns the New Agent action.
-- The main Agents iframe no longer renders an internal sidebar. It listens for `maverick.app.navigate` with `agent_type_id` or `app_page: "agent-types/<id>"` to select an agent, and `new_agent` plus `new_agent_request_id` to open the create modal. When selection changes, it emits `maverick.app.selection-changed` so shell-hosted Agents widgets can keep their active row synchronized with the detail iframe.
-- Agents does not own runtime execution or orchestration. It owns only agent definitions, role prompts, and prompt preview; a future optional Orchestrations/Fleet app may consume those definitions only if that app exists and is installed.
-- Runtime execution belongs to Chat or another installed runtime-owning app through the generic core runtime surfaces. Agents does not launch runtime sessions or persist runtime instances.
-- New custom agents use explicit skill activation. Their runtime prompt is only their own instructions; no common prompt or generated metadata is injected.
+Each agent is one self-contained record: identity, instructions, enabled state,
+and an explicit skill allowlist. There are no role records, common prompt,
+implicit skills, trace settings, or prompt-composition preview. The app ships no
+agents; Free Agent and Research remain fixed Chat runners.
 
-## CLI And MCP Operations
+Agents provides `agent.catalog`. `get_agent_definition` returns the exact
+instructions consumed by Chat and orchestration, so a second prompt
+materialization interface is unnecessary. Runtime execution remains owned by
+Chat and core.
 
-- `maverick app agents cli run agents --json` and `maverick app agents mcp call maverick_agents_app --json` return a compact `operations.manifest` by default.
-- Use `catalog.compact` or `agents_catalog_compact` for token-efficient catalog reads; compact agent records retain `skill_ids` and activation mode so clients can enforce picker policy without loading prompt content. Full `catalog` is opt-in because it includes common prompt and role instructions.
-- Use `get_agent_definition` or `agents_get_agent_definition` when full prompt content is needed for one explicit agent type id.
-- Use `upsert_agent_definition` or `agents_upsert_agent_definition` to create or update a role prompt plus its agent type in one idempotent write path.
-- CLI and MCP discovery schemas live in `cli/command_schemas.json` and `mcp/tool_schemas.json` so `list` and `inspect` stay useful without reading app source.
+Bundled `agents-ops` is an optional explicit skill for managing the catalog.
+The shell sidebar and main view use the same backend actions.
 
 ## SDK Flow
 
@@ -31,6 +23,4 @@ Workspace app for managing intentional custom agent definitions.
 ./scripts/maverick core cli run core.app-sdk.validate --app-id agents --workspace default --json
 ./scripts/maverick core cli run core.app-sdk.register-local --app-id agents --workspace default --json
 ./scripts/maverick core cli run core.app-sdk.install-local --app-id agents --workspace default --json
-./scripts/maverick core cli run core.app-sdk.status --app-id agents --workspace default --json
-./scripts/maverick core cli run core.app-sdk.package --app-id agents --workspace default --json
 ```

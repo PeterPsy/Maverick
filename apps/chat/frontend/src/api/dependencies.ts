@@ -2,7 +2,6 @@ import { booleanField, objectField, requestJson, stringArrayField, stringField }
 import type {
   AgentCatalogPayload,
   AgentDefinitionPayload,
-  AgentPromptPreviewPayload,
   AgentTypeSummary,
   AppDependenciesPayload,
   AppEntityReference,
@@ -94,22 +93,6 @@ export function selectedDependencyProviderAppId(payload: AppDependenciesPayload,
   return selectedExplicitProviderIdsForDependency(dependency)[0] || "";
 }
 
-export function selectedSharedDependencyProviderAppId(payload: AppDependenciesPayload, aliases: string[]): string {
-  const dependencies = aliases
-    .map((alias) => payload.dependencies.find((item) => item.alias === alias))
-    .filter((item): item is DependencyResolutionItem => Boolean(item));
-  if (dependencies.length !== aliases.length) {
-    return "";
-  }
-  const [primary, ...rest] = dependencies;
-  for (const providerAppId of selectedProviderIdsForDependencyWithAutomaticFallback(primary)) {
-    if (rest.every((dependency) => selectedProviderIdsForDependencyWithAutomaticFallback(dependency).includes(providerAppId))) {
-      return providerAppId;
-    }
-  }
-  return "";
-}
-
 function selectedExplicitProviderIdsForDependency(dependency: DependencyResolutionItem | undefined): string[] {
   if (!dependency) {
     return [];
@@ -119,28 +102,6 @@ function selectedExplicitProviderIdsForDependency(dependency: DependencyResoluti
     return dependency.selected_provider_app_ids.filter((providerAppId) => backendProviderIds.includes(providerAppId));
   }
   return [];
-}
-
-function selectedProviderIdsForDependencyWithAutomaticFallback(dependency: DependencyResolutionItem | undefined): string[] {
-  const selectedProviderIds = selectedExplicitProviderIdsForDependency(dependency);
-  if (selectedProviderIds.length || !dependency) {
-    return selectedProviderIds;
-  }
-  const backendProviderIds = backendCandidateProviderIds(dependency);
-  if (canUseAutomaticDependencyProvider(dependency)) {
-    return backendProviderIds;
-  }
-  return [];
-}
-
-function canUseAutomaticDependencyProvider(dependency: DependencyResolutionItem): boolean {
-  return (
-    dependency.status === "optional_unset" &&
-    dependency.cardinality === "one" &&
-    dependency.stale_provider_app_ids.length === 0 &&
-    !dependency.blocked_reason &&
-    backendCandidateProviderIds(dependency).length > 0
-  );
 }
 
 function backendCandidateProviderIds(dependency: DependencyResolutionItem): string[] {
@@ -153,12 +114,7 @@ function normalizeAgentType(value: unknown): AgentTypeSummary {
     id: stringField(item.id),
     name: stringField(item.name),
     description: stringField(item.description),
-    role_id: stringField(item.role_id),
     skill_ids: stringArrayField(item.skill_ids),
-    skill_activation_mode: stringField(item.skill_activation_mode, "implicit") === "explicit"
-      ? "explicit"
-      : "implicit",
-    trace_verbosity: stringField(item.trace_verbosity, "compact"),
     enabled: item.enabled !== false,
   };
 }
@@ -179,14 +135,6 @@ export function getAgentDefinition(providerAppId: string, agentTypeId: string): 
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "get_agent_definition", id: agentTypeId }),
-  });
-}
-
-export function previewAgentPrompt(providerAppId: string, agentTypeId: string): Promise<AgentPromptPreviewPayload> {
-  return requestJson<AgentPromptPreviewPayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "preview_prompt", agent_type_id: agentTypeId }),
   });
 }
 

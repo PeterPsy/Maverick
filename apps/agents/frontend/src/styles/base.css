@@ -112,7 +112,6 @@ h3 {
 .primary-action,
 .secondary-action,
 .danger-action,
-.band-heading button,
 .icon-action {
   display: inline-flex;
   align-items: center;
@@ -132,7 +131,6 @@ h3 {
 
 .secondary-action,
 .danger-action,
-.band-heading button,
 .icon-action {
   border: 1px solid var(--maverick-border-strong);
   background: rgba(255, 255, 255, 0.08);
@@ -151,7 +149,6 @@ h3 {
 .primary-action:hover,
 .secondary-action:hover,
 .danger-action:hover,
-.band-heading button:hover:not(:disabled),
 .icon-action:hover {
   transform: translateY(-1px);
 }

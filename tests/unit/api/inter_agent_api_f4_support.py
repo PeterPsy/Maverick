@@ -87,18 +87,13 @@ def main() -> None:
                     "id": "research-agent",
                     "name": "Provider Researcher",
                     "description": "Materialized by provider.",
+                    "instructions": __PROVIDER_PROMPT__,
                     "skill_ids": ["provider-storage"],
 __PROVIDER_SKILL_CATALOG_LINE__                    "enabled": True,
                     "updated_at": "provider-revision-1",
                 },
             }
         )
-        return
-    if action == "preview_prompt":
-        if requested != "research-agent":
-            _response({"rendered": ""}, status_code=404)
-            return
-        _response({"rendered": __PROVIDER_PROMPT__})
         return
     _response({"error": "unknown_action", "action": action}, status_code=400)
 
@@ -125,12 +120,6 @@ if __name__ == "__main__":
                             interface="agent.catalog",
                             required=False,
                             description="Agent catalog.",
-                        ),
-                        build_required_interface_declaration(
-                            alias="agent-prompt-materializer",
-                            interface="agent.prompt-materializer",
-                            required=False,
-                            description="Agent prompt materializer.",
                         ),
                     ]
                 ),
@@ -162,11 +151,6 @@ if __name__ == "__main__":
                         build_provided_interface_declaration(
                             interface="agent.catalog",
                             description="Agent catalog.",
-                            surfaces=["backend"],
-                        ),
-                        build_provided_interface_declaration(
-                            interface="agent.prompt-materializer",
-                            description="Agent prompt materializer.",
                             surfaces=["backend"],
                         ),
                     ]

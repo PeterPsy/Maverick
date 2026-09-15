@@ -62,7 +62,7 @@ class CodexAppServerRuntimeInitializeTestCase(unittest.TestCase):
         launch_spec = SimpleNamespace(
             command=["codex", "app-server"],
             working_directory="/tmp",
-            env_overrides={},
+            env_overrides={"CODEX_HOME": "/tmp/runtime-initialize/codex-home"},
         )
 
         class FakeProcess:
@@ -87,7 +87,15 @@ class CodexAppServerRuntimeInitializeTestCase(unittest.TestCase):
             ), patch.object(
                 runtime_thread,
                 "start_device_use_request_worker",
-            ), patch.object(runtime_thread, "_send_request", return_value={}) as send_request:
+            ), patch.object(
+                runtime_thread,
+                "_send_request",
+                return_value=(
+                    {"codexHome": "/tmp/runtime-initialize/codex-home"}
+                    if runtime_profile == "research"
+                    else {}
+                ),
+            ) as send_request:
                 runtime_thread._ensure_runtime(
                     session=session,
                     launch_spec=launch_spec,

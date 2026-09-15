@@ -7,7 +7,7 @@ import { agentTypeIdFromSelectionMessage, type ActiveAgentSelectionMessage } fro
 import type { AgentType, Catalog } from '../../types';
 import '../../styles/sidebar-widget.css';
 
-const emptyCatalog: Catalog = { common_prompt: '', roles: [], agent_types: [] };
+const emptyCatalog: Catalog = { agent_types: [] };
 const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';
 
 type ViewFilter = {
@@ -91,7 +91,7 @@ function AgentsSidebarWidget() {
     if (!needle) {
       return catalog.agent_types;
     }
-    return catalog.agent_types.filter((item) => `${item.name} ${item.description} ${item.role_id}`.toLowerCase().includes(needle));
+    return catalog.agent_types.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(needle));
   }, [catalog.agent_types, query]);
 
   async function refreshCatalog() {
@@ -214,7 +214,7 @@ function AgentsSidebarWidget() {
               <span className="material-symbols-rounded agents-sidebar-row__icon" aria-hidden="true">smart_toy</span>
               <span className="agents-sidebar-row__copy">
                 <strong>{agentType.name}</strong>
-                <span>{agentType.role_id}</span>
+                <span>{agentType.description || 'Custom agent'}</span>
               </span>
             </button>
           ))

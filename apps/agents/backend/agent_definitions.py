@@ -1,4 +1,4 @@
-"""Agent definition operations for compact agent-facing surfaces."""
+"""Agent definition operations for compact app surfaces."""
 
 from __future__ import annotations
 
@@ -6,182 +6,98 @@ from pathlib import Path
 from typing import Any
 
 from agent_runtime_revision import agent_runtime_revision
-from models import TRACE_VERBOSITIES
 from store import (
     AgentsValidationError,
-    get_agent_type,
-    get_role,
-    list_agent_types,
-    list_roles,
-    read_common_prompt,
-    save_agent_type,
-    save_role,
+    get_agent_definition as load_agent_definition,
+    list_agent_definitions,
+    save_agent_definition,
     validate_agent_type_id,
-    validate_role_id,
-    write_common_prompt,
 )
 
 
 UPSERT_ERROR_HINT = {
     "expected_fields": ["id", "name", "instructions"],
-    "accepted_aliases": {
-        "id": ["agent_type_id", "entity_id"],
-        "instructions": ["role_instructions", "prompt"],
-        "role_id": ["role_prompt_id"],
-    },
-    "allowed_values": {"trace_verbosity": sorted(TRACE_VERBOSITIES)},
     "example": {
         "action": "upsert_agent_definition",
         "id": "agent-type-example-specialist",
         "name": "Example Specialist",
-        "instructions": "# Example Specialist\n\nHandle one focused class of work.",
+        "instructions": "Handle one focused class of work.",
     },
 }
 
 
 def compact_catalog(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """Return a compact, paginated catalog without long prompt content."""
-    entity_type = _optional_entity_type(body)
     query = str(body.get("query") or body.get("q") or "").strip().casefold()
     limit = _bounded_int(body.get("limit"), default=50, minimum=1, maximum=100)
-    role_records = list_roles(data_root)
-    roles_by_id = {str(item.get("id") or ""): item for item in role_records}
-    roles = [_compact_role(item) for item in role_records]
-    agent_types = [
-        _compact_agent_type(
-            item,
-            role=roles_by_id.get(str(item.get("role_id") or "")),
-            common_prompt="",
-        )
-        for item in list_agent_types(data_root)
-    ]
+    agents = [_compact_agent(item) for item in list_agent_definitions(data_root)]
     if query:
-        roles = [item for item in roles if _matches_query(item, query)]
-        agent_types = [item for item in agent_types if _matches_query(item, query)]
-    if entity_type == "role_prompt":
-        agent_types = []
-    if entity_type == "agent_type":
-        roles = []
+        agents = [item for item in agents if _matches_query(item, query)]
     return {
         "app_id": "agents",
-        "schema_version": "1",
+        "schema_version": "2",
         "payload_profile": "compact",
-        "counts": {"roles": len(roles), "agent_types": len(agent_types)},
-        "roles": roles[:limit],
-        "agent_types": agent_types[:limit],
+        "count": len(agents),
+        "agent_types": agents[:limit],
         "limit": limit,
     }
 
 
+def catalog(data_root: Path) -> dict[str, Any]:
+    return {"agent_types": [_full_agent(item) for item in list_agent_definitions(data_root)]}
+
+
 def get_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """Return one full agent definition by agent type id."""
-    agent_type_id = _agent_type_id_from_body(body)
-    agent_type = get_agent_type(data_root, agent_type_id)
-    if agent_type is None:
-        return {"exists": False, "agent_type_id": agent_type_id}
-    role = get_role(data_root, agent_type["role_id"])
-    if role is None:
-        raise AgentsValidationError(f"Unknown role id: {agent_type['role_id']}")
-    payload = {
-        "exists": True,
-        "agent_definition": _definition_payload(
-            agent_type=agent_type,
-            role=role,
-            common_prompt="",
-            include_content=True,
-        ),
-    }
-    return payload
+    agent_id = _agent_id_from_body(body)
+    agent = load_agent_definition(data_root, agent_id)
+    if agent is None:
+        return {"exists": False, "agent_type_id": agent_id}
+    return {"exists": True, "agent_definition": _full_agent(agent)}
 
 
 def upsert_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """Create or update the role prompt and agent type in one idempotent operation."""
-    agent_type_id = _agent_type_id_from_body(body)
-    existing_agent_type = get_agent_type(data_root, agent_type_id)
-    role_id = _role_id_from_body(body, agent_type_id=agent_type_id, existing_agent_type=existing_agent_type)
-    existing_role = get_role(data_root, role_id)
-    name = _text_field(body, "name", default=(existing_agent_type or {}).get("name"))
+    agent_id = _agent_id_from_body(body)
+    existing = load_agent_definition(data_root, agent_id)
+    name = _text_field(body, "name", default=(existing or {}).get("name"))
     instructions = _text_field(
         body,
         "instructions",
-        aliases=("role_instructions", "prompt"),
-        default=(existing_role or {}).get("instructions"),
+        default=(existing or {}).get("instructions"),
+        preserve_whitespace=True,
     )
     description = _text_field(
         body,
         "description",
-        default=(existing_agent_type or {}).get("description") or f"Agent definition for {name}.",
+        default=(existing or {}).get("description") or "",
         required=False,
     )
-    role_description = _text_field(
-        body,
-        "role_description",
-        default=(existing_role or {}).get("description") or description,
-        required=False,
+    skill_ids = _skill_ids(
+        body.get("skill_ids"),
+        default=(existing or {}).get("skill_ids", []),
     )
-    trace_verbosity = str(body.get("trace_verbosity") or (existing_agent_type or {}).get("trace_verbosity") or "compact")
-    if trace_verbosity not in TRACE_VERBOSITIES:
-        raise AgentsValidationError(f"Invalid trace_verbosity: {trace_verbosity}")
-    skill_ids = _skill_ids(body.get("skill_ids"), default=(existing_agent_type or {}).get("skill_ids", []))
-    skill_activation_mode = str(
-        body.get("skill_activation_mode")
-        or (existing_agent_type or {}).get("skill_activation_mode")
-        or "explicit"
-    ).strip()
-    if skill_activation_mode not in {"implicit", "explicit"}:
-        raise AgentsValidationError("Field `skill_activation_mode` must be `implicit` or `explicit`.")
-    enabled = bool(body.get("enabled", (existing_agent_type or {}).get("enabled", True)))
-
-    role_candidate = {
-        "id": role_id,
-        "name": name,
-        "description": role_description,
-        "instructions": instructions,
-    }
-    agent_type_candidate = {
-        "id": agent_type_id,
+    candidate = {
+        "id": agent_id,
         "name": name,
         "description": description,
-        "role_id": role_id,
+        "instructions": instructions,
         "skill_ids": skill_ids,
-        "skill_activation_mode": skill_activation_mode,
-        "trace_verbosity": trace_verbosity,
-        "enabled": enabled,
+        "enabled": bool(body.get("enabled", (existing or {}).get("enabled", True))),
     }
-    role_changed = existing_role is None or any(existing_role.get(key) != value for key, value in role_candidate.items())
-    agent_type_changed = existing_agent_type is None or any(
-        existing_agent_type.get(key) != value for key, value in agent_type_candidate.items()
+    changed = existing is None or any(
+        existing.get(key) != value for key, value in candidate.items()
     )
-    role = save_role(data_root, role_candidate) if role_changed else existing_role
-    agent_type = save_agent_type(data_root, agent_type_candidate) if agent_type_changed else existing_agent_type
-    if role is None or agent_type is None:
-        raise AgentsValidationError("Agent definition upsert failed to materialize saved records.")
-    common_prompt_changed = False
-    if "common_prompt" in body:
-        next_common_prompt = str(body.get("common_prompt") or "").strip() + "\n"
-        if read_common_prompt(data_root) != next_common_prompt:
-            write_common_prompt(data_root, next_common_prompt)
-            common_prompt_changed = True
-    include_content = bool(body.get("include_content"))
+    agent = save_agent_definition(data_root, candidate) if changed else existing
+    if agent is None:
+        raise AgentsValidationError("Agent definition was not saved.")
     return {
         "operation": "upsert_agent_definition",
-        "created": {"agent_type": existing_agent_type is None, "role": existing_role is None},
-        "changed": {
-            "agent_type": agent_type_changed,
-            "role": role_changed,
-            "common_prompt": common_prompt_changed,
-        },
-        "agent_definition": _definition_payload(
-            agent_type=agent_type,
-            role=role,
-            common_prompt="",
-            include_content=include_content,
-        ),
+        "created": existing is None,
+        "changed": changed,
+        "agent_definition": _full_agent(agent),
     }
 
 
-def _agent_type_id_from_body(body: dict[str, Any]) -> str:
-    raw = str(body.get("agent_type_id") or body.get("id") or body.get("entity_id") or "").strip()
+def _agent_id_from_body(body: dict[str, Any]) -> str:
+    raw = str(body.get("id") or body.get("agent_type_id") or "").strip()
     if not raw:
         raise AgentsValidationError("Missing required field: id")
     if not raw.startswith("agent-type-"):
@@ -189,54 +105,30 @@ def _agent_type_id_from_body(body: dict[str, Any]) -> str:
     return validate_agent_type_id(raw)
 
 
-def _role_id_from_body(
-    body: dict[str, Any],
-    *,
-    agent_type_id: str,
-    existing_agent_type: dict[str, Any] | None,
-) -> str:
-    raw = str(
-        body.get("role_id")
-        or body.get("role_prompt_id")
-        or (existing_agent_type or {}).get("role_id")
-        or agent_type_id.removeprefix("agent-type-")
-    ).strip()
-    return validate_role_id(raw)
-
-
 def _text_field(
     body: dict[str, Any],
     key: str,
     *,
-    aliases: tuple[str, ...] = (),
     default: Any = None,
     required: bool = True,
+    preserve_whitespace: bool = False,
 ) -> str:
-    value = body.get(key)
-    for alias in aliases:
-        if value is None:
-            value = body.get(alias)
-    if value is None:
-        value = default
-    text = " ".join(str(value or "").split()).strip() if key != "instructions" else str(value or "").strip()
+    value = body.get(key, default)
+    text = str(value or "").strip()
+    if not preserve_whitespace:
+        text = " ".join(text.split())
     if required and not text:
         raise AgentsValidationError(f"Missing required field: {key}")
     return text
 
 
 def _skill_ids(value: Any, *, default: list[str]) -> list[str]:
-    if value is None:
-        value = default
-    if not isinstance(value, list):
+    selected = default if value is None else value
+    if not isinstance(selected, list):
         raise AgentsValidationError("Field `skill_ids` must be a list.")
-    return [str(item).strip() for item in value if str(item).strip()]
-
-
-def _optional_entity_type(body: dict[str, Any]) -> str:
-    entity_type = str(body.get("entity_type") or body.get("type") or "").strip()
-    if entity_type and entity_type not in {"agent_type", "role_prompt"}:
-        raise AgentsValidationError(f"Unsupported reference entity type: {entity_type}")
-    return entity_type
+    return list(dict.fromkeys(
+        str(item).strip() for item in selected if str(item).strip()
+    ))
 
 
 def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
@@ -247,69 +139,25 @@ def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int
     return max(minimum, min(parsed, maximum))
 
 
-def _compact_role(role: dict[str, Any]) -> dict[str, Any]:
+def _compact_agent(agent: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": role["id"],
-        "name": role["name"],
-        "description": role.get("description", ""),
+        "id": agent["id"],
+        "name": agent["name"],
+        "description": agent.get("description", ""),
+        "skill_ids": agent.get("skill_ids", []),
+        "skill_count": len(agent.get("skill_ids", [])),
+        "enabled": bool(agent.get("enabled", True)),
+        "updated_at": agent.get("updated_at", ""),
+        "revision_id": agent_runtime_revision(agent),
     }
 
 
-def _compact_agent_type(
-    agent_type: dict[str, Any],
-    *,
-    role: dict[str, Any] | None,
-    common_prompt: str,
-) -> dict[str, Any]:
-    return {
-        "id": agent_type["id"],
-        "name": agent_type["name"],
-        "description": agent_type.get("description", ""),
-        "role_id": agent_type["role_id"],
-        "skill_ids": agent_type.get("skill_ids", []),
-        "skill_count": len(agent_type.get("skill_ids", [])),
-        "skill_activation_mode": agent_type.get("skill_activation_mode", "implicit"),
-        "trace_verbosity": agent_type.get("trace_verbosity", "compact"),
-        "enabled": bool(agent_type.get("enabled", True)),
-        "updated_at": agent_type.get("updated_at", ""),
-        "revision_id": agent_runtime_revision(
-            agent_type=agent_type,
-            role=role or {},
-            common_prompt=common_prompt,
-        ),
-    }
-
-
-def _definition_payload(
-    *,
-    agent_type: dict[str, Any],
-    role: dict[str, Any],
-    common_prompt: str,
-    include_content: bool,
-) -> dict[str, Any]:
-    payload = {
-        "id": agent_type["id"],
-        "name": agent_type["name"],
-        "description": agent_type.get("description", ""),
-        "role_id": role["id"],
-        "role_name": role["name"],
-        "role_description": role.get("description", ""),
-        "skill_ids": agent_type.get("skill_ids", []),
-        "skill_activation_mode": agent_type.get("skill_activation_mode", "implicit"),
-        "trace_verbosity": agent_type.get("trace_verbosity", "compact"),
-        "enabled": bool(agent_type.get("enabled", True)),
-        "created_at": agent_type.get("created_at", ""),
-        "updated_at": agent_type.get("updated_at", ""),
-        "revision_id": agent_runtime_revision(
-            agent_type=agent_type,
-            role=role,
-            common_prompt=common_prompt,
-        ),
-    }
-    if include_content:
-        payload["instructions"] = role.get("instructions", "")
-    return payload
+def _full_agent(agent: dict[str, Any]) -> dict[str, Any]:
+    return {**_compact_agent(agent), "instructions": agent["instructions"], "created_at": agent.get("created_at", "")}
 
 
 def _matches_query(item: dict[str, Any], query: str) -> bool:
-    return any(query in str(item.get(field, "")).casefold() for field in ("id", "name", "description", "role_id"))
+    return any(
+        query in str(item.get(field, "")).casefold()
+        for field in ("id", "name", "description")
+    )

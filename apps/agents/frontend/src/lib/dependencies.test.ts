@@ -12,9 +12,8 @@ function agentType(skillIds: string[]): AgentType {
     id: 'agent-type-test',
     name: 'Test',
     description: '',
-    role_id: 'test',
+    instructions: 'Test instructions.',
     skill_ids: skillIds,
-    trace_verbosity: 'compact',
     enabled: true
   };
 }
@@ -45,8 +44,8 @@ describe('agents dependency helpers', () => {
     expect(selectedProviderAppId(dependencies)).toBe('workspace-skills');
   });
 
-  it('treats an empty agent skill list as all linked workspace skills', () => {
-    expect(effectiveSkillIds(agentType([]), skills)).toEqual(['agents-ops', 'skills-ops']);
+  it('keeps an empty explicit allowlist empty', () => {
+    expect(effectiveSkillIds(agentType([]), skills)).toEqual([]);
   });
 
   it('drops stale skill ids before saving agent edits', () => {
@@ -57,8 +56,8 @@ describe('agents dependency helpers', () => {
     const selection = skillIdsForAgentSave(agentType(['missing-skill']), [], skills);
 
     expect(effectiveSkillIds(agentType(['missing-skill']), skills)).toEqual([]);
-    expect(selection.changed).toBe(false);
-    expect(selection.skillIds).toEqual(['missing-skill']);
+    expect(selection.changed).toBe(true);
+    expect(selection.skillIds).toEqual([]);
   });
 
   it('replaces stale explicit skill ids when the user selects a current skill', () => {

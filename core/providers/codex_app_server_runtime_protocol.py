@@ -180,6 +180,19 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
                 _emit(runtime, RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": text, "provider_event_type": provider_type}))
             return
     event = parse_provider_json_event(json.dumps({"type": provider_type, "item": item}))
+    if event is not None and not _research_event_allowed(runtime, event):
+        with runtime.event_lock:
+            runtime.current_error_text = (
+                "Codex exposed a non-web tool in the Research runtime."
+            )
+            runtime.current_failure_reason_code = "research_runtime_unavailable"
+            runtime.current_terminal_error_at = time.monotonic()
+        _put_completion(runtime, {"status": "failed"})
+        try:
+            runtime.process.terminate()
+        except OSError:
+            pass
+        return
     if event is not None:
         _emit(runtime, event)
     structured = _structured_content_from_completed_item(provider_type=provider_type, item=item)
@@ -190,6 +203,17 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
             structured=structured,
             tool_call_id=_item_id(item) or None,
         )
+
+
+def _research_event_allowed(
+    runtime: _CodexAppServerRuntime,
+    event: RuntimeExecutionEvent,
+) -> bool:
+    if not getattr(runtime, "research", False):
+        return True
+    if not event.event_type.startswith("runtime.tool_call."):
+        return True
+    return event.payload.get("tool_kind") == "web_search"
 
 
 def _is_agent_message_item(item: dict[str, Any]) -> bool:

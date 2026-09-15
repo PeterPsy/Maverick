@@ -54,7 +54,7 @@ from core.inter_agent.surfaces import (
 )
 from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTurnNotFoundError
-from core.runtime.runtime_session import coerce_skill_activation_mode, runtime_session_allows_user_thread
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.transcript_service import read_runtime_event_history
 from core.skills.runtime_catalog import (
     selected_runtime_skill_catalog_app_id_for_source_app,
@@ -64,7 +64,7 @@ from core.workspaces.errors import WorkspaceMembershipError
 
 
 CHAT_APP_ID = "chat"
-CHAT_AGENT_PROVIDER_ALIASES = ("agent-catalog", "agent-prompt-materializer")
+CHAT_AGENT_PROVIDER_ALIASES = ("agent-catalog",)
 ACTIVE_APP_CONTEXT_HEADER = "Current shell context:"
 ACTIVE_APP_CONTEXT_KEYS = {"active_app_id", "active_app_name", "active_app_description"}
 
@@ -1185,16 +1185,8 @@ def _materialize_agent_snapshot_from_provider(
         raise InterAgentValidationError(
             f"agent_snapshot.agent_type_id `{requested_agent_type_id}` is disabled."
         )
-    prompt_payload = _invoke_chat_agent_provider_backend(
-        state,
-        context,
-        provider_app_id=provider_app_id,
-        dependency_alias="agent-prompt-materializer",
-        body={"action": "preview_prompt", "agent_type_id": requested_agent_type_id},
-        start_path=start_path,
-    )
     system_prompt = _system_prompt_with_active_app_context(
-        _text(prompt_payload.get("rendered")),
+        _text(agent_definition.get("instructions")),
         active_app_context,
     )
     return {
@@ -1202,14 +1194,13 @@ def _materialize_agent_snapshot_from_provider(
         "label": _text(agent_definition.get("name")) or requested_agent_type_id,
         "system_prompt": system_prompt,
         "skill_ids": _string_items(agent_definition.get("skill_ids")),
-        "skill_activation_mode": coerce_skill_activation_mode(agent_definition.get("skill_activation_mode")),
+        "skill_activation_mode": "explicit",
         "skill_catalog_app_id": _materialized_agent_snapshot_skill_catalog(
             state,
             context,
             provider_app_id=provider_app_id,
             provider_skill_catalog_app_id=(
                 _text(agent_definition.get("skill_catalog_app_id"))
-                or _text(prompt_payload.get("skill_catalog_app_id"))
             ),
             snapshot=snapshot,
             start_path=start_path,

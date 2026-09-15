@@ -321,14 +321,13 @@ export function useChatAppController({
   const skillMentionContext = useMemo(() => ({
     activationMode: activeThread
       ? activeSession?.skill_activation_mode
-      : selectedAgent?.skill_activation_mode || (selectedAgent ? "implicit" : "explicit"),
+      : "explicit",
     allowedSkillIds: activeThread ? activeSession?.skill_ids : selectedAgent?.skill_ids || [],
     provider: selectedProvider,
   }), [
     activeSession?.skill_activation_mode,
     activeSession?.skill_ids,
     activeThread,
-    selectedAgent,
     selectedProvider,
   ]);
   const appReferencesAllowed = composerCapabilities.appReferencesAllowed;

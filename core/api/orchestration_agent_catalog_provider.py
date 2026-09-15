@@ -43,11 +43,9 @@ def invoke_agent_provider(
 def skill_catalog_app_id(
     catalog: OrchestrationAgentCatalogSource,
     definition: dict[str, Any],
-    prompt_payload: dict[str, Any],
 ) -> str:
     candidate = str(
         definition.get("skill_catalog_app_id")
-        or prompt_payload.get("skill_catalog_app_id")
         or selected_runtime_skill_catalog_app_id_for_source_app(
             catalog.state.app_store,
             workspace_id=catalog.workspace_id,

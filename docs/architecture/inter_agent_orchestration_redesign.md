@@ -144,15 +144,15 @@ transcript projection behavior.
 - The source root session and source turn must belong to the caller's
   workspace, and the caller must satisfy the existing root-session authority
   policy.
-- Dynamic workers inherit only server-materialized prompt, skills, provider,
+- Dynamic workers inherit only server-materialized instructions, skills, provider,
   workspace, and execution authority. Orchestrator output cannot mint grants or
   choose arbitrary prompt/skill material.
 - The hosted worker obtains a compact catalog from Chat's selected
   `agent.catalog` provider. Every compact entry carries a runtime revision over
-  the definition, role instructions, and common prompt. Before each planning
-  or control decision, Core materializes the changed entries, verifies their
-  definition and prompt revisions, rereads the compact catalog, and retries if
-  either read changed. The planner page and task resolver then share that one
+  its self-contained definition. Before each planning or control decision,
+  Core materializes changed entries, verifies their definition revisions,
+  rereads the compact catalog, and retries if either read changed. The planner
+  page and task resolver then share that one
   immutable materialized snapshot; the resolver performs no later live lookup.
   An orchestrator may name only an id in that snapshot. Core validates its
   runtime skill catalog and persists the selected participant snapshot.

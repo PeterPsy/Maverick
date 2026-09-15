@@ -741,6 +741,13 @@ That means:
 - the app `agents` owns workspace-specific agent definitions
 - new workspaces start with no preinstalled agent definitions
 - each custom definition contributes only its own instructions and explicit skill allowlist
+- each custom definition is one record; role records, common prompts, trace
+  verbosity, implicit activation, and composed prompt previews do not exist
+
+The built-in Skills app may seed the optional `prompt-library` template. It
+performs on-demand public prompt search and retrieval from prompts.chat; it does
+not import the upstream dataset or create agent records. Like every product
+skill, it affects a runtime only after explicit selection and invocation.
 
 The first provider implementation should not blur these concerns:
 

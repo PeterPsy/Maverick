@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
+import re
 import shutil
+import subprocess
 from typing import Callable
 
 from core.providers.errors import ProviderLaunchError
@@ -24,6 +27,19 @@ CODEX_RESEARCH_AUTH_FILES = (
     ".personality_migration",
     "installation_id",
 )
+CODEX_RESEARCH_ENV_KEYS = frozenset(
+    {
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "NODE_EXTRA_CA_CERTS",
+        "PATH",
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+    }
+)
+CODEX_RESEARCH_REVIEWED_VERSIONS = frozenset({"0.153.4"})
+_CODEX_VERSION_PATTERN = re.compile(r"^codex-cli (\d+\.\d+\.\d+)$")
 
 
 @dataclass(frozen=True)
@@ -35,6 +51,51 @@ class CodexLaunchScope:
     readable_roots: list[str] | None
     writable_roots: list[str] | None
     require_code_mode_host: bool
+
+
+def codex_research_environment(source: dict[str, str]) -> dict[str, str]:
+    """Keep only process essentials before adding the private runtime paths."""
+    return {
+        key: value
+        for key, value in source.items()
+        if key in CODEX_RESEARCH_ENV_KEYS and str(value).strip()
+    }
+
+
+@lru_cache(maxsize=8)
+def codex_research_runtime_version(command: str) -> str | None:
+    """Return an exact reviewed Codex version, otherwise fail closed."""
+    try:
+        completed = subprocess.run(
+            [command, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    first_line = (completed.stdout or completed.stderr).strip().splitlines()
+    match = _CODEX_VERSION_PATTERN.fullmatch(first_line[0]) if first_line else None
+    version = match.group(1) if match else None
+    return version if version in CODEX_RESEARCH_REVIEWED_VERSIONS else None
+
+
+def validate_codex_research_initialize(
+    result: object,
+    *,
+    expected_home: str,
+) -> None:
+    """Attest that the isolated process accepted its private Codex home."""
+    payload = result if isinstance(result, dict) else {}
+    reported_home = str(payload.get("codexHome") or "").strip()
+    if not reported_home or Path(reported_home).resolve() != Path(expected_home).resolve():
+        raise ProviderLaunchError(
+            "codex_research_private_home_unverified",
+            reason_code="research_runtime_unavailable",
+        )
 
 
 def codex_launch_scope(session: RuntimeSessionRecord) -> CodexLaunchScope:
@@ -122,6 +183,7 @@ def prepare_codex_research_runtime_home(
         *(f"{feature} = true" for feature in CODEX_RESEARCH_ENABLED_FEATURES),
         "",
         "[skills]",
+        "bundled = { enabled = false }",
         "include_instructions = false",
         "",
         "[tools.experimental_request_user_input]",
@@ -138,6 +200,10 @@ def prepare_codex_research_runtime_home(
 
 class CodexResearchRuntimeMixin:
     """Intercept Codex home preparation only for isolated Research sessions."""
+
+    def research_runtime_available(self, _binding: object = None) -> bool:
+        command = self._runtime_command(self.codex_command)
+        return codex_research_runtime_version(command) is not None
 
     def _prepare_runtime_home(
         self,
@@ -195,7 +261,10 @@ class CodexResearchRuntimeMixin:
 
 __all__ = [
     "CodexResearchRuntimeMixin",
+    "codex_research_environment",
+    "codex_research_runtime_version",
     "codex_launch_scope",
     "prepare_codex_research_runtime_bin",
     "prepare_codex_research_runtime_home",
+    "validate_codex_research_initialize",
 ]

@@ -23,8 +23,7 @@ export function normalizeSelectedSkillIds(skillIds: string[], skills: SkillSumma
 }
 
 export function effectiveSkillIds(agentType: AgentType, skills: SkillSummary[]) {
-  const explicit = normalizeSelectedSkillIds(agentType.skill_ids, skills);
-  return agentType.skill_ids.length ? explicit : skills.map((skill) => skill.id);
+  return normalizeSelectedSkillIds(agentType.skill_ids, skills);
 }
 
 export function skillIdsForAgentSave(
@@ -34,7 +33,9 @@ export function skillIdsForAgentSave(
 ) {
   const normalizedSelected = normalizeSelectedSkillIds(selectedSkillIds, skills);
   const initialSkillIds = effectiveSkillIds(agentType, skills);
-  const changed = !sameSet(normalizedSelected, initialSkillIds);
+  const changed =
+    agentType.skill_ids.length !== initialSkillIds.length ||
+    !sameSet(normalizedSelected, initialSkillIds);
   return {
     changed,
     skillIds: changed ? normalizedSelected : agentType.skill_ids

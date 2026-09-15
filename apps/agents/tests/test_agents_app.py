@@ -1,572 +1,176 @@
-"""Tests for the native agents app."""
+"""Tests for the simplified Agents app."""
 
 from __future__ import annotations
 
-from io import BytesIO
-from pathlib import Path
 import json
-import os
-import shutil
+from pathlib import Path
 import sys
 import tempfile
 import unittest
 
-from core.api.platform_host import PlatformHost
-from core.api.platform_state import bootstrap_platform_state
 from core.apps.contracts import parse_app_contract_file
-from core.cli.models import CliInvocationContext
-from core.cli.service import list_core_cli_commands, run_core_cli_command
-from core.mcp.models import McpInvocationContext
-from core.mcp.service import call_mcp_tool, list_mcp_tools
-from tests.support.markers import integration_test
 
 
-AGENTS_BACKEND = Path(__file__).resolve().parents[1] / "backend"
-sys.path.insert(0, str(AGENTS_BACKEND))
+APP_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from seeds import seed_defaults
 from service import app_events_for_action, app_events_for_result, handle_action
-from store import delete_role, list_agent_types, list_roles, save_agent_type, save_role
+from store import list_agent_definitions
 
 
 class AgentsAppTestCase(unittest.TestCase):
-    def make_repo_root(self) -> Path:
-        temp_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(temp_dir.cleanup)
-        repo_root = Path(temp_dir.name) / "maverick"
-        for name in ("core", "apps", "workspaces", "scripts"):
-            (repo_root / name).mkdir(parents=True, exist_ok=True)
-        (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
-        (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        source_apps_root = Path(__file__).resolve().parents[3] / "apps"
-        for app_id in ("base-shell", "chat", "agents"):
-            shutil.copytree(source_apps_root / app_id, repo_root / "apps" / app_id, ignore=shutil.ignore_patterns("node_modules"))
-        return repo_root
-
-    def invoke(self, app, *, path: str, method: str = "GET", body: dict | None = None, cookie: str | None = None) -> tuple[int, dict | bytes, dict[str, str]]:
-        payload = b"" if body is None else json.dumps(body).encode("utf-8")
-        headers: dict[str, str] = {}
-        environ = {
-            "PATH_INFO": path,
-            "REQUEST_METHOD": method,
-            "CONTENT_LENGTH": str(len(payload)),
-            "CONTENT_TYPE": "application/json",
-            "wsgi.input": BytesIO(payload),
-        }
-        if cookie is not None:
-            environ["HTTP_COOKIE"] = cookie
-
-        def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
-            headers.update(dict(response_headers))
-            headers["__status__"] = status
-
-        raw = b"".join(app(environ, start_response))
-        status = int(headers["__status__"].split()[0])
-        content_type = headers.get("Content-Type", "")
-        if "application/json" in content_type:
-            return status, json.loads(raw.decode("utf-8")), headers
-        return status, raw, headers
-
-    def login(self, app) -> str:
-        status, _payload, headers = self.invoke(
-            app,
-            path="/api/auth/login",
-            method="POST",
-            body={
-                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
-                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
-            },
-        )
-        self.assertEqual(status, 200)
-        return headers["Set-Cookie"].split(";", 1)[0]
-
-    def test_contract_declares_agents_surfaces(self) -> None:
-        parsed = parse_app_contract_file(Path(__file__).resolve().parents[1])
+    def test_contract_exposes_one_agent_catalog_shape(self) -> None:
+        parsed = parse_app_contract_file(APP_ROOT)
 
         self.assertEqual(parsed.app_id, "agents")
-        self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
-        self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
-        self.assertEqual(len(parsed.contract.requires), 1)
-        self.assertEqual(parsed.contract.requires[0].alias, "runtime-skills")
-        self.assertEqual(parsed.contract.requires[0].interface, "skill.catalog")
-        self.assertEqual(parsed.contract.requires[0].cardinality, "one")
-        self.assertIn("maverick_agents_app", parsed.contract.capabilities.mcp_tools)
-        self.assertIn("agents_set_view_filter", parsed.contract.capabilities.mcp_tools)
-        self.assertIn("agents_reference_manifest", parsed.contract.capabilities.mcp_tools)
-        self.assertEqual(parsed.contract.capabilities.cli_commands, ["agents"])
+        self.assertEqual([item.interface for item in parsed.contract.provides], ["agent.catalog"])
+        self.assertEqual(
+            [item.entity_type for item in parsed.contract.capabilities.reference_entities],
+            ["agent_type"],
+        )
+        self.assertIn(
+            "agents_delete_agent_definition",
+            parsed.contract.capabilities.mcp_tools,
+        )
         self.assertEqual(parsed.contract.capabilities.skills, ["agents-ops"])
-        self.assertIn("widget", parsed.contract.provides[0].surfaces)
-        self.assertEqual(
-            {widget.widget_id for widget in parsed.contract.widgets},
-            {"agents-sidebar", "agents-sidebar-footer"},
-        )
-        self.assertIn("agent_type", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
-        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "agents")
-        self.assertEqual(
-            [item.action for item in parsed.contract.capabilities.view_surfaces[0].state_actions],
-            ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
-        )
 
-    def test_mcp_upsert_schema_allows_documented_instruction_aliases(self) -> None:
-        payload = json.loads((Path(__file__).resolve().parents[1] / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
-        schema = payload["tools"]["agents_upsert_agent_definition"]["input_schema"]
-        instruction_requirements = schema["allOf"][1]["anyOf"]
-
-        self.assertIn({"required": ["instructions"]}, instruction_requirements)
-        self.assertIn({"required": ["role_instructions"]}, instruction_requirements)
-        self.assertIn({"required": ["prompt"]}, instruction_requirements)
-
-    def test_new_catalog_has_no_preinstalled_agents(self) -> None:
+    def test_new_catalog_is_empty_and_uses_one_json_store(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
             result = seed_defaults(data_root)
 
-            self.assertEqual(result["role_count"], 0)
-            self.assertEqual(result["agent_type_count"], 0)
-            self.assertEqual(list_roles(data_root), [])
-            self.assertEqual(list_agent_types(data_root), [])
-            self.assertEqual((data_root / "common_prompt.md").read_text(encoding="utf-8"), "")
+            self.assertEqual(result, {"agent_count": 0})
+            self.assertEqual(list_agent_definitions(data_root), [])
+            self.assertTrue((data_root / "agents.json").is_file())
+            self.assertFalse((data_root / "roles").exists())
+            self.assertFalse((data_root / "common_prompt.md").exists())
+            self.assertFalse((data_root / "agent_types.json").exists())
 
-    def test_existing_historical_catalog_is_retired_once(self) -> None:
+    def test_upsert_get_and_delete_use_one_self_contained_record(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
-            save_role(
-                data_root,
-                {
-                    "id": "general-operator",
-                    "name": "General Operator",
-                    "instructions": "Old bundled instructions.",
-                },
-            )
-            save_role(
-                data_root,
-                {
-                    "id": "piero-linkedin-content-os",
-                    "name": "Piero LinkedIn Content OS",
-                    "instructions": "Old orphan role.",
-                },
-            )
-            save_agent_type(
-                data_root,
-                {
-                    "id": "agent-type-general-operator",
-                    "name": "General Operator",
-                    "role_id": "general-operator",
-                },
-            )
-            (data_root / "common_prompt.md").write_text("Old common prompt.\n", encoding="utf-8")
-
-            result = seed_defaults(data_root)
-
-            self.assertEqual(result["retired_agent_type_count"], 1)
-            self.assertEqual(result["retired_role_count"], 2)
-            self.assertEqual(list_agent_types(data_root), [])
-            self.assertEqual(list_roles(data_root), [])
-            self.assertEqual((data_root / "common_prompt.md").read_text(encoding="utf-8"), "")
-            self.assertEqual(seed_defaults(data_root)["retired_agent_type_count"], 0)
-
-    def test_service_rejects_deleting_referenced_role(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            data_root = Path(temp) / "agents"
-            handle_action(
-                data_root,
-                {
-                    "action": "upsert_agent_definition",
-                    "id": "example-specialist",
-                    "name": "Example Specialist",
-                    "instructions": "Handle one focused task.",
-                },
-            )
-
-            with self.assertRaises(ValueError):
-                delete_role(data_root, "example-specialist")
-
-    def test_backend_catalog_and_prompt_preview(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            data_root = Path(temp) / "agents"
-            handle_action(
-                data_root,
-                {
-                    "action": "upsert_agent_definition",
-                    "id": "example-specialist",
-                    "name": "Example Specialist",
-                    "instructions": "Handle one focused task.",
-                },
-            )
-            status, payload = handle_action(data_root, {"action": "catalog"})
-            preview_status, preview_payload = handle_action(
-                data_root,
-                {"action": "preview_prompt", "id": "example-specialist"},
-            )
-
-            self.assertEqual(status, 200)
-            self.assertEqual(preview_status, 200)
-            self.assertEqual(len(payload["roles"]), 1)
-            self.assertEqual(preview_payload["rendered"], "Handle one focused task.")
-            self.assertNotIn("instances", payload)
-            self.assertEqual(payload["agent_types"][0]["skill_activation_mode"], "explicit")
-        self.assertNotIn("default_execution_mode", payload["agent_types"][0])
-        self.assertNotIn("execution_mode_policy", payload["agent_types"][0])
-        self.assertNotIn("Execution mode", preview_payload["rendered"])
-        self.assertNotIn("Execution policy", preview_payload["rendered"])
-
-    def test_default_action_returns_compact_operations_manifest(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            data_root = Path(temp) / "agents"
-            handle_action(
-                data_root,
-                {
-                    "action": "upsert_agent_definition",
-                    "id": "example-specialist",
-                    "name": "Example Specialist",
-                    "instructions": "Handle one focused task.",
-                },
-            )
-            status, payload = handle_action(data_root, {})
-            compact_status, compact = handle_action(data_root, {"action": "catalog.compact", "limit": 5})
-            full_status, full = handle_action(data_root, {"action": "catalog"})
-
-            self.assertEqual(status, 200)
-            self.assertEqual(payload["default_action"], "operations.manifest")
-            self.assertIn("upsert_agent_definition", payload["operations"])
-            self.assertEqual(compact_status, 200)
-            self.assertEqual(compact["payload_profile"], "compact")
-            self.assertNotIn("common_prompt", compact)
-            self.assertNotIn("instructions", compact["roles"][0])
-            self.assertIn("instructions", full["roles"][0])
-            self.assertIn("skill_ids", compact["agent_types"][0])
-            self.assertTrue(compact["agent_types"][0]["revision_id"].startswith("sha256:"))
-            self.assertEqual(full_status, 200)
-
-    def test_runtime_revision_binds_compact_definition_and_prompt_material(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            data_root = Path(temp) / "agents"
-            handle_action(
-                data_root,
-                {
-                    "action": "upsert_agent_definition",
-                    "id": "example-specialist",
-                    "name": "Example Specialist",
-                    "instructions": "Handle one focused task.",
-                },
-            )
-            _, compact = handle_action(
-                data_root,
-                {"action": "catalog.compact", "entity_type": "agent_type", "limit": 100},
-            )
-            item = compact["agent_types"][0]
-            _, definition = handle_action(
-                data_root,
-                {"action": "get_agent_definition", "id": item["id"]},
-            )
-            _, preview = handle_action(
-                data_root,
-                {"action": "preview_prompt", "agent_type_id": item["id"]},
-            )
-
-            self.assertEqual(
-                item["revision_id"],
-                definition["agent_definition"]["revision_id"],
-            )
-            self.assertEqual(item["revision_id"], preview["revision_id"])
-
-            handle_action(data_root, {"action": "set_common_prompt", "prompt": "Changed common prompt."})
-            _, changed = handle_action(
-                data_root,
-                {"action": "catalog.compact", "entity_type": "agent_type", "limit": 100},
-            )
-            self.assertEqual(item["revision_id"], changed["agent_types"][0]["revision_id"])
-
-    def test_upsert_agent_definition_is_idempotent_and_compact_by_default(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            data_root = Path(temp) / "agents"
-            payload = {
+            status, created = handle_action(data_root, {
                 "action": "upsert_agent_definition",
-                "id": "agent-type-example-specialist",
-                "name": "Example Specialist",
-                "description": "Handles one focused task.",
-                "instructions": "# Example Specialist\n\nHandle one focused task.",
-                "skill_ids": ["agents-ops"],
+                "id": "example",
+                "name": "Example",
+                "description": "One focused agent.",
+                "instructions": "Do the focused work.",
+                "skill_ids": ["prompt-library", "prompt-library"],
+            })
+            get_status, loaded = handle_action(data_root, {
+                "action": "get_agent_definition",
+                "id": "agent-type-example",
+            })
+            delete_status, deleted = handle_action(data_root, {
+                "action": "delete_agent_definition",
+                "id": "agent-type-example",
+            })
+
+            self.assertEqual((status, get_status, delete_status), (200, 200, 200))
+            self.assertTrue(created["created"])
+            self.assertEqual(created["agent_definition"]["skill_ids"], ["prompt-library"])
+            self.assertEqual(loaded["agent_definition"]["instructions"], "Do the focused work.")
+            self.assertTrue(deleted["deleted"])
+            document = json.loads((data_root / "agents.json").read_text(encoding="utf-8"))
+            self.assertEqual(document, {"schema_version": "2", "agents": []})
+
+    def test_compact_catalog_omits_instructions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "agents"
+            handle_action(data_root, {
+                "action": "upsert_agent_definition",
+                "id": "agent-type-example",
+                "name": "Example",
+                "instructions": "Private instructions.",
+            })
+            _status, compact = handle_action(data_root, {
+                "action": "catalog.compact",
+            })
+            _status, full = handle_action(data_root, {"action": "catalog"})
+
+            self.assertNotIn("instructions", compact["agent_types"][0])
+            self.assertEqual(full["agent_types"][0]["instructions"], "Private instructions.")
+            self.assertEqual(compact["count"], 1)
+
+    def test_idempotent_upsert_emits_no_change_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "agents"
+            body = {
+                "action": "upsert_agent_definition",
+                "id": "agent-type-example",
+                "name": "Example",
+                "instructions": "Focused.",
             }
+            handle_action(data_root, body)
+            _status, result = handle_action(data_root, body)
 
-            create_status, created = handle_action(data_root, payload)
-            update_status, updated = handle_action(data_root, payload)
-            changed_status, changed = handle_action(data_root, {**payload, "description": "Updated description."})
-            get_status, full = handle_action(data_root, {"action": "get_agent_definition", "id": "example-specialist"})
+            self.assertFalse(result["created"])
+            self.assertFalse(result["changed"])
+            self.assertEqual(app_events_for_result(body["action"], result), [])
 
-            self.assertEqual(create_status, 200)
-            self.assertEqual(update_status, 200)
-            self.assertEqual(changed_status, 200)
-            self.assertTrue(created["created"]["agent_type"])
-            self.assertFalse(updated["created"]["agent_type"])
-            self.assertTrue(created["changed"]["agent_type"])
-            self.assertFalse(updated["changed"]["agent_type"])
-            self.assertFalse(updated["changed"]["role"])
-            self.assertEqual(app_events_for_result("upsert_agent_definition", updated), [])
-            self.assertTrue(changed["changed"]["agent_type"])
-            self.assertEqual(
-                app_events_for_result("upsert_agent_definition", changed),
-                [{"type": "maverick.app.data-changed", "resource": "configuration"}],
-            )
-            self.assertEqual(created["agent_definition"]["id"], "agent-type-example-specialist")
-            self.assertNotIn("instructions", created["agent_definition"])
-            self.assertEqual(get_status, 200)
-            self.assertTrue(full["exists"])
-            self.assertIn("Handle one focused task.", full["agent_definition"]["instructions"])
-
-    def test_upsert_validation_error_includes_repair_hints(self) -> None:
+    def test_obsolete_role_prompt_and_preview_actions_are_absent(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
+            for action in (
+                "list_roles",
+                "create_role",
+                "create_agent_type",
+                "set_common_prompt",
+                "preview_prompt",
+                "agent.prompt.preview",
+            ):
+                status, payload = handle_action(data_root, {"action": action})
+                self.assertEqual(status, 400)
+                self.assertEqual(payload["error"], "unsupported_action")
 
-            with self.assertRaises(ValueError) as caught:
-                handle_action(data_root, {"action": "upsert_agent_definition", "name": "Missing Id"})
-
-            from service import validation_error_payload
-
-            payload = validation_error_payload(caught.exception, "upsert_agent_definition")
-            self.assertEqual(payload["error"], "validation_error")
-            self.assertIn("id", payload["expected_fields"])
-            self.assertIn("agent_type_id", payload["accepted_aliases"]["id"])
-            self.assertIn("example", payload)
-
-    def test_backend_creates_and_deletes_agent_types(self) -> None:
+    def test_view_and_references_accept_agents_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
-            seed_defaults(data_root)
-            handle_action(
-                data_root,
-                {
-                    "action": "create_role",
-                    "id": "custom-test",
-                    "name": "Custom Test Agent",
-                    "instructions": "Handle the custom test.",
-                },
-            )
-
-            create_status, create_payload = handle_action(
-                data_root,
-                {
-                    "action": "create_agent_type",
-                    "id": "agent-type-custom-test",
-                    "name": "Custom Test Agent",
-                    "description": "Temporary test agent.",
-                    "role_id": "custom-test",
-                    "skill_ids": [],
-                    "trace_verbosity": "compact",
-                    "enabled": True,
-                },
-            )
-            delete_status, delete_payload = handle_action(
-                data_root,
-                {"action": "delete_agent_type", "agent_type_id": "agent-type-custom-test"},
-            )
-            self.assertEqual(create_status, 200)
-            self.assertEqual(create_payload["agent_type"]["id"], "agent-type-custom-test")
-            self.assertEqual(create_payload["agent_type"]["skill_activation_mode"], "explicit")
-            self.assertIn("skill_ids", create_payload["agent_type"])
-            self.assertNotIn("codex_skill_ids", create_payload["agent_type"])
-            self.assertNotIn("default_execution_mode", create_payload["agent_type"])
-            self.assertNotIn("execution_mode_policy", create_payload["agent_type"])
-            self.assertEqual(delete_status, 200)
-            self.assertEqual(delete_payload, {"deleted": True})
-
-    def test_agents_app_does_not_own_runtime_launch(self) -> None:
-        frontend_api = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
-        frontend_types = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "types.ts").read_text(encoding="utf-8")
-        frontend_app = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-
-        self.assertNotIn("/api/apps/skills/backend", frontend_api)
-        self.assertIn("/api/apps/dependencies", frontend_api)
-        self.assertIn("callProviderBackend", frontend_app)
-        self.assertNotIn("/api/runtime/sessions", frontend_api)
-        self.assertNotIn("createRuntimeSession", frontend_api)
-        self.assertNotIn("openChatForRuntimeSession", frontend_api)
-        self.assertNotIn("Use In Runtime", frontend_app)
-        self.assertNotIn("requested_mode", frontend_api)
-        self.assertNotIn("default_execution_mode", frontend_types)
-        self.assertNotIn("execution_mode_policy", frontend_types)
-
-    def test_frontend_uses_shell_sidebar_widgets(self) -> None:
-        app_root = Path(__file__).resolve().parents[1]
-        frontend_app = (app_root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-        sidebar_widget = (app_root / "frontend" / "src" / "widgets" / "agents-sidebar" / "main.tsx").read_text(encoding="utf-8")
-        footer_widget = (app_root / "frontend" / "src" / "widgets" / "agents-sidebar-footer" / "main.tsx").read_text(encoding="utf-8")
-
-        self.assertNotIn("<AgentsSidebar", frontend_app)
-        self.assertIn("maverick.app.navigate", frontend_app)
-        self.assertIn("maverick.app.selection-changed", (app_root / "frontend" / "src" / "lib" / "activeAgentSelection.ts").read_text(encoding="utf-8"))
-        self.assertIn("agentTypeIdFromWidgetContext", sidebar_widget)
-        self.assertIn("useShellSidebarCloseSwipe", sidebar_widget)
-        self.assertIn("maverick.widget.open-app", sidebar_widget)
-        self.assertIn("agent-types/${agentTypeId}", sidebar_widget)
-        self.assertIn("maverick.shell.sidebar.close", sidebar_widget)
-        self.assertIn("new_agent_request_id", footer_widget)
-
-    def test_frontend_uses_single_upsert_write_path_for_agent_definition_edits(self) -> None:
-        frontend_app = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-
-        self.assertIn("action: 'upsert_agent_definition'", frontend_app)
-        self.assertNotIn("action: 'create_role'", frontend_app)
-        self.assertNotIn("action: 'create_agent_type'", frontend_app)
-        self.assertNotIn("action: 'update_role'", frontend_app)
-        self.assertNotIn("action: 'update_agent_type'", frontend_app)
-
-    def test_backend_persists_agents_view_filter_and_custom_view(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            data_root = Path(temp) / "agents"
-            seed_defaults(data_root)
-
-            filtered_status, filtered = handle_action(
-                data_root,
-                {"action": "set_view_filter", "query": "engineer", "entity_type": "agent_type"},
-            )
-            custom_status, custom = handle_action(
-                data_root,
-                {
-                    "action": "set_custom_view",
-                    "title": "Core builders",
-                    "refs": [
-                        {"entity_type": "agent_type", "entity_id": "agent-type-agent-builder"},
-                        {"entity_type": "role_prompt", "entity_id": "server-coding-engineer"},
-                    ],
-                },
-            )
-            read_status, view_state = handle_action(data_root, {"action": "view_filter"})
-            cleared_status, cleared = handle_action(data_root, {"action": "clear_custom_view"})
-
-            self.assertEqual(filtered_status, 200)
-            self.assertEqual(filtered["state"]["view_filter"]["query"], "engineer")
-            self.assertEqual(filtered["state"]["view_filter"]["entity_type"], "agent_type")
-            self.assertEqual(custom_status, 200)
+            status, custom = handle_action(data_root, {
+                "action": "set_custom_view",
+                "refs": [{"entity_type": "agent_type", "entity_id": "agent-type-example"}],
+            })
+            self.assertEqual(status, 200)
             self.assertEqual(custom["state"]["view_filter"]["mode"], "custom")
-            self.assertEqual(len(custom["state"]["view_filter"]["refs"]), 2)
-            self.assertEqual(read_status, 200)
-            self.assertEqual(view_state["state"]["view_filter"]["mode"], "custom")
-            self.assertEqual(cleared_status, 200)
-            self.assertEqual(cleared["state"]["view_filter"]["mode"], "search")
+            with self.assertRaisesRegex(ValueError, "agent_type"):
+                handle_action(data_root, {
+                    "action": "set_custom_view",
+                    "refs": [{"entity_type": "role_prompt", "entity_id": "role"}],
+                })
 
-    def test_reading_agents_view_filter_does_not_emit_data_changed_event(self) -> None:
-        self.assertEqual(app_events_for_action("view_filter"), [])
-        self.assertEqual(app_events_for_action("set_view_filter"), [{"type": "maverick.app.data-changed", "resource": "view-state"}])
-
-    @integration_test("agents platform integration suite; run with scripts/test_suite.py --level integration")
-    def test_bootstrap_installs_agents_and_exposes_surfaces(self) -> None:
-        repo_root = self.make_repo_root()
-        state = bootstrap_platform_state(start_path=repo_root)
-
-        bindings = state.app_store.list_workspace_app_bindings("default")
-        self.assertIn("agents", {binding.app_id for binding in bindings})
-        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "agents" / "agent_types.json").is_file())
-
-        tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
-        commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
-
-        self.assertIn("app.agents.maverick_agents_app", [tool.tool_name for tool in tools])
-        self.assertIn("app.agents.agents_upsert_agent_definition", [tool.tool_name for tool in tools])
-        self.assertIn("app.agents.agents", [command.command_id for command in commands])
-
-    @integration_test("agents platform integration suite; run with scripts/test_suite.py --level integration")
-    def test_platform_backend_mount_returns_agents_catalog(self) -> None:
-        repo_root = self.make_repo_root()
-        state = bootstrap_platform_state(start_path=repo_root)
-        app = PlatformHost(state, start_path=repo_root)
-        cookie = self.login(app)
-
-        status, payload, _headers = self.invoke(app, path="/api/apps/agents/backend", method="POST", body={"action": "catalog"}, cookie=cookie)
-
-        self.assertEqual(status, 200)
-        self.assertEqual(len(payload["roles"]), 17)
-        self.assertEqual(len(payload["agent_types"]), 17)
-
-    @integration_test("agents platform integration suite; run with scripts/test_suite.py --level integration")
-    def test_mcp_and_cli_call_catalog(self) -> None:
-        repo_root = self.make_repo_root()
-        state = bootstrap_platform_state(start_path=repo_root)
-
-        mcp_payload = call_mcp_tool(
-            tool_name="app.agents.maverick_agents_app",
-            context=McpInvocationContext(
-                caller_kind="sandbox_agent",
-                workspace_id="default",
-                agent_id="tester",
-                effective_mode="sandbox",
-            ),
-            arguments={"action": "catalog"},
-            app_store=state.app_store,
-            workspace_id="default",
-            start_path=repo_root,
+    def test_frontend_contains_only_agent_instructions_and_explicit_skills(self) -> None:
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                APP_ROOT / "frontend" / "src" / "App.tsx",
+                APP_ROOT / "frontend" / "src" / "components" / "AgentsDetail.tsx",
+                APP_ROOT / "frontend" / "src" / "types.ts",
+            )
         )
-        cli_payload = run_core_cli_command(
-            command_id="app.agents.agents",
-            context=CliInvocationContext(
-                caller_kind="sandbox_agent",
-                workspace_id="default",
-                agent_id="tester",
-                effective_mode="sandbox",
-            ),
-            arguments={"action": "catalog"},
-            app_store=state.app_store,
-            workspace_id="default",
-            start_path=repo_root,
-        )
+        for obsolete in (
+            "Common Prompt",
+            "Prompt Preview",
+            "TraceMeter",
+            "skillActivationMode",
+            "selectedRole",
+            "role_id",
+            "trace_verbosity",
+        ):
+            self.assertNotIn(obsolete, source)
+        self.assertIn("Explicit Skills", source)
+        self.assertIn("instructions", source)
 
-        self.assertEqual(mcp_payload["status_code"], 200)
-        self.assertEqual(cli_payload["status_code"], 200)
-        self.assertEqual(len(mcp_payload["roles"]), 17)
-        self.assertEqual(len(cli_payload["agent_types"]), 17)
-
-    @integration_test("agents platform integration suite; run with scripts/test_suite.py --level integration")
-    def test_mcp_and_cli_default_manifest_and_upsert_agent_definition(self) -> None:
-        repo_root = self.make_repo_root()
-        state = bootstrap_platform_state(start_path=repo_root)
-        mcp_context = McpInvocationContext(
-            caller_kind="sandbox_agent",
-            workspace_id="default",
-            agent_id="tester",
-            effective_mode="sandbox",
+    def test_data_and_view_actions_emit_separate_events(self) -> None:
+        self.assertEqual(
+            app_events_for_action("upsert_agent_definition"),
+            [{"type": "maverick.app.data-changed", "resource": "configuration"}],
         )
-        cli_context = CliInvocationContext(
-            caller_kind="sandbox_agent",
-            workspace_id="default",
-            agent_id="tester",
-            effective_mode="sandbox",
+        self.assertEqual(
+            app_events_for_action("set_view_filter"),
+            [{"type": "maverick.app.data-changed", "resource": "view-state"}],
         )
-
-        mcp_manifest = call_mcp_tool(
-            tool_name="app.agents.maverick_agents_app",
-            context=mcp_context,
-            arguments={},
-            app_store=state.app_store,
-            workspace_id="default",
-            start_path=repo_root,
-        )
-        cli_manifest = run_core_cli_command(
-            command_id="app.agents.agents",
-            context=cli_context,
-            arguments={},
-            app_store=state.app_store,
-            workspace_id="default",
-            start_path=repo_root,
-        )
-        upsert_payload = {
-            "id": "agent-type-cli-mcp-test",
-            "name": "CLI MCP Test",
-            "instructions": "# CLI MCP Test\n\nVerify shared CLI and MCP behavior.",
-        }
-        mcp_upsert = call_mcp_tool(
-            tool_name="app.agents.agents_upsert_agent_definition",
-            context=mcp_context,
-            arguments=upsert_payload,
-            app_store=state.app_store,
-            workspace_id="default",
-            start_path=repo_root,
-        )
-
-        self.assertEqual(mcp_manifest["default_action"], "operations.manifest")
-        self.assertEqual(cli_manifest["default_action"], "operations.manifest")
-        self.assertEqual(mcp_upsert["status_code"], 200)
-        self.assertEqual(mcp_upsert["agent_definition"]["id"], "agent-type-cli-mcp-test")
-        self.assertNotIn("instructions", mcp_upsert["agent_definition"])
+        self.assertEqual(app_events_for_action("catalog"), [])
 
 
 if __name__ == "__main__":

@@ -395,10 +395,7 @@ export type AgentTypeSummary = {
   id: string;
   name: string;
   description: string;
-  role_id: string;
   skill_ids: string[];
-  skill_activation_mode?: "implicit" | "explicit";
-  trace_verbosity: string;
   enabled: boolean;
 };
 
@@ -408,18 +405,12 @@ export type AgentCatalogPayload = {
 };
 
 export type AgentDefinition = AgentTypeSummary & {
-  role_name?: string;
-  role_description?: string;
   instructions?: string;
 };
 
 export type AgentDefinitionPayload = {
   exists: boolean;
   agent_definition?: AgentDefinition;
-};
-
-export type AgentPromptPreviewPayload = {
-  rendered: string;
 };
 
 export type SpeechCapabilitiesPayload = {

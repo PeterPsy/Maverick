@@ -210,7 +210,10 @@ def _validate_pairing_lineage(request: AgenticModelRequest) -> None:
         not request.pairing_source_journal_id
         or not request.pairing_source_turn_id
         or not request.pairing_source_request_id
-        or request.correlation_id != request.pairing_source_turn_id
+        or (
+            request.correlation_id != request.pairing_source_turn_id
+            and not request.pairing_lineage_authorized
+        )
         or state is None
         or state.provider_request_id != request.pairing_source_request_id
         or state.turn_generation != request.pairing_source_turn_id

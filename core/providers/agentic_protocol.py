@@ -135,6 +135,7 @@ class AgenticModelRequest:
     pairing_source_journal_id: str | None = None
     pairing_source_turn_id: str | None = None
     pairing_source_request_id: str | None = None
+    pairing_lineage_authorized: bool = False
     request_phase: AgenticRequestPhase = "exploration"
     semantic_envelope_schema_version: str = ""
     semantic_source_snapshot_digest: str = ""

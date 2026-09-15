@@ -673,10 +673,14 @@ replay cannot export bytes that the original step excluded.
 The loop refreshes effective authority before each provider request and side
 effect, journals request identity before acceptance, and routes tools through
 the official CLI, MCP, app-interface or Core capability surface.
-When execution re-enters an interrupted hosted turn, the prepare context carries
-that exact turn id. Only a committed same-turn pairing may pass preparation;
-the loop restores compatible journal budget schemas, reuses the persisted tool
-result and continues without repeating the effect.
+On backend restart, the interrupted hosted turn is closed and Core creates a
+new recovery turn. When the old turn owns the sole committed tool-result
+pairing, the recovery turn persists that exact source turn id as immutable
+lineage. Admission accepts only a failed predecessor in the same session and
+workspace whose journal and provider envelope still match. The loop restores
+the linked journal budget, pairs the persisted tool result under the new turn
+correlation id, and continues without repeating the effect. Ordinary turns
+without this server-owned lineage remain blocked by an unresolved pairing.
 
 Tool-schema review is separate from provider/model admission. Only Core-owned
 schemas marked with the reviewed schema component may be projected directly to
@@ -702,11 +706,14 @@ id and selected upstream must still match the pinned egress route.
 Full-access directory listing and text search scan incrementally and cooperate
 with turn cancellation. They cap visited entries, aggregate bytes read and
 bytes read per file, report partial-scan metadata, and retain only the requested
-page. The bounded scanner orders each visited directory before emitting entries,
-so an unchanged scan has a stable digest and multipage cursors do not depend on
-the order returned by the host filesystem. Listing and search audit
-classification joins the exact entry or match paths included in that page
-rather than classifying only the aggregate root.
+page. The bounded scanner orders each fully visited directory before emitting
+entries. If the physical entry limit interrupts a directory, the scanner
+discards that incomplete directory rather than exposing an order-dependent
+subset. Unchanged scans therefore have a stable digest and multipage cursors do
+not depend on the order returned by the host filesystem. Listing and search
+still report the partial scan. Audit classification joins the exact entry or
+match paths included in the returned page rather than classifying only the
+aggregate root.
 
 Remote requests are built only from server-owned context and authorized tool
 schemas. Client-supplied authority metadata is rejected. Provider routing is
@@ -2268,7 +2275,7 @@ This is a bootstrap adapter detail, not the domain model. Production deployments
 
 Backend process restart is a runtime recovery event.
 
-On real backend host startup, the platform must inspect persisted running runtime sessions. Generic platform-state bootstrap used by CLI wrappers, MCP wrappers, tests, app tooling, or other sidecar processes must not run backend-restart recovery, because those processes can coexist with live runtime workers owned by the backend host. The hosted backend must start this recovery from the backend host lifecycle without blocking the HTTP socket from opening; large runtime histories must not make the service unavailable while deterministic recovery work is still running. Recovery must scope bounded event reads to the running sessions being inspected instead of scanning every persisted runtime event partition or loading full legacy histories. Oversized valid event partitions may be skipped by the startup recovery scan, but they must remain in place for normal runtime history reads and WebSocket snapshot replay; malformed event partitions may be quarantined out of the startup path rather than parsed unboundedly. If a running session has a queued or active turn during true backend startup, the in-memory worker that owned that turn died with the previous backend process. The startup recovery pass must first reconcile the turn store with persisted terminal events. An explicit `runtime.turn.completed`, `runtime.turn.failed`, or `runtime.turn.cancelled` event closes the non-terminal turn record to match that evidence, dispatches the source-app runtime event hook for the terminal state, and does not enqueue a resume. `runtime.output.final` is successful completion evidence only when its `exit_code` is zero; a legacy event without that field retains completed semantics. A final-output event with a nonzero or malformed exit code never proves completion: when the canonical turn is still non-terminal at restart, recovery treats it as interrupted, preserves its partial output, records a visible failed event, and enqueues the bounded continuation. Remaining stale non-terminal user turns must be closed with explicit backend-restart evidence and source-app hooks must be dispatched for those terminal transitions. Before persisting a recovery message, Core validates the pinned live authority. Direct authority proceeds; a proven compatible profile change completes an idempotent continuation fork and resumes on the child session; an unproven change records `runtime.recovery.resume_blocked` without creating a turn. Each recovery message uses a deterministic client-message id derived from the interrupted source turn. If a recovery-created turn is itself interrupted by another restart, Core retries it up to three total attempts in that recovery chain. The terminal failed event states whether another retry was queued; after the limit it gives an actionable visible failure and records `runtime.recovery.resume_blocked` instead of creating an unbounded restart loop.
+On real backend host startup, the platform must inspect persisted running runtime sessions. Generic platform-state bootstrap used by CLI wrappers, MCP wrappers, tests, app tooling, or other sidecar processes must not run backend-restart recovery, because those processes can coexist with live runtime workers owned by the backend host. The hosted backend must start this recovery from the backend host lifecycle without blocking the HTTP socket from opening; large runtime histories must not make the service unavailable while deterministic recovery work is still running. Recovery must scope bounded event reads to the running sessions being inspected instead of scanning every persisted runtime event partition or loading full legacy histories. Oversized valid event partitions may be skipped by the startup recovery scan, but they must remain in place for normal runtime history reads and WebSocket snapshot replay; malformed event partitions may be quarantined out of the startup path rather than parsed unboundedly. If a running session has a queued or active turn during true backend startup, the in-memory worker that owned that turn died with the previous backend process. The startup recovery pass must first reconcile the turn store with persisted terminal events. An explicit `runtime.turn.completed`, `runtime.turn.failed`, or `runtime.turn.cancelled` event closes the non-terminal turn record to match that evidence, dispatches the source-app runtime event hook for the terminal state, and does not enqueue a resume. `runtime.output.final` is successful completion evidence only when its `exit_code` is zero; a legacy event without that field retains completed semantics. A final-output event with a nonzero or malformed exit code never proves completion: when the canonical turn is still non-terminal at restart, recovery treats it as interrupted, preserves its partial output, records a visible failed event, and enqueues the bounded continuation. Remaining stale non-terminal user turns must be closed with explicit backend-restart evidence and source-app hooks must be dispatched for those terminal transitions. Before persisting a recovery message, Core validates the pinned live authority. Direct authority proceeds; a proven compatible profile change completes an idempotent continuation fork and resumes on the child session; an unproven change records `runtime.recovery.resume_blocked` without creating a turn. Each recovery message uses a deterministic client-message id derived from the interrupted source turn. If startup recovery finds a committed hosted tool-result pairing, the new recovery turn records the exact failed source turn in `provider_pairing_source_turn_id`; admission and the provider-step WAL accept only that persisted same-session lineage, while the provider request keeps the new turn as its correlation id. A later restart transfers whichever turn owns the sole ready pairing in that recovery chain. If a recovery-created turn is itself interrupted by another restart, Core retries it up to three total attempts in that recovery chain. The terminal failed event states whether another retry was queued; after the limit it gives an actionable visible failure and records `runtime.recovery.resume_blocked` instead of creating an unbounded restart loop.
 
 Recovery events, source-app callbacks, and resume eligibility must be derived
 from the terminal status actually returned by the turn lifecycle transition,

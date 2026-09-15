@@ -69,6 +69,7 @@ def _queue_turn_with_event(
     attachments: list[dict[str, object]] | None,
     app_references: list[dict[str, object]] | None,
     invoked_skill_ids: list[str] | None = None,
+    provider_pairing_source_turn_id: str | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
     submission_timing: RuntimeTurnSubmissionTiming | None = None,
@@ -82,6 +83,7 @@ def _queue_turn_with_event(
         attachments=attachments,
         app_references=app_references,
         invoked_skill_ids=invoked_skill_ids,
+        provider_pairing_source_turn_id=provider_pairing_source_turn_id,
         turn_id=turn_id,
         received_perf_counter=received_perf_counter,
         submission_timing=submission_timing,
@@ -99,6 +101,7 @@ def _queue_turn_with_event_result(
     attachments: list[dict[str, object]] | None,
     app_references: list[dict[str, object]] | None,
     invoked_skill_ids: list[str] | None = None,
+    provider_pairing_source_turn_id: str | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
@@ -114,6 +117,7 @@ def _queue_turn_with_event_result(
         input_text=input_text,
         client_message_id=client_message_id,
         invoked_skill_ids=invoked_skill_ids,
+        provider_pairing_source_turn_id=provider_pairing_source_turn_id,
         client_message_claim=client_message_claim,
         workspace_store=getattr(state, "workspace_store", None),
     )
@@ -128,6 +132,10 @@ def _queue_turn_with_event_result(
         payload["app_references"] = app_references
     if invoked_skill_ids:
         payload["invoked_skill_ids"] = list(invoked_skill_ids)
+    if provider_pairing_source_turn_id:
+        payload["provider_pairing_source_turn_id"] = (
+            provider_pairing_source_turn_id
+        )
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),

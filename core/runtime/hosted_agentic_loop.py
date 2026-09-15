@@ -75,6 +75,7 @@ from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.provider_step_journal import ProviderStepJournal
 from core.runtime.provider_step_models import ProviderStepJournalRecord
+from core.runtime.provider_step_admission import provider_pairing_lineage_allows
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_catalog import RuntimeToolCatalog
@@ -254,6 +255,16 @@ class HostedAgenticLoop:
             elif committed_final.final_completion_status != "delivered":
                 raise HostedAgenticLoopError("provider_state_ambiguous")
             return
+        pairing_source = self.recovery.pending_pairing(
+            session_id=context.session.session_id,
+            turn_id=context.correlation_id,
+        )
+        if pairing_source is not None and pairing_source.turn_id != context.correlation_id:
+            existing_turn_steps = _provider_step_lineage(
+                self.tool_ledger.store,
+                pairing_source,
+                current_turn_records=existing_turn_steps,
+            )
         budget = HostedAgenticBudget(
             policy,
             provider_runtime.finalization_policy,
@@ -264,10 +275,6 @@ class HostedAgenticLoop:
             max(item.step_index for item in existing_turn_steps) + 1
             if existing_turn_steps
             else 0
-        )
-        pairing_source = self.recovery.pending_pairing(
-            session_id=context.session.session_id,
-            turn_id=context.correlation_id,
         )
         if pairing_source is not None:
             effective_context = replace(context, effective_authority=authority)
@@ -442,6 +449,14 @@ class HostedAgenticLoop:
                     require_preflight=provider_runtime.recipe is not None,
                     transport_guard=transport_guard,
                 )
+                if (
+                    pairing_source is not None
+                    and pairing_source.turn_id != context.correlation_id
+                ):
+                    request = replace(
+                        request,
+                        pairing_lineage_authorized=True,
+                    )
                 request_control_digest = hosted_request_control_digest(request)
                 break
             private_state.persist_request_identity(context, request)
@@ -1180,8 +1195,8 @@ class HostedAgenticLoop:
         except Exception as error:
             raise HostedAgenticLoopError("provider_state_ambiguous") from error
 
-    @staticmethod
     def _validate_request_pairing(
+        self,
         request: AgenticModelRequest,
         *,
         pairing_source: ProviderStepJournalRecord | None,
@@ -1189,7 +1204,7 @@ class HostedAgenticLoop:
         request_lineage_digest: str,
     ) -> None:
         if pairing_source is None:
-            if request.tool_results or any(
+            if request.tool_results or request.pairing_lineage_authorized or any(
                 value is not None
                 for value in (
                     request.pairing_source_journal_id,
@@ -1202,12 +1217,22 @@ class HostedAgenticLoop:
         state = request.provider_private_state
         if (
             not request.tool_results
-            or pairing_source.turn_id != turn_id
+            or request.pairing_lineage_authorized
             or request.correlation_id != turn_id
+            or not provider_pairing_lineage_allows(
+                self.tool_ledger.store,
+                session_id=pairing_source.session_id,
+                consumer_turn_id=turn_id,
+                source_turn_id=pairing_source.turn_id,
+            )
             or request.pairing_source_journal_id != pairing_source.journal_id
             or request.pairing_source_turn_id != pairing_source.turn_id
             or request.pairing_source_request_id != pairing_source.request_id
-            or pairing_source.request_lineage_digest != request_lineage_digest
+            or (
+                pairing_source.turn_id == turn_id
+                and pairing_source.request_lineage_digest
+                != request_lineage_digest
+            )
             or state is None
             or state.provider_request_id != pairing_source.request_id
             or state.turn_generation != pairing_source.turn_id
@@ -1222,3 +1247,38 @@ def _turn_budget_elapsed(records: list[ProviderStepJournalRecord]) -> float:
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=UTC)
     return max(0.0, (datetime.now(tz=UTC) - created_at).total_seconds())
+
+
+def _provider_step_lineage(
+    store,
+    pairing_source: ProviderStepJournalRecord,
+    *,
+    current_turn_records: list[ProviderStepJournalRecord],
+) -> list[ProviderStepJournalRecord]:
+    """Restore only journal turns linked to the pending pairing."""
+    turn_ids = {pairing_source.turn_id}
+    cursor = pairing_source
+    seen: set[str] = set()
+    while cursor.pairing_source_journal_id is not None:
+        if cursor.journal_id in seen:
+            raise HostedAgenticLoopError("provider_pairing_ambiguous")
+        seen.add(cursor.journal_id)
+        cursor = store.get_provider_step_journal(
+            cursor.pairing_source_journal_id
+        )
+        turn_ids.add(cursor.turn_id)
+    records = [
+        item
+        for item in store.list_provider_step_journals(
+            session_id=pairing_source.session_id
+        )
+        if item.turn_id in turn_ids
+    ]
+    by_id = {
+        item.journal_id: item
+        for item in (*records, *current_turn_records)
+    }
+    return sorted(
+        by_id.values(),
+        key=lambda item: (item.created_at, item.step_index, item.journal_id),
+    )

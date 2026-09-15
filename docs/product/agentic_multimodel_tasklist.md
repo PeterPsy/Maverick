@@ -109,30 +109,30 @@ hosted adapter follows the same universal loop and full-access contract.
   on every terminal turn transition; keep native process tokens intentionally
   session-scoped.
 - [x] Extract a bounded filesystem scanner with deterministic per-directory
-  ordering and multipage cursor coverage.
-- [x] Cover an interrupted OpenRouter tool step with a fresh adapter instance,
-  same-turn journal recovery and no repeated tool effect.
+  ordering and multipage cursor coverage; discard an incomplete directory when
+  the physical limit would otherwise expose an order-dependent subset.
+- [x] Cover an interrupted OpenRouter tool step through real backend startup
+  recovery, persisted predecessor pairing lineage and no repeated tool effect.
 - [x] Record the final post-commit OpenRouter GLM and Codex restart smoke below.
 
 ## Validation record
 
-Current 2026-09-14 validation passes 1,225 root unit tests with five skips, 381
-provider tests, 204 runtime-state tests, 171 runtime-tool tests, 28 egress tests
-and 350 API tests. A complete fast run on detached commit `8c9bc9ae` reached
-every functional area and app shard. Its persistent failures are the three
+Current 2026-09-15 validation passes 1,232 root unit tests with five skips, 387
+provider tests, 207 runtime-state tests, 172 runtime-tool tests, 26 integration
+recovery tests, 28 egress tests and 350 API tests. The final complete fast run
+reached every root and app shard. Its persistent failures remain the three
 existing repository convention baselines for file-size/layout/reference
-budgets. Two load-sensitive timing assertions that passed in root discovery
-failed in their repeated area shards and then passed three consecutive focused
-runs. One Browser check could not resolve the main checkout's `node_modules`
-from the detached worktree and passed immediately in the primary checkout.
+budgets. One Chat cleanup race failed while app shards ran concurrently and
+passed immediately in a focused rerun.
 
 The controlled in-flight recovery test interrupts the OpenRouter loop after a
-filesystem result and provider step are durably committed, constructs a fresh
-adapter over the same store, reconciles the journal and completes the original
-turn. The second provider request contains the persisted result and the tool
-ledger contains one invocation, proving that recovery does not repeat the
-effect. This test also protects current and persisted compatible budget journal
-schemas.
+filesystem result and provider step are durably committed, then enters
+`recover_interrupted_runtime_turns_after_backend_restart()`. Startup recovery
+reconciles the journal, fails the interrupted turn, persists its pairing id on
+a newly queued recovery turn, and completes that new turn. The second provider
+request contains the persisted result and the tool ledger contains one
+invocation, proving that recovery does not repeat the effect. This test also
+protects current and persisted compatible budget journal schemas.
 
 The live parity smoke used OpenRouter session
 `b2eae95d-a5e4-42d4-b401-c6404e258353` for concurrent filesystem reads and a
@@ -141,7 +141,7 @@ The same session accepted a new tool turn after restart. Codex session
 `b1610ebb-6a15-4ed9-a328-709babcf22f2` likewise completed filesystem and CLI
 work before restart and a new tool turn afterwards. These live checks establish
 persisted-session continuity; the controlled fault test above establishes
-in-flight same-turn recovery.
+in-flight recovery through the actual backend-restart entry point.
 
 Historical counts of 1,207, 1,214 and 1,223 tests were intermediate delivery
 snapshots and are superseded by the current result above. The direct control

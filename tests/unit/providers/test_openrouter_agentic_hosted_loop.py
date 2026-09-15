@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import unittest
 
-from core.providers.agentic_adapter import RuntimeRecoveryContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
@@ -25,7 +23,6 @@ from core.providers.openrouter_agentic_profile import openrouter_agentic_routing
 from core.providers.openrouter_agentic_state import inspect_openrouter_chat_state
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
-from core.runtime.provider_step_journal import ProviderStepJournal
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
 from tests.unit.providers.test_openrouter_agentic_codec import (
     _ScriptedTransport,
@@ -94,107 +91,6 @@ class OpenRouterAgenticHostedLoopTest(unittest.TestCase):
         self.assertNotIn("private fixture reasoning", serialized)
         self.assertNotIn("private-signature", serialized)
 
-    def test_restart_after_tool_execution_continues_the_same_turn(self) -> None:
-        harness = HostedAgenticHarness(
-            self,
-            model_provider_id="openrouter",
-            model_id=OPENROUTER_AGENTIC_MODEL_ID,
-            provider_protocol="openrouter-chat-completions",
-            routing_constraint=openrouter_agentic_routing_constraint(),
-            filesystem_list=True,
-        )
-        interrupted_transport = _ScriptedTransport([
-            _tool_stream(
-                "generation-restart-tool",
-                harness.filesystem_list_tool_name,
-                arguments={"path": ".", "max_depth": 1, "max_results": 10},
-            ),
-        ])
-        interrupted = harness.adapter(
-            OpenRouterAgenticClient(transport=interrupted_transport),
-            private_codec=HostedProviderPrivateCodec(
-                OPENROUTER_AGENTIC_CODEC_ID,
-                OPENROUTER_AGENTIC_CODEC_VERSION,
-                OPENROUTER_AGENTIC_SCHEMA_VERSION,
-                OPENROUTER_AGENTIC_CONTENT_TYPE,
-            ),
-            credential=EphemeralCredential("fixture-openrouter-key"),
-            cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
-            private_state_inspector=inspect_openrouter_chat_state,
-        )
-
-        class _BackendRestart(BaseException):
-            pass
-
-        def restart_after_tool_commit(point, _record):
-            if point == "committed":
-                raise _BackendRestart()
-
-        interrupted.loop.provider_step_journal = ProviderStepJournal(
-            store=harness.store,
-            fault_hook=restart_after_tool_commit,
-        )
-        interrupted.loop.recovery.journal = interrupted.loop.provider_step_journal
-        with self.assertRaises(_BackendRestart):
-            execute_runtime_turn(
-                session=harness.session,
-                provider=harness.provider,
-                input_text="Use only synthetic fixture data.",
-                agentic_adapter=interrupted,
-                provider_state=harness.store.get_provider_state("session-hosted"),
-                correlation_id="turn-hosted",
-                effective_authority=harness.authority,
-            )
-
-        resumed_transport = _ScriptedTransport([
-            _text_stream("generation-restart-final", "Recovered same turn"),
-        ])
-        resumed = harness.adapter(
-            OpenRouterAgenticClient(transport=resumed_transport),
-            private_codec=HostedProviderPrivateCodec(
-                OPENROUTER_AGENTIC_CODEC_ID,
-                OPENROUTER_AGENTIC_CODEC_VERSION,
-                OPENROUTER_AGENTIC_SCHEMA_VERSION,
-                OPENROUTER_AGENTIC_CONTENT_TYPE,
-            ),
-            credential=EphemeralCredential("fixture-openrouter-key"),
-            cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
-            private_state_inspector=inspect_openrouter_chat_state,
-        )
-        recovered = asyncio.run(
-            resumed.recover(
-                RuntimeRecoveryContext(
-                    harness.session,
-                    harness.binding,
-                    harness.store.get_provider_state("session-hosted"),
-                    "backend_restart",
-                )
-            )
-        )
-        result = execute_runtime_turn(
-            session=harness.session,
-            provider=harness.provider,
-            input_text="Use only synthetic fixture data.",
-            agentic_adapter=resumed,
-            provider_state=harness.store.get_provider_state("session-hosted"),
-            correlation_id="turn-hosted",
-            effective_authority=harness.authority,
-        )
-
-        self.assertTrue(recovered.recovered)
-        self.assertEqual(result.output_text, "Recovered same turn")
-        self.assertEqual(
-            len(
-                harness.store.list_tool_invocations(
-                    session_id="session-hosted"
-                )
-            ),
-            1,
-        )
-        self.assertIn(
-            harness.filesystem_marker,
-            json.dumps(resumed_transport.payloads[0]),
-        )
 
 
 if __name__ == "__main__":

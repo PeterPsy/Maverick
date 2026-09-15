@@ -44,6 +44,7 @@ def admit_runtime_session(
     *,
     session: RuntimeSessionRecord,
     allow_compatible_fork: bool = True,
+    provider_pairing_source_turn_id: str | None = None,
     now: datetime | None = None,
 ) -> RuntimeContinuationResult:
     """Resolve current lineage, validate authority, and fork only with proof."""
@@ -53,16 +54,18 @@ def admit_runtime_session(
             "runtime_session_recovery_required",
             detail_code=session.recovery_reason_code or "runtime_state_ambiguous",
         )
-    lifecycle_recovery = recover_hosted_agentic_session(
-        state,
-        session=session,
-        trigger="pre_admission",
-    )
-    if lifecycle_recovery.applicable and not lifecycle_recovery.recovered:
-        raise RuntimeProfileUpgradeRequiredError(
-            "runtime_session_recovery_required",
-            detail_code=lifecycle_recovery.reason_code,
+    # Startup recovery already reconciled this WAL before closing its owner.
+    if provider_pairing_source_turn_id is None:
+        lifecycle_recovery = recover_hosted_agentic_session(
+            state,
+            session=session,
+            trigger="pre_admission",
         )
+        if lifecycle_recovery.applicable and not lifecycle_recovery.recovered:
+            raise RuntimeProfileUpgradeRequiredError(
+                "runtime_session_recovery_required",
+                detail_code=lifecycle_recovery.reason_code,
+            )
     candidate = session
     last_fork: RuntimeContinuationResult | None = None
     for _hop in range(MAX_CONTINUATION_ADMISSION_HOPS):
@@ -71,6 +74,7 @@ def admit_runtime_session(
                 state,
                 session=candidate,
                 allow_compatible_fork=allow_compatible_fork,
+                provider_pairing_source_turn_id=provider_pairing_source_turn_id,
                 now=timestamp,
             )
         except _ContinuationAdmissionRetry as retry:
@@ -98,6 +102,7 @@ def _admit_runtime_session_once(
     *,
     session: RuntimeSessionRecord,
     allow_compatible_fork: bool,
+    provider_pairing_source_turn_id: str | None,
     now: datetime,
 ) -> RuntimeContinuationResult:
     handoff = _continuation_handoff_for_session(state, session)
@@ -153,6 +158,7 @@ def _admit_runtime_session_once(
             state.provider_registry,
             session=current,
             target_session_id=successor_id,
+            provider_pairing_source_turn_id=provider_pairing_source_turn_id,
             now=now,
             workspace_store=getattr(state, "workspace_store", None),
         )

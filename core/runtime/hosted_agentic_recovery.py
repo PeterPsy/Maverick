@@ -20,6 +20,10 @@ from core.runtime.provider_private_state import (
 )
 from core.runtime.provider_step_journal import ProviderStepJournal
 from core.runtime.provider_step_models import ProviderStepJournalRecord
+from core.runtime.provider_step_admission import (
+    live_provider_pairing_source_turn_id,
+    provider_pairing_lineage_allows,
+)
 from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.tool_models import ToolInvocationRecord
 
@@ -227,7 +231,7 @@ class HostedAgenticRecovery:
         session_id: str,
         turn_id: str,
     ) -> ProviderStepJournalRecord | None:
-        """Return only the current turn's sole committed, unconsumed pairing."""
+        """Return the pairing owned by this turn or its persisted predecessor."""
         records = self.journal.store.list_provider_step_journals(session_id=session_id)
         pending = [
             item
@@ -239,11 +243,16 @@ class HostedAgenticRecovery:
         if not pending:
             return None
         record = pending[0]
+        source_turn_id = live_provider_pairing_source_turn_id(
+            self.journal.store,
+            session_id=session_id,
+            consumer_turn_id=turn_id,
+        )
         envelope = record.staged_provider_state
         state = self.journal.store.get_provider_state(session_id)
         current = state.provider_private_envelope
         if (
-            record.turn_id != turn_id
+            source_turn_id != record.turn_id
             or envelope is None
             or current is None
             or current.opaque_state_ref != envelope.opaque_state_ref
@@ -921,13 +930,22 @@ class HostedAgenticRecovery:
             if (
                 source.session_id != item.session_id
                 or source.workspace_id != item.workspace_id
-                or source.turn_id != item.turn_id
+                or not provider_pairing_lineage_allows(
+                    self.journal.store,
+                    session_id=item.session_id,
+                    consumer_turn_id=item.turn_id,
+                    source_turn_id=source.turn_id,
+                )
                 or source.step_index >= item.step_index
                 or source.commit_status != "committed"
                 or source.pairing_status not in {"ready", "consumed"}
                 or not item.request_lineage_digest
                 or len(item.request_lineage_digest) != 64
-                or source.request_lineage_digest != item.request_lineage_digest
+                or (
+                    source.turn_id == item.turn_id
+                    and source.request_lineage_digest
+                    != item.request_lineage_digest
+                )
                 or (
                     item.request_phase == "finalization_recovery"
                     and source.request_phase != "finalization"
@@ -1024,19 +1042,17 @@ class HostedAgenticRecovery:
         for record in records:
             if record.commit_status != "committed" or record.pairing_status != "ready":
                 continue
-            try:
-                turn = self.journal.store.get_turn(record.turn_id)
-            except Exception as error:
-                raise _RecoveryAmbiguous(
-                    "provider_pairing_ambiguous",
-                    "provider_pairing_owner_turn_missing",
-                    record,
-                ) from error
-            if turn.session_id != record.session_id or turn.status not in {
-                "queued",
-                "active",
-                "waiting_for_tool_confirmation",
-            }:
+            consumers = [
+                turn
+                for turn in self.journal.store.list_turns(record.session_id)
+                if live_provider_pairing_source_turn_id(
+                    self.journal.store,
+                    session_id=record.session_id,
+                    consumer_turn_id=turn.turn_id,
+                )
+                == record.turn_id
+            ]
+            if len(consumers) != 1:
                 raise _RecoveryAmbiguous(
                     "provider_pairing_ambiguous",
                     "provider_pairing_owner_turn_terminal",

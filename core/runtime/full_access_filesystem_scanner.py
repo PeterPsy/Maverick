@@ -24,15 +24,13 @@ class FullAccessFilesystemScanner:
             self._check(execution_control)
             current_path, depth = pending.popleft()
             children: list[tuple[dict[str, object], Path]] = []
-            limit_reached = False
             try:
                 with os.scandir(current_path) as iterator:
                     for child in iterator:
                         self._check(execution_control)
                         if self.scanned_entries >= self.max_entries:
                             self.truncated = True
-                            limit_reached = True
-                            break
+                            return
                         self.scanned_entries += 1
                         path = Path(child.path)
                         try:
@@ -62,8 +60,6 @@ class FullAccessFilesystemScanner:
                 yield entry, path
                 if entry["type"] == "directory" and depth + 1 < max_depth:
                     pending.append((path, depth + 1))
-            if limit_reached:
-                return
 
     @staticmethod
     def _check(execution_control) -> None:

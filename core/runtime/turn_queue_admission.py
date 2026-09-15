@@ -14,6 +14,7 @@ def require_turn_queue_session_executable(
     session: RuntimeSessionRecord,
     *,
     turn_id: str | None = None,
+    provider_pairing_source_turn_id: str | None = None,
     workspace_store: object | None = None,
 ) -> None:
     """Reject turns whose session is stopped or has transferred ownership."""
@@ -67,6 +68,7 @@ def require_turn_queue_session_executable(
         session_id=session.session_id,
         turn_id=turn_id,
         allow_same_turn_pairing=False,
+        pairing_source_turn_id=provider_pairing_source_turn_id,
     )
     if journal_reason is not None:
         raise RuntimeTurnQueueRejectedError(

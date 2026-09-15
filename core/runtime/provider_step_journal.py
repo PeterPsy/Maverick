@@ -10,6 +10,7 @@ from uuid import NAMESPACE_URL, uuid5
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.provider_state import ProviderPrivateEnvelope, RuntimeProviderState
 from core.runtime.provider_step_models import ProviderStepJournalRecord
+from core.runtime.provider_step_admission import provider_pairing_lineage_allows
 from core.runtime.store import RuntimeStore
 
 
@@ -103,13 +104,21 @@ class ProviderStepJournal:
             if (
                 source.session_id != session.session_id
                 or source.workspace_id != session.workspace_id
-                or source.turn_id != turn_id
+                or not provider_pairing_lineage_allows(
+                    self.store,
+                    session_id=session.session_id,
+                    consumer_turn_id=turn_id,
+                    source_turn_id=source.turn_id,
+                )
                 or source.commit_status != "committed"
                 or (source.pairing_status != "ready" and not source_replay)
                 or source.step_index >= step_index
                 or not request_lineage_digest
                 or len(request_lineage_digest) != 64
-                or source.request_lineage_digest != request_lineage_digest
+                or (
+                    source.turn_id == turn_id
+                    and source.request_lineage_digest != request_lineage_digest
+                )
                 or source_envelope is None
                 or current_envelope is None
                 or current_envelope.opaque_state_ref

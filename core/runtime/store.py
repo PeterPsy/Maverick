@@ -95,6 +95,7 @@ RUNTIME_TURN_IMMUTABLE_SUBMISSION_FIELDS = frozenset(
         "created_at",
         "runtime_mode",
         "invoked_skill_ids",
+        "provider_pairing_source_turn_id",
         "provider_input_classification_manifest",
     }
 )

@@ -234,11 +234,16 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         if not should_queue_resume:
             continue
         source_turn_id = resume_source_turn.turn_id if resume_source_turn is not None else session.session_id
+        pairing_source_turn_id = _recovery_pairing_source_turn_id(
+            state.runtime_store,
+            resume_source_turn,
+        )
         next_resume_attempt = resume_source_attempts + 1
         try:
             admission = admit_runtime_session(
                 state,
                 session=state.runtime_store.get_session(session.session_id),
+                provider_pairing_source_turn_id=pairing_source_turn_id,
             )
             resume_session = admission.session
             submit_runtime_turn_async(
@@ -251,6 +256,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                     attempt=next_resume_attempt,
                 ),
                 invoked_skill_ids=list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
+                provider_pairing_source_turn_id=pairing_source_turn_id,
                 on_queued=lambda queued_turn, _events, session_id=resume_session.session_id: dispatch_source_app_runtime_event(
                     state,
                     session=state.runtime_store.get_session(session_id),
@@ -300,6 +306,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 "resume_attempt": next_resume_attempt,
                 "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN,
                 "invoked_skill_ids": list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
+                "provider_pairing_source_turn_id": pairing_source_turn_id,
             },
             event_bus=state.runtime_event_bus,
         )
@@ -322,6 +329,27 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         closed_turns=closed_turns,
         queued_resume_turns=queued_resumes,
     )
+
+
+def _recovery_pairing_source_turn_id(
+    store,
+    turn: "RuntimeTurnRecord | None",
+) -> str | None:
+    """Select the sole ready pairing owned by the interrupted turn lineage."""
+    if turn is None:
+        return None
+    ready = [
+        item
+        for item in store.list_provider_step_journals(session_id=turn.session_id)
+        if item.commit_status == "committed" and item.pairing_status == "ready"
+    ]
+    if len(ready) != 1:
+        return None
+    allowed_sources = {
+        turn.turn_id,
+        getattr(turn, "provider_pairing_source_turn_id", None),
+    }
+    return ready[0].turn_id if ready[0].turn_id in allowed_sources else None
 
 
 def _recover_pending_cancelled_turn_terminalizations(state: "PlatformState") -> int:

@@ -11,6 +11,7 @@ from core.providers.agentic_adapter import RuntimePrepareContext, RuntimeRecover
 from core.recovery.continuation_admission import assess_runtime_session_admission
 from core.runtime.errors import RuntimeTurnQueueRejectedError
 from core.runtime.lifecycle_service_children import queue_runtime_turn
+from core.runtime.service import transition_runtime_turn
 from core.runtime.workspace_api_token import (
     issue_workspace_api_token,
     register_workspace_api_token,
@@ -74,6 +75,34 @@ class HostedAgenticPersistedAdmissionTest(unittest.TestCase):
                 turn.turn_id == "turn-new-admission"
                 for turn in harness.store.list_turns(harness.session.session_id)
             )
+        )
+
+    def test_queue_persists_explicit_backend_restart_pairing_lineage(self) -> None:
+        harness, _adapter = self._ready_pairing()
+        transition_runtime_turn(
+            harness.store,
+            turn_id="turn-hosted",
+            target_status="failed",
+            failure_reason="backend restart",
+            now=NOW,
+        )
+
+        with patch(
+            "core.runtime.turn_queue_admission.remote_agentic_containment_reason",
+            return_value=None,
+        ):
+            queued = queue_runtime_turn(
+                harness.store,
+                turn_id="turn-recovery",
+                session_id=harness.session.session_id,
+                input_text="continue after restart",
+                provider_pairing_source_turn_id="turn-hosted",
+                now=NOW,
+            )
+
+        self.assertEqual(
+            queued.provider_pairing_source_turn_id,
+            "turn-hosted",
         )
 
     def test_runtime_token_rejects_unresolved_persisted_pairing(self) -> None:

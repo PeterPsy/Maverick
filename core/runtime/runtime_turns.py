@@ -37,6 +37,7 @@ class RuntimeTurnRecord:
     runtime_mode: RuntimeMode = "agentic"
     client_message_id: str | None = None
     invoked_skill_ids: list[str] = field(default_factory=list)
+    provider_pairing_source_turn_id: str | None = None
     cancellation_requested_at: datetime | None = None
     cancellation_reason: str | None = None
     provider_request_started_at: datetime | None = None

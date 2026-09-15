@@ -44,9 +44,24 @@ class RuntimeProviderStartHandoff:
                 raise RuntimeTransitionError(
                     f"Cannot start a provider for unprepared runtime session `{session.session_id}`."
                 )
+            turn = (
+                self.store.get_turn(self.turn_id)
+                if self.turn_id is not None
+                else None
+            )
             require_turn_queue_session_executable(
                 self.store,
                 session,
+                turn_id=self.turn_id,
+                provider_pairing_source_turn_id=(
+                    None
+                    if turn is None
+                    else getattr(
+                        turn,
+                        "provider_pairing_source_turn_id",
+                        None,
+                    )
+                ),
                 workspace_store=self.workspace_store,
             )
             if session.runtime_mode == "agentic":
@@ -65,8 +80,7 @@ class RuntimeProviderStartHandoff:
                         raise RuntimeProviderStateError(
                             f"Runtime provider state for session `{session.session_id}` does not match its binding."
                         )
-            if self.turn_id is not None:
-                turn = self.store.get_turn(self.turn_id)
+            if turn is not None:
                 if turn.session_id != session.session_id or turn.status != "active":
                     raise RuntimeTransitionError(
                         f"Cannot start a provider while runtime turn `{self.turn_id}` is {turn.status}."

@@ -112,7 +112,7 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
             "entries": page,
             "result_count": len(page),
             "total_result_count": total_count,
-            "truncated": next_offset < total_count,
+            "truncated": next_offset < total_count or scanner.truncated,
             "next_cursor": (
                 encode_cursor(next_offset, snapshot)
                 if next_offset < total_count
@@ -220,7 +220,7 @@ class FullAccessFilesystem(FullAccessFilesystemMutationMixin):
             "matches": page,
             "result_count": len(page),
             "total_result_count": total_count,
-            "truncated": next_offset < total_count,
+            "truncated": next_offset < total_count or scanner.truncated,
             "next_cursor": (
                 encode_cursor(next_offset, snapshot)
                 if next_offset < total_count

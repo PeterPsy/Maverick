@@ -70,7 +70,7 @@ class FullAccessFilesystemScanningTest(unittest.TestCase):
             )
             self.assertEqual(first.payload["snapshot_id"], second.payload["snapshot_id"])
 
-    def test_list_streams_only_up_to_physical_entry_limit(self) -> None:
+    def test_list_discards_directory_incomplete_at_physical_limit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for index in range(10):
@@ -87,9 +87,67 @@ class FullAccessFilesystemScanningTest(unittest.TestCase):
                 page_size=100,
             )
 
-            self.assertEqual(result.payload["total_result_count"], 3)
+            self.assertEqual(result.payload["total_result_count"], 0)
             self.assertTrue(result.payload["scan_truncated"])
             self.assertEqual(result.payload["scan_entry_limit"], 3)
+
+    def test_listing_pages_stay_stable_when_physical_limit_truncates_child(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "anchor.txt").write_text("anchor", encoding="utf-8")
+            nested = root / "nested"
+            nested.mkdir()
+            for name in ("charlie.txt", "alpha.txt", "bravo.txt"):
+                (nested / name).write_text(name, encoding="utf-8")
+            root_entries = list(os.scandir(root))
+            nested_entries = list(os.scandir(nested))
+            scans = iter(
+                (
+                    root_entries,
+                    nested_entries,
+                    list(reversed(root_entries)),
+                    list(reversed(nested_entries)),
+                )
+            )
+
+            class _Scandir:
+                def __init__(self, values):
+                    self.values = values
+
+                def __enter__(self):
+                    return iter(self.values)
+
+                def __exit__(self, *_args):
+                    return False
+
+            filesystem = FullAccessFilesystem(
+                workspace_id="default",
+                workspace_root=root,
+                max_scan_entries=4,
+            )
+            with patch(
+                "core.runtime.full_access_filesystem_scanner.os.scandir",
+                side_effect=lambda _path: _Scandir(next(scans)),
+            ):
+                first = filesystem.list_entries(
+                    ".",
+                    max_depth=2,
+                    page_size=1,
+                ).payload
+                second = filesystem.list_entries(
+                    ".",
+                    max_depth=2,
+                    page_size=1,
+                    cursor=first["next_cursor"],
+                ).payload
+
+            self.assertEqual(first["entries"][0]["name"], "anchor.txt")
+            self.assertEqual(second["entries"][0]["name"], "nested")
+            self.assertTrue(first["scan_truncated"])
+            self.assertTrue(second["scan_truncated"])
+            self.assertIsNotNone(first["next_cursor"])
+            self.assertIsNone(second["next_cursor"])
+            self.assertEqual(first["snapshot_id"], second["snapshot_id"])
 
     def test_search_bounds_reads_and_reports_partial_file_scan(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

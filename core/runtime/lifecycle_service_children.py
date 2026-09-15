@@ -165,6 +165,7 @@ def queue_runtime_turn(
     input_text: str | None = None,
     client_message_id: str | None = None,
     invoked_skill_ids: list[str] | None = None,
+    provider_pairing_source_turn_id: str | None = None,
     now: datetime | None = None,
     workspace_store: object | None = None,
 ) -> RuntimeTurnRecord:
@@ -182,6 +183,7 @@ def queue_runtime_turn(
                 input_text=input_text,
                 client_message_id=client_message_id,
                 invoked_skill_ids=invoked_skill_ids,
+                provider_pairing_source_turn_id=provider_pairing_source_turn_id,
                 now=now,
                 workspace_store=workspace_store,
             )
@@ -195,6 +197,7 @@ def _queue_runtime_turn_locked(
     input_text: str | None = None,
     client_message_id: str | None = None,
     invoked_skill_ids: list[str] | None = None,
+    provider_pairing_source_turn_id: str | None = None,
     now: datetime | None = None,
     workspace_store: object | None = None,
 ) -> RuntimeTurnRecord:
@@ -204,6 +207,7 @@ def _queue_runtime_turn_locked(
         store,
         session,
         turn_id=turn_id,
+        provider_pairing_source_turn_id=provider_pairing_source_turn_id,
         workspace_store=workspace_store,
     )
     record = store.save_turn(
@@ -221,6 +225,7 @@ def _queue_runtime_turn_locked(
             runtime_mode=session.runtime_mode,
             client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
             invoked_skill_ids=_normalized_skill_ids(invoked_skill_ids),
+            provider_pairing_source_turn_id=provider_pairing_source_turn_id,
         )
     )
     _update_thread_for_queued_turn(store, record)
@@ -235,6 +240,7 @@ def queue_runtime_turn_if_client_message_absent(
     input_text: str | None = None,
     client_message_id: str | None = None,
     invoked_skill_ids: list[str] | None = None,
+    provider_pairing_source_turn_id: str | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
     now: datetime | None = None,
     workspace_store: object | None = None,
@@ -253,6 +259,7 @@ def queue_runtime_turn_if_client_message_absent(
                 input_text=input_text,
                 client_message_id=client_message_id,
                 invoked_skill_ids=invoked_skill_ids,
+                provider_pairing_source_turn_id=provider_pairing_source_turn_id,
                 client_message_claim=client_message_claim,
                 now=now,
                 workspace_store=workspace_store,
@@ -267,6 +274,7 @@ def _queue_runtime_turn_if_client_message_absent_locked(
     input_text: str | None = None,
     client_message_id: str | None = None,
     invoked_skill_ids: list[str] | None = None,
+    provider_pairing_source_turn_id: str | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
     now: datetime | None = None,
     workspace_store: object | None = None,
@@ -277,6 +285,7 @@ def _queue_runtime_turn_if_client_message_absent_locked(
         store,
         session,
         turn_id=turn_id,
+        provider_pairing_source_turn_id=provider_pairing_source_turn_id,
         workspace_store=workspace_store,
     )
     record = RuntimeTurnRecord(
@@ -293,6 +302,7 @@ def _queue_runtime_turn_if_client_message_absent_locked(
         runtime_mode=session.runtime_mode,
         client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
         invoked_skill_ids=_normalized_skill_ids(invoked_skill_ids),
+        provider_pairing_source_turn_id=provider_pairing_source_turn_id,
     )
     save_claimed = getattr(store, "save_turn_if_current_client_message_claim", None)
     if client_message_claim is not None and callable(save_claimed):

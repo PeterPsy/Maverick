@@ -93,6 +93,7 @@ def assess_runtime_session_admission(
     *,
     session: RuntimeSessionRecord,
     target_session_id: str,
+    provider_pairing_source_turn_id: str | None = None,
     now: datetime | None = None,
     workspace_store: object | None = None,
 ) -> RuntimeAdmissionAssessment:
@@ -110,6 +111,7 @@ def assess_runtime_session_admission(
     journal_reason = provider_step_admission_reason(
         runtime_store,
         session_id=session.session_id,
+        pairing_source_turn_id=provider_pairing_source_turn_id,
     )
     if journal_reason is not None:
         return _blocked(session, journal_reason)

@@ -97,7 +97,7 @@ def hosted_request_lineage_digest(request: AgenticModelRequest) -> str:
 
 
 def hosted_request_control_digest(request: AgenticModelRequest) -> str:
-    """Hash phase controls separately from immutable same-turn source lineage."""
+    """Hash phase controls separately from immutable request source lineage."""
     payload = {
         "request_phase": request.request_phase,
         "max_output_tokens": request.max_output_tokens,

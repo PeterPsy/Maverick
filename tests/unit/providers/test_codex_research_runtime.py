@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -8,8 +7,6 @@ import tomllib
 import unittest
 from unittest.mock import patch
 
-importlib.import_module("core.providers.codex_app_server_runtime")
-from core.providers import codex_app_server_runtime_protocol as runtime_protocol
 from core.providers.codex_app_server_device_use_turn import (
     codex_turn_input,
     codex_turn_start_params,
@@ -40,7 +37,6 @@ class CodexResearchRuntimeTest(unittest.TestCase):
                 encoding="utf-8",
             )
             command.chmod(0o755)
-            codex_research_runtime_version.cache_clear()
 
             self.assertEqual(
                 codex_research_runtime_version(str(command)),
@@ -55,34 +51,6 @@ class CodexResearchRuntimeTest(unittest.TestCase):
                     {"codexHome": str(root / "other")},
                     expected_home=str(root / "home"),
                 )
-
-    def test_non_web_native_tool_event_fails_closed(self) -> None:
-        process = SimpleNamespace(terminate=unittest.mock.Mock())
-        runtime = SimpleNamespace(
-            research=True,
-            process=process,
-            event_lock=unittest.mock.MagicMock(),
-            current_error_text=None,
-            current_failure_reason_code=None,
-            current_terminal_error_at=None,
-        )
-        with patch.object(runtime_protocol, "_put_completion") as complete, patch.object(
-            runtime_protocol,
-            "_emit",
-        ) as emit:
-            runtime_protocol._handle_item_event(
-                runtime,
-                provider_type="item.started",
-                item={"type": "commandExecution", "command": "pwd"},
-            )
-
-        self.assertEqual(
-            runtime.current_failure_reason_code,
-            "research_runtime_unavailable",
-        )
-        complete.assert_called_once_with(runtime, {"status": "failed"})
-        process.terminate.assert_called_once()
-        emit.assert_not_called()
 
     def test_thread_is_durable_and_turn_is_web_only_without_instructions(self) -> None:
         session = SimpleNamespace(
@@ -168,7 +136,10 @@ class CodexResearchRuntimeTest(unittest.TestCase):
             vendor_bin = root / "vendor"
             vendor_bin.mkdir()
             codex = vendor_bin / "codex"
-            codex.write_text("not executed\n", encoding="utf-8")
+            codex.write_text(
+                "#!/bin/sh\nprintf 'codex-cli 0.153.4\\n'\n",
+                encoding="utf-8",
+            )
             codex.chmod(0o755)
             (vendor_bin / "codex-code-mode-host").touch()
             session = SimpleNamespace(

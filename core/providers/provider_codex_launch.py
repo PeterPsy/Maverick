@@ -304,6 +304,11 @@ class CodexLaunchMixin:
         self.validate_backend()
         selected_model, selected_reasoning = self.validate_model_settings(model_id, model_reasoning_effort)
         scope = codex_launch_scope(session)
+        if scope.research and not self.research_runtime_available():
+            raise ProviderLaunchError(
+                "codex_research_runtime_version_unreviewed",
+                reason_code="research_runtime_unavailable",
+            )
         runtime_root = Path(session.runtime_root)
         workspace_root = Path(session.workspace_root)
         host_command = self._runtime_command(self.codex_command)

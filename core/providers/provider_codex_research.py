@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 import re
 import shutil
@@ -62,9 +61,8 @@ def codex_research_environment(source: dict[str, str]) -> dict[str, str]:
     }
 
 
-@lru_cache(maxsize=8)
 def codex_research_runtime_version(command: str) -> str | None:
-    """Return an exact reviewed Codex version, otherwise fail closed."""
+    """Check the current executable against the exact reviewed Codex version."""
     try:
         completed = subprocess.run(
             [command, "--version"],

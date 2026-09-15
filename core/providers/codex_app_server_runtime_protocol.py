@@ -16,6 +16,18 @@ from core.providers.codex_prompt_budget import final_prompt_budget_payload
 from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
 
 
+_CODEX_RESEARCH_ALLOWED_ITEM_TYPES = frozenset(
+    {
+        "agentMessage",
+        "contextCompaction",
+        "plan",
+        "reasoning",
+        "userMessage",
+        "webSearch",
+    }
+)
+
+
 def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any]) -> None:
     method = str(payload.get("method") or "")
     params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
@@ -166,6 +178,13 @@ def _extract_error_text(params: dict[str, Any]) -> str:
 
 
 def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, item: dict[str, Any]) -> None:
+    item_type = str(item.get("type") or "").strip()
+    if (
+        getattr(runtime, "research", False)
+        and item_type not in _CODEX_RESEARCH_ALLOWED_ITEM_TYPES
+    ):
+        _fail_research_item(runtime, item_type=item_type)
+        return
     if _is_agent_message_item(item) and provider_type.endswith("completed"):
         if _emit_completed_agent_message_output(runtime=runtime, provider_type=provider_type, item=item):
             return
@@ -181,17 +200,7 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
             return
     event = parse_provider_json_event(json.dumps({"type": provider_type, "item": item}))
     if event is not None and not _research_event_allowed(runtime, event):
-        with runtime.event_lock:
-            runtime.current_error_text = (
-                "Codex exposed a non-web tool in the Research runtime."
-            )
-            runtime.current_failure_reason_code = "research_runtime_unavailable"
-            runtime.current_terminal_error_at = time.monotonic()
-        _put_completion(runtime, {"status": "failed"})
-        try:
-            runtime.process.terminate()
-        except OSError:
-            pass
+        _fail_research_item(runtime, item_type=item_type)
         return
     if event is not None:
         _emit(runtime, event)
@@ -203,6 +212,21 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
             structured=structured,
             tool_call_id=_item_id(item) or None,
         )
+
+
+def _fail_research_item(runtime: _CodexAppServerRuntime, *, item_type: str) -> None:
+    label = item_type or "unknown"
+    with runtime.event_lock:
+        runtime.current_error_text = (
+            f"Codex exposed disallowed Research item `{label}`."
+        )
+        runtime.current_failure_reason_code = "research_runtime_unavailable"
+        runtime.current_terminal_error_at = time.monotonic()
+    _put_completion(runtime, {"status": "failed"})
+    try:
+        runtime.process.terminate()
+    except OSError:
+        pass
 
 
 def _research_event_allowed(

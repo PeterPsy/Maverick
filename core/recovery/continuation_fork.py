@@ -134,6 +134,11 @@ def _admit_runtime_session_once(
             state.runtime_store.get_session(lock_session.session_id),
         )
         if live_handoff is not None and live_handoff.phase != "completed":
+            if provider_pairing_source_turn_id is not None:
+                raise RuntimeProfileUpgradeRequiredError(
+                    "runtime_profile_upgrade_required",
+                    detail_code="provider_pairing_session_fork_unsupported",
+                )
             if live_handoff.successor_session_id not in admission_session_ids:
                 raise _ContinuationAdmissionRetry(lock_session)
             predecessor = state.runtime_store.get_session(
@@ -167,6 +172,14 @@ def _admit_runtime_session_once(
                 status="direct",
                 session=current,
                 assessment=assessment,
+            )
+        if (
+            assessment.status == "compatible_upgrade"
+            and provider_pairing_source_turn_id is not None
+        ):
+            raise RuntimeProfileUpgradeRequiredError(
+                "runtime_profile_upgrade_required",
+                detail_code="provider_pairing_session_fork_unsupported",
             )
         if assessment.status != "compatible_upgrade" or not allow_compatible_fork:
             raise RuntimeProfileUpgradeRequiredError(

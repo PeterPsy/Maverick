@@ -112,13 +112,16 @@ hosted adapter follows the same universal loop and full-access contract.
   ordering and multipage cursor coverage; discard an incomplete directory when
   the physical limit would otherwise expose an order-dependent subset.
 - [x] Cover an interrupted OpenRouter tool step through real backend startup
-  recovery, persisted predecessor pairing lineage and no repeated tool effect.
+  recovery, production request preflight, required credentials, persisted
+  predecessor pairing lineage and no repeated tool effect.
+- [x] Block compatible session forks while a hosted pairing is in-flight rather
+  than silently losing provider-private state on the child session.
 - [x] Record the final post-commit OpenRouter GLM and Codex restart smoke below.
 
 ## Validation record
 
-Current 2026-09-15 validation passes 1,232 root unit tests with five skips, 387
-provider tests, 207 runtime-state tests, 172 runtime-tool tests, 26 integration
+Current 2026-09-15 validation passes 1,233 root unit tests with five skips, 387
+provider tests, 208 runtime-state tests, 172 runtime-tool tests, 26 integration
 recovery tests, 28 egress tests and 350 API tests. The final complete fast run
 reached every root and app shard. Its persistent failures remain the three
 existing repository convention baselines for file-size/layout/reference
@@ -131,8 +134,11 @@ filesystem result and provider step are durably committed, then enters
 reconciles the journal, fails the interrupted turn, persists its pairing id on
 a newly queued recovery turn, and completes that new turn. The second provider
 request contains the persisted result and the tool ledger contains one
-invocation, proving that recovery does not repeat the effect. This test also
-protects current and persisted compatible budget journal schemas.
+invocation, proving that recovery does not repeat the effect. Both provider
+requests pass through the production OpenRouter preflight with required
+credentials, and the recovery request reaches preflight only after Core marks
+the persisted lineage as authorized. This test also protects current and
+persisted compatible budget journal schemas.
 
 The live parity smoke used OpenRouter session
 `b2eae95d-a5e4-42d4-b401-c6404e258353` for concurrent filesystem reads and a

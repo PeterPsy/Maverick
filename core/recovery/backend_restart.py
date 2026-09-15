@@ -12,7 +12,11 @@ from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dis
 from core.inter_agent.service import InterAgentService
 from core.providers.errors import ProviderError
 from core.recovery.continuation_fork import admit_runtime_session
-from core.runtime.errors import RuntimeProfileUpgradeRequiredError, RuntimeTurnNotFoundError
+from core.runtime.errors import (
+    RuntimeProfileUpgradeRequiredError,
+    RuntimeTurnNotFoundError,
+    RuntimeTurnQueueRejectedError,
+)
 from core.runtime.plain_hosted_cancellation import reconcile_stale_plain_hosted_request_owners
 from core.runtime.hosted_agentic_lifecycle import recover_all_hosted_agentic_sessions
 from core.runtime.service import record_runtime_event, transition_runtime_turn
@@ -264,10 +268,17 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                     event_type="runtime.turn.queued",
                 ),
             )
-        except (ProviderError, RuntimeProfileUpgradeRequiredError, SkillInvocationError) as error:
+        except (
+            ProviderError,
+            RuntimeProfileUpgradeRequiredError,
+            RuntimeTurnQueueRejectedError,
+            SkillInvocationError,
+        ) as error:
             if isinstance(error, SkillInvocationError):
                 blocked_reason = error.reason_code
             elif isinstance(error, RuntimeProfileUpgradeRequiredError):
+                blocked_reason = error.reason_code
+            elif isinstance(error, RuntimeTurnQueueRejectedError):
                 blocked_reason = error.reason_code
             else:
                 blocked_reason = (

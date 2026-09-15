@@ -418,6 +418,22 @@ class HostedAgenticLoop:
                         forced_context_compaction = True
                         continue
                     raise
+                request_lineage_digest = hosted_request_lineage_digest(request)
+                self._validate_request_pairing(
+                    request,
+                    pairing_source=pairing_source,
+                    turn_id=context.correlation_id,
+                    request_lineage_digest=request_lineage_digest,
+                )
+                if (
+                    pairing_source is not None
+                    and pairing_source.turn_id != context.correlation_id
+                ):
+                    request = replace(request, pairing_lineage_authorized=True)
+                    prepared_request = replace(
+                        prepared_request,
+                        request=request,
+                    )
                 transport_guard = HostedTransportAuthorityGuard(
                     context=context,
                     prepared_request=prepared_request,
@@ -429,13 +445,6 @@ class HostedAgenticLoop:
                     credential_resolver=self.credential_resolver,
                     credential_required=provider_runtime.credential_required,
                     preflight_credential=credential,
-                )
-                request_lineage_digest = hosted_request_lineage_digest(request)
-                self._validate_request_pairing(
-                    request,
-                    pairing_source=pairing_source,
-                    turn_id=context.correlation_id,
-                    request_lineage_digest=request_lineage_digest,
                 )
                 reservation = budget.begin_step(
                     request,
@@ -449,14 +458,6 @@ class HostedAgenticLoop:
                     require_preflight=provider_runtime.recipe is not None,
                     transport_guard=transport_guard,
                 )
-                if (
-                    pairing_source is not None
-                    and pairing_source.turn_id != context.correlation_id
-                ):
-                    request = replace(
-                        request,
-                        pairing_lineage_authorized=True,
-                    )
                 request_control_digest = hosted_request_control_digest(request)
                 break
             private_state.persist_request_identity(context, request)

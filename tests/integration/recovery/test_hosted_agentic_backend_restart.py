@@ -9,6 +9,9 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_protocol import EphemeralCredential
+from core.providers.hosted_endpoint_preflight import (
+    preflight_openrouter_completion_request,
+)
 from core.providers.maverick_agent_builtins import (
     OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
 )
@@ -62,6 +65,12 @@ class HostedAgenticBackendRestartTest(unittest.TestCase):
                 arguments={"path": ".", "max_depth": 1, "max_results": 10},
             ),
         ])
+        preflight_requests = []
+
+        def production_preflight(request, credential):
+            preflight_requests.append(request)
+            return preflight_openrouter_completion_request(request, credential)
+
         interrupted = harness.adapter(
             OpenRouterAgenticClient(transport=interrupted_transport),
             private_codec=HostedProviderPrivateCodec(
@@ -73,6 +82,8 @@ class HostedAgenticBackendRestartTest(unittest.TestCase):
             credential=EphemeralCredential("fixture-openrouter-key"),
             cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
             private_state_inspector=inspect_openrouter_chat_state,
+            request_preflight=production_preflight,
+            credential_required=True,
         )
 
         class _BackendRestart(BaseException):
@@ -124,6 +135,8 @@ class HostedAgenticBackendRestartTest(unittest.TestCase):
             credential=EphemeralCredential("fixture-openrouter-key"),
             cost_estimator=OPENROUTER_REQUEST_COST_ESTIMATOR,
             private_state_inspector=inspect_openrouter_chat_state,
+            request_preflight=production_preflight,
+            credential_required=True,
             authority_refresher=authority_for,
             authority_revalidator=lambda context, _authority: authority_for(context),
         )
@@ -263,6 +276,9 @@ class HostedAgenticBackendRestartTest(unittest.TestCase):
             final_event.payload["complete_text"],
             "Recovered after restart",
         )
+        self.assertEqual(len(preflight_requests), 2)
+        self.assertFalse(preflight_requests[0].pairing_lineage_authorized)
+        self.assertTrue(preflight_requests[1].pairing_lineage_authorized)
 
 
 

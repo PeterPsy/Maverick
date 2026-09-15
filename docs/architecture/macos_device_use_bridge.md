@@ -247,6 +247,8 @@ the material improvement. The persistent binary bridge itself was not the
 bottleneck. Do not add compression layers, upload indirection, retries, polling,
 batching or compound action/observe tools without new measurement.
 
-Concise model instructions intentionally suppress intermediate narration unless
-the user asks for it, so Chat can show `Thinking` until the verified final
-answer. That is a context/latency choice, not missing executor progress.
+Core projects every dynamic native call as a redaction-safe
+`runtime.tool_call.started` plus `completed` or `failed` lifecycle. Chat uses
+those events to show the current Mac action and the persisted Actions group;
+raw arguments, typed text, screenshots and native result bodies stay private.
+The model may add brief milestone narration, but should not narrate every click.

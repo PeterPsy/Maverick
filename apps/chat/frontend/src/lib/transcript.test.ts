@@ -995,6 +995,48 @@ describe("runtime event transcript projection", () => {
     expect(messages[0].toolCalls).toHaveLength(1);
   });
 
+  it("projects a Device Use lifecycle as one visible action", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "device-started",
+        event_type: "runtime.tool_call.started",
+        payload: {
+          action: "observe_app",
+          name: "mac_peekaboo",
+          provider_event_type: "item/tool/call",
+          tool_call_id: "device-call-1",
+          tool_kind: "device_use",
+        },
+      }),
+      event({
+        event_id: "device-completed",
+        event_type: "runtime.tool_call.completed",
+        payload: {
+          action: "observe_app",
+          name: "mac_peekaboo",
+          provider_event_type: "item/tool/call",
+          status: "completed",
+          tool_call_id: "device-call-1",
+          tool_kind: "device_use",
+        },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "tool",
+        toolCalls: [
+          {
+            name: "mac_peekaboo",
+            status: "completed",
+            detail: { action: "observe_app", tool_kind: "device_use" },
+          },
+        ],
+      },
+    ]);
+    expect(messages[0].toolCalls).toHaveLength(1);
+  });
+
   it("merges file change lifecycle events even when one event is missing the provider id", () => {
     const messages = eventsToMessages([
       event({

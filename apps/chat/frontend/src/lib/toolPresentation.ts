@@ -16,10 +16,51 @@ export function toolActivityLabel({ detail, name = "", status }: ToolPresentatio
   if (toolKind === "command" || command) return shellCommandActivityLabel(command, status);
   if (toolKind === "web_search" || isWebTool(detail, name)) return webSearchLabel(detail, status);
   if (toolKind === "file_change" || name === "file_change") return fileChangeLabel(detail, status);
+  if (toolKind === "device_use" || ["mac_computer", "mac_peekaboo", "mac_calendar"].includes(name)) {
+    return deviceUseLabel(detail, status);
+  }
   if (toolKind === "skill_change") {
     return statusLabel(status, "Updating skills", "Updated skills", "Failed to update skills", "Ready to update skills");
   }
   return handleLabel(stringValue(detail.tool_handle) || name, status);
+}
+
+function deviceUseLabel(detail: Record<string, unknown>, status: ToolActivityStatus): string {
+  const action = stringValue(detail.action).toLowerCase();
+  if (["observe", "observe_app", "list_windows"].includes(action)) {
+    return statusLabel(status, "Observing Mac app", "Observed Mac app", "Mac observation failed", "Ready to observe Mac app");
+  }
+  if (action === "open_app") {
+    return statusLabel(status, "Opening Mac app", "Opened Mac app", "Failed to open Mac app", "Ready to open Mac app");
+  }
+  if (action === "select_app") {
+    return statusLabel(status, "Selecting Mac app", "Selected Mac app", "Failed to select Mac app", "Ready to select Mac app");
+  }
+  if (["type", "type_text", "type_at_point", "replace", "replace_text", "replace_at_point"].includes(action)) {
+    return statusLabel(status, "Typing in Mac app", "Typed in Mac app", "Mac typing failed", "Ready to type in Mac app");
+  }
+  if (action === "scroll") {
+    return statusLabel(status, "Scrolling Mac app", "Scrolled Mac app", "Mac scroll failed", "Ready to scroll Mac app");
+  }
+  if (["keypress", "key_chord", "press", "shortcut"].includes(action)) {
+    return statusLabel(status, "Using Mac keyboard", "Used Mac keyboard", "Mac keyboard action failed", "Ready to use Mac keyboard");
+  }
+  if (["click", "click_point", "double_click", "right_click", "middle_click", "hover", "drag"].includes(action)) {
+    return statusLabel(status, "Interacting with Mac app", "Interacted with Mac app", "Mac interaction failed", "Ready to interact with Mac app");
+  }
+  if (action === "wait") {
+    return statusLabel(status, "Waiting for Mac app", "Waited for Mac app", "Mac wait failed", "Ready to wait for Mac app");
+  }
+  if (action === "confirm_action") {
+    return statusLabel(status, "Requesting Mac confirmation", "Requested Mac confirmation", "Mac confirmation failed", "Ready to request Mac confirmation");
+  }
+  if (["list_calendars", "list_events"].includes(action)) {
+    return statusLabel(status, "Reading Mac calendar", "Read Mac calendar", "Failed to read Mac calendar", "Ready to read Mac calendar");
+  }
+  if (["create_event", "update_event"].includes(action)) {
+    return statusLabel(status, "Updating Mac calendar", "Updated Mac calendar", "Failed to update Mac calendar", "Ready to update Mac calendar");
+  }
+  return statusLabel(status, "Using Mac", "Used Mac", "Mac action failed", "Ready to use Mac");
 }
 
 function webSearchLabel(detail: Record<string, unknown>, status: ToolActivityStatus): string {

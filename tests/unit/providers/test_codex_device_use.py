@@ -13,7 +13,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.device_use.contract import DEVICE_USE_CODEX_CONFIG, DEVICE_USE_TOOL_CONTRACT_DIGEST
+from core.device_use.contract import (
+    DEVICE_USE_CODEX_CONFIG,
+    DEVICE_USE_TOOL_CONTRACT_DIGEST,
+    device_use_base_instructions,
+)
 from core.device_use.errors import DeviceUseUnavailableError
 from core.device_use.runtime_registry import register_device_use_session, unregister_device_use_session
 from core.device_use.service import DeviceUseService
@@ -75,7 +79,20 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         instructions = params["baseInstructions"]
         self.assertIn("There is no application allowlist", instructions)
         self.assertIn("Only an explicit Stop or a positively detected screen lock", instructions)
+        self.assertIn("inspect the source project/view", instructions)
+        self.assertIn("brief intermediate updates", instructions)
         self.assertNotIn("Never operate credential or security UI", instructions)
+
+    def test_scoped_mode_requires_source_app_grounding_and_milestone_updates(self):
+        instructions = device_use_base_instructions(
+            mode="on",
+            approved_apps=("com.apple.Safari",),
+            initial_app="com.apple.Safari",
+        )
+
+        self.assertIn("Inspect the source project/view", instructions)
+        self.assertIn("brief intermediate updates", instructions)
+        self.assertNotIn("Do not narrate intermediate tool progress", instructions)
 
     def test_turn_uses_the_reasoning_effort_pinned_to_the_session(self):
         params = codex_turn_start_params(
@@ -152,12 +169,13 @@ class CodexDeviceUseTestCase(unittest.TestCase):
 
     def test_image_is_steered_while_reader_remains_available_then_text_result_returns(self):
         stdin = io.StringIO()
+        events = []
         runtime = _CodexAppServerRuntime(
             session_id="runtime", workspace_id="default", runtime_root="/tmp/runtime",
             process=SimpleNamespace(stdin=stdin, pid=1, poll=lambda: None),
             device_use_binding=self.binding, provider_thread_id="provider-thread",
             current_provider_turn_id="provider-turn", current_runtime_turn_id="runtime-turn",
-            current_task_text="Osserva Safari",
+            current_task_text="Osserva Safari", current_event_sink=events.append,
         )
         payload = {"id": 7, "method": "item/tool/call", "params": {
             "threadId": "provider-thread", "turnId": "provider-turn", "callId": "call",
@@ -194,6 +212,86 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             "PRIVATE_DYNAMIC_METADATA",
         )
         self.assertNotIn("base64", json.dumps(response["result"]))
+        self.assertEqual(
+            [event.event_type for event in events],
+            ["runtime.tool_call.started", "runtime.tool_call.completed"],
+        )
+        self.assertEqual(events[0].payload["tool_call_id"], "call")
+        self.assertEqual(events[1].payload["status"], "completed")
+        self.assertNotIn("PRIVATE_DYNAMIC_METADATA", json.dumps([event.payload for event in events]))
+
+    def test_failed_device_request_emits_a_visible_redacted_tool_lifecycle(self):
+        stdin = io.StringIO()
+        events = []
+        runtime = _CodexAppServerRuntime(
+            session_id="runtime", workspace_id="default", runtime_root="/tmp/runtime",
+            process=SimpleNamespace(stdin=stdin, pid=1, poll=lambda: None),
+            device_use_binding=self.binding, provider_thread_id="provider-thread",
+            current_provider_turn_id="provider-turn", current_runtime_turn_id="runtime-turn",
+            current_task_text="Osserva Safari", current_event_sink=events.append,
+        )
+
+        process_device_use_request(runtime, {
+            "id": 8,
+            "method": "item/tool/call",
+            "params": {
+                "threadId": "provider-thread",
+                "turnId": "provider-turn",
+                "callId": "bad-call",
+                "tool": "not_a_device_tool",
+                "arguments": {"action": "observe", "private": "do not expose"},
+            },
+        })
+
+        response = json.loads(stdin.getvalue())
+        self.assertFalse(response["result"]["success"])
+        self.assertEqual(
+            [event.event_type for event in events],
+            ["runtime.tool_call.started", "runtime.tool_call.failed"],
+        )
+        self.assertEqual(events[1].payload["failure_reason_code"], "device_use_tool_not_allowed")
+        self.assertNotIn("do not expose", json.dumps([event.payload for event in events]))
+
+    def test_native_tool_failure_is_projected_as_failed_not_completed(self):
+        stdin = io.StringIO()
+        events = []
+        runtime = _CodexAppServerRuntime(
+            session_id="runtime", workspace_id="default", runtime_root="/tmp/runtime",
+            process=SimpleNamespace(stdin=stdin, pid=1, poll=lambda: None),
+            device_use_binding=self.binding, provider_thread_id="provider-thread",
+            current_provider_turn_id="provider-turn", current_runtime_turn_id="runtime-turn",
+            current_task_text="Osserva Safari", current_event_sink=events.append,
+        )
+        failed_result = SimpleNamespace(
+            result={
+                "success": False,
+                "contentItems": [{"type": "inputText", "text": "PRIVATE_NATIVE_FAILURE"}],
+            },
+            image_jpeg=None,
+            native_duration_ms=12.0,
+        )
+
+        with patch(
+            "core.providers.codex_app_server_device_use.device_use_service_for_session",
+            return_value=SimpleNamespace(invoke=lambda **_kwargs: failed_result),
+        ):
+            process_device_use_request(runtime, {
+                "id": 9,
+                "method": "item/tool/call",
+                "params": {
+                    "threadId": "provider-thread",
+                    "turnId": "provider-turn",
+                    "callId": "failed-call",
+                    "tool": "mac_computer",
+                    "arguments": {"action": "observe"},
+                },
+            })
+
+        self.assertEqual(
+            [event.event_type for event in events],
+            ["runtime.tool_call.started", "runtime.tool_call.failed"],
+        )
+        self.assertNotIn("PRIVATE_NATIVE_FAILURE", json.dumps([event.payload for event in events]))
 
     def test_provider_exit_revokes_and_unregisters_the_device_lease(self):
         runtime = SimpleNamespace(

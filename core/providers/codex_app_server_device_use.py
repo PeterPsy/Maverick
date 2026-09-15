@@ -9,6 +9,7 @@ from typing import Any
 from core.device_use.errors import DeviceUseError
 from core.device_use.runtime_registry import device_use_service_for_session
 from core.providers.codex_app_server_runtime_transport import _send_request
+from core.runtime.execution_events import RuntimeExecutionEvent
 
 
 def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
@@ -41,6 +42,14 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
     ):
         _send_tool_failure(runtime, request_id, "Device Use turn authority changed.")
         return
+    call_id = str(params.get("callId") or "")
+    tool_name = str(params.get("tool") or "")
+    event_payload = _tool_event_payload(
+        tool_name=tool_name,
+        action=str(arguments.get("action") or ""),
+        call_id=call_id,
+    )
+    _emit(runtime, "runtime.tool_call.started", event_payload)
     try:
         result = service.invoke(
             binding=binding,
@@ -48,8 +57,8 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
             turn_id=runtime_turn_id,
             provider_thread_id=provider_thread_id,
             provider_turn_id=provider_turn_id,
-            call_id=str(params.get("callId") or ""),
-            tool_name=str(params.get("tool") or ""),
+            call_id=call_id,
+            tool_name=tool_name,
             arguments=arguments,
             task_text=task_text,
         )
@@ -82,13 +91,41 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
             )
             if str(acknowledgement.get("turnId") or "").strip() != provider_turn_id:
                 raise RuntimeError("device_use_provider_turn_changed")
+        status = "failed" if tool_result.get("success") is False else "completed"
+        _emit(
+            runtime,
+            f"runtime.tool_call.{status}",
+            {
+                **event_payload,
+                "status": status,
+                "native_duration_ms": result.native_duration_ms,
+            },
+        )
         _send_result(runtime, request_id, tool_result)
     except DeviceUseError as error:
+        _emit(
+            runtime,
+            "runtime.tool_call.failed",
+            {
+                **event_payload,
+                "status": "failed",
+                "failure_reason_code": error.reason_code,
+            },
+        )
         _send_tool_failure(runtime, request_id, error.reason_code)
     except Exception:
         service.stop_activation(
             binding.activation_id,
             reason="device_use_execution_unknown",
+        )
+        _emit(
+            runtime,
+            "runtime.tool_call.failed",
+            {
+                **event_payload,
+                "status": "failed",
+                "failure_reason_code": "device_use_execution_unknown",
+            },
         )
         _send_tool_failure(runtime, request_id, "device_use_execution_unknown")
 
@@ -96,6 +133,28 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
 def reject_device_use_request(runtime, request_id: object, reason: str) -> None:
     """Return a bounded tool failure when the private queue cannot admit work."""
     _send_tool_failure(runtime, request_id, reason)
+
+
+def _tool_event_payload(*, tool_name: str, action: str, call_id: str) -> dict[str, object]:
+    """Return the redaction-safe public identity of one native action."""
+    safe_action = action.strip()[:64]
+    return {
+        "name": tool_name,
+        "tool_kind": "device_use",
+        "status": "started",
+        "tool_call_id": call_id,
+        "call_id": call_id,
+        "action": safe_action,
+        "summary": f"{tool_name}.{safe_action}" if safe_action else tool_name,
+        "provider_event_type": "item/tool/call",
+    }
+
+
+def _emit(runtime, event_type: str, payload: dict[str, object]) -> None:
+    with runtime.event_lock:
+        sink = runtime.current_event_sink
+    if sink is not None:
+        sink(RuntimeExecutionEvent(event_type=event_type, payload=payload))
 
 
 def _tool_text(result: dict[str, object]) -> str:

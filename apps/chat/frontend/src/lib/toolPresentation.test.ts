@@ -99,6 +99,30 @@ describe("toolActivityLabel", () => {
     ).toBe("Read a workspace file");
   });
 
+  it("shows the current Mac action for Device Use tools", () => {
+    expect(
+      toolActivityLabel({
+        detail: { action: "observe_app", tool_kind: "device_use" },
+        name: "mac_peekaboo",
+        status: "started",
+      }),
+    ).toBe("Observing Mac app");
+    expect(
+      toolActivityLabel({
+        detail: { action: "click_point", tool_kind: "device_use" },
+        name: "mac_peekaboo",
+        status: "completed",
+      }),
+    ).toBe("Interacted with Mac app");
+    expect(
+      toolActivityLabel({
+        detail: { action: "type_text", tool_kind: "device_use" },
+        name: "mac_computer",
+        status: "failed",
+      }),
+    ).toBe("Mac typing failed");
+  });
+
   it("bounds long user-controlled fragments", () => {
     const label = toolActivityLabel({
       detail: { query: "x".repeat(200), tool_kind: "web_search" },

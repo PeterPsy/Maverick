@@ -129,6 +129,21 @@ describe("runtimeActivityLabel", () => {
     ).toBe("Reading apps/chat/frontend/src/App.tsx");
   });
 
+  it("shows the active Device Use action instead of thinking", () => {
+    expect(
+      runtimeActivityLabel({
+        activeTurn: turn("active"),
+        events: [
+          event({
+            event_type: "runtime.tool_call.started",
+            payload: { action: "observe_app", name: "mac_peekaboo", tool_kind: "device_use" },
+          }),
+        ],
+        isRuntimeBusy: true,
+      }),
+    ).toBe("Observing Mac app");
+  });
+
   it("keeps failed tool activity specific", () => {
     expect(
       runtimeActivityLabel({

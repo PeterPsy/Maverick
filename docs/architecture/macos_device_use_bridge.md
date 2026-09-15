@@ -1,6 +1,6 @@
 # macOS Device Use through Maverick
 
-Status (2026-09-14): **the only macOS execution path**. Maverick Chat and Core
+Status (2026-09-15): **the only macOS execution path**. Maverick Chat and Core
 own the Codex turn; `MaverickMac` is only the signed native executor. The old
 local/direct Codex mode, local transcript, credential provisioning, native setup
 chrome and Chat execution switch have been deleted without a compatibility
@@ -8,7 +8,7 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v41`.
+direct path was then removed. The current executor contract is `macos-v42`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
@@ -52,17 +52,20 @@ audit remain in Core. WebKit exposes only `maverickDeviceUse`; arguments,
 results, screenshots and credentials never pass through JavaScript or Storage.
 The retired `maverickLocalRuntime` handler and broker do not exist.
 
-The v41 MVP is deliberately one provider/runtime shape:
+The v42 path deliberately remains one provider/runtime family:
 
 - source app and agent `chat`;
-- Codex app-server with `gpt-6-astra`, effort `high`;
+- Codex app-server with the active model profile and reasoning effort already
+  selected in Chat;
 - one agent, Device Use tools only;
 - no skills, attachments, app references, multi-agent mode, MCP servers, shell
   or filesystem tools during a Device Use turn.
 
-This keeps the accepted path small and makes physical device ownership
-unambiguous. Provider and multi-agent expansion require a separate design; do
-not add speculative abstraction to this path.
+Every active Codex model exposed by the ordinary Maverick model selector is
+therefore usable without a second Device Use selector. Hosted and generic tool
+loop providers are not admitted because this bridge depends on Codex dynamic
+tools and same-turn image steering. Provider-family and multi-agent expansion
+require a separate design; do not add speculative abstraction to this path.
 
 ## Off, On and Full authority
 
@@ -121,18 +124,19 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v41`;
+- executor `macos-v42`;
 - tool digest
   `c990c06470cb6252edc762a731525b15b0f1f600070c7bc33ab4f15f6c5ae756`;
 - mode `on` or `full`;
-- model `gpt-6-astra`, effort `high`;
 - initial app and the running-app discovery/allowlist snapshot.
 
-The tool schemas did not change from v40, so the digest is unchanged. v41 adds
+The tool schemas did not change from v40, so the digest is unchanged. v41 added
 mode to the hello, ready frame, immutable `DeviceUseSessionBinding`, public
-thread projection and provider instructions. In On, Core validates the initial
-app against the admitted list and applies the call ceiling. In Full it does
-neither.
+thread projection and provider instructions. v42 removes the executor-level
+model pin: runtime session creation records the selected Codex model and effort
+in the ordinary immutable `RuntimeExecutionBinding`, and both thread/start
+requests read that binding. In On, Core validates the initial app against the
+admitted list and applies the call ceiling. In Full it does neither.
 
 A binding is exact to activation, user, workspace, runtime session and contract.
 Only one activation per login generation and one physical call at a time are
@@ -169,7 +173,7 @@ invariants.
 
 Core:
 
-- `core/device_use/contract.py` — v41 identity, tool schemas and On/Full prompts;
+- `core/device_use/contract.py` — v42 identity, tool schemas and On/Full prompts;
 - `core/device_use/models.py` — immutable mode binding;
 - `core/device_use/service.py` — activation, lease, serialization, ledger,
   binary images and On-only quota;
@@ -185,7 +189,7 @@ Core:
 Native:
 
 - `DeviceUseRuntime.swift` — Off/On/Full settings and lifecycle;
-- `DeviceUseBridge.swift` — v41 WSS and binary image transport;
+- `DeviceUseBridge.swift` — v42 WSS and binary image transport;
 - `ComputerTools.swift` / `IntegratedComputerTools.swift` — dispatcher;
 - `DesktopSessionMonitor.swift` — On invalidation and Full lock-only monitor;
 - `NativeTextFocus.swift` / `NativeTextInput.swift` — exact input admission;
@@ -219,7 +223,7 @@ python3 -m unittest discover -s scripts -p 'test_mac_*.py'
 
 The Apple-silicon workflow must also run Swift tests, release build, real
 Peekaboo catalog smoke and signing/designated-requirement checks. Deploy/restart
-Core before installing a v41 Mac client. With MaverickMac closed, dispatch the
+Core before installing a v42 Mac client. With MaverickMac closed, dispatch the
 existing workflow using `install_and_open=true`; the installer atomically
 replaces `~/Applications/MaverickMac.app`. Never create a second app bundle.
 

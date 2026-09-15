@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from core.device_use.contract import DEVICE_USE_REASONING_EFFORT
 from core.device_use.errors import DeviceUseError
 from core.device_use.runtime_registry import device_use_service_for_session
 from core.providers.codex_skill_inputs import (
@@ -75,12 +74,15 @@ def codex_turn_start_params(
     research: bool,
     provider_thread_id: str,
     turn_input: list[dict[str, object]],
+    reasoning_effort: str | None,
     launch_spec,
     sandbox_policy,
 ) -> dict[str, object]:
     params: dict[str, object] = {"threadId": provider_thread_id, "input": turn_input}
     if device_use:
-        params["effort"] = DEVICE_USE_REASONING_EFFORT
+        effort = str(reasoning_effort or "").strip()
+        if effort:
+            params["effort"] = effort
     elif research:
         params.update({
             "approvalPolicy": "never",

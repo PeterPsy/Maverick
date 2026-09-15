@@ -68,6 +68,8 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertNotIn("ticket", public)
+            self.assertNotIn("model_id", public)
+            self.assertNotIn("reasoning_effort", public)
 
             status, metrics, _ = self._invoke(
                 app,
@@ -96,7 +98,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(stopped, {"status": "stopped"})
 
-    def test_runtime_session_consumes_one_activation_with_the_exact_mono_agent_pin(self) -> None:
+    def test_runtime_session_consumes_one_activation_with_the_selected_codex_pin(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -113,8 +115,8 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 state.provider_registry,
                 workspace_id="default",
                 provider_id="codex",
-                model_id="gpt-6-astra",
-                model_reasoning_effort="high",
+                model_id="gpt-5.6-sol",
+                model_reasoning_effort="max",
             )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
@@ -142,7 +144,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 "runtime_mode": "agentic",
                 "requested_mode": "sandbox",
                 "workspace_profile_binding_id": binding.binding_id,
-                "reasoning_effort": "high",
+                "reasoning_effort": "max",
                 "device_use_activation_id": activation["activation_id"],
                 "system_prompt": "must be ignored",
             }
@@ -159,8 +161,8 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             self.assertEqual(session["device_use"]["mode"], "on")
             self.assertNotIn("device_use_binding", session)
             self.assertEqual(session["execution_binding"]["runtime_engine_id"], "codex")
-            self.assertEqual(session["execution_binding"]["model_id"], "gpt-6-astra")
-            self.assertEqual(session["execution_binding"]["reasoning_effort"], "high")
+            self.assertEqual(session["execution_binding"]["model_id"], "gpt-5.6-sol")
+            self.assertEqual(session["execution_binding"]["reasoning_effort"], "max")
             self.assertEqual(session["requested_mode"], "sandbox")
             self.assertEqual(session["system_prompt"], None)
             self.assertEqual(session["skill_ids"], [])

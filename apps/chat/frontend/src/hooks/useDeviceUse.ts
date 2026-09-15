@@ -14,9 +14,6 @@ import {
   type NativeDeviceUseSnapshot,
 } from "../lib/deviceUse";
 
-const REQUIRED_MODEL = "gpt-6-astra";
-const REQUIRED_EFFORT = "high";
-
 const emptySnapshot: NativeDeviceUseSnapshot = {
   available: false,
   active: false,
@@ -29,14 +26,16 @@ const emptySnapshot: NativeDeviceUseSnapshot = {
   settings: { selectedApp: "", additionalApps: [], consentMode: "perAction" },
 };
 
-function compatibleProvider(providers: ProviderItem[]): ProviderItem | null {
-  return providers.find((provider) => (
-    provider.provider_role === "runtime_engine"
-    && provider.default_model_family === REQUIRED_MODEL
+export function providerSupportsDeviceUse(provider: ProviderItem | null): provider is ProviderItem {
+  const runtimeEngineId = provider?.runtime_engine_id || provider?.provider_id;
+  return Boolean(
+    provider
+    && provider.provider_role === "runtime_engine"
+    && runtimeEngineId === "codex"
     && Boolean(provider.workspace_profile_binding_id)
     && provider.selectable !== false
     && provider.status === "active"
-  )) || null;
+  );
 }
 
 async function waitUntilReady(activationId: string) {
@@ -54,11 +53,13 @@ async function waitUntilReady(activationId: string) {
 
 export function useDeviceUse({
   activeThread,
-  providers,
+  provider,
+  reasoningEffort,
   onPrepare,
 }: {
   activeThread: ChatThread | null;
-  providers: ProviderItem[];
+  provider: ProviderItem | null;
+  reasoningEffort: string;
   onPrepare: (providerId: string, reasoningEffort: string) => Promise<void> | void;
 }) {
   const [snapshot, setSnapshot] = useState<NativeDeviceUseSnapshot>(emptySnapshot);
@@ -116,10 +117,15 @@ export function useDeviceUse({
       if (activeThread) {
         throw new Error("La modalità è fissata per questa chat. Avvia una nuova chat per riattivarla o cambiarla.");
       }
-      const provider = compatibleProvider(providers);
-      if (!provider) throw new Error("Device Use richiede il profilo Codex gpt-6-astra con effort High.");
+      if (!providerSupportsDeviceUse(provider)) {
+        throw new Error("Device Use richiede un modello Codex attivo.");
+      }
       if (activationRef.current) await stopCurrent();
-      await onPrepare(provider.provider_id, REQUIRED_EFFORT);
+      const selectedEffort = reasoningEffort
+        || provider.default_reasoning_effort
+        || provider.supported_reasoning_efforts?.[0]?.effort
+        || "";
+      await onPrepare(provider.provider_id, selectedEffort);
       const activation = await createDeviceUseActivation(crypto.randomUUID());
       const createdId = activation.activation_id;
       if (!activation.ticket || activation.websocket_path !== "/ws/device-use/executor") {
@@ -146,7 +152,7 @@ export function useDeviceUse({
     } finally {
       setBusy(false);
     }
-  }, [activeThread, busy, mode, onPrepare, providers, stopCurrent]);
+  }, [activeThread, busy, mode, onPrepare, provider, reasoningEffort, stopCurrent]);
 
   const configure = useCallback(async (settings: {
     selectedApp: string;

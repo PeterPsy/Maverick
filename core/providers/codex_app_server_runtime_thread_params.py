@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from core.device_use.contract import (
-    DEVICE_USE_MODEL_ID,
     device_use_base_instructions,
     device_use_dynamic_tools,
 )
@@ -110,8 +109,12 @@ def codex_thread_params(
         }
     if getattr(session, "device_use_binding", None) is not None:
         binding = session.device_use_binding
+        execution_binding = getattr(session, "execution_binding", None)
+        model_id = str(getattr(execution_binding, "model_id", "") or "").strip()
+        if not model_id:
+            raise ValueError("Device Use requires a pinned Codex model")
         return {
-            "model": DEVICE_USE_MODEL_ID,
+            "model": model_id,
             "modelProvider": "openai",
             "cwd": launch_spec.working_directory,
             "approvalPolicy": "never",

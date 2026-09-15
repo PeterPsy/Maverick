@@ -33,10 +33,6 @@ from core.api.runtime_thread_delete_api import (
     handle_thread_delete_batch,
     thread_cleanup_forbidden_reason,
 )
-from core.device_use.contract import (
-    DEVICE_USE_MODEL_ID,
-    DEVICE_USE_REASONING_EFFORT,
-)
 from core.device_use.errors import DeviceUseError
 from core.device_use.models import DeviceUseSessionBinding
 from core.device_use.runtime_registry import (
@@ -1365,12 +1361,11 @@ def _preflight_runtime_session_creation_before_persistence(
                 else ()
             ),
         )
-        if device_use_binding is not None and (
-            execution_binding.runtime_engine_id != "codex"
-            or execution_binding.model_id != DEVICE_USE_MODEL_ID
-            or execution_binding.reasoning_effort != DEVICE_USE_REASONING_EFFORT
+        if (
+            device_use_binding is not None
+            and execution_binding.runtime_engine_id != "codex"
         ):
-            raise ProviderError("device_use_requires_codex_astra_high")
+            raise ProviderError("device_use_requires_codex_runtime")
     return RuntimeSessionCreationPreflight(
         session_id=session_id,
         runtime_profile=runtime_profile,

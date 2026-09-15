@@ -18,6 +18,7 @@ from core.device_use.errors import DeviceUseUnavailableError
 from core.device_use.runtime_registry import register_device_use_session, unregister_device_use_session
 from core.device_use.service import DeviceUseService
 from core.providers.codex_app_server_device_use import process_device_use_request
+from core.providers.codex_app_server_device_use_turn import codex_turn_start_params
 from core.providers.codex_app_server_device_use_requests import stop_device_use_runtime
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime
 from core.providers.codex_app_server_runtime_thread_params import codex_thread_params
@@ -34,7 +35,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
-            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v41",
+            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v42",
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="on", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
@@ -49,11 +50,14 @@ class CodexDeviceUseTestCase(unittest.TestCase):
 
     def test_thread_contract_is_ephemeral_read_only_and_dynamic_only(self):
         params = codex_thread_params(
-            session=SimpleNamespace(device_use_binding=self.binding),
+            session=SimpleNamespace(
+                device_use_binding=self.binding,
+                execution_binding=SimpleNamespace(model_id="gpt-5.6-sol"),
+            ),
             launch_spec=SimpleNamespace(working_directory="/private/device-work", execution_mode="sandbox"),
         )
         self.assertTrue(params["ephemeral"])
-        self.assertEqual(params["model"], "gpt-6-astra")
+        self.assertEqual(params["model"], "gpt-5.6-sol")
         self.assertEqual(params["sandbox"], "read-only")
         self.assertEqual({item["name"] for item in params["dynamicTools"]}, {
             "mac_computer", "mac_peekaboo", "mac_calendar",
@@ -62,13 +66,29 @@ class CodexDeviceUseTestCase(unittest.TestCase):
 
     def test_full_mode_instructions_remove_native_authority_limits(self):
         params = codex_thread_params(
-            session=SimpleNamespace(device_use_binding=replace(self.binding, mode="full")),
+            session=SimpleNamespace(
+                device_use_binding=replace(self.binding, mode="full"),
+                execution_binding=SimpleNamespace(model_id="gpt-5.6-terra"),
+            ),
             launch_spec=SimpleNamespace(working_directory="/private/device-work", execution_mode="sandbox"),
         )
         instructions = params["baseInstructions"]
         self.assertIn("There is no application allowlist", instructions)
         self.assertIn("Only an explicit Stop or a positively detected screen lock", instructions)
         self.assertNotIn("Never operate credential or security UI", instructions)
+
+    def test_turn_uses_the_reasoning_effort_pinned_to_the_session(self):
+        params = codex_turn_start_params(
+            device_use=True,
+            research=False,
+            provider_thread_id="provider-thread",
+            turn_input=[{"type": "text", "text": "Observe"}],
+            reasoning_effort="max",
+            launch_spec=SimpleNamespace(),
+            sandbox_policy=lambda _spec: {},
+        )
+
+        self.assertEqual(params["effort"], "max")
 
     def test_device_runtime_routes_dynamic_tools_through_code_mode_host(self):
         features = tomllib.loads(DEVICE_USE_CODEX_CONFIG)["features"]

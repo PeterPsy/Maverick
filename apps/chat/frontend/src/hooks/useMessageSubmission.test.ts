@@ -61,7 +61,7 @@ describe("runtimeSessionOptionsForNewChat", () => {
     expect(options.skill_activation_mode).toBe("implicit");
   });
 
-  it("reduces a Device Use chat to the Codex mono-agent envelope", () => {
+  it("preserves the selected Codex model binding and reasoning effort for Device Use", () => {
     const options = runtimeSessionOptionsForNewChat({
       agentRuntimeConfig: {
         agent_id: "chat",
@@ -72,10 +72,10 @@ describe("runtimeSessionOptionsForNewChat", () => {
         skill_activation_mode: "explicit",
         source_app_id: "chat",
         system_prompt: "",
-        title: "GPT-6 Astra",
+        title: "GPT-5.6 Sol",
         runtime_mode: "agentic",
-        workspace_profile_binding_id: "binding-astra",
-        reasoning_effort: "high",
+        workspace_profile_binding_id: "binding-sol",
+        reasoning_effort: "max",
       },
       deviceUseActivationId: "01234567-89ab-cdef-0123-456789abcdef",
       draftChat: null,
@@ -90,8 +90,8 @@ describe("runtimeSessionOptionsForNewChat", () => {
       skill_ids: [],
       skill_activation_mode: "explicit",
       runtime_mode: "agentic",
-      workspace_profile_binding_id: "binding-astra",
-      reasoning_effort: "high",
+      workspace_profile_binding_id: "binding-sol",
+      reasoning_effort: "max",
       device_use_activation_id: "01234567-89ab-cdef-0123-456789abcdef",
     });
     expect(options.system_prompt).toBeUndefined();

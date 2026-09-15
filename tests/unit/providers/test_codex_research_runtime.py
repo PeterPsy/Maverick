@@ -42,6 +42,7 @@ class CodexResearchRuntimeTest(unittest.TestCase):
             research=research,
             provider_thread_id="thread-research",
             turn_input=turn_input,
+            reasoning_effort=None,
             launch_spec=launch_spec,
             sandbox_policy=lambda _spec: {"type": "dangerFullAccess"},
         )

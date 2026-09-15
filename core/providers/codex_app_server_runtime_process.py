@@ -153,6 +153,11 @@ def execute_codex_app_server_turn(
                 research=research,
                 provider_thread_id=provider_thread_id,
                 turn_input=turn_input,
+                reasoning_effort=getattr(
+                    getattr(session, "execution_binding", None),
+                    "reasoning_effort",
+                    None,
+                ),
                 launch_spec=launch_spec,
                 sandbox_policy=_turn_sandbox_policy,
             ),

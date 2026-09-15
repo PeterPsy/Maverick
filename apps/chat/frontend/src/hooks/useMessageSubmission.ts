@@ -267,7 +267,7 @@ export function runtimeSessionOptionsForNewChat({
       skill_activation_mode: "explicit",
       runtime_mode: "agentic",
       workspace_profile_binding_id: agentRuntimeConfig?.workspace_profile_binding_id,
-      reasoning_effort: "high",
+      reasoning_effort: agentRuntimeConfig?.reasoning_effort,
       device_use_activation_id: deviceUseActivationId,
       title: "New chat",
     };

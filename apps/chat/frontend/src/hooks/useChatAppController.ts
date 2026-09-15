@@ -405,7 +405,8 @@ export function useChatAppController({
   }, [clearAttachments, runtimeControls, setSelectedAgentTypeId]);
   const deviceUse = useDeviceUse({
     activeThread,
-    providers: composerProviders,
+    provider: selectedProvider,
+    reasoningEffort: runtimeControls.reasoningEffort,
     onPrepare: prepareDeviceUse,
   });
   const upsertInterAgentRunDetail = useCallback((detail: InterAgentRunDetail) => {

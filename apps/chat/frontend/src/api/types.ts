@@ -680,8 +680,6 @@ export type DeviceUseActivation = {
   ready: boolean;
   bound: boolean;
   reason?: string | null;
-  model_id?: string;
-  reasoning_effort?: string;
   mode?: "on" | "full" | null;
   initial_app?: string | null;
   approved_app_count?: number;

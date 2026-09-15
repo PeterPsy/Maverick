@@ -1,4 +1,4 @@
-"""Pinned Codex/macOS tool contract for the Device Use benchmark runtime."""
+"""Native macOS tool contract for the Device Use runtime."""
 
 from __future__ import annotations
 
@@ -7,9 +7,7 @@ import json
 
 
 DEVICE_USE_PROTOCOL_VERSION = "maverick.device-use.v1"
-DEVICE_USE_EXECUTOR_CONTRACT = "macos-v41"
-DEVICE_USE_MODEL_ID = "gpt-6-astra"
-DEVICE_USE_REASONING_EFFORT = "high"
+DEVICE_USE_EXECUTOR_CONTRACT = "macos-v42"
 DEVICE_USE_MAX_JPEG_BYTES = 4_000_000
 # EventKit v40 admits a bounded 200 KB JSON read before it is wrapped as a
 # dynamic-tool result. The relay bound includes JSON string escaping so the

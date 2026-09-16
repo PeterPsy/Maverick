@@ -66,7 +66,12 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
         if not callable(prewarm):
             return RuntimePrepareResult(ready=True, prepared_handle=launch_spec)
         provider_thread_id = await asyncio.to_thread(prewarm, context.session, launch_spec)
-        updates = {"provider_thread_id": provider_thread_id, "continuation_id": provider_thread_id} if provider_thread_id else {}
+        updates = (
+            {"provider_thread_id": provider_thread_id, "continuation_id": provider_thread_id}
+            if provider_thread_id
+            and getattr(self.legacy_adapter, "persist_prewarm_provider_thread", True)
+            else {}
+        )
         return RuntimePrepareResult(
             ready=bool(provider_thread_id),
             provider_state_updates=updates,
@@ -230,5 +235,10 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
         if not callable(prewarm):
             return LocalPrewarmResult(ready=True)
         provider_thread_id = await asyncio.to_thread(prewarm, context.session, context.launch_spec)
-        updates = {"provider_thread_id": provider_thread_id, "continuation_id": provider_thread_id} if provider_thread_id else {}
+        updates = (
+            {"provider_thread_id": provider_thread_id, "continuation_id": provider_thread_id}
+            if provider_thread_id
+            and getattr(self.legacy_adapter, "persist_prewarm_provider_thread", True)
+            else {}
+        )
         return LocalPrewarmResult(ready=bool(provider_thread_id), provider_state_updates=updates)

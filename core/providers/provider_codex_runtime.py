@@ -175,6 +175,8 @@ class CodexProviderAdapter(
 ):
     adapter_id = "codex-app-server"
     adapter_version = "2"
+    # Codex does not archive an empty thread; persist it after the first turn is accepted.
+    persist_prewarm_provider_thread = False
     research_runtime_kind = RESEARCH_NATIVE_WEB_RUNTIME
     synchronizes_runtime_skills = True
 

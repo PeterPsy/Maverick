@@ -9,6 +9,7 @@ import unittest
 from core.providers.agentic_adapter import (
     RuntimeCancelContext,
     RuntimeCloseContext,
+    RuntimePrepareContext,
     RuntimeProviderEvent,
     RuntimeRecoveryContext,
     RuntimeTurnContext,
@@ -263,6 +264,26 @@ class AgenticAdapterContractTest(unittest.TestCase):
         self.assertNotIn("aggregatedOutput", tool_payload["raw"]["item"])
         encoded_payload = json.dumps(tool_payload, separators=(",", ":")).encode("utf-8")
         self.assertLessEqual(len(encoded_payload), 1_048_576)
+
+    def test_legacy_prewarm_can_keep_an_empty_thread_process_local(self) -> None:
+        legacy = _LegacyAdapter(self.definition)
+        legacy.prewarm_runtime = lambda *_args: "empty-provider-thread"
+        legacy.persist_prewarm_provider_thread = False
+        bridge = LegacyRuntimeBackendAgenticBridge(legacy)
+
+        prepared = asyncio.run(
+            bridge.prepare(
+                RuntimePrepareContext(
+                    session=self.session,
+                    binding=self.binding,
+                    provider_state=self.provider_state,
+                    local_launch_spec=_launch_spec(self.session),
+                )
+            )
+        )
+
+        self.assertTrue(prepared.ready)
+        self.assertEqual(prepared.provider_state_updates, {})
 
     def test_legacy_bridge_preserves_structured_provider_failure_code(self) -> None:
         legacy = _LegacyAdapter(

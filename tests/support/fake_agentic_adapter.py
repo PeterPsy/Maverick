@@ -25,6 +25,7 @@ class FakeLegacyLocalRuntimeCapabilities:
     """Capabilities used by legacy launch-spec tests behind the async bridge."""
 
     local_process_lifecycle = object()
+    persist_prewarm_provider_thread = False
     synchronizes_runtime_skills = True
 
     def prewarm_runtime(self, session, launch_spec):

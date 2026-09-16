@@ -57,7 +57,6 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                     runtime=runtime,
                     session=session,
                     launch_spec=launch_spec,
-                    on_provider_thread_id=None,
                 )
 
         send_request.assert_called_once()
@@ -104,7 +103,6 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                     runtime=runtime,
                     session=session,
                     launch_spec=launch_spec,
-                    on_provider_thread_id=None,
                 )
 
         self.assertEqual(caught.exception.reason_code, "provider_thread_missing")
@@ -149,7 +147,6 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                     runtime=runtime,
                     session=session,
                     launch_spec=launch_spec,
-                    on_provider_thread_id=None,
                 )
 
         self.assertEqual(caught.exception.reason_code, "provider_request_rejected")
@@ -200,7 +197,6 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                         runtime=runtime,
                         session=session,
                         launch_spec=launch_spec,
-                        on_provider_thread_id=None,
                     )
 
         self.assertEqual(caught.exception.reason_code, "provider_thread_missing")
@@ -249,8 +245,10 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                 status="available",
             )
             captured: dict[str, object] = {}
+            recorded_thread_ids: list[str] = []
 
             def send_request(_runtime, method, params, *, timeout, on_sent=None):
+                self.assertEqual(recorded_thread_ids, [])
                 captured.update(params)
                 _runtime.completion_queue.put({"status": "completed"})
                 return {"turn": {"id": "provider-turn-1"}}
@@ -267,8 +265,10 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                     invoked_skills=[invoked_skill],
                     event_sink=None,
                     timeout_seconds=1,
+                    on_provider_thread_id=recorded_thread_ids.append,
                 )
 
+        self.assertEqual(recorded_thread_ids, ["provider-thread-1"])
         self.assertEqual(
             captured["input"],
             [

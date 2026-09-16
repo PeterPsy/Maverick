@@ -35,7 +35,7 @@ def prewarm_codex_app_server_runtime(
     """Start the Codex app-server and bind a provider thread before the next turn."""
     runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
     _remove_generated_system_skills_if_needed(runtime=runtime, launch_spec=launch_spec, session=session)
-    return _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=None)
+    return _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec)
 
 def execute_codex_app_server_turn(
     *,
@@ -80,7 +80,11 @@ def execute_codex_app_server_turn(
     if on_provider_startup_event is not None:
         on_provider_startup_event("ensure_thread_started", {})
     ensure_thread_started_at = time.perf_counter()
-    provider_thread_id = _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=on_provider_thread_id)
+    provider_thread_id = _ensure_provider_thread(
+        runtime=runtime,
+        session=session,
+        launch_spec=launch_spec,
+    )
     ensure_provider_thread_ms = (time.perf_counter() - ensure_thread_started_at) * 1000
     if on_provider_startup_event is not None:
         on_provider_startup_event(
@@ -186,6 +190,12 @@ def execute_codex_app_server_turn(
         if provider_turn_id:
             with runtime.active_turn_lock:
                 runtime.current_provider_turn_id = provider_turn_id
+    if (
+        on_provider_thread_id is not None
+        and provider_thread_id
+        != str(getattr(session, "provider_thread_id", None) or "").strip()
+    ):
+        on_provider_thread_id(provider_thread_id)
     if on_provider_accepted is not None:
         on_provider_accepted(
             {

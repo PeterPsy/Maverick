@@ -7,7 +7,7 @@ from pathlib import Path
 import queue
 import subprocess
 import threading
-from typing import Any, Callable
+from typing import Any
 
 from core.providers.codex_app_server_runtime_errors import CodexAppServerRequestError
 from core.providers.codex_app_server_runtime_resume import (
@@ -107,7 +107,6 @@ def _ensure_provider_thread(
     runtime: _CodexAppServerRuntime,
     session: RuntimeSessionRecord,
     launch_spec: RuntimeBackendLaunchSpec,
-    on_provider_thread_id: Callable[[str], None] | None,
 ) -> str:
     with runtime.provider_thread_lock:
         configure_codex_prompt_budget(runtime, session)
@@ -154,8 +153,6 @@ def _ensure_provider_thread(
         if not provider_thread_id:
             raise RuntimeError("Codex app-server did not return a provider thread id.")
         runtime.provider_thread_id = provider_thread_id
-        if on_provider_thread_id is not None and provider_thread_id != existing_thread_id:
-            on_provider_thread_id(provider_thread_id)
         return provider_thread_id
 
 

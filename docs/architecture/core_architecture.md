@@ -732,7 +732,10 @@ Prepared-session creation dispatches prewarm without a client-side wait. Turn
 execution retains the short prewarm scheduling delay and bounded join, avoiding
 an immediate prewarm/turn race. This is a transport behavior guarantee, not a
 claim that provider cold-start latency has improved without an end-to-end
-measurement.
+measurement. A Codex prewarm may keep an empty provider thread in the live
+app-server process, but Core does not persist that thread id until `turn/start`
+is accepted. If the prewarmed process exits first, the user turn starts a fresh
+thread instead of trying to resume provider history that never existed.
 
 ### 8. Secret management
 

@@ -69,7 +69,6 @@ class CodexResearchContinuationTest(unittest.TestCase):
                     runtime=runtime,
                     session=session,
                     launch_spec=launch_spec,
-                    on_provider_thread_id=None,
                 )
 
         self.assertEqual(resumed, thread_id)

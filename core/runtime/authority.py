@@ -207,7 +207,12 @@ def resolve_runtime_authority(
             else binding.context_policy_snapshot.revision
         ),
     )
-    return replace(authority, authority_digest=canonical_digest(authority))
+    return replace(authority, authority_digest=canonical_authority_digest(authority))
+
+
+def canonical_authority_digest(authority: RuntimeAuthority) -> str:
+    """Return stable SHA-256 digest of authority with self-digest zeroed out."""
+    return canonical_digest(replace(authority, authority_digest=""))
 
 
 def validate_live_runtime_binding_governance(
@@ -470,7 +475,7 @@ def narrow_hosted_authority_to_policy(
     )
     return replace(
         narrowed,
-        authority_digest=canonical_digest(narrowed),
+        authority_digest=canonical_authority_digest(narrowed),
     )
 
 

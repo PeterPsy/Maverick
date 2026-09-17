@@ -11,7 +11,10 @@ import time
 import unittest
 from unittest.mock import patch
 
-from core.providers.agentic_migration import migrate_agentic_runtime_schema
+from core.providers.agentic_profiles import (
+    build_pinned_execution_binding,
+    ensure_codex_workspace_profile,
+)
 from core.providers.hosted_text_profiles import pin_hosted_text_execution_binding
 from core.providers.provider_credentials import bind_provider_credential
 from core.providers.models import ProviderSelection
@@ -83,7 +86,21 @@ class AsyncProviderContextTest(unittest.TestCase):
         self.assertEqual(self.state.runtime_store.get_turn(turn.turn_id).input_text, original_input)
         self.assertNotIn(provider_input, str(self.state.runtime_store.list_events(session.session_id)))
 
-    def test_migrated_agentic_async_dispatch_receives_context_without_persisting_it(self) -> None:
+    def test_agentic_async_dispatch_receives_context_without_persisting_it(self) -> None:
+        codex = self.state.provider_store.get_provider_definition("codex")
+        selection = self.state.provider_store.get_provider_selection("default")
+        ensure_codex_workspace_profile(
+            self.state.provider_store,
+            definition=codex,
+            selection=selection,
+        )
+        binding = build_pinned_execution_binding(
+            self.state.provider_store,
+            builtin_provider_registry(),
+            session_id="agentic-context",
+            workspace_id="default",
+            execution_mode="sandbox",
+        )
         session = create_runtime_session(
             self.state.runtime_store,
             session_id="agentic-context",
@@ -91,15 +108,10 @@ class AsyncProviderContextTest(unittest.TestCase):
             agent_id="chat",
             owner_user_id="user-context",
             start_path=self.state.repository_root,
-        )
-        migrate_agentic_runtime_schema(
-            self.state.provider_store,
-            self.state.runtime_store,
-            builtin_provider_registry(),
+            execution_binding=binding,
         )
         session = self.state.runtime_store.get_session(session.session_id)
         self.assertIsNotNone(session.execution_binding)
-        self.assertTrue(session.execution_binding.legacy_inferred)
         self.assertEqual(
             self.state.runtime_store.get_provider_state(session.session_id).runtime_engine_id,
             "codex",

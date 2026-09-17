@@ -46,7 +46,9 @@ def runtime_capability_semantic_payload(authority) -> dict[str, object]:
         "execution_mode": authority.execution_mode,
         "capabilities": asdict(authority.allowed_capabilities),
         "allowed_tool_handles": authority.allowed_tool_handles,
-        "policy_revisions": authority.policy_revision_set,
+        "actor_policy_revision": getattr(authority, "actor_policy_revision", ""),
+        "feature_flag_revision": getattr(authority, "feature_flag_revision", ""),
+        "policy_revisions": getattr(authority, "policy_revision_set", ()),
     }
 
 

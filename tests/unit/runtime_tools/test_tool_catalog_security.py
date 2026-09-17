@@ -91,7 +91,6 @@ class ToolCatalogSecurityTest(unittest.TestCase):
             allowed_tool_handles=("cli:fixture.read", "app-interface:documents:v1:lookup"),
             execution_mode="sandbox",
             egress_policy_id="fake-data",
-            policy_revision_set=("policy:1",),
             health_revision="health:1",
             authority_digest="authority-digest",
             computed_at=NOW,

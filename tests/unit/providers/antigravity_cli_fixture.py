@@ -16,8 +16,7 @@ from core.providers.native_agent_builtins import (
 )
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.agentic_models import RuntimeCapabilitySet
-from core.runtime.authority import RuntimeAuthority
-from core.runtime.execution_binding import canonical_digest
+from core.runtime.authority import RuntimeAuthority, canonical_authority_digest
 
 
 class AntigravityCliFixture:
@@ -176,9 +175,8 @@ class AntigravityCliFixture:
             allowed_tool_handles=(),
             execution_mode="sandbox",
             egress_policy_id="fixture-only",
-            policy_revision_set=(),
             health_revision="fixture",
             authority_digest="",
             computed_at=datetime.now(tz=UTC),
         )
-        return replace(authority, authority_digest=canonical_digest(authority))
+        return replace(authority, authority_digest=canonical_authority_digest(authority))

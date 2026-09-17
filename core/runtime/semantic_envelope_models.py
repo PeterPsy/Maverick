@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import hashlib
-import json
 from typing import Literal
 
 from core.egress.agentic_transforms import canonical_egress_content
@@ -288,12 +287,6 @@ def semantic_block_classification(
 
 
 def canonical_digest(value: object) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
+    from core.runtime.execution_binding import canonical_digest as _canonical_digest
+
+    return _canonical_digest(value)

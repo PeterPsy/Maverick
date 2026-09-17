@@ -16,8 +16,7 @@ from core.providers.agentic_adapter import (
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutionEventSink
 from core.runtime.provider_state import RuntimeProviderState
-from core.runtime.authority import RuntimeAuthority
-from core.runtime.execution_binding import canonical_digest
+from core.runtime.authority import RuntimeAuthority, canonical_authority_digest
 from core.runtime.failure_messages import (
     normalized_failure_reason_code,
     runtime_failure_public_message,
@@ -92,7 +91,7 @@ async def execute_agentic_runtime_turn(
     if (
         effective_authority.execution_binding_id != binding.execution_binding_id
         or effective_authority.turn_id != correlation_id
-        or effective_authority.authority_digest != canonical_digest(effective_authority)
+        or effective_authority.authority_digest != canonical_authority_digest(effective_authority)
     ):
         raise ValueError("Effective runtime authority does not match the active turn.")
     health = await adapter.validate(RuntimeValidationContext(session=session, binding=binding))

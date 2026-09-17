@@ -21,7 +21,7 @@ from core.providers.agentic_models import codex_routing_constraint, codex_runtim
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.agentic_models import RuntimeCapabilitySet
 from core.providers.service import builtin_provider_registry
-from core.runtime.authority import RuntimeAuthority
+from core.runtime.authority import RuntimeAuthority, canonical_authority_digest
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
@@ -394,11 +394,6 @@ class HostedAgenticHarness:
                 recipe=self.recipe,
                 context_compactor=context_compactor,
                 request_preflight=request_preflight,
-                provider_config_id=self.provider_config_id,
-                provider_config_revision=self.provider_config_revision,
-                provider_config_digest=self.provider_config_digest,
-                protocol_adapter_id=self.protocol_adapter_id,
-                protocol_adapter_version=self.protocol_adapter_version,
                 endpoint_id=("" if self.recipe is None else self.recipe.endpoint_id),
                 allowed_upstream_ids=(
                     () if self.recipe is None else self.recipe.upstream_ids
@@ -478,12 +473,11 @@ class HostedAgenticHarness:
             execution_mode=self.execution_mode,
             egress_policy_id=self.binding.egress_policy_id,
             allowed_remote_data_classes=("public",),
-            policy_revision_set=("policy:test:1",),
             health_revision="health:test:1",
             authority_digest="",
             computed_at=NOW,
         )
-        return replace(authority, authority_digest=canonical_digest(authority))
+        return replace(authority, authority_digest=canonical_authority_digest(authority))
 
     def _turn_status_callback(self):
         persist = build_hosted_turn_status_callback(self.store)

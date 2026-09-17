@@ -7,8 +7,8 @@ from dataclasses import replace
 from core.providers.agentic_models import AgenticRuntimePolicy
 from core.providers.errors import AgenticRuntimeError
 from core.providers.execution_families import effective_agentic_execution_family
-from core.runtime.authority import RuntimeAuthority
-from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
+from core.runtime.authority import RuntimeAuthority, canonical_authority_digest
+from core.runtime.execution_binding import RuntimeExecutionBinding
 from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.runtime.tool_schema_review import REVIEWED_TOOL_SCHEMA_COMPONENT
 
@@ -171,7 +171,7 @@ def isolate_research_authority(
         allowed_tool_handles=handles if web_tools_available else (),
         authority_digest="",
     )
-    return replace(narrowed, authority_digest=canonical_digest(narrowed))
+    return replace(narrowed, authority_digest=canonical_authority_digest(narrowed))
 
 
 def validate_research_authority(

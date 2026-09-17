@@ -112,7 +112,7 @@ class HostedTransportAuthorityRevocationTest(unittest.TestCase):
             nonlocal live_authority
             live_authority = replace(
                 live_authority,
-                policy_revision_set=("workspace-live:binding-hosted:1",),
+                actor_policy_revision="workspace-live:binding-hosted:1",
             )
             return SimpleNamespace(snapshot_digest="6" * 64)
 

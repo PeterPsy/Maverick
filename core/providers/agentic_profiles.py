@@ -1,15 +1,13 @@
-"""Profile publication, workspace binding, and pinned resolution services."""
+"""Direct provider/model configuration for agentic runtime sessions."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
 import hashlib
 
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
     AgenticProfileDefinition,
-    AgenticProfileDefinitionStatus,
     WorkspaceAgenticProfileBinding,
     codex_routing_constraint,
     codex_runtime_capabilities,
@@ -21,42 +19,23 @@ from core.providers.errors import (
     ProviderCredentialBindingError,
     ProviderNotFoundError,
 )
-from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.models import ProviderDefinition, ProviderSelection
-from core.providers.native_agent_catalog import native_catalog_admission
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
-from core.runtime.execution_binding import RuntimeExecutionBinding, build_runtime_execution_binding
-from core.runtime.full_workspace_contract import validate_full_workspace_contract_claim
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
     MAVERICK_FEATURE_AGENTIC_PROFILES,
     feature_enabled,
 )
+from core.runtime.authority import intersect_runtime_policies
+from core.runtime.execution_binding import (
+    RuntimeExecutionBinding,
+    build_runtime_execution_binding,
+)
 from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
 
 
-CODEX_PROFILE_REVISION = "18"
-CODEX_PREVIOUS_PROFILE_REVISIONS = (
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11",
-    "12",
-    "13",
-    "14",
-    "15",
-    "16",
-    "17",
-)
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
 DEFAULT_EGRESS_POLICY_ID = "local-runtime-no-remote-egress"
@@ -74,52 +53,46 @@ def ensure_codex_workspace_profile(
     selection: ProviderSelection,
     now: datetime | None = None,
 ) -> tuple[AgenticProfileDefinition, WorkspaceAgenticProfileBinding]:
-    """Publish the exact Codex model profile and bind the workspace default."""
+    """Publish the current Codex model config and select it for a workspace."""
     if definition.provider_id != "codex" or definition.provider_role != "runtime_engine":
-        raise AgenticProfileError("Phase-0 agentic profile publication supports the Codex runtime only.")
-    model_id = str(selection.model_id or definition.default_model_family or "").strip()
+        raise AgenticProfileError("Codex model configuration requires the Codex runtime.")
     timestamp = now or utcnow()
     profile = publish_codex_agentic_profile(
         store,
         definition=definition,
-        model_id=model_id,
+        model_id=str(selection.model_id or definition.default_model_family or "").strip(),
         now=timestamp,
     )
-
     binding_id = _default_workspace_binding_id(selection.workspace_id)
-    bindings = store.list_workspace_agentic_profile_bindings(selection.workspace_id)
-    existing = next((item for item in bindings if item.binding_id == binding_id), None)
-    if existing is None:
-        binding = WorkspaceAgenticProfileBinding(
-            binding_id=binding_id,
-            workspace_id=selection.workspace_id,
-            definition_id=profile.definition_id,
-            definition_revision=profile.revision,
-            credential_binding_id=selection.binding_id,
-            enabled=True,
-            is_default=True,
-            actor_policy=default_actor_selection_policy(),
-            workspace_policy_ceiling=profile.policy_ceiling,
-            egress_policy_id=DEFAULT_EGRESS_POLICY_ID,
-            egress_policy_revision=DEFAULT_EGRESS_POLICY_REVISION,
-            revision=0,
-            created_at=timestamp,
-            updated_at=timestamp,
-        )
-        store.save_workspace_agentic_profile_binding(binding, expected_revision=None)
-        return profile, binding
-    desired = replace(
-        existing,
+    existing = next(
+        (
+            item
+            for item in store.list_workspace_agentic_profile_bindings(selection.workspace_id)
+            if item.binding_id == binding_id
+        ),
+        None,
+    )
+    binding = WorkspaceAgenticProfileBinding(
+        binding_id=binding_id,
+        workspace_id=selection.workspace_id,
         definition_id=profile.definition_id,
-        definition_revision=profile.revision,
         credential_binding_id=selection.binding_id,
         enabled=True,
         is_default=True,
+        actor_policy=(
+            default_actor_selection_policy() if existing is None else existing.actor_policy
+        ),
+        workspace_policy_ceiling=(
+            profile.policy_ceiling
+            if existing is None
+            else existing.workspace_policy_ceiling
+        ),
+        egress_policy_id=profile.egress_policy_id,
+        egress_policy_revision=profile.egress_policy_revision,
+        created_at=timestamp if existing is None else existing.created_at,
+        updated_at=timestamp,
     )
-    if desired == existing:
-        return profile, existing
-    binding = replace(desired, revision=existing.revision + 1, updated_at=timestamp)
-    store.save_workspace_agentic_profile_binding(binding, expected_revision=existing.revision)
+    store.save_workspace_agentic_profile_binding(binding)
     return profile, binding
 
 
@@ -130,79 +103,21 @@ def publish_codex_agentic_profile(
     model_id: str,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish one immutable Codex definition without mutating workspace state."""
+    """Upsert the current direct Codex model configuration."""
     if definition.provider_id != "codex" or definition.provider_role != "runtime_engine":
-        raise AgenticProfileError("Codex profile publication requires the Codex runtime engine.")
+        raise AgenticProfileError("Codex model configuration requires the Codex runtime.")
     normalized_model_id = str(model_id or definition.default_model_family or "").strip()
     if not normalized_model_id:
-        raise AgenticProfileError("Codex agentic profiles require an exact model id.")
-    timestamp = now or utcnow()
+        raise AgenticProfileError("Codex model configuration requires a model id.")
     profile = _codex_profile_definition(
         definition=definition,
         model_id=normalized_model_id,
-        now=timestamp,
+        now=now or utcnow(),
     )
     from core.providers.native_agent_projection import codex_model_profile_projection
 
     profile = codex_model_profile_projection(store, profile, definition)
-    try:
-        profile = store.get_agentic_profile_definition(profile.definition_id, profile.revision)
-    except ProviderNotFoundError:
-        store.save_agentic_profile_definition(profile)
-    status = store.get_agentic_profile_definition_status(profile.definition_id, profile.revision)
-    if status is None:
-        store.save_agentic_profile_definition_status(
-            AgenticProfileDefinitionStatus(
-                definition_id=profile.definition_id,
-                definition_revision=profile.revision,
-                rollout_status="preview",
-                revision=0,
-                updated_at=timestamp,
-            ),
-            expected_revision=None,
-        )
-    _suspend_previous_codex_revisions(
-        store,
-        definition_id=profile.definition_id,
-        current_revision=profile.revision,
-        now=timestamp,
-    )
-    return profile
-
-
-def _suspend_previous_codex_revisions(
-    store: ProviderStore,
-    *,
-    definition_id: str,
-    current_revision: str,
-    now: datetime,
-) -> None:
-    """Suspend preview definitions built for earlier adapter identities."""
-    previous_revisions = {
-        *CODEX_PREVIOUS_PROFILE_REVISIONS,
-        *(
-            profile.revision
-            for profile in store.list_agentic_profile_definitions()
-            if profile.definition_id == definition_id
-            and profile.revision != current_revision
-        ),
-    }
-    for revision in sorted(previous_revisions):
-        status = store.get_agentic_profile_definition_status(
-            definition_id,
-            revision,
-        )
-        if status is None or status.rollout_status in {"disabled", "suspended"}:
-            continue
-        store.save_agentic_profile_definition_status(
-            replace(
-                status,
-                rollout_status="suspended",
-                revision=status.revision + 1,
-                updated_at=now,
-            ),
-            expected_revision=status.revision,
-        )
+    return store.save_agentic_profile_definition(profile)
 
 
 def resolve_workspace_agentic_profile(
@@ -213,7 +128,7 @@ def resolve_workspace_agentic_profile(
     enforce_remote_admission: bool = True,
     workspace_store: object | None = None,
 ) -> tuple[AgenticProfileDefinition, WorkspaceAgenticProfileBinding]:
-    """Resolve one enabled binding; only admission code may defer the remote guard."""
+    """Resolve one direct, enabled workspace provider/model configuration."""
     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
         raise AgenticProfileError("agentic_profiles_disabled")
     bindings = store.list_workspace_agentic_profile_bindings(workspace_id)
@@ -222,20 +137,11 @@ def resolve_workspace_agentic_profile(
     else:
         defaults = [item for item in bindings if item.enabled and item.is_default]
         if len(defaults) > 1:
-            raise AgenticProfileError("Workspace has multiple default agentic profile bindings.")
+            raise AgenticProfileError("workspace_agentic_default_ambiguous")
         binding = defaults[0] if defaults else None
     if binding is None or not binding.enabled:
         raise AgenticProfileError("workspace_profile_binding_disabled")
-    from core.providers.agentic_lineage_admission import require_lineage_admission
-
-    require_lineage_admission(store, binding)
-    definition = store.get_agentic_profile_definition(
-        binding.definition_id,
-        binding.definition_revision,
-    )
-    status = store.get_agentic_profile_definition_status(definition.definition_id, definition.revision)
-    if status is None or status.rollout_status in {"disabled", "suspended"}:
-        raise AgenticProfileError("profile_definition_invalid")
+    definition = store.get_agentic_profile_definition(binding.definition_id)
     if enforce_remote_admission:
         require_remote_agentic_session_admission(
             definition,
@@ -254,7 +160,6 @@ def resolve_workspace_agentic_profile(
     return definition, binding
 
 
-@native_catalog_admission
 def build_pinned_execution_binding(
     store: ProviderStore,
     registry: ProviderRegistry,
@@ -264,40 +169,22 @@ def build_pinned_execution_binding(
     execution_mode: ExecutionMode,
     workspace_binding_id: str | None = None,
     reasoning_effort: str | None = None,
-    authorized_definition_snapshot: AgenticProfileDefinition | None = None,
-    authorized_workspace_binding_snapshot: WorkspaceAgenticProfileBinding | None = None,
-    legacy_inferred: bool = False,
     now: datetime | None = None,
     workspace_store: object | None = None,
 ) -> RuntimeExecutionBinding:
-    """Resolve the current profile, fence an authorized snapshot, and build its pin."""
+    """Resolve direct workspace settings into the small session binding."""
     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT):
         raise AgenticProfileError("agentic_adapter_contract_disabled")
-    timestamp = now or utcnow()
     definition, binding = resolve_workspace_agentic_profile(
         store,
         workspace_id=workspace_id,
         binding_id=workspace_binding_id,
         workspace_store=workspace_store,
     )
-    _require_authorized_profile_snapshot(
-        definition=definition,
-        binding=binding,
-        authorized_definition=authorized_definition_snapshot,
-        authorized_binding=authorized_workspace_binding_snapshot,
-    )
     try:
-        model_provider = registry.get_provider_definition(
-            definition.model_provider_id
-        )
+        model_provider = registry.get_provider_definition(definition.model_provider_id)
     except ProviderNotFoundError:
-        if definition.execution_family != "native_agent":
-            raise
-        # Native connection ids need not be separately selectable provider
-        # definitions; their runtime owns authentication and routing.
-        model_provider = registry.get_provider_definition(
-            definition.runtime_engine_id
-        )
+        model_provider = registry.get_provider_definition(definition.runtime_engine_id)
     if model_provider.requires_credentials and not binding.credential_binding_id:
         raise ProviderCredentialBindingError("credential_binding_unavailable")
     provider = registry.get_provider_definition(definition.runtime_engine_id)
@@ -305,118 +192,48 @@ def build_pinned_execution_binding(
     adapter_version = str(getattr(adapter, "adapter_version", ""))
     if definition.adapter_version_constraint != f"=={adapter_version}":
         raise AgenticProfileError("adapter_version_mismatch")
-    from core.providers.native_agent_catalog import require_native_agent_model_available
-
-    require_native_agent_model_available(registry, definition)
-    validate_full_workspace_contract_claim(profile=definition)
     from core.providers.execution_family_readiness import inspect_agentic_family_readiness
 
     readiness = inspect_agentic_family_readiness(
-        definition=definition, binding=binding, registry=registry, store=store,
+        definition=definition,
+        binding=binding,
+        registry=registry,
+        store=store,
     )
     if not readiness.complete:
-        raise AgenticProfileError(readiness.reason_code or "full_workspace_contract_incomplete")
-    normalized_reasoning_effort = _validated_reasoning_effort(
+        raise AgenticProfileError(readiness.reason_code or "agentic_runtime_unavailable")
+    selected_reasoning = _validated_reasoning_effort(
         definition,
         reasoning_effort=reasoning_effort,
     )
-    selection = _selection_projection(
-        definition,
-        binding,
-        reasoning_effort=normalized_reasoning_effort,
-        now=timestamp,
-    )
-    runtime_binding = build_runtime_execution_binding(
+    return build_runtime_execution_binding(
         session_id=session_id,
         workspace_id=workspace_id,
-        profile_definition_id=definition.definition_id,
-        profile_definition_revision=definition.revision,
         workspace_binding_id=binding.binding_id,
-        workspace_binding_revision=binding.revision,
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=definition.adapter_id,
         adapter_version=adapter_version,
-        adapter_identity_digest=runtime_adapter_identity_digest(adapter),
         model_provider_id=definition.model_provider_id,
         model_id=definition.model_id,
-        model_revision=getattr(definition, "model_revision", None),
-        model_revision_policy=getattr(
-            definition,
-            "model_revision_policy",
-            "provider_alias",
-        ),
+        model_revision=definition.model_revision,
+        model_revision_policy=definition.model_revision_policy,
         provider_protocol=definition.provider_protocol,
         provider_api_version=definition.provider_api_version,
         routing_constraint=definition.routing_constraint,
         credential_binding_id=binding.credential_binding_id,
-        reasoning_effort=selection.model_reasoning_effort,
+        reasoning_effort=selected_reasoning,
         reasoning_efforts=definition.reasoning_efforts,
-        default_reasoning_effort=definition.default_reasoning_effort,
         capabilities=definition.capabilities,
         execution_mode=execution_mode,
-        profile_policy_ceiling=definition.policy_ceiling,
-        workspace_policy_ceiling=binding.workspace_policy_ceiling,
+        runtime_policy=intersect_runtime_policies(
+            definition.policy_ceiling,
+            binding.workspace_policy_ceiling,
+        ),
         egress_policy_id=binding.egress_policy_id,
         egress_policy_revision=binding.egress_policy_revision,
-        created_at=timestamp,
-        legacy_inferred=legacy_inferred,
-        full_workspace_contract_revision=(
-            getattr(definition, "full_workspace_contract_revision", "")
-        ),
-        execution_family=getattr(definition, "execution_family", ""),
-        harness_recipe_id=getattr(definition, "harness_recipe_id", ""),
-        harness_recipe_revision=getattr(
-            definition,
-            "harness_recipe_revision",
-            "",
-        ),
-        harness_recipe_digest=getattr(definition, "harness_recipe_digest", ""),
-        provider_capability_catalog_digest=(
-            getattr(definition, "provider_capability_catalog_digest", "")
-        ),
-        semantic_projection_compiler_revision=(
-            getattr(definition, "semantic_projection_compiler_revision", "")
-        ),
-        tool_contract_revision=getattr(definition, "tool_contract_revision", ""),
-        context_policy=getattr(definition, "context_policy", None),
-        provider_config_id=getattr(definition, "provider_config_id", ""),
-        provider_config_revision=getattr(
-            definition,
-            "provider_config_revision",
-            "",
-        ),
-        provider_config_digest=getattr(definition, "provider_config_digest", ""),
-        protocol_adapter_id=getattr(definition, "protocol_adapter_id", ""),
-        protocol_adapter_version=getattr(
-            definition,
-            "protocol_adapter_version",
-            "",
-        ),
+        created_at=now or utcnow(),
+        context_policy=definition.context_policy,
     )
-    return runtime_binding
-
-
-def _require_authorized_profile_snapshot(
-    *,
-    definition: AgenticProfileDefinition,
-    binding: WorkspaceAgenticProfileBinding,
-    authorized_definition: AgenticProfileDefinition | None,
-    authorized_binding: WorkspaceAgenticProfileBinding | None,
-) -> None:
-    """Reject any profile drift between actor admission and immutable pinning."""
-    if (authorized_definition is None) != (authorized_binding is None):
-        raise AgenticProfileError("authorized_profile_snapshot_incomplete")
-    if authorized_definition is None or authorized_binding is None:
-        return
-    if (
-        authorized_binding.definition_id != authorized_definition.definition_id
-        or authorized_binding.definition_revision != authorized_definition.revision
-        or binding.definition_id != definition.definition_id
-        or binding.definition_revision != definition.revision
-        or binding != authorized_binding
-        or definition != authorized_definition
-    ):
-        raise AgenticProfileError("workspace_profile_binding_changed")
 
 
 def _validated_reasoning_effort(
@@ -429,9 +246,7 @@ def _validated_reasoning_effort(
         or definition.default_reasoning_effort
         or None
     )
-    if normalized is None:
-        return None
-    if normalized not in definition.reasoning_efforts:
+    if normalized is not None and normalized not in definition.reasoning_efforts:
         raise AgenticProfileError("profile_reasoning_effort_unsupported")
     return normalized
 
@@ -439,14 +254,14 @@ def _validated_reasoning_effort(
 def provider_selection_from_execution_binding(
     binding: RuntimeExecutionBinding,
 ) -> ProviderSelection:
-    """Project pinned session fields into the legacy launch adapter input."""
+    """Project concrete session settings into the provider launch input."""
     return ProviderSelection(
         selection_id=f"session:{binding.session_id}:{binding.execution_binding_id}",
         workspace_id=binding.workspace_id,
         provider_id=binding.runtime_engine_id,
         binding_id=binding.credential_binding_id,
         selection_scope="workspace_default",
-        selection_reason="immutable runtime execution binding",
+        selection_reason="runtime session configuration",
         created_at=binding.created_at,
         updated_at=binding.created_at,
         model_id=binding.model_id,
@@ -460,13 +275,9 @@ def _codex_profile_definition(
     model_id: str,
     now: datetime,
 ) -> AgenticProfileDefinition:
-    identity = hashlib.sha256(
-        f"codex\0{model_id}\0codex-app-server-v{CODEX_ADAPTER_VERSION}".encode()
-    ).hexdigest()[:16]
-    definition_id = f"agentic-profile-codex-{identity}"
+    identity = hashlib.sha256(f"codex\0{model_id}".encode()).hexdigest()[:16]
     return AgenticProfileDefinition(
-        definition_id=definition_id,
-        revision=CODEX_PROFILE_REVISION,
+        definition_id=f"agentic-profile-codex-{identity}",
         display_name=f"Codex · {model_id}",
         runtime_engine_id="codex",
         model_provider_id="codex",
@@ -501,24 +312,3 @@ def _codex_profile_definition(
 def _default_workspace_binding_id(workspace_id: str) -> str:
     digest = hashlib.sha256(workspace_id.encode("utf-8")).hexdigest()[:16]
     return f"workspace-agentic-default-{digest}"
-
-
-def _selection_projection(
-    definition: AgenticProfileDefinition,
-    binding: WorkspaceAgenticProfileBinding,
-    *,
-    reasoning_effort: str | None,
-    now: datetime,
-) -> ProviderSelection:
-    return ProviderSelection(
-        selection_id=f"binding:{binding.binding_id}:{binding.revision}",
-        workspace_id=binding.workspace_id,
-        provider_id=definition.runtime_engine_id,
-        binding_id=binding.credential_binding_id,
-        selection_scope="workspace_default",
-        selection_reason="workspace agentic profile binding",
-        created_at=binding.created_at,
-        updated_at=now,
-        model_id=definition.model_id,
-        model_reasoning_effort=reasoning_effort,
-    )

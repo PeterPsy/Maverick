@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from functools import wraps
 from typing import Literal
 
@@ -38,7 +38,6 @@ class NativeAgentCatalogSnapshot:
     catalog_provider_id: str
     source_id: str
     observed_at: datetime
-    expires_at: datetime
     models: tuple[NativeAgentCatalogModel, ...]
     model_options: tuple[ProviderModelOption, ...]
 
@@ -74,7 +73,6 @@ def native_agent_catalog_models(
             catalog.runtime_engine_id != installation.manifest.runtime_engine_id
             or catalog.catalog_provider_id != connection.catalog_provider_id
             or catalog.model_provider_id != connection.model_provider_id
-            or datetime.now(tz=UTC) >= catalog.expires_at
         ):
             continue
         for model in catalog.models:
@@ -124,14 +122,9 @@ def require_native_agent_model_available(registry, definition) -> None:
                   and model.model_id == definition.model_id), None)
     if model is None:
         raise AgenticProfileError("native_agent_model_unavailable")
-    if (
-        model.model_revision != definition.model_revision
-        or model.revision_policy != definition.model_revision_policy
-        or (definition.native_model_catalog_digest and definition.native_model_catalog_digest != model.digest)
-        or definition.reasoning_efforts != model.reasoning_efforts
-        or definition.default_reasoning_effort != model.default_reasoning_effort
-    ):
-        raise AgenticProfileError("native_agent_model_catalog_mismatch")
+    # Discovery describes what the runtime currently advertises; it is not a
+    # second signed identity contract. Model/reasoning settings come from the
+    # direct workspace configuration and the provider validates them on use.
 
 
 def native_catalog_admission(operation):

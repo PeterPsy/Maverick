@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -12,12 +11,12 @@ from core.providers.errors import AgenticRuntimeError
 from core.providers.service import effective_provider_registry
 from core.providers.store import ProviderStore
 from core.runtime.authority import (
-    EffectiveRuntimeAuthority,
-    effective_authority_audit_payload,
-    resolve_effective_runtime_authority,
+    RuntimeAuthority,
+    resolve_runtime_authority,
+    runtime_authority_audit_payload,
     runtime_feature_flag_revision,
     validate_live_runtime_binding_governance,
-    validate_effective_context_capabilities,
+    validate_runtime_context_capabilities,
 )
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -44,7 +43,7 @@ def resolve_and_record_runtime_authority(
     adapter: AgenticRuntimeEngineAdapter,
     turn_id: str,
     event_type: str = "runtime.authority.evaluated",
-) -> EffectiveRuntimeAuthority:
+) -> RuntimeAuthority:
     """Resolve fail-closed authority and persist only its redaction-safe digest summary."""
     authority = resolve_runtime_authority_snapshot(
         state,
@@ -59,7 +58,7 @@ def resolve_and_record_runtime_authority(
         turn_id=None if turn_id.startswith("prewarm:") else turn_id,
         plane="runtime",
         event_type=event_type,
-        payload=effective_authority_audit_payload(authority),
+        payload=runtime_authority_audit_payload(authority),
         event_bus=getattr(state, "runtime_event_bus", None),
     )
     return authority
@@ -73,8 +72,7 @@ def resolve_runtime_authority_snapshot(
     turn_id: str,
     currently_authorized_tool_handles: tuple[str, ...] | None = None,
     provider_store: ProviderStore | None = None,
-    adapter_identity_digest: str | None = None,
-) -> EffectiveRuntimeAuthority:
+) -> RuntimeAuthority:
     """Compute the same live snapshot used by admission, dispatch, and refresh."""
     binding = session.execution_binding
     if binding is None:
@@ -106,7 +104,7 @@ def resolve_runtime_authority_snapshot(
         session=session,
         provider_store=active_provider_store,
     )
-    authority = resolve_effective_runtime_authority(
+    authority = resolve_runtime_authority(
         active_provider_store,
         binding=binding,
         adapter=adapter,
@@ -117,7 +115,6 @@ def resolve_runtime_authority_snapshot(
         health_revision=f"runtime-health:{canonical_digest(health)}",
         actor_policy_allowed=actor_allowed,
         actor_policy_revision=actor_revision,
-        adapter_identity_digest=adapter_identity_digest,
     )
     if runtime_session_is_research(session):
         authority = isolate_research_authority(
@@ -133,10 +130,11 @@ def revalidate_runtime_authority_snapshot(
     *,
     session: RuntimeSessionRecord,
     adapter: AgenticRuntimeEngineAdapter,
-    authority: EffectiveRuntimeAuthority,
+    authority: RuntimeAuthority,
     provider_store: ProviderStore | None = None,
     now: datetime | None = None,
-) -> EffectiveRuntimeAuthority:
+    **_extra_ignored: Any,
+) -> RuntimeAuthority:
     """Recheck mutable profile, actor, feature, mode, and health inputs."""
     binding = session.execution_binding
     if binding is None or (
@@ -156,13 +154,7 @@ def revalidate_runtime_authority_snapshot(
     workspace_binding = validate_live_runtime_binding_governance(
         active_provider_store,
         binding=binding,
-        allow_inactive_definition=True,
     )
-    if not _authority_revision_matches(
-        authority,
-        f"workspace-live:{workspace_binding.binding_id}:{workspace_binding.revision}",
-    ):
-        raise AgenticRuntimeError("runtime_policy_changed")
     actor_allowed, actor_revision = live_runtime_actor_policy(
         state,
         session=session,
@@ -196,13 +188,6 @@ def revalidate_runtime_authority_snapshot(
     return authority
 
 
-def _authority_revision_matches(
-    authority: EffectiveRuntimeAuthority,
-    revision: str,
-) -> bool:
-    return revision in authority.policy_revision_set
-
-
 def live_runtime_actor_policy(
     state: PlatformState,
     *,
@@ -224,10 +209,7 @@ def live_runtime_actor_policy(
             workspace_id=session.workspace_id,
         )
     except Exception:
-        return False, (
-            f"workspace-actor:{workspace_binding.binding_id}:"
-            f"{workspace_binding.revision}"
-        )
+        return False, f"workspace-actor:{workspace_binding.binding_id}:unresolved"
     return (
         actor_selection_allowed(
             workspace_binding,
@@ -236,7 +218,8 @@ def live_runtime_actor_policy(
             workspace_role=workspace_role,
             agent_type_id=str(session.agent_type_id or ""),
         ),
-        f"workspace-actor:{workspace_binding.binding_id}:{workspace_binding.revision}",
+        f"workspace-actor:{workspace_binding.binding_id}:"
+        f"{canonical_digest(workspace_binding.actor_policy)}",
     )
 
 
@@ -249,7 +232,7 @@ def preflight_runtime_context_capabilities(
     invoked_skills: object = (),
     attachments: object = (),
     app_references: object = (),
-) -> EffectiveRuntimeAuthority | None:
+) -> RuntimeAuthority | None:
     """Block unsupported context before a turn, event, or provider side effect."""
     if session.execution_binding is None:
         return None
@@ -267,7 +250,7 @@ def preflight_runtime_context_capabilities(
         adapter=adapter,
         turn_id=turn_id,
     )
-    validate_effective_context_capabilities(
+    validate_runtime_context_capabilities(
         authority,
         invoked_skills=invoked_skills,
         attachments=attachments,
@@ -288,7 +271,7 @@ def preflight_execution_binding_context(
     attachments: object = (),
     app_references: object = (),
     adapter: AgenticRuntimeEngineAdapter | None = None,
-) -> EffectiveRuntimeAuthority:
+) -> RuntimeAuthority:
     """Compute and validate the canonical snapshot before session persistence."""
     if adapter is None:
         registry = effective_provider_registry(
@@ -302,7 +285,7 @@ def preflight_execution_binding_context(
     if runtime_profile == "research":
         runtime_kind = research_runtime_kind(binding, adapter)
         handles = research_tool_candidates(handles, runtime_kind=runtime_kind)
-    authority = resolve_effective_runtime_authority(
+    authority = resolve_runtime_authority(
         state.provider_store,
         binding=binding,
         adapter=adapter,
@@ -320,7 +303,7 @@ def preflight_execution_binding_context(
             runtime_kind=runtime_kind,
         )
         validate_research_authority(binding, authority, adapter=adapter)
-    validate_effective_context_capabilities(
+    validate_runtime_context_capabilities(
         authority,
         invoked_skills=invoked_skills,
         attachments=attachments,

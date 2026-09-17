@@ -11,8 +11,6 @@ from core.providers.agentic_containment_models import (
     RemoteAgenticContainmentReport,
 )
 from core.providers.agentic_containment_plan import build_remote_agentic_containment_plan
-from core.providers.agentic_models import AgenticProfileDefinitionStatus
-from core.providers.errors import AgenticProfileConflictError
 from core.providers.store import ProviderStore
 from core.runtime.errors import RuntimeTransitionError
 from core.runtime.lifecycle_service import transition_runtime_session
@@ -119,40 +117,10 @@ def _apply_plan(
                     current,
                     enabled=False,
                     is_default=False,
-                    revision=current.revision + 1,
                     updated_at=now,
                 ),
-                expected_revision=target.current_revision,
             )
             counts["bindings_disabled"] += 1
-        for target in plan["profiles"]:
-            active_target = target
-            current = provider_store.get_agentic_profile_definition_status(
-                target.definition_id or "",
-                target.definition_revision or "",
-            )
-            if current is None:
-                provider_store.save_agentic_profile_definition_status(
-                    AgenticProfileDefinitionStatus(
-                        definition_id=target.definition_id or "",
-                        definition_revision=target.definition_revision or "",
-                        rollout_status="suspended",
-                        revision=0,
-                        updated_at=now,
-                    ),
-                    expected_revision=None,
-                )
-            else:
-                provider_store.save_agentic_profile_definition_status(
-                    replace(
-                        current,
-                        rollout_status="suspended",
-                        revision=current.revision + 1,
-                        updated_at=now,
-                    ),
-                    expected_revision=target.current_revision,
-                )
-            counts["profiles_suspended"] += 1
         for target in plan["sessions"]:
             active_target = target
             transition_runtime_session(
@@ -206,11 +174,6 @@ def _empty_applied_counts() -> dict[str, int]:
 
 
 def _apply_failure_code(error: Exception) -> str:
-    if isinstance(
-        error,
-        AgenticProfileConflictError,
-    ):
-        return "provider_record_cas_conflict"
     if isinstance(error, RuntimeTransitionError):
         return "session_lifecycle_conflict"
     return "containment_apply_failed"

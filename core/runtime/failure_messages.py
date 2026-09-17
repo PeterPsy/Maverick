@@ -124,11 +124,8 @@ _PUBLIC_MESSAGES = {
     "hosted_runtime_failed": "The hosted runtime could not complete the request.",
     "hosted_agent_runtime_disabled": "Hosted agentic runtime admission is disabled.",
     "google_agentic_preview_disabled": "Google agentic preview admission is disabled.",
-    "full_workspace_contract_live_authority_incomplete": (
-        "This agent is unavailable because its full workspace contract is no longer effective."
-    ),
-    "harness_recipe_mismatch": (
-        "The pinned provider harness recipe does not match the active runtime."
+    "runtime_configuration_mismatch": (
+        "The selected provider/model settings do not match the active runtime."
     ),
     "openrouter_agentic_preview_disabled": "OpenRouter agentic preview admission is disabled.",
     "model_provider_unavailable": "The selected model provider is unavailable.",

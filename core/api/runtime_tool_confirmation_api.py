@@ -242,8 +242,8 @@ def _confirmation_deadline(state: PlatformState, turn):
     binding = None if session is None else session.execution_binding
     if binding is not None:
         max_wall_time_seconds = min(
-            binding.profile_policy_ceiling_snapshot.max_wall_time_seconds,
-            binding.workspace_policy_ceiling_snapshot.max_wall_time_seconds,
+            binding.runtime_policy_snapshot.max_wall_time_seconds,
+            binding.runtime_policy_snapshot.max_wall_time_seconds,
         )
         deadlines.append(
             (turn.started_at or turn.created_at)

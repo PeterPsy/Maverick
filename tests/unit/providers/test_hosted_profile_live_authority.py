@@ -19,7 +19,7 @@ from core.providers.openrouter_agentic_profile import (
     OPENROUTER_REASONING_EFFORTS,
     OPENROUTER_DEFAULT_REASONING_EFFORT,
 )
-from core.runtime.authority import resolve_effective_runtime_authority
+from core.runtime.authority import resolve_runtime_authority
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.full_workspace_contract import FULL_WORKSPACE_CORE_TOOL_HANDLES
 from tests.support.agentic_runtime import (
@@ -126,7 +126,7 @@ class HostedProfileLiveAuthorityTest(unittest.TestCase):
                     "core.runtime.authority.feature_enabled",
                     return_value=True,
                 ):
-                    authority = resolve_effective_runtime_authority(
+                    authority = resolve_runtime_authority(
                         store,
                         binding=binding,
                         adapter=adapter,

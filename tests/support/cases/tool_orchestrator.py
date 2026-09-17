@@ -7,7 +7,7 @@ from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
 from core.providers.agentic_models import RuntimeCapabilitySet
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.tool_catalog import (
     RuntimeAppInterfaceResolver,
@@ -171,8 +171,8 @@ class _RuntimeToolOrchestratorFixture:
             ledger=self.ledger,
         )
 
-    def _authority(self, *handles: str) -> EffectiveRuntimeAuthority:
-        return EffectiveRuntimeAuthority(
+    def _authority(self, *handles: str) -> RuntimeAuthority:
+        return RuntimeAuthority(
             execution_binding_id="binding-tools",
             turn_id="turn-tools",
             allowed_capabilities=RuntimeCapabilitySet(

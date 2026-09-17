@@ -16,7 +16,7 @@ from core.providers.native_agent_builtins import (
 )
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.agentic_models import RuntimeCapabilitySet
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.execution_binding import canonical_digest
 
 
@@ -153,7 +153,7 @@ class AntigravityCliFixture:
     def core_authority(self):
         self.binding.execution_binding_id = "fixture-binding"
         self.session.execution_binding = self.binding
-        authority = EffectiveRuntimeAuthority(
+        authority = RuntimeAuthority(
             execution_binding_id="fixture-binding",
             turn_id="turn",
             allowed_capabilities=RuntimeCapabilitySet(

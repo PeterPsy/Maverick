@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from threading import Event
 from uuid import uuid4
 
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
@@ -30,7 +30,7 @@ async def execute_hosted_authorized_tool(
     *,
     tool_orchestrator: RuntimeToolOrchestrator,
     outcome: RuntimeToolInvocationOutcome,
-    authority: EffectiveRuntimeAuthority,
+    authority: RuntimeAuthority,
     context: RuntimeToolActorContext,
     policy: RuntimeToolConfirmationPolicy,
     budget: HostedAgenticBudget,

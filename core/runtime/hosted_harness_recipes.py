@@ -1,10 +1,8 @@
-"""Immutable hosted harness recipes selected by pinned execution profiles."""
+"""Concrete hosted provider/model runtime settings."""
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-import hashlib
-import json
+from dataclasses import dataclass
 
 from core.providers.agentic_models import AgenticContextPolicy, ModelRevisionPolicy
 from core.providers.google_interactions_client import (
@@ -17,19 +15,12 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_REASONING_EFFORTS,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
 )
-from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
-from core.runtime.semantic_envelope_models import (
-    HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION,
-)
-
-
 HOSTED_CONTEXT_POLICY_REVISION = "p4-context-v4"
-HOSTED_TOOL_CONTRACT_REVISION = FULL_WORKSPACE_CONTRACT_REVISION
 
 
 @dataclass(frozen=True)
 class HostedProviderSupportFlags:
-    """Fine-grained endpoint behavior included in the recipe catalog digest."""
+    """Fine-grained behavior actually implemented by an endpoint."""
 
     streaming: bool
     usage_accounting: bool
@@ -48,10 +39,8 @@ class HostedProviderSupportFlags:
 
 @dataclass(frozen=True)
 class HostedHarnessRecipeManifest:
-    """Data-only identity for one exact provider/model harness composition."""
+    """Current settings for one hosted provider/model implementation."""
 
-    recipe_id: str
-    revision: str
     model_provider_id: str
     model_id: str
     model_revision: str
@@ -61,37 +50,8 @@ class HostedHarnessRecipeManifest:
     endpoint_id: str
     upstream_ids: tuple[str, ...]
     state_mode: str
-    semantic_projection_compiler_revision: str
-    tool_contract_revision: str
     context_policy: AgenticContextPolicy
     support_flags: HostedProviderSupportFlags
-
-    @property
-    def capability_catalog_digest(self) -> str:
-        return _digest(
-            {
-                "recipe_id": self.recipe_id,
-                "revision": self.revision,
-                "model_provider_id": self.model_provider_id,
-                "model_id": self.model_id,
-                "model_revision": self.model_revision,
-                "model_revision_policy": self.model_revision_policy,
-                "provider_protocol": self.provider_protocol,
-                "provider_api_version": self.provider_api_version,
-                "endpoint_id": self.endpoint_id,
-                "upstream_ids": self.upstream_ids,
-                "support_flags": asdict(self.support_flags),
-            }
-        )
-
-    @property
-    def recipe_digest(self) -> str:
-        return _digest(
-            {
-                **asdict(self),
-                "capability_catalog_digest": self.capability_catalog_digest,
-            }
-        )
 
 
 def hosted_full_context_policy() -> AgenticContextPolicy:
@@ -131,8 +91,6 @@ def openrouter_full_context_policy() -> AgenticContextPolicy:
 
 
 GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
-    recipe_id="maverick-google-interactions-governed-workspace",
-    revision="27",
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
     model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
@@ -142,10 +100,6 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     endpoint_id="google-generativelanguage-v1-interactions",
     upstream_ids=(),
     state_mode="stateless",
-    semantic_projection_compiler_revision=(
-        HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION
-    ),
-    tool_contract_revision=HOSTED_TOOL_CONTRACT_REVISION,
     context_policy=hosted_full_context_policy(),
     support_flags=HostedProviderSupportFlags(
         streaming=True,
@@ -166,8 +120,6 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 
 OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
-    recipe_id="maverick-openrouter-chat-governed-workspace",
-    revision="30",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
@@ -177,10 +129,6 @@ OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     endpoint_id="openrouter-chat-completions-v1",
     upstream_ids=(OPENROUTER_AGENTIC_UPSTREAM_ID,),
     state_mode="client-managed-history",
-    semantic_projection_compiler_revision=(
-        HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION
-    ),
-    tool_contract_revision=HOSTED_TOOL_CONTRACT_REVISION,
     context_policy=openrouter_full_context_policy(),
     support_flags=HostedProviderSupportFlags(
         streaming=True,
@@ -200,22 +148,9 @@ OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 )
 
 
-def _digest(value: object) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-
-
 __all__ = [
     "GOOGLE_GOVERNED_WORKSPACE_RECIPE",
     "HOSTED_CONTEXT_POLICY_REVISION",
-    "HOSTED_TOOL_CONTRACT_REVISION",
     "HostedHarnessRecipeManifest",
     "HostedProviderSupportFlags",
     "OPENROUTER_GOVERNED_WORKSPACE_RECIPE",

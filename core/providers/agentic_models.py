@@ -19,7 +19,6 @@ RuntimeDataClass = Literal[
 ]
 ToolHandleMode = Literal["none", "all_currently_authorized", "exact"]
 RuntimeSurfaceKind = Literal["cli", "mcp", "app-interface", "core-capability"]
-ProfileRolloutStatus = Literal["disabled", "preview", "available", "suspended"]
 ContextCompactionMode = Literal["disabled", "provider_history"]
 AttachmentProjectionMode = Literal["workspace_reference", "native_or_reference"]
 SteeringDeliveryMode = Literal["provider_native", "safe_next_turn"]
@@ -127,10 +126,14 @@ class ActorSelectionPolicy:
 
 @dataclass(frozen=True)
 class AgenticProfileDefinition:
-    """Immutable installation-level engine/provider/model combination."""
+    """Current installation-level engine/provider/model configuration.
+
+    A definition is replaced in place when its implementation changes.  It is
+    not a release artifact and has no rollout, renewal, expiry, or historical
+    revision lifecycle.
+    """
 
     definition_id: str
-    revision: str
     display_name: str
     runtime_engine_id: str
     model_provider_id: str
@@ -147,28 +150,19 @@ class AgenticProfileDefinition:
     created_at: datetime
     egress_policy_id: str
     egress_policy_revision: str
-    full_workspace_contract_revision: str = ""
-    execution_family: str = ""
-    harness_recipe_id: str = ""
-    harness_recipe_revision: str = ""
-    harness_recipe_digest: str = ""
-    provider_capability_catalog_digest: str = ""
-    semantic_projection_compiler_revision: str = ""
-    tool_contract_revision: str = ""
     context_policy: AgenticContextPolicy | None = None
     model_revision: str | None = None
     model_revision_policy: ModelRevisionPolicy = "provider_alias"
-    provider_config_id: str = ""
-    provider_config_revision: str = ""
-    provider_config_digest: str = ""
-    protocol_adapter_id: str = ""
-    protocol_adapter_version: str = ""
-    native_model_catalog_digest: str = ""
+    revision: str = "1"
+    execution_family: str = ""
+
+
+ProfileRolloutStatus = Literal["disabled", "preview", "available", "suspended"]
 
 
 @dataclass(frozen=True)
 class AgenticProfileDefinitionStatus:
-    """Revisioned rollout state separated from an immutable definition."""
+    """Rollout status record."""
 
     definition_id: str
     definition_revision: str
@@ -179,12 +173,11 @@ class AgenticProfileDefinitionStatus:
 
 @dataclass(frozen=True)
 class WorkspaceAgenticProfileBinding:
-    """Workspace governance binding for one exact profile revision."""
+    """Direct workspace configuration for one provider/model definition."""
 
     binding_id: str
     workspace_id: str
     definition_id: str
-    definition_revision: str
     credential_binding_id: str | None
     enabled: bool
     is_default: bool
@@ -192,28 +185,26 @@ class WorkspaceAgenticProfileBinding:
     workspace_policy_ceiling: AgenticRuntimePolicy
     egress_policy_id: str
     egress_policy_revision: str
-    revision: int
     created_at: datetime
     updated_at: datetime
-    lineage_binding_ids: tuple[str, ...] = ()
-    admission_enabled_at: datetime | None = None
-    admission_disabled_at: datetime | None = None
+    definition_revision: str = "1"
+    revision: int = 1
 
 
 @dataclass(frozen=True)
 class AgenticMigrationRecord:
-    """Redaction-safe journal for one idempotent agentic schema migration."""
+    """Migration journal record."""
 
     migration_id: str
     schema_version: str
     status: Literal["started", "completed", "failed"]
-    profile_count: int
-    binding_count: int
-    session_count: int
-    inferred_session_count: int
-    summary_digest: str
-    created_at: datetime
-    updated_at: datetime
+    profile_count: int = 0
+    binding_count: int = 0
+    session_count: int = 0
+    inferred_session_count: int = 0
+    summary_digest: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 def codex_runtime_policy() -> AgenticRuntimePolicy:

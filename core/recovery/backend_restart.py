@@ -311,9 +311,6 @@ def recover_interrupted_runtime_turns_after_backend_restart(
             payload={
                 "reason": "backend_restart",
                 "input_text": BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
-                "predecessor_session_id": (
-                    session.session_id if resume_session.session_id != session.session_id else None
-                ),
                 "resume_attempt": next_resume_attempt,
                 "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN,
                 "invoked_skill_ids": list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],

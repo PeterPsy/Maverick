@@ -47,6 +47,36 @@ def create_application(
         builtin_app_count = sum(len(app_ids) for app_ids in installed_by_workspace.values())
     if register_providers and provider_store is not None:
         register_builtin_providers(provider_store, registry=provider_registry)
+        if workspace_store is not None:
+            try:
+                if not provider_store.list_workspace_agentic_profile_bindings("default"):
+                    from core.providers.agentic_profiles import ensure_codex_workspace_profile
+                    from core.providers.models import ProviderSelection
+                    from core.providers.service import builtin_provider_registry
+                    from datetime import UTC, datetime
+                    active_reg = provider_registry or builtin_provider_registry()
+                    codex_def = active_reg.get_provider_definition("codex")
+                    selection = provider_store.get_provider_selection("default")
+                    if selection is None or selection.provider_id != "codex":
+                        selection = ProviderSelection(
+                            selection_id="workspace:default:codex",
+                            workspace_id="default",
+                            provider_id="codex",
+                            binding_id=None,
+                            selection_scope="workspace_default",
+                            selection_reason="default bootstrap",
+                            created_at=now or datetime.now(tz=UTC),
+                            updated_at=now or datetime.now(tz=UTC),
+                            model_id=codex_def.default_model_family or "gpt-5.6-sol",
+                        )
+                    ensure_codex_workspace_profile(
+                        provider_store,
+                        definition=codex_def,
+                        selection=selection,
+                        now=now,
+                    )
+            except Exception:
+                pass
     return {
         "name": "maverick-core",
         "status": "initialized",

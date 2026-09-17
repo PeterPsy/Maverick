@@ -10,7 +10,7 @@ from core.providers.agentic_models import (
     default_actor_selection_policy,
 )
 from core.providers.store import ProviderCollections, ProviderDocumentStore
-from core.runtime.authority import resolve_effective_runtime_authority
+from core.runtime.authority import resolve_runtime_authority
 from core.runtime.execution_binding import RuntimeExecutionBinding
 from tests.support.collections import FakeCollection
 
@@ -67,7 +67,7 @@ def direct_test_provider_store(
 
 
 def direct_test_authority(store, binding, adapter, *, turn_id: str, now: datetime):
-    return resolve_effective_runtime_authority(
+    return resolve_runtime_authority(
         store,
         binding=binding,
         adapter=adapter,

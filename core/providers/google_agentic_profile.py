@@ -1,4 +1,4 @@
-"""Immutable preview profile for Google Gemini Interactions."""
+"""Direct Google Gemini agentic model configuration."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from core.providers.agentic_data_policies import (
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
-from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.providers.maverick_agent_builtins import (
     GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
     GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
@@ -27,23 +26,11 @@ from core.providers.maverick_agent_onboarding import (
 )
 from core.providers.store import ProviderStore
 from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
-from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
-    FULL_WORKSPACE_CORE_TOOL_HANDLES,
-)
+from core.runtime.hosted_agentic_policy import HOSTED_CORE_TOOL_HANDLES
 from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "73"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "72"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
-    "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
-    "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "61", "62", "63", "64", "65", "66",
-    "67", "68", "69", "70", "71", "72",
-)
 GOOGLE_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"
 
@@ -89,7 +76,7 @@ def google_agentic_preview_policy() -> AgenticRuntimePolicy:
             "core-capability",
         ),
         tool_handle_mode="exact",
-        allowed_tool_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES,
+        allowed_tool_handles=HOSTED_CORE_TOOL_HANDLES,
         allow_filesystem_list=True,
         allow_filesystem_read=True,
         allow_filesystem_write=True,
@@ -117,7 +104,6 @@ def google_agentic_preview_publication(
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-        revision=GOOGLE_AGENTIC_PROFILE_REVISION,
         display_name="Google Gemini 3.6 Flash · Full Workspace preview",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="google-ai-studio",
@@ -138,36 +124,13 @@ def google_agentic_preview_publication(
         created_at=timestamp,
         egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
-        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-        execution_family=MAVERICK_AGENT_EXECUTION_FAMILY,
-        harness_recipe_id=GOOGLE_GOVERNED_WORKSPACE_RECIPE.recipe_id,
-        harness_recipe_revision=GOOGLE_GOVERNED_WORKSPACE_RECIPE.revision,
-        harness_recipe_digest=GOOGLE_GOVERNED_WORKSPACE_RECIPE.recipe_digest,
-        provider_capability_catalog_digest=(
-            GOOGLE_GOVERNED_WORKSPACE_RECIPE.capability_catalog_digest
-        ),
-        semantic_projection_compiler_revision=(
-            GOOGLE_GOVERNED_WORKSPACE_RECIPE.semantic_projection_compiler_revision
-        ),
-        tool_contract_revision=GOOGLE_GOVERNED_WORKSPACE_RECIPE.tool_contract_revision,
         context_policy=GOOGLE_GOVERNED_WORKSPACE_RECIPE.context_policy,
-        provider_config_id=GOOGLE_INTERACTIONS_PROVIDER_CONFIG.config_id,
-        provider_config_revision=GOOGLE_INTERACTIONS_PROVIDER_CONFIG.revision,
-        provider_config_digest=GOOGLE_INTERACTIONS_PROVIDER_CONFIG.digest,
-        protocol_adapter_id=(
-            GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.protocol_adapter_id
-        ),
-        protocol_adapter_version=(
-            GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.protocol_adapter_version
-        ),
     )
     return MaverickAgentProfilePublication(
         adapter=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
         provider_config=GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
         recipe=GOOGLE_GOVERNED_WORKSPACE_RECIPE,
         profile=definition,
-        rollout_status="preview",
-        superseded_profile_revisions=GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
     )
 
 

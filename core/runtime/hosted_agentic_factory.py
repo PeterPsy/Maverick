@@ -149,8 +149,8 @@ def build_hosted_agentic_engine_adapter(
             if not live.enabled or live.workspace_id != context.binding.workspace_id:
                 raise HostedAgenticLoopError("workspace_profile_binding_disabled")
             policy = intersect_runtime_policies(
-                context.binding.profile_policy_ceiling_snapshot,
-                context.binding.workspace_policy_ceiling_snapshot,
+                context.binding.runtime_policy_snapshot,
+                context.binding.runtime_policy_snapshot,
                 live.workspace_policy_ceiling,
             )
             return (

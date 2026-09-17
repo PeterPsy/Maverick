@@ -39,7 +39,7 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
     require_agentic_feature,
 )
-from core.runtime.authority import validate_effective_context_capabilities
+from core.runtime.authority import validate_runtime_context_capabilities
 from core.runtime.semantic_envelope import (
     HostedSemanticEnvelopeCompiler,
     SemanticEnvelopeBlock,
@@ -705,7 +705,7 @@ class HostedAgenticRequestBuilder:
             elif provenance == "app_reference":
                 app_references.append({"server_materialized": True})
         try:
-            validate_effective_context_capabilities(
+            validate_runtime_context_capabilities(
                 authority,
                 invoked_skills=tuple(getattr(context, "invoked_skills", ()) or ()),
                 attachments=attachments,

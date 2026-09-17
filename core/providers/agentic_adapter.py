@@ -12,7 +12,7 @@ from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 if TYPE_CHECKING:
-    from core.runtime.authority import EffectiveRuntimeAuthority
+    from core.runtime.authority import RuntimeAuthority
 
 
 RuntimeProviderEventType = Literal[
@@ -87,7 +87,7 @@ class RuntimeTurnContext:
     invoked_skills: tuple[object, ...] = ()
     timeout_seconds: int | None = None
     prepared_handle: object | None = None
-    effective_authority: "EffectiveRuntimeAuthority | None" = None
+    effective_authority: "RuntimeAuthority | None" = None
     input_sources: tuple[object, ...] = ()
 
 

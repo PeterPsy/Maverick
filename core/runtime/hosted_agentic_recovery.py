@@ -577,8 +577,8 @@ class HostedAgenticRecovery:
             if item.step_index < record.step_index
         )
         tool_call_ceiling = min(
-            binding.profile_policy_ceiling_snapshot.max_tool_calls_per_turn,
-            binding.workspace_policy_ceiling_snapshot.max_tool_calls_per_turn,
+            binding.runtime_policy_snapshot.max_tool_calls_per_turn,
+            binding.runtime_policy_snapshot.max_tool_calls_per_turn,
         )
         for candidate in candidates[len(record.proposal_ids) :]:
             charge_tool_budget = (
@@ -611,12 +611,12 @@ class HostedAgenticRecovery:
             if item.step_index < record.step_index
         )
         result_ceiling = min(
-            binding.profile_policy_ceiling_snapshot.max_total_tool_result_bytes,
-            binding.workspace_policy_ceiling_snapshot.max_total_tool_result_bytes,
+            binding.runtime_policy_snapshot.max_total_tool_result_bytes,
+            binding.runtime_policy_snapshot.max_total_tool_result_bytes,
         )
         per_result_ceiling = min(
-            binding.profile_policy_ceiling_snapshot.max_tool_result_bytes,
-            binding.workspace_policy_ceiling_snapshot.max_tool_result_bytes,
+            binding.runtime_policy_snapshot.max_tool_result_bytes,
+            binding.runtime_policy_snapshot.max_tool_result_bytes,
         )
         for call_index, proposal_id in enumerate(record.proposal_ids):
             invocation = self.tool_ledger.store.get_tool_invocation(proposal_id)

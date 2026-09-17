@@ -8,7 +8,7 @@ from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.mcp.tool_registry import McpToolRegistry
 from core.providers.agentic_models import RuntimeCapabilitySet
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.tool_catalog import RuntimeAppInterfaceResolver, RuntimeExternalToolSurface, RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
 
@@ -68,7 +68,7 @@ class ToolCatalogSecurityTest(unittest.TestCase):
             ),
             ledger=object(),
         )
-        self.authority = EffectiveRuntimeAuthority(
+        self.authority = RuntimeAuthority(
             execution_binding_id="binding-tools",
             turn_id="turn-tools",
             allowed_capabilities=RuntimeCapabilitySet(

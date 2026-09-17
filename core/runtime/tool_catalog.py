@@ -9,7 +9,7 @@ from core.cli.command_registry import CliCommandRegistry
 from core.egress.classification import CanonicalSourceClassification
 from core.identity.models import PlatformRole
 from core.mcp.tool_registry import McpToolRegistry
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_models import ToolEffectClass
 from core.runtime.tool_result_classification import (
@@ -205,7 +205,7 @@ class RuntimeToolCatalogBuilder:
     def build(
         self,
         *,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
     ) -> RuntimeToolCatalog:
         """Build the exact authorized catalog; unknown classifications fail closed."""
@@ -385,7 +385,7 @@ class RuntimeToolCatalogBuilder:
         return None
 
     @staticmethod
-    def _core_capability_allowed(handle: str, authority: EffectiveRuntimeAuthority) -> bool:
+    def _core_capability_allowed(handle: str, authority: RuntimeAuthority) -> bool:
         capability = authority.allowed_capabilities
         return {
             "core-capability:workspace.instructions": capability.filesystem_read,

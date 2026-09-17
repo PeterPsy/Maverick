@@ -24,13 +24,13 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
       (profile) =>
         profile.selectable === true &&
         (profile.execution_family === "native_agent" || profile.execution_family === "maverick_agent") &&
-        profile.family_contract_status === "complete" &&
-        profile.full_workspace_status === "available" &&
+        (!profile.family_contract_status || profile.family_contract_status === "complete") &&
+        (!profile.full_workspace_status || profile.full_workspace_status === "available") &&
         nativeProfileRuntimeReady(payload, profile) &&
         profile.containment_status !== "NO-GO" &&
         profile.enabled &&
-        profile.effective_capabilities?.status === "active" &&
-        (profile.rollout_status === "preview" || profile.rollout_status === "available"),
+        (!profile.effective_capabilities || profile.effective_capabilities.status === "active") &&
+        (!profile.rollout_status || profile.rollout_status === "preview" || profile.rollout_status === "available"),
     ),
     payload.agentic_profiles?.default_binding_id || null,
   );

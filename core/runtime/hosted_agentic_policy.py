@@ -5,7 +5,6 @@ from __future__ import annotations
 from core.egress.agentic_models import AgenticEgressPolicy
 from core.providers.agentic_models import AgenticRuntimePolicy
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
-from core.runtime.full_workspace_contract import FULL_WORKSPACE_CORE_TOOL_HANDLES
 from core.runtime.tool_orchestrator import (
     RuntimeToolConfirmationPolicy,
     RuntimeToolInvocationOutcome,
@@ -14,7 +13,27 @@ from core.runtime.tool_result_artifacts import project_hosted_tool_result
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 
 
-HOSTED_CORE_TOOL_HANDLES = FULL_WORKSPACE_CORE_TOOL_HANDLES
+HOSTED_CORE_TOOL_HANDLES = (
+    "core-capability:workspace.instructions",
+    "core-capability:filesystem.list",
+    "core-capability:filesystem.search",
+    "core-capability:filesystem.read",
+    "core-capability:filesystem.write",
+    "core-capability:filesystem.edit",
+    "core-capability:filesystem.patch",
+    "core-capability:filesystem.move",
+    "core-capability:filesystem.delete",
+    "core-capability:shell.run",
+    "core-capability:process.start",
+    "core-capability:process.status",
+    "core-capability:process.input",
+    "core-capability:process.interrupt",
+    "core-capability:cli.list",
+    "core-capability:cli.run",
+    "core-capability:mcp.list",
+    "core-capability:mcp.call",
+    "core-capability:artifact.read",
+)
 _TOOL_POLICY_FLAG_BY_HANDLE = {
     "core-capability:workspace.instructions": "allow_filesystem_read",
     "core-capability:filesystem.list": "allow_filesystem_list",
@@ -42,7 +61,7 @@ _TOOL_POLICY_SURFACE_BY_HANDLE = {
 
 def authorized_core_tool_handles(binding) -> tuple[str, ...]:
     """Return the exact Core candidates the hosted adapter can materialize."""
-    policy = binding.profile_policy_ceiling_snapshot
+    policy = binding.runtime_policy_snapshot
     if policy.tool_handle_mode == "none":
         return ()
     if policy.tool_handle_mode == "exact":
@@ -125,7 +144,7 @@ def validate_hosted_request_policy(
 
 def hosted_tool_policy(authority, policy) -> RuntimeToolConfirmationPolicy:
     return RuntimeToolConfirmationPolicy(
-        policy_revision="|".join(authority.policy_revision_set),
+        policy_revision=authority.authority_digest,
         require_confirmation_for_mutating=policy.require_confirmation_for_mutating,
         require_confirmation_for_destructive=policy.require_confirmation_for_destructive,
         max_tool_result_bytes=policy.max_tool_result_bytes,

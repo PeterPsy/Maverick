@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime
 
 from core.runtime.private_payload_models import PRIVATE_PAYLOAD_ENCRYPTION_PROFILE
@@ -66,8 +66,6 @@ class RuntimeProviderState:
     revision: int
     turn_generation: str | None
     updated_at: datetime
-    continuation_handoff_id: str | None = None
-    continuation_successor_session_id: str | None = None
 
 
 def provider_private_envelope_from_document(
@@ -213,7 +211,9 @@ def runtime_provider_state_from_document(document: Mapping[str, object]) -> Runt
         payload["provider_private_envelope"] = provider_private_envelope_from_document(envelope)
     elif envelope is not None and not isinstance(envelope, ProviderPrivateEnvelope):
         raise ValueError("Provider private envelope must be an object.")
-    return RuntimeProviderState(**payload)
+    valid_keys = {f.name for f in fields(RuntimeProviderState)}
+    sanitized = {k: v for k, v in payload.items() if k in valid_keys}
+    return RuntimeProviderState(**sanitized)
 
 
 def _is_sha256(value: object) -> bool:

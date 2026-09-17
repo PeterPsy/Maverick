@@ -281,10 +281,7 @@ def _session_payload(
         }
         payload["execution_binding"] = {
             "execution_binding_id": binding.execution_binding_id,
-            "profile_definition_id": binding.profile_definition_id,
-            "profile_definition_revision": binding.profile_definition_revision,
             "workspace_binding_id": binding.workspace_binding_id,
-            "workspace_binding_revision": binding.workspace_binding_revision,
             "runtime_engine_id": binding.runtime_engine_id,
             "adapter_id": binding.adapter_id,
             "adapter_version": binding.adapter_version,
@@ -293,14 +290,11 @@ def _session_payload(
             "model_revision": binding.model_revision,
             "model_revision_policy": binding.model_revision_policy,
             "reasoning_effort": binding.reasoning_effort,
-            "reasoning_efforts": binding.reasoning_efforts,
-            "default_reasoning_effort": binding.default_reasoning_effort,
             "capabilities": asdict(binding.capabilities_snapshot),
             "provider_protocol": binding.provider_protocol,
             "provider_api_version": binding.provider_api_version,
             "egress_policy_id": binding.egress_policy_id,
             "egress_policy_revision": binding.egress_policy_revision,
-            "binding_digest": binding.binding_digest,
             "created_at": binding.created_at,
         }
         if state is not None:
@@ -1315,8 +1309,6 @@ def _preflight_runtime_session_creation_before_persistence(
             ),
             workspace_binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
             reasoning_effort=str(body.get("reasoning_effort") or "").strip() or None,
-            authorized_definition_snapshot=authorized_profile[0],
-            authorized_workspace_binding_snapshot=authorized_profile[1],
             workspace_store=getattr(state, "workspace_store", None),
         )
         adapter = registry.get_agentic_runtime_adapter(
@@ -1336,10 +1328,7 @@ def _preflight_runtime_session_creation_before_persistence(
                 governance=governance,
                 platform_allows_full_access=context.workspace_id == "default",
             ),
-            actor_policy_revision=(
-                f"workspace-actor:{execution_binding.workspace_binding_id}:"
-                f"{execution_binding.workspace_binding_revision}"
-            ),
+            actor_policy_revision=f"workspace-actor:{execution_binding.workspace_binding_id}",
             runtime_profile=runtime_profile,
             adapter=adapter,
             invoked_skills=(

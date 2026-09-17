@@ -33,15 +33,6 @@ def require_turn_queue_session_executable(
             f"Cannot queue a runtime turn while session `{session.session_id}` is remotely contained.",
             reason_code="remote_agentic_session_contained",
         )
-    handoff = store.get_continuation_handoff_by_predecessor(
-        workspace_id=session.workspace_id,
-        predecessor_session_id=session.session_id,
-    )
-    if handoff is not None:
-        raise RuntimeTurnQueueRejectedError(
-            f"Cannot queue a runtime turn on superseded session `{session.session_id}`.",
-            reason_code="runtime_session_superseded",
-        )
     if session.status not in {"created", "running"}:
         raise RuntimeTurnQueueRejectedError(
             f"Cannot queue a runtime turn while session `{session.session_id}` is {session.status}.",

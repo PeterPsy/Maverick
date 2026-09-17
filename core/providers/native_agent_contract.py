@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
 from typing import Literal, Protocol
 
 from core.providers.execution_families import NATIVE_AGENT_EXECUTION_FAMILY
@@ -67,9 +66,6 @@ REQUIRED_NATIVE_INSPECTOR_METHODS = (
 _STRUCTURED_PROTOCOLS = frozenset(
     {"app_server", "sdk", "api", "json_rpc", "jsonl", "structured_cli"}
 )
-_SHA256 = re.compile(r"^[0-9a-f]{64}$")
-
-
 @dataclass(frozen=True)
 class NativeAgentAdapterManifest:
     """Trusted integration identity, protocol, and lifecycle declaration."""
@@ -89,11 +85,8 @@ class NativeAgentAdapterManifest:
 
 @dataclass(frozen=True)
 class NativeAgentHarnessRecipe:
-    """Immutable native-agent harness configuration, separate from the adapter."""
+    """Prompt and context settings for a native-agent integration."""
 
-    recipe_id: str
-    revision: str
-    digest: str
     prompt_contract_revision: str
     context_owner: Literal["native_runtime", "maverick"]
 
@@ -153,7 +146,6 @@ class NativeAgentInstallation:
     recipe: NativeAgentHarnessRecipe
     model_provider_connections: tuple[NativeAgentModelProviderConnection, ...]
     effects: NativeAgentEffectContract
-    full_workspace_contract_revision: str | None
     inspector: NativeRuntimeInspector
 
     @property
@@ -162,8 +154,8 @@ class NativeAgentInstallation:
 
     @property
     def contract_configured(self) -> bool:
-        """Return whether the integration declares the Full Workspace contract."""
-        return bool(self.full_workspace_contract_revision)
+        """Return whether the executable integration has a model connection."""
+        return bool(self.model_provider_connections)
 
 
 def validate_native_agent_installation(installation: NativeAgentInstallation) -> None:
@@ -193,8 +185,6 @@ def validate_native_agent_installation(installation: NativeAgentInstallation) ->
         raise ValueError("native_agent_effects_unobserved")
     if not installation.effects.sandbox_policy_revision.strip():
         raise ValueError("native_agent_sandbox_policy_missing")
-    if not _SHA256.fullmatch(installation.recipe.digest):
-        raise ValueError("native_agent_recipe_digest_invalid")
     if not installation.model_provider_connections:
         raise ValueError("native_agent_model_provider_connection_missing")
     connection_ids: set[str] = set()
@@ -213,8 +203,6 @@ def validate_native_agent_installation(installation: NativeAgentInstallation) ->
             raise ValueError("native_agent_model_provider_connection_duplicate")
         connection_ids.add(identity[0])
         catalog_ids.add(identity[1])
-    if not installation.full_workspace_contract_revision:
-        raise ValueError("native_agent_workspace_contract_missing")
 
 
 def validate_native_runtime_adapter(

@@ -32,7 +32,7 @@ class HostedAgenticAuthorityAuditTest(unittest.TestCase):
         )
         record = Mock()
         with patch(
-            "core.runtime.authority_service.resolve_effective_runtime_authority",
+            "core.runtime.authority_service.resolve_runtime_authority",
             return_value=harness.authority,
         ) as resolve, patch(
             "core.runtime.authority_service.live_runtime_actor_policy",

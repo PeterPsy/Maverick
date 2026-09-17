@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Literal
 
@@ -100,11 +100,6 @@ class RuntimeSessionRecord:
     owner_user_id: str | None = None
     created_by_user_id: str | None = None
     creator_runtime_session_id: str | None = None
-    predecessor_session_id: str | None = None
-    lineage_root_session_id: str | None = None
-    continuation_handoff_id: str | None = None
-    continuation_fork_reason: str | None = None
-    continuation_successor_session_id: str | None = None
     grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] = field(default_factory=list)
     execution_binding: RuntimeExecutionBinding | None = None
     hosted_text_binding: HostedTextExecutionBinding | None = None
@@ -253,7 +248,9 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
         payload.get("device_use_binding")
     )
     _validate_runtime_family_pins(payload)
-    return RuntimeSessionRecord(**payload)
+    valid_keys = {f.name for f in fields(RuntimeSessionRecord)}
+    sanitized = {k: v for k, v in payload.items() if k in valid_keys}
+    return RuntimeSessionRecord(**sanitized)
 
 
 def _validate_runtime_family_pins(payload: Mapping[str, object]) -> None:
@@ -277,10 +274,6 @@ def _validate_runtime_family_pins(payload: Mapping[str, object]) -> None:
 
 def runtime_session_allows_user_thread(session: RuntimeSessionRecord) -> bool:
     """Return whether this runtime session may be represented by a user-visible thread."""
-    if str(
-        getattr(session, "continuation_successor_session_id", None) or ""
-    ).strip():
-        return False
     try:
         _kind, visibility = normalize_runtime_session_visibility(
             getattr(session, "session_kind", None),

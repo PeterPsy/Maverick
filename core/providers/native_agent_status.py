@@ -8,7 +8,6 @@ from core.providers.errors import ProviderNotFoundError
 from core.providers.execution_families import NATIVE_AGENT_EXECUTION_FAMILY
 from core.providers.native_agent_catalog import native_agent_catalog_models
 from core.providers.native_agent_contract import NativeRuntimeStatus
-from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
 
 
 def native_agent_status_items(registry, *, store=None) -> list[dict[str, object]]:
@@ -44,9 +43,7 @@ def _native_agent_status_item(registry, installation, *, store) -> dict[str, obj
             update_status="unknown",
         )
     contract_complete = bool(
-        installation.full_workspace_contract_revision
-        == FULL_WORKSPACE_CONTRACT_REVISION
-        and installation.effects.workspace_confined
+        installation.effects.workspace_confined
         and installation.effects.process_tree_supervised
         and installation.effects.structured_effect_events
     )
@@ -60,8 +57,6 @@ def _native_agent_status_item(registry, installation, *, store) -> dict[str, obj
         status=status,
     )
     catalog_models = native_agent_catalog_models(registry, installation)
-    selectable = selectable and bool(catalog_models)
-    unavailable_reason = unavailable_reason or (None if catalog_models else "native_agent_model_unavailable")
     return {
         "runtime_engine_id": manifest.runtime_engine_id,
         "label": manifest.runtime_engine_id if definition is None else definition.label,
@@ -84,14 +79,6 @@ def _native_agent_status_item(registry, installation, *, store) -> dict[str, obj
             "id": manifest.adapter_id,
             "version": manifest.adapter_version,
             "trusted_distribution": manifest.trusted_distribution,
-        },
-        "harness_recipe": {
-            "id": installation.recipe.recipe_id,
-            "revision": installation.recipe.revision,
-            "digest": installation.recipe.digest,
-            "prompt_contract_revision": (
-                installation.recipe.prompt_contract_revision
-            ),
         },
         "protocol": {
             "kind": manifest.protocol_kind,
@@ -122,10 +109,6 @@ def _native_agent_status_item(registry, installation, *, store) -> dict[str, obj
             "approval_policy": installation.effects.approval_policy,
         },
         "contract_state": "available" if contract_complete else "unavailable",
-        "full_workspace_status": "available" if contract_complete else "unavailable",
-        "full_workspace_contract_revision": (
-            installation.full_workspace_contract_revision
-        ),
         "selectable": selectable,
         "unavailable_reason": unavailable_reason,
     }

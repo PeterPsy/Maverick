@@ -1,4 +1,4 @@
-"""Monotonic live authority calculation for pinned agentic turns."""
+"""Live runtime permissions for agentic turns."""
 
 from __future__ import annotations
 
@@ -18,9 +18,6 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 from core.runtime.failure_messages import public_runtime_failure_reason_code
-from core.runtime.full_workspace_contract import (
-    validate_full_workspace_live_authority,
-)
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_ANTIGRAVITY_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
@@ -55,8 +52,8 @@ _CLIENT_AUTHORITY_FIELDS = frozenset(
 
 
 @dataclass(frozen=True)
-class EffectiveRuntimeAuthority:
-    """Ephemeral, non-bearer authority narrowed from pinned and live policy."""
+class RuntimeAuthority:
+    """Ephemeral permissions derived from session settings and live state."""
 
     execution_binding_id: str
     turn_id: str
@@ -64,7 +61,6 @@ class EffectiveRuntimeAuthority:
     allowed_tool_handles: tuple[str, ...]
     execution_mode: ExecutionMode
     egress_policy_id: str
-    policy_revision_set: tuple[str, ...]
     health_revision: str
     authority_digest: str
     computed_at: datetime
@@ -82,18 +78,10 @@ class EffectiveRuntimeAuthority:
     allowed_remote_data_classes: tuple[str, ...] = ()
     data_collection_policy: str = "deny"
     require_zdr: bool = False
-    full_workspace_contract_revision: str = ""
-    execution_family: str = ""
-    harness_recipe_id: str = ""
-    harness_recipe_revision: str = ""
-    harness_recipe_digest: str = ""
-    provider_capability_catalog_digest: str = ""
-    semantic_projection_compiler_revision: str = ""
-    tool_contract_revision: str = ""
     context_policy_revision: str = ""
 
 
-def resolve_effective_runtime_authority(
+def resolve_runtime_authority(
     store: ProviderStore,
     *,
     binding: RuntimeExecutionBinding,
@@ -107,9 +95,8 @@ def resolve_effective_runtime_authority(
     actor_policy_allowed: bool = True,
     actor_policy_revision: str = "runtime-actor:unknown",
     now: datetime | None = None,
-    adapter_identity_digest: str | None = None,
-) -> EffectiveRuntimeAuthority:
-    """Intersect profile capabilities with every pinned and live restriction."""
+) -> RuntimeAuthority:
+    """Apply live health, mode, actor, workspace, and tool restrictions."""
     timestamp = now or datetime.now(tz=UTC)
     if (
         str(getattr(adapter, "runtime_engine_id", ""))
@@ -131,11 +118,9 @@ def resolve_effective_runtime_authority(
     workspace_binding = validate_live_runtime_binding_governance(
         store,
         binding=binding,
-        allow_inactive_definition=True,
     )
     policy = intersect_runtime_policies(
-        binding.profile_policy_ceiling_snapshot,
-        binding.workspace_policy_ceiling_snapshot,
+        binding.runtime_policy_snapshot,
         workspace_binding.workspace_policy_ceiling,
     )
     policy_capabilities = _narrow_capabilities(
@@ -169,8 +154,7 @@ def resolve_effective_runtime_authority(
     capabilities = _confirmation_capability_ceiling(capabilities, policy)
     tool_handles = _allowed_tool_handles(
         currently_authorized_tool_handles,
-        binding.profile_policy_ceiling_snapshot,
-        binding.workspace_policy_ceiling_snapshot,
+        binding.runtime_policy_snapshot,
         workspace_binding.workspace_policy_ceiling,
     )
     if not capabilities.tool_orchestration:
@@ -190,25 +174,13 @@ def resolve_effective_runtime_authority(
             capabilities,
             tool_handles,
         )
-    validate_full_workspace_live_authority(
-        revision=binding.full_workspace_contract_revision,
-        capabilities=capabilities,
-        policy=policy,
-        allowed_handles=tool_handles,
-    )
-    authority = EffectiveRuntimeAuthority(
+    authority = RuntimeAuthority(
         execution_binding_id=binding.execution_binding_id,
         turn_id=turn_id,
         allowed_capabilities=capabilities,
         allowed_tool_handles=tool_handles,
         execution_mode=execution_mode,
         egress_policy_id=binding.egress_policy_id,
-        policy_revision_set=(
-            f"profile:{binding.profile_definition_id}:{binding.profile_definition_revision}",
-            f"workspace-snapshot:{binding.workspace_binding_id}:{binding.workspace_binding_revision}",
-            f"workspace-live:{workspace_binding.binding_id}:{workspace_binding.revision}",
-            f"egress:{binding.egress_policy_id}:{binding.egress_policy_revision}",
-        ),
         health_revision=str(health_revision or "runtime-health:unknown"),
         authority_digest="",
         computed_at=timestamp,
@@ -229,24 +201,6 @@ def resolve_effective_runtime_authority(
         allowed_remote_data_classes=policy.allowed_remote_data_classes,
         data_collection_policy=binding.routing_constraint_snapshot.data_collection_policy,
         require_zdr=binding.routing_constraint_snapshot.require_zdr,
-        full_workspace_contract_revision=(
-            binding.full_workspace_contract_revision
-        ),
-        execution_family=getattr(binding, "execution_family", ""),
-        harness_recipe_id=getattr(binding, "harness_recipe_id", ""),
-        harness_recipe_revision=getattr(binding, "harness_recipe_revision", ""),
-        harness_recipe_digest=getattr(binding, "harness_recipe_digest", ""),
-        provider_capability_catalog_digest=getattr(
-            binding,
-            "provider_capability_catalog_digest",
-            "",
-        ),
-        semantic_projection_compiler_revision=getattr(
-            binding,
-            "semantic_projection_compiler_revision",
-            "",
-        ),
-        tool_contract_revision=getattr(binding, "tool_contract_revision", ""),
         context_policy_revision=(
             ""
             if getattr(binding, "context_policy_snapshot", None) is None
@@ -260,7 +214,6 @@ def validate_live_runtime_binding_governance(
     store: ProviderStore,
     *,
     binding: RuntimeExecutionBinding,
-    allow_inactive_definition: bool = False,
 ) -> WorkspaceAgenticProfileBinding:
     """Validate mutable workspace authority against current control-plane state."""
     try:
@@ -276,19 +229,6 @@ def validate_live_runtime_binding_governance(
         or workspace_binding.egress_policy_revision != binding.egress_policy_revision
     ):
         raise AgenticRuntimeError("egress_policy_drift_unresolved")
-    definition_status = store.get_agentic_profile_definition_status(
-        binding.profile_definition_id,
-        binding.profile_definition_revision,
-    )
-    if definition_status is None and not allow_inactive_definition:
-        raise AgenticRuntimeError("profile_definition_invalid")
-    if definition_status is not None and definition_status.rollout_status == "disabled":
-        raise AgenticRuntimeError("profile_definition_invalid")
-    if definition_status is not None and (
-        definition_status.rollout_status == "suspended"
-        and not allow_inactive_definition
-    ):
-        raise AgenticRuntimeError("profile_definition_invalid")
     if binding.credential_binding_id:
         credential = resolve_provider_binding(
             store,
@@ -334,7 +274,7 @@ def intersect_runtime_policies(*policies: AgenticRuntimePolicy) -> AgenticRuntim
     )
 
 
-def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> dict[str, object]:
+def runtime_authority_audit_payload(authority: RuntimeAuthority) -> dict[str, object]:
     """Return the redaction-safe persisted projection of ephemeral authority."""
     capabilities = authority.allowed_capabilities
     return {
@@ -342,27 +282,10 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
         "authority_digest": authority.authority_digest,
         "execution_mode": authority.execution_mode,
         "egress_policy_id": authority.egress_policy_id,
-        "policy_revision_set": authority.policy_revision_set,
         "health_revision": authority.health_revision,
         "provider_health_status": authority.provider_health_status,
         "actor_policy_revision": authority.actor_policy_revision,
         "feature_flag_revision": authority.feature_flag_revision,
-        "full_workspace_contract_revision": (
-            authority.full_workspace_contract_revision or None
-        ),
-        "execution_family": authority.execution_family or None,
-        "harness_recipe": {
-            "id": authority.harness_recipe_id or None,
-            "revision": authority.harness_recipe_revision or None,
-            "digest": authority.harness_recipe_digest or None,
-            "provider_capability_catalog_digest": (
-                authority.provider_capability_catalog_digest or None
-            ),
-        },
-        "semantic_projection_compiler_revision": (
-            authority.semantic_projection_compiler_revision or None
-        ),
-        "tool_contract_revision": authority.tool_contract_revision or None,
         "context_policy_revision": authority.context_policy_revision or None,
         "allowed_tool_handle_count": len(authority.allowed_tool_handles),
         "allowed_capabilities": tuple(
@@ -373,8 +296,8 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
     }
 
 
-def effective_runtime_capability_payload(
-    authority: EffectiveRuntimeAuthority,
+def runtime_capability_payload(
+    authority: RuntimeAuthority,
 ) -> dict[str, object]:
     """Project the one server-owned snapshot without bearer or credential authority."""
     return {
@@ -401,24 +324,7 @@ def effective_runtime_capability_payload(
             "collection": authority.data_collection_policy,
             "require_zdr": authority.require_zdr,
         },
-        "full_workspace_contract_revision": (
-            authority.full_workspace_contract_revision or None
-        ),
-        "execution_family": authority.execution_family or None,
-        "harness_recipe": {
-            "id": authority.harness_recipe_id or None,
-            "revision": authority.harness_recipe_revision or None,
-            "digest": authority.harness_recipe_digest or None,
-            "provider_capability_catalog_digest": (
-                authority.provider_capability_catalog_digest or None
-            ),
-        },
-        "semantic_projection_compiler_revision": (
-            authority.semantic_projection_compiler_revision or None
-        ),
-        "tool_contract_revision": authority.tool_contract_revision or None,
         "context_policy_revision": authority.context_policy_revision or None,
-        "policy_revisions": authority.policy_revision_set,
         "actor_policy_revision": authority.actor_policy_revision,
         "feature_flag_revision": authority.feature_flag_revision,
     }
@@ -471,8 +377,8 @@ def blocked_runtime_capability_payload(
     }
 
 
-def validate_effective_context_capabilities(
-    authority: EffectiveRuntimeAuthority,
+def validate_runtime_context_capabilities(
+    authority: RuntimeAuthority,
     *,
     invoked_skills: object = (),
     attachments: object = (),
@@ -527,9 +433,9 @@ def validate_effective_context_capabilities(
 
 
 def narrow_hosted_authority_to_policy(
-    authority: EffectiveRuntimeAuthority,
+    authority: RuntimeAuthority,
     policy: AgenticRuntimePolicy,
-) -> EffectiveRuntimeAuthority:
+) -> RuntimeAuthority:
     """Apply a policy read after authority resolution as a monotonic fence."""
     _validate_policy(policy)
     capabilities = _narrow_capabilities(

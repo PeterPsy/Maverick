@@ -21,7 +21,7 @@ from core.cli.models import CliInvocationContext
 from core.cli.runner import CliRunner
 from core.mcp.models import McpInvocationContext
 from core.mcp.runner import McpRunner
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.classification_authority import (
     revalidate_canonical_classification,
 )
@@ -234,7 +234,7 @@ class RuntimeToolOrchestrator:
         )
 
     def materialize(
-        self, *, authority: EffectiveRuntimeAuthority, context: RuntimeToolActorContext
+        self, *, authority: RuntimeAuthority, context: RuntimeToolActorContext
     ) -> RuntimeToolCatalog:
         return self.catalog_builder.build(authority=authority, context=context)
     def invoke_provider_tool(
@@ -243,7 +243,7 @@ class RuntimeToolOrchestrator:
         provider_tool_name: str,
         provider_tool_call_id: str,
         arguments: dict[str, object],
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         turn_id: str,
         policy: RuntimeToolConfirmationPolicy,
@@ -287,7 +287,7 @@ class RuntimeToolOrchestrator:
         provider_request_id: str,
         provider_event_ordinal: int,
         provider_call_index: int,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         turn_id: str,
         policy: RuntimeToolConfirmationPolicy,
@@ -328,7 +328,7 @@ class RuntimeToolOrchestrator:
         record: ToolInvocationRecord,
         *,
         requested_catalog: RuntimeToolCatalog,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
     ) -> RuntimeToolInvocationOutcome:
@@ -427,7 +427,7 @@ class RuntimeToolOrchestrator:
         self,
         record: ToolInvocationRecord,
         *,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
         control: RuntimeToolExecutionControl | None = None,
@@ -451,7 +451,7 @@ class RuntimeToolOrchestrator:
         self,
         record: ToolInvocationRecord,
         *,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         control: RuntimeToolExecutionControl | None = None,
     ) -> RuntimeToolInvocationOutcome:
@@ -481,7 +481,7 @@ class RuntimeToolOrchestrator:
         self,
         record: ToolInvocationRecord,
         *,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
         control: RuntimeToolExecutionControl | None = None,
@@ -575,7 +575,7 @@ class RuntimeToolOrchestrator:
         *,
         invocation_id: str,
         grant_id: str,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
     ) -> RuntimeToolInvocationOutcome:
@@ -600,7 +600,7 @@ class RuntimeToolOrchestrator:
         *,
         invocation_id: str,
         grant_id: str,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
     ) -> RuntimeToolInvocationOutcome:
         """Consume confirmation and recompute authority without executing."""
@@ -623,7 +623,7 @@ class RuntimeToolOrchestrator:
         self,
         *,
         invocation_id: str,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
     ) -> RuntimeToolInvocationOutcome:
         """Reconcile an interrupted execution without replaying ambiguous effects."""
@@ -640,7 +640,7 @@ class RuntimeToolOrchestrator:
         record: ToolInvocationRecord,
         *,
         descriptor: RuntimeToolDescriptor,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
         control: RuntimeToolExecutionControl | None,
@@ -872,7 +872,7 @@ class RuntimeToolOrchestrator:
         arguments: dict[str, object],
         context: RuntimeToolActorContext,
         *,
-        authority: EffectiveRuntimeAuthority,
+        authority: RuntimeAuthority,
     ) -> None:
         try:
             decision = resolver(handle, arguments, context)

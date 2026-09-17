@@ -10,17 +10,10 @@ import shutil
 import sqlite3
 from urllib.parse import quote
 
-from core.runtime.paths import runtime_session_root, workspace_runtime_root
+from core.runtime.paths import runtime_session_root
 
 
 MAX_PROVIDER_SNAPSHOT_BYTES = 2 * 1024 * 1024 * 1024
-_LINEAGE_ID_FIELDS = (
-    "predecessor_session_id",
-    "continuation_successor_session_id",
-    "lineage_root_session_id",
-)
-
-
 def resolve_snapshot_lineage_session_ids(
     repository_root: Path,
     *,
@@ -30,10 +23,6 @@ def resolve_snapshot_lineage_session_ids(
     """Expand selected sessions to every persisted member of their lineage."""
     pending = list(session_ids)
     resolved: set[str] = set()
-    handoff_links = _continuation_handoff_links(
-        repository_root,
-        workspace_id=workspace_id,
-    )
     while pending:
         session_id = pending.pop()
         if session_id in resolved:
@@ -48,51 +37,9 @@ def resolve_snapshot_lineage_session_ids(
             session_id=session_id,
         )
         resolved.add(session_id)
-        for field_name in _LINEAGE_ID_FIELDS:
-            related_id = str(document.get(field_name) or "").strip()
-            if related_id and related_id not in resolved:
-                pending.append(related_id)
-        for related_id in handoff_links.get(session_id, ()):
-            related_document = runtime_session_root(
-                workspace_id=workspace_id,
-                session_id=related_id,
-                start_path=repository_root,
-            ) / "session.json"
-            if related_id not in resolved and related_document.is_file():
-                pending.append(related_id)
         if len(resolved) > 1000:
             raise RuntimeError("runtime_continuation_snapshot_lineage_too_large")
     return sorted(resolved)
-
-
-def _continuation_handoff_links(
-    repository_root: Path,
-    *,
-    workspace_id: str,
-) -> dict[str, set[str]]:
-    path = workspace_runtime_root(
-        workspace_id=workspace_id,
-        start_path=repository_root,
-    ) / "continuation_handoffs.json"
-    if not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise RuntimeError("runtime_continuation_snapshot_handoff_invalid") from error
-    if not isinstance(payload, list) or any(
-        not isinstance(item, dict) for item in payload
-    ):
-        raise RuntimeError("runtime_continuation_snapshot_handoff_invalid")
-    links: dict[str, set[str]] = {}
-    for item in payload:
-        predecessor_id = str(item.get("predecessor_session_id") or "").strip()
-        successor_id = str(item.get("successor_session_id") or "").strip()
-        if not predecessor_id or not successor_id:
-            raise RuntimeError("runtime_continuation_snapshot_handoff_invalid")
-        links.setdefault(predecessor_id, set()).add(successor_id)
-        links.setdefault(successor_id, set()).add(predecessor_id)
-    return links
 
 
 def snapshot_provider_conversation_homes(
@@ -198,7 +145,7 @@ def _lineage_root_session_ids(
             session_root / "session.json",
             session_id=session_id,
         )
-        roots.add(str(document.get("lineage_root_session_id") or session_id).strip())
+        roots.add(session_id)
     return sorted(roots)
 
 
@@ -229,7 +176,7 @@ def _codex_lineage_root_session_ids(
             document.get("provider_id") or ""
         ).strip() == "codex":
             roots.add(
-                str(document.get("lineage_root_session_id") or session_id).strip()
+                session_id
             )
     return roots
 

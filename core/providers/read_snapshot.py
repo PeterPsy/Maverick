@@ -19,16 +19,12 @@ class ProviderReadSnapshot:
         self._store = store
 
     @cache
-    def get_agentic_profile_definition(self, definition_id: str, revision: str):
-        return self._store.get_agentic_profile_definition(definition_id, revision)
+    def get_agentic_profile_definition(self, definition_id: str):
+        return self._store.get_agentic_profile_definition(definition_id)
 
     @cache
     def list_agentic_profile_definitions(self):
         return self._store.list_agentic_profile_definitions()
-
-    @cache
-    def get_agentic_profile_definition_status(self, definition_id: str, revision: str):
-        return self._store.get_agentic_profile_definition_status(definition_id, revision)
 
     @cache
     def get_workspace_agentic_profile_binding(self, binding_id: str):

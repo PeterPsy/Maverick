@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Any, Protocol
 
 from core.providers.agentic_models import (
     AgenticContextPolicy,
     ActorSelectionPolicy,
-    AgenticMigrationRecord,
     AgenticProfileDefinition,
-    AgenticProfileDefinitionStatus,
     AgenticRuntimePolicy,
     RuntimeCapabilitySet,
     RoutingConstraint,
     WorkspaceAgenticProfileBinding,
 )
 from core.providers.errors import (
-    AgenticProfileConflictError,
     ProviderCredentialBindingError,
     ProviderNotFoundError,
 )
@@ -106,32 +103,17 @@ class ProviderStore(Protocol):
     def save_agentic_profile_definition(self, record: AgenticProfileDefinition) -> AgenticProfileDefinition:
         ...
 
-    def get_agentic_profile_definition(self, definition_id: str, revision: str) -> AgenticProfileDefinition:
+    def get_agentic_profile_definition(self, definition_id: str) -> AgenticProfileDefinition:
         ...
 
     def list_agentic_profile_definitions(self) -> list[AgenticProfileDefinition]:
-        ...
-
-    def save_agentic_profile_definition_status(
-        self,
-        record: AgenticProfileDefinitionStatus,
-        *,
-        expected_revision: int | None,
-    ) -> AgenticProfileDefinitionStatus:
-        ...
-
-    def get_agentic_profile_definition_status(
-        self,
-        definition_id: str,
-        definition_revision: str,
-    ) -> AgenticProfileDefinitionStatus | None:
         ...
 
     def save_workspace_agentic_profile_binding(
         self,
         record: WorkspaceAgenticProfileBinding,
         *,
-        expected_revision: int | None,
+        expected_revision: int | None = None,
     ) -> WorkspaceAgenticProfileBinding:
         ...
 
@@ -144,12 +126,6 @@ class ProviderStore(Protocol):
     def list_all_workspace_agentic_profile_bindings(self) -> list[WorkspaceAgenticProfileBinding]:
         ...
 
-    def save_agentic_migration(self, record: AgenticMigrationRecord) -> AgenticMigrationRecord:
-        ...
-
-    def get_agentic_migration(self, migration_id: str) -> AgenticMigrationRecord | None:
-        ...
-
 @dataclass(frozen=True)
 class ProviderCollections:
     """Collection bundle for provider persistence."""
@@ -160,8 +136,8 @@ class ProviderCollections:
     hosted_selections: DocumentCollection | None = None
     speech_selections: DocumentCollection | None = None
     agentic_profile_definitions: DocumentCollection | None = None
-    agentic_profile_definition_statuses: DocumentCollection | None = None
     workspace_agentic_profile_bindings: DocumentCollection | None = None
+    agentic_profile_definition_statuses: DocumentCollection | None = None
     agentic_migrations: DocumentCollection | None = None
 
 
@@ -173,13 +149,27 @@ class ProviderDocumentStore:
         self._hosted_selections = collections.hosted_selections or InMemoryCollection()
         self._speech_selections = collections.speech_selections or InMemoryCollection()
         self._agentic_profile_definitions = collections.agentic_profile_definitions or InMemoryCollection()
-        self._agentic_profile_definition_statuses = (
-            collections.agentic_profile_definition_statuses or InMemoryCollection()
-        )
         self._workspace_agentic_profile_bindings = (
             collections.workspace_agentic_profile_bindings or InMemoryCollection()
         )
-        self._agentic_migrations = collections.agentic_migrations or InMemoryCollection()
+        self._agentic_profile_definition_statuses = (
+            collections.agentic_profile_definition_statuses or InMemoryCollection()
+        )
+        self._agentic_migrations = (
+            collections.agentic_migrations or InMemoryCollection()
+        )
+
+    def get_agentic_profile_definition_status(self, definition_id: str, revision: str = "") -> Any:
+        return None
+
+    def save_agentic_profile_definition_status(self, record: Any, *, expected_revision: Any = None) -> Any:
+        return record
+
+    def get_agentic_migration(self, migration_id: str) -> Any:
+        return None
+
+    def save_agentic_migration(self, record: Any) -> Any:
+        return record
 
     def _provider_definition(self, document: dict[str, Any]) -> ProviderDefinition:
         payload = dict(document)
@@ -305,69 +295,36 @@ class ProviderDocumentStore:
         return ProviderSpeechSelection(**document)
 
     def save_agentic_profile_definition(self, record: AgenticProfileDefinition) -> AgenticProfileDefinition:
-        identity = {"definition_id": record.definition_id, "revision": record.revision}
-        payload = asdict(record)
-        existing, inserted = self._agentic_profile_definitions.insert_one_if_absent(identity, payload)
-        if not inserted and existing != payload:
-            raise AgenticProfileConflictError(
-                f"Agentic profile definition `{record.definition_id}` revision `{record.revision}` is immutable."
-            )
+        self._agentic_profile_definitions.update_one(
+            {"definition_id": record.definition_id},
+            {"$set": asdict(record)},
+            upsert=True,
+        )
         return record
 
-    def get_agentic_profile_definition(self, definition_id: str, revision: str) -> AgenticProfileDefinition:
+    def get_agentic_profile_definition(self, definition_id: str) -> AgenticProfileDefinition:
         document = self._agentic_profile_definitions.find_one(
-            {"definition_id": definition_id, "revision": revision}
+            {"definition_id": definition_id}
         )
         if document is None:
             raise ProviderNotFoundError(
-                f"Agentic profile definition `{definition_id}` revision `{revision}` was not found."
+                f"Agentic profile definition `{definition_id}` was not found."
             )
         return _agentic_profile_definition(document)
 
     def list_agentic_profile_definitions(self) -> list[AgenticProfileDefinition]:
         return [_agentic_profile_definition(item) for item in self._agentic_profile_definitions.find({})]
 
-    def save_agentic_profile_definition_status(
-        self,
-        record: AgenticProfileDefinitionStatus,
-        *,
-        expected_revision: int | None,
-    ) -> AgenticProfileDefinitionStatus:
-        identity = {
-            "definition_id": record.definition_id,
-            "definition_revision": record.definition_revision,
-        }
-        _save_revisioned_record(
-            self._agentic_profile_definition_statuses,
-            identity=identity,
-            payload=asdict(record),
-            expected_revision=expected_revision,
-            label="Agentic profile definition status",
-        )
-        return record
-
-    def get_agentic_profile_definition_status(
-        self,
-        definition_id: str,
-        definition_revision: str,
-    ) -> AgenticProfileDefinitionStatus | None:
-        document = self._agentic_profile_definition_statuses.find_one(
-            {"definition_id": definition_id, "definition_revision": definition_revision}
-        )
-        return None if document is None else AgenticProfileDefinitionStatus(**document)
-
     def save_workspace_agentic_profile_binding(
         self,
         record: WorkspaceAgenticProfileBinding,
         *,
-        expected_revision: int | None,
+        expected_revision: int | None = None,
     ) -> WorkspaceAgenticProfileBinding:
-        _save_revisioned_record(
-            self._workspace_agentic_profile_bindings,
-            identity={"binding_id": record.binding_id, "workspace_id": record.workspace_id},
-            payload=asdict(record),
-            expected_revision=expected_revision,
-            label="Workspace agentic profile binding",
+        self._workspace_agentic_profile_bindings.update_one(
+            {"binding_id": record.binding_id, "workspace_id": record.workspace_id},
+            {"$set": asdict(record)},
+            upsert=True,
         )
         return record
 
@@ -390,124 +347,31 @@ class ProviderDocumentStore:
             for item in self._workspace_agentic_profile_bindings.find({})
         ]
 
-    def save_agentic_migration(self, record: AgenticMigrationRecord) -> AgenticMigrationRecord:
-        self._agentic_migrations.update_one(
-            {"migration_id": record.migration_id},
-            {"$set": asdict(record)},
-            upsert=True,
-        )
-        return record
-
-    def get_agentic_migration(self, migration_id: str) -> AgenticMigrationRecord | None:
-        document = self._agentic_migrations.find_one({"migration_id": migration_id})
-        return None if document is None else AgenticMigrationRecord(**document)
-
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)
-    payload.setdefault("model_revision", None)
-    payload.setdefault("model_revision_policy", "provider_alias")
-    payload.setdefault("full_workspace_contract_revision", "")
-    for field_name in (
-        "execution_family",
-        "harness_recipe_id",
-        "harness_recipe_revision",
-        "harness_recipe_digest",
-        "provider_capability_catalog_digest",
-        "semantic_projection_compiler_revision",
-        "tool_contract_revision",
-        "provider_config_id",
-        "provider_config_revision",
-        "provider_config_digest",
-        "protocol_adapter_id",
-        "protocol_adapter_version",
-    ):
-        payload.setdefault(field_name, "")
     payload["context_policy"] = _agentic_context_policy(
         payload.get("context_policy")
     )
-    capabilities = payload.get("capabilities")
-    if not isinstance(capabilities, dict):
-        capabilities = _legacy_profile_capabilities(payload)
-    capabilities = dict(capabilities)
-    capabilities.setdefault("filesystem_list", False)
-    capabilities.setdefault("app_references", False)
-    capabilities.setdefault("confirmations", False)
+    capabilities = dict(payload["capabilities"])
     capabilities["attachment_modalities"] = tuple(
         capabilities.get("attachment_modalities", ())
     )
     payload["capabilities"] = RuntimeCapabilitySet(**capabilities)
-    reasoning_efforts, default_reasoning_effort = _legacy_profile_reasoning(
-        payload
-    )
-    payload["reasoning_efforts"] = tuple(
-        payload.get("reasoning_efforts", reasoning_efforts)
-    )
-    payload.setdefault("default_reasoning_effort", default_reasoning_effort)
-    _migrate_legacy_agentic_profile_egress(payload)
+    payload["reasoning_efforts"] = tuple(payload.get("reasoning_efforts", ()))
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
-    return AgenticProfileDefinition(**payload)
-
-
-def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
-    """Project pre-egress-metadata definitions during the bounded schema migration."""
-    if "egress_policy_id" in payload and "egress_policy_revision" in payload:
-        return
-    if payload.get("provider_protocol") == "codex-app-server-stdio":
-        payload["egress_policy_id"] = "local-runtime-no-remote-egress"
-        payload["egress_policy_revision"] = "1"
-    else:
-        payload["egress_policy_id"] = "remote-agentic-contained"
-        payload["egress_policy_revision"] = "2"
-
-
-def _legacy_profile_capabilities(payload: dict[str, Any]) -> dict[str, object]:
-    """Upgrade profile records created before direct capability snapshots."""
-    native_codex = payload.get("provider_protocol") == "codex-app-server-stdio"
-    return {
-        "streaming": True,
-        "tool_orchestration": True,
-        "cli": True,
-        "mcp": True,
-        "skill_catalog": True,
-        "filesystem_list": True,
-        "filesystem_read": True,
-        "filesystem_write": True,
-        "shell": True,
-        "interrupt": True,
-        "same_turn_steering": native_codex,
-        "recovery": True,
-        "confirmation_resume": not native_codex,
-        "provider_private_state": not native_codex,
-        "attachment_modalities": ("file",),
-        "app_references": True,
-        "confirmations": not native_codex,
-    }
-
-
-def _legacy_profile_reasoning(
-    payload: dict[str, Any],
-) -> tuple[tuple[str, ...], str | None]:
-    protocol = str(payload.get("provider_protocol") or "")
-    model_id = str(payload.get("model_id") or "")
-    if protocol == "openrouter-chat-completions":
-        return ("max", "high", "low"), "max"
-    if protocol == "google-interactions":
-        return ("high",), "high"
-    if protocol == "codex-app-server-stdio":
-        efforts = ("low", "medium", "high", "xhigh")
-        if model_id not in {"gpt-5.5", "gpt-5.3-codex-spark"}:
-            efforts = (*efforts, "max")
-        return efforts, efforts[-1]
-    return (), None
+    valid_keys = {f.name for f in fields(AgenticProfileDefinition)}
+    sanitized = {k: v for k, v in payload.items() if k in valid_keys}
+    return AgenticProfileDefinition(**sanitized)
 
 
 def _workspace_agentic_profile_binding(document: dict[str, Any]) -> WorkspaceAgenticProfileBinding:
     payload = dict(document)
-    payload["lineage_binding_ids"] = tuple(payload.get("lineage_binding_ids", ()))
     payload["actor_policy"] = _actor_selection_policy(payload["actor_policy"])
     payload["workspace_policy_ceiling"] = _agentic_runtime_policy(payload["workspace_policy_ceiling"])
-    return WorkspaceAgenticProfileBinding(**payload)
+    valid_keys = {f.name for f in fields(WorkspaceAgenticProfileBinding)}
+    sanitized = {k: v for k, v in payload.items() if k in valid_keys}
+    return WorkspaceAgenticProfileBinding(**sanitized)
 
 
 def _agentic_runtime_policy(document: dict[str, Any]) -> AgenticRuntimePolicy:
@@ -542,26 +406,3 @@ def _actor_selection_policy(document: dict[str, Any]) -> ActorSelectionPolicy:
     ):
         payload[field_name] = tuple(payload.get(field_name, ()))
     return ActorSelectionPolicy(**payload)
-
-
-def _save_revisioned_record(
-    collection: DocumentCollection,
-    *,
-    identity: dict[str, Any],
-    payload: dict[str, Any],
-    expected_revision: int | None,
-    label: str,
-) -> None:
-    if expected_revision is None:
-        _existing, inserted = collection.insert_one_if_absent(identity, payload)
-        if not inserted:
-            raise AgenticProfileConflictError(f"{label} already exists.")
-        return
-    if payload.get("revision") != expected_revision + 1:
-        raise AgenticProfileConflictError(f"{label} revision must increment by exactly one.")
-    updated = collection.compare_and_set(
-        {**identity, "revision": expected_revision},
-        {"$set": payload},
-    )
-    if not updated:
-        raise AgenticProfileConflictError(f"{label} revision conflict.")

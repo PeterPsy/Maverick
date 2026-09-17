@@ -1,4 +1,4 @@
-"""Content-addressed native model projections, independent of adapter revisions."""
+"""Project native catalog model metadata into direct runtime configs."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from core.providers.agentic_models import AgenticProfileDefinition
 from core.providers.errors import AgenticProfileError
 from core.providers.models import ProviderDefinition
 from core.providers.native_agent_catalog import NativeAgentCatalogModel
-from core.runtime.execution_binding import canonical_digest
 
 if TYPE_CHECKING:
     from core.providers.store import ProviderStore
@@ -38,14 +37,11 @@ def codex_model_profile_projection(
         reasoning_efforts=tuple(item.effort for item in option.supported_reasoning_efforts),
         default_reasoning_effort=option.default_reasoning_effort,
     )
-    revision = f"{profile.revision}.{canonical_digest((profile.revision, model.digest))}"
     return replace(
         profile,
-        revision=revision,
         model_revision=model.model_revision, model_revision_policy=model.revision_policy,
         reasoning_efforts=model.reasoning_efforts,
         default_reasoning_effort=model.default_reasoning_effort,
-        native_model_catalog_digest=model.digest,
     )
 
 

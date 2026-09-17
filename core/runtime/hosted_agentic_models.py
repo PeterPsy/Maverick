@@ -12,7 +12,7 @@ from core.providers.agentic_protocol import (
     AgenticRequestPhase,
     EphemeralCredential,
 )
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.tool_catalog import RuntimeToolActorContext
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
 from core.runtime.runtime_cancellation import RuntimeCancellationSignal
@@ -58,10 +58,10 @@ HostedProviderStateInspector = Callable[[bytes], HostedProviderStateInspection]
 HostedContentClassifier = Callable[[object, str, object], HostedContentClassification]
 HostedCredentialResolver = Callable[[object], EphemeralCredential | None]
 HostedPolicyResolver = Callable[[object], AgenticRuntimePolicy]
-HostedAuthorityRefresher = Callable[[object], EffectiveRuntimeAuthority]
+HostedAuthorityRefresher = Callable[[object], RuntimeAuthority]
 HostedAuthorityRevalidator = Callable[
-    [object, EffectiveRuntimeAuthority],
-    EffectiveRuntimeAuthority,
+    [object, RuntimeAuthority],
+    RuntimeAuthority,
 ]
 HostedActorContextResolver = Callable[[object], RuntimeToolActorContext]
 HostedToolOrchestratorResolver = Callable[

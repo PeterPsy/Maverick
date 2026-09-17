@@ -1,4 +1,4 @@
-"""Immutable full-workspace profile for OpenRouter execution."""
+"""Direct OpenRouter agentic model configuration."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from core.providers.agentic_data_policies import (
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
-from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
     OPENROUTER_AGENTIC_MODEL_ID,
@@ -32,24 +31,10 @@ from core.providers.maverick_agent_onboarding import (
     validate_maverick_runtime_adapter,
 )
 from core.providers.store import ProviderStore
-from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-glm-5-3-flash-relace"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "4"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS: tuple[str, ...] = (
-    "1",
-    "2",
-    "3",
-)
-OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS = tuple(
-    (
-        "agentic-profile-openrouter-glm-5-3-flash-relace-fp4",
-        revision,
-    )
-    for revision in ("1", "2", "3", "4", "5", "6")
-)
 OPENROUTER_REASONING_EFFORTS = OPENROUTER_AGENTIC_REASONING_EFFORTS
 OPENROUTER_DEFAULT_REASONING_EFFORT = OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT
 
@@ -125,7 +110,6 @@ def openrouter_agentic_preview_publication(
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
-        revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
         display_name="OpenRouter GLM 5.3 Flash · Relace · Full Workspace",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="openrouter",
@@ -146,39 +130,13 @@ def openrouter_agentic_preview_publication(
         created_at=timestamp,
         egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
-        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-        execution_family=MAVERICK_AGENT_EXECUTION_FAMILY,
-        harness_recipe_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_id,
-        harness_recipe_revision=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.revision,
-        harness_recipe_digest=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_digest,
-        provider_capability_catalog_digest=(
-            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.capability_catalog_digest
-        ),
-        semantic_projection_compiler_revision=(
-            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.semantic_projection_compiler_revision
-        ),
-        tool_contract_revision=(
-            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.tool_contract_revision
-        ),
         context_policy=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.context_policy,
-        provider_config_id=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.config_id,
-        provider_config_revision=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.revision,
-        provider_config_digest=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG.digest,
-        protocol_adapter_id=OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_id,
-        protocol_adapter_version=(
-            OPENROUTER_CHAT_PROTOCOL_ADAPTER.protocol_adapter_version
-        ),
     )
     return MaverickAgentProfilePublication(
         adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
         provider_config=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
         recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         profile=definition,
-        rollout_status="available",
-        superseded_profile_revisions=OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
-        superseded_profile_definitions=(
-            OPENROUTER_AGENTIC_SUPERSEDED_PROFILE_DEFINITIONS
-        ),
     )
 
 

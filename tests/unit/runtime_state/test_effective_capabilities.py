@@ -16,10 +16,10 @@ from core.providers.runtime_adapter_identity import runtime_adapter_identity_dig
 from core.providers.errors import AgenticRuntimeError
 from core.runtime.authority import (
     blocked_runtime_capability_payload,
-    effective_runtime_capability_payload,
+    runtime_capability_payload,
     intersect_runtime_capabilities,
-    resolve_effective_runtime_authority,
-    validate_effective_context_capabilities,
+    resolve_runtime_authority,
+    validate_runtime_context_capabilities,
 )
 from core.runtime.execution_binding import (
     build_runtime_execution_binding,
@@ -149,7 +149,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             },
             clear=False,
         ):
-            authority = resolve_effective_runtime_authority(
+            authority = resolve_runtime_authority(
                 self.store,
                 binding=self.binding,
                 adapter=self.adapter,
@@ -173,14 +173,14 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.provider_private_state)
         self.assertEqual(authority.provider_health_status, "degraded")
         self.assertEqual(authority.actor_policy_revision, "actor:1")
-        projection = effective_runtime_capability_payload(authority)
+        projection = runtime_capability_payload(authority)
         self.assertNotIn("credential", str(projection).lower())
 
         with self.assertRaisesRegex(
             AgenticRuntimeError,
             "runtime_actor_policy_denied",
         ):
-            resolve_effective_runtime_authority(
+            resolve_runtime_authority(
                 self.store,
                 binding=self.binding,
                 adapter=self.adapter,
@@ -190,7 +190,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             )
 
     def test_empty_hosted_live_tool_authority_never_falls_back_to_profile(self) -> None:
-        authority = resolve_effective_runtime_authority(
+        authority = resolve_runtime_authority(
             self.store,
             binding=self.binding,
             adapter=self.adapter,
@@ -209,7 +209,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
 
     def test_lightweight_authority_revalidation_fences_workspace_policy(self) -> None:
         health = RuntimeHealth(status="healthy")
-        authority = resolve_effective_runtime_authority(
+        authority = resolve_runtime_authority(
             self.store,
             binding=self.binding,
             adapter=self.adapter,
@@ -269,7 +269,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             revalidate_runtime_authority_snapshot(**arguments)
 
     def test_sandbox_execution_mode_removes_shell_from_snapshot_and_handles(self) -> None:
-        authority = resolve_effective_runtime_authority(
+        authority = resolve_runtime_authority(
             self.store,
             binding=self.binding,
             adapter=self.adapter,
@@ -316,7 +316,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             binding_digest="",
         )
         binding = replace(binding, binding_digest=canonical_digest(binding))
-        authority = resolve_effective_runtime_authority(
+        authority = resolve_runtime_authority(
             self.store,
             binding=binding,
             adapter=self.adapter,
@@ -335,7 +335,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.assertEqual(authority.allowed_tool_handles, ())
 
     def test_unsupported_context_has_public_reason_before_use(self) -> None:
-        base = resolve_effective_runtime_authority(
+        base = resolve_runtime_authority(
             self.store,
             binding=self.binding,
             adapter=self.adapter,
@@ -377,10 +377,10 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
                 AgenticRuntimeError,
                 reason,
             ):
-                validate_effective_context_capabilities(denied, **arguments)
+                validate_runtime_context_capabilities(denied, **arguments)
 
     def test_malformed_context_is_never_coerced_or_silently_filtered(self) -> None:
-        authority = resolve_effective_runtime_authority(
+        authority = resolve_runtime_authority(
             self.store,
             binding=self.binding,
             adapter=self.adapter,
@@ -399,7 +399,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
                 AgenticRuntimeError,
                 reason,
             ):
-                validate_effective_context_capabilities(authority, **arguments)
+                validate_runtime_context_capabilities(authority, **arguments)
             self.assertNotEqual(
                 runtime_failure_public_message(reason),
                 "The runtime could not complete this request.",

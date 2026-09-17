@@ -7,7 +7,7 @@ from dataclasses import replace
 from core.providers.agentic_models import AgenticRuntimePolicy
 from core.providers.errors import AgenticRuntimeError
 from core.providers.execution_families import effective_agentic_execution_family
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.runtime.tool_schema_review import REVIEWED_TOOL_SCHEMA_COMPONENT
@@ -129,10 +129,10 @@ def research_provider_catalog(
 
 
 def isolate_research_authority(
-    authority: EffectiveRuntimeAuthority,
+    authority: RuntimeAuthority,
     *,
     runtime_kind: str | None,
-) -> EffectiveRuntimeAuthority:
+) -> RuntimeAuthority:
     """Remove every model-facing capability except the fixed web read tools."""
     handles = (
         tuple(
@@ -176,7 +176,7 @@ def isolate_research_authority(
 
 def validate_research_authority(
     binding: RuntimeExecutionBinding,
-    authority: EffectiveRuntimeAuthority,
+    authority: RuntimeAuthority,
     *,
     adapter: object,
 ) -> None:

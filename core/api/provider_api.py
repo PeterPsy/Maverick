@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
 from core.api.http import StartResponse, json_response, query_params
@@ -27,11 +27,9 @@ from core.providers.agentic_workspace_policy import human_actor_selection_allowe
 from core.providers.agentic_data_policies import (
     remote_data_policy_requires_fake_data_attestation,
 )
-from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.execution_families import (
     NATIVE_AGENT_EXECUTION_FAMILY,
     NO_WORKSPACE_ACTIONS_MESSAGE,
-    effective_agentic_execution_family,
     execution_family_catalog,
 )
 from core.providers.execution_family_migration import (
@@ -73,9 +71,9 @@ from core.runtime.execution_binding import (
 from core.runtime.async_runtime import run_runtime_coroutine
 from core.runtime.authority import (
     blocked_runtime_capability_payload,
-    effective_runtime_capability_payload,
+    runtime_capability_payload,
     intersect_runtime_policies,
-    resolve_effective_runtime_authority,
+    resolve_runtime_authority,
 )
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
@@ -93,16 +91,7 @@ class ProviderProjectionContext:
 
     provider_store: ProviderReadSnapshot
     registry: ProviderRegistry
-    _adapter_identity_digests: dict[int, str] = field(default_factory=dict)
     _native_items: list[dict[str, object]] | None = None
-
-    def adapter_identity_digest(self, adapter: object) -> str:
-        cache_key = id(adapter)
-        digest = self._adapter_identity_digests.get(cache_key)
-        if digest is None:
-            digest = runtime_adapter_identity_digest(adapter)
-            self._adapter_identity_digests[cache_key] = digest
-        return digest
 
     def native_items(self) -> list[dict[str, object]]:
         if self._native_items is None:
@@ -633,206 +622,132 @@ def workspace_agentic_profile_status(
     native_items: list[dict[str, object]] | None = None,
     projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
-    """Return selectable workspace profiles from direct runtime contracts."""
-    items: list[dict[str, object]] = []
+    """Return the current selectable provider/model configs for a workspace."""
     context = projection_context or provider_projection_context(state)
-    provider_store = context.provider_store
+    store = context.provider_store
     registry = context.registry
     native_by_engine = {
         str(item["runtime_engine_id"]): item
-        for item in (
-            native_items if native_items is not None else context.native_items()
-        )
+        for item in (native_items if native_items is not None else context.native_items())
     }
-    for binding in provider_store.list_workspace_agentic_profile_bindings(workspace_id):
+    items: list[dict[str, object]] = []
+    for config in store.list_workspace_agentic_profile_bindings(workspace_id):
         if actor_roles is not None and not human_actor_selection_allowed(
-            binding,
+            config,
             platform_role=actor_roles[0],
             user_id=actor_roles[1],
             workspace_role=actor_roles[2],
         ):
             continue
         try:
-            definition = provider_store.get_agentic_profile_definition(
-                binding.definition_id,
-                binding.definition_revision,
-            )
+            definition = store.get_agentic_profile_definition(config.definition_id)
         except ProviderNotFoundError:
             continue
-        status = provider_store.get_agentic_profile_definition_status(
-            definition.definition_id,
-            definition.revision,
-        )
-        reasoning = _agentic_model_reasoning(registry, definition)
-        family_readiness = inspect_agentic_family_readiness(
-            definition=definition,
-            store=provider_store,
-            binding=binding,
-            registry=registry,
+        readiness = inspect_agentic_family_readiness(
+            definition=definition, binding=config, registry=registry, store=store
         )
         containment_reason = remote_agentic_containment_reason(
             definition,
             workspace_id=workspace_id,
             workspace_store=getattr(state, "workspace_store", None),
         )
-        rollout_selectable = bool(
-            status and status.rollout_status in {"preview", "available"}
-        )
-        native_runtime = (
-            native_by_engine.get(definition.runtime_engine_id)
-            if family_readiness.execution_family == NATIVE_AGENT_EXECUTION_FAMILY
-            else None
-        )
-        native_runtime_selectable = bool(
-            family_readiness.execution_family != NATIVE_AGENT_EXECUTION_FAMILY
+        native_runtime = native_by_engine.get(definition.runtime_engine_id)
+        native_ready = bool(
+            readiness.execution_family != NATIVE_AGENT_EXECUTION_FAMILY
             or (native_runtime and native_runtime.get("selectable") is True)
         )
         selectable = bool(
-            containment_reason is None
-            and family_readiness.complete
-            and native_runtime_selectable
-            and binding.enabled
-            and rollout_selectable
+            config.enabled and containment_reason is None and readiness.complete and native_ready
         )
         blocked_reason = (
             containment_reason
-            or family_readiness.reason_code
-            or (
-                None
-                if native_runtime_selectable
-                else str(
-                    (native_runtime or {}).get("unavailable_reason")
-                    or "native_runtime_unavailable"
-                )
-            )
-            or (None if binding.enabled else "workspace_profile_binding_disabled")
-            or (None if rollout_selectable else "profile_definition_invalid")
+            or readiness.reason_code
+            or (None if native_ready else str((native_runtime or {}).get("unavailable_reason") or "native_runtime_unavailable"))
+            or (None if config.enabled else "workspace_profile_binding_disabled")
         )
         effective_capabilities = _profile_effective_capability_snapshot(
             state,
             definition=definition,
-            binding=binding,
+            binding=config,
             eligible=selectable,
             blocked_reason=blocked_reason,
             projection_context=context,
         )
         if selectable and effective_capabilities.get("status") != "active":
             selectable = False
-            blocked_reason = str(
-                effective_capabilities.get("reason_code")
-                or "runtime_authority_unavailable"
-            )
+            blocked_reason = str(effective_capabilities.get("reason_code") or "runtime_authority_unavailable")
         effective_policy = (
-            intersect_runtime_policies(
-                definition.policy_ceiling,
-                binding.workspace_policy_ceiling,
-            )
-            if selectable
-            else None
+            intersect_runtime_policies(definition.policy_ceiling, config.workspace_policy_ceiling)
+            if selectable else None
         )
+        reasoning = _agentic_model_reasoning(registry, definition)
         try:
             research_compatible = bool(
                 research_runtime_kind(
                     definition,
-                    registry.get_agentic_runtime_adapter(
-                        definition.runtime_engine_id
-                    ),
+                    registry.get_agentic_runtime_adapter(definition.runtime_engine_id),
                 )
             )
         except ProviderError:
             research_compatible = False
-        items.append(
-            {
-                "workspace_profile_binding_id": binding.binding_id,
-                "workspace_binding_revision": binding.revision,
-                "definition_id": definition.definition_id,
-                "definition_revision": definition.revision,
-                "display_name": definition.display_name,
-                "runtime_engine_id": definition.runtime_engine_id,
-                "model_provider_id": definition.model_provider_id,
-                "model_id": definition.model_id,
-                "model_revision": definition.model_revision,
-                "model_revision_policy": definition.model_revision_policy,
-                "default_reasoning_effort": reasoning[0],
-                "supported_reasoning_efforts": reasoning[1],
-                "provider_protocol": definition.provider_protocol,
-                "provider_api_version": definition.provider_api_version,
-                "adapter_id": definition.adapter_id,
-                "adapter_version_constraint": definition.adapter_version_constraint,
-                "protocol_adapter": {
-                    "id": definition.protocol_adapter_id or None,
-                    "version": definition.protocol_adapter_version or None,
-                },
-                "provider_config": {
-                    "id": definition.provider_config_id or None,
-                    "revision": definition.provider_config_revision or None,
-                    "digest": definition.provider_config_digest or None,
-                },
-                "execution_family": family_readiness.execution_family or None,
-                "family_contract_status": family_readiness.contract_status,
-                "family_contract_reason": family_readiness.reason_code,
-                "harness_recipe": {
-                    "id": family_readiness.harness_recipe_id,
-                    "revision": family_readiness.harness_recipe_revision,
-                    "digest": family_readiness.harness_recipe_digest,
-                    "provider_capability_catalog_digest": (
-                        family_readiness.provider_capability_catalog_digest
-                    ),
-                },
-                "context_policy": (
-                    None
-                    if definition.context_policy is None
-                    else asdict(definition.context_policy)
-                ),
-                "capabilities": asdict(definition.capabilities),
-                "full_workspace_contract_revision": (
-                    family_readiness.full_workspace_contract_revision
-                ),
-                "full_workspace_status": (
-                    "available" if family_readiness.complete else "unavailable"
-                ),
-                "rollout_status": None if status is None else status.rollout_status,
-                "enabled": binding.enabled,
-                "is_default": binding.is_default,
-                "credential_binding_configured": bool(binding.credential_binding_id),
-                "selectable": selectable,
-                "unavailable_reason": None if selectable else blocked_reason,
-                "containment_status": "NO-GO" if containment_reason else "GO",
-                "containment_reason": containment_reason,
-                "egress_policy_id": binding.egress_policy_id,
-                "egress_policy_revision": binding.egress_policy_revision,
-                "data_destination": _agentic_data_destination_payload(
-                    provider_id=definition.model_provider_id,
-                    endpoint_id=definition.routing_constraint.endpoint_id,
-                    upstream_provider_ids=definition.routing_constraint.allowed_upstream_ids,
-                ),
-                "egress_policy": _agentic_egress_policy_payload(
-                    policy_id=binding.egress_policy_id,
-                    revision=binding.egress_policy_revision,
-                    policy=binding.workspace_policy_ceiling,
-                ),
-                "data_policy": _agentic_data_policy_payload(
-                    definition.routing_constraint,
-                    egress_policy_id=binding.egress_policy_id,
-                    egress_policy_revision=binding.egress_policy_revision,
-                    state=state,
-                    workspace_id=workspace_id,
-                ),
-                "allowed_remote_data_classes": binding.workspace_policy_ceiling.allowed_remote_data_classes,
-                "tool_handle_mode": binding.workspace_policy_ceiling.tool_handle_mode,
-                "allowed_tool_handles": binding.workspace_policy_ceiling.allowed_tool_handles,
-                "effective_tool_handle_mode": (
-                    effective_policy.tool_handle_mode if effective_policy else "none"
-                ),
-                "effective_allowed_tool_handles": (
-                    effective_policy.allowed_tool_handles if effective_policy else ()
-                ),
-                "max_estimated_cost_microusd": binding.workspace_policy_ceiling.max_estimated_cost_microusd,
-                "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
-                "effective_capabilities": effective_capabilities,
-                "research_compatible": research_compatible,
-            }
-        )
+        items.append({
+            "workspace_profile_binding_id": config.binding_id,
+            "definition_id": definition.definition_id,
+            "display_name": definition.display_name,
+            "runtime_engine_id": definition.runtime_engine_id,
+            "model_provider_id": definition.model_provider_id,
+            "model_id": definition.model_id,
+            "model_revision": definition.model_revision,
+            "model_revision_policy": definition.model_revision_policy,
+            "default_reasoning_effort": reasoning[0],
+            "supported_reasoning_efforts": reasoning[1],
+            "provider_protocol": definition.provider_protocol,
+            "provider_api_version": definition.provider_api_version,
+            "adapter_id": definition.adapter_id,
+            "adapter_version_constraint": definition.adapter_version_constraint,
+            "execution_family": readiness.execution_family or None,
+            "runtime_status": readiness.contract_status,
+            "runtime_status_reason": readiness.reason_code,
+            "family_contract_status": "complete" if selectable else readiness.contract_status,
+            "full_workspace_status": "available" if selectable else "unavailable",
+            "rollout_status": "available" if selectable else "disabled",
+            "context_policy": None if definition.context_policy is None else asdict(definition.context_policy),
+            "capabilities": asdict(definition.capabilities),
+            "enabled": config.enabled,
+            "is_default": config.is_default,
+            "credential_binding_configured": bool(config.credential_binding_id),
+            "selectable": selectable,
+            "unavailable_reason": None if selectable else blocked_reason,
+            "containment_status": "NO-GO" if containment_reason else "GO",
+            "containment_reason": containment_reason,
+            "egress_policy_id": config.egress_policy_id,
+            "egress_policy_revision": config.egress_policy_revision,
+            "data_destination": _agentic_data_destination_payload(
+                provider_id=definition.model_provider_id,
+                endpoint_id=definition.routing_constraint.endpoint_id,
+                upstream_provider_ids=definition.routing_constraint.allowed_upstream_ids,
+            ),
+            "egress_policy": _agentic_egress_policy_payload(
+                policy_id=config.egress_policy_id,
+                revision=config.egress_policy_revision,
+                policy=config.workspace_policy_ceiling,
+            ),
+            "data_policy": _agentic_data_policy_payload(
+                definition.routing_constraint,
+                egress_policy_id=config.egress_policy_id,
+                egress_policy_revision=config.egress_policy_revision,
+                state=state,
+                workspace_id=workspace_id,
+            ),
+            "allowed_remote_data_classes": config.workspace_policy_ceiling.allowed_remote_data_classes,
+            "tool_handle_mode": config.workspace_policy_ceiling.tool_handle_mode,
+            "allowed_tool_handles": config.workspace_policy_ceiling.allowed_tool_handles,
+            "effective_tool_handle_mode": effective_policy.tool_handle_mode if effective_policy else "none",
+            "effective_allowed_tool_handles": effective_policy.allowed_tool_handles if effective_policy else (),
+            "max_estimated_cost_microusd": config.workspace_policy_ceiling.max_estimated_cost_microusd,
+            "effective_capabilities": effective_capabilities,
+            "research_compatible": research_compatible,
+        })
     items.sort(key=lambda item: (not bool(item["is_default"]), str(item["display_name"])))
     default = next((item for item in items if item["selectable"] and item["is_default"]), None)
     return {
@@ -850,7 +765,7 @@ def _profile_effective_capability_snapshot(
     blocked_reason: str | None,
     projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
-    """Calculate a conservative, non-bearer profile projection for Chat/Settings."""
+    """Calculate live permissions for a current provider/model config."""
     if not eligible:
         return blocked_runtime_capability_payload(
             blocked_reason or "runtime_authority_unavailable",
@@ -858,11 +773,9 @@ def _profile_effective_capability_snapshot(
         )
     try:
         context = projection_context or provider_projection_context(state)
-        provider_store = context.provider_store
         registry = context.registry
         adapter = registry.get_agentic_runtime_adapter(definition.runtime_engine_id)
-        workspace_store = getattr(state, "workspace_store", None)
-        governance_resolver = getattr(workspace_store, "get_governance", None)
+        governance_resolver = getattr(getattr(state, "workspace_store", None), "get_governance", None)
         if not callable(governance_resolver):
             raise AgenticRuntimeError("runtime_authority_unavailable")
         execution_mode = resolve_runtime_execution_mode(
@@ -870,17 +783,16 @@ def _profile_effective_capability_snapshot(
             governance=governance_resolver(binding.workspace_id),
             platform_allows_full_access=binding.workspace_id == "default",
         )
+        runtime_policy = intersect_runtime_policies(
+            definition.policy_ceiling, binding.workspace_policy_ceiling
+        )
         execution_binding = build_runtime_execution_binding(
             session_id=f"capability-projection:{binding.binding_id}",
             workspace_id=binding.workspace_id,
-            profile_definition_id=definition.definition_id,
-            profile_definition_revision=definition.revision,
             workspace_binding_id=binding.binding_id,
-            workspace_binding_revision=binding.revision,
             runtime_engine_id=definition.runtime_engine_id,
             adapter_id=definition.adapter_id,
             adapter_version=str(getattr(adapter, "adapter_version", "")),
-            adapter_identity_digest=context.adapter_identity_digest(adapter),
             model_provider_id=definition.model_provider_id,
             model_id=definition.model_id,
             model_revision=definition.model_revision,
@@ -891,44 +803,26 @@ def _profile_effective_capability_snapshot(
             credential_binding_id=binding.credential_binding_id,
             reasoning_effort=definition.default_reasoning_effort,
             reasoning_efforts=definition.reasoning_efforts,
-            default_reasoning_effort=definition.default_reasoning_effort,
             capabilities=definition.capabilities,
             execution_mode=execution_mode,
-            profile_policy_ceiling=definition.policy_ceiling,
-            workspace_policy_ceiling=binding.workspace_policy_ceiling,
+            runtime_policy=runtime_policy,
             egress_policy_id=binding.egress_policy_id,
             egress_policy_revision=binding.egress_policy_revision,
             created_at=datetime.now(tz=UTC),
-            full_workspace_contract_revision=definition.full_workspace_contract_revision,
-            execution_family=definition.execution_family,
-            harness_recipe_id=definition.harness_recipe_id,
-            harness_recipe_revision=definition.harness_recipe_revision,
-            harness_recipe_digest=definition.harness_recipe_digest,
-            provider_capability_catalog_digest=definition.provider_capability_catalog_digest,
-            semantic_projection_compiler_revision=definition.semantic_projection_compiler_revision,
-            tool_contract_revision=definition.tool_contract_revision,
             context_policy=definition.context_policy,
-            provider_config_id=definition.provider_config_id,
-            provider_config_revision=definition.provider_config_revision,
-            provider_config_digest=definition.provider_config_digest,
-            protocol_adapter_id=definition.protocol_adapter_id,
-            protocol_adapter_version=definition.protocol_adapter_version,
         )
-        health = run_runtime_coroutine(
-            adapter.health(RuntimeHealthContext(binding=execution_binding))
-        )
+        health = run_runtime_coroutine(adapter.health(RuntimeHealthContext(binding=execution_binding)))
         handle_resolver = getattr(adapter, "currently_authorized_tool_handles", None)
         handles = (
             tuple(handle_resolver(execution_binding))
             if callable(handle_resolver)
             else (
                 authorized_core_tool_handles(execution_binding)
-                if execution_binding.runtime_engine_id == "maverick-tool-loop"
-                else ()
+                if execution_binding.runtime_engine_id == "maverick-tool-loop" else ()
             )
         )
-        authority = resolve_effective_runtime_authority(
-            provider_store,
+        authority = resolve_runtime_authority(
+            context.provider_store,
             binding=execution_binding,
             adapter=adapter,
             turn_id=f"capability-projection:{binding.binding_id}",
@@ -937,9 +831,9 @@ def _profile_effective_capability_snapshot(
             health_status=health.status,
             health_revision=f"runtime-health:{canonical_digest(health)}",
             actor_policy_allowed=True,
-            actor_policy_revision=f"workspace-actor:{binding.binding_id}:{binding.revision}",
+            actor_policy_revision=f"workspace-actor:{binding.binding_id}",
         )
-        return effective_runtime_capability_payload(authority)
+        return runtime_capability_payload(authority)
     except (AgenticRuntimeError, ProviderError, ValueError) as error:
         return blocked_runtime_capability_payload(
             str(getattr(error, "reason_code", None) or error),
@@ -997,72 +891,58 @@ def workspace_agentic_admin_status(
     compact: bool = False,
     projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object]:
-    """Return the redaction-safe administration catalog for Settings."""
+    """Return one current administration item per provider/model config."""
     context = projection_context or provider_projection_context(state)
-    provider_store = context.provider_store
+    store = context.provider_store
     registry = context.registry
-    bindings = provider_store.list_workspace_agentic_profile_bindings(workspace_id)
-    bindings_by_definition = {
-        (item.definition_id, item.definition_revision): item for item in bindings
+    bindings = {
+        item.definition_id: item
+        for item in store.list_workspace_agentic_profile_bindings(workspace_id)
     }
     native_items = context.native_items()
-    native_by_engine = {
-        str(item["runtime_engine_id"]): item for item in native_items
-    }
+    native_by_engine = {str(item["runtime_engine_id"]): item for item in native_items}
     items: list[dict[str, object]] = []
-    for definition in provider_store.list_agentic_profile_definitions():
-        status = provider_store.get_agentic_profile_definition_status(
-            definition.definition_id,
-            definition.revision,
-        )
-        binding = bindings_by_definition.get((definition.definition_id, definition.revision))
+    for definition in store.list_agentic_profile_definitions():
+        binding = bindings.get(definition.definition_id)
         credential_bindings = [
             provider_credential_binding_payload(item)
-            for item in provider_store.list_provider_bindings(
-                provider_id=definition.model_provider_id
-            )
+            for item in store.list_provider_bindings(provider_id=definition.model_provider_id)
             if item.status == "active" and item.workspace_id in {None, workspace_id}
         ]
-        family_readiness = inspect_agentic_family_readiness(
-            definition=definition,
-            store=provider_store,
-            binding=binding,
-            registry=registry,
+        readiness = inspect_agentic_family_readiness(
+            definition=definition, store=store, binding=binding, registry=registry
         )
         containment_reason = remote_agentic_containment_reason(
             definition,
             workspace_id=workspace_id,
             workspace_store=getattr(state, "workspace_store", None),
         )
-        reasoning = _agentic_model_reasoning(registry, definition)
         blocked_reason = _agentic_definition_blocked_reason(
             definition=definition,
-            rollout_status=None if status is None else status.rollout_status,
             binding=binding,
             credential_bindings=credential_bindings,
             registry=registry,
-            family_readiness=family_readiness,
+            family_readiness=readiness,
             native_runtime=native_by_engine.get(definition.runtime_engine_id),
             containment_reason=containment_reason,
         )
         enable_blocked_reason = _agentic_definition_blocked_reason(
             definition=definition,
-            rollout_status=None if status is None else status.rollout_status,
             binding=binding,
             credential_bindings=credential_bindings,
             registry=registry,
-            family_readiness=family_readiness,
+            family_readiness=readiness,
             native_runtime=native_by_engine.get(definition.runtime_engine_id),
-            require_enabled_binding=False,
             containment_reason=containment_reason,
+            require_enabled_binding=False,
         )
         effective_capabilities = (
             blocked_runtime_capability_payload(
                 blocked_reason or "workspace_binding_missing",
                 profile_capabilities=definition.capabilities,
             )
-            if binding is None
-            else _profile_effective_capability_snapshot(
+            if binding is None else
+            _profile_effective_capability_snapshot(
                 state,
                 definition=definition,
                 binding=binding,
@@ -1072,186 +952,90 @@ def workspace_agentic_admin_status(
             )
         )
         if blocked_reason is None and effective_capabilities.get("status") != "active":
-            blocked_reason = str(
-                effective_capabilities.get("reason_code")
-                or "runtime_authority_unavailable"
-            )
-        effective_policy = definition.policy_ceiling if binding is None else binding.workspace_policy_ceiling
-        effective_egress_policy_id = definition.egress_policy_id if binding is None else binding.egress_policy_id
-        effective_egress_policy_revision = definition.egress_policy_revision if binding is None else binding.egress_policy_revision
-        items.append(
-            {
-                "definition_id": definition.definition_id,
-                "definition_revision": definition.revision,
-                "display_name": definition.display_name,
-                "runtime_engine_id": definition.runtime_engine_id,
-                "model_provider_id": definition.model_provider_id,
-                "model_id": definition.model_id,
-                "model_revision": definition.model_revision,
-                "model_revision_policy": definition.model_revision_policy,
-                "default_reasoning_effort": reasoning[0],
-                "supported_reasoning_efforts": reasoning[1],
-                "provider_protocol": definition.provider_protocol,
-                "provider_api_version": definition.provider_api_version,
-                "adapter_id": definition.adapter_id,
-                "adapter_version_constraint": definition.adapter_version_constraint,
-                "protocol_adapter": {
-                    "id": definition.protocol_adapter_id or None,
-                    "version": definition.protocol_adapter_version or None,
-                },
-                "provider_config": {
-                    "id": definition.provider_config_id or None,
-                    "revision": definition.provider_config_revision or None,
-                    "digest": definition.provider_config_digest or None,
-                },
-                "execution_family": family_readiness.execution_family or None,
-                "family_contract_status": family_readiness.contract_status,
-                "family_contract_reason": family_readiness.reason_code,
-                "harness_recipe": {
-                    "id": family_readiness.harness_recipe_id,
-                    "revision": family_readiness.harness_recipe_revision,
-                    "digest": family_readiness.harness_recipe_digest,
-                    "provider_capability_catalog_digest": family_readiness.provider_capability_catalog_digest,
-                },
-                "context_policy": None if definition.context_policy is None else asdict(definition.context_policy),
-                "capabilities": asdict(definition.capabilities),
-                "full_workspace_contract_revision": family_readiness.full_workspace_contract_revision,
-                "full_workspace_status": "available" if family_readiness.complete else "unavailable",
-                "routing_constraint": asdict(definition.routing_constraint),
-                "upstream_provider_ids": definition.routing_constraint.allowed_upstream_ids,
-                "data_destination": _agentic_data_destination_payload(
-                    provider_id=definition.model_provider_id,
-                    endpoint_id=definition.routing_constraint.endpoint_id,
-                    upstream_provider_ids=definition.routing_constraint.allowed_upstream_ids,
-                ),
-                "egress_policy": _agentic_egress_policy_payload(
-                    policy_id=effective_egress_policy_id,
-                    revision=effective_egress_policy_revision,
-                    policy=effective_policy,
-                ),
-                "data_policy": _agentic_data_policy_payload(
-                    definition.routing_constraint,
-                    egress_policy_id=effective_egress_policy_id,
-                    egress_policy_revision=effective_egress_policy_revision,
-                    state=state,
-                    workspace_id=workspace_id,
-                ),
-                "profile_policy_ceiling": asdict(definition.policy_ceiling),
-                "rollout_status": None if status is None else status.rollout_status,
-                "native_runtime": native_by_engine.get(definition.runtime_engine_id),
-                "credential_bindings": credential_bindings,
-                "binding": None if binding is None else {
-                    "binding_id": binding.binding_id,
-                    "revision": binding.revision,
-                    "credential_binding_id": binding.credential_binding_id,
-                    "enabled": binding.enabled,
-                    "is_default": binding.is_default,
-                    "actor_policy": asdict(binding.actor_policy),
-                    "workspace_policy_ceiling": asdict(binding.workspace_policy_ceiling),
-                    "egress_policy_id": binding.egress_policy_id,
-                    "egress_policy_revision": binding.egress_policy_revision,
-                    "created_at": binding.created_at,
-                    "updated_at": binding.updated_at,
-                },
-                "health": "healthy" if blocked_reason is None else "blocked",
-                "live_preflight_status": (
-                    "ready" if blocked_reason is None else "unavailable"
-                ),
-                "live_preflight_reason": blocked_reason,
-                "blocked_reason": blocked_reason,
-                "selectable": blocked_reason is None,
-                "enable_eligible": enable_blocked_reason is None,
-                "enable_blocked_reason": enable_blocked_reason,
-                "containment_status": "NO-GO" if containment_reason else "GO",
-                "containment_reason": containment_reason,
-                "binding_status": "missing" if binding is None else ("enabled" if binding.enabled else "disabled"),
-                "profile_status": "missing" if status is None else status.rollout_status,
-                "effective_capabilities": effective_capabilities,
-            }
-        )
-    items.sort(
-        key=lambda item: (
-            not bool((item.get("binding") or {}).get("is_default")),
-            str(item["display_name"]),
-        )
-    )
-    release_decision = "NO-GO" if any(item["containment_status"] == "NO-GO" for item in items) else "GO"
-    if compact:
-        items = _compact_agentic_admin_items(items)
+            blocked_reason = str(effective_capabilities.get("reason_code") or "runtime_authority_unavailable")
+        policy = definition.policy_ceiling if binding is None else binding.workspace_policy_ceiling
+        egress_id = definition.egress_policy_id if binding is None else binding.egress_policy_id
+        egress_revision = definition.egress_policy_revision if binding is None else binding.egress_policy_revision
+        reasoning = _agentic_model_reasoning(registry, definition)
+        items.append({
+            "definition_id": definition.definition_id,
+            "display_name": definition.display_name,
+            "runtime_engine_id": definition.runtime_engine_id,
+            "model_provider_id": definition.model_provider_id,
+            "model_id": definition.model_id,
+            "model_revision": definition.model_revision,
+            "model_revision_policy": definition.model_revision_policy,
+            "default_reasoning_effort": reasoning[0],
+            "supported_reasoning_efforts": reasoning[1],
+            "provider_protocol": definition.provider_protocol,
+            "provider_api_version": definition.provider_api_version,
+            "adapter_id": definition.adapter_id,
+            "adapter_version_constraint": definition.adapter_version_constraint,
+            "execution_family": readiness.execution_family or None,
+            "runtime_status": readiness.contract_status,
+            "runtime_status_reason": readiness.reason_code,
+            "context_policy": None if definition.context_policy is None else asdict(definition.context_policy),
+            "capabilities": asdict(definition.capabilities),
+            "routing_constraint": asdict(definition.routing_constraint),
+            "upstream_provider_ids": definition.routing_constraint.allowed_upstream_ids,
+            "data_destination": _agentic_data_destination_payload(
+                provider_id=definition.model_provider_id,
+                endpoint_id=definition.routing_constraint.endpoint_id,
+                upstream_provider_ids=definition.routing_constraint.allowed_upstream_ids,
+            ),
+            "egress_policy": _agentic_egress_policy_payload(
+                policy_id=egress_id, revision=egress_revision, policy=policy
+            ),
+            "data_policy": _agentic_data_policy_payload(
+                definition.routing_constraint,
+                egress_policy_id=egress_id,
+                egress_policy_revision=egress_revision,
+                state=state,
+                workspace_id=workspace_id,
+            ),
+            "profile_policy_ceiling": asdict(definition.policy_ceiling),
+            "native_runtime": native_by_engine.get(definition.runtime_engine_id),
+            "credential_bindings": credential_bindings,
+            "binding": None if binding is None else {
+                "binding_id": binding.binding_id,
+                "credential_binding_id": binding.credential_binding_id,
+                "enabled": binding.enabled,
+                "is_default": binding.is_default,
+                "actor_policy": asdict(binding.actor_policy),
+                "workspace_policy_ceiling": asdict(binding.workspace_policy_ceiling),
+                "egress_policy_id": binding.egress_policy_id,
+                "egress_policy_revision": binding.egress_policy_revision,
+                "created_at": binding.created_at,
+                "updated_at": binding.updated_at,
+            },
+            "health": "healthy" if blocked_reason is None else "blocked",
+            "live_preflight_status": "ready" if blocked_reason is None else "unavailable",
+            "live_preflight_reason": blocked_reason,
+            "blocked_reason": blocked_reason,
+            "selectable": blocked_reason is None,
+            "enable_eligible": enable_blocked_reason is None,
+            "enable_blocked_reason": enable_blocked_reason,
+            "containment_status": "NO-GO" if containment_reason else "GO",
+            "containment_reason": containment_reason,
+            "binding_status": "missing" if binding is None else ("enabled" if binding.enabled else "disabled"),
+            "effective_capabilities": effective_capabilities,
+        })
+    items.sort(key=lambda item: (
+        not bool((item.get("binding") or {}).get("is_default")),
+        str(item["display_name"]),
+    ))
     return {
         "workspace_id": workspace_id,
         "execution_families": [asdict(family) for family in execution_family_catalog()],
         "native_agents": {"items": native_items},
-        "release_decision": release_decision,
+        "release_decision": "NO-GO" if any(item["containment_status"] == "NO-GO" for item in items) else "GO",
         "items": items,
     }
-
-
-def _compact_agentic_admin_items(
-    items: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    """Keep the Settings representative for each provider model and family."""
-    selected: dict[tuple[str, str, str], dict[str, object]] = {}
-    for item in items:
-        family = str(
-            item.get("execution_family")
-            or ("native_agent" if item.get("runtime_engine_id") == "codex" else "unclassified")
-        )
-        key = (
-            family,
-            str(item.get("model_provider_id") or ""),
-            str(item.get("model_id") or ""),
-        )
-        current = selected.get(key)
-        if current is None or _agentic_admin_item_priority(
-            item
-        ) > _agentic_admin_item_priority(current):
-            selected[key] = item
-    return list(selected.values())
-
-
-def _agentic_admin_item_priority(item: dict[str, object]) -> tuple[object, ...]:
-    binding = item.get("binding")
-    binding_payload = binding if isinstance(binding, dict) else {}
-    if binding_payload.get("enabled") and binding_payload.get("is_default"):
-        status_priority = 5
-    elif binding_payload.get("enabled"):
-        status_priority = 4
-    elif item.get("selectable"):
-        status_priority = 3
-    elif item.get("enable_eligible"):
-        status_priority = 2
-    elif item.get("full_workspace_status") == "available":
-        status_priority = 1
-    else:
-        status_priority = 0
-    return (
-        status_priority,
-        _natural_sort_key(str(item.get("definition_revision") or "")),
-        _natural_sort_key(str(item.get("definition_id") or "")),
-    )
-
-
-def _natural_sort_key(value: str) -> tuple[tuple[int, object], ...]:
-    parts: list[tuple[int, object]] = []
-    current = ""
-    numeric = False
-    for character in value:
-        character_is_numeric = character.isdigit()
-        if current and character_is_numeric != numeric:
-            parts.append((1, int(current)) if numeric else (0, current))
-            current = ""
-        current += character
-        numeric = character_is_numeric
-    if current:
-        parts.append((1, int(current)) if numeric else (0, current))
-    return tuple(parts)
 
 
 def _agentic_definition_blocked_reason(
     *,
     definition,
-    rollout_status,
     binding,
     credential_bindings,
     registry,
@@ -1263,17 +1047,12 @@ def _agentic_definition_blocked_reason(
     if containment_reason is not None:
         return containment_reason
     if not family_readiness.complete:
-        return family_readiness.reason_code or "execution_family_contract_incomplete"
+        return family_readiness.reason_code or "runtime_unavailable"
     if (
         family_readiness.execution_family == NATIVE_AGENT_EXECUTION_FAMILY
         and (not native_runtime or native_runtime.get("selectable") is not True)
     ):
-        return str(
-            (native_runtime or {}).get("unavailable_reason")
-            or "native_runtime_unavailable"
-        )
-    if rollout_status in {None, "disabled", "suspended"}:
-        return "profile_definition_invalid"
+        return str((native_runtime or {}).get("unavailable_reason") or "native_runtime_unavailable")
     try:
         provider = registry.get_provider_definition(definition.model_provider_id)
     except ProviderNotFoundError:
@@ -1296,71 +1075,30 @@ def _agentic_definition_blocked_reason(
     return None
 
 
-
-
-
 def runtime_session_agentic_governance_payload(
     state: PlatformState,
     *,
     session: RuntimeSessionRecord,
     projection_context: ProviderProjectionContext | None = None,
 ) -> dict[str, object] | None:
-    """Project exact pinned governance without exposing credential authority."""
+    """Project the concrete session config and its current live permissions."""
     binding = session.execution_binding
     if binding is None:
         return None
     context = projection_context or provider_projection_context(state)
-    provider_store = context.provider_store
-    registry = context.registry
+    definition = None
+    try:
+        config = context.provider_store.get_workspace_agentic_profile_binding(
+            binding.workspace_binding_id
+        )
+        definition = context.provider_store.get_agentic_profile_definition(config.definition_id)
+    except ProviderNotFoundError:
+        pass
     containment_reason = remote_agentic_containment_reason(
         binding,
         workspace_id=session.workspace_id,
         workspace_store=getattr(state, "workspace_store", None),
     )
-    definition = None
-    rollout_status = None
-    try:
-        definition = provider_store.get_agentic_profile_definition(
-            binding.profile_definition_id,
-            binding.profile_definition_revision,
-        )
-        definition_status = provider_store.get_agentic_profile_definition_status(
-            definition.definition_id,
-            definition.revision,
-        )
-        rollout_status = None if definition_status is None else definition_status.rollout_status
-    except ProviderNotFoundError:
-        pass
-    family_readiness = None
-    if definition is not None:
-        family_readiness = inspect_agentic_family_readiness(
-            definition=definition,
-            store=provider_store,
-            binding=binding,
-            registry=registry,
-        )
-    projected_family = (
-        family_readiness.execution_family
-        if family_readiness is not None
-        else effective_agentic_execution_family(
-            binding.execution_family,
-            runtime_engine_id=binding.runtime_engine_id,
-            adapter_id=binding.adapter_id,
-            model_provider_id=binding.model_provider_id,
-            provider_protocol=binding.provider_protocol,
-        )
-    )
-    projected_full_revision = (
-        family_readiness.full_workspace_contract_revision
-        if family_readiness is not None
-        else (binding.full_workspace_contract_revision or None)
-    )
-    projected_recipe = {
-        "id": family_readiness.harness_recipe_id if family_readiness is not None else (binding.harness_recipe_id or None),
-        "revision": family_readiness.harness_recipe_revision if family_readiness is not None else (binding.harness_recipe_revision or None),
-        "digest": family_readiness.harness_recipe_digest if family_readiness is not None else (binding.harness_recipe_digest or None),
-        "provider_capability_catalog_digest": family_readiness.provider_capability_catalog_digest if family_readiness is not None else (binding.provider_capability_catalog_digest or None),
-    }
     if containment_reason is not None:
         effective_capabilities = blocked_runtime_capability_payload(
             containment_reason,
@@ -1368,15 +1106,15 @@ def runtime_session_agentic_governance_payload(
         )
     else:
         try:
-            adapter = registry.get_agentic_runtime_adapter(binding.runtime_engine_id)
+            adapter = context.registry.get_agentic_runtime_adapter(binding.runtime_engine_id)
             authority = resolve_runtime_authority_snapshot(
                 state,
                 session=session,
                 adapter=adapter,
                 turn_id=f"capability-projection:{session.session_id}",
-                provider_store=provider_store,
+                provider_store=context.provider_store,
             )
-            effective_capabilities = effective_runtime_capability_payload(authority)
+            effective_capabilities = runtime_capability_payload(authority)
         except (AuthorizationError, ProviderError, ValueError) as error:
             effective_capabilities = blocked_runtime_capability_payload(
                 str(getattr(error, "reason_code", None) or getattr(error, "reason", None) or error),
@@ -1384,38 +1122,18 @@ def runtime_session_agentic_governance_payload(
             )
     return {
         "display_name": None if definition is None else definition.display_name,
-        "profile_definition_id": binding.profile_definition_id,
-        "profile_definition_revision": binding.profile_definition_revision,
         "workspace_binding_id": binding.workspace_binding_id,
-        "workspace_binding_revision": binding.workspace_binding_revision,
         "runtime_engine_id": binding.runtime_engine_id,
-        "full_workspace_contract_revision": projected_full_revision,
-        "full_workspace_status": (
-            "available"
-            if family_readiness is not None and family_readiness.complete
-            else "unavailable"
-        ),
-        "execution_family": projected_family or None,
-        "execution_family_projection": {
-            "stored_value": binding.execution_family or None,
-            "legacy_identity_projected": bool(projected_family and projected_family != binding.execution_family),
-        },
-        "harness_recipe": projected_recipe,
-        "protocol_adapter": {
-            "id": binding.protocol_adapter_id or None,
-            "version": binding.protocol_adapter_version or None,
-        },
-        "provider_config": {
-            "id": binding.provider_config_id or None,
-            "revision": binding.provider_config_revision or None,
-            "digest": binding.provider_config_digest or None,
-        },
+        "adapter_id": binding.adapter_id,
+        "adapter_version": binding.adapter_version,
         "context_policy": None if binding.context_policy_snapshot is None else asdict(binding.context_policy_snapshot),
         "model_provider_id": binding.model_provider_id,
         "model_id": binding.model_id,
         "model_revision": binding.model_revision,
         "model_revision_policy": binding.model_revision_policy,
-        "rollout_status": rollout_status,
+        "provider_protocol": binding.provider_protocol,
+        "provider_api_version": binding.provider_api_version,
+        "reasoning_effort": binding.reasoning_effort,
         "containment": {
             "status": "NO-GO" if containment_reason else "GO",
             "reason_code": containment_reason,
@@ -1428,7 +1146,7 @@ def runtime_session_agentic_governance_payload(
         "egress_policy": _agentic_egress_policy_payload(
             policy_id=binding.egress_policy_id,
             revision=binding.egress_policy_revision,
-            policy=binding.workspace_policy_ceiling_snapshot,
+            policy=binding.runtime_policy_snapshot,
         ),
         "data_policy": _agentic_data_policy_payload(
             binding.routing_constraint_snapshot,
@@ -1517,8 +1235,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
         body = read_json_body(environ)
         definition_id = str(body.get("definition_id") or "").strip()
-        definition_revision = str(body.get("definition_revision") or "").strip()
-        if not definition_id or not definition_revision:
+        if not definition_id:
             return json_response(
                 start_response,
                 {"error": "agentic_profile_definition_required"},
@@ -1542,14 +1259,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 ),
                 workspace_id=context.workspace_id,
                 definition_id=definition_id,
-                definition_revision=definition_revision,
                 binding_id=str(body.get("binding_id") or "").strip() or None,
-                expected_revision=(
-                    body.get("expected_revision")
-                    if isinstance(body.get("expected_revision"), int)
-                    and not isinstance(body.get("expected_revision"), bool)
-                    else None
-                ),
                 credential_binding_id=(
                     str(body.get("credential_binding_id") or "").strip() or None
                 ),
@@ -1564,14 +1274,13 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             return json_response(
                 start_response,
                 {"error": str(error)},
-                status="409 Conflict" if "revision_conflict" in str(error) else "400 Bad Request",
+                status="400 Bad Request",
             )
         projection_context = provider_projection_context(state)
         return json_response(
             start_response,
             {
                 "binding_id": saved.binding_id,
-                "binding_revision": saved.revision,
                 "agentic_admin": workspace_agentic_admin_status(
                     state,
                     workspace_id=context.workspace_id,
@@ -1811,7 +1520,6 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 "items": [
                     {
                         "definition_id": item.definition_id,
-                        "revision": item.revision,
                         "display_name": item.display_name,
                         "runtime_engine_id": item.runtime_engine_id,
                         "model_provider_id": item.model_provider_id,
@@ -1820,9 +1528,6 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                         "provider_api_version": item.provider_api_version,
                         "adapter_id": item.adapter_id,
                         "adapter_version_constraint": item.adapter_version_constraint,
-                        "full_workspace_contract_revision": (
-                            item.full_workspace_contract_revision or None
-                        ),
                         "routing_constraint": asdict(item.routing_constraint),
                         "capabilities": asdict(item.capabilities),
                         "reasoning_efforts": item.reasoning_efforts,

@@ -9,7 +9,7 @@ import json
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
-_PREPARED_SESSION_FINGERPRINT_VERSION = 5
+_PREPARED_SESSION_FINGERPRINT_VERSION = 6
 
 
 def prepared_session_fingerprint(
@@ -67,7 +67,9 @@ def _resolved_execution_binding(binding: object | None) -> dict[str, object] | N
             getattr(binding, "profile_definition_revision", None)
         ),
         "workspace_binding_id": _text(getattr(binding, "workspace_binding_id", None)),
-        "workspace_binding_revision": getattr(binding, "workspace_binding_revision", None),
+        "workspace_binding_revision": getattr(
+            binding, "workspace_binding_revision", getattr(binding, "revision", None)
+        ),
         "runtime_engine_id": _text(getattr(binding, "runtime_engine_id", None)),
         "model_provider_id": _text(getattr(binding, "model_provider_id", None)),
         "model_id": _text(getattr(binding, "model_id", None)),
@@ -122,7 +124,6 @@ def stored_prepared_session_configuration_key(session: RuntimeSessionRecord) -> 
         "binding": (
             {
                 "workspace_binding_id": binding.workspace_binding_id,
-                "profile_definition_id": binding.profile_definition_id,
                 "model_id": binding.model_id,
                 "reasoning_effort": binding.reasoning_effort,
             }

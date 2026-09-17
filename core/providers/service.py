@@ -313,7 +313,7 @@ def activate_native_agent_provider(
     from core.providers.native_agent_catalog import native_agent_catalog_models
 
     catalog_models = {
-        (model.model_id, model.digest)
+        model.model_id
         for model in native_agent_catalog_models(active_registry, installation)
         if model.model_provider_id == model_provider_id
     }
@@ -322,27 +322,13 @@ def activate_native_agent_provider(
         for profile in store.list_agentic_profile_definitions()
         if profile.runtime_engine_id == provider_id
         and profile.model_provider_id == model_provider_id
-        and (profile.model_id, profile.native_model_catalog_digest)
-        in catalog_models
+        and profile.model_id in catalog_models
     ]
     if not profiles:
         raise ProviderCapabilityError("native_agent_model_projection_missing")
-    from core.providers.native_agent_catalog import require_native_agent_model_available
     from core.providers.execution_family_readiness import inspect_agentic_family_readiness
 
     for profile in profiles:
-        profile_status = store.get_agentic_profile_definition_status(
-            profile.definition_id,
-            profile.revision,
-        )
-        if (
-            profile_status is None
-            or profile_status.rollout_status in {"disabled", "suspended"}
-        ):
-            raise ProviderCapabilityError(
-                "native_agent_model_projection_missing"
-            )
-        require_native_agent_model_available(active_registry, profile)
         readiness = inspect_agentic_family_readiness(
             definition=profile,
             binding=None,
@@ -1048,7 +1034,7 @@ def resolve_workspace_provider_status(
             blocked_detail=str(error),
         )
     resolved_selection = ProviderSelection(
-        selection_id=f"binding:{binding.binding_id}:{binding.revision}",
+        selection_id=f"binding:{binding.binding_id}",
         workspace_id=workspace_id,
         provider_id=profile.runtime_engine_id,
         binding_id=binding.credential_binding_id,

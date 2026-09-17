@@ -40,7 +40,6 @@ def cleanup_runtime_sessions_batch(
     repository_root = start_path or state.repository_root
     root_session_ids = list(dict.fromkeys(item.strip() for item in session_ids if item.strip()))
     expanded_session_ids = list(root_session_ids)
-    continuation_predecessor_ids: set[str] = set()
     for session_id in root_session_ids:
         try:
             session = state.runtime_store.get_session(session_id)
@@ -49,12 +48,6 @@ def cleanup_runtime_sessions_batch(
         except (RuntimeSessionNotFoundError, ValueError):
             continue
         for lineage_session in lineage:
-            if getattr(
-                lineage_session,
-                "continuation_successor_session_id",
-                None,
-            ):
-                continuation_predecessor_ids.add(lineage_session.session_id)
             if lineage_session.session_id not in expanded_session_ids:
                 expanded_session_ids.append(lineage_session.session_id)
     active_runs = [
@@ -149,7 +142,7 @@ def cleanup_runtime_sessions_batch(
         cleanup_once(
             session_id,
             reason,
-            allow_hidden=session_id in continuation_predecessor_ids,
+            allow_hidden=False,
         )
     roots_finished_at = time.perf_counter()
 

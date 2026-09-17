@@ -21,7 +21,7 @@ from core.providers.agentic_models import codex_routing_constraint, codex_runtim
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.agentic_models import RuntimeCapabilitySet
 from core.providers.service import builtin_provider_registry
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
@@ -465,8 +465,8 @@ class HostedAgenticHarness:
             content_digest=content_sha256(canonical_egress_content(content)),
         )
 
-    def _authority(self) -> EffectiveRuntimeAuthority:
-        authority = EffectiveRuntimeAuthority(
+    def _authority(self) -> RuntimeAuthority:
+        authority = RuntimeAuthority(
             execution_binding_id=self.binding.execution_binding_id,
             turn_id="turn-hosted",
             allowed_capabilities=self.capabilities,

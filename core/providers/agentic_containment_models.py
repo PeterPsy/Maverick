@@ -21,8 +21,6 @@ class RemoteContainmentTarget:
     workspace_id: str | None
     model_provider_id: str
     definition_id: str | None
-    definition_revision: str | None
-    current_revision: int | None
     current_status: str
     target_status: str
     target_digest: str

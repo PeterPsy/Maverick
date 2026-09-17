@@ -18,7 +18,7 @@ def build_remote_agentic_containment_plan(
 ) -> dict:
     """Build one deterministic plan without mutating either store."""
     definitions = {
-        (definition.definition_id, definition.revision): definition
+        definition.definition_id: definition
         for definition in provider_store.list_agentic_profile_definitions()
     }
     remote_definitions = {
@@ -28,8 +28,7 @@ def build_remote_agentic_containment_plan(
     }
     binding_targets: list[RemoteContainmentTarget] = []
     for binding in provider_store.list_all_workspace_agentic_profile_bindings():
-        key = (binding.definition_id, binding.definition_revision)
-        definition = definitions.get(key)
+        definition = definitions.get(binding.definition_id)
         if definition is not None and not is_remote_agentic_identity(definition):
             continue
         if not binding.enabled and not binding.is_default:
@@ -43,31 +42,12 @@ def build_remote_agentic_containment_plan(
                     "unknown" if definition is None else definition.model_provider_id
                 ),
                 definition_id=binding.definition_id,
-                definition_revision=binding.definition_revision,
-                current_revision=binding.revision,
                 current_status="enabled" if binding.enabled else "disabled_default",
                 target_status="disabled",
             )
         )
 
     profile_targets: list[RemoteContainmentTarget] = []
-    for key, definition in remote_definitions.items():
-        status = provider_store.get_agentic_profile_definition_status(*key)
-        if status is not None and status.rollout_status in {"disabled", "suspended"}:
-            continue
-        profile_targets.append(
-            _target(
-                "profile",
-                f"{definition.definition_id}:{definition.revision}",
-                workspace_id=None,
-                model_provider_id=definition.model_provider_id,
-                definition_id=definition.definition_id,
-                definition_revision=definition.revision,
-                current_revision=None if status is None else status.revision,
-                current_status="missing_status" if status is None else status.rollout_status,
-                target_status="suspended",
-            )
-        )
 
     inventory = inventory_remote_agentic_sessions(runtime_store)
     session_targets = [
@@ -76,9 +56,7 @@ def build_remote_agentic_containment_plan(
             item.session_id,
             workspace_id=item.workspace_id,
             model_provider_id=item.model_provider_id,
-            definition_id=item.profile_definition_id,
-            definition_revision=item.profile_definition_revision,
-            current_revision=None,
+            definition_id=None,
             current_status=item.session_status,
             target_status="recovery_required",
         )
@@ -111,8 +89,6 @@ def _target(
     workspace_id: str | None,
     model_provider_id: str,
     definition_id: str | None,
-    definition_revision: str | None,
-    current_revision: int | None,
     current_status: str,
     target_status: str,
 ) -> RemoteContainmentTarget:
@@ -122,8 +98,6 @@ def _target(
         "workspace_id": workspace_id,
         "model_provider_id": model_provider_id,
         "definition_id": definition_id,
-        "definition_revision": definition_revision,
-        "current_revision": current_revision,
         "current_status": current_status,
         "target_status": target_status,
     }

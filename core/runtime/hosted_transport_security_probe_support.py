@@ -14,7 +14,7 @@ from core.providers.agentic_models import (
 )
 from core.providers.agentic_protocol import AgenticModelEvent
 from core.providers.agentic_models import RuntimeCapabilitySet
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
@@ -146,7 +146,7 @@ def build_transport_probe_context(root: Path):
         provider_state=SimpleNamespace(),
         input_text="synthetic public transport probe",
         correlation_id="security-probe-turn",
-        effective_authority=EffectiveRuntimeAuthority(
+        effective_authority=RuntimeAuthority(
             execution_binding_id=binding.execution_binding_id,
             turn_id="security-probe-turn",
             allowed_capabilities=RuntimeCapabilitySet(

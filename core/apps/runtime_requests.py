@@ -757,8 +757,6 @@ def _preflight_runtime_request_before_persistence(
             execution_mode=execution_mode,
             workspace_binding_id=_text(request.get("workspace_profile_binding_id")) or None,
             reasoning_effort=_text(request.get("reasoning_effort")) or None,
-            authorized_definition_snapshot=authorized_profile[0],
-            authorized_workspace_binding_snapshot=authorized_profile[1],
             workspace_store=getattr(state, "workspace_store", None),
         )
         preflight_execution_binding_context(
@@ -766,10 +764,7 @@ def _preflight_runtime_request_before_persistence(
             binding=execution_binding,
             turn_id=f"app-session-admission:{session_id}",
             live_execution_mode=execution_mode,
-            actor_policy_revision=(
-                f"workspace-actor:{execution_binding.workspace_binding_id}:"
-                f"{execution_binding.workspace_binding_revision}"
-            ),
+            actor_policy_revision=f"workspace-actor:{execution_binding.workspace_binding_id}",
             invoked_skills=(
                 *raw_skill_ids,
                 *raw_invoked_skill_ids,

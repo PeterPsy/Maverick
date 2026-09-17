@@ -14,7 +14,6 @@ from core.runtime.hosted_agentic_models import (
     HostedProviderStateInspector,
 )
 from core.runtime.hosted_context_management import HostedProviderStateCompactor
-from core.runtime.full_workspace_contract import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
 from core.runtime.remote_agentic_admission import (
     require_remote_agentic_runtime_availability,
@@ -40,11 +39,6 @@ class HostedProviderRuntime:
     recipe: HostedHarnessRecipeManifest | None = None
     context_compactor: HostedProviderStateCompactor | None = None
     request_preflight: Callable[[object, object], object] | None = None
-    provider_config_id: str = ""
-    provider_config_revision: str = ""
-    provider_config_digest: str = ""
-    protocol_adapter_id: str = ""
-    protocol_adapter_version: str = ""
     endpoint_id: str = ""
     endpoint_url: str = ""
     allowed_upstream_ids: tuple[str, ...] = ()
@@ -59,22 +53,17 @@ class HostedProviderRuntimeRegistry:
         self._runtimes: dict[
             tuple[str, str, str | None], list[HostedProviderRuntime]
         ] = {}
-        self._recipes: dict[tuple[str, str], HostedProviderRuntime] = {}
 
     def register(self, runtime: HostedProviderRuntime) -> HostedProviderRuntime:
         identity = self._identity(runtime)
         recipe = runtime.recipe
         if recipe is not None:
-            recipe_identity = (recipe.recipe_id, recipe.revision)
-            if recipe_identity in self._recipes:
-                raise ValueError("Hosted harness recipe identity is already registered.")
             if identity != (
                 recipe.model_provider_id,
                 recipe.provider_protocol,
                 recipe.provider_api_version,
             ):
                 raise ValueError("Hosted harness recipe provider identity is invalid.")
-            self._recipes[recipe_identity] = runtime
         candidates = self._runtimes.setdefault(identity, [])
         if recipe is None and any(item.recipe is None for item in candidates):
             raise ValueError("Hosted provider runtime identity is already registered.")
@@ -88,18 +77,13 @@ class HostedProviderRuntimeRegistry:
             binding.provider_protocol,
             binding.provider_api_version,
         )
-        recipe_id = str(getattr(binding, "harness_recipe_id", "") or "")
-        recipe_revision = str(
-            getattr(binding, "harness_recipe_revision", "") or ""
-        )
-        if recipe_id or recipe_revision:
-            if not recipe_id or not recipe_revision:
-                raise HostedAgenticLoopError("harness_recipe_mismatch")
-            runtime = self._recipes.get((recipe_id, recipe_revision))
-        else:
-            candidates = self._runtimes.get(identity, [])
-            legacy = [item for item in candidates if item.recipe is None]
-            runtime = legacy[0] if len(legacy) == 1 else None
+        candidates = self._runtimes.get(identity, [])
+        matching = [
+            item
+            for item in candidates
+            if item.recipe is None or item.recipe.model_id == binding.model_id
+        ]
+        runtime = matching[0] if len(matching) == 1 else None
         if runtime is None:
             raise HostedAgenticLoopError("provider_protocol_unavailable")
         if self._identity(runtime) != identity:
@@ -119,8 +103,7 @@ class HostedProviderRuntimeRegistry:
             for runtime in sorted(
                 self._runtimes[identity],
                 key=lambda item: (
-                    "" if item.recipe is None else item.recipe.recipe_id,
-                    "" if item.recipe is None else item.recipe.revision,
+                    "" if item.recipe is None else item.recipe.model_id,
                 ),
             )
         )
@@ -129,62 +112,9 @@ class HostedProviderRuntimeRegistry:
     def _validate_recipe_binding(runtime: HostedProviderRuntime, binding) -> None:
         recipe = runtime.recipe
         if recipe is None:
-            if any(
-                str(getattr(binding, field_name, "") or "")
-                for field_name in (
-                    "harness_recipe_id",
-                    "harness_recipe_revision",
-                    "harness_recipe_digest",
-                    "provider_capability_catalog_digest",
-                    "semantic_projection_compiler_revision",
-                    "tool_contract_revision",
-                )
-            ) or getattr(binding, "context_policy_snapshot", None) is not None:
-                raise HostedAgenticLoopError("harness_recipe_mismatch")
             return
-        runtime_provider_identity = {
-            "provider_config_id": runtime.provider_config_id,
-            "provider_config_revision": runtime.provider_config_revision,
-            "provider_config_digest": runtime.provider_config_digest,
-            "protocol_adapter_id": runtime.protocol_adapter_id,
-            "protocol_adapter_version": runtime.protocol_adapter_version,
-        }
-        if any(
-            not value
-            or str(getattr(binding, field_name, "") or "") != value
-            for field_name, value in runtime_provider_identity.items()
-        ):
-            raise HostedAgenticLoopError("provider_config_identity_mismatch")
-        expected = {
-            "harness_recipe_id": recipe.recipe_id,
-            "harness_recipe_revision": recipe.revision,
-            "harness_recipe_digest": recipe.recipe_digest,
-            "provider_capability_catalog_digest": (
-                recipe.capability_catalog_digest
-            ),
-            "semantic_projection_compiler_revision": (
-                recipe.semantic_projection_compiler_revision
-            ),
-            "tool_contract_revision": recipe.tool_contract_revision,
-        }
-        if any(
-            str(getattr(binding, field_name, "") or "") != value
-            for field_name, value in expected.items()
-        ):
-            reason = (
-                "provider_capability_catalog_mismatch"
-                if str(
-                    getattr(binding, "provider_capability_catalog_digest", "")
-                    or ""
-                )
-                != recipe.capability_catalog_digest
-                else "harness_recipe_mismatch"
-            )
-            raise HostedAgenticLoopError(reason)
         if (
-            str(getattr(binding, "execution_family", "") or "")
-            != MAVERICK_AGENT_EXECUTION_FAMILY
-            or binding.model_provider_id != recipe.model_provider_id
+            binding.model_provider_id != recipe.model_provider_id
             or binding.model_id != recipe.model_id
             or binding.model_revision != recipe.model_revision
             or binding.model_revision_policy != recipe.model_revision_policy
@@ -201,7 +131,7 @@ class HostedProviderRuntimeRegistry:
             or recipe.context_policy.max_request_input_tokens
             > recipe.support_flags.input_token_limit
         ):
-            raise HostedAgenticLoopError("harness_recipe_mismatch")
+            raise HostedAgenticLoopError("runtime_configuration_mismatch")
 
     @staticmethod
     def _identity(runtime: HostedProviderRuntime) -> tuple[str, str, str | None]:

@@ -17,7 +17,7 @@ from core.skills.models import SkillDefinition
 if TYPE_CHECKING:
     from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter
     from core.runtime.provider_state import RuntimeProviderState
-    from core.runtime.authority import EffectiveRuntimeAuthority
+    from core.runtime.authority import RuntimeAuthority
 
 
 OUTPUT_DELTA_FLUSH_CHARS = 80
@@ -47,7 +47,7 @@ def execute_runtime_turn(
     agentic_adapter: AgenticRuntimeEngineAdapter | None = None,
     provider_state: RuntimeProviderState | None = None,
     correlation_id: str | None = None,
-    effective_authority: EffectiveRuntimeAuthority | None = None,
+    effective_authority: RuntimeAuthority | None = None,
     input_sources: tuple[object, ...] = (),
     on_provider_thread_id: Callable[[str], None] | None = None,
     on_provider_state_update: Callable[[dict[str, object]], RuntimeProviderState] | None = None,

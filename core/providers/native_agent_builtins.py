@@ -28,12 +28,6 @@ from core.providers.native_agent_contract import (
     NativeRuntimeStatus,
     NativeUpdateState,
 )
-from core.runtime.execution_binding import canonical_digest
-from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
-
-
-NATIVE_AGENT_RECIPE_REVISION = "1"
-ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION = "4"
 NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
 ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION = (
     "maverick-antigravity-native-sandbox-v3"
@@ -132,13 +126,6 @@ class CommandNativeRuntimeInspector:
 
 def build_codex_native_installation(adapter) -> NativeAgentInstallation:
     """Describe the Codex app-server integration and its connection."""
-    recipe_payload = {
-        "recipe_id": "codex-native-app-server",
-        "revision": NATIVE_AGENT_RECIPE_REVISION,
-        "protocol": "codex-app-server-stdio",
-        "context_owner": "native_runtime",
-        "prompt_contract_revision": "codex-native-prompt-v1",
-    }
     connections = (
         NativeAgentModelProviderConnection(
             model_provider_id="codex",
@@ -160,10 +147,7 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             trusted_distribution="maverick_builtin",
         ),
         recipe=NativeAgentHarnessRecipe(
-            recipe_id=str(recipe_payload["recipe_id"]),
-            revision=NATIVE_AGENT_RECIPE_REVISION,
-            digest=canonical_digest(recipe_payload),
-            prompt_contract_revision=str(recipe_payload["prompt_contract_revision"]),
+            prompt_contract_revision="codex-native-prompt-v1",
             context_owner="native_runtime",
         ),
         model_provider_connections=connections,
@@ -175,7 +159,6 @@ def build_codex_native_installation(adapter) -> NativeAgentInstallation:
             approval_policy="maverick_common_approval_policy",
             sandbox_policy_revision=NATIVE_AGENT_SANDBOX_POLICY_REVISION,
         ),
-        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         inspector=CommandNativeRuntimeInspector(adapter.codex_command),
     )
 
@@ -234,14 +217,6 @@ def build_antigravity_cli_candidate_installation(
     command: str = "agy",
 ) -> NativeAgentInstallation:
     """Return a complete, content-pinned candidate registration."""
-    recipe_payload = {
-        "recipe_id": "antigravity-cli-native-candidate",
-        "revision": ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION,
-        "protocol": "antigravity-stream-json-v1",
-        "authentication": "private-cached-oauth-profile-v1",
-        "context_owner": "native_runtime",
-        "prompt_contract_revision": "antigravity-text-v1",
-    }
     return NativeAgentInstallation(
         manifest=NativeAgentAdapterManifest(
             runtime_engine_id=ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID,
@@ -257,9 +232,6 @@ def build_antigravity_cli_candidate_installation(
             trusted_distribution="maverick_reviewed_binary",
         ),
         recipe=NativeAgentHarnessRecipe(
-            recipe_id=str(recipe_payload["recipe_id"]),
-            revision=ANTIGRAVITY_NATIVE_AGENT_RECIPE_REVISION,
-            digest=canonical_digest(recipe_payload),
             prompt_contract_revision="antigravity-text-v1",
             context_owner="native_runtime",
         ),
@@ -279,6 +251,5 @@ def build_antigravity_cli_candidate_installation(
                 ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION
             ),
         ),
-        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         inspector=CommandNativeRuntimeInspector(command),
     )

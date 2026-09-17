@@ -1,4 +1,4 @@
-"""Atomic live-catalog publication after immutable model projections are ready."""
+"""Refresh native model discovery and current direct model configs."""
 
 from __future__ import annotations
 
@@ -26,18 +26,12 @@ def refresh_codex_native_catalog(
     force: bool = False,
     now: datetime | None = None,
 ) -> bool:
-    """Commit catalog + eligible projections together, or expose no authority.
-
-    The lock fences catalog readers/admission while persistent immutable records
-    are staged. On any write failure their catalog gate stays closed, including
-    across restart (only fresh discovery can republish the gate).
-    """
+    """Refresh discovery; a failed refresh keeps the last usable snapshot."""
     with registry.native_catalog_lock:
         snapshot = discover_codex_native_catalog(
             registry.get_runtime_adapter("codex"), force=force,
         )
         if snapshot is None:
-            registry.clear_native_agent_catalog("codex", "codex")
             return False
         definition = registry.get_provider_definition("codex")
         ids = {model.model_id for model in snapshot.models}
@@ -58,7 +52,6 @@ def refresh_codex_native_catalog(
             reconcile_codex_native_models(store, registry, definition, now=now)
             store.save_provider_definition(definition)
         except Exception:
-            registry.clear_native_agent_catalog("codex", "codex")
             raise
         registry._native_catalog_reconciliations[("codex", "codex")] = key
         return True
@@ -185,37 +178,12 @@ def _reconcile_antigravity_native_models(store, controller, snapshot) -> None:
         publish_antigravity_agentic_profile,
     )
 
-    current_profiles: set[tuple[str, str]] = set()
     for model in snapshot.models:
-        profile = publish_antigravity_agentic_profile(
+        publish_antigravity_agentic_profile(
             store,
             installation=controller.installation,
             model=model,
             now=snapshot.observed_at,
-        )
-        current_profiles.add((profile.definition_id, profile.revision))
-    current_definition_ids = {
-        definition_id for definition_id, _revision in current_profiles
-    }
-    for profile in store.list_agentic_profile_definitions():
-        identity = (profile.definition_id, profile.revision)
-        if (
-            profile.runtime_engine_id != "antigravity-cli"
-            or identity in current_profiles
-            or profile.definition_id not in current_definition_ids
-        ):
-            continue
-        status = store.get_agentic_profile_definition_status(*identity)
-        if status is None or status.rollout_status in {"disabled", "suspended"}:
-            continue
-        store.save_agentic_profile_definition_status(
-            replace(
-                status,
-                rollout_status="suspended",
-                revision=status.revision + 1,
-                updated_at=snapshot.observed_at,
-            ),
-            expected_revision=status.revision,
         )
 
 
@@ -232,15 +200,6 @@ def reconcile_codex_native_models(
         publish_codex_agentic_profile(
             store, definition=definition, model_id=model.model_id, now=timestamp,
         )
-    from core.providers.agentic_migration import _roll_forward_enabled_codex_bindings
-
-    _roll_forward_enabled_codex_bindings(
-        store, registry,
-        workspace_ids={
-            item.workspace_id for item in store.list_all_workspace_agentic_profile_bindings()
-        },
-        now=timestamp,
-    )
 
 
 __all__ = [

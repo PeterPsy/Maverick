@@ -10,7 +10,7 @@ import tempfile
 from core.cli.command_registry import CliCommandRegistry
 from core.mcp.tool_registry import McpToolRegistry
 from core.providers.agentic_models import RuntimeCapabilitySet
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 from core.runtime.public_content_classification import (
     classification_from_runtime_public_content_authority,
@@ -187,8 +187,8 @@ def _actor_context(workspace_id: str) -> RuntimeToolActorContext:
     )
 
 
-def _filesystem_read_authority() -> EffectiveRuntimeAuthority:
-    return EffectiveRuntimeAuthority(
+def _filesystem_read_authority() -> RuntimeAuthority:
+    return RuntimeAuthority(
         execution_binding_id="security-probe-binding",
         turn_id="security-probe-turn",
         allowed_capabilities=RuntimeCapabilitySet(

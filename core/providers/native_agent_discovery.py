@@ -65,7 +65,9 @@ def discover_codex_native_catalog(
     with _LOCK:
         timestamp = datetime.now(tz=UTC)
         cached = _CACHE.get(source_id)
-        if not force and cached is not None and timestamp < cached.expires_at:
+        if not force and cached is not None and (
+            timestamp - cached.observed_at
+        ) < timedelta(seconds=CODEX_MODEL_CATALOG_TTL_SECONDS):
             return cached
         try:
             result = subprocess.run(
@@ -109,17 +111,14 @@ def discover_codex_native_catalog(
                 models.append(model)
                 options.append(replace(option, metadata={
                     "model_revision": revision, "model_revision_policy": revision_policy,
-                    "native_model_catalog_digest": model.digest,
                 }))
             snapshot = NativeAgentCatalogSnapshot(
                 runtime_engine_id="codex", model_provider_id="codex", catalog_provider_id="codex",
                 source_id=source_id, observed_at=timestamp,
-                expires_at=timestamp + timedelta(seconds=CODEX_MODEL_CATALOG_TTL_SECONDS),
                 models=tuple(models), model_options=tuple(options),
             )
         except (OSError, subprocess.SubprocessError, ValueError, AttributeError, TypeError):
-            _CACHE.pop(source_id, None)
-            return None
+            return cached
         _CACHE[source_id] = snapshot
         # Keep the unchanged reviewed launch adapter's settings validator in
         # sync with this same successful runtime observation (never fallback).
@@ -173,7 +172,9 @@ def discover_antigravity_native_catalog(
     with _LOCK:
         timestamp = datetime.now(tz=UTC)
         cached = _CACHE.get(source_id)
-        if not force and cached is not None and timestamp < cached.expires_at:
+        if not force and cached is not None and (
+            timestamp - cached.observed_at
+        ) < timedelta(seconds=CODEX_MODEL_CATALOG_TTL_SECONDS):
             return cached
         try:
             with tempfile.TemporaryDirectory(
@@ -217,8 +218,6 @@ def discover_antigravity_native_catalog(
                 catalog_provider_id="antigravity-cli",
                 source_id=source_id,
                 observed_at=timestamp,
-                expires_at=timestamp
-                + timedelta(seconds=CODEX_MODEL_CATALOG_TTL_SECONDS),
                 models=tuple(models),
                 model_options=tuple(options),
             )
@@ -230,8 +229,7 @@ def discover_antigravity_native_catalog(
             ValueError,
             RuntimeError,
         ):
-            _CACHE.pop(source_id, None)
-            return None
+            return cached
         _CACHE[source_id] = snapshot
         return snapshot
 

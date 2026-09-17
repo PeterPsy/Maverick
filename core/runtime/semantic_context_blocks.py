@@ -104,7 +104,7 @@ class SemanticContextMaterializer:
                 content=runtime_context,
                 classification=platform_classification(
                     f"runtime-binding:{binding.execution_binding_id}",
-                    binding.binding_digest,
+                    canonical_digest(binding),
                     runtime_context,
                 ),
             )

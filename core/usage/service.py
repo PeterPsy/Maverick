@@ -71,19 +71,11 @@ def ingest_runtime_usage(
 
 
 def resolve_root_session_id(runtime_store: Any, session: RuntimeSessionRecord) -> str:
-    """Follow continuation and creator links to the logical root session."""
+    """Follow creator links to the logical root session."""
     current = session
     visited = {current.session_id}
-    while getattr(current, "predecessor_session_id", None) or getattr(
-        current,
-        "creator_runtime_session_id",
-        None,
-    ):
-        parent_id = getattr(current, "predecessor_session_id", None) or getattr(
-            current,
-            "creator_runtime_session_id",
-            None,
-        )
+    while getattr(current, "creator_runtime_session_id", None):
+        parent_id = getattr(current, "creator_runtime_session_id", None)
         if parent_id in visited:
             break
         visited.add(parent_id)

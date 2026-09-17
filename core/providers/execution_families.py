@@ -105,4 +105,8 @@ def effective_agentic_execution_family(
         provider_protocol=provider_protocol,
     ):
         return NATIVE_AGENT_EXECUTION_FAMILY
+    if runtime_engine_id == "maverick-tool-loop":
+        return MAVERICK_AGENT_EXECUTION_FAMILY
+    if runtime_engine_id in {"codex", "claude-code", "antigravity-cli"}:
+        return NATIVE_AGENT_EXECUTION_FAMILY
     return ""

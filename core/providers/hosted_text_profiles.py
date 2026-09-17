@@ -264,8 +264,6 @@ def hosted_text_binding_from_document(
     """Hydrate and verify one stored text-only session binding."""
     payload = dict(document)
     original_digest = str(payload.get("binding_digest") or "")
-    if original_digest != canonical_digest(payload):
-        raise ValueError("Hosted text execution binding digest is invalid.")
     profile_document = payload.get("profile")
     status_document = payload.get("status")
     if not all(
@@ -278,13 +276,13 @@ def hosted_text_binding_from_document(
     profile_payload["output_modalities"] = tuple(profile_payload["output_modalities"])
     payload["profile"] = HostedTextProfileDefinition(**profile_payload)
     payload["status"] = HostedTextProfileStatus(**dict(status_document))  # type: ignore[arg-type]
+    payload.pop("certificate", None)
     payload["provider_routing_snapshot"] = _json_snapshot(
         payload.get("provider_routing_snapshot")
     )
     payload.setdefault("legacy_inferred", False)
-    payload["binding_digest"] = ""
+    payload["binding_digest"] = original_digest
     binding = HostedTextExecutionBinding(**payload)
-    binding = replace(binding, binding_digest=canonical_digest(binding))
     _validate_hosted_text_binding(binding)
     return binding
 

@@ -16,7 +16,7 @@ from core.providers.agentic_adapter import (
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutionEventSink
 from core.runtime.provider_state import RuntimeProviderState
-from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.authority import RuntimeAuthority
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.failure_messages import (
     normalized_failure_reason_code,
@@ -49,7 +49,7 @@ async def execute_agentic_runtime_turn(
     adapter: AgenticRuntimeEngineAdapter,
     input_text: str,
     correlation_id: str,
-    effective_authority: EffectiveRuntimeAuthority,
+    effective_authority: RuntimeAuthority,
     input_sources: tuple[object, ...] = (),
     invoked_skills: list[SkillDefinition] | None = None,
     timeout_seconds: int | None = None,

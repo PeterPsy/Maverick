@@ -51,10 +51,7 @@ class RemoteAgenticSessionInventoryItem:
     runtime_engine_id: str
     model_provider_id: str
     model_id: str
-    profile_definition_id: str
-    profile_definition_revision: str
     workspace_binding_id: str
-    workspace_binding_revision: int
     terminal_turn_ids: tuple[str, ...]
     provider_request_count: int
     provider_acceptance_count: int
@@ -181,10 +178,7 @@ def inventory_remote_agentic_sessions(
             runtime_engine_id=binding.runtime_engine_id,
             model_provider_id=binding.model_provider_id,
             model_id=binding.model_id,
-            profile_definition_id=binding.profile_definition_id,
-            profile_definition_revision=binding.profile_definition_revision,
             workspace_binding_id=binding.workspace_binding_id,
-            workspace_binding_revision=binding.workspace_binding_revision,
             terminal_turn_ids=tuple(turn.turn_id for turn in terminal_turns),
             provider_request_count=request_count,
             provider_acceptance_count=acceptance_count,

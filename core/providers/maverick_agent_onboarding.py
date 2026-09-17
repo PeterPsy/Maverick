@@ -4,16 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Callable, Literal
+from typing import Callable
 
-from core.providers.agentic_models import (
-    AgenticProfileDefinition,
-    AgenticProfileDefinitionStatus,
-    ProfileRolloutStatus,
-)
-from core.providers.errors import AgenticProfileError, ProviderNotFoundError
-from core.providers.execution_families import MAVERICK_AGENT_EXECUTION_FAMILY
-from core.providers.models import ProviderDefinition
+from core.providers.agentic_models import AgenticProfileDefinition
+from core.providers.errors import AgenticProfileError
 from core.providers.maverick_agent_provider_config import (
     MaverickProviderConfig,
     MaverickTokenCostPolicy,
@@ -23,12 +17,6 @@ from core.providers.maverick_agent_runtime_contract import (
     validate_composed_maverick_runtime,
 )
 from core.providers.store import ProviderStore
-from core.runtime.execution_binding import canonical_digest
-from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
-    FULL_WORKSPACE_CORE_TOOL_HANDLES,
-    MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
-)
 from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
 from core.runtime.hosted_provider_runtime import (
     HostedProviderRuntime,
@@ -64,30 +52,12 @@ class MaverickProtocolAdapterManifest:
 
 @dataclass(frozen=True)
 class MaverickAgentProfilePublication:
-    """Exact model profile plus separately versioned adapter/config/recipe."""
+    """Direct model config plus its executable implementation components."""
 
     adapter: MaverickProtocolAdapterManifest
     provider_config: MaverickProviderConfig
     recipe: HostedHarnessRecipeManifest
     profile: AgenticProfileDefinition
-    rollout_status: ProfileRolloutStatus
-    superseded_profile_revisions: tuple[str, ...] = ()
-    superseded_profile_definitions: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True)
-class MaverickModelCandidate:
-    """Discovery observation that deliberately carries no runtime authority."""
-
-    candidate_id: str
-    model_provider_id: str
-    model_id: str
-    model_revision: str | None
-    provider_config_id: str
-    compatible_recipe_ids: tuple[str, ...]
-    observed_metadata_digest: str
-    authority_granted: Literal[False] = False
-    execution_family: None = None
 
 
 @dataclass(frozen=True)
@@ -109,7 +79,7 @@ class MaverickAgentOnboardingCatalog:
             tuple[str, str], MaverickProviderConfig
         ] = {}
         self._publications: dict[
-            tuple[str, str], MaverickAgentProfilePublication
+            str, MaverickAgentProfilePublication
         ] = {}
 
     def register_protocol_adapter(
@@ -152,59 +122,10 @@ class MaverickAgentOnboardingCatalog:
         registration = self._runtime_adapters.get(adapter_key)
         if registration is None or registration.manifest != publication.adapter:
             raise AgenticProfileError("maverick_protocol_adapter_unregistered")
-        key = (publication.profile.definition_id, publication.profile.revision)
+        key = publication.profile.definition_id
         if key in self._publications:
             raise AgenticProfileError("maverick_profile_publication_duplicate")
         self._publications[key] = publication
-
-    def discover_candidates(
-        self,
-        definition: ProviderDefinition,
-    ) -> tuple[MaverickModelCandidate, ...]:
-        """Observe models without treating mutable vendor flags as authority."""
-        configs = tuple(
-            config
-            for config in self._provider_configs.values()
-            if config.model_provider_id == definition.provider_id
-        )
-        candidates: list[MaverickModelCandidate] = []
-        for config in sorted(configs, key=lambda item: item.config_id):
-            recipes = tuple(
-                publication.recipe
-                for publication in self._publications.values()
-                if publication.provider_config == config
-            )
-            for option in definition.model_options:
-                compatible = tuple(
-                    sorted(
-                        recipe.recipe_id
-                        for recipe in recipes
-                        if recipe.model_id == option.model_id
-                    )
-                )
-                candidates.append(
-                    MaverickModelCandidate(
-                        candidate_id=(
-                            f"maverick-candidate:{definition.provider_id}:"
-                            f"{option.model_id}:{config.revision}"
-                        ),
-                        model_provider_id=definition.provider_id,
-                        model_id=option.model_id,
-                        model_revision=str(option.metadata.get("model_revision") or "") or None,
-                        provider_config_id=config.config_id,
-                        compatible_recipe_ids=compatible,
-                        observed_metadata_digest=canonical_digest(
-                            {
-                                "model_id": option.model_id,
-                                "metadata": option.metadata,
-                                "input_modalities": option.input_modalities,
-                                "output_modalities": option.output_modalities,
-                                "upstream_provider_options": option.upstream_provider_options,
-                            }
-                        ),
-                    )
-                )
-        return tuple(candidates)
 
     def build_runtime_registry(self) -> HostedProviderRuntimeRegistry:
         """Compose trusted protocol factories from registered data only."""
@@ -222,13 +143,6 @@ class MaverickAgentOnboardingCatalog:
             )
             runtime = replace(
                 runtime,
-                provider_config_id=publication.provider_config.config_id,
-                provider_config_revision=publication.provider_config.revision,
-                provider_config_digest=publication.provider_config.digest,
-                protocol_adapter_id=publication.adapter.protocol_adapter_id,
-                protocol_adapter_version=(
-                    publication.adapter.protocol_adapter_version
-                ),
                 endpoint_id=publication.provider_config.routing_constraint.endpoint_id,
                 endpoint_url=publication.provider_config.endpoint_url,
                 allowed_upstream_ids=(
@@ -263,7 +177,7 @@ class MaverickAgentOnboardingCatalog:
         *,
         now: datetime,
     ) -> tuple[AgenticProfileDefinition, ...]:
-        """Publish every registered immutable profile through one bootstrap path."""
+        """Publish every registered current model config."""
         self.build_runtime_registry()
         return tuple(
             publish_maverick_agent_profile(
@@ -281,67 +195,10 @@ def publish_maverick_agent_profile(
     publication: MaverickAgentProfilePublication,
     now: datetime,
 ) -> AgenticProfileDefinition:
-    """Publish one exact immutable profile and an independent rollout record."""
+    """Upsert one current direct model configuration."""
     _validate_publication(publication)
     expected = publication.profile
-    try:
-        stored = store.get_agentic_profile_definition(
-            expected.definition_id,
-            expected.revision,
-        )
-    except ProviderNotFoundError:
-        stored = store.save_agentic_profile_definition(expected)
-    else:
-        if stored != replace(expected, created_at=stored.created_at):
-            raise AgenticProfileError("maverick_profile_immutable_conflict")
-    status = store.get_agentic_profile_definition_status(
-        stored.definition_id,
-        stored.revision,
-    )
-    if status is None:
-        store.save_agentic_profile_definition_status(
-            AgenticProfileDefinitionStatus(
-                definition_id=stored.definition_id,
-                definition_revision=stored.revision,
-                rollout_status=publication.rollout_status,
-                revision=0,
-                updated_at=now,
-            ),
-            expected_revision=None,
-        )
-    _suspend_superseded_profile_revisions(store, publication=publication, now=now)
-    return stored
-
-
-def _suspend_superseded_profile_revisions(
-    store: ProviderStore,
-    *,
-    publication: MaverickAgentProfilePublication,
-    now: datetime,
-) -> None:
-    identities = (
-        *(
-            (publication.profile.definition_id, revision)
-            for revision in publication.superseded_profile_revisions
-        ),
-        *publication.superseded_profile_definitions,
-    )
-    for definition_id, revision in identities:
-        status = store.get_agentic_profile_definition_status(
-            definition_id,
-            revision,
-        )
-        if status is None or status.rollout_status in {"disabled", "suspended"}:
-            continue
-        store.save_agentic_profile_definition_status(
-            replace(
-                status,
-                rollout_status="suspended",
-                revision=status.revision + 1,
-                updated_at=now,
-            ),
-            expected_revision=status.revision,
-        )
+    return store.save_agentic_profile_definition(expected)
 
 
 def validate_maverick_runtime_adapter(
@@ -369,22 +226,6 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
     from core.runtime.hosted_finalization_policy import provider_finalization_policy, validate_finalization_resources
 
     validate_finalization_resources(profile.policy_ceiling, provider_finalization_policy(config, recipe))
-    if profile.revision in publication.superseded_profile_revisions:
-        raise AgenticProfileError("maverick_profile_supersedes_itself")
-    if len(set(publication.superseded_profile_revisions)) != len(
-        publication.superseded_profile_revisions
-    ):
-        raise AgenticProfileError("maverick_profile_superseded_revision_duplicate")
-    superseded_definitions = publication.superseded_profile_definitions
-    if (
-        len(set(superseded_definitions)) != len(superseded_definitions)
-        or (profile.definition_id, profile.revision) in superseded_definitions
-        or any(
-            not definition_id or not revision
-            for definition_id, revision in superseded_definitions
-        )
-    ):
-        raise AgenticProfileError("maverick_profile_superseded_definition_invalid")
     if (
         profile.runtime_engine_id != "maverick-tool-loop"
         or profile.adapter_id != adapter.runtime_adapter_id
@@ -402,76 +243,21 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
         or profile.model_id != recipe.model_id
         or profile.model_revision != recipe.model_revision
         or profile.model_revision_policy != recipe.model_revision_policy
-        or profile.harness_recipe_id != recipe.recipe_id
-        or profile.harness_recipe_revision != recipe.revision
-        or profile.harness_recipe_digest != recipe.recipe_digest
-        or profile.provider_capability_catalog_digest
-        != recipe.capability_catalog_digest
-        or profile.semantic_projection_compiler_revision
-        != recipe.semantic_projection_compiler_revision
-        or profile.tool_contract_revision != recipe.tool_contract_revision
         or profile.context_policy != recipe.context_policy
         or recipe.endpoint_id != config.routing_constraint.endpoint_id
         or recipe.upstream_ids != config.routing_constraint.allowed_upstream_ids
-        or profile.provider_config_id != config.config_id
-        or profile.provider_config_revision != config.revision
-        or profile.provider_config_digest != config.digest
-        or profile.protocol_adapter_id != adapter.protocol_adapter_id
-        or profile.protocol_adapter_version != adapter.protocol_adapter_version
     ):
         raise AgenticProfileError("maverick_profile_composition_mismatch")
-    _validate_maverick_family(profile, recipe, publication.rollout_status)
-    from core.runtime.full_workspace_contract import (
-        validate_full_workspace_contract_claim,
-    )
-
-    validate_full_workspace_contract_claim(profile=profile)
-
-
-def _validate_maverick_family(
-    profile: AgenticProfileDefinition,
-    recipe: HostedHarnessRecipeManifest,
-    rollout_status: ProfileRolloutStatus,
-) -> None:
-    if profile.execution_family == MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY:
-        if profile.full_workspace_contract_revision or rollout_status != "disabled":
-            raise AgenticProfileError("maverick_candidate_must_remain_disabled")
-        return
-    if profile.execution_family != MAVERICK_AGENT_EXECUTION_FAMILY:
-        raise AgenticProfileError("maverick_execution_family_invalid")
-    policy = profile.policy_ceiling
     flags = recipe.support_flags
-    capabilities = profile.capabilities
     if (
-        profile.full_workspace_contract_revision
-        != FULL_WORKSPACE_CONTRACT_REVISION
-        or recipe.tool_contract_revision != FULL_WORKSPACE_CONTRACT_REVISION
-        or recipe.context_policy.compaction_mode != "provider_history"
-        or not flags.streaming
-        or not flags.usage_accounting
-        or not flags.tool_calling
-        or not flags.cooperative_cancellation
-        or profile.reasoning_efforts != flags.reasoning_efforts
+        profile.reasoning_efforts != flags.reasoning_efforts
         or profile.default_reasoning_effort not in profile.reasoning_efforts
-        or capabilities.streaming != flags.streaming
-        or capabilities.tool_orchestration != flags.tool_calling
-        or capabilities.interrupt != flags.cooperative_cancellation
-        or capabilities.attachment_modalities != flags.attachment_modalities
-        or not (
-            policy.tool_handle_mode == "all_currently_authorized"
-            or (
-                policy.tool_handle_mode == "exact"
-                and set(FULL_WORKSPACE_CORE_TOOL_HANDLES).issubset(
-                    policy.allowed_tool_handles
-                )
-            )
-        )
-        or not policy.allow_filesystem_list
-        or not policy.allow_filesystem_read
-        or not policy.allow_filesystem_write
-        or not policy.allow_shell
+        or profile.capabilities.streaming != flags.streaming
+        or profile.capabilities.tool_orchestration != flags.tool_calling
+        or profile.capabilities.interrupt != flags.cooperative_cancellation
+        or profile.capabilities.attachment_modalities != flags.attachment_modalities
     ):
-        raise AgenticProfileError("maverick_full_workspace_contract_required")
+        raise AgenticProfileError("maverick_profile_composition_mismatch")
 
 
 def _validate_protocol_adapter(adapter: MaverickProtocolAdapterManifest) -> None:
@@ -498,7 +284,6 @@ def _validate_protocol_adapter(adapter: MaverickProtocolAdapterManifest) -> None
 __all__ = [
     "MaverickAgentOnboardingCatalog",
     "MaverickAgentProfilePublication",
-    "MaverickModelCandidate",
     "MaverickProtocolAdapterManifest",
     "MaverickProtocolRuntimeRegistration",
     "MaverickProviderConfig",

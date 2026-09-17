@@ -47,8 +47,6 @@ def build_remote_agentic_containment_plan(
             )
         )
 
-    profile_targets: list[RemoteContainmentTarget] = []
-
     inventory = inventory_remote_agentic_sessions(runtime_store)
     session_targets = [
         _target(
@@ -63,19 +61,17 @@ def build_remote_agentic_containment_plan(
         for item in inventory
         if item.quarantine_required
     ]
-    for targets in (binding_targets, profile_targets, session_targets):
+    for targets in (binding_targets, session_targets):
         targets.sort(key=lambda target: (target.workspace_id or "", target.identity))
     digest = canonical_digest(
         {
             "bindings": [asdict(item) for item in binding_targets],
-            "profiles": [asdict(item) for item in profile_targets],
             "sessions": [asdict(item) for item in session_targets],
             "inventory": [asdict(item) for item in inventory],
         }
     )
     return {
         "bindings": tuple(binding_targets),
-        "profiles": tuple(profile_targets),
         "sessions": tuple(session_targets),
         "inventory": inventory,
         "digest": digest,

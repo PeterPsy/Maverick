@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from core.runtime.continuation_lineage import (
-    resolve_latest_runtime_session,
-    runtime_session_lineage,
-)
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.usage.models import ChatUsageSummary, TokenUsageBreakdown, UsageAccuracy, UsageSampleRecord
 from core.usage.normalization import normalized_usage_sample
@@ -93,13 +89,8 @@ def resolve_current_root_session_id(
     runtime_store: Any,
     session: RuntimeSessionRecord,
 ) -> str:
-    """Return the current executable session for one logical root chat."""
-    root_session_id = resolve_root_session_id(runtime_store, session)
-    try:
-        root = runtime_store.get_session(root_session_id)
-        return resolve_latest_runtime_session(runtime_store, root).session_id
-    except Exception:
-        return root_session_id
+    """Return the root session for one logical chat."""
+    return resolve_root_session_id(runtime_store, session)
 
 
 def build_runtime_chat_usage_summary(
@@ -108,22 +99,13 @@ def build_runtime_chat_usage_summary(
     runtime_store: Any,
     session: RuntimeSessionRecord,
 ) -> ChatUsageSummary:
-    """Aggregate usage with every continuation of the root counted as direct."""
+    """Aggregate root-session usage separately from delegated child usage."""
     root_session_id = resolve_root_session_id(runtime_store, session)
-    direct_session_ids = {root_session_id}
-    try:
-        root = runtime_store.get_session(root_session_id)
-        current = resolve_latest_runtime_session(runtime_store, root)
-        direct_session_ids = {
-            item.session_id for item in runtime_session_lineage(runtime_store, current)
-        }
-    except Exception:
-        pass
     return build_chat_usage_summary(
         store,
         workspace_id=session.workspace_id,
         root_session_id=root_session_id,
-        direct_session_ids=direct_session_ids,
+        direct_session_ids={root_session_id},
     )
 
 

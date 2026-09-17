@@ -72,11 +72,11 @@ export function runtimeAdmissionBlockMessage(session: RuntimeSession | null): st
     return "This chat is pinned to a remote agentic profile that is contained (NO-GO). Start a new chat with an available model.";
   }
   const status = session?.runtime_admission?.status;
-  if (status === "provider_thread_missing") {
+  if (status === "restart_required" && session?.runtime_admission?.detail_code === "provider_thread_missing") {
     return "This chat cannot continue because its provider conversation is no longer available. Start a new chat and hand off the prior transcript.";
   }
-  if (status === "upgrade_required") {
-    return "This chat cannot be upgraded automatically to the current runtime profile. Start a new chat and hand off the prior transcript.";
+  if (status === "restart_required") {
+    return "This chat's saved runtime configuration is no longer usable. Start a new chat and hand off the prior transcript.";
   }
   return null;
 }
@@ -144,17 +144,18 @@ function pinnedAgenticSessionProvider(
   const binding = session.execution_binding;
   const governance = session.agentic_governance;
   const contained = session.agentic_containment?.status === "NO-GO";
-  const executionFamily = governance?.execution_family || (
+  const executionFamily = binding?.runtime_engine_id === "maverick-tool-loop"
+    ? "maverick_agent"
+    : (
     binding?.runtime_engine_id === "codex"
     && binding.adapter_id === "codex-app-server"
     && binding.model_provider_id === "codex"
     && binding.provider_protocol === "codex-app-server-stdio"
       ? "native_agent"
       : undefined
-  );
+    );
   const modelId = governance?.model_id || binding?.model_id || "Pinned model";
   const destination = governance?.data_destination.display_label || "Pinned destination unavailable";
-  const recipe = governance?.harness_recipe;
   return {
     provider_id: `${contained ? "contained" : "pinned"}-session:${encodeURIComponent(pinnedBindingId)}`,
     label: governance?.display_name || modelId,
@@ -172,18 +173,14 @@ function pinnedAgenticSessionProvider(
     default_reasoning_effort: binding?.reasoning_effort || null,
     workspace_profile_binding_id: pinnedBindingId,
     execution_family: executionFamily,
-    full_workspace_status: governance?.full_workspace_status,
-    full_workspace_contract_revision: governance?.full_workspace_contract_revision || null,
-    harness_recipe: recipe || null,
     provider_detail: `Provider: ${governance?.model_provider_id || binding?.model_provider_id || session.provider_id || "unavailable"} · Destination: ${destination}`,
-    profile_detail: `Profile: ${governance?.profile_definition_id || binding?.profile_definition_id || "unavailable"}@${governance?.profile_definition_revision || binding?.profile_definition_revision || "unavailable"} · Recipe: ${recipe?.id || "unavailable"}@${recipe?.revision || "unavailable"} · Full Workspace: ${governance?.full_workspace_contract_revision || "unavailable"}`,
+    profile_detail: `Runtime: ${governance?.runtime_engine_id || binding?.runtime_engine_id || "unavailable"} · Model: ${governance?.model_provider_id || binding?.model_provider_id || "unavailable"}/${modelId}`,
     agentic_containment_status: contained ? "NO-GO" : governance?.containment.status,
     agentic_containment_reason: contained
       ? governance?.containment.reason_code
         || session.agentic_containment?.reason_code
         || "remote_agentic_session_contained"
       : governance?.containment.reason_code || null,
-    agentic_rollout_status: governance?.rollout_status || null,
     agentic_egress_policy_id: governance?.egress_policy.policy_id || null,
     agentic_data_destination: governance?.data_destination || null,
     agentic_egress_policy: governance?.egress_policy || null,

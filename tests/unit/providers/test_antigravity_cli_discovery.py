@@ -77,8 +77,8 @@ printf 'claude-sonnet-4-6\\tClaude Sonnet 4.6 (Thinking)\\n'
             all(model.revision_policy == "provider_alias" for model in snapshot.models)
         )
         self.assertEqual(
-            snapshot.model_options[0].metadata["native_model_catalog_digest"],
-            snapshot.models[0].digest,
+            snapshot.model_options[0].metadata["model_revision_policy"],
+            "provider_alias",
         )
 
     def test_wrong_binary_or_malformed_catalog_grants_no_availability(self) -> None:

@@ -10,10 +10,9 @@ from core.api.platform_state import bootstrap_platform_state
 from core.device_use.models import DeviceUseSessionBinding
 from core.providers.agentic_profiles import build_pinned_execution_binding
 from core.providers.service import configure_workspace_provider
-from core.recovery.continuation_admission import assess_runtime_session_admission
-from core.recovery.continuation_fork import admit_runtime_session
-from core.runtime.errors import RuntimeProfileUpgradeRequiredError
-from core.runtime.execution_binding import canonical_digest
+from core.recovery.runtime_admission import assess_runtime_session_admission
+from core.recovery.runtime_admission import admit_runtime_session
+from core.runtime.errors import RuntimeSessionRestartRequiredError
 from core.runtime.service import create_runtime_session, transition_runtime_session
 from tests.support.repo import make_temp_repo_root
 
@@ -55,9 +54,7 @@ class DeviceUseContinuationTestCase(unittest.TestCase):
             binding = replace(
                 binding,
                 adapter_version="obsolete",
-                binding_digest="",
             )
-            binding = replace(binding, binding_digest=canonical_digest(binding))
         source = create_runtime_session(
             self.state.runtime_store,
             session_id=session_id,
@@ -77,7 +74,7 @@ class DeviceUseContinuationTestCase(unittest.TestCase):
             now=NOW,
         )
 
-    def test_obsolete_device_authority_never_forks_into_a_workspace_runtime(self) -> None:
+    def test_obsolete_saved_adapter_requires_a_new_session(self) -> None:
         source = self._source_session("device-source", obsolete=True)
         source = self.state.runtime_store.save_session(replace(
             source,
@@ -100,13 +97,11 @@ class DeviceUseContinuationTestCase(unittest.TestCase):
             self.state.runtime_store,
             self.state.provider_registry,
             session=source,
-            target_session_id="must-not-exist",
-            now=NOW,
         )
-        self.assertEqual(assessment.status, "upgrade_required")
-        self.assertEqual(assessment.detail_code, "device_use_continuation_unsupported")
-        with self.assertRaises(RuntimeProfileUpgradeRequiredError) as caught:
-            admit_runtime_session(self.state, session=source, now=NOW)
-        self.assertEqual(caught.exception.reason_code, "runtime_profile_upgrade_required")
-        self.assertEqual(caught.exception.detail_code, "device_use_continuation_unsupported")
+        self.assertEqual(assessment.status, "restart_required")
+        self.assertEqual(assessment.detail_code, "runtime_adapter_identity_mismatch")
+        with self.assertRaises(RuntimeSessionRestartRequiredError) as caught:
+            admit_runtime_session(self.state, session=source)
+        self.assertEqual(caught.exception.reason_code, "runtime_session_restart_required")
+        self.assertEqual(caught.exception.detail_code, "runtime_adapter_identity_mismatch")
         self.assertEqual(len(self.state.runtime_store.list_all_sessions()), 1)

@@ -45,7 +45,7 @@ def refresh_codex_native_catalog(
         registry.register_provider_definition(definition)
         if store is None:
             return True
-        key = (id(store), snapshot.digest)
+        key = (id(store), snapshot.source_id, snapshot.models)
         if registry._native_catalog_reconciliations.get(("codex", "codex")) == key:
             return True
         try:

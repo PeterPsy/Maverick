@@ -1,4 +1,4 @@
-"""Full Workspace filesystem and instruction capability surfaces."""
+"""Workspace filesystem and instruction capability surfaces."""
 
 from __future__ import annotations
 

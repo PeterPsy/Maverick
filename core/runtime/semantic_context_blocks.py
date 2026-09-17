@@ -48,7 +48,6 @@ def runtime_capability_semantic_payload(authority) -> dict[str, object]:
         "allowed_tool_handles": authority.allowed_tool_handles,
         "actor_policy_revision": getattr(authority, "actor_policy_revision", ""),
         "feature_flag_revision": getattr(authority, "feature_flag_revision", ""),
-        "policy_revisions": getattr(authority, "policy_revision_set", ()),
     }
 
 
@@ -106,7 +105,7 @@ class SemanticContextMaterializer:
                 content=runtime_context,
                 classification=platform_classification(
                     f"runtime-binding:{binding.execution_binding_id}",
-                    canonical_digest(binding),
+                    canonical_digest(runtime_context),
                     runtime_context,
                 ),
             )

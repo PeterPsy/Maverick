@@ -41,14 +41,10 @@ class ChildExecutionBindingTest(unittest.TestCase):
         parent_binding = build_runtime_execution_binding(
             session_id="root-session",
             workspace_id="default",
-            profile_definition_id="profile-child-fixture",
-            profile_definition_revision="1",
             workspace_binding_id="workspace-child-fixture",
-            workspace_binding_revision=0,
             runtime_engine_id="codex",
             adapter_id="codex-app-server",
             adapter_version="1",
-            adapter_identity_digest="b" * 64,
             model_provider_id="codex",
             model_id="fake-model",
             provider_protocol="codex-app-server-stdio",
@@ -57,11 +53,9 @@ class ChildExecutionBindingTest(unittest.TestCase):
             credential_binding_id=None,
             reasoning_effort=None,
             reasoning_efforts=(),
-            default_reasoning_effort=None,
             capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
-            profile_policy_ceiling=policy,
-            workspace_policy_ceiling=policy,
+            runtime_policy=policy,
             egress_policy_id="fake-egress",
             egress_policy_revision="1",
             created_at=NOW,
@@ -119,13 +113,11 @@ class ChildExecutionBindingTest(unittest.TestCase):
             child_binding.execution_binding_id,
             parent_binding.execution_binding_id,
         )
-        self.assertNotEqual(child_binding.binding_digest, parent_binding.binding_digest)
         self.assertEqual(
             replace(
                 child_binding,
                 execution_binding_id=parent_binding.execution_binding_id,
                 session_id=parent_binding.session_id,
-                binding_digest=parent_binding.binding_digest,
                 created_at=parent_binding.created_at,
             ),
             parent_binding,

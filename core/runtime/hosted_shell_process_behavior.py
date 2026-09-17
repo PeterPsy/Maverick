@@ -1,4 +1,4 @@
-"""Executable shell/process evidence for the hosted Full Workspace gate."""
+"""Executable checks for hosted shell and process capabilities."""
 
 from __future__ import annotations
 

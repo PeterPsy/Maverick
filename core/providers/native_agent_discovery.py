@@ -279,7 +279,6 @@ def _parse_antigravity_catalog(
                 metadata={
                     "model_revision": None,
                     "model_revision_policy": "provider_alias",
-                    "native_model_catalog_digest": model.digest,
                 },
             )
         )

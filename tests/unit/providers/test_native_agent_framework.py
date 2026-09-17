@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.execution_families import (
     HOSTED_TEXT_EXECUTION_FAMILY,
     MAVERICK_AGENT_EXECUTION_FAMILY,
@@ -54,10 +53,9 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         self.assertEqual(catalog[2].label, "Text-only Models (API)")
         self.assertEqual(NO_WORKSPACE_ACTIONS_MESSAGE, "No workspace tools or actions.")
 
-    def test_only_exact_legacy_codex_identity_is_inferred_as_native(self) -> None:
+    def test_execution_family_is_derived_from_runtime_identity(self) -> None:
         self.assertEqual(
             effective_agentic_execution_family(
-                "",
                 runtime_engine_id="codex",
                 adapter_id="codex-app-server",
                 model_provider_id="codex",
@@ -67,7 +65,6 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         )
         self.assertEqual(
             effective_agentic_execution_family(
-                "",
                 runtime_engine_id="vendor-agent",
                 adapter_id="codex-app-server",
                 model_provider_id="vendor",
@@ -96,10 +93,6 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         self.assertTrue(installation.effects.structured_effect_events)
         self.assertIs(controller.installation, installation)
         self.assertIs(registry.get_agentic_runtime_adapter("codex"), controller)
-        self.assertEqual(
-            len(runtime_adapter_identity_digest(registry.get_runtime_adapter("codex"))),
-            64,
-        )
         self.assertEqual(registry.get_provider_definition("codex").status, "active")
 
     def test_second_native_candidate_is_onboarded_but_cannot_be_enabled(self) -> None:
@@ -112,7 +105,7 @@ class NativeAgentFrameworkTest(unittest.TestCase):
         self.assertFalse(definition.requires_credentials)
         self.assertFalse(definition.capabilities.supports_api_key_auth)
         self.assertEqual(installation.manifest.adapter_version, "5")
-        self.assertEqual(installation.recipe.revision, "4")
+        self.assertEqual(installation.recipe.context_owner, "native_runtime")
         controller = registry.get_native_agent_controller("antigravity-cli")
         self.assertEqual(controller.adapter_id, "antigravity-cli-stream-json")
         self.assertIsNone(controller.legacy_adapter)

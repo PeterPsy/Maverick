@@ -27,7 +27,7 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
 )
-from core.runtime.execution_binding import build_runtime_execution_binding, canonical_digest
+from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.hosted_agentic_engine import (
     HostedAgenticEngineAdapter,
     build_hosted_turn_status_callback,
@@ -81,7 +81,7 @@ class HostedAgenticHarness:
         provider_api_version: str | None = "v1",
         routing_constraint=None,
         filesystem_list: bool = False,
-        recipe=None,
+        model_config=None,
         execution_mode: str = "full-access",
     ) -> None:
         feature_flags = patch.dict(
@@ -105,26 +105,8 @@ class HostedAgenticHarness:
         workspace_root = self.root / "workspaces" / "default"
         workspace_root.mkdir(parents=True, exist_ok=True)
         self.filesystem_list = filesystem_list
-        self.recipe = recipe
+        self.model_config = model_config
         self.execution_mode = execution_mode
-        self.provider_config_id = (
-            "" if recipe is None else f"fixture-config:{recipe.recipe_id}"
-        )
-        self.provider_config_revision = "" if recipe is None else "1"
-        self.provider_config_digest = (
-            ""
-            if recipe is None
-            else canonical_digest(
-                {
-                    "config_id": self.provider_config_id,
-                    "recipe_digest": recipe.recipe_digest,
-                }
-            )
-        )
-        self.protocol_adapter_id = (
-            "" if recipe is None else f"fixture-protocol:{recipe.provider_protocol}"
-        )
-        self.protocol_adapter_version = "" if recipe is None else "1"
         self.filesystem_marker = "hosted-loop-filesystem-marker.txt"
         if filesystem_list:
             (workspace_root / self.filesystem_marker).write_text(
@@ -198,21 +180,17 @@ class HostedAgenticHarness:
         self.binding = build_runtime_execution_binding(
             session_id="session-hosted",
             workspace_id="default",
-            profile_definition_id="profile-hosted",
-            profile_definition_revision="1",
             workspace_binding_id="binding-hosted",
-            workspace_binding_revision=0,
             runtime_engine_id="hosted-agentic",
             adapter_id="hosted-agentic-test-adapter",
             adapter_version="1",
-            adapter_identity_digest="b" * 64,
             model_provider_id=model_provider_id,
             model_id=model_id,
-            model_revision=(None if recipe is None else recipe.model_revision),
+            model_revision=(None if model_config is None else model_config.model_revision),
             model_revision_policy=(
                 "provider_alias"
-                if recipe is None
-                else recipe.model_revision_policy
+                if model_config is None
+                else model_config.model_revision_policy
             ),
             provider_protocol=provider_protocol,
             provider_api_version=provider_api_version,
@@ -220,45 +198,19 @@ class HostedAgenticHarness:
             credential_binding_id=None,
             reasoning_effort=(
                 None
-                if recipe is None
-                else recipe.support_flags.reasoning_efforts[-1]
+                if model_config is None
+                else model_config.support_flags.reasoning_efforts[-1]
             ),
             reasoning_efforts=(
-                () if recipe is None else recipe.support_flags.reasoning_efforts
-            ),
-            default_reasoning_effort=(
-                None
-                if recipe is None
-                else recipe.support_flags.reasoning_efforts[-1]
+                () if model_config is None else model_config.support_flags.reasoning_efforts
             ),
             capabilities=self.capabilities,
             execution_mode=self.execution_mode,
-            profile_policy_ceiling=self.policy,
-            workspace_policy_ceiling=self.policy,
+            runtime_policy=self.policy,
             egress_policy_id="fixture-public-remote",
             egress_policy_revision="1",
             created_at=NOW,
-            execution_family=("maverick_agent" if recipe is not None else ""),
-            harness_recipe_id=("" if recipe is None else recipe.recipe_id),
-            harness_recipe_revision=("" if recipe is None else recipe.revision),
-            harness_recipe_digest=("" if recipe is None else recipe.recipe_digest),
-            provider_capability_catalog_digest=(
-                "" if recipe is None else recipe.capability_catalog_digest
-            ),
-            semantic_projection_compiler_revision=(
-                ""
-                if recipe is None
-                else recipe.semantic_projection_compiler_revision
-            ),
-            tool_contract_revision=(
-                "" if recipe is None else recipe.tool_contract_revision
-            ),
-            context_policy=(None if recipe is None else recipe.context_policy),
-            provider_config_id=self.provider_config_id,
-            provider_config_revision=self.provider_config_revision,
-            provider_config_digest=self.provider_config_digest,
-            protocol_adapter_id=self.protocol_adapter_id,
-            protocol_adapter_version=self.protocol_adapter_version,
+            context_policy=(None if model_config is None else model_config.context_policy),
         )
         self.session = RuntimeSessionRecord(
             session_id="session-hosted",
@@ -391,12 +343,12 @@ class HostedAgenticHarness:
                 ),
                 credential_required=credential_required,
                 private_state_inspector=private_state_inspector,
-                recipe=self.recipe,
+                model_config=self.model_config,
                 context_compactor=context_compactor,
                 request_preflight=request_preflight,
-                endpoint_id=("" if self.recipe is None else self.recipe.endpoint_id),
+                endpoint_id=("" if self.model_config is None else self.model_config.endpoint_id),
                 allowed_upstream_ids=(
-                    () if self.recipe is None else self.recipe.upstream_ids
+                    () if self.model_config is None else self.model_config.upstream_ids
                 ),
             )
         )

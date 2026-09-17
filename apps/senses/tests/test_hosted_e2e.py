@@ -342,7 +342,6 @@ class SensesHostedE2ETest(unittest.TestCase):
         state = bootstrap_platform_state(
             start_path=repo_root,
             install_builtin_apps=False,
-            register_builtin_provider_definitions=False,
         )
         speech_fixture = repo_root / "speech-health-fixture"
         speech_fixture.mkdir()

@@ -212,25 +212,22 @@ cover false-promotion and leakage-safe metadata, but remote agentic execution
 stays independently governed until complete live/behavioral testing, recovery,
 leakage review, canary, and the broader production blockers are closed.
 
-### Profile or routing substitution
+### Runtime or routing substitution
 
-An attacker may try to substitute a profile revision, credential binding,
-adapter identity, provider model, protocol, endpoint or upstream after a session
-is created. A provider may also silently route to an unapproved upstream.
+An attacker may try to substitute a credential, adapter, provider model,
+protocol, endpoint or upstream after a session is created. A provider may also
+silently route to an unapproved upstream.
 
-The runtime session embeds an immutable direct execution binding. It pins the
-profile/binding revisions, declared capabilities and reasoning, adapter,
-provider/model/protocol, routing constraint, provider config, harness recipe and
-policy ceilings. Workspace defaults are not consulted after session creation.
-Live state may only narrow the pin.
+The session stores the concrete runtime, adapter, provider/model/protocol,
+reasoning, route, capabilities and policy needed to continue. It does not carry
+profile revisions, launch recipes, catalog/config digests or certificate-like
+identity metadata.
 
-Before dispatch Core re-resolves the enabled workspace binding, actor, credential,
-model/runtime health, feature flags, containment, endpoint/upstream and egress
-policy. OpenRouter requests use the profile's explicit upstream/fallback and
-parameter constraints; no eligible endpoint means no request. Adapter identity
-uses declared engine/adapter ids and versions rather than mutable source bytes,
-so source changes do not create a time-based outage, while identity or routing
-substitution still fails closed.
+Before dispatch Core rechecks the enabled workspace config, actor, credential,
+runtime health, execution mode, feature flags, endpoint/upstream and egress
+policy. OpenRouter uses its explicit upstream/fallback and parameter constraints;
+no eligible endpoint means no request. Declared adapter id/version and actual
+routing still fail closed, without a time-based certificate or catalog expiry.
 
 ### Confirmation and side-effect replay
 

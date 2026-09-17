@@ -214,8 +214,7 @@ Runtime session provider state must be partitioned below that root by runtime se
 ### Agentic runtime state ownership
 
 The agentic multimodel runtime uses the workspace runtime root for physical
-partitioning, but that location does not make its records workspace data or app
-data. The following paths are private, Core-owned operational state:
+partitioning, but those records remain private Core-owned operational state:
 
 ```text
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/provider_state.json
@@ -223,43 +222,45 @@ data. The following paths are private, Core-owned operational state:
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/tool_confirmation_grants.json
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/egress_decisions.json
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/private/
-/workspaces/<workspace_id>/runtime/continuation_handoffs.json
 ```
 
-`session.json` contains the immutable execution binding, continuation-lineage
-identity, and its one-way preparation barrier. Provider state is
-insert-if-absent and then revisioned with compare-and-set. A continuation fork
-CAS-fences the predecessor provider state before transferring its provider
-thread ids; the workspace-scoped handoff file records immutable compatibility
-evidence and monotonic recovery phases. Tool invocations and confirmation grants are a private
-side-effect ledger; egress decisions are append-only and redaction-safe. The
-`private/` directory contains encrypted, bounded provider continuation and tool
-payloads behind opaque Core-issued locators. Apps, browser APIs, ordinary logs,
-workspace exports, and provider adapters do not receive a locator-resolution
-surface. Being able to read ciphertext on disk is not runtime authority.
+`session.json` contains the session's small immutable direct execution binding.
+Provider state is insert-if-absent and then revisioned with compare-and-set for
+concurrent turn safety; that provider-state revision is not a model/profile
+release lifecycle. Tool invocations and confirmation grants form the private
+side-effect ledger, while egress decisions are append-only and redaction-safe.
+The `private/` directory contains encrypted bounded provider continuation and
+tool payloads behind opaque Core locators. Apps, browser APIs, logs, workspace
+exports, and provider adapters do not receive a locator-resolution surface.
 
-Agentic profile definitions, rollout status, workspace bindings and provider
+Current agentic model configurations, workspace selections, and provider
 credential references remain in platform control-plane stores. They never live
-inside a workspace root and cannot be changed by copying or restoring workspace
-files.
+inside a workspace root and cannot be changed by copying workspace files. There
+are no separate rollout-status, certification, evidence, or migration-journal
+collections.
 
 Workspace backup and export therefore treat these records differently:
 
 - app and Storage exports exclude runtime-private and provider-authority state;
-- runtime recovery retains private session state according to Core retention
-  and deletion policy, independently of app lifecycle;
-- control-plane backup covers agentic definitions, rollout status, bindings and
-  provider credential references;
-- moving or restoring a workspace cannot manufacture, widen, enable or select
-  an agentic profile.
+- runtime recovery retains private session state according to Core retention and
+  deletion policy, independently of app lifecycle;
+- control-plane backup covers current agentic configurations, workspace
+  selections, and provider credential references;
+- moving or restoring a workspace cannot manufacture, widen, enable, or select
+  an agentic model configuration.
 
-Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime roots. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between independent concurrent agents unless a provider adapter documents an explicit immutable cache. A compatible Codex continuation lineage is one provider conversation rather than independent agents: its single executable child inherits the lineage-root `CODEX_HOME` because the thread database points to an absolute rollout file there, and the operating-system sandbox receives that same path as `HOME` and `CODEX_HOME`. Continuation admission is serialized with message admission; any non-terminal turn blocks transfer. The predecessor provider state is fenced and its app-server process is proven closed before provider-state ownership passes to the child. Recovery inventory resolves a requested lineage member to the current tip, and a mutating repair snapshots every lineage record plus a checked SQLite backup and checksummed rollout files from the root home. Lineage-aware cleanup removes the root home with the complete lineage.
+Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`,
+copied runtime skills, and transient provider binaries live below the owning
+session root and are never shared by independent concurrent agents. Session
+cleanup removes the same root and its provider home.
 
-Continuation repair scopes snapshots to one durable user-visible chat lineage at
-a time. Hidden prepared-session homes are disposable and are not part of chat
-migration. A snapshot failure leaves its lineage unchanged, removes the
-incomplete snapshot directory, and does not prevent independent chat lineages
-from receiving their own snapshots and compatible successors.
+Historical runtime events and transcripts are retained as audit/history data
+until the owning session or thread is deleted; they are not decoded as control
+plane authority and old certificate-shaped payloads in those immutable records
+do not affect admission. Inactive recovery backups from the removed profile
+migration system are not retained. User-created Storage documents remain user
+data and are never silently rewritten or deleted by runtime cleanup.
+
 Runtime session history and operational records that belong to one agent must live inside that same session root so cleanup can remove one agent's files without scanning or rewriting shared cross-agent history files. This includes persisted runtime events, turn records, process records, and the mutable runtime state snapshot.
 
 ```text
@@ -322,7 +323,7 @@ So the distinction is:
 
 - `workspace_root` = the writable sandbox boundary for the workspace
 - `runtime/` = runtime-local temporary and operational state, not the provider process cwd
-- `runtime/sessions/<runtime_session_id>/` = one physical agent session's mutable runtime records; a compatible Codex continuation child explicitly inherits its fenced lineage root's provider home
+- `runtime/sessions/<runtime_session_id>/` = one physical agent session's mutable runtime records and provider home; incompatible sessions require a new conversation rather than a continuation child
 
 The hosted tool factory therefore gives confined shell and managed-process
 capabilities the workspace-level `runtime/` root used for private scratch and

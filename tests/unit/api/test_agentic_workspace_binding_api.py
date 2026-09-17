@@ -52,9 +52,7 @@ class AgenticWorkspaceBindingApiTest(unittest.TestCase):
                 method="POST",
                 body={
                     "definition_id": binding.definition_id,
-                    "definition_revision": binding.definition_revision,
                     "binding_id": binding.binding_id,
-                    "expected_revision": binding.revision,
                     "credential_binding_id": None,
                     "enabled": True,
                     "is_default": True,
@@ -74,7 +72,7 @@ class AgenticWorkspaceBindingApiTest(unittest.TestCase):
             )
 
         self.assertEqual(status, "200 OK")
-        self.assertEqual(payload["binding_revision"], binding.revision + 1)
+        self.assertEqual(payload["binding_id"], binding.binding_id)
         saved = state.provider_store.get_workspace_agentic_profile_binding(binding.binding_id)
         self.assertEqual(saved.workspace_policy_ceiling.tool_handle_mode, "none")
         self.assertNotIn("secret_ref", json.dumps(payload, default=str))
@@ -87,7 +85,7 @@ class AgenticWorkspaceBindingApiTest(unittest.TestCase):
             status, payload = self.invoke(
                 "/api/providers/agentic/workspace-bindings",
                 method="POST",
-                body={"definition_id": "definition", "definition_revision": "1"},
+                body={"definition_id": "definition"},
             )
         self.assertEqual(status, "403 Forbidden")
         self.assertEqual(payload["error"], "provider_selection_forbidden")

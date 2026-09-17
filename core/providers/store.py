@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
 from core.providers.agentic_models import (
@@ -112,8 +112,6 @@ class ProviderStore(Protocol):
     def save_workspace_agentic_profile_binding(
         self,
         record: WorkspaceAgenticProfileBinding,
-        *,
-        expected_revision: int | None = None,
     ) -> WorkspaceAgenticProfileBinding:
         ...
 
@@ -137,8 +135,6 @@ class ProviderCollections:
     speech_selections: DocumentCollection | None = None
     agentic_profile_definitions: DocumentCollection | None = None
     workspace_agentic_profile_bindings: DocumentCollection | None = None
-    agentic_profile_definition_statuses: DocumentCollection | None = None
-    agentic_migrations: DocumentCollection | None = None
 
 
 class ProviderDocumentStore:
@@ -152,25 +148,6 @@ class ProviderDocumentStore:
         self._workspace_agentic_profile_bindings = (
             collections.workspace_agentic_profile_bindings or InMemoryCollection()
         )
-        self._agentic_profile_definition_statuses = (
-            collections.agentic_profile_definition_statuses or InMemoryCollection()
-        )
-        self._agentic_migrations = (
-            collections.agentic_migrations or InMemoryCollection()
-        )
-
-    def get_agentic_profile_definition_status(self, definition_id: str, revision: str = "") -> Any:
-        return None
-
-    def save_agentic_profile_definition_status(self, record: Any, *, expected_revision: Any = None) -> Any:
-        return record
-
-    def get_agentic_migration(self, migration_id: str) -> Any:
-        return None
-
-    def save_agentic_migration(self, record: Any) -> Any:
-        return record
-
     def _provider_definition(self, document: dict[str, Any]) -> ProviderDefinition:
         payload = dict(document)
         if "provider_role" not in payload:
@@ -318,8 +295,6 @@ class ProviderDocumentStore:
     def save_workspace_agentic_profile_binding(
         self,
         record: WorkspaceAgenticProfileBinding,
-        *,
-        expected_revision: int | None = None,
     ) -> WorkspaceAgenticProfileBinding:
         self._workspace_agentic_profile_bindings.update_one(
             {"binding_id": record.binding_id, "workspace_id": record.workspace_id},
@@ -360,23 +335,18 @@ def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefin
     payload["reasoning_efforts"] = tuple(payload.get("reasoning_efforts", ()))
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
-    valid_keys = {f.name for f in fields(AgenticProfileDefinition)}
-    sanitized = {k: v for k, v in payload.items() if k in valid_keys}
-    return AgenticProfileDefinition(**sanitized)
+    return AgenticProfileDefinition(**payload)
 
 
 def _workspace_agentic_profile_binding(document: dict[str, Any]) -> WorkspaceAgenticProfileBinding:
     payload = dict(document)
     payload["actor_policy"] = _actor_selection_policy(payload["actor_policy"])
     payload["workspace_policy_ceiling"] = _agentic_runtime_policy(payload["workspace_policy_ceiling"])
-    valid_keys = {f.name for f in fields(WorkspaceAgenticProfileBinding)}
-    sanitized = {k: v for k, v in payload.items() if k in valid_keys}
-    return WorkspaceAgenticProfileBinding(**sanitized)
+    return WorkspaceAgenticProfileBinding(**payload)
 
 
 def _agentic_runtime_policy(document: dict[str, Any]) -> AgenticRuntimePolicy:
     payload = dict(document)
-    payload.setdefault("allow_filesystem_list", False)
     for field_name in ("allowed_surface_kinds", "allowed_tool_handles", "allowed_remote_data_classes"):
         payload[field_name] = tuple(payload.get(field_name, ()))
     return AgenticRuntimePolicy(**payload)

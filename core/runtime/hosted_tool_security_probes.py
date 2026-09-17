@@ -211,7 +211,6 @@ def _filesystem_read_authority() -> RuntimeAuthority:
         allowed_tool_handles=("core-capability:filesystem.read",),
         execution_mode="full-access",
         egress_policy_id="security-probe-public",
-        policy_revision_set=("security-probe:1",),
         health_revision="security-probe-health:1",
         authority_digest="security-probe-authority",
         computed_at=_PROBE_TIME,

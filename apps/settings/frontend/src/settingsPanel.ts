@@ -17,7 +17,6 @@ import {
   selectedHostedProviderDraft
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
-import { deduplicateAgenticModels } from './agenticModelSelection';
 import {
   NO_WORKSPACE_ACTIONS_MESSAGE,
   executionFamily
@@ -77,7 +76,6 @@ export type SettingsPanelActions = {
   onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
   onSaveAgenticBinding: (
     definitionId: string,
-    definitionRevision: string,
     options?: { enabled?: boolean }
   ) => void;
   onSaveHostedProviderSettings: (modelId?: string) => void;
@@ -375,8 +373,7 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   document.querySelectorAll<HTMLButtonElement>('[data-agentic-binding-save]').forEach((button) => {
     button.addEventListener('click', () => {
       actions.onSaveAgenticBinding(
-        button.dataset.agenticDefinitionId || '',
-        button.dataset.agenticDefinitionRevision || ''
+        button.dataset.agenticDefinitionId || ''
       );
     });
   });
@@ -390,7 +387,6 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
       if (statusLabel) statusLabel.textContent = enable ? 'On' : 'Off';
       actions.onSaveAgenticBinding(
         toggle.dataset.agenticDefinitionId || '',
-        toggle.dataset.agenticDefinitionRevision || '',
         { enabled: enable }
       );
     });
@@ -452,7 +448,7 @@ function agenticRuntimeSettingsCardHtml(
   nativeAgents: NativeAgentStatus[]
 ) {
   const allItems = admin?.items || [];
-  const visibleItems = deduplicateAgenticModels(allItems);
+  const visibleItems = allItems;
   const releaseDecision = admin?.release_decision || 'GO';
   const nativeFamily = executionFamily('native_agent', projectedFamilies || admin?.execution_families);
   const maverickFamily = executionFamily('maverick_agent', projectedFamilies || admin?.execution_families);
@@ -470,7 +466,7 @@ function agenticRuntimeSettingsCardHtml(
   );
   return `<section class="settings-card settings-platform settings-agentic-runtimes-card">
     ${modelSettingsHeadingHtml('account_tree', 'Agent runtimes')}
-    <p class="settings-card-copy">Enable complete runtime profiles for new chats. Execution family and Full Workspace status are derived from server-owned contracts.</p>
+    <p class="settings-card-copy">Choose the provider and model available to new chats. Runtime health, credentials, permissions, and egress are checked directly.</p>
     ${releaseDecision === 'NO-GO' ? `<p class="settings-platform-error settings-agentic-no-go"><strong>Remote agentic release: NO-GO</strong><br>Remote profiles remain visible for containment review but cannot be enabled or selected.</p>` : ''}
     ${visibleItems.some((item) => item.runtime_engine_id === 'codex') ? `<div class="settings-models-toolbar">
       <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
@@ -526,7 +522,7 @@ function nativeAgentInstallationHtml(item: NativeAgentStatus) {
       </span>
       <span class="settings-agentic-summary-badges">
         <span class="settings-pill ${available ? 'is-healthy' : 'is-warning'}">${available ? 'Available' : escapeHtml(humanizeAgenticCode(reason))}</span>
-        <span class="settings-pill">Full Workspace · ${escapeHtml(item.full_workspace_status)}</span>
+        <span class="settings-pill">${escapeHtml(item.execution_family === 'native_agent' ? 'Native agent' : 'Agent runtime')}</span>
       </span>
     </summary>
     <div class="settings-model-content settings-agentic-runtime-content">
@@ -546,12 +542,11 @@ function nativeAgentMetadataHtml(item: NativeAgentStatus, selectedModelId?: stri
     .join(' · ');
   return `<dl class="settings-agentic-metadata settings-native-agent-metadata">
     ${metadataRowHtml('Installed / executable', `${item.installed ? 'yes' : 'no'} · ${item.executable_name || 'unavailable'}`)}
-    ${metadataRowHtml('Runtime / harness', `${item.runtime_version || 'unavailable'} · ${item.harness_recipe.id || 'unavailable'}@${item.harness_recipe.revision || 'unavailable'}`)}
+    ${metadataRowHtml('Runtime / adapter', `${item.runtime_version || 'unavailable'} · ${item.adapter.id}@${item.adapter.version}`)}
     ${metadataRowHtml('Native model / revision', `${model?.model_id || 'unavailable'} · ${model?.model_revision || model?.model_revision_policy || 'unavailable'}`)}
     ${metadataRowHtml('Integration protocol', `${item.protocol.kind} · ${item.protocol.id}${item.protocol.version ? `@${item.protocol.version}` : ''}`)}
     ${metadataRowHtml('Authentication', humanizeAgenticCode(item.authentication_status))}
     ${metadataRowHtml('Native health / update', `${health || 'unknown'} · ${update || 'unknown'}`)}
-    ${metadataRowHtml('Full Workspace', `${item.full_workspace_status} · ${item.full_workspace_contract_revision || 'revision unavailable'}`)}
     ${metadataRowHtml('Sandbox / approvals', `${item.effects.sandbox_policy_revision} · ${item.effects.approval_policy}`)}
     ${metadataRowHtml('Effect observation', `workspace confined ${item.effects.workspace_confined ? 'yes' : 'no'} · process supervised ${item.effects.process_tree_supervised ? 'yes' : 'no'} · structured events ${item.effects.structured_effect_events ? 'yes' : 'no'}`)}
     ${metadataRowHtml('Runtime contract / rollout', `${item.contract_state} · ${item.provider_status}`)}
@@ -563,7 +558,7 @@ function metadataRowHtml(label: string, value: string) {
 }
 
 function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelState) {
-  const key = `${item.definition_id}:${item.definition_revision}`;
+  const key = item.definition_id;
   const binding = item.binding;
   const policy = binding?.workspace_policy_ceiling || item.profile_policy_ceiling;
   const actor = binding?.actor_policy || {
@@ -600,12 +595,11 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       </span>
       <span class="settings-agentic-summary-badges">
         ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}
-        <span class="settings-pill ${item.full_workspace_status === 'available' ? 'is-healthy' : 'is-warning'}">Full Workspace · ${escapeHtml(item.full_workspace_status || 'unavailable')}</span>
+        <span class="settings-pill ${item.runtime_status === 'complete' ? 'is-healthy' : 'is-warning'}">Runtime · ${escapeHtml(item.runtime_status || 'unavailable')}</span>
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(unavailableReason))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
             data-agentic-definition-id="${escapeAttr(item.definition_id)}"
-            data-agentic-definition-revision="${escapeAttr(item.definition_revision)}"
             ${enabled ? 'checked' : ''} ${isSaving || (item.enable_eligible !== true && !enabled) ? 'disabled' : ''}>
           <span class="settings-bouncy-toggle__label">${enabled ? 'On' : 'Off'}</span>
           <span class="settings-bouncy-toggle__track" aria-hidden="true">
@@ -615,7 +609,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
         </label>
       </span>
     </summary>
-    <div class="settings-model-content settings-agentic-runtime-content" data-agentic-binding-form data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}">
+    <div class="settings-model-content settings-agentic-runtime-content" data-agentic-binding-form data-agentic-definition-id="${escapeAttr(item.definition_id)}">
       ${contained ? `<div class="settings-provider-usage-unavailable settings-agentic-containment-state">
         <span class="material-symbols-rounded" aria-hidden="true">block</span>
         <span>
@@ -624,7 +618,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
           <small>Data destination ${escapeHtml(item.data_destination.display_label)}</small>
           <small>Egress policy ${escapeHtml(item.egress_policy.policy_id)}@${escapeHtml(item.egress_policy.revision)} · Core-classified data ${escapeHtml(item.egress_policy.allowed_remote_data_classes.join(', ') || 'none')}</small>
           <small>Data policy collection=${escapeHtml(item.data_policy.collection)} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'} · attestation ${escapeHtml(item.data_policy.attestation_state)}</small>
-          <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))}</small>
+          <small>Workspace config ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Runtime ${escapeHtml(humanizeAgenticCode(item.runtime_status))}</small>
         </span>
       </div>` : ''}
       ${item.execution_family === 'native_agent' && item.native_runtime
@@ -657,7 +651,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
           </details>
         </div>
       </div>
-      <button type="button" data-agentic-binding-save data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}" ${isSaving || contained ? 'disabled' : ''}>
+      <button type="button" data-agentic-binding-save data-agentic-definition-id="${escapeAttr(item.definition_id)}" ${isSaving || contained ? 'disabled' : ''}>
         <span class="material-symbols-rounded" aria-hidden="true">${isSaving ? 'progress_activity' : 'verified_user'}</span>
         ${isSaving ? 'Saving binding' : binding ? 'Save binding' : 'Create binding'}
       </button>
@@ -667,7 +661,6 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
 }
 
 function agenticContractMetadataHtml(item: AgenticAdminItem) {
-  const recipe = item.harness_recipe;
   const upstream = item.upstream_provider_ids.join(', ') || 'direct';
   const quantization = item.routing_constraint.allowed_quantizations.join(', ') || 'provider default';
   const modelRevision = item.model_revision || item.model_revision_policy || 'provider alias';
@@ -678,10 +671,8 @@ function agenticContractMetadataHtml(item: AgenticAdminItem) {
     ${metadataRowHtml('Provider → model', `${item.model_provider_id} → ${item.model_id} · ${modelRevision}`)}
     ${metadataRowHtml('Endpoint / upstream', `${item.routing_constraint.endpoint_id} · ${upstream} · ${quantization}`)}
     ${metadataRowHtml('Adapter / protocol', `${item.adapter_id}${item.adapter_version_constraint} · ${item.provider_protocol}${item.provider_api_version ? `@${item.provider_api_version}` : ''}`)}
-    ${metadataRowHtml('Agent profile', `${item.definition_id}@${item.definition_revision} · ${item.profile_status}`)}
-    ${metadataRowHtml('Harness recipe', `${recipe.id || 'unavailable'}@${recipe.revision || 'unavailable'} · ${recipe.digest || 'digest unavailable'}`)}
+    ${metadataRowHtml('Runtime config', `${item.definition_id} · ${item.runtime_status}`)}
     ${metadataRowHtml('Reasoning modes / default', `${reasoningModes} · ${item.default_reasoning_effort || 'none'}`)}
-    ${metadataRowHtml('Full Workspace', `${item.full_workspace_status} · ${item.full_workspace_contract_revision || 'revision unavailable'}`)}
     ${metadataRowHtml('Data policy', `collection ${item.data_policy.collection} · retention ${item.data_policy.retention || 'provider contract'} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'}`)}
     ${metadataRowHtml('Context / output / cost', `${item.profile_policy_ceiling.max_input_tokens} / ${item.profile_policy_ceiling.max_output_tokens} tokens · ${item.profile_policy_ceiling.max_estimated_cost_microusd === null ? 'no profile cost ceiling' : `${item.profile_policy_ceiling.max_estimated_cost_microusd} µUSD`}`)}
     ${metadataRowHtml('Health / preflight', `${item.health} · ${item.live_preflight_status || 'unavailable'}${item.blocked_reason ? ` · ${humanizeAgenticCode(item.blocked_reason)}` : ''}`)}

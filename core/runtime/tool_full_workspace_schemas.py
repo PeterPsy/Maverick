@@ -1,4 +1,4 @@
-"""Reviewed JSON schemas for Full Workspace Core capabilities."""
+"""JSON schemas for workspace Core capabilities."""
 
 from __future__ import annotations
 

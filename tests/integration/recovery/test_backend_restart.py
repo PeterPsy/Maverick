@@ -520,7 +520,7 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
             if event.event_type == "runtime.recovery.resume_blocked"
         ]
         self.assertEqual(len(blocked), 1)
-        self.assertEqual(blocked[0].payload["blocked_reason"], "runtime_profile_upgrade_required")
+        self.assertEqual(blocked[0].payload["blocked_reason"], "runtime_session_restart_required")
         self.assertEqual(blocked[0].payload["detail_code"], "runtime_execution_binding_missing")
 
     def test_interrupted_recovery_resume_is_retried_with_visible_failure(self) -> None:

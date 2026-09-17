@@ -15,7 +15,6 @@ export function providerSupportsResearch(provider: ProviderItem | null | undefin
     provider?.provider_role !== "runtime_engine"
     || provider.status !== "active"
     || provider.selectable === false
-    || provider.full_workspace_status !== "available"
     || provider.agentic_effective_capabilities?.status !== "active"
     || provider.research_compatible !== true
   ) {

@@ -229,14 +229,6 @@ export type ExecutionFamilyDefinition = {
   workspace_actions: boolean;
 };
 
-export type AgenticHarnessRecipe = {
-  id: string | null;
-  revision: string | null;
-  digest: string | null;
-  provider_capability_catalog_digest?: string | null;
-  prompt_contract_revision?: string | null;
-};
-
 export type NativeAgentStatus = {
   runtime_engine_id: string;
   label: string;
@@ -251,7 +243,6 @@ export type NativeAgentStatus = {
   health_reason_codes: string[];
   update: { status: string; detail: string | null };
   adapter: { id: string; version: string; trusted_distribution: string };
-  harness_recipe: AgenticHarnessRecipe;
   protocol: { kind: string; id: string; version: string | null; event_schema: string };
   authentication_status: string;
   models: Array<{
@@ -269,8 +260,6 @@ export type NativeAgentStatus = {
     approval_policy: string;
   };
   contract_state: string;
-  full_workspace_status: 'available' | 'unavailable';
-  full_workspace_contract_revision: string | null;
   selectable: boolean;
   unavailable_reason: string | null;
 };
@@ -442,12 +431,6 @@ export type ProviderStatus = {
   blocked_detail?: string | null;
   available_providers?: ProviderItem[];
   native_agents?: { items: NativeAgentStatus[] } | null;
-  selection_migration?: {
-    schema_version: string;
-    mode: 'projection_only';
-    persisted_records_mutated: false;
-    pinned_sessions_rewritten: false;
-  };
 };
 
 export type AgenticRuntimePolicy = {
@@ -515,7 +498,6 @@ export type AgenticCredentialBinding = {
 
 export type AgenticAdminItem = {
   definition_id: string;
-  definition_revision: string;
   display_name: string;
   runtime_engine_id: string;
   model_provider_id: string;
@@ -529,12 +511,9 @@ export type AgenticAdminItem = {
   adapter_id: string;
   adapter_version_constraint: string;
   execution_family: 'native_agent' | 'maverick_agent' | null;
-  family_contract_status: string;
-  family_contract_reason: string | null;
-  harness_recipe: AgenticHarnessRecipe;
+  runtime_status: string;
+  runtime_status_reason: string | null;
   capabilities: Record<string, boolean | string[]>;
-  full_workspace_status: 'available' | 'unavailable';
-  full_workspace_contract_revision: string | null;
   native_runtime?: NativeAgentStatus | null;
   routing_constraint: {
     endpoint_id: string;
@@ -546,11 +525,9 @@ export type AgenticAdminItem = {
     allowed_quantizations: string[];
   };
   profile_policy_ceiling: AgenticRuntimePolicy;
-  rollout_status: string | null;
   credential_bindings: AgenticCredentialBinding[];
   binding: {
     binding_id: string;
-    revision: number;
     credential_binding_id: string | null;
     enabled: boolean;
     is_default: boolean;
@@ -570,7 +547,6 @@ export type AgenticAdminItem = {
   containment_status: 'GO' | 'NO-GO';
   containment_reason: string | null;
   binding_status: 'missing' | 'enabled' | 'disabled';
-  profile_status: string;
   effective_capabilities?: AgenticEffectiveCapabilities | null;
   upstream_provider_ids: string[];
   data_destination: {
@@ -812,15 +788,13 @@ export function configureSpeechProvider(payload: {
 
 export function configureAgenticWorkspaceBinding(payload: {
   definition_id: string;
-  definition_revision: string;
   binding_id?: string | null;
-  expected_revision?: number | null;
   credential_binding_id?: string | null;
   enabled: boolean;
   is_default: boolean;
   actor_policy: AgenticActorPolicy;
   policy_patch: Record<string, unknown>;
-}): Promise<{ binding_id: string; binding_revision: number; agentic_admin: AgenticAdminPayload }> {
+}): Promise<{ binding_id: string; agentic_admin: AgenticAdminPayload }> {
   return requestJson('/api/providers/agentic/workspace-bindings', {
     method: 'POST',
     body: JSON.stringify(payload)

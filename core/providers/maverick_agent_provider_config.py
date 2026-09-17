@@ -1,4 +1,4 @@
-"""Immutable endpoint, routing, and accounting data for Maverick Agents."""
+"""Endpoint, routing, and accounting data for Maverick Agents."""
 
 from __future__ import annotations
 
@@ -8,22 +8,16 @@ from urllib.parse import urlsplit
 
 from core.providers.agentic_models import RoutingConstraint
 from core.providers.errors import AgenticProfileError
-from core.runtime.execution_binding import canonical_digest
 
 
 @dataclass(frozen=True)
 class MaverickTokenCostPolicy:
-    """Versioned token pricing used for reservations and reported usage."""
+    """Token pricing used for reservations and reported usage."""
 
     policy_id: str
-    revision: str
     input_microusd_per_million_tokens: int
     output_microusd_per_million_tokens: int
     estimated_input_bytes_per_token: int = 3
-
-    @property
-    def digest(self) -> str:
-        return canonical_digest(self)
 
     def usage_cost_microusd(self, input_tokens: int, output_tokens: int) -> int:
         if not _nonnegative_int(input_tokens) or not _nonnegative_int(output_tokens):
@@ -63,7 +57,6 @@ class MaverickProviderConfig:
     """Endpoint, upstream, credential, and data policy for one provider."""
 
     config_id: str
-    revision: str
     model_provider_id: str
     provider_protocol: str
     provider_api_version: str | None
@@ -76,11 +69,6 @@ class MaverickProviderConfig:
     upstream_provider_names: tuple[str, ...] = ()
     resolved_model_ids: tuple[str, ...] = ()
 
-    @property
-    def digest(self) -> str:
-        return canonical_digest(self)
-
-
 def validate_maverick_provider_config(config: MaverickProviderConfig) -> None:
     """Reject incomplete routes, non-HTTPS endpoints, and invalid pricing."""
     if (
@@ -92,7 +80,6 @@ def validate_maverick_provider_config(config: MaverickProviderConfig) -> None:
     pricing = config.token_cost_policy
     identity_fields = (
         config.config_id,
-        config.revision,
         config.model_provider_id,
         config.provider_protocol,
         config.routing_constraint.endpoint_id,
@@ -101,7 +88,6 @@ def validate_maverick_provider_config(config: MaverickProviderConfig) -> None:
         config.data_destination,
         config.retention_policy,
         pricing.policy_id,
-        pricing.revision,
     )
     if any(
         not isinstance(value, str) or not value or value.strip() != value

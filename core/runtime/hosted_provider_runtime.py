@@ -14,7 +14,7 @@ from core.runtime.hosted_agentic_models import (
     HostedProviderStateInspector,
 )
 from core.runtime.hosted_context_management import HostedProviderStateCompactor
-from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
+from core.runtime.hosted_provider_model_config import HostedProviderModelConfig
 from core.runtime.remote_agentic_admission import (
     require_remote_agentic_runtime_availability,
 )
@@ -36,7 +36,7 @@ class HostedProviderRuntime:
     finalization_policy: HostedFinalizationPolicy
     credential_required: bool = True
     private_state_inspector: HostedProviderStateInspector | None = None
-    recipe: HostedHarnessRecipeManifest | None = None
+    model_config: HostedProviderModelConfig | None = None
     context_compactor: HostedProviderStateCompactor | None = None
     request_preflight: Callable[[object, object], object] | None = None
     endpoint_id: str = ""
@@ -56,16 +56,16 @@ class HostedProviderRuntimeRegistry:
 
     def register(self, runtime: HostedProviderRuntime) -> HostedProviderRuntime:
         identity = self._identity(runtime)
-        recipe = runtime.recipe
-        if recipe is not None:
+        model_config = runtime.model_config
+        if model_config is not None:
             if identity != (
-                recipe.model_provider_id,
-                recipe.provider_protocol,
-                recipe.provider_api_version,
+                model_config.model_provider_id,
+                model_config.provider_protocol,
+                model_config.provider_api_version,
             ):
-                raise ValueError("Hosted harness recipe provider identity is invalid.")
+                raise ValueError("Hosted model config provider identity is invalid.")
         candidates = self._runtimes.setdefault(identity, [])
-        if recipe is None and any(item.recipe is None for item in candidates):
+        if model_config is None and any(item.model_config is None for item in candidates):
             raise ValueError("Hosted provider runtime identity is already registered.")
         candidates.append(runtime)
         return runtime
@@ -81,14 +81,14 @@ class HostedProviderRuntimeRegistry:
         matching = [
             item
             for item in candidates
-            if item.recipe is None or item.recipe.model_id == binding.model_id
+            if item.model_config is None or item.model_config.model_id == binding.model_id
         ]
         runtime = matching[0] if len(matching) == 1 else None
         if runtime is None:
             raise HostedAgenticLoopError("provider_protocol_unavailable")
         if self._identity(runtime) != identity:
             raise HostedAgenticLoopError("provider_protocol_unavailable")
-        self._validate_recipe_binding(runtime, binding)
+        self._validate_model_config_binding(runtime, binding)
         return runtime
 
 
@@ -103,33 +103,33 @@ class HostedProviderRuntimeRegistry:
             for runtime in sorted(
                 self._runtimes[identity],
                 key=lambda item: (
-                    "" if item.recipe is None else item.recipe.model_id,
+                    "" if item.model_config is None else item.model_config.model_id,
                 ),
             )
         )
 
     @staticmethod
-    def _validate_recipe_binding(runtime: HostedProviderRuntime, binding) -> None:
-        recipe = runtime.recipe
-        if recipe is None:
+    def _validate_model_config_binding(runtime: HostedProviderRuntime, binding) -> None:
+        model_config = runtime.model_config
+        if model_config is None:
             return
         if (
-            binding.model_provider_id != recipe.model_provider_id
-            or binding.model_id != recipe.model_id
-            or binding.model_revision != recipe.model_revision
-            or binding.model_revision_policy != recipe.model_revision_policy
-            or binding.provider_protocol != recipe.provider_protocol
-            or binding.provider_api_version != recipe.provider_api_version
-            or binding.routing_constraint_snapshot.endpoint_id != recipe.endpoint_id
+            binding.model_provider_id != model_config.model_provider_id
+            or binding.model_id != model_config.model_id
+            or binding.model_revision != model_config.model_revision
+            or binding.model_revision_policy != model_config.model_revision_policy
+            or binding.provider_protocol != model_config.provider_protocol
+            or binding.provider_api_version != model_config.provider_api_version
+            or binding.routing_constraint_snapshot.endpoint_id != model_config.endpoint_id
             or tuple(binding.routing_constraint_snapshot.allowed_upstream_ids)
-            != recipe.upstream_ids
-            or runtime.endpoint_id != recipe.endpoint_id
-            or runtime.allowed_upstream_ids != recipe.upstream_ids
-            or binding.context_policy_snapshot != recipe.context_policy
+            != model_config.upstream_ids
+            or runtime.endpoint_id != model_config.endpoint_id
+            or runtime.allowed_upstream_ids != model_config.upstream_ids
+            or binding.context_policy_snapshot != model_config.context_policy
             or binding.reasoning_effort
-            not in recipe.support_flags.reasoning_efforts
-            or recipe.context_policy.max_request_input_tokens
-            > recipe.support_flags.input_token_limit
+            not in model_config.support_flags.reasoning_efforts
+            or model_config.context_policy.max_request_input_tokens
+            > model_config.support_flags.input_token_limit
         ):
             raise HostedAgenticLoopError("runtime_configuration_mismatch")
 

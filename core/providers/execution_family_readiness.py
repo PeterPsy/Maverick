@@ -11,6 +11,7 @@ from core.providers.execution_families import (
     effective_agentic_execution_family,
 )
 from core.providers.native_agent_catalog import native_agent_model_provider_connected
+from core.providers.native_agent_status import native_runtime_unavailable_reason
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,6 @@ def inspect_agentic_family_readiness(
 ) -> AgenticFamilyReadiness:
     """Check executable presence and direct provider/adapter compatibility."""
     family = effective_agentic_execution_family(
-        getattr(definition, "execution_family", "") or "",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=definition.adapter_id,
         model_provider_id=definition.model_provider_id,
@@ -77,15 +77,27 @@ def _native_readiness(*, definition, registry) -> AgenticFamilyReadiness:
             "incomplete",
             "native_agent_contract_incomplete",
         )
-    status = installation.inspector.inspect()
-    if status.availability != "installed" or status.health not in {
-        "healthy",
-        "degraded",
-    }:
+    try:
+        status = installation.inspector.inspect()
+    except Exception:
         return AgenticFamilyReadiness(
             NATIVE_AGENT_EXECUTION_FAMILY,
             "incomplete",
             "native_runtime_unavailable",
+        )
+    runtime_ready = status.availability == "installed" and status.health in {
+        "healthy", "degraded"
+    }
+    if not runtime_ready:
+        return AgenticFamilyReadiness(
+            NATIVE_AGENT_EXECUTION_FAMILY,
+            "incomplete",
+            native_runtime_unavailable_reason(
+                contract_complete=True,
+                runtime_ready=runtime_ready,
+                enabled=True,
+                status=status,
+            ),
         )
     return AgenticFamilyReadiness(NATIVE_AGENT_EXECUTION_FAMILY, "complete", None)
 

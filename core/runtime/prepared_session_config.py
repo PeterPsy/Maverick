@@ -62,14 +62,7 @@ def _resolved_execution_binding(binding: object | None) -> dict[str, object] | N
     if binding is None:
         return None
     return {
-        "profile_definition_id": _text(getattr(binding, "profile_definition_id", None)),
-        "profile_definition_revision": _text(
-            getattr(binding, "profile_definition_revision", None)
-        ),
         "workspace_binding_id": _text(getattr(binding, "workspace_binding_id", None)),
-        "workspace_binding_revision": getattr(
-            binding, "workspace_binding_revision", getattr(binding, "revision", None)
-        ),
         "runtime_engine_id": _text(getattr(binding, "runtime_engine_id", None)),
         "model_provider_id": _text(getattr(binding, "model_provider_id", None)),
         "model_id": _text(getattr(binding, "model_id", None)),

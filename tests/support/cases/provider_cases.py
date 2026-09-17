@@ -18,7 +18,6 @@ from core.providers.agentic_models import (
     codex_runtime_policy,
 )
 from core.providers.agentic_profiles import build_pinned_execution_binding
-from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.errors import ProviderCredentialBindingError, ProviderNotFoundError, ProviderSelectionError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_codex_config_policy import (
@@ -1378,14 +1377,10 @@ class ProvidersTestCase(unittest.TestCase):
         execution_binding = build_runtime_execution_binding(
             session_id="sess-credentialed",
             workspace_id="default",
-            profile_definition_id="profile-credentialed-fixture",
-            profile_definition_revision="1",
             workspace_binding_id="workspace-credentialed-fixture",
-            workspace_binding_revision=0,
             runtime_engine_id="credentialed",
             adapter_id=bridge.adapter_id,
             adapter_version=bridge.adapter_version,
-            adapter_identity_digest=runtime_adapter_identity_digest(bridge),
             model_provider_id="credentialed",
             model_id="credentialed",
             provider_protocol="legacy-runtime-backend",
@@ -1394,11 +1389,9 @@ class ProvidersTestCase(unittest.TestCase):
             credential_binding_id=selection.binding_id,
             reasoning_effort=None,
             reasoning_efforts=(),
-            default_reasoning_effort=None,
             capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
-            profile_policy_ceiling=policy,
-            workspace_policy_ceiling=policy,
+            runtime_policy=policy,
             egress_policy_id="local-runtime-no-remote-egress",
             egress_policy_revision="1",
             created_at=datetime.now(tz=UTC),

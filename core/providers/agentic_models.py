@@ -153,22 +153,6 @@ class AgenticProfileDefinition:
     context_policy: AgenticContextPolicy | None = None
     model_revision: str | None = None
     model_revision_policy: ModelRevisionPolicy = "provider_alias"
-    revision: str = "1"
-    execution_family: str = ""
-
-
-ProfileRolloutStatus = Literal["disabled", "preview", "available", "suspended"]
-
-
-@dataclass(frozen=True)
-class AgenticProfileDefinitionStatus:
-    """Rollout status record."""
-
-    definition_id: str
-    definition_revision: str
-    rollout_status: ProfileRolloutStatus
-    revision: int
-    updated_at: datetime
 
 
 @dataclass(frozen=True)
@@ -187,24 +171,6 @@ class WorkspaceAgenticProfileBinding:
     egress_policy_revision: str
     created_at: datetime
     updated_at: datetime
-    definition_revision: str = "1"
-    revision: int = 1
-
-
-@dataclass(frozen=True)
-class AgenticMigrationRecord:
-    """Migration journal record."""
-
-    migration_id: str
-    schema_version: str
-    status: Literal["started", "completed", "failed"]
-    profile_count: int = 0
-    binding_count: int = 0
-    session_count: int = 0
-    inferred_session_count: int = 0
-    summary_digest: str = ""
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
 
 
 def codex_runtime_policy() -> AgenticRuntimePolicy:

@@ -13,7 +13,7 @@ from core.providers.agentic_data_policies import (
     REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
 from core.providers.errors import AgenticProfileError, AgenticRuntimeError
-from core.recovery.continuation_admission import assess_runtime_session_admission
+from core.recovery.runtime_admission import assess_runtime_session_admission
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.agentic_feature_flags import (
@@ -54,14 +54,10 @@ def _remote_binding(*, provider_id: str, now: datetime):
     return build_runtime_execution_binding(
         session_id=f"session-{provider_id}",
         workspace_id="workspace-1",
-        profile_definition_id=f"profile-{provider_id}",
-        profile_definition_revision="candidate",
         workspace_binding_id=f"binding-{provider_id}",
-        workspace_binding_revision=1,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
         adapter_version="candidate",
-        adapter_identity_digest="b" * 64,
         model_provider_id=provider_id,
         model_id="fixture-model",
         model_revision="fixture-revision",
@@ -72,11 +68,9 @@ def _remote_binding(*, provider_id: str, now: datetime):
         credential_binding_id="credential-fixture",
         reasoning_effort="high",
         reasoning_efforts=("high",),
-        default_reasoning_effort="high",
         capabilities=codex_runtime_capabilities(),
         execution_mode="sandbox",
-        profile_policy_ceiling=codex_runtime_policy(),
-        workspace_policy_ceiling=codex_runtime_policy(),
+        runtime_policy=codex_runtime_policy(),
         egress_policy_id="fixture-egress",
         egress_policy_revision="1",
         created_at=now,
@@ -544,12 +538,10 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
                 runtime_store,
                 registry,
                 session=session,
-                target_session_id="continuation-revoked-target",
-                now=now,
                 workspace_store=_AttestationStore(revoked),
             )
 
-        self.assertEqual(assessment.status, "upgrade_required")
+        self.assertEqual(assessment.status, "restart_required")
         self.assertEqual(
             assessment.detail_code,
             "remote_agentic_attestation_revoked",

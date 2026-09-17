@@ -51,7 +51,7 @@ from core.providers.openrouter_agentic_transport import (
     OpenRouterAgenticHttpTransport,
 )
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
-from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
+from core.runtime.hosted_provider_model_config import HostedProviderModelConfig
 from core.runtime.hosted_provider_runtime import (
     HostedProviderRuntime,
     HostedProviderRuntimeRegistry,
@@ -96,14 +96,14 @@ def build_hosted_provider_runtime_registry(
 
 def _google_interactions_runtime(
     config: MaverickProviderConfig,
-    recipe: HostedHarnessRecipeManifest,
+    model_config: HostedProviderModelConfig,
 ) -> HostedProviderRuntime:
     return HostedProviderRuntime(
         model_provider_id=config.model_provider_id,
         provider_protocol=config.provider_protocol,
         provider_api_version=config.provider_api_version,
         client=GoogleInteractionsAgenticClient(
-            model_id=recipe.model_id,
+            model_id=model_config.model_id,
             state_mode="stateless",
             transport=GoogleInteractionsHttpTransport(
                 endpoint=config.endpoint_url,
@@ -121,12 +121,12 @@ def _google_interactions_runtime(
             content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
         ),
         cost_estimator=config.token_cost_policy.request_ceiling_microusd,
-        finalization_policy=provider_finalization_policy(config, recipe),
+        finalization_policy=provider_finalization_policy(config, model_config),
         private_state_inspector=lambda content: inspect_google_interaction_state(
             content,
             mode="stateless",
         ),
-        recipe=recipe,
+        model_config=model_config,
         context_compactor=compact_google_stateless_history,
         request_preflight=preflight_google_interactions_request,
         implementation_manifest=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
@@ -135,14 +135,14 @@ def _google_interactions_runtime(
 
 def _openrouter_chat_runtime(
     config: MaverickProviderConfig,
-    recipe: HostedHarnessRecipeManifest,
+    model_config: HostedProviderModelConfig,
 ) -> HostedProviderRuntime:
     return HostedProviderRuntime(
         model_provider_id=config.model_provider_id,
         provider_protocol=config.provider_protocol,
         provider_api_version=config.provider_api_version,
         client=OpenRouterAgenticClient(
-            model_id=recipe.model_id,
+            model_id=model_config.model_id,
             transport=OpenRouterAgenticHttpTransport(
                 endpoint=config.endpoint_url,
             ),
@@ -159,9 +159,9 @@ def _openrouter_chat_runtime(
             content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
         ),
         cost_estimator=config.token_cost_policy.request_ceiling_microusd,
-        finalization_policy=provider_finalization_policy(config, recipe),
+        finalization_policy=provider_finalization_policy(config, model_config),
         private_state_inspector=inspect_openrouter_chat_state,
-        recipe=recipe,
+        model_config=model_config,
         context_compactor=compact_openrouter_history,
         request_preflight=preflight_openrouter_completion_request,
         implementation_manifest=OPENROUTER_CHAT_PROTOCOL_ADAPTER,

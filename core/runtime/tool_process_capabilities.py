@@ -1,4 +1,4 @@
-"""Session-owned process capability surfaces for Full Workspace profiles."""
+"""Session-owned process capability surfaces."""
 
 from __future__ import annotations
 

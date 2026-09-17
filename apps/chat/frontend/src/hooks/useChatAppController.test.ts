@@ -76,35 +76,26 @@ describe("runtime admission status", () => {
   it("blocks unsafe and missing-thread sessions with actionable copy", () => {
     expect(runtimeAdmissionBlockMessage(session({
       runtime_admission: {
-        status: "upgrade_required",
-        reason_code: "runtime_profile_upgrade_required",
-        detail_code: "runtime_profile_upgrade_legacy_authority_unproven",
-        source_profile_revision: "2",
-        target_profile_revision: null,
-        provider_thread_available: true,
+        status: "restart_required",
+        reason_code: "runtime_session_restart_required",
+        detail_code: "runtime_binding_unavailable",
       },
-    }))).toContain("cannot be upgraded automatically");
+    }))).toContain("no longer usable");
     expect(runtimeAdmissionBlockMessage(session({
       runtime_admission: {
-        status: "provider_thread_missing",
-        reason_code: "runtime_profile_upgrade_required",
+        status: "restart_required",
+        reason_code: "runtime_session_restart_required",
         detail_code: "provider_thread_missing",
-        source_profile_revision: "5",
-        target_profile_revision: null,
-        provider_thread_available: false,
       },
     }))).toContain("provider conversation");
   });
 
-  it("keeps direct and compatible-upgrade sessions interactive", () => {
+  it("keeps directly admitted sessions interactive", () => {
     expect(runtimeAdmissionBlockMessage(session({
       runtime_admission: {
-        status: "compatible_upgrade",
-        reason_code: "runtime_profile_upgrade_compatible",
-        detail_code: "adapter_artifact_mismatch",
-        source_profile_revision: "5",
-        target_profile_revision: "7",
-        provider_thread_available: true,
+        status: "direct",
+        reason_code: null,
+        detail_code: null,
       },
     }))).toBeNull();
   });
@@ -215,7 +206,6 @@ describe("selectedProviderForSession", () => {
           workspace_binding_id: "binding-codex",
           model_id: "gpt-local",
           runtime_engine_id: "codex",
-          binding_digest: "codex-digest",
         },
       }),
       activeThread: thread("free"),
@@ -239,7 +229,6 @@ describe("selectedProviderForSession", () => {
           adapter_id: "codex-app-server",
           model_provider_id: "codex",
           provider_protocol: "codex-app-server-stdio",
-          binding_digest: "codex-digest",
         },
       }),
       activeThread: thread("free"),
@@ -271,19 +260,14 @@ describe("selectedProviderForSession", () => {
           model_provider_id: "openrouter",
           model_id: "z-ai/glm-5.3-flash",
           runtime_engine_id: "maverick-tool-loop",
-          binding_digest: "remote-digest",
         },
         agentic_containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
         agentic_governance: {
           display_name: "OpenRouter GLM 5.3 Flash · Relace FP4 · fake-data preview",
-          profile_definition_id: "profile-openrouter",
-          profile_definition_revision: "12",
           workspace_binding_id: "binding-remote",
-          workspace_binding_revision: 4,
           runtime_engine_id: "maverick-tool-loop",
           model_provider_id: "openrouter",
           model_id: "z-ai/glm-5.3-flash",
-          rollout_status: "suspended",
           containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
           data_destination: {
             provider_id: "openrouter",

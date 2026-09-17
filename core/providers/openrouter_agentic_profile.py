@@ -31,7 +31,7 @@ from core.providers.maverick_agent_onboarding import (
     validate_maverick_runtime_adapter,
 )
 from core.providers.store import ProviderStore
-from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
+from core.runtime.hosted_provider_model_config import OPENROUTER_HOSTED_MODEL_CONFIG
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-glm-5-3-flash-relace"
@@ -110,7 +110,7 @@ def openrouter_agentic_preview_publication(
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
-        display_name="OpenRouter GLM 5.3 Flash · Relace · Full Workspace",
+        display_name="OpenRouter GLM 5.3 Flash · Relace",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,
@@ -130,12 +130,12 @@ def openrouter_agentic_preview_publication(
         created_at=timestamp,
         egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
-        context_policy=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.context_policy,
+        context_policy=OPENROUTER_HOSTED_MODEL_CONFIG.context_policy,
     )
     return MaverickAgentProfilePublication(
         adapter=OPENROUTER_CHAT_PROTOCOL_ADAPTER,
         provider_config=OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
-        recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
+        model_config=OPENROUTER_HOSTED_MODEL_CONFIG,
         profile=definition,
     )
 
@@ -146,7 +146,7 @@ def ensure_openrouter_agentic_preview_profile(
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish a Full Workspace profile without enabling a binding."""
+    """Publish the current OpenRouter agentic model config without enabling it."""
     timestamp = now or datetime.now(tz=UTC)
     validate_maverick_runtime_adapter(OPENROUTER_CHAT_PROTOCOL_ADAPTER, adapter)
     return publish_maverick_agent_profile(

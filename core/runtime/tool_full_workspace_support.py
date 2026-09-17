@@ -1,4 +1,4 @@
-"""Shared support for reviewed Full Workspace capability surfaces."""
+"""Shared support for workspace capability surfaces."""
 
 from __future__ import annotations
 

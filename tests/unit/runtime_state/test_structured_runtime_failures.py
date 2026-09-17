@@ -38,14 +38,14 @@ class StructuredRuntimeFailureTest(unittest.TestCase):
         self.assertIn("cybersecurity policy", public_message)
         self.assertIn("Rephrase", public_message)
 
-    def test_profile_upgrade_failures_have_actionable_public_messages(self) -> None:
+    def test_session_restart_failures_have_actionable_public_messages(self) -> None:
         self.assertIn(
-            "older runtime profile",
+            "saved runtime adapter",
             runtime_failure_public_message("runtime_adapter_identity_mismatch"),
         )
         self.assertIn(
-            "compatible runtime-profile upgrade",
-            runtime_failure_public_message("runtime_profile_upgrade_required"),
+            "saved runtime configuration",
+            runtime_failure_public_message("runtime_session_restart_required"),
         )
 
     def test_raw_exception_text_cannot_become_a_public_reason_code(self) -> None:

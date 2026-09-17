@@ -260,14 +260,7 @@ export function useChatDependencies() {
   const loadInitialChatDependencies = useCallback(async () => {
     const [providerPayload, dependencies] = await Promise.all([listProviders(), getAppDependencies("chat").catch(() => null)]);
     const providerOptions = providerItemsFromPayload(providerPayload);
-    const projectedSelection = providerPayload.selection_migration?.records.find(
-      (record) => record.source_kind === "provider_selection",
-    ) || providerPayload.selection_migration?.records.find(
-      (record) => record.source_kind === "hosted_provider_selection",
-    );
-    const requestedProviderId = projectedSelection
-      ? projectedSelection.canonical_selection_id || ""
-      : providerPayload.active_provider?.provider_id || null;
+    const requestedProviderId = providerPayload.active_provider?.provider_id || null;
     setWorkspaceId(providerPayload.workspace_id || dependencies?.workspace_id || "");
     setProviders(providerOptions);
     setActiveProviderId(initialProviderSelectionId(requestedProviderId, providerOptions));

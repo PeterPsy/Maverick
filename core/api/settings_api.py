@@ -13,7 +13,6 @@ from core.api.provider_api import (
     workspace_provider_status,
 )
 from core.api.runtime_cleanup import RuntimeCleanupError, cleanup_runtime_session
-from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.api.session_api import RequestSession, public_user_payload, require_session
 from core.api.workspace_api import workspace_payload
 from core.authorization.errors import AuthorizationError
@@ -24,7 +23,6 @@ from core.authorization.service import (
 )
 from core.recovery.service import execute_session_restart, record_provider_health, record_runtime_health, recovery_status
 from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.continuation_lineage import runtime_session_lineage
 from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
 from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
@@ -255,25 +253,14 @@ def _clear_visible_runtime_sessions(state: PlatformState, context: RequestSessio
     results = []
     for session in sessions:
         try:
-            lineage = runtime_session_lineage(state.runtime_store, session)
-            if len(lineage) == 1:
-                cleanups = [
-                    cleanup_runtime_session(
-                        state,
-                        session_id=session.session_id,
-                        reason=reason,
-                        start_path=state.repository_root,
-                    )
-                ]
-            else:
-                batch = cleanup_runtime_sessions_batch(
+            cleanups = [
+                cleanup_runtime_session(
                     state,
-                    session_ids=[session.session_id],
-                    workspace_id=session.workspace_id,
+                    session_id=session.session_id,
                     reason=reason,
                     start_path=state.repository_root,
                 )
-                cleanups = batch["session_results"]
+            ]
         except (RuntimeCleanupError, ValueError) as error:
             return 500, {"error": str(error)}
         for cleanup in cleanups:

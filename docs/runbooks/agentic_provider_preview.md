@@ -1,96 +1,55 @@
 # OpenRouter GLM Agent Activation Runbook
 
-This runbook activates the direct OpenRouter GLM profile for new sessions.
-Google API activation is outside this runbook.
+This runbook activates the current OpenRouter GLM config for new sessions.
 
 ## Preconditions
 
-1. The backend is running the current source and reports healthy.
-2. The OpenRouter provider definition is active.
-3. A Core secret and provider credential binding exist for the workspace.
-4. `agentic-profile-openrouter-glm-5-3-flash-relace@1` is published with rollout
-   `available`.
-5. The workspace binding is enabled and its policy retains Full Workspace.
-6. The workspace data/egress policy permits the intended data classes.
-7. Provider and global hosted-agent feature flags are enabled.
+1. The backend is healthy and running the current source.
+2. OpenRouter is active and the workspace has a Core-managed credential binding.
+3. The direct `z-ai/glm-5.3-flash` workspace config is enabled.
+4. Hosted-agent feature flags, workspace execution policy and egress policy
+   permit the intended session.
 
-Do not expose or copy the OpenRouter key into shell output, app storage, browser
-state, logs or runtime events.
+Never expose the API key in shell output, workspace files, browser state, logs
+or runtime events.
 
 ## Read-only verification
 
 Inspect provider status and confirm:
 
-- execution family is `maverick_agent`;
-- model is `z-ai/glm-5.3-flash`;
-- Full Workspace status is `available`;
-- profile and workspace binding are enabled;
-- credential binding is present;
-- containment is `GO`;
-- live effective capabilities are `active`;
-- reasoning efforts are `max`, `high`, `low`;
-- endpoint/upstream and data destination match the profile.
+- family `maverick_agent`, runtime `maverick-tool-loop`;
+- model `z-ai/glm-5.3-flash` and reasoning `max`, `high`, `low`;
+- expected endpoint, Relace upstream and data destination;
+- enabled workspace config and credential binding;
+- healthy runtime, `GO` containment and active effective capabilities.
 
-A browser field is never sufficient authority. The server-owned `selectable` and
-effective-capability projection are decisive.
+These are direct runtime checks. There is no rollout revision, Full Workspace
+contract, harness digest or catalog certificate to renew.
 
 ## Activation
 
-Use the provider administration API/CLI to create or update the workspace
-binding with compare-and-set revision. Enable it for new sessions. Make it the
-workspace default only when explicitly intended; activation and default
-selection are separate operations.
+Use the provider administration surface to create or update the direct workspace
+binding. Enable it for new sessions and set it as default only when explicitly
+intended. A changed model or route updates the stable current config in place;
+it does not publish a new revision.
 
-Never rewrite existing runtime session bindings. New chats pin the current
-direct profile. Existing chats retain their immutable session pin and pass live
-policy checks on each turn.
-
-## Model and adapter updates
-
-Publish or reconcile a new immutable profile revision when model, adapter,
-routing or capability behavior changes. Keep prior revisions available to
-historical sessions. New sessions resolve the enabled current binding.
-
-The administration surface may show revision history. Chat groups rows by
-execution family/provider/model and renders only the configured default or the
-newest eligible revision. Do not delete historical bindings merely to clean the
-composer.
+Existing sessions keep their concrete execution inputs. If those inputs become
+incompatible, the session reports `runtime_session_restart_required` and the
+user starts a new conversation.
 
 ## Smoke test
 
-Create a new session selecting the OpenRouter workspace profile and `max`
-reasoning. Run a bounded task that requires:
-
-1. streamed assistant output;
-2. filesystem list/read;
-3. one write through the governed tool boundary;
-4. one CLI or MCP invocation;
-5. final answer and usage persistence.
-
-Verify that the session execution binding contains direct capability and
-reasoning snapshots, provider/model/route identity and no secret material.
-Verify that public events contain no raw provider-private history.
+Create a new OpenRouter session with `max` reasoning and run a bounded task that
+requires streamed output, filesystem read, one governed write and one CLI or MCP
+call. Verify final output and usage persistence, and verify that no credential or
+provider-private history appears in public events.
 
 ## Failure handling
 
-Stop activation if any of these occur:
+Stop activation for an authentication failure, unexpected route/upstream,
+unhealthy runtime, containment `NO-GO`, blocked tool/egress policy, leaked
+private data or non-terminal cancellation. Disable the workspace config to stop
+new work, correct the real dependency or policy, and repeat verification.
 
-- authentication failure or missing credential binding;
-- unexpected endpoint, model or upstream;
-- containment `NO-GO`;
-- Full Workspace/profile family incomplete;
-- effective authority blocked;
-- request/tool journal mismatch;
-- unclassified or unauthorized tool effect;
-- leaked secret, host path or provider-private payload;
-- cancellation/recovery cannot reach a deterministic terminal state.
-
-Disable the workspace binding or provider feature flag to stop new work. Fix the
-profile, adapter, provider config, credentials or live policy that failed, then
-repeat the read-only verification and smoke test.
-
-## Codex stability
-
-OpenRouter changes must not restart Codex, rewrite Codex bindings or alter Codex
-session history. Codex model/catalog changes follow normal profile
-reconciliation and are tested independently.
+OpenRouter changes must not rewrite Codex config or session history. Codex
+discovery retains its last usable catalog when a refresh fails.

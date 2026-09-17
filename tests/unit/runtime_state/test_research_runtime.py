@@ -110,7 +110,6 @@ class ResearchRuntimeTest(unittest.TestCase):
         binding = replace(
             harness.binding,
             runtime_engine_id="maverick-tool-loop",
-            execution_family="maverick_agent",
         )
         validate_research_authority(
             binding,
@@ -130,7 +129,6 @@ class ResearchRuntimeTest(unittest.TestCase):
             adapter_id="codex-app-server",
             model_provider_id="codex",
             provider_protocol="codex-app-server-stdio",
-            execution_family="native_agent",
         )
         authority = isolate_research_authority(
             harness.authority,

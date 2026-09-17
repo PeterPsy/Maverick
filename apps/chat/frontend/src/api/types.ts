@@ -77,22 +77,10 @@ export type AgenticEffectiveCapabilities = {
 
 export type AgenticSessionGovernance = {
   display_name: string | null;
-  profile_definition_id: string;
-  profile_definition_revision: string;
   workspace_binding_id: string;
-  workspace_binding_revision: number;
   runtime_engine_id: string;
-  execution_family?: "native_agent" | "maverick_agent" | null;
-  execution_family_projection?: {
-    stored_value: string | null;
-    legacy_identity_projected: boolean;
-  };
-  full_workspace_status?: "available" | "unavailable";
-  full_workspace_contract_revision?: string | null;
-  harness_recipe?: AgenticHarnessRecipe;
   model_provider_id: string;
   model_id: string;
-  rollout_status: string | null;
   containment: {
     status: "GO" | "NO-GO";
     reason_code: string | null;
@@ -117,7 +105,6 @@ export type ProviderItem = {
   hosted_provider_id?: string;
   hosted_model_id?: string;
   workspace_profile_binding_id?: string;
-  agentic_rollout_status?: string | null;
   agentic_egress_policy_id?: string | null;
   agentic_allowed_tool_handles?: string[];
   agentic_tool_handle_mode?: "none" | "exact" | "all_currently_authorized";
@@ -140,13 +127,9 @@ export type ProviderItem = {
   execution_family_order?: number;
   selectable?: boolean;
   unavailable_reason?: string | null;
-  full_workspace_status?: "available" | "unavailable";
-  full_workspace_contract_revision?: string | null;
-  harness_recipe?: AgenticHarnessRecipe | null;
   research_compatible?: boolean;
   provider_detail?: string | null;
   profile_detail?: string | null;
-  legacy_selection_ids?: string[];
   hosted_text_profile?: HostedTextProfileItem | null;
 };
 
@@ -157,13 +140,6 @@ export type ExecutionFamilyItem = {
   label: string;
   description: string;
   workspace_actions: boolean;
-};
-
-export type AgenticHarnessRecipe = {
-  id?: string | null;
-  revision?: string | null;
-  digest?: string | null;
-  provider_capability_catalog_digest?: string | null;
 };
 
 export type HostedTextProfileItem = {
@@ -212,7 +188,6 @@ export type NativeAgentItem = {
   health_reason_codes: string[];
   update: { status: string; detail: string | null };
   adapter: { id: string; version: string; trusted_distribution: string };
-  harness_recipe: AgenticHarnessRecipe;
   protocol: { kind: string; id: string; version: string | null; event_schema: string };
   authentication_status: string;
   models: Array<{
@@ -230,8 +205,6 @@ export type NativeAgentItem = {
     approval_policy: string;
   };
   contract_state: string;
-  full_workspace_status: "available" | "unavailable";
-  full_workspace_contract_revision: string | null;
   selectable: boolean;
   unavailable_reason: string | null;
 };
@@ -301,26 +274,11 @@ export type ProviderPayload = {
     items: AgenticProfileItem[];
   } | null;
   native_agents?: { items: NativeAgentItem[] } | null;
-  selection_migration?: {
-    schema_version: string;
-    mode: "projection_only";
-    persisted_records_mutated: false;
-    pinned_sessions_rewritten: false;
-    records: Array<{
-      source_kind: string;
-      source_profile: string;
-      source_id: string;
-      execution_family: ExecutionFamilyId | null;
-      canonical_selection_id: string | null;
-      storage_action: "preserved";
-    }>;
-  };
 };
 
 export type AgenticProfileItem = {
   workspace_profile_binding_id: string;
   definition_id: string;
-  definition_revision: string;
   display_name: string;
   runtime_engine_id: string;
   model_provider_id: string;
@@ -329,18 +287,14 @@ export type AgenticProfileItem = {
   model_revision_policy?: string;
   default_reasoning_effort?: string | null;
   supported_reasoning_efforts?: ProviderReasoningOption[];
-  rollout_status: string | null;
   enabled: boolean;
   is_default: boolean;
   selectable?: boolean;
   unavailable_reason?: string | null;
   execution_family?: "native_agent" | "maverick_agent" | null;
-  family_contract_status?: string;
-  family_contract_reason?: string | null;
+  runtime_status?: string;
+  runtime_status_reason?: string | null;
   capabilities?: AgenticEffectiveCapabilities["capabilities"];
-  full_workspace_status?: "available" | "unavailable";
-  full_workspace_contract_revision?: string | null;
-  harness_recipe?: AgenticHarnessRecipe;
   containment_status?: "GO" | "NO-GO";
   containment_reason?: string | null;
   provider_protocol?: string;
@@ -626,10 +580,7 @@ export type RuntimeSession = {
   skill_activation_mode?: "implicit" | "explicit" | string;
   provider_id?: string;
   execution_binding?: {
-    profile_definition_id?: string;
-    profile_definition_revision?: string;
     workspace_binding_id: string;
-    workspace_binding_revision?: number;
     reasoning_efforts?: string[];
     default_reasoning_effort?: string | null;
     capabilities?: AgenticEffectiveCapabilities["capabilities"];
@@ -642,7 +593,6 @@ export type RuntimeSession = {
     provider_protocol?: string;
     provider_api_version?: string | null;
     egress_policy_id?: string;
-    binding_digest: string;
   } | null;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;
@@ -657,9 +607,6 @@ export type RuntimeSession = {
     reason_code: string | null;
   } | null;
   agentic_governance?: AgenticSessionGovernance | null;
-  predecessor_session_id?: string | null;
-  lineage_root_session_id?: string | null;
-  continuation_successor_session_id?: string | null;
   runtime_admission?: RuntimeAdmission | null;
   device_use_enabled?: boolean;
   device_use?: DeviceUseActivation | null;
@@ -679,12 +626,10 @@ export type DeviceUseActivation = {
 };
 
 export type RuntimeAdmission = {
-  status: "direct" | "compatible_upgrade" | "upgrade_required" | "provider_thread_missing";
+  status: "direct" | "restart_required";
   reason_code: string | null;
   detail_code: string | null;
-  source_profile_revision: string | null;
-  target_profile_revision: string | null;
-  provider_thread_available: boolean;
+  model_id?: string | null;
 };
 
 export type RuntimeTurn = {
@@ -775,8 +720,6 @@ export type RuntimeWebSocketFrame =
       oldest_event_id?: string | null;
       usage?: ChatUsageSummary | null;
       runtime_admission?: RuntimeAdmission | null;
-      requested_session_id?: string | null;
-      lineage_session_ids?: string[];
     }
   | {
       type: "runtime.history.page";

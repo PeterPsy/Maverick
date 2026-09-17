@@ -34,7 +34,7 @@ from core.providers.openrouter_agentic_state import (
     inspect_openrouter_chat_state,
 )
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
-from core.recovery.continuation_fork import admit_runtime_session
+from core.recovery.runtime_admission import admit_runtime_session
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
@@ -424,7 +424,7 @@ class HostedAgenticRecoveryPairingTest(unittest.TestCase):
         )
 
         with patch(
-            "core.recovery.continuation_fork.recover_hosted_agentic_session",
+            "core.recovery.runtime_admission.recover_hosted_agentic_session",
             side_effect=_StartupSentinel("pre-admission recovery invoked"),
         ) as admission_recovery:
             with self.assertRaisesRegex(

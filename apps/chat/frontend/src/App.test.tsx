@@ -864,7 +864,6 @@ describe("App thread navigation", () => {
           model_provider_id: "codex",
           provider_protocol: "codex-app-server-stdio",
           model_id: "gpt-5.6-sol",
-          binding_digest: "exact-codex-binding",
         },
       }),
       thread: createdThread,

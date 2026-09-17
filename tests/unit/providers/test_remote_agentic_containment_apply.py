@@ -13,7 +13,6 @@ from core.providers.agentic_containment import (
     RemoteAgenticContainmentApplyError,
     run_remote_agentic_containment,
 )
-from core.providers.errors import AgenticProfileConflictError
 from core.runtime.errors import RuntimeTransitionError
 from tests.support.collections import FakeCollection
 from tests.support.remote_agentic_containment_fixture import (
@@ -23,75 +22,6 @@ from tests.support.remote_agentic_containment_fixture import (
 
 
 class RemoteAgenticContainmentApplyTest(RemoteAgenticContainmentFixture, unittest.TestCase):
-    def test_partial_apply_failure_is_audited_and_requires_new_review(self) -> None:
-        audit_collection = FakeCollection()
-        observability_store = ObservabilityDocumentStore(
-            ObservabilityCollections(
-                events=FakeCollection(),
-                audit=audit_collection,
-                metrics=FakeCollection(),
-            )
-        )
-        reviewed = run_remote_agentic_containment(
-            self.provider_store,
-            self.runtime_store,
-            mode="dry_run",
-            now=NOW,
-        )
-
-        with patch.object(
-            self.provider_store,
-            "save_agentic_profile_definition_status",
-            side_effect=AgenticProfileConflictError("profile_status_revision_conflict"),
-        ), self.assertRaises(RemoteAgenticContainmentApplyError) as raised:
-            run_remote_agentic_containment(
-                self.provider_store,
-                self.runtime_store,
-                mode="apply",
-                expected_plan_digest=reviewed.plan_digest,
-                now=NOW + timedelta(minutes=1),
-                observability_store=observability_store,
-            )
-
-        binding = self.provider_store.get_workspace_agentic_profile_binding(
-            self.remote_binding.binding_id
-        )
-        profile_status = self.provider_store.get_agentic_profile_definition_status(
-            self.remote_definition.definition_id,
-            self.remote_definition.revision,
-        )
-        session = self.runtime_store.get_session(self.remote_session.session_id)
-        self.assertFalse(binding.enabled)
-        self.assertEqual(profile_status.rollout_status, "preview")
-        self.assertEqual(session.status, "running")
-        self.assertEqual(
-            raised.exception.reason_code,
-            "remote_agentic_containment_apply_failed_new_review_required",
-        )
-        self.assertFalse(raised.exception.safe_to_retry)
-        self.assertTrue(raised.exception.requires_new_dry_run)
-        audits = observability_store.list_audit(source_domain="providers")
-        self.assertEqual(len(audits), 1)
-        audit = audits[0]
-        self.assertEqual(audit.status, "failed")
-        self.assertEqual(audit.action, "provider.remote_agentic_containment.apply")
-        self.assertEqual(
-            audit.payload,
-            {
-                "plan_digest": reviewed.plan_digest,
-                "bindings_disabled": 1,
-                "profiles_suspended": 0,
-                "sessions_quarantined": 0,
-                "partial_apply": True,
-                "safe_to_retry": False,
-                "requires_new_dry_run": True,
-                "requires_post_apply_verification": False,
-                "failure_code": "provider_record_cas_conflict",
-                "failure_stage": "profile",
-                "failed_target_digest": reviewed.profile_targets[0].target_digest,
-            },
-        )
-
     def test_operator_cli_dry_run_is_read_only_and_apply_requires_review_token(self) -> None:
         commands = {
             definition.command_id: (definition, handler)
@@ -179,7 +109,6 @@ class RemoteAgenticContainmentApplyTest(RemoteAgenticContainmentFixture, unittes
             reviewed.session_targets[0].target_digest,
         )
         self.assertEqual(audit.payload["bindings_disabled"], 1)
-        self.assertEqual(audit.payload["profiles_suspended"], 1)
         self.assertEqual(audit.payload["sessions_quarantined"], 0)
         self.assertTrue(audit.payload["partial_apply"])
         self.assertFalse(audit.payload["safe_to_retry"])

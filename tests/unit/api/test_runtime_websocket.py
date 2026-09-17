@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
 
 from core.api.runtime_websocket import (
     initial_runtime_event_page,
-    lineage_runtime_event_page,
-    stream_runtime_session_events,
     turn_anchored_runtime_event_page,
 )
-from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeEventPage
@@ -89,119 +83,6 @@ class RuntimeWebSocketReplayPagingTestCase(unittest.TestCase):
 
         self.assertEqual([event.event_id for event in page.events], ["event-1", "event-2"])
         self.assertEqual(page.oldest_event_id, "event-1")
-
-    def test_lineage_initial_page_reads_only_the_bounded_recent_tail(self) -> None:
-        predecessor = type(
-            "Session",
-            (),
-            {
-                "session_id": "session-1",
-                "predecessor_session_id": None,
-                "continuation_successor_session_id": "session-2",
-                "workspace_id": "default",
-            },
-        )()
-        successor = type(
-            "Session",
-            (),
-            {
-                "session_id": "session-2",
-                "predecessor_session_id": "session-1",
-                "continuation_successor_session_id": None,
-                "workspace_id": "default",
-            },
-        )()
-        state = _state_with_events(
-            [
-                _event("old-0", 0, "runtime.turn.queued", turn_id="old-turn"),
-                _event("old-1", 1, "runtime.turn.completed", turn_id="old-turn"),
-                _event(
-                    "new-0",
-                    2,
-                    "runtime.turn.queued",
-                    turn_id="new-turn",
-                    session_id="session-2",
-                ),
-                _event(
-                    "new-1",
-                    3,
-                    "runtime.turn.completed",
-                    turn_id="new-turn",
-                    session_id="session-2",
-                ),
-            ],
-            sessions=[predecessor, successor],
-        )
-
-        page = lineage_runtime_event_page(
-            state,
-            successor,
-            before_event_id=None,
-            limit=2,
-        )
-
-        self.assertEqual([event.event_id for event in page.events], ["new-0", "new-1"])
-        self.assertTrue(page.has_more_before)
-        self.assertEqual(state.runtime_store.page_calls, [("session-2", None, 2)])
-
-
-class RuntimeWebSocketSchedulingTestCase(unittest.IsolatedAsyncioTestCase):
-    async def test_heartbeat_does_not_cancel_the_pending_client_receive(self) -> None:
-        session = _runtime_session()
-        state = SimpleNamespace(
-            provider_registry=object(),
-            provider_store=object(),
-            runtime_event_bus=RuntimeEventBus(),
-            runtime_store=_RuntimeStore([], [session]),
-            usage_store=None,
-        )
-        context = SimpleNamespace(
-            workspace_id="default",
-            user=SimpleNamespace(user_id="user-a"),
-        )
-        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
-        await receive_queue.put({"type": "websocket.connect"})
-        heartbeat_sent = asyncio.Event()
-        receive_cancellations = 0
-
-        async def receive() -> dict:
-            nonlocal receive_cancellations
-            try:
-                return await receive_queue.get()
-            except asyncio.CancelledError:
-                receive_cancellations += 1
-                raise
-
-        async def send(message: dict) -> None:
-            if "runtime.heartbeat" in str(message.get("text") or ""):
-                heartbeat_sent.set()
-
-        with (
-            patch("core.api.runtime_websocket.resolve_request_session", return_value=context),
-            patch("core.api.runtime_websocket.resolve_latest_runtime_session", return_value=session),
-            patch("core.api.runtime_websocket.runtime_session_lineage", return_value=[session]),
-            patch("core.api.runtime_websocket.runtime_session_admission_payload", return_value={}),
-        ):
-            stream_task = asyncio.create_task(
-                stream_runtime_session_events(
-                    state=state,
-                    scope={
-                        "type": "websocket",
-                        "path": f"/ws/runtime/sessions/{session.session_id}",
-                        "headers": [],
-                        "query_string": b"",
-                    },
-                    receive=receive,
-                    send=send,
-                    heartbeat_interval_seconds=0.01,
-                )
-            )
-            await asyncio.wait_for(heartbeat_sent.wait(), timeout=1)
-            cancellations_before_disconnect = receive_cancellations
-            await receive_queue.put({"type": "websocket.disconnect"})
-            await asyncio.wait_for(stream_task, timeout=1)
-
-        self.assertEqual(cancellations_before_disconnect, 0)
 
 
 class _RuntimeStore:

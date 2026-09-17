@@ -58,7 +58,7 @@ const providerOptions: ProviderItem[] = [
     execution_family: "maverick_agent",
     selectable: true,
     provider_detail: "Provider: Google AI Studio · Destination: Google AI Studio API",
-    profile_detail: "Profile: google@1 · Recipe: google@1 · Full Workspace: codex-baseline-v20",
+    profile_detail: "Runtime: maverick-tool-loop · google-ai-studio/gemini-3.6-flash",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "high", label: "High", description: null },
@@ -74,7 +74,7 @@ const providerOptions: ProviderItem[] = [
     execution_family: "maverick_agent",
     selectable: true,
     provider_detail: "Provider: OpenRouter · Destination: OpenRouter via Relace FP4",
-    profile_detail: "Profile: openrouter@1 · Recipe: openrouter@1 · Full Workspace: codex-baseline-v20",
+    profile_detail: "Runtime: maverick-tool-loop · openrouter/z-ai/glm-5.3-flash",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "xhigh", label: "Extra high", description: null },
@@ -279,7 +279,7 @@ describe("ProviderSelector", () => {
       "API models without workspace tools or an action loop. They generate text from the context provided by Maverick but cannot perform workspace actions.",
     ]);
     expect(googleOption.textContent).toContain("Destination: Google AI Studio API");
-    expect(googleOption.textContent).toContain("Full Workspace: codex-baseline-v20");
+    expect(googleOption.textContent).toContain("google-ai-studio/gemini-3.6-flash");
     expect(element.textContent).toContain("No workspace tools or actions.");
   });
 

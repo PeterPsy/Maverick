@@ -25,7 +25,6 @@ from core.api.provider_api import (
     workspace_provider_status,
 )
 from core.api.runtime_cleanup import cleanup_runtime_session
-from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.api.runtime_tool_confirmation_api import handle_runtime_tool_confirmation
 from core.api.session_api import RequestSession, require_session
 from core.api.runtime_thread_delete_api import (
@@ -56,16 +55,10 @@ from core.providers.hosted_text_profiles import (
     pin_hosted_text_execution_binding,
 )
 from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
-from core.recovery.continuation_admission import runtime_session_admission_payload
-from core.recovery.continuation_fork import admit_runtime_session
-from core.runtime.continuation_lineage import (
-    resolve_latest_runtime_session,
-    runtime_lineage_events,
-    runtime_lineage_turns,
-    runtime_session_lineage,
-)
+from core.recovery.runtime_admission import runtime_session_admission_payload
+from core.recovery.runtime_admission import admit_runtime_session
 from core.runtime.errors import (
-    RuntimeProfileUpgradeRequiredError,
+    RuntimeSessionRestartRequiredError,
     RuntimeSessionHiddenError,
     RuntimeSessionNotFoundError,
     RuntimeThreadNotFoundError,
@@ -332,7 +325,7 @@ def _reconciled_session(state: PlatformState, session: RuntimeSessionRecord, *, 
 
 
 def _visibility_reconciled_session(state: PlatformState, session: RuntimeSessionRecord) -> RuntimeSessionRecord:
-    session = resolve_latest_runtime_session(state.runtime_store, session)
+    session = state.runtime_store.get_session(session.session_id)
     if runtime_session_allows_user_thread(session):
         return session
     promoted = promote_hidden_chat_root_session_with_turns(
@@ -578,23 +571,19 @@ def _turn_for_client_message(
     )
 
 
-def _turn_for_lineage_client_message(
+def _turn_for_session_client_message(
     state: PlatformState,
     *,
     session: RuntimeSessionRecord,
     client_message_id: str | None,
 ) -> RuntimeTurnRecord | None:
-    """Resolve one client retry across immutable continuation sessions."""
-    for lineage_session in reversed(runtime_session_lineage(state.runtime_store, session)):
-        turn = _turn_for_client_message(
-            state,
-            workspace_id=session.workspace_id,
-            session_id=lineage_session.session_id,
-            client_message_id=client_message_id,
-        )
-        if turn is not None:
-            return turn
-    return None
+    """Resolve one idempotent client retry in its persisted session."""
+    return _turn_for_client_message(
+        state,
+        workspace_id=session.workspace_id,
+        session_id=session.session_id,
+        client_message_id=client_message_id,
+    )
 
 
 def _claim_client_message_for_new_session(
@@ -1910,17 +1899,11 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
     _reconciled_session(state, session, start_path=start_path)
     query = parse_qs(query_string, keep_blank_values=False)
     limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=5000)
-    lineage = runtime_session_lineage(state.runtime_store, session)
-    if len(lineage) == 1:
-        events = (
-            state.runtime_store.list_recent_events(session.session_id, limit=limit)
-            if limit is not None
-            else state.runtime_store.list_events(session.session_id)
-        )
-    else:
-        events = runtime_lineage_events(state.runtime_store, session)
-        if limit is not None:
-            events = events[-limit:]
+    events = (
+        state.runtime_store.list_recent_events(session.session_id, limit=limit)
+        if limit is not None
+        else state.runtime_store.list_events(session.session_id)
+    )
     return json_response(
         start_response,
         {"items": [_event_payload(event) for event in events]},
@@ -1999,10 +1982,9 @@ def _handle_session_turns(
                 session = admit_runtime_session(
                     state,
                     session=session,
-                    allow_compatible_fork=False,
                 ).session
-            except RuntimeProfileUpgradeRequiredError as error:
-                return _runtime_profile_upgrade_response(start_response, error)
+            except RuntimeSessionRestartRequiredError as error:
+                return _runtime_session_restart_response(start_response, error)
             draft, validation_response = (
                 _finalize_runtime_turn_submission_for_admitted_session(
                     state,
@@ -2031,7 +2013,7 @@ def _handle_session_turns(
     if method == "GET":
         return json_response(
             start_response,
-            {"items": [_turn_payload(turn) for turn in runtime_lineage_turns(state.runtime_store, session)]},
+            {"items": [_turn_payload(turn) for turn in state.runtime_store.list_turns(session.session_id)]},
         )
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
@@ -2228,10 +2210,9 @@ def _handle_session_prewarm(
         admission = admit_runtime_session(
             state,
             session=session,
-            allow_compatible_fork=runtime_session_allows_user_thread(session),
         )
-    except RuntimeProfileUpgradeRequiredError as error:
-        return _runtime_profile_upgrade_response(start_response, error)
+    except RuntimeSessionRestartRequiredError as error:
+        return _runtime_session_restart_response(start_response, error)
     session = admission.session
     prewarm_result = _prewarm_new_runtime_session(
         state,
@@ -2298,9 +2279,9 @@ def _submit_runtime_turn_response(
         return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
     try:
         admission = admit_runtime_session(state, session=session)
-    except RuntimeProfileUpgradeRequiredError as error:
+    except RuntimeSessionRestartRequiredError as error:
         _release_client_message_claim(state, release_claim_on_failure)
-        return _runtime_profile_upgrade_response(start_response, error)
+        return _runtime_session_restart_response(start_response, error)
     session = admission.session
     draft, validation_response = _finalize_runtime_turn_submission_for_admitted_session(
         state,
@@ -2341,26 +2322,26 @@ def _submit_runtime_turn_response(
         )
 
 
-def _runtime_profile_upgrade_response(
+def _runtime_session_restart_response(
     start_response: StartResponse,
-    error: RuntimeProfileUpgradeRequiredError,
+    error: RuntimeSessionRestartRequiredError,
 ) -> list[bytes]:
     return json_response(
         start_response,
         {
-            "error": "runtime_profile_upgrade_required",
+            "error": "runtime_session_restart_required",
             "detail_code": error.detail_code,
             "admission_status": (
                 "provider_thread_missing"
                 if error.detail_code
                 in {"provider_thread_missing", "runtime_provider_state_missing"}
-                else "upgrade_required"
+                else "restart_required"
             ),
             "detail": runtime_failure_public_message(
                 "provider_thread_missing"
                 if error.detail_code
                 in {"provider_thread_missing", "runtime_provider_state_missing"}
-                else "runtime_profile_upgrade_required"
+                else "runtime_session_restart_required"
             ),
         },
         status="409 Conflict",
@@ -2487,7 +2468,7 @@ def _prepare_runtime_turn_submission(
         _release_client_message_claim(state, release_claim_on_failure)
         return None, json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
     client_message_id = str(body.get("client_message_id") or "").strip() or None
-    existing_turn = _turn_for_lineage_client_message(
+    existing_turn = _turn_for_session_client_message(
         state,
         session=session,
         client_message_id=client_message_id,
@@ -2863,38 +2844,12 @@ def _handle_session_cleanup(
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     reason = str(body.get("reason") or "").strip() or "runtime_session_cleaned"
-    lineage = runtime_session_lineage(state.runtime_store, session)
-    if len(lineage) == 1:
-        result = cleanup_runtime_session(
-            state,
-            session_id=session.session_id,
-            reason=reason,
-            start_path=start_path,
-        )
-    else:
-        batch = cleanup_runtime_sessions_batch(
-            state,
-            session_ids=[session.session_id],
-            workspace_id=session.workspace_id,
-            reason=reason,
-            start_path=start_path,
-        )
-        current_result = next(
-            (
-                item
-                for item in batch["session_results"]
-                if item.get("session_id") == session.session_id
-            ),
-            {"session_id": session.session_id, "found": False},
-        )
-        result = {
-            **current_result,
-            "continuation_lineage_cleanup": {
-                "requested_session_id": session_id,
-                "resolved_session_id": session.session_id,
-                "cleaned_session_ids": batch["expanded_session_ids"],
-            },
-        }
+    result = cleanup_runtime_session(
+        state,
+        session_id=session.session_id,
+        reason=reason,
+        start_path=start_path,
+    )
     return json_response(start_response, result)
 
 

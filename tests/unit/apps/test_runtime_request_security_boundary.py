@@ -44,7 +44,7 @@ class RuntimeRequestSecurityBoundaryTest(unittest.TestCase):
         governance = SimpleNamespace(allow_full_access_runtime=False)
         registry = object()
         definition = object()
-        workspace_binding = SimpleNamespace(binding_id="binding-codex", revision=3)
+        workspace_binding = SimpleNamespace(binding_id="binding-codex")
         routing = SimpleNamespace(effective_mode="sandbox")
         created = SimpleNamespace(
             session_id="runtime-app-session",
@@ -85,7 +85,6 @@ class RuntimeRequestSecurityBoundaryTest(unittest.TestCase):
                     workspace_id=kwargs["workspace_id"],
                     execution_mode=kwargs["execution_mode"],
                     workspace_binding_id="binding-codex",
-                    workspace_binding_revision=3,
                 ),
             ) as pin,
             patch.object(
@@ -109,8 +108,8 @@ class RuntimeRequestSecurityBoundaryTest(unittest.TestCase):
                 preflight=preflight,
             )
         self.assertIs(observed, created)
-        self.assertIs(pin.call_args.kwargs["authorized_definition_snapshot"], definition)
-        self.assertIs(pin.call_args.kwargs["authorized_workspace_binding_snapshot"], workspace_binding)
+        self.assertNotIn("authorized_definition_snapshot", pin.call_args.kwargs)
+        self.assertNotIn("authorized_workspace_binding_snapshot", pin.call_args.kwargs)
         self.assertIs(create_session.call_args.kwargs["execution_binding"], preflight.execution_binding)
         self.assertEqual(preflight.execution_binding.session_id, pin.call_args.kwargs["session_id"])
         self.assertIs(create_session.call_args.kwargs["routing"], routing)

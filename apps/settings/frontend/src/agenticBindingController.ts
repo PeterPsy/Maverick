@@ -16,17 +16,14 @@ export function createAgenticBindingController(context: AgenticBindingController
   return {
     save: async (
       definitionId: string,
-      definitionRevision: string,
       options: { enabled?: boolean } = {}
     ) => {
-      const key = `${definitionId}:${definitionRevision}`;
+      const key = definitionId;
       const item = context.getSettings()?.agentic_admin?.items.find(
         (candidate) => candidate.definition_id === definitionId
-          && candidate.definition_revision === definitionRevision
       );
       const form = Array.from(document.querySelectorAll<HTMLElement>('[data-agentic-binding-form]')).find(
         (candidate) => candidate.dataset.agenticDefinitionId === definitionId
-          && candidate.dataset.agenticDefinitionRevision === definitionRevision
       );
       if (!item || !form) {
         context.state.agenticBindingErrors[key] = 'Agentic binding form is no longer available.';
@@ -46,12 +43,11 @@ export function createAgenticBindingController(context: AgenticBindingController
         requestedEnabled
         && (
           item.execution_family === null
-          || item.family_contract_status !== 'complete'
-          || item.full_workspace_status !== 'available'
+          || item.runtime_status !== 'complete'
           || item.enable_eligible !== true
         )
       ) {
-        context.state.agenticBindingErrors[key] = `This profile is unavailable: ${item.enable_blocked_reason || item.family_contract_reason || item.blocked_reason || 'Full Workspace contract incomplete'}.`;
+        context.state.agenticBindingErrors[key] = `This model is unavailable: ${item.enable_blocked_reason || item.runtime_status_reason || item.blocked_reason || 'runtime unavailable'}.`;
         context.render();
         return;
       }
@@ -68,9 +64,7 @@ export function createAgenticBindingController(context: AgenticBindingController
       try {
         await configureAgenticWorkspaceBinding({
           definition_id: definitionId,
-          definition_revision: definitionRevision,
           binding_id: item.binding?.binding_id || null,
-          expected_revision: item.binding?.revision ?? null,
           credential_binding_id: field<HTMLSelectElement>('credential_binding_id')?.value || null,
           enabled: requestedEnabled,
           is_default: options.enabled === false ? false : checked('is_default'),

@@ -15,7 +15,6 @@ from core.providers.agentic_workspace_policy import actor_selection_allowed
 from core.providers.errors import AgenticProfileError
 from core.providers.google_agentic_profile import (
     GOOGLE_AGENTIC_PROFILE_ID,
-    GOOGLE_AGENTIC_PROFILE_REVISION,
 )
 from core.providers.provider_credentials import bind_provider_credential
 from tests.support.repo import make_temp_repo_root
@@ -65,7 +64,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 self.state.provider_registry,
                 workspace_id="default",
                 definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-                definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
                 credential_binding_id=credential.binding_id,
                 enabled=True,
                 is_default=False,
@@ -112,15 +110,13 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
     def test_workspace_policy_cannot_widen_profile_limits(self) -> None:
         profile = self.state.provider_store.get_agentic_profile_definition(
             GOOGLE_AGENTIC_PROFILE_ID,
-            GOOGLE_AGENTIC_PROFILE_REVISION,
-        )
+                )
         with self.assertRaisesRegex(AgenticProfileError, "workspace_profile_policy_widened"):
             save_workspace_agentic_binding(
                 self.state.provider_store,
                 self.state.provider_registry,
                 workspace_id="default",
                 definition_id=profile.definition_id,
-                definition_revision=profile.revision,
                 credential_binding_id=None,
                 enabled=False,
                 is_default=False,
@@ -136,7 +132,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             self.state.provider_registry,
             workspace_id="default",
             definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-            definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
             credential_binding_id=None,
             enabled=False,
             is_default=False,
@@ -155,9 +150,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             self.state.provider_registry,
             workspace_id="default",
             definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-            definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
             binding_id=created.binding_id,
-            expected_revision=created.revision,
             credential_binding_id=None,
             enabled=False,
             is_default=False,
@@ -177,7 +170,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             self.state.provider_registry,
             workspace_id="default",
             definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-            definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
             credential_binding_id=None,
             enabled=False,
             is_default=False,
@@ -211,7 +203,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             self.state.provider_registry,
             workspace_id="workspace-a",
             definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-            definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
             binding_id="shared-binding-id",
             credential_binding_id=None,
             enabled=False,
@@ -231,7 +222,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 self.state.provider_registry,
                 workspace_id="workspace-b",
                 definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-                definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
                 binding_id="shared-binding-id",
                 credential_binding_id=None,
                 enabled=False,

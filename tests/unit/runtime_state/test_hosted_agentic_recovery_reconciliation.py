@@ -28,8 +28,7 @@ class HostedAgenticRecoveryReconciliationTest(unittest.TestCase):
         harness.policy = limited_policy
         harness.binding = replace(
             harness.binding,
-            profile_policy_ceiling_snapshot=limited_policy,
-            workspace_policy_ceiling_snapshot=limited_policy,
+            runtime_policy_snapshot=limited_policy,
         )
         harness.session = replace(
             harness.session,

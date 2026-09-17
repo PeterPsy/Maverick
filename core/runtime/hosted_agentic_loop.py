@@ -388,8 +388,8 @@ class HostedAgenticLoop:
                         context_policy=context_policy,
                         endpoint_input_token_limit=(
                             budget.policy.max_input_tokens
-                            if provider_runtime.recipe is None
-                            else provider_runtime.recipe.support_flags.input_token_limit
+                            if provider_runtime.model_config is None
+                            else provider_runtime.model_config.support_flags.input_token_limit
                         ),
                     )
                 except HostedAgenticLoopError as error:
@@ -455,7 +455,7 @@ class HostedAgenticLoop:
                     request_builder=self.request_builder,
                     prepared_request=prepared_request,
                     request_preflight=provider_runtime.request_preflight,
-                    require_preflight=provider_runtime.recipe is not None,
+                    require_preflight=provider_runtime.model_config is not None,
                     transport_guard=transport_guard,
                 )
                 request_control_digest = hosted_request_control_digest(request)

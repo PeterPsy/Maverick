@@ -82,12 +82,10 @@ steering test was received by this assistant during its active runtime turn.
 - Official frontend builds include both app typechecks.
 - Unused-import and diff whitespace checks passed.
 
-A read-only copy of live provider metadata was validated in memory. Codex
-profile revision 14 and digest
-`33b483337b160ba8281b3ad17176030905ee0b83f2067d5eee911ef6517eab55`
-remain unchanged. A new pin was admitted in the clone while preserving the
-operator's default. The executable remains `codex-cli 0.153.4`. No Codex adapter
-module was modified.
+This historical validation predated the direct-config cleanup and inspected the
+then-current Codex revision metadata in a read-only copy. Those revision/digest
+fields are no longer part of runtime admission. The executable at the time was
+`codex-cli 0.153.4`, and no Codex adapter module was modified by that validation.
 
 The existing mobile utility-panel browser fixture now supplies the runtime
 engine role and runtime-backend kind already required by the provider selector.

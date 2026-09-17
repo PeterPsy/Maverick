@@ -528,113 +528,82 @@ recovery do not depend on a mutable future Agents app record.
 
 ### 6. AI provider management
 
-The Core owns the provider abstraction, credentials, model catalogs, workspace
-bindings, runtime adapters, routing and the live policy intersection. `Codex` is
-one supported runtime backend, not the definition of the Core.
+Core owns provider credentials, model discovery, workspace selection, runtime
+adapters, routing, health checks, execution mode, egress, and tool permissions.
+`Codex` is one runtime backend, not a special authorization system.
 
 Provider definitions separate technical kind from execution role:
 
-- `runtime_engine` providers own their own agent loop, such as the Codex
-  app-server.
-- `model_provider` providers expose inference APIs. Maverick may provide the
-  agent loop around these APIs.
+- `runtime_engine` providers own their agent loop, such as Codex app-server;
+- `model_provider` providers expose inference APIs used by the Core-owned loop;
 - `speech_provider` providers expose speech-specific contracts.
 
-Agentic execution has two supported families:
+Agentic execution supports native agents and the Core-owned hosted agent loop.
+Text-only API models remain separate and never receive workspace tools.
 
-- **Native Agents (CLI)** use a structured native runtime and its own loop.
-  Admission requires a registered installation contract, an installed and
-  healthy runtime, an available model in its current catalog, an enabled
-  workspace profile and live actor/policy authority.
-- **Maverick Agents (API)** use a Core-owned loop around a provider protocol
-  adapter. The profile identifies the exact provider config, protocol adapter,
-  harness recipe, model, routing constraint, reasoning choices and Full
-  Workspace contract.
+#### Direct agentic model configuration
 
-A third **Text-only Models (API)** family has no workspace tools or action loop.
-A text session pins an immutable `HostedTextExecutionBinding` containing its
-provider/model profile, availability state and routing snapshot. It never enters
-the agentic loop and every dispatch revalidates the pinned route.
+Despite the retained class name `AgenticProfileDefinition`, each stored record is
+one **current provider/model configuration**, not a release artifact. It contains
+only engine, adapter, provider, model, protocol, routing, reasoning choices,
+capabilities, resource/tool policy, context policy, and egress policy. It has no
+rollout state, revision history, signature, evidence, renewal, expiry, catalog
+digest, source digest, or certificate lifecycle. Updating discovery replaces the
+current record in place.
 
-#### Direct agentic profile contract
+A workspace binding selects one of those current records and may narrow its
+policy. It contains the workspace, selected configuration id, optional credential
+reference, enabled/default flags, actor selection, tool/resource ceiling, and
+egress policy. It has no revision fence or lineage. Restricting tools is a valid
+configuration and must not make a model unavailable merely because it is less
+capable than a predefined "full workspace" shape.
 
-`AgenticProfileDefinition` directly declares:
+A new agentic session copies the fields required to continue that session into a
+small immutable `RuntimeExecutionBinding`: runtime and adapter identity,
+provider/model/protocol and route, reasoning, capabilities, execution mode,
+resource/tool policy, egress policy, context policy, and model revision policy.
+It does not persist profile revisions, workspace-binding revisions, recipe or
+catalog digests, adapter source digests, or a binding signature. Existing
+sessions use their stored direct configuration; Core does not roll them forward,
+fork them onto a replacement profile, or run compatibility migrations at
+bootstrap. If a saved adapter or enabled workspace binding is no longer usable,
+the session reports `restart_required` and the user starts a new chat.
 
-- engine, adapter, provider, model and protocol identity;
-- routing and egress constraints;
-- reasoning efforts and default effort;
-- `RuntimeCapabilitySet`;
-- runtime policy ceiling;
-- Full Workspace revision, execution family and harness recipe;
-- protocol-adapter and provider-config identities.
+At execution time `RuntimeAuthority` is an ephemeral permission calculation, not
+a credential or certification artifact. It applies only the checks that protect
+a real boundary: enabled workspace selection, actor permission, credential
+availability, native runtime health, sandbox/full-access mode, current tool
+permission, routing/upstream constraints, and egress/data policy. These checks
+may narrow declared capabilities. Metadata agreement that grants no real
+permission must not block a model.
 
-This profile is the declared capability source. A model or adapter update is
-handled as normal catalog/profile evolution: new sessions pin the current
-profile while historical session pins remain immutable. Newly advertised Codex
-models are reconciled from the current native catalog.
+Native integrations expose machine-readable discovery, version, health,
+launch/connect/resume, structured events, final output, steering, interrupt,
+recovery, cleanup, and close operations. Terminal scraping is not admissible.
+The last successful native model catalog remains usable when a refresh fails;
+the catalog has no expiry gate. A model is unavailable only when no usable
+configuration/runtime exists, not because a refresh timer elapsed.
 
-This simplification does not remove security boundaries. Before session creation
-and before provider requests or effects, Core still verifies the enabled
-workspace binding, actor policy, credential reference, installed runtime health,
-model availability, routing/upstream restrictions, execution mode, feature flags,
-egress/data policy and current authorized tool handles. Live state may only
-narrow the profile capabilities.
+Hosted provider manifests and tool-loop configuration remain implementation
+inputs. They do not have independent rollout, digest, certification, or admission
+lifecycles. OpenRouter requests use the configured Chat Completions route and
+validate actual response identity and transport errors; Maverick does not add a
+second mutable vendor-catalog veto.
 
-A `RuntimeExecutionBinding` pins the direct profile snapshot into a session. It
-contains declared capabilities and reasoning efforts plus adapter identity,
-routing, policy, model, recipe and provider-config identities. Hydration
-validates the stored binding digest before constructing the direct binding.
-Continuation handoff hydration also requires the target digest to match the
-embedded binding. An inconsistent reference or embedded digest is rejected.
+The provider status API projects current configurations directly. A row is
+selectable when its workspace binding is enabled, required credential and
+runtime health are available, containment policy permits it, and live permissions
+can be calculated. Settings and Chat consume that same projection and deduplicate
+by workspace binding/configuration identity; browsers cannot grant capabilities
+or classify data.
 
-`EffectiveRuntimeAuthority` is ephemeral and non-bearer. It intersects the
-pinned capability snapshot with profile policy, workspace policy, feature flags,
-health, execution mode and current tool authorization. Provider-private state,
-credentials and raw protocol data never enter public projections.
+Core remains installable and bootable with no AI provider configured. Missing
+providers fail on use and never cause silent fallback.
 
-Native integrations must expose machine-readable discovery, version, health,
-launch/connect/resume, structured events and final output, steering, interrupt,
-recovery, cleanup and close operations. Terminal scraping is not admissible.
-Native effects must run through Maverick tools or within a supervised workspace
-sandbox with structured effect handling.
-
-Maverick Agent onboarding is composition-driven. A protocol-adapter manifest
-owns transport, codecs, private state, usage, cancellation and recovery. A
-provider config owns endpoint, upstream, model identity, routing, credentials,
-retention, destination and cost policy. A harness recipe owns prompt, context,
-tool and finalization behavior. Publication succeeds only when these identities
-and the Full Workspace contract agree.
-
-OpenRouter GLM uses the `openrouter-chat-completions` adapter with model
-`z-ai/glm-5.3-flash`, the Relace route, provider-private continuation state and
-the Core-owned hosted tool loop. Its direct profile exposes streaming, CLI/MCP,
-skills, filesystem operations, shell, app references, confirmations, interrupt
-and recovery. The supported reasoning efforts are `max`, `high` and `low`, with
-`max` as the default. Selection still requires an active OpenRouter credential
-binding and the live workspace policy checks described above.
-
-OpenRouter requests validate the pinned request envelope locally and are then
-sent to the configured Chat Completions endpoint. Maverick does not fetch a
-second mutable vendor endpoint catalog before every model step and does not let
-undocumented catalog health codes become a separate admission lifecycle. The
-router still receives the pinned upstream, fallback, parameter, collection and
-ZDR controls, while the streamed response decoder rejects an unexpected model
-or provider and normalizes real transport/provider failures.
-
-The provider status API projects these contracts directly. An agentic row is
-selectable only when the family contract is complete, Full Workspace is
-`available`, the binding and rollout are enabled, live effective authority is
-active, containment is `GO`, and any native runtime is installed and healthy.
-Settings and Chat consume the same server-owned projection. Browsers cannot add
-capabilities or alter data classification.
-
-The Core must remain installable and bootable with no AI provider configured.
-Provider selection is a later explicit admin action; missing providers fail on
-use and never cause silent fallback.
-
-Runtime-style providers preserve conversation continuity. Codex uses the Codex
-app-server protocol rather than one-shot commands. Hosted adapters retain only
-bounded encrypted provider-private continuation state in Core runtime storage.
+Runtime-style providers preserve conversation continuity inside the same
+session. Codex uses its structured app-server protocol. Hosted adapters retain
+only bounded encrypted provider-private continuation state in Core runtime
+storage.
 
 ### 7. Execution policy
 
@@ -1956,7 +1925,7 @@ Active context and cumulative consumption are different values. Active context i
 
 Canonical samples, hourly/daily provider-model buckets, and redaction-safe provider-quota observations are core-owned control-plane records. The JSON adapter stores them below `data/control-plane/json/usage/`; Mongo uses dedicated indexed collections. Runtime cleanup removes detailed samples for deleted sessions. Historical coverage starts when metering is deployed; neither the API nor the UI may imply that older unobserved turns were reconstructed.
 
-The root runtime WebSocket snapshot includes an authoritative `usage` projection. Every physical session in the root chat's continuation lineage counts as direct usage, so a compatible authority fork neither freezes the active-context meter nor reclassifies subsequent work as delegated. Newly inserted samples publish a persisted `runtime.usage.updated` event to the current root-lineage session, including when the observed work ran in a hidden delegated child, so Chat updates without polling. `GET /api/runtime/sessions/<session_id>/usage` exposes the same session-authorized projection for diagnostics. `GET /api/usage/timeseries?resolution=hour|day&periods=<n>` is platform-admin-only, derives workspace scope from the authenticated session, supports provider/model filtering, fills empty UTC buckets, and returns only redaction-safe aggregate data plus provider/model facets for the requested period. Chat renders the current-context percentage and numeric non-cached tokens in the composer and keeps cached input and the complete processed breakdown behind a dialog. Settings defaults workspace charts to non-cached usage, exposes metric/provider/model/range filters, and keeps cached and processed totals visible while provider subscription gauges remain separate.
+The root runtime WebSocket snapshot includes an authoritative `usage` projection. Usage produced by the root session is direct; usage produced by inter-agent descendants linked through `creator_runtime_session_id` is delegated. Newly inserted samples publish a persisted `runtime.usage.updated` event to the root session so Chat updates without polling. `GET /api/runtime/sessions/<session_id>/usage` exposes the same session-authorized projection for diagnostics. `GET /api/usage/timeseries?resolution=hour|day&periods=<n>` is platform-admin-only, derives workspace scope from the authenticated session, supports provider/model filtering, fills empty UTC buckets, and returns only redaction-safe aggregate data plus provider/model facets for the requested period. Chat renders the current-context percentage and numeric non-cached tokens in the composer and keeps cached input and the complete processed breakdown behind a dialog. Settings defaults workspace charts to non-cached usage, exposes metric/provider/model/range filters, and keeps cached and processed totals visible while provider subscription gauges remain separate.
 
 ### Runtime model decomposition
 
@@ -2103,31 +2072,18 @@ When a Codex turn is interrupted or a session becomes idle, cleanup must termina
 
 Before launching the Codex process, the adapter must prepare a runtime-scoped `CODEX_HOME`.
 
-This home is operational provider state for one logical Maverick provider
-conversation. An ordinary session owns it below that session's runtime root. A
-compatible continuation child reuses the lineage-root session's `CODEX_HOME`:
-Codex persists the provider thread in its local database together with an
-absolute rollout path, so transferring only the thread id or copying the
-database to a different root cannot resume the conversation safely. Core must
-serialize continuation admission with ordinary message admission, reject a
-fork while either side owns a queued, active, or waiting turn, fence
-provider-state updates, and prove that the predecessor app-server process is
-closed before provider-state ownership moves or the child becomes executable.
-A missing, symlinked, or non-canonical lineage home fails as
-`provider_thread_missing`; the adapter must never replace it with a new provider
-thread. The operating-system sandbox receives that same canonical lineage home
-as `HOME` and `CODEX_HOME`, so Codex cannot resolve its database or rollout
-through a session-local home that differs from the ownership root.
+This home is operational provider state owned by one Maverick runtime session.
+It lives below that session's runtime root and is never shared by independent
+sessions. The provider thread database and its referenced files remain together
+inside that root; a missing, symlinked, or non-canonical home fails as
+`provider_thread_missing` and is never silently replaced with a new provider
+thread. The operating-system sandbox receives the same canonical home as `HOME`
+and `CODEX_HOME`.
 
-The home must live below the continuation lineage's session roots, not in the
-workspace data plane and not inside the source repository. The initial session
-runtime root is
-`workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`, so
-independent concurrent agents in the same workspace receive separate provider
-homes, temporary directories, copied runtime skills, and transient provider
-binaries. Physical runtime records other than the explicitly inherited Codex
-home remain partitioned by the session that produced them, and lineage-aware
-cleanup removes the complete conversation lineage together.
+The home is not workspace data and is not part of the source repository. Each
+runtime session therefore receives separate provider state, temporary files,
+copied runtime skills, and transient provider binaries. Cleanup of that session
+removes its provider home.
 Runtime history and operational records for that agent session must also be partitioned there. The core stores per-session runtime records under the session root, including:
 
 - `session.json` for the runtime session lifecycle record
@@ -2167,27 +2123,18 @@ Codex models become eligible through normal catalog reconciliation. Persisted
 provider model metadata cannot override the current built-in/live Codex catalog.
 
 Every agentic model identity carries an `exact` or `provider_alias` revision
-policy. Exact revisions must remain identical across profile, binding, request
-and effective authority. Alias profiles still pin endpoint, resolved model,
-upstream and fallback restrictions. A legacy binding may hydrate to the explicit
-alias default only through the bounded compatibility decoder and never gains
-additional permissions.
+policy. An exact revision is checked against actual provider requests and
+responses; an alias still pins its endpoint, resolved model, upstream, and
+fallback restrictions.
 
-Selectable profiles declare their reasoning-effort tuple and default directly.
-Chat renders only those values and never invents choices from mutable browser
-state. Core rejects an unsupported effort before session creation. A
-behavior-changing built-in adapter update publishes the current profile shape;
-historical session bindings remain immutable, and continuations use the same
-model rather than silently moving to a workspace default. Adapter identity is
-based on declared engine/adapter ids and versions, not a digest of mutable Python
-source files, so an ordinary Codex package/source change cannot disable all
-sessions. In Chat's compact model menu each row shows the model label, provider
-label and reasoning control without internal rollout or profile badges.
-
-Persisted execution-binding digest compatibility remains fail closed. A newly
-materialized default may be excluded from legacy digest validation only as part
-of an explicit atomic schema-extension group. Workspace-binding migration
-preserves every existing policy restriction and never broadens permissions.
+Current model configurations declare their reasoning-effort tuple and default
+directly. Chat renders only those values and never invents choices from mutable
+browser state. Core rejects an unsupported effort before session creation.
+Existing sessions retain their direct binding and never move silently to a
+workspace default. Adapter identity uses declared engine, adapter id, and
+version rather than a digest of mutable source files, so an ordinary package or
+source change cannot disable all sessions. The compact model menu shows only the
+model, provider, and reasoning control, without rollout or revision badges.
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 
@@ -2282,7 +2229,23 @@ This is a bootstrap adapter detail, not the domain model. Production deployments
 
 Backend process restart is a runtime recovery event.
 
-On real backend host startup, the platform must inspect persisted running runtime sessions. Generic platform-state bootstrap used by CLI wrappers, MCP wrappers, tests, app tooling, or other sidecar processes must not run backend-restart recovery, because those processes can coexist with live runtime workers owned by the backend host. The hosted backend must start this recovery from the backend host lifecycle without blocking the HTTP socket from opening; large runtime histories must not make the service unavailable while deterministic recovery work is still running. Recovery must scope bounded event reads to the running sessions being inspected instead of scanning every persisted runtime event partition or loading full legacy histories. Oversized valid event partitions may be skipped by the startup recovery scan, but they must remain in place for normal runtime history reads and WebSocket snapshot replay; malformed event partitions may be quarantined out of the startup path rather than parsed unboundedly. If a running session has a queued or active turn during true backend startup, the in-memory worker that owned that turn died with the previous backend process. The startup recovery pass must first reconcile the turn store with persisted terminal events. An explicit `runtime.turn.completed`, `runtime.turn.failed`, or `runtime.turn.cancelled` event closes the non-terminal turn record to match that evidence, dispatches the source-app runtime event hook for the terminal state, and does not enqueue a resume. `runtime.output.final` is successful completion evidence only when its `exit_code` is zero; a legacy event without that field retains completed semantics. A final-output event with a nonzero or malformed exit code never proves completion: when the canonical turn is still non-terminal at restart, recovery treats it as interrupted, preserves its partial output, records a visible failed event, and enqueues the bounded continuation. Remaining stale non-terminal user turns must be closed with explicit backend-restart evidence and source-app hooks must be dispatched for those terminal transitions. Before persisting a recovery message, Core validates the pinned live authority. Direct authority proceeds. A proven compatible profile change may complete an idempotent continuation fork only when no hosted tool-result pairing is in-flight; Core blocks recovery explicitly rather than move provider-private pairing state across sessions. Other unproven changes also record `runtime.recovery.resume_blocked` without creating a turn. Each recovery message uses a deterministic client-message id derived from the interrupted source turn. If startup recovery finds a committed hosted tool-result pairing, the new recovery turn records the exact failed source turn in `provider_pairing_source_turn_id`; admission and the provider-step WAL accept only that persisted same-session lineage, while the provider request keeps the new turn as its correlation id. A later restart transfers whichever turn owns the sole ready pairing in that recovery chain. If a recovery-created turn is itself interrupted by another restart, Core retries it up to three total attempts in that recovery chain. The terminal failed event states whether another retry was queued; after the limit it gives an actionable visible failure and records `runtime.recovery.resume_blocked` instead of creating an unbounded restart loop.
+On real backend host startup, the platform inspects persisted running runtime
+sessions. Generic platform-state bootstrap used by CLI, MCP, tests, and app
+tooling must not run backend-restart recovery because those processes may
+coexist with the backend. Recovery starts from the backend lifecycle without
+blocking the HTTP socket and reads only bounded event ranges for the affected
+sessions.
+
+Terminal persisted events reconcile non-terminal turn records. A successful
+`runtime.output.final` is completion evidence only when its exit code is zero;
+otherwise the interrupted turn is closed with visible failure evidence. A
+bounded recovery turn may then continue the same session after its direct
+binding, credential, workspace policy, and provider state pass admission. A
+committed hosted tool result is paired only from its persisted failed source
+turn in that same session, so restart never repeats an already executed effect.
+Recovery retries remain capped at three. If the saved direct configuration can
+no longer run, Core records `runtime.recovery.resume_blocked` with
+`runtime_session_restart_required`; it does not migrate or fork the session.
 
 Recovery events, source-app callbacks, and resume eligibility must be derived
 from the terminal status actually returned by the turn lifecycle transition,
@@ -2373,48 +2336,29 @@ For example, a `skills changed` runtime update may be rendered as a synthetic `s
 
 Deleting a chat thread is also a runtime ownership operation when the thread references a runtime session.
 
-The chat product model is one logical runtime-thread invariant. Ordinarily one chat maps to one `session_kind=chat_root` runtime session, one selected-provider app-server context, and one canonical session root under `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`. When immutable execution authority changes compatibly, the same thread may point to a child runtime session and render the frozen predecessor plus child as one audited lineage. Automatic forks are limited to `chat_root`; hidden inter-agent and system sessions fail closed because their scheduler ownership would require a separate audited handoff. Continuation admission holds the same per-session message-admission and lifecycle fences used for ordinary turn creation. Any queued, active, or waiting turn on the predecessor or successor blocks ownership transfer. The predecessor keeps its original binding and history, rejects new turns, and is not listed as a second chat. For Codex, the provider thread id and its physical database/rollout store move as one ownership unit: the executable child uses the lineage-root `CODEX_HOME`, and Core must prove the predecessor app-server process is absent before transferring provider state or starting the child. A chat thread must not exist without a user-visible current runtime session, and every current `thread_visibility=user` runtime session in the active workspace must be represented by exactly one runtime thread before the chat list is returned. `thread_visibility=hidden` sessions are runtime-operational records for future inter-agent participants and must not appear as standalone chats. The initial runtime thread id should use the initial runtime session id; continuation rebinds only its `runtime_session_id` pointer so the user-facing thread identity remains stable. Runtime WebSocket snapshots carry the requested logical session id plus all physical lineage ids; Chat scopes events to that authenticated set and follows a live `runtime.continuation.forked` event onto its successor instead of discarding child events as foreign.
+The chat product model has one simple invariant: one visible chat thread points
+to one `session_kind=chat_root` runtime session, one provider context, and one
+canonical session root. A chat thread must not exist without its visible current
+session, and hidden inter-agent or prepared sessions never appear as standalone
+chats. Runtime WebSocket replay and history paging are scoped to that one
+session.
 
-When a profile or workspace binding changes compatibly, continuation admission
-may create a child session with a new direct execution binding while retaining
-the predecessor as immutable history. Existing-session turn submission and
-prewarm run admission before live capability preflight. Hidden prepared sessions
-are disposable and excluded from durable chat repair.
+An existing session is admitted only with its saved direct execution binding.
+Core rechecks the enabled workspace selection, credential, adapter, egress,
+provider state, and live permissions. Admission reports `direct` or
+`restart_required`; a missing provider conversation is exposed as the concrete
+detail. Core does not create compatible profile forks, handoff records, repair
+snapshots, or automatic roll-forward migrations.
 
 Chat may keep one hidden prepared `chat_root` session for the next draft. Its
-idempotency fingerprint includes normalized request configuration, direct
-execution-binding identity, binding revision and effective reasoning effort.
-Equivalent default reasoning reuses the same prepared session; a real profile or
-binding change cannot reuse a stale pin.
-
-Every resumed handoff revalidates workspace bindings, credential availability,
-egress governance, adapter identity and the persisted non-expansion proof.
-Incompatible successors are quarantined and require a new conversation or an
-explicit transcript handoff. No update lifecycle for a separate capability
-document participates in this process.
-
-Session reads expose the redaction-safe admission states `direct`,
-`compatible_upgrade`, `upgrade_required`, and `provider_thread_missing`. Chat may
-keep the composer active for the first two because submission can complete a
-proven compatible fork; it blocks the latter two with actionable copy and must
-not imply that an unavailable provider conversation can be reconstructed.
-
-Bulk repair is an admin-only CLI operation and defaults to `dry_run=true`.
-Inventory resolves a requested predecessor or lineage root to its current tip
-and deduplicates multi-hop lineages. Before a mutating run, Core writes a
-private, collision-safe snapshot under `data/recovery-snapshots/` containing
-provider control-plane JSON, workspace runtime indexes, every selected lineage
-session's JSON/event-history records, and the Codex lineage-root conversation
-store required to resume it. SQLite databases are copied through SQLite's
-online backup API and pass `PRAGMA quick_check`; rollout JSONL files are copied
-with canonical-path and symlink checks, bounded size, and SHA-256 entries in the
-manifest. Logs, transient caches, and unrelated provider homes remain excluded.
-The mutation then uses the same preflight inventory and never broadens its
-session scope between snapshot and handoff.
+idempotency fingerprint uses the normalized request configuration, direct
+execution-binding identity, and effective reasoning effort. Equivalent default
+reasoning reuses the prepared session; a real configuration change cannot reuse
+a stale pin.
 
 The core owns the delete operation. `DELETE /api/runtime/threads/<thread_id>` removes the core thread record and performs full cleanup of the linked runtime session. `POST /api/runtime/threads/delete-batch` accepts up to 20 deduplicated thread ids, authorizes every resolvable thread before mutation, expands root and active inter-agent child sessions once, and returns an explicit `deleted` or `not_found` result for every requested id. `POST /api/runtime/threads/clear` applies the same batch cleanup operation to every runtime thread in the active workspace.
 
-A synchronous thread-delete batch invokes each eligible app cleanup callback once with the complete deduplicated session-id list, including every continuation predecessor, deletes the selected thread records with one collection mutation, and publishes one workspace thread-catalog delta. Direct chat cleanup, Settings cleanup, and authorized app cleanup requests use the same lineage expansion, so no surface may delete only the current child and orphan its predecessor or handoff record. Physical runtime cleanup remains complete before the response; batching must not weaken process termination, authorization, hidden-session policy, or canonical-root safety.
+A synchronous thread-delete batch invokes each eligible app cleanup callback once with the complete deduplicated session-id list, deletes the selected thread records with one collection mutation, and publishes one workspace thread-catalog delta. It also expands active inter-agent children so delegated runtime state is not orphaned. Physical runtime cleanup remains complete before the response; batching must not weaken process termination, authorization, hidden-session policy, or canonical-root safety.
 
 Runtime persistence adapters expose multi-record deletion so shared workspace or control-plane collections are read and rewritten once per session batch rather than once per matching record. Session-partitioned event archives are removed as files; cleanup must not decode complete historical archives solely to produce a deletion counter before deleting the same canonical session root.
 

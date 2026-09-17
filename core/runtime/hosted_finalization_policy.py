@@ -1,4 +1,4 @@
-"""Price- and recipe-derived terminal reserves, never provider-name constants."""
+"""Price- and model-config-derived terminal reserves."""
 
 import math
 
@@ -9,8 +9,8 @@ from core.runtime.hosted_agentic_models import HostedFinalizationPolicy
 HOSTED_PROVIDER_STEP_OUTPUT_TOKENS = 4_096
 
 
-def provider_finalization_policy(config, recipe) -> HostedFinalizationPolicy:
-    """Cover every request admitted by the recipe's input-byte token bound.
+def provider_finalization_policy(config, model_config) -> HostedFinalizationPolicy:
+    """Cover every request admitted by the model config's token bounds.
 
     Core input admission uses ceil(bytes / 4); provider request reservation may
     use a different bytes/token assumption. Convert that bound before pricing
@@ -18,9 +18,12 @@ def provider_finalization_policy(config, recipe) -> HostedFinalizationPolicy:
     """
     output_tokens = min(
         HOSTED_PROVIDER_STEP_OUTPUT_TOKENS,
-        recipe.support_flags.output_token_limit,
+        model_config.support_flags.output_token_limit,
     )
-    input_limit = min(recipe.context_policy.max_request_input_tokens, recipe.support_flags.input_token_limit)
+    input_limit = min(
+        model_config.context_policy.max_request_input_tokens,
+        model_config.support_flags.input_token_limit,
+    )
     pricing = config.token_cost_policy
     input_tokens = math.ceil(4 * input_limit / pricing.estimated_input_bytes_per_token)
     return HostedFinalizationPolicy(

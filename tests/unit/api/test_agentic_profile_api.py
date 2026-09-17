@@ -71,7 +71,7 @@ class AgenticProfileApiTest(unittest.TestCase):
         self.assertNotIn("secret_ref", encoded)
         self.assertTrue(profile["selectable"])
         self.assertEqual(profile["containment_status"], "GO")
-        self.assertEqual(profile["full_workspace_status"], "available")
+        self.assertEqual(profile["runtime_status"], "complete")
         self.assertTrue(profile["capabilities"]["tool_orchestration"])
         self.assertTrue(profile["research_compatible"])
         effective = profile["effective_capabilities"]
@@ -110,18 +110,10 @@ class AgenticProfileApiTest(unittest.TestCase):
             default=str,
         )
         self.assertNotIn("credential_binding_id", serialized_session)
-        self.assertIn("profile_definition_revision", serialized_session)
+        self.assertNotIn("profile_definition_revision", serialized_session)
         self.assertEqual(
             session_payload["execution_binding"]["reasoning_effort"],
             runtime_binding.reasoning_effort,
-        )
-        self.assertEqual(
-            session_payload["execution_binding"]["reasoning_efforts"],
-            runtime_binding.reasoning_efforts,
-        )
-        self.assertEqual(
-            session_payload["execution_binding"]["default_reasoning_effort"],
-            runtime_binding.default_reasoning_effort,
         )
 
     def test_status_exposes_remote_model_reasoning_choices(self) -> None:
@@ -158,7 +150,6 @@ class AgenticProfileApiTest(unittest.TestCase):
                     binding_id=f"binding-{definition.model_provider_id}",
                     workspace_id="default",
                     definition_id=definition.definition_id,
-                    definition_revision=definition.revision,
                     credential_binding_id=None,
                     enabled=True,
                     is_default=False,
@@ -166,11 +157,9 @@ class AgenticProfileApiTest(unittest.TestCase):
                     workspace_policy_ceiling=definition.policy_ceiling,
                     egress_policy_id=definition.egress_policy_id,
                     egress_policy_revision=definition.egress_policy_revision,
-                    revision=0,
                     created_at=now,
                     updated_at=now,
                 ),
-                expected_revision=None,
             )
         state = SimpleNamespace(
             provider_store=provider_store,
@@ -249,9 +238,7 @@ class AgenticProfileApiTest(unittest.TestCase):
                     allowed_workspace_role_ids=(),
                     allowed_agent_type_ids=(),
                 ),
-                revision=binding.revision + 1,
             ),
-            expected_revision=binding.revision,
         )
         state = SimpleNamespace(provider_store=provider_store, secret_store=None)
 

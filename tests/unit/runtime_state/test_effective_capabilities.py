@@ -12,7 +12,6 @@ import core.runtime.turn_submission_service_submit as sync_submission
 from core.providers.agentic_adapter import RuntimeHealth
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.agentic_models import RuntimeCapabilitySet
-from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.errors import AgenticRuntimeError
 from core.runtime.authority import (
     blocked_runtime_capability_payload,
@@ -66,14 +65,10 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.binding = build_runtime_execution_binding(
             session_id="session-effective",
             workspace_id="default",
-            profile_definition_id="profile-effective",
-            profile_definition_revision="1",
             workspace_binding_id="workspace-effective",
-            workspace_binding_revision=0,
             runtime_engine_id=self.adapter.runtime_engine_id,
             adapter_id=self.adapter.adapter_id,
             adapter_version=self.adapter.adapter_version,
-            adapter_identity_digest=runtime_adapter_identity_digest(self.adapter),
             model_provider_id="fake-provider",
             model_id="fake-model",
             provider_protocol="fake-stream-v1",
@@ -82,11 +77,9 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             credential_binding_id=None,
             reasoning_effort=None,
             reasoning_efforts=(),
-            default_reasoning_effort=None,
             capabilities=capabilities(),
             execution_mode="full-access",
-            profile_policy_ceiling=codex_runtime_policy(),
-            workspace_policy_ceiling=codex_runtime_policy(),
+            runtime_policy=codex_runtime_policy(),
             egress_policy_id="fake-egress",
             egress_policy_revision="1",
             created_at=NOW,
@@ -239,9 +232,6 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         ), patch(
             "core.runtime.authority_service.require_remote_agentic_authority",
             return_value=None,
-        ), patch(
-            "core.runtime.full_workspace_contract.validate_full_workspace_live_authority",
-            side_effect=AssertionError("expensive behavior gate reran"),
         ):
             self.assertIs(
                 revalidate_runtime_authority_snapshot(**arguments),
@@ -255,9 +245,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             replace(
                 live_binding,
                 enabled=False,
-                revision=live_binding.revision + 1,
             ),
-            expected_revision=live_binding.revision,
         )
         with self.assertRaisesRegex(
             AgenticRuntimeError,
@@ -302,10 +290,8 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
             replace(
                 live,
                 workspace_policy_ceiling=confirmation_policy,
-                revision=live.revision + 1,
                 updated_at=NOW,
             ),
-            expected_revision=live.revision,
         )
         binding = replace(
             self.binding,
@@ -313,9 +299,7 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
                 self.binding.capabilities_snapshot,
                 confirmations=False,
             ),
-            binding_digest="",
         )
-        binding = replace(binding, binding_digest=canonical_digest(binding))
         authority = resolve_runtime_authority(
             self.store,
             binding=binding,

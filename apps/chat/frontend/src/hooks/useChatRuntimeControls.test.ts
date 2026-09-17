@@ -60,7 +60,6 @@ describe("genericAgenticRuntimeConfig", () => {
       runtime_engine_id: "maverick-tool-loop",
       execution_family: "maverick_agent",
       research_compatible: true,
-      full_workspace_status: "available",
       agentic_effective_tool_handle_mode: "all_currently_authorized",
       agentic_effective_capabilities: {
         status: "active",
@@ -113,7 +112,6 @@ describe("genericAgenticRuntimeConfig", () => {
       runtime_engine_id: "codex",
       execution_family: "native_agent",
       research_compatible: true,
-      full_workspace_status: "available",
       agentic_effective_capabilities: {
         status: "active",
         reason_code: null,

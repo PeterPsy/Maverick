@@ -65,7 +65,6 @@ class HostedTextExecutionBinding:
     provider_routing_digest: str
     binding_digest: str
     created_at: datetime
-    legacy_inferred: bool = False
 
     @property
     def provider_id(self) -> str:
@@ -276,11 +275,9 @@ def hosted_text_binding_from_document(
     profile_payload["output_modalities"] = tuple(profile_payload["output_modalities"])
     payload["profile"] = HostedTextProfileDefinition(**profile_payload)
     payload["status"] = HostedTextProfileStatus(**dict(status_document))  # type: ignore[arg-type]
-    payload.pop("certificate", None)
     payload["provider_routing_snapshot"] = _json_snapshot(
         payload.get("provider_routing_snapshot")
     )
-    payload.setdefault("legacy_inferred", False)
     payload["binding_digest"] = original_digest
     binding = HostedTextExecutionBinding(**payload)
     _validate_hosted_text_binding(binding)

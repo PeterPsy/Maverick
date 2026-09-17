@@ -64,7 +64,7 @@ export function ComposerRuntimeBadges({
   );
   const governanceTitle = [
     selectedProvider?.label,
-    contained ? "NO-GO" : selectedProvider?.agentic_rollout_status,
+    contained ? "NO-GO" : selectedProvider?.execution_family_label,
     `destination ${destinationLabel}`,
     selectedProvider?.agentic_egress_policy
       ? `egress ${selectedProvider.agentic_egress_policy.policy_id}@${selectedProvider.agentic_egress_policy.revision} [${selectedProvider.agentic_egress_policy.allowed_remote_data_classes.join(", ") || "none"}]`
@@ -108,7 +108,7 @@ export function ComposerRuntimeBadges({
           <span aria-hidden="true" className="material-symbols-rounded">verified_user</span>
           {contained
             ? `NO-GO · ${destinationLabel}`
-            : selectedProvider?.agentic_rollout_status || "Agentic"}
+            : selectedProvider?.execution_family_label || "Agentic"}
         </span>
       ) : null}
       {executionMode ? (

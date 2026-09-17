@@ -77,27 +77,13 @@ def execution_family_catalog() -> tuple[ExecutionFamilyDefinition, ...]:
 
 
 def effective_agentic_execution_family(
-    explicit_family: str | None,
     *,
     runtime_engine_id: str,
     adapter_id: str,
     model_provider_id: str,
     provider_protocol: str,
 ) -> str:
-    """Resolve an agentic family without trusting provider capability flags.
-
-    Old Codex profiles predate the family field. Their exact, closed identity is
-    the only legacy inference allowed; arbitrary vendor labels never grant an
-    agentic classification.
-    """
-    normalized = str(explicit_family or "").strip()
-    if normalized in {
-        NATIVE_AGENT_EXECUTION_FAMILY,
-        MAVERICK_AGENT_EXECUTION_FAMILY,
-    }:
-        return normalized
-    if normalized:
-        return normalized
+    """Derive the product family directly from the configured runtime identity."""
     if is_exact_codex_identity(
         runtime_engine_id=runtime_engine_id,
         adapter_id=adapter_id,

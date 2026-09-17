@@ -39,7 +39,7 @@ ANTIGRAVITY_CONTEXT_POLICY = AgenticContextPolicy(
 
 
 def antigravity_native_policy() -> AgenticRuntimePolicy:
-    """Bound the remote native runtime to the common Full Workspace surface."""
+    """Bound the remote native runtime to the configured workspace tools."""
     return AgenticRuntimePolicy(
         max_steps_per_turn=64,
         max_tool_calls_per_turn=48,

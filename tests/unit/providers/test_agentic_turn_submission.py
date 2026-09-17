@@ -12,7 +12,6 @@ from core.providers.agentic_models import (
     codex_runtime_policy,
 )
 from core.providers.service import builtin_provider_registry
-from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.service import create_runtime_session, transition_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -70,14 +69,10 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
         binding = build_runtime_execution_binding(
             session_id="session-fake-hosted",
             workspace_id="default",
-            profile_definition_id="profile-fake-hosted",
-            profile_definition_revision="1",
             workspace_binding_id="binding-fake-hosted",
-            workspace_binding_revision=0,
             runtime_engine_id="fake-hosted-agentic",
             adapter_id="fake-hosted-agentic-adapter",
             adapter_version="1",
-            adapter_identity_digest=runtime_adapter_identity_digest(adapter),
             model_provider_id="fake-model-provider",
             model_id="fake-model-v1",
             provider_protocol="fake-stream-v1",
@@ -86,11 +81,9 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             credential_binding_id=None,
             reasoning_effort=None,
             reasoning_efforts=(),
-            default_reasoning_effort=None,
             capabilities=codex_runtime_capabilities(),
             execution_mode="sandbox",
-            profile_policy_ceiling=codex_runtime_policy(),
-            workspace_policy_ceiling=codex_runtime_policy(),
+            runtime_policy=codex_runtime_policy(),
             egress_policy_id="fake-only",
             egress_policy_revision="1",
             created_at=timestamp,

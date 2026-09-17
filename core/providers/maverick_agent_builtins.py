@@ -68,7 +68,6 @@ OPENROUTER_CHAT_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
 
 GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
     config_id="google-ai-studio-interactions",
-    revision="2",
     model_provider_id="google-ai-studio",
     provider_protocol="google-interactions",
     provider_api_version="v1",
@@ -87,7 +86,6 @@ GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
     retention_policy="provider_contract",
     token_cost_policy=MaverickTokenCostPolicy(
         policy_id="google-gemini-3.6-flash-public-list-price",
-        revision="1",
         input_microusd_per_million_tokens=1_500_000,
         output_microusd_per_million_tokens=7_500_000,
     ),
@@ -95,7 +93,6 @@ GOOGLE_INTERACTIONS_PROVIDER_CONFIG = MaverickProviderConfig(
 
 OPENROUTER_RELACE_GLM_PROVIDER_CONFIG = MaverickProviderConfig(
     config_id="openrouter-relace-glm-5-3-flash",
-    revision="2",
     model_provider_id="openrouter",
     provider_protocol="openrouter-chat-completions",
     provider_api_version="v1",
@@ -114,7 +111,6 @@ OPENROUTER_RELACE_GLM_PROVIDER_CONFIG = MaverickProviderConfig(
     retention_policy="zdr_required",
     token_cost_policy=MaverickTokenCostPolicy(
         policy_id="openrouter-relace-glm-5-3-flash-public-list-price",
-        revision="2",
         input_microusd_per_million_tokens=90_000,
         output_microusd_per_million_tokens=300_000,
     ),

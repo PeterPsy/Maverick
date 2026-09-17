@@ -7,10 +7,8 @@ from datetime import datetime
 from functools import wraps
 from typing import Literal
 
-from core.providers.errors import ProviderNotFoundError
 from core.providers.native_agent_contract import NativeAgentInstallation
 from core.providers.models import ProviderModelOption
-from core.runtime.execution_binding import canonical_digest
 
 
 @dataclass(frozen=True)
@@ -24,11 +22,6 @@ class NativeAgentCatalogModel:
     reasoning_efforts: tuple[str, ...] = ()
     default_reasoning_effort: str | None = None
 
-    @property
-    def digest(self) -> str:
-        return canonical_digest(self)
-
-
 @dataclass(frozen=True)
 class NativeAgentCatalogSnapshot:
     """Successful trusted-runtime observation; persisted UI metadata is not one."""
@@ -40,11 +33,6 @@ class NativeAgentCatalogSnapshot:
     observed_at: datetime
     models: tuple[NativeAgentCatalogModel, ...]
     model_options: tuple[ProviderModelOption, ...]
-
-    @property
-    def digest(self) -> str:
-        return canonical_digest((self.source_id, self.models))
-
 
 def native_agent_model_provider_connected(
     installation: NativeAgentInstallation,
@@ -100,33 +88,6 @@ def native_agent_model_available(
     )
 
 
-def require_native_agent_model_available(registry, definition) -> None:
-    """Fence model/revision/reasoning availability at every admission boundary."""
-    from core.providers.errors import AgenticProfileError
-    from core.providers.execution_families import effective_agentic_execution_family
-
-    if effective_agentic_execution_family(
-        getattr(definition, "execution_family", ""),
-        runtime_engine_id=definition.runtime_engine_id,
-        adapter_id=definition.adapter_id,
-        model_provider_id=definition.model_provider_id,
-        provider_protocol=definition.provider_protocol,
-    ) != "native_agent":
-        return
-    try:
-        installation = registry.get_native_agent_installation(definition.runtime_engine_id)
-    except ProviderNotFoundError as error:
-        raise AgenticProfileError("native_agent_installation_missing") from error
-    model = next((model for model in native_agent_catalog_models(registry, installation)
-                  if model.model_provider_id == definition.model_provider_id
-                  and model.model_id == definition.model_id), None)
-    if model is None:
-        raise AgenticProfileError("native_agent_model_unavailable")
-    # Discovery describes what the runtime currently advertises; it is not a
-    # second signed identity contract. Model/reasoning settings come from the
-    # direct workspace configuration and the provider validates them on use.
-
-
 def native_catalog_admission(operation):
     """Serialize admission writes with publication of an entire catalog epoch."""
     @wraps(operation)
@@ -143,5 +104,4 @@ __all__ = [
     "native_agent_catalog_models",
     "native_agent_model_available",
     "native_agent_model_provider_connected",
-    "require_native_agent_model_available",
 ]

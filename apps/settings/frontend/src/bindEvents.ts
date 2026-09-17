@@ -18,7 +18,6 @@ export function bindSettingsEvents(context: {
   onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
   saveAgenticBindingFromPanel: (
     definitionId: string,
-    definitionRevision: string,
     options?: { enabled?: boolean }
   ) => Promise<void>;
   refreshProviderUsageFromPanel: () => Promise<void>;
@@ -81,8 +80,8 @@ export function bindSettingsEvents(context: {
       context.logoutFromSettings().catch(context.showError);
     },
     onHostedProviderRoutingChanged: context.onHostedProviderRoutingChanged,
-    onSaveAgenticBinding: (definitionId, definitionRevision, options) => {
-      context.saveAgenticBindingFromPanel(definitionId, definitionRevision, options).catch(context.showError);
+    onSaveAgenticBinding: (definitionId, options) => {
+      context.saveAgenticBindingFromPanel(definitionId, options).catch(context.showError);
     },
     onRefreshProviderUsage: () => {
       context.refreshProviderUsageFromPanel().catch(context.showError);

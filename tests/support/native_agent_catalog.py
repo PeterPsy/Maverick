@@ -1,7 +1,7 @@
 """Explicit trusted discovery observations for native control-plane tests."""
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from core.providers.native_agent_catalog import NativeAgentCatalogModel, NativeAgentCatalogSnapshot
 from core.providers.provider_codex_models import build_codex_definition
@@ -21,11 +21,11 @@ def codex_snapshot(*model_ids, reasoning=("low", "medium", "high", "xhigh", "max
     options = tuple(replace(base, model_id=model.model_id, label=model.model_id,
         default_reasoning_effort=model.default_reasoning_effort,
         supported_reasoning_efforts=[ProviderReasoningOption(effort=value, label=value) for value in reasoning],
-        metadata={"model_revision": revision, "model_revision_policy": model.revision_policy,
-                  "native_model_catalog_digest": model.digest},
+        metadata={"model_revision": revision, "model_revision_policy": model.revision_policy},
     ) for model in models)
-    return NativeAgentCatalogSnapshot("codex", "codex", "codex", "trusted-test-cli", now,
-                                      now + timedelta(minutes=5), models, options)
+    return NativeAgentCatalogSnapshot(
+        "codex", "codex", "codex", "trusted-test-cli", now, models, options
+    )
 
 
 def antigravity_snapshot(*model_ids, revision=None):
@@ -48,7 +48,6 @@ def antigravity_snapshot(*model_ids, revision=None):
             metadata={
                 "model_revision": revision,
                 "model_revision_policy": model.revision_policy,
-                "native_model_catalog_digest": model.digest,
             },
         )
         for model in models
@@ -59,7 +58,6 @@ def antigravity_snapshot(*model_ids, revision=None):
         "antigravity-cli",
         "authenticated-antigravity-cli-models-v1",
         now,
-        now + timedelta(minutes=5),
         models,
         options,
     )

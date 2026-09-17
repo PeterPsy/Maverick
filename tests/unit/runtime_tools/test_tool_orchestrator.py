@@ -22,7 +22,7 @@ from core.runtime.tool_result_artifacts import (
     project_hosted_tool_result,
 )
 from core.runtime.tool_schema import provider_tool_name
-from core.runtime.hosted_harness_recipes import hosted_full_context_policy
+from core.runtime.hosted_provider_model_config import hosted_full_context_policy
 from tests.support.cases.tool_orchestrator import _RuntimeToolOrchestratorFixture
 
 

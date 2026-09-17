@@ -8,7 +8,7 @@ import re
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PUBLIC_MESSAGES = {
     "runtime_adapter_identity_mismatch": (
-        "This chat uses an older runtime profile and must be upgraded before it can continue."
+        "This chat's saved runtime adapter is no longer available. Start a new chat to continue."
     ),
     "adapter_version_mismatch": "The configured runtime adapter version is unavailable.",
     "agent_step_limit_reached": "The runtime reached its step limit before completing the request.",
@@ -214,8 +214,8 @@ _PUBLIC_MESSAGES = {
     "research_runtime_unavailable": (
         "No compatible read-only web research runtime is currently available."
     ),
-    "runtime_profile_upgrade_required": (
-        "This chat requires a compatible runtime-profile upgrade before it can continue."
+    "runtime_session_restart_required": (
+        "This chat's saved runtime configuration is no longer usable. Start a new chat to continue."
     ),
     "remote_agentic_attestation_invalid": (
         "The workspace fake-data attestation is invalid."

@@ -17,7 +17,7 @@ from core.providers.maverick_agent_runtime_contract import (
     validate_composed_maverick_runtime,
 )
 from core.providers.store import ProviderStore
-from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
+from core.runtime.hosted_provider_model_config import HostedProviderModelConfig
 from core.runtime.hosted_provider_runtime import (
     HostedProviderRuntime,
     HostedProviderRuntimeRegistry,
@@ -25,7 +25,7 @@ from core.runtime.hosted_provider_runtime import (
 
 
 RuntimeFactory = Callable[
-    ["MaverickProviderConfig", HostedHarnessRecipeManifest],
+    ["MaverickProviderConfig", HostedProviderModelConfig],
     HostedProviderRuntime,
 ]
 
@@ -56,7 +56,7 @@ class MaverickAgentProfilePublication:
 
     adapter: MaverickProtocolAdapterManifest
     provider_config: MaverickProviderConfig
-    recipe: HostedHarnessRecipeManifest
+    model_config: HostedProviderModelConfig
     profile: AgenticProfileDefinition
 
 
@@ -75,9 +75,7 @@ class MaverickAgentOnboardingCatalog:
         self._runtime_adapters: dict[
             tuple[str, str | None], MaverickProtocolRuntimeRegistration
         ] = {}
-        self._provider_configs: dict[
-            tuple[str, str], MaverickProviderConfig
-        ] = {}
+        self._provider_configs: dict[str, MaverickProviderConfig] = {}
         self._publications: dict[
             str, MaverickAgentProfilePublication
         ] = {}
@@ -97,7 +95,7 @@ class MaverickAgentOnboardingCatalog:
 
     def register_provider_config(self, config: MaverickProviderConfig) -> None:
         validate_maverick_provider_config(config)
-        key = (config.config_id, config.revision)
+        key = config.config_id
         if key in self._provider_configs:
             raise AgenticProfileError("maverick_provider_config_duplicate")
         self._provider_configs[key] = config
@@ -107,12 +105,7 @@ class MaverickAgentOnboardingCatalog:
         publication: MaverickAgentProfilePublication,
     ) -> None:
         _validate_publication(publication)
-        config = self._provider_configs.get(
-            (
-                publication.provider_config.config_id,
-                publication.provider_config.revision,
-            )
-        )
+        config = self._provider_configs.get(publication.provider_config.config_id)
         if config != publication.provider_config:
             raise AgenticProfileError("maverick_provider_config_unregistered")
         adapter_key = (
@@ -139,7 +132,7 @@ class MaverickAgentOnboardingCatalog:
             registration = self._runtime_adapters[adapter_key]
             runtime = registration.runtime_factory(
                 publication.provider_config,
-                publication.recipe,
+                publication.model_config,
             )
             runtime = replace(
                 runtime,
@@ -219,13 +212,13 @@ def validate_maverick_runtime_adapter(
 def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
     adapter = publication.adapter
     config = publication.provider_config
-    recipe = publication.recipe
+    model_config = publication.model_config
     profile = publication.profile
     _validate_protocol_adapter(adapter)
     validate_maverick_provider_config(config)
     from core.runtime.hosted_finalization_policy import provider_finalization_policy, validate_finalization_resources
 
-    validate_finalization_resources(profile.policy_ceiling, provider_finalization_policy(config, recipe))
+    validate_finalization_resources(profile.policy_ceiling, provider_finalization_policy(config, model_config))
     if (
         profile.runtime_engine_id != "maverick-tool-loop"
         or profile.adapter_id != adapter.runtime_adapter_id
@@ -236,19 +229,19 @@ def _validate_publication(publication: MaverickAgentProfilePublication) -> None:
         or profile.provider_api_version != adapter.provider_api_version
         or config.provider_protocol != adapter.provider_protocol
         or config.provider_api_version != adapter.provider_api_version
-        or recipe.provider_protocol != config.provider_protocol
-        or recipe.provider_api_version != config.provider_api_version
+        or model_config.provider_protocol != config.provider_protocol
+        or model_config.provider_api_version != config.provider_api_version
         or profile.routing_constraint != config.routing_constraint
-        or profile.model_provider_id != recipe.model_provider_id
-        or profile.model_id != recipe.model_id
-        or profile.model_revision != recipe.model_revision
-        or profile.model_revision_policy != recipe.model_revision_policy
-        or profile.context_policy != recipe.context_policy
-        or recipe.endpoint_id != config.routing_constraint.endpoint_id
-        or recipe.upstream_ids != config.routing_constraint.allowed_upstream_ids
+        or profile.model_provider_id != model_config.model_provider_id
+        or profile.model_id != model_config.model_id
+        or profile.model_revision != model_config.model_revision
+        or profile.model_revision_policy != model_config.model_revision_policy
+        or profile.context_policy != model_config.context_policy
+        or model_config.endpoint_id != config.routing_constraint.endpoint_id
+        or model_config.upstream_ids != config.routing_constraint.allowed_upstream_ids
     ):
         raise AgenticProfileError("maverick_profile_composition_mismatch")
-    flags = recipe.support_flags
+    flags = model_config.support_flags
     if (
         profile.reasoning_efforts != flags.reasoning_efforts
         or profile.default_reasoning_effort not in profile.reasoning_efforts

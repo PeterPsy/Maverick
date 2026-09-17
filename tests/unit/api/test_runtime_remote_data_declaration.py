@@ -12,75 +12,57 @@ from core.providers.agentic_models import (
     WorkspaceAgenticProfileBinding,
     default_actor_selection_policy,
 )
-from core.providers.google_agentic_profile import (
-    GOOGLE_AGENTIC_PROFILE_ID,
-    GOOGLE_AGENTIC_PROFILE_REVISION,
-)
+from core.providers.google_agentic_profile import GOOGLE_AGENTIC_PROFILE_ID
 from core.providers.agentic_profiles import resolve_workspace_agentic_profile
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.TestCase):
-    def test_disabled_native_lineage_blocks_rollback_before_session_persistence(self) -> None:
-        from core.providers.agentic_profiles import build_pinned_execution_binding
-        from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
-        from tests.support.native_agent_catalog import codex_snapshot
-
-        original_catalog = codex_snapshot("gpt-5.6-sol")
-        with tempfile.TemporaryDirectory() as temp_dir, patch(
-            "core.providers.native_agent_reconciliation.discover_codex_native_catalog",
-            return_value=original_catalog,
-        ) as discovery:
-            state, app, cookie = self._platform(temp_dir)
-            _profile, original = resolve_workspace_agentic_profile(state.provider_store, workspace_id="default")
-            pin = build_pinned_execution_binding(state.provider_store, state.provider_registry,
-                session_id="existing", workspace_id="default", execution_mode="sandbox")
-            discovery.return_value = codex_snapshot("gpt-5.6-sol", reasoning=("low", "high"))
-            refresh_codex_native_catalog(state.provider_registry, store=state.provider_store, force=True)
-            successor = next(b for b in state.provider_store.list_workspace_agentic_profile_bindings("default")
-                             if b.binding_id != original.binding_id and b.definition_id == original.definition_id)
-            state.provider_store.save_workspace_agentic_profile_binding(replace(
-                successor, enabled=False, is_default=False, revision=successor.revision + 1,
-                updated_at=datetime.now(tz=UTC),
-            ), expected_revision=successor.revision)
-            discovery.return_value = original_catalog
-            refresh_codex_native_catalog(state.provider_registry, store=state.provider_store, force=True)
-            before = state.runtime_store.list_all_sessions()
-            with patch("core.api.runtime_api._prewarm_new_runtime_session", return_value=None):
-                status, payload, _headers = self._invoke(app, path="/api/runtime/sessions", method="POST", cookie=cookie,
-                    body={"agent_id": "chat", "source_app_id": "chat", "runtime_mode": "agentic",
-                          "workspace_profile_binding_id": original.binding_id})
-            self.assertEqual(status, 409)
-            self.assertEqual(payload["error"], "workspace_profile_lineage_disabled")
-            self.assertEqual(state.runtime_store.list_all_sessions(), before)
-            self.assertTrue(pin.capabilities_snapshot.tool_orchestration)
-
-    def test_partial_native_policy_is_rejected_without_rewriting_restrictions(self) -> None:
+    def test_restricted_native_policy_remains_selectable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             state, app, cookie = self._platform(temp_dir)
-            _definition, binding = resolve_workspace_agentic_profile(state.provider_store, workspace_id="default")
-            restricted = replace(binding, workspace_policy_ceiling=replace(
-                binding.workspace_policy_ceiling, tool_handle_mode="none",
-                allow_filesystem_list=False, allow_filesystem_read=False,
-                allow_filesystem_write=False, allow_shell=False,
-            ), revision=binding.revision + 1)
-            state.provider_store.save_workspace_agentic_profile_binding(restricted, expected_revision=binding.revision)
-            with patch("core.api.runtime_api.create_runtime_session") as create, patch(
-                "core.api.runtime_api.acquire_prepared_session"
-            ) as prepare, patch.object(state.runtime_store, "claim_client_message_id") as claim:
-                status, payload, _headers = self._invoke(
-                    app, path="/api/runtime/sessions", method="POST", cookie=cookie,
-                    body={"agent_id": "chat", "source_app_id": "chat", "runtime_mode": "agentic",
-                          "input_text": "must not persist", "client_message_id": "partial-agent"},
-                )
-            self.assertEqual(status, 409)
-            self.assertEqual(payload["error"], "full_workspace_policy_incomplete")
-            create.assert_not_called()
-            prepare.assert_not_called()
-            claim.assert_not_called()
-            self.assertEqual(state.provider_store.get_workspace_agentic_profile_binding(binding.binding_id), restricted)
+            _definition, binding = resolve_workspace_agentic_profile(
+                state.provider_store,
+                workspace_id="default",
+            )
+            restricted = replace(
+                binding,
+                workspace_policy_ceiling=replace(
+                    binding.workspace_policy_ceiling,
+                    tool_handle_mode="none",
+                    allow_filesystem_list=False,
+                    allow_filesystem_read=False,
+                    allow_filesystem_write=False,
+                    allow_shell=False,
+                ),
+                updated_at=datetime.now(tz=UTC),
+            )
+            state.provider_store.save_workspace_agentic_profile_binding(restricted)
 
-    def test_removed_native_model_is_rejected_before_any_session_persistence(self) -> None:
+            with patch("core.api.runtime_api._prewarm_new_runtime_session", return_value=None):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    cookie=cookie,
+                    body={
+                        "agent_id": "chat",
+                        "source_app_id": "chat",
+                        "runtime_mode": "agentic",
+                    },
+                )
+
+            self.assertEqual(status, 201)
+            self.assertEqual(
+                payload["execution_binding"]["workspace_binding_id"],
+                restricted.binding_id,
+            )
+            self.assertEqual(
+                state.provider_store.get_workspace_agentic_profile_binding(binding.binding_id),
+                restricted,
+            )
+
+    def test_catalog_refresh_does_not_disable_an_existing_model_config(self) -> None:
         from core.providers.native_agent_reconciliation import refresh_codex_native_catalog
         from tests.support.native_agent_catalog import codex_snapshot
 
@@ -91,21 +73,20 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
             state, app, cookie = self._platform(temp_dir)
             discovery.return_value = codex_snapshot("remaining-model")
             refresh_codex_native_catalog(state.provider_registry, store=state.provider_store, force=True)
-            before = state.runtime_store.list_all_sessions()
-            with patch("core.api.runtime_api.create_runtime_session") as create, patch(
-                "core.api.runtime_api.acquire_prepared_session"
-            ) as prepare, patch.object(state.runtime_store, "claim_client_message_id") as claim:
+            with patch("core.api.runtime_api._prewarm_new_runtime_session", return_value=None):
                 status, payload, _headers = self._invoke(
-                    app, path="/api/runtime/sessions", method="POST", cookie=cookie,
-                    body={"agent_id": "chat", "source_app_id": "chat", "runtime_mode": "agentic",
-                          "input_text": "must not persist", "client_message_id": "removed-model-message"},
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    cookie=cookie,
+                    body={
+                        "agent_id": "chat",
+                        "source_app_id": "chat",
+                        "runtime_mode": "agentic",
+                    },
                 )
-            self.assertEqual(status, 409)
-            self.assertEqual(payload["error"], "native_agent_model_unavailable")
-            create.assert_not_called()
-            prepare.assert_not_called()
-            claim.assert_not_called()
-            self.assertEqual(state.runtime_store.list_all_sessions(), before)
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["execution_binding"]["model_id"], "gpt-5.6-sol")
 
     def test_authorized_codex_pin_matches_the_preflight_profile_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -135,82 +116,12 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
             self.assertEqual(status, 201)
             pinned = payload["execution_binding"]
             self.assertEqual(pinned["workspace_binding_id"], binding.binding_id)
-            self.assertEqual(pinned["workspace_binding_revision"], binding.revision)
-            self.assertEqual(pinned["profile_definition_id"], definition.definition_id)
-            self.assertEqual(
-                pinned["profile_definition_revision"],
-                definition.revision,
-            )
-
-    def test_profile_mutation_fails_before_claim_prepared_lock_or_runtime_records(self) -> None:
-        request_shapes = {
-            "claim": {
-                "input_text": "must not persist",
-                "client_message_id": "mutating-profile-message",
-            },
-            "prepared": {"prepare_only": True},
-        }
-        for mutation in ("revision", "default", "definition"):
-            for request_kind, request_fields in request_shapes.items():
-                with self.subTest(mutation=mutation, request_kind=request_kind), tempfile.TemporaryDirectory() as temp_dir:
-                    state, app, cookie = self._platform(temp_dir)
-                    resolver = self._mutating_profile_resolver(state, mutation=mutation)
-                    before_sessions = state.runtime_store.list_all_sessions()
-                    before_threads = state.runtime_store.list_threads("default")
-
-                    with patch(
-                        "core.api.runtime_api.resolve_workspace_agentic_profile",
-                        side_effect=resolver,
-                    ), patch.object(
-                        state.runtime_store,
-                        "claim_client_message_id",
-                        wraps=state.runtime_store.claim_client_message_id,
-                    ) as claim_client_message, patch(
-                        "core.api.runtime_api.acquire_prepared_session",
-                    ) as acquire_prepared, patch(
-                        "core.api.runtime_api.create_runtime_session",
-                    ) as create_session, patch(
-                        "core.api.runtime_api.create_runtime_thread",
-                    ) as create_thread, patch(
-                        "core.api.runtime_api.submit_runtime_turn",
-                    ) as submit_turn, patch(
-                        "core.api.runtime_api.submit_runtime_turn_async",
-                    ) as submit_turn_async:
-                        status, payload, _headers = self._invoke(
-                            app,
-                            path="/api/runtime/sessions",
-                            method="POST",
-                            body={
-                                "agent_id": "chat",
-                                "source_app_id": "chat",
-                                "runtime_mode": "agentic",
-                                **request_fields,
-                            },
-                            cookie=cookie,
-                        )
-
-                    self.assertEqual(status, 409)
-                    self.assertIn(
-                        payload["error"],
-                        {
-                            "workspace_profile_binding_changed",
-                            "profile_definition_invalid",
-                        },
-                    )
-                    claim_client_message.assert_not_called()
-                    acquire_prepared.assert_not_called()
-                    create_session.assert_not_called()
-                    create_thread.assert_not_called()
-                    submit_turn.assert_not_called()
-                    submit_turn_async.assert_not_called()
-                    self.assertEqual(
-                        state.runtime_store.list_all_sessions(),
-                        before_sessions,
-                    )
-                    self.assertEqual(
-                        state.runtime_store.list_threads("default"),
-                        before_threads,
-                    )
+            self.assertEqual(pinned["runtime_engine_id"], definition.runtime_engine_id)
+            self.assertEqual(pinned["adapter_id"], definition.adapter_id)
+            self.assertEqual(pinned["model_provider_id"], definition.model_provider_id)
+            self.assertEqual(pinned["model_id"], definition.model_id)
+            self.assertNotIn("profile_definition_id", pinned)
+            self.assertNotIn("workspace_binding_revision", pinned)
 
     def test_remote_agentic_session_is_rejected_before_persistence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -411,64 +322,9 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
         return state, app, self._login(app)
 
     @staticmethod
-    def _mutating_profile_resolver(state, *, mutation: str):
-        def resolve_then_mutate(*args, **kwargs):
-            definition, binding = resolve_workspace_agentic_profile(*args, **kwargs)
-            now = datetime.now(UTC)
-            if mutation == "revision":
-                state.provider_store.save_workspace_agentic_profile_binding(
-                    replace(
-                        binding,
-                        revision=binding.revision + 1,
-                        updated_at=now,
-                    ),
-                    expected_revision=binding.revision,
-                )
-            elif mutation == "default":
-                state.provider_store.save_workspace_agentic_profile_binding(
-                    replace(
-                        binding,
-                        is_default=False,
-                        revision=binding.revision + 1,
-                        updated_at=now,
-                    ),
-                    expected_revision=binding.revision,
-                )
-                state.provider_store.save_workspace_agentic_profile_binding(
-                    replace(
-                        binding,
-                        binding_id="workspace-agentic-concurrent-default",
-                        revision=0,
-                        created_at=now,
-                        updated_at=now,
-                    ),
-                    expected_revision=None,
-                )
-            elif mutation == "definition":
-                status = state.provider_store.get_agentic_profile_definition_status(
-                    definition.definition_id,
-                    definition.revision,
-                )
-                state.provider_store.save_agentic_profile_definition_status(
-                    replace(
-                        status,
-                        rollout_status="suspended",
-                        revision=status.revision + 1,
-                        updated_at=now,
-                    ),
-                    expected_revision=status.revision,
-                )
-            else:
-                raise AssertionError(f"Unknown mutation {mutation}")
-            return definition, binding
-
-        return resolve_then_mutate
-
-    @staticmethod
     def _remote_binding(state):
         definition = state.provider_store.get_agentic_profile_definition(
             GOOGLE_AGENTIC_PROFILE_ID,
-            GOOGLE_AGENTIC_PROFILE_REVISION,
         )
         now = datetime.now(UTC)
         return state.provider_store.save_workspace_agentic_profile_binding(
@@ -476,7 +332,6 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
                 binding_id="binding-google-contained-api",
                 workspace_id="default",
                 definition_id=definition.definition_id,
-                definition_revision=definition.revision,
                 credential_binding_id=None,
                 enabled=True,
                 is_default=False,
@@ -484,11 +339,9 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
                 workspace_policy_ceiling=definition.policy_ceiling,
                 egress_policy_id=definition.egress_policy_id,
                 egress_policy_revision=definition.egress_policy_revision,
-                revision=0,
                 created_at=now,
                 updated_at=now,
             ),
-            expected_revision=None,
         )
 
 

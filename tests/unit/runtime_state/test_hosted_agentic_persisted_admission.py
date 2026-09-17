@@ -4,18 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 from core.providers.agentic_adapter import RuntimePrepareContext, RuntimeRecoveryContext
-from core.recovery.continuation_admission import (
-    RuntimeAdmissionAssessment,
-    assess_runtime_session_admission,
-)
-from core.recovery.continuation_fork import admit_runtime_session
+from core.recovery.runtime_admission import assess_runtime_session_admission
 from core.runtime.errors import (
-    RuntimeProfileUpgradeRequiredError,
     RuntimeTurnQueueRejectedError,
 )
 from core.runtime.lifecycle_service_children import queue_runtime_turn
@@ -113,52 +107,6 @@ class HostedAgenticPersistedAdmissionTest(unittest.TestCase):
             "turn-hosted",
         )
 
-    def test_inflight_pairing_blocks_compatible_session_fork(self) -> None:
-        harness, _adapter = self._ready_pairing()
-        transition_runtime_turn(
-            harness.store,
-            turn_id="turn-hosted",
-            target_status="failed",
-            failure_reason="backend restart",
-            now=NOW,
-        )
-        assessment = RuntimeAdmissionAssessment(
-            status="compatible_upgrade",
-            session_id=harness.session.session_id,
-            reason_code="runtime_profile_upgrade_required",
-            detail_code="runtime_profile_definition_changed",
-            target_execution_binding=harness.binding,
-        )
-        state = SimpleNamespace(
-            runtime_store=harness.store,
-            provider_store=object(),
-            provider_registry=object(),
-            workspace_store=None,
-        )
-
-        with (
-            patch(
-                "core.recovery.continuation_fork.assess_runtime_session_admission",
-                return_value=assessment,
-            ),
-            patch(
-                "core.recovery.continuation_fork.complete_compatible_continuation_fork"
-            ) as fork,
-            self.assertRaises(RuntimeProfileUpgradeRequiredError) as raised,
-        ):
-            admit_runtime_session(
-                state,
-                session=harness.session,
-                provider_pairing_source_turn_id="turn-hosted",
-                now=NOW,
-            )
-
-        self.assertEqual(
-            raised.exception.detail_code,
-            "provider_pairing_session_fork_unsupported",
-        )
-        fork.assert_not_called()
-
     def test_runtime_token_rejects_unresolved_persisted_pairing(self) -> None:
         harness, _adapter = self._ready_pairing()
         with patch.dict(
@@ -201,17 +149,15 @@ class HostedAgenticPersistedAdmissionTest(unittest.TestCase):
         )
 
         with patch(
-            "core.recovery.continuation_admission._validate_direct_authority"
+            "core.recovery.runtime_admission._validate_direct_authority"
         ):
             assessment = assess_runtime_session_admission(
                 Mock(),
                 harness.store,
                 Mock(),
                 session=harness.session,
-                target_session_id="session-continuation-target",
-                now=NOW,
             )
-        self.assertEqual(assessment.status, "upgrade_required")
+        self.assertEqual(assessment.status, "restart_required")
         self.assertEqual(assessment.detail_code, "provider_pairing_ambiguous")
 
 

@@ -41,7 +41,7 @@ from core.runtime.hosted_context_management import (
     validate_agentic_context_policy,
     validate_hosted_request_context,
 )
-from core.runtime.hosted_harness_recipes import hosted_full_context_policy
+from core.runtime.hosted_provider_model_config import hosted_full_context_policy
 
 
 class HostedContextManagementTest(unittest.TestCase):

@@ -19,7 +19,6 @@ from core.providers.agentic_models import (
     codex_runtime_capabilities,
     codex_runtime_policy,
 )
-from core.providers.runtime_adapter_identity import runtime_adapter_identity_digest
 from core.providers.errors import ProviderLaunchError, ProviderNotFoundError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.provider_legacy_agentic_bridge import LegacyRuntimeBackendAgenticBridge
@@ -56,14 +55,10 @@ class AgenticAdapterContractTest(unittest.TestCase):
         self.binding = build_runtime_execution_binding(
             session_id="session-fake",
             workspace_id="default",
-            profile_definition_id="profile-fake",
-            profile_definition_revision="1",
             workspace_binding_id="binding-fake",
-            workspace_binding_revision=0,
             runtime_engine_id=self.adapter.runtime_engine_id,
             adapter_id=self.adapter.adapter_id,
             adapter_version=self.adapter.adapter_version,
-            adapter_identity_digest=runtime_adapter_identity_digest(self.adapter),
             model_provider_id="fake-model-provider",
             model_id="fake-model-v1",
             provider_protocol="fake-stream-v1",
@@ -72,11 +67,9 @@ class AgenticAdapterContractTest(unittest.TestCase):
             credential_binding_id=None,
             reasoning_effort=None,
             reasoning_efforts=(),
-            default_reasoning_effort=None,
             capabilities=codex_runtime_capabilities(),
             execution_mode="full-access",
-            profile_policy_ceiling=codex_runtime_policy(),
-            workspace_policy_ceiling=codex_runtime_policy(),
+            runtime_policy=codex_runtime_policy(),
             egress_policy_id="fake-only",
             egress_policy_revision="1",
             created_at=NOW,
@@ -222,11 +215,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             self.binding,
             adapter_id=bridge.adapter_id,
             adapter_version=bridge.adapter_version,
-            adapter_identity_digest=runtime_adapter_identity_digest(bridge),
-            binding_digest="",
         )
-        from core.runtime.execution_binding import canonical_digest
-        legacy_binding = replace(legacy_binding, binding_digest=canonical_digest(legacy_binding))
         legacy_session = replace(self.session, execution_binding=legacy_binding)
         legacy_store = direct_test_provider_store(
             legacy_binding,
@@ -299,13 +288,6 @@ class AgenticAdapterContractTest(unittest.TestCase):
             self.binding,
             adapter_id=bridge.adapter_id,
             adapter_version=bridge.adapter_version,
-            adapter_identity_digest=runtime_adapter_identity_digest(bridge),
-            binding_digest="",
-        )
-        from core.runtime.execution_binding import canonical_digest
-        legacy_binding = replace(
-            legacy_binding,
-            binding_digest=canonical_digest(legacy_binding),
         )
         legacy_session = replace(self.session, execution_binding=legacy_binding)
         legacy_store = direct_test_provider_store(

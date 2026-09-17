@@ -1,4 +1,4 @@
-"""Phase-5 UI taxonomy, readiness, and safe selection migration tests."""
+"""Execution-family taxonomy and runtime-readiness tests."""
 
 from __future__ import annotations
 
@@ -80,12 +80,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         )
         profile = payload["agentic_profiles"]["items"][0]
         self.assertEqual(profile["execution_family"], "native_agent")
-        self.assertEqual(profile["full_workspace_status"], "available")
-        self.assertEqual(
-            profile["full_workspace_contract_revision"],
-            "codex-baseline-v21",
-        )
-        self.assertEqual(profile["harness_recipe"]["id"], "codex-native-app-server")
+        self.assertEqual(profile["runtime_status"], "complete")
         self.assertTrue(profile["research_compatible"])
         self.assertTrue(profile["selectable"])
         admin = workspace_agentic_admin_status(state, workspace_id="default")["items"][0]
@@ -94,7 +89,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             admin["default_reasoning_effort"],
             [item["effort"] for item in admin["supported_reasoning_efforts"]],
         )
-        self.assertEqual(admin["full_workspace_status"], "available")
+        self.assertEqual(admin["runtime_status"], "complete")
         self.assertEqual(admin["native_runtime"]["health"], "healthy")
         self.assertTrue(admin["enable_eligible"])
         self.assertIsNone(admin["enable_blocked_reason"])
@@ -134,7 +129,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             payload["agentic_profiles"]["default_binding_id"],
             binding.binding_id,
         )
-        self.assertEqual(profile["full_workspace_status"], "available")
+        self.assertEqual(profile["runtime_status"], "complete")
         self.assertTrue(profile["capabilities"]["tool_orchestration"])
         self.assertTrue(profile["research_compatible"])
         self.assertTrue(profile["selectable"])
@@ -150,14 +145,11 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
                 binding,
                 enabled=False,
                 is_default=False,
-                revision=binding.revision + 1,
             ),
-            expected_revision=binding.revision,
         )
 
         item = next(item for item in workspace_agentic_admin_status(state, workspace_id="default")["items"]
-                    if item["definition_id"] == binding.definition_id
-                    and item["definition_revision"] == binding.definition_revision)
+                    if item["definition_id"] == binding.definition_id)
 
         self.assertFalse(item["selectable"])
         self.assertEqual(item["blocked_reason"], "workspace_binding_disabled")
@@ -187,7 +179,6 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         antigravity = candidates["antigravity-cli"]
         self.assertFalse(antigravity["selectable"])
         self.assertEqual(antigravity["provider_status"], "disabled")
-        self.assertEqual(antigravity["full_workspace_status"], "available")
         self.assertEqual(
             antigravity["unavailable_reason"],
             "native_agent_disabled",
@@ -214,8 +205,7 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
             admin = workspace_agentic_admin_status(state, workspace_id="default")
 
         profile = payload["agentic_profiles"]["items"][0]
-        self.assertEqual(profile["family_contract_status"], "complete")
-        self.assertEqual(profile["full_workspace_status"], "available")
+        self.assertEqual(profile["runtime_status"], "incomplete")
         self.assertFalse(profile["selectable"])
         self.assertEqual(profile["unavailable_reason"], "native_runtime_not_installed")
         self.assertFalse(admin["items"][0]["selectable"])
@@ -245,9 +235,9 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
         self.assertEqual(native["unavailable_reason"], "runtime_inspection_failed")
         self.assertNotIn("secret path", str(native))
         self.assertFalse(profile["selectable"])
-        self.assertEqual(profile["unavailable_reason"], "runtime_inspection_failed")
+        self.assertEqual(profile["unavailable_reason"], "native_runtime_unavailable")
 
-    def test_narrowed_agent_binding_is_not_selectable_as_a_partial_agent(self) -> None:
+    def test_narrowed_tool_policy_remains_a_valid_direct_runtime_config(self) -> None:
         for mode in ("none", "exact"):
             with self.subTest(tool_handle_mode=mode):
                 state = self.make_state()
@@ -261,32 +251,24 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
                         tool_handle_mode=mode,
                         allowed_tool_handles=(),
                     ),
-                    revision=binding.revision + 1,
                 )
-                state.provider_store.save_workspace_agentic_profile_binding(
-                    narrowed,
-                    expected_revision=binding.revision,
-                )
+                state.provider_store.save_workspace_agentic_profile_binding(narrowed)
 
                 payload = workspace_provider_status(state, workspace_id="default")
                 profile = payload["agentic_profiles"]["items"][0]
 
-                self.assertFalse(profile["selectable"])
-                self.assertEqual(profile["full_workspace_status"], "unavailable")
+                self.assertTrue(profile["selectable"])
+                self.assertIsNone(profile["unavailable_reason"])
                 self.assertEqual(
-                    profile["unavailable_reason"],
-                    "full_workspace_policy_incomplete",
+                    payload["agentic_profiles"]["default_binding_id"],
+                    binding.binding_id,
                 )
-                self.assertIsNone(payload["agentic_profiles"]["default_binding_id"])
                 admin = workspace_agentic_admin_status(
                     state,
                     workspace_id="default",
                 )["items"][0]
-                self.assertFalse(admin["enable_eligible"])
-                self.assertEqual(
-                    admin["enable_blocked_reason"],
-                    "full_workspace_policy_incomplete",
-                )
+                self.assertTrue(admin["enable_eligible"])
+                self.assertIsNone(admin["enable_blocked_reason"])
 
     def test_text_profiles_declare_no_workspace_actions(self) -> None:
         payload = workspace_provider_status(self.make_state(), workspace_id="default")
@@ -303,21 +285,6 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
                 item["workspace_actions_message"],
                 "No workspace tools or actions.",
             )
-
-    def test_legacy_selection_migration_is_projection_only(self) -> None:
-        state = self.make_state()
-        before = state.provider_store.get_provider_selection("default")
-
-        payload = workspace_provider_status(state, workspace_id="default")
-
-        self.assertEqual(state.provider_store.get_provider_selection("default"), before)
-        migration = payload["selection_migration"]
-        self.assertEqual(migration["mode"], "projection_only")
-        self.assertFalse(migration["persisted_records_mutated"])
-        self.assertFalse(migration["pinned_sessions_rewritten"])
-        self.assertEqual(migration["records"][0]["execution_family"], "native_agent")
-        self.assertEqual(migration["records"][0]["storage_action"], "preserved")
-
 
 if __name__ == "__main__":
     unittest.main()

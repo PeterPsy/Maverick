@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-import hashlib
 from uuid import uuid4
 
 from core.apps.service import probe_workspace_app_health
 from core.apps.store import AppStore
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
-from core.recovery.continuation_admission import assess_runtime_session_admission
+from core.recovery.runtime_admission import assess_runtime_session_admission
 from core.recovery.models import HealthCheckResult
 from core.runtime.runtime_session import RuntimeSessionRecord
 
@@ -37,25 +36,16 @@ def run_runtime_health_check(
         and runtime_store is not None
         and provider_registry is not None
     ):
-        target_digest = hashlib.sha256(session.session_id.encode("utf-8")).hexdigest()[:24]
         assessment = assess_runtime_session_admission(
             provider_store,
             runtime_store,
             provider_registry,
             session=session,
-            target_session_id=f"runtime-health-{target_digest}",
-            now=now,
             workspace_store=workspace_store,
         )
         if assessment.status == "direct":
             status = "healthy"
             detail = "Runtime session authority is directly executable."
-        elif assessment.status == "compatible_upgrade":
-            status = "degraded"
-            detail = (
-                "Runtime session requires a compatible continuation upgrade"
-                f" ({assessment.detail_code})."
-            )
         else:
             status = "unhealthy"
             detail = (

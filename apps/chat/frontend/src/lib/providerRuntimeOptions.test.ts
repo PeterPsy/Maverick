@@ -135,7 +135,6 @@ describe("provider runtime options", () => {
           {
             workspace_profile_binding_id: "binding-codex",
             definition_id: "profile-codex",
-            definition_revision: "1",
             display_name: "Codex profile display label",
             runtime_engine_id: "codex",
             model_provider_id: "codex",
@@ -145,18 +144,11 @@ describe("provider runtime options", () => {
               { effort: "high", label: "High", description: null },
               { effort: "xhigh", label: "Extra high", description: null },
             ],
-            rollout_status: "available",
             enabled: true,
             is_default: true,
             selectable: true,
             execution_family: "native_agent",
-            family_contract_status: "complete",
-            full_workspace_status: "available",
-            full_workspace_contract_revision: "codex-baseline-v20",
-            harness_recipe: {
-              id: "codex-native-app-server",
-              revision: "1",
-            },
+            runtime_status: "complete",
             containment_status: "GO",
             effective_capabilities: {
               status: "active",
@@ -200,7 +192,6 @@ describe("provider runtime options", () => {
       agentic_allowed_tool_handles: ["mcp:storage_read"],
       agentic_max_estimated_cost_microusd: 250_000,
       agentic_containment_status: "GO",
-      agentic_rollout_status: "available",
       default_reasoning_effort: "xhigh",
       supported_reasoning_efforts: [
         { effort: "high", label: "High", description: null },

@@ -25,11 +25,7 @@ from core.providers.maverick_agent_onboarding import (
     MaverickAgentProfilePublication,
 )
 from core.providers.store import ProviderCollections, ProviderDocumentStore
-from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
-    MAVERICK_AGENT_EXECUTION_FAMILY,
-)
-from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
+from core.runtime.hosted_provider_model_config import GOOGLE_HOSTED_MODEL_CONFIG
 from tests.support.collections import FakeCollection
 
 
@@ -43,9 +39,7 @@ def provider_store() -> ProviderDocumentStore:
             bindings=FakeCollection(),
             selections=FakeCollection(),
             agentic_profile_definitions=FakeCollection(),
-            agentic_profile_definition_statuses=FakeCollection(),
             workspace_agentic_profile_bindings=FakeCollection(),
-            agentic_migrations=FakeCollection(),
         )
     )
 
@@ -55,24 +49,21 @@ def google_publication(
     model_id: str = "gemini-3.6-flash",
     profile_revision: str = "test-1",
 ) -> MaverickAgentProfilePublication:
-    recipe = replace(
-        GOOGLE_GOVERNED_WORKSPACE_RECIPE,
-        recipe_id=f"test-google-recipe-{model_id}",
-        revision=profile_revision,
+    model_config = replace(
+        GOOGLE_HOSTED_MODEL_CONFIG,
         model_id=model_id,
         model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
     )
     profile = AgenticProfileDefinition(
-        definition_id=f"test-profile-{model_id}",
-        revision=profile_revision,
+        definition_id=f"test-profile-{model_id}-{profile_revision}",
         display_name=f"Test {model_id}",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="google-ai-studio",
         model_id=model_id,
-        model_revision=recipe.model_revision,
-        model_revision_policy=recipe.model_revision_policy,
-        provider_protocol=recipe.provider_protocol,
-        provider_api_version=recipe.provider_api_version,
+        model_revision=model_config.model_revision,
+        model_revision_policy=model_config.model_revision_policy,
+        provider_protocol=model_config.provider_protocol,
+        provider_api_version=model_config.provider_api_version,
         adapter_id=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.runtime_adapter_id,
         adapter_version_constraint=(
             f"=={GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.runtime_adapter_version}"
@@ -85,41 +76,21 @@ def google_publication(
         created_at=NOW,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
-        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-        execution_family=MAVERICK_AGENT_EXECUTION_FAMILY,
-        harness_recipe_id=recipe.recipe_id,
-        harness_recipe_revision=recipe.revision,
-        harness_recipe_digest=recipe.recipe_digest,
-        provider_capability_catalog_digest=recipe.capability_catalog_digest,
-        semantic_projection_compiler_revision=(
-            recipe.semantic_projection_compiler_revision
-        ),
-        tool_contract_revision=recipe.tool_contract_revision,
-        context_policy=recipe.context_policy,
-        provider_config_id=GOOGLE_INTERACTIONS_PROVIDER_CONFIG.config_id,
-        provider_config_revision=GOOGLE_INTERACTIONS_PROVIDER_CONFIG.revision,
-        provider_config_digest=GOOGLE_INTERACTIONS_PROVIDER_CONFIG.digest,
-        protocol_adapter_id=(
-            GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.protocol_adapter_id
-        ),
-        protocol_adapter_version=(
-            GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER.protocol_adapter_version
-        ),
+        context_policy=model_config.context_policy,
     )
     return MaverickAgentProfilePublication(
         adapter=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
         provider_config=GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
-        recipe=recipe,
+        model_config=model_config,
         profile=profile,
-        rollout_status="preview",
     )
 
 
 class RuntimeClient:
     """Minimal introspectable protocol client for composition tests."""
 
-    def __init__(self, config, recipe) -> None:
-        self.model_id = recipe.model_id
+    def __init__(self, config, model_config) -> None:
+        self.model_id = model_config.model_id
         self.endpoint_url = config.endpoint_url
         self.routing_constraint = config.routing_constraint
         self.allowed_upstream_ids = config.routing_constraint.allowed_upstream_ids

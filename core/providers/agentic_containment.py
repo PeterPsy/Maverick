@@ -75,7 +75,6 @@ def run_remote_agentic_containment(
     counts = {
         "remote_sessions_inventoried": len(plan["inventory"]),
         "bindings_to_disable": len(plan["bindings"]),
-        "profiles_to_suspend": len(plan["profiles"]),
         "sessions_to_quarantine": len(plan["sessions"]),
         **applied,
     }
@@ -91,7 +90,6 @@ def run_remote_agentic_containment(
         ),
         counts=counts,
         binding_targets=plan["bindings"],
-        profile_targets=plan["profiles"],
         session_targets=plan["sessions"],
         session_inventory=plan["inventory"],
         plan_digest=plan["digest"],
@@ -168,7 +166,6 @@ def _apply_plan(
 def _empty_applied_counts() -> dict[str, int]:
     return {
         "bindings_disabled": 0,
-        "profiles_suspended": 0,
         "sessions_quarantined": 0,
     }
 

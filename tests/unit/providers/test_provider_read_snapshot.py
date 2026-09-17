@@ -19,11 +19,11 @@ class ProviderReadSnapshotTestCase(unittest.TestCase):
         snapshot = ProviderReadSnapshot(store)
 
         self.assertIs(
-            snapshot.get_agentic_profile_definition("profile-1", "1"),
+            snapshot.get_agentic_profile_definition("profile-1"),
             profile,
         )
         self.assertIs(
-            snapshot.get_agentic_profile_definition("profile-1", "1"),
+            snapshot.get_agentic_profile_definition("profile-1"),
             profile,
         )
         self.assertIs(snapshot.list_agentic_profile_definitions(), profiles)
@@ -43,39 +43,12 @@ class ProviderReadSnapshotTestCase(unittest.TestCase):
             bindings,
         )
 
-        store.get_agentic_profile_definition.assert_called_once_with("profile-1", "1")
+        store.get_agentic_profile_definition.assert_called_once_with("profile-1")
         store.list_agentic_profile_definitions.assert_called_once_with()
         store.list_provider_bindings.assert_called_once_with(
             workspace_id="default",
             provider_id="codex",
         )
-
-    def test_projection_context_hashes_each_adapter_once(self) -> None:
-        context = ProviderProjectionContext(
-            provider_store=Mock(),
-            registry=Mock(),
-        )
-        first_adapter = object()
-        second_adapter = object()
-
-        with patch(
-            "core.api.provider_api.runtime_adapter_identity_digest",
-            side_effect=["first-digest", "second-digest"],
-        ) as artifact_digest:
-            self.assertEqual(
-                context.adapter_identity_digest(first_adapter),
-                "first-digest",
-            )
-            self.assertEqual(
-                context.adapter_identity_digest(first_adapter),
-                "first-digest",
-            )
-            self.assertEqual(
-                context.adapter_identity_digest(second_adapter),
-                "second-digest",
-            )
-
-        self.assertEqual(artifact_digest.call_count, 2)
 
     def test_projection_context_inspects_native_runtimes_once(self) -> None:
         provider_store = Mock()

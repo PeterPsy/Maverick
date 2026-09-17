@@ -168,9 +168,7 @@ def _state(repository_root: Path) -> SimpleNamespace:
             bindings=FakeCollection(),
             selections=FakeCollection(),
             agentic_profile_definitions=FakeCollection(),
-            agentic_profile_definition_statuses=FakeCollection(),
             workspace_agentic_profile_bindings=FakeCollection(),
-            agentic_migrations=FakeCollection(),
         )
     )
     register_builtin_providers(provider_store)

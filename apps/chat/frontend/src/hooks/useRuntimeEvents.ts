@@ -149,8 +149,6 @@ export function useRuntimeEvents({
 
     let unavailableReported = false;
     let lastFrameAt = Date.now();
-    let activeRuntimeSessionId = currentSessionId;
-    const lineageSessionIds = new Set([currentSessionId]);
 
     function reportUnavailableSession() {
       if (cancelled || unavailableReported) {
@@ -175,32 +173,10 @@ export function useRuntimeEvents({
     }
 
     function eventsForCurrentSession(incoming: RuntimeEvent[]): RuntimeEvent[] {
-      return incoming.filter((event) => lineageSessionIds.has(event.session_id));
-    }
-
-    function extendRuntimeLineage(incoming: RuntimeEvent[]) {
-      for (const runtimeEvent of incoming) {
-        if (
-          runtimeEvent.event_type === "runtime.continuation.forked"
-          && lineageSessionIds.has(runtimeEvent.session_id)
-          && typeof runtimeEvent.payload.successor_session_id === "string"
-        ) {
-          activeRuntimeSessionId = runtimeEvent.payload.successor_session_id;
-          lineageSessionIds.add(activeRuntimeSessionId);
-        }
-        if (
-          runtimeEvent.event_type === "runtime.continuation.accepted"
-          && typeof runtimeEvent.payload.predecessor_session_id === "string"
-          && lineageSessionIds.has(runtimeEvent.payload.predecessor_session_id)
-        ) {
-          activeRuntimeSessionId = runtimeEvent.session_id;
-          lineageSessionIds.add(runtimeEvent.session_id);
-        }
-      }
+      return incoming.filter((event) => event.session_id === currentSessionId);
     }
 
     function applyIncomingEvents(incoming: RuntimeEvent[], oldestEventId?: string | null) {
-      extendRuntimeLineage(incoming);
       const scopedIncoming = eventsForCurrentSession(incoming);
       if (!scopedIncoming.length) {
         return;
@@ -218,19 +194,18 @@ export function useRuntimeEvents({
         const merged = mergeRuntimeEvents(eventsForCurrentSession(current), scopedIncoming);
         setOldestEventCursor(merged, oldestEventId);
         const currentTurn = activeTurnRef.current;
-        applyRuntimeEventEffects(merged, currentTurn && lineageSessionIds.has(currentTurn.session_id) ? currentTurn : null, setActiveTurn, setPendingUserMessages);
-        setActiveTurn(inferActiveRuntimeTurn(merged, activeRuntimeSessionId));
+        applyRuntimeEventEffects(merged, currentTurn?.session_id === currentSessionId ? currentTurn : null, setActiveTurn, setPendingUserMessages);
+        setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
         return merged;
       });
     }
 
     function applyHistoryPage(incoming: RuntimeEvent[], oldestEventId?: string | null) {
-      extendRuntimeLineage(incoming);
       const scopedIncoming = eventsForCurrentSession(incoming);
       setEvents((current) => {
         const merged = mergeRuntimeEvents(eventsForCurrentSession(current), scopedIncoming);
         setOldestEventCursor(merged, oldestEventId);
-        setActiveTurn(inferActiveRuntimeTurn(merged, activeRuntimeSessionId));
+        setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
         return merged;
       });
     }
@@ -246,7 +221,7 @@ export function useRuntimeEvents({
       setOldestEventCursor(scopedCurrent);
       const currentTurn = activeTurnRef.current;
       applyRuntimeEventEffects(scopedCurrent, currentTurn?.session_id === currentSessionId ? currentTurn : null, setActiveTurn, setPendingUserMessages);
-      setActiveTurn(inferActiveRuntimeTurn(scopedCurrent, activeRuntimeSessionId));
+      setActiveTurn(inferActiveRuntimeTurn(scopedCurrent, currentSessionId));
       return scopedCurrent;
     });
 
@@ -270,26 +245,14 @@ export function useRuntimeEvents({
         }
         try {
           const frame = JSON.parse(event.data) as RuntimeWebSocketFrame;
-          if ("session_id" in frame && !lineageSessionIds.has(frame.session_id)) {
+          if ("session_id" in frame && frame.session_id !== currentSessionId) {
             return;
           }
           lastFrameAt = Date.now();
           if (frame.type === "runtime.snapshot") {
-            const declaredLineage = frame.lineage_session_ids || [frame.session.session_id];
-            if (
-              frame.requested_session_id
-              && frame.requested_session_id !== currentSessionId
-            ) {
+            if (frame.session.session_id !== currentSessionId) {
               return;
             }
-            if (
-              !frame.requested_session_id
-              && !declaredLineage.includes(currentSessionId)
-            ) {
-              return;
-            }
-            declaredLineage.forEach((sessionId) => lineageSessionIds.add(sessionId));
-            activeRuntimeSessionId = frame.session.session_id;
             if (receivedInitialSnapshot) invalidateChatDisplay('messages');
             receivedInitialSnapshot = true;
             if (paintedDisplay) { setEvents([]); oldestEventIdRef.current = null; }

@@ -19,24 +19,19 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
       : EXECUTION_FAMILY_CATALOG
     ).map((family, index) => [family.family_id, { ...family, index }]),
   );
-  const agenticProfiles = selectAgenticProfiles(
-    (payload.agentic_profiles?.items || []).filter(
+  const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
       (profile) =>
         profile.selectable === true &&
         (profile.execution_family === "native_agent" || profile.execution_family === "maverick_agent") &&
-        (!profile.family_contract_status || profile.family_contract_status === "complete") &&
-        (!profile.full_workspace_status || profile.full_workspace_status === "available") &&
+        (!profile.runtime_status || profile.runtime_status === "complete") &&
         nativeProfileRuntimeReady(payload, profile) &&
         profile.containment_status !== "NO-GO" &&
         profile.enabled &&
-        (!profile.effective_capabilities || profile.effective_capabilities.status === "active") &&
-        (!profile.rollout_status || profile.rollout_status === "preview" || profile.rollout_status === "available"),
-    ),
-    payload.agentic_profiles?.default_binding_id || null,
-  );
+        profile.effective_capabilities?.status === "active",
+    );
   if (agenticProfiles.length) {
     options.push(
-      ...agenticProfiles.map(({ profile, selectionIds }) => {
+      ...agenticProfiles.map((profile) => {
         const engine = [payload.active_provider, ...(payload.available_providers || [])].find(
           (provider) => provider?.provider_id === profile.runtime_engine_id,
         );
@@ -64,7 +59,6 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
             : profile.display_name,
           description: modelProvider?.label || profile.model_provider_id,
           status: "active",
-          agentic_rollout_status: profile.rollout_status,
           agentic_egress_policy_id: profile.egress_policy_id || null,
           agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
           agentic_tool_handle_mode: profile.tool_handle_mode,
@@ -80,13 +74,9 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           execution_family: profile.execution_family || undefined,
           selectable: true,
           unavailable_reason: null,
-          full_workspace_status: profile.full_workspace_status,
-          full_workspace_contract_revision: profile.full_workspace_contract_revision || null,
-          harness_recipe: profile.harness_recipe || null,
           research_compatible: profile.research_compatible === true,
           provider_detail: agenticProviderDetail(profile),
           profile_detail: agenticProfileDetail(profile),
-          legacy_selection_ids: selectionIds,
           capabilities: {
             ...(engine?.capabilities || {}),
             supports_skills: profile.effective_capabilities?.capabilities.skill_catalog === true,
@@ -137,75 +127,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
     options.push(...(payload.items || payload.available_providers || []).filter(providerIsSelectable));
   }
 
-  return applySelectionMigrationAliases(
-    dedupeProviders(options),
-    payload.selection_migration?.records || [],
-  );
-}
-
-const naturalProfileOrder = new Intl.Collator("en", {
-  numeric: true,
-  sensitivity: "variant",
-});
-
-type AgenticProfileSelection = {
-  profile: AgenticProfileItem;
-  selectionIds: string[];
-};
-
-function selectAgenticProfiles(
-  profiles: readonly AgenticProfileItem[],
-  defaultBindingId: string | null,
-): AgenticProfileSelection[] {
-  const selections = new Map<string, AgenticProfileSelection>();
-  for (const profile of profiles) {
-    const key = JSON.stringify([
-      profile.execution_family,
-      profile.model_provider_id,
-      profile.model_id,
-    ]);
-    const current = selections.get(key);
-    if (!current) {
-      selections.set(key, {
-        profile,
-        selectionIds: [profile.workspace_profile_binding_id],
-      });
-      continue;
-    }
-    if (!current.selectionIds.includes(profile.workspace_profile_binding_id)) {
-      current.selectionIds.push(profile.workspace_profile_binding_id);
-    }
-    if (compareAgenticProfiles(profile, current.profile, defaultBindingId) > 0) {
-      current.profile = profile;
-    }
-  }
-  return Array.from(selections.values());
-}
-
-function compareAgenticProfiles(
-  left: AgenticProfileItem,
-  right: AgenticProfileItem,
-  defaultBindingId: string | null,
-): number {
-  return agenticProfilePriority(left, defaultBindingId)
-    - agenticProfilePriority(right, defaultBindingId)
-    || naturalProfileOrder.compare(left.definition_revision, right.definition_revision)
-    || naturalProfileOrder.compare(left.definition_id, right.definition_id)
-    || naturalProfileOrder.compare(
-      left.workspace_profile_binding_id,
-      right.workspace_profile_binding_id,
-    );
-}
-
-function agenticProfilePriority(
-  profile: AgenticProfileItem,
-  defaultBindingId: string | null,
-): number {
-  if (profile.workspace_profile_binding_id === defaultBindingId) return 4;
-  if (profile.is_default) return 3;
-  if (profile.enabled) return 2;
-  if (profile.selectable) return 1;
-  return 0;
+  return dedupeProviders(options);
 }
 
 function nativeProfileRuntimeReady(payload: ProviderPayload, profile: AgenticProfileItem): boolean {
@@ -238,10 +160,7 @@ function agenticProviderDetail(profile: AgenticProfileItem): string {
 }
 
 function agenticProfileDetail(profile: AgenticProfileItem): string {
-  const recipe = profile.harness_recipe?.id
-    ? `${profile.harness_recipe.id}@${profile.harness_recipe.revision || "unversioned"}`
-    : "unavailable";
-  return `Profile: ${profile.definition_id}@${profile.definition_revision} · Recipe: ${recipe} · Full Workspace: ${profile.full_workspace_contract_revision || "unavailable"}`;
+  return `Runtime: ${profile.runtime_engine_id} · Model: ${profile.model_provider_id}/${profile.model_id}`;
 }
 
 function reasoningForAgenticProfile(
@@ -345,7 +264,6 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
         hosted_text_profile: profile,
         provider_detail: `Provider: ${provider.label || provider.provider_id}`,
         profile_detail: NO_WORKSPACE_ACTIONS_MESSAGE,
-        legacy_selection_ids: [`fast_model:${provider.provider_id}:${encodeURIComponent(selectedModelId)}`],
       },
     ];
   }
@@ -368,7 +286,6 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
       hosted_text_profile: profile,
       provider_detail: `Provider: ${provider.label || provider.provider_id}`,
       profile_detail: NO_WORKSPACE_ACTIONS_MESSAGE,
-      legacy_selection_ids: [`fast_model:${provider.provider_id}:${encodeURIComponent(model.model_id)}`],
     };
   });
 }
@@ -402,48 +319,15 @@ function providerIsSelectable(provider: ProviderItem): boolean {
     && (provider.provider_role === "runtime_engine" || providerUsesPlainHostedRuntime(provider));
 }
 
-function applySelectionMigrationAliases(
-  providers: ProviderItem[],
-  records: Array<{ source_id: string; canonical_selection_id: string | null }>,
-): ProviderItem[] {
-  return providers.map((provider) => {
-    const aliases = records
-      .filter((record) => record.canonical_selection_id === provider.provider_id)
-      .map((record) => record.source_id);
-    return aliases.length
-      ? {
-        ...provider,
-        legacy_selection_ids: Array.from(new Set([...(provider.legacy_selection_ids || []), ...aliases])),
-      }
-      : provider;
-  });
-}
-
-export function migrateLegacyProviderSelectionId(
-  selectionId: string,
-  providers: ProviderItem[],
-): string | null {
-  const normalized = selectionId.trim();
-  if (!normalized) {
-    return null;
-  }
-  const exact = providers.find((provider) => provider.provider_id === normalized);
-  if (exact) {
-    return exact.provider_id;
-  }
-  const aliases = providers.filter((provider) =>
-    provider.legacy_selection_ids?.includes(normalized),
-  );
-  return aliases.length === 1 ? aliases[0].provider_id : null;
-}
-
 export function initialProviderSelectionId(
   requestedSelectionId: string | null,
   providers: ProviderItem[],
 ): string {
   const selectableProviders = providers.filter(providerIsSelectable);
   if (requestedSelectionId !== null) {
-    return migrateLegacyProviderSelectionId(requestedSelectionId, selectableProviders) || "";
+    return selectableProviders.some(
+      (provider) => provider.provider_id === requestedSelectionId,
+    ) ? requestedSelectionId : "";
   }
   return selectableProviders[0]?.provider_id || "";
 }

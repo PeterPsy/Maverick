@@ -16,10 +16,6 @@ from core.inter_agent.service import (
 )
 from core.inter_agent.surfaces import inter_agent_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.continuation_lineage import (
-    resolve_latest_runtime_session,
-    runtime_session_lineage,
-)
 from core.runtime.paths import runtime_session_root
 
 
@@ -40,16 +36,6 @@ def cleanup_runtime_sessions_batch(
     repository_root = start_path or state.repository_root
     root_session_ids = list(dict.fromkeys(item.strip() for item in session_ids if item.strip()))
     expanded_session_ids = list(root_session_ids)
-    for session_id in root_session_ids:
-        try:
-            session = state.runtime_store.get_session(session_id)
-            current = resolve_latest_runtime_session(state.runtime_store, session)
-            lineage = runtime_session_lineage(state.runtime_store, current)
-        except (RuntimeSessionNotFoundError, ValueError):
-            continue
-        for lineage_session in lineage:
-            if lineage_session.session_id not in expanded_session_ids:
-                expanded_session_ids.append(lineage_session.session_id)
     active_runs = [
         run
         for run in state.inter_agent_store.list_runs(workspace_id)

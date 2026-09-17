@@ -24,7 +24,7 @@ def validate_composed_maverick_runtime(
     """Prove that a factory made the endpoint and accounting it declared."""
     adapter = publication.adapter
     config = publication.provider_config
-    recipe = publication.recipe
+    model_config = publication.model_config
     client = runtime.client
     expected_runtime_identity = {
         "model_provider_id": config.model_provider_id,
@@ -34,13 +34,13 @@ def validate_composed_maverick_runtime(
         "endpoint_url": config.endpoint_url,
         "allowed_upstream_ids": config.routing_constraint.allowed_upstream_ids,
     }
-    if runtime.recipe != recipe or any(
+    if runtime.model_config != model_config or any(
         getattr(runtime, field_name) != value
         for field_name, value in expected_runtime_identity.items()
     ):
         raise AgenticProfileError("maverick_runtime_identity_mismatch")
     client_identity = {
-        "model_id": recipe.model_id,
+        "model_id": model_config.model_id,
         "endpoint_url": config.endpoint_url,
         "routing_constraint": config.routing_constraint,
         "allowed_upstream_ids": config.routing_constraint.allowed_upstream_ids,
@@ -82,7 +82,7 @@ def validate_composed_maverick_runtime(
         raise AgenticProfileError("maverick_runtime_recovery_incomplete")
     if not isinstance(runtime.finalization_policy, HostedFinalizationPolicy):
         raise AgenticProfileError("maverick_runtime_finalization_incomplete")
-    if runtime.finalization_policy != provider_finalization_policy(config, recipe):
+    if runtime.finalization_policy != provider_finalization_policy(config, model_config):
         raise AgenticProfileError("maverick_runtime_finalization_policy_mismatch")
 
 

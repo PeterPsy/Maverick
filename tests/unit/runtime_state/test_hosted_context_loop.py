@@ -16,8 +16,8 @@ from core.runtime.hosted_context_management import (
     HostedContextCompactionEvidence,
     HostedContextCompactionResult,
 )
-from core.runtime.hosted_harness_recipes import (
-    HostedHarnessRecipeManifest,
+from core.runtime.hosted_provider_model_config import (
+    HostedProviderModelConfig,
     HostedProviderSupportFlags,
 )
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
@@ -38,9 +38,7 @@ CONTEXT_POLICY = AgenticContextPolicy(
     steering_delivery_mode="safe_next_turn",
     max_same_turn_steering_messages=0,
 )
-FIXTURE_RECIPE = HostedHarnessRecipeManifest(
-    recipe_id="fixture-hosted-context-loop",
-    revision="1",
+FIXTURE_RECIPE = HostedProviderModelConfig(
     model_provider_id="fake-model-provider",
     model_id="fake-model-v1",
     model_revision="fake-model-revision-v1",
@@ -50,8 +48,6 @@ FIXTURE_RECIPE = HostedHarnessRecipeManifest(
     endpoint_id=codex_routing_constraint().endpoint_id,
     upstream_ids=(),
     state_mode="client-managed-history",
-    semantic_projection_compiler_revision="3",
-    tool_contract_revision="fixture-tool-contract-v1",
     context_policy=CONTEXT_POLICY,
     support_flags=HostedProviderSupportFlags(
         streaming=True,
@@ -84,14 +80,13 @@ class HostedContextLoopTest(unittest.TestCase):
         )
         pressure_recipe = replace(
             FIXTURE_RECIPE,
-            revision="request-pressure-1",
             context_policy=pressure_policy,
             support_flags=replace(
                 FIXTURE_RECIPE.support_flags,
                 input_token_limit=8_192,
             ),
         )
-        harness = HostedAgenticHarness(self, recipe=pressure_recipe)
+        harness = HostedAgenticHarness(self, model_config=pressure_recipe)
         metadata = AgenticSourceMetadata(
             source_block_digest="c" * 64,
             source_data_class="public",
@@ -271,7 +266,7 @@ class HostedContextLoopTest(unittest.TestCase):
         self.assertEqual(recovery.reason_code, "provider_acceptance_ambiguous")
 
     def _harness_with_large_state(self) -> HostedAgenticHarness:
-        harness = HostedAgenticHarness(self, recipe=FIXTURE_RECIPE)
+        harness = HostedAgenticHarness(self, model_config=FIXTURE_RECIPE)
         metadata = AgenticSourceMetadata(
             source_block_digest="c" * 64,
             source_data_class="public",

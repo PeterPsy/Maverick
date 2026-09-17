@@ -38,7 +38,7 @@ class HostedProviderSupportFlags:
 
 
 @dataclass(frozen=True)
-class HostedHarnessRecipeManifest:
+class HostedProviderModelConfig:
     """Current settings for one hosted provider/model implementation."""
 
     model_provider_id: str
@@ -55,7 +55,7 @@ class HostedHarnessRecipeManifest:
 
 
 def hosted_full_context_policy() -> AgenticContextPolicy:
-    """Return the common bounded policy declared by the hosted recipes."""
+    """Return the common bounded policy used by hosted models."""
     return AgenticContextPolicy(
         revision=HOSTED_CONTEXT_POLICY_REVISION,
         max_request_input_tokens=262_144,
@@ -90,7 +90,7 @@ def openrouter_full_context_policy() -> AgenticContextPolicy:
     )
 
 
-GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
+GOOGLE_HOSTED_MODEL_CONFIG = HostedProviderModelConfig(
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
     model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
@@ -119,7 +119,7 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 )
 
 
-OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
+OPENROUTER_HOSTED_MODEL_CONFIG = HostedProviderModelConfig(
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
@@ -149,11 +149,11 @@ OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 
 __all__ = [
-    "GOOGLE_GOVERNED_WORKSPACE_RECIPE",
+    "GOOGLE_HOSTED_MODEL_CONFIG",
     "HOSTED_CONTEXT_POLICY_REVISION",
-    "HostedHarnessRecipeManifest",
+    "HostedProviderModelConfig",
     "HostedProviderSupportFlags",
-    "OPENROUTER_GOVERNED_WORKSPACE_RECIPE",
+    "OPENROUTER_HOSTED_MODEL_CONFIG",
     "hosted_full_context_policy",
     "openrouter_full_context_policy",
 ]

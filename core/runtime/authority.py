@@ -921,5 +921,5 @@ def _validate_policy(policy: AgenticRuntimePolicy) -> None:
     if policy.tool_handle_mode == "none" and policy.allowed_tool_handles:
         raise AgenticRuntimeError("runtime_policy_tool_handles_invalid")
     if policy.tool_handle_mode == "exact":
-        if not policy.allowed_tool_handles or any("*" in value for value in policy.allowed_tool_handles):
+        if any("*" in value for value in policy.allowed_tool_handles):
             raise AgenticRuntimeError("runtime_policy_tool_handles_invalid")

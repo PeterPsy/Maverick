@@ -57,7 +57,6 @@ def research_runtime_kind(binding: object, adapter: object) -> str | None:
     ):
         return None
     family = effective_agentic_execution_family(
-        str(getattr(binding, "execution_family", "") or ""),
         runtime_engine_id=runtime_engine_id,
         adapter_id=adapter_id,
         model_provider_id=str(getattr(binding, "model_provider_id", "") or ""),

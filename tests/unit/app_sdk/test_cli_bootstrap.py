@@ -245,7 +245,7 @@ class CliBootstrapTests(unittest.TestCase):
             shutdown_controller=object(),
         )
         command = SimpleNamespace(
-            command_id="core.recovery.repair_continuations",
+            command_id="core.recovery.health",
             owner_kind="core",
             exposure_scope="core_global",
         )

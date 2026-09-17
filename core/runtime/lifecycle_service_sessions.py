@@ -9,7 +9,10 @@ from typing import TYPE_CHECKING
 from core.device_use.models import DeviceUseSessionBinding
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
-from core.runtime.execution_binding import RuntimeExecutionBinding, fork_runtime_execution_binding
+from core.runtime.execution_binding import (
+    RuntimeExecutionBinding,
+    copy_runtime_execution_binding_for_child,
+)
 from core.providers.hosted_text_profiles import (
     HostedTextExecutionBinding,
     validate_hosted_text_execution_binding,
@@ -284,7 +287,7 @@ def create_child_runtime_session(
     runtime_root = Path(parent.runtime_root).parent / child_session_id
     runtime_root.mkdir(parents=True, exist_ok=True)
     execution_binding = (
-        fork_runtime_execution_binding(
+        copy_runtime_execution_binding_for_child(
             parent.execution_binding,
             session_id=child_session_id,
             created_at=timestamp,

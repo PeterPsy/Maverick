@@ -3,24 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Literal
 
 from core.providers.errors import AgenticProfileError, ProviderError
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.authority import validate_live_runtime_binding_governance
-from core.runtime.errors import RuntimeProviderStateError
+from core.runtime.errors import (
+    RuntimeProviderStateError,
+    RuntimeSessionRestartRequiredError,
+)
+from core.runtime.hosted_agentic_lifecycle import recover_hosted_agentic_session
 from core.runtime.provider_step_admission import provider_step_admission_reason
 from core.runtime.remote_agentic_admission import require_remote_agentic_authority
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeStore
 
 
-RuntimeAdmissionStatus = Literal["direct", "upgrade_required"]
-NON_TERMINAL_CONTINUATION_TURN_STATUSES = frozenset(
-    {"queued", "active", "waiting_for_tool_confirmation"}
-)
+RuntimeAdmissionStatus = Literal["direct", "restart_required"]
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,6 @@ def runtime_session_admission_payload(
     registry: ProviderRegistry,
     *,
     session: RuntimeSessionRecord,
-    now: datetime | None = None,
     workspace_store: object | None = None,
 ) -> dict[str, object]:
     assessment = assess_runtime_session_admission(
@@ -47,8 +46,6 @@ def runtime_session_admission_payload(
         runtime_store,
         registry,
         session=session,
-        target_session_id=session.session_id,
-        now=now,
         workspace_store=workspace_store,
     )
     return {
@@ -65,9 +62,7 @@ def assess_runtime_session_admission(
     registry: ProviderRegistry,
     *,
     session: RuntimeSessionRecord,
-    target_session_id: str | None = None,
     provider_pairing_source_turn_id: str | None = None,
-    now: datetime | None = None,
     workspace_store: object | None = None,
 ) -> RuntimeAdmissionAssessment:
     """Check the stored config and current credentials, adapter, and policy.
@@ -76,7 +71,6 @@ def assess_runtime_session_admission(
     automatic continuation fork here. A session either remains directly usable
     or reports the concrete reason it must be restarted.
     """
-    del target_session_id, now
     try:
         persisted = runtime_store.get_session(session.session_id)
     except Exception:
@@ -134,16 +128,6 @@ def _validate_direct_authority(
     validate_live_runtime_binding_governance(provider_store, binding=binding)
 
 
-def runtime_session_has_nonterminal_turns(
-    runtime_store: RuntimeStore,
-    session_id: str,
-) -> bool:
-    return any(
-        turn.status in NON_TERMINAL_CONTINUATION_TURN_STATUSES
-        for turn in runtime_store.list_turns(session_id)
-    )
-
-
 def _provider_reason(error: BaseException) -> str:
     return str(getattr(error, "reason_code", None) or error or "provider_unavailable").strip()
 
@@ -155,8 +139,57 @@ def _direct(session: RuntimeSessionRecord) -> RuntimeAdmissionAssessment:
 def _blocked(session: RuntimeSessionRecord, detail_code: str) -> RuntimeAdmissionAssessment:
     detail = str(detail_code or "runtime_session_restart_required")
     return RuntimeAdmissionAssessment(
-        "upgrade_required",
+        "restart_required",
         session.session_id,
         "runtime_session_restart_required",
         detail,
     )
+
+
+@dataclass(frozen=True)
+class RuntimeSessionAdmissionResult:
+    """A directly admitted current runtime session."""
+
+    status: str
+    session: RuntimeSessionRecord
+    assessment: RuntimeAdmissionAssessment
+
+
+def admit_runtime_session(
+    state,
+    *,
+    session: RuntimeSessionRecord,
+    provider_pairing_source_turn_id: str | None = None,
+) -> RuntimeSessionAdmissionResult:
+    """Admit one persisted session without migration or automatic forking."""
+    if session.status == "recovery_required":
+        raise RuntimeSessionRestartRequiredError(
+            "runtime_session_restart_required",
+            detail_code=session.recovery_reason_code or "runtime_state_ambiguous",
+        )
+    if provider_pairing_source_turn_id is None:
+        recovery = recover_hosted_agentic_session(
+            state,
+            session=session,
+            trigger="pre_admission",
+        )
+        if recovery.applicable and not recovery.recovered:
+            raise RuntimeSessionRestartRequiredError(
+                "runtime_session_restart_required",
+                detail_code=recovery.reason_code,
+            )
+    current = state.runtime_store.get_session(session.session_id)
+    assessment = assess_runtime_session_admission(
+        state.provider_store,
+        state.runtime_store,
+        state.provider_registry,
+        session=current,
+        provider_pairing_source_turn_id=provider_pairing_source_turn_id,
+        workspace_store=getattr(state, "workspace_store", None),
+    )
+    if assessment.status != "direct":
+        raise RuntimeSessionRestartRequiredError(
+            assessment.reason_code or "runtime_session_restart_required",
+            detail_code=assessment.detail_code,
+        )
+    return RuntimeSessionAdmissionResult("direct", current, assessment)

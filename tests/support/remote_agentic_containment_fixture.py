@@ -36,7 +36,6 @@ class RemoteAgenticContainmentFixture:
                 bindings=FakeCollection(),
                 selections=FakeCollection(),
                 agentic_profile_definitions=FakeCollection(),
-                agentic_profile_definition_statuses=FakeCollection(),
                 workspace_agentic_profile_bindings=FakeCollection(),
             )
         )
@@ -65,7 +64,6 @@ class RemoteAgenticContainmentFixture:
                 binding_id="binding-codex-enabled",
                 workspace_id="default",
                 definition_id=codex_definition.definition_id,
-                definition_revision=codex_definition.revision,
                 credential_binding_id=None,
                 enabled=True,
                 is_default=True,
@@ -73,14 +71,9 @@ class RemoteAgenticContainmentFixture:
                 workspace_policy_ceiling=codex_definition.policy_ceiling,
                 egress_policy_id=codex_definition.egress_policy_id,
                 egress_policy_revision=codex_definition.egress_policy_revision,
-                revision=0,
                 created_at=NOW,
                 updated_at=NOW,
             ),
-            expected_revision=None,
-        )
-        self.codex_status = self.provider_store.get_agentic_profile_definition_status(
-            self.codex_binding.definition_id, self.codex_binding.definition_revision
         )
         self.remote_definition = ensure_google_agentic_preview_profile(
             self.provider_store,
@@ -96,7 +89,6 @@ class RemoteAgenticContainmentFixture:
                 binding_id="binding-google-enabled",
                 workspace_id="default",
                 definition_id=self.remote_definition.definition_id,
-                definition_revision=self.remote_definition.revision,
                 credential_binding_id="credential-redacted-from-report",
                 enabled=True,
                 is_default=False,
@@ -104,11 +96,9 @@ class RemoteAgenticContainmentFixture:
                 workspace_policy_ceiling=self.remote_definition.policy_ceiling,
                 egress_policy_id=self.remote_definition.egress_policy_id,
                 egress_policy_revision=self.remote_definition.egress_policy_revision,
-                revision=0,
                 created_at=NOW,
                 updated_at=NOW,
             ),
-            expected_revision=None,
         )
         self.remote_session = self._save_remote_mismatch_session()
 
@@ -116,14 +106,10 @@ class RemoteAgenticContainmentFixture:
         binding = build_runtime_execution_binding(
             session_id="session-google-ambiguous",
             workspace_id="default",
-            profile_definition_id=self.remote_definition.definition_id,
-            profile_definition_revision=self.remote_definition.revision,
             workspace_binding_id=self.remote_binding.binding_id,
-            workspace_binding_revision=self.remote_binding.revision,
             runtime_engine_id=self.remote_definition.runtime_engine_id,
             adapter_id=self.remote_definition.adapter_id,
             adapter_version="5",
-            adapter_identity_digest="a" * 64,
             model_provider_id=self.remote_definition.model_provider_id,
             model_id=self.remote_definition.model_id,
             provider_protocol=self.remote_definition.provider_protocol,
@@ -132,11 +118,9 @@ class RemoteAgenticContainmentFixture:
             credential_binding_id=None,
             reasoning_effort="high",
             reasoning_efforts=("high",),
-            default_reasoning_effort="high",
             capabilities=self.remote_definition.capabilities,
             execution_mode="sandbox",
-            profile_policy_ceiling=self.remote_definition.policy_ceiling,
-            workspace_policy_ceiling=self.remote_definition.policy_ceiling,
+            runtime_policy=self.remote_definition.policy_ceiling,
             egress_policy_id=self.remote_definition.egress_policy_id,
             egress_policy_revision=self.remote_definition.egress_policy_revision,
             created_at=NOW,
@@ -291,19 +275,13 @@ class RemoteAgenticContainmentFixture:
     def _codex_snapshot(self):
         return (
             self.provider_store.get_workspace_agentic_profile_binding(self.codex_binding.binding_id),
-            self.provider_store.get_agentic_profile_definition_status(
-                self.codex_binding.definition_id,
-                self.codex_binding.definition_revision,
-            ),
+            self.provider_store.get_agentic_profile_definition(self.codex_binding.definition_id),
         )
 
     def _state_snapshot(self):
         return (
             self.provider_store.get_workspace_agentic_profile_binding(self.remote_binding.binding_id),
-            self.provider_store.get_agentic_profile_definition_status(
-                self.remote_definition.definition_id,
-                self.remote_definition.revision,
-            ),
+            self.provider_store.get_agentic_profile_definition(self.remote_definition.definition_id),
             self.runtime_store.get_session(self.remote_session.session_id),
             self.runtime_store.get_state(self.remote_session.session_id),
         )

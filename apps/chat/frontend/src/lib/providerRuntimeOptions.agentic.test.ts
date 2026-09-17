@@ -48,30 +48,22 @@ function modelProvider(providerId: string, providerLabel: string, modelId: strin
 function agenticProfile(
   providerId: string,
   modelId: string,
-  rolloutStatus: AgenticProfileItem["rollout_status"] = "available",
+  runtimeStatus = "complete",
   supportedReasoningEfforts: ProviderReasoningOption[] = reasoningOptions,
   defaultReasoningEffort = "high",
 ): AgenticProfileItem {
   return {
     workspace_profile_binding_id: `binding-${providerId}`,
     definition_id: `profile-${providerId}`,
-    definition_revision: "1",
     display_name: `${providerId} · ${modelId} · fake-data preview`,
     runtime_engine_id: "maverick-tool-loop",
     model_provider_id: providerId,
     model_id: modelId,
-    rollout_status: rolloutStatus,
     enabled: true,
     is_default: false,
     selectable: true,
     execution_family: "maverick_agent",
-    family_contract_status: "complete",
-    full_workspace_status: "available",
-    full_workspace_contract_revision: "codex-baseline-v20",
-    harness_recipe: {
-      id: `recipe-${providerId}`,
-      revision: "1",
-    },
+    runtime_status: runtimeStatus,
     containment_status: "GO",
     effective_capabilities: {
       status: "active",
@@ -103,22 +95,13 @@ function agenticProfile(
 }
 
 describe("remote agentic provider runtime options", () => {
-  it("shows one composer option for repeated revisions of the same model", () => {
+  it("maps one current model config directly into the composer", () => {
     const modelId = "gpt-5.6-sol";
-    const revision15 = agenticProfile("codex", modelId);
-    const revision16 = agenticProfile("codex", modelId);
-    const revision17 = agenticProfile("codex", modelId);
-    for (const [revision, profile] of [
-      ["15", revision15],
-      ["16", revision16],
-      ["17", revision17],
-    ] as const) {
-      profile.workspace_profile_binding_id = `binding-codex-sol-${revision}`;
-      profile.definition_id = `profile-codex-sol-${revision}`;
-      profile.definition_revision = revision;
-      profile.runtime_engine_id = "codex";
-      profile.execution_family = "native_agent";
-    }
+    const profile = agenticProfile("codex", modelId);
+    profile.workspace_profile_binding_id = "binding-codex-sol";
+    profile.definition_id = "profile-codex-sol";
+    profile.runtime_engine_id = "codex";
+    profile.execution_family = "native_agent";
 
     const providers = providerItemsFromPayload({
       workspace_id: "default",
@@ -128,32 +111,48 @@ describe("remote agentic provider runtime options", () => {
       ],
       agentic_profiles: {
         default_binding_id: null,
-        items: [revision15, revision17, revision16],
+        items: [profile],
       },
     });
 
     expect(providers).toHaveLength(1);
-    expect(providers[0]?.workspace_profile_binding_id).toBe("binding-codex-sol-17");
-    expect(providers[0]?.profile_detail).toContain("profile-codex-sol-17@17");
-    expect(providers[0]?.legacy_selection_ids).toEqual([
-      "binding-codex-sol-15",
-      "binding-codex-sol-17",
-      "binding-codex-sol-16",
+    expect(providers[0]?.workspace_profile_binding_id).toBe("binding-codex-sol");
+    expect(providers[0]?.profile_detail).toBe("Runtime: codex · Model: codex/gpt-5.6-sol");
+  });
+
+  it("does not hide duplicate workspace configs returned by the server", () => {
+    const first = agenticProfile("openrouter", "z-ai/glm-5.3-flash");
+    first.workspace_profile_binding_id = "binding-openrouter-first";
+    const second = {
+      ...first,
+      workspace_profile_binding_id: "binding-openrouter-second",
+      definition_id: "profile-openrouter-second",
+    };
+
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [],
+      agentic_profiles: {
+        default_binding_id: null,
+        items: [first, second],
+      },
+    });
+
+    expect(providers.map((provider) => provider.workspace_profile_binding_id)).toEqual([
+      "binding-openrouter-first",
+      "binding-openrouter-second",
     ]);
   });
 
-  it("keeps the configured default when a newer revision of that model exists", () => {
+  it("uses the runtime id for the directly configured default", () => {
     const modelId = "gpt-6-astra";
     const configuredDefault = agenticProfile("codex", modelId);
-    configuredDefault.workspace_profile_binding_id = "binding-codex-astra-15";
-    configuredDefault.definition_revision = "15";
+    configuredDefault.workspace_profile_binding_id = "binding-codex-astra";
+    configuredDefault.definition_id = "profile-codex-astra-default";
     configuredDefault.runtime_engine_id = "codex";
     configuredDefault.execution_family = "native_agent";
-    const newer = {
-      ...configuredDefault,
-      workspace_profile_binding_id: "binding-codex-astra-17",
-      definition_revision: "17",
-    };
+    configuredDefault.is_default = true;
 
     const providers = providerItemsFromPayload({
       workspace_id: "default",
@@ -163,21 +162,23 @@ describe("remote agentic provider runtime options", () => {
       ],
       agentic_profiles: {
         default_binding_id: configuredDefault.workspace_profile_binding_id,
-        items: [newer, configuredDefault],
+        items: [configuredDefault],
       },
     });
 
     expect(providers).toHaveLength(1);
+    expect(providers[0]?.provider_id).toBe("codex");
     expect(providers[0]?.workspace_profile_binding_id).toBe(
       configuredDefault.workspace_profile_binding_id,
     );
   });
 
-  it("uses the server selectable projection while excluding suspended profiles", () => {
+  it("uses the server selectable projection while excluding unavailable configs", () => {
     const modelId = "gemini-3.6-flash";
-    const preview = agenticProfile("google-ai-studio", modelId, "preview");
-    const suspended = agenticProfile("google-ai-studio", modelId, "suspended");
+    const preview = agenticProfile("google-ai-studio", modelId);
+    const suspended = agenticProfile("google-ai-studio", modelId, "incomplete");
     suspended.workspace_profile_binding_id = "binding-suspended";
+    suspended.selectable = false;
     const providers = providerItemsFromPayload({
       workspace_id: "default",
       active_provider: null,
@@ -196,7 +197,7 @@ describe("remote agentic provider runtime options", () => {
   });
 
   it("does not offer a contained remote profile even when legacy fields look active", () => {
-    const contained = agenticProfile("google-ai-studio", "gemini-3.6-flash", "preview");
+    const contained = agenticProfile("google-ai-studio", "gemini-3.6-flash");
     contained.selectable = false;
     contained.containment_status = "NO-GO";
     contained.containment_reason = "hosted_agent_runtime_disabled";
@@ -215,7 +216,8 @@ describe("remote agentic provider runtime options", () => {
     const modelId = "gemini-3.6-flash";
     const unavailable = agenticProfile("google-ai-studio", modelId);
     unavailable.workspace_profile_binding_id = "binding-unavailable";
-    unavailable.full_workspace_status = "unavailable";
+    unavailable.runtime_status = "incomplete";
+    unavailable.selectable = false;
     const nonSelectable = agenticProfile("google-ai-studio", modelId);
     nonSelectable.workspace_profile_binding_id = "binding-not-selectable";
     nonSelectable.selectable = false;
@@ -276,13 +278,13 @@ describe("remote agentic provider runtime options", () => {
           agenticProfile(
             "google-ai-studio",
             googleModelId,
-            "available",
+            "complete",
             googleAgenticReasoningOptions,
           ),
           agenticProfile(
             "openrouter",
             openRouterModelId,
-            "available",
+            "complete",
             openRouterAgenticReasoningOptions,
             "max",
           ),

@@ -356,7 +356,6 @@ function transpile(relativePath) {
 
 transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/bouncyToggle.ts');
-transpile('frontend/src/agenticModelSelection.ts');
 transpile('frontend/src/providerModelOptions.ts');
 transpile('frontend/src/executionFamilies.ts');
 transpile('frontend/src/usageHistoryFilters.ts');
@@ -474,14 +473,11 @@ const settings = {
         health_reason_codes: [],
         update: { status: 'unknown', detail: null },
         adapter: { id: 'codex-app-server', version: 'fixture', trusted_distribution: 'maverick_builtin' },
-        harness_recipe: { id: 'codex-native-app-server', revision: '1', digest: 'fixture' },
         protocol: { kind: 'app_server', id: 'codex-app-server-stdio', version: null, event_schema: 'fixture' },
         authentication_status: 'runtime_managed',
         models: [{ provider_id: 'codex', model_id: 'gpt-5.5', model_revision: null, model_revision_policy: 'provider_alias' }],
         effects: { mode: 'mapped_hybrid', workspace_confined: true, process_tree_supervised: true, structured_effect_events: true, sandbox_policy_revision: 'sandbox-v1', approval_policy: 'common' },
         contract_state: 'available',
-        full_workspace_status: 'available',
-        full_workspace_contract_revision: 'codex-baseline-v20',
         selectable: true,
         unavailable_reason: null
       }]
@@ -727,8 +723,7 @@ settings.agentic_admin = {
   release_decision: 'NO-GO',
   items: [{
     definition_id: 'google-agentic-gemini-3-5-pro-preview',
-    definition_revision: '8',
-    display_name: 'Google agentic Gemini 3.5 Pro · fake-data preview',
+    display_name: 'Google Gemini 3.5 Pro',
     runtime_engine_id: 'maverick-tool-loop',
     model_provider_id: 'google-ai-studio',
     model_id: 'gemini-3.5-pro',
@@ -737,16 +732,9 @@ settings.agentic_admin = {
     adapter_id: 'google-interactions-agentic',
     adapter_version_constraint: '==8',
     execution_family: 'maverick_agent',
-    family_contract_status: 'incomplete',
-    family_contract_reason: 'hosted_agent_runtime_disabled',
-    full_workspace_status: 'unavailable',
-    full_workspace_contract_revision: 'codex-baseline-v20',
-    harness_recipe: {
-      id: 'google-workspace-agent',
-      revision: '8',
-      digest: 'fixture-recipe-digest',
-      provider_capability_catalog_digest: 'fixture-catalog-digest'
-    },
+    runtime_status: 'incomplete',
+    runtime_status_reason: 'hosted_agent_runtime_disabled',
+    capabilities: {},
     routing_constraint: {
       endpoint_id: 'google-ai-studio',
       allowed_upstream_ids: ['google-ai-studio'],
@@ -789,12 +777,9 @@ settings.agentic_admin = {
       require_confirmation_for_mutating: true,
       require_confirmation_for_destructive: true
     },
-    rollout_status: 'suspended',
-    profile_status: 'suspended',
     credential_bindings: [],
     binding: {
       binding_id: 'binding-google-contained',
-      revision: 2,
       credential_binding_id: null,
       enabled: false,
       is_default: false,
@@ -861,16 +846,17 @@ settings.runtime.all_sessions = [{
   recovery_reason_code: 'remote_agentic_state_ambiguous',
   agentic_containment: { status: 'NO-GO', reason_code: 'hosted_agent_runtime_disabled' }
 }];
-const historicalDuplicate = JSON.parse(JSON.stringify(settings.agentic_admin.items[0]));
-Object.assign(historicalDuplicate, {
-  definition_id: 'google-agentic-gemini-3-5-pro-historical',
-  definition_revision: '7',
-  display_name: 'Google agentic Gemini 3.5 Pro · historical candidate'
+const duplicateConfig = JSON.parse(JSON.stringify(settings.agentic_admin.items[0]));
+Object.assign(duplicateConfig, {
+  definition_id: 'google-agentic-gemini-3-5-pro-duplicate',
+  display_name: 'Google Gemini 3.5 Pro duplicate'
 });
-settings.agentic_admin.items.push(historicalDuplicate);
+settings.agentic_admin.items.push(duplicateConfig);
+const duplicateHtml = settingsPanelHtml(settings, state);
+assert.equal((duplicateHtml.match(/data-agentic-model-toggle/g) || []).length, 2);
+settings.agentic_admin.items.pop();
 const containmentHtml = settingsPanelHtml(settings, state);
 assert.equal((containmentHtml.match(/data-agentic-model-toggle/g) || []).length, 1);
-assert.ok(!containmentHtml.includes('google-agentic-gemini-3-5-pro-historical'));
 for (const expected of [
   'Remote agentic release: NO-GO',
   'Provider google-ai-studio · upstream google-ai-studio',
@@ -879,8 +865,8 @@ for (const expected of [
   'Data policy collection=deny · ZDR required · attestation not_attested',
   'Effective capabilities · blocked',
   'Workspace data declaration (informational): not_attested',
-  'Binding Disabled · Profile Suspended',
-  'Google agentic Gemini 3.5 Pro · fake-data preview',
+  'Workspace config Disabled · Runtime Incomplete',
+  'Google Gemini 3.5 Pro',
   'Quarantined: Remote Agentic State Ambiguous',
   'Pinned remote profile contained (NO-GO): Hosted Agent Runtime Disabled'
 ]) {
@@ -903,9 +889,8 @@ Object.assign(reenableItem, {
   model_provider_id: 'codex',
   model_id: 'gpt-5.5',
   execution_family: 'native_agent',
-  family_contract_status: 'complete',
-  family_contract_reason: null,
-  full_workspace_status: 'available',
+  runtime_status: 'complete',
+  runtime_status_reason: null,
   selectable: false,
   enable_eligible: true,
   enable_blocked_reason: null,

@@ -224,7 +224,7 @@ class HostedAgenticBackendRestartTest(unittest.TestCase):
                 return_value=None,
             ),
             patch(
-                "core.recovery.continuation_admission.require_remote_agentic_authority",
+                "core.recovery.runtime_admission.require_remote_agentic_authority",
                 return_value=None,
             ),
             patch(

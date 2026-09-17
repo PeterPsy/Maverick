@@ -4,7 +4,13 @@ from dataclasses import replace
 from unittest.mock import patch
 import unittest
 
-from core.providers.agentic_protocol import EphemeralCredential
+from core.providers.agentic_protocol import (
+    AgenticModelRequest,
+    AgenticRequestContentBlock,
+    AgenticToolDefinition,
+    EphemeralCredential,
+)
+from core.providers.google_agentic_profile import google_interactions_routing_constraint
 from core.providers.google_interactions_catalog import (
     GOOGLE_INTERACTIONS_MODEL_CATALOG,
     GOOGLE_INTERACTIONS_OPENAPI_CATALOG,
@@ -12,8 +18,7 @@ from core.providers.google_interactions_catalog import (
     validate_google_interactions_catalog,
 )
 from core.providers.google_interactions_models import GoogleInteractionsProtocolError
-from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
-from tests.unit.providers.test_hosted_harness_recipes import _request
+from core.runtime.hosted_provider_model_config import GOOGLE_HOSTED_MODEL_CONFIG
 
 
 class GoogleInteractionsCatalogTest(unittest.TestCase):
@@ -24,7 +29,7 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
             calls.append((url, credential is not None))
             return _endpoint_schema() if credential is None else _model_record()
 
-        request = _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False)
+        request = _request(GOOGLE_HOSTED_MODEL_CONFIG, final=False)
         with patch(
             "core.providers.google_interactions_catalog._fetch_catalog",
             side_effect=fetch,
@@ -49,7 +54,7 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
         self.assertEqual(len(snapshot.catalog_snapshot_digest), 64)
 
     def test_catalog_rejects_endpoint_model_and_limit_drift(self) -> None:
-        request = _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False)
+        request = _request(GOOGLE_HOSTED_MODEL_CONFIG, final=False)
         variants = []
         missing_stream = _endpoint_schema()
         del missing_stream["components"]["schemas"][
@@ -89,7 +94,7 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
                 )
 
     def test_exact_name_and_revision_accept_absent_base_model_id(self) -> None:
-        request = _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False)
+        request = _request(GOOGLE_HOSTED_MODEL_CONFIG, final=False)
         for model_record in (
             _model_record(),
             {**_model_record(), "baseModelId": None},
@@ -106,7 +111,7 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
 
     def test_same_protocol_validates_another_model_from_request_data(self) -> None:
         request = replace(
-            _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False),
+            _request(GOOGLE_HOSTED_MODEL_CONFIG, final=False),
             model_id="gemini-data-only",
             model_revision="stable-data-only",
         )
@@ -129,6 +134,45 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
 
         self.assertEqual(snapshot.model_name, "models/gemini-data-only")
         self.assertEqual(snapshot.model_version, "stable-data-only")
+
+
+def _request(model_config, *, final: bool) -> AgenticModelRequest:
+    return AgenticModelRequest(
+        schema_version="1",
+        request_id=f"catalog-request-{'final' if final else 'explore'}",
+        correlation_id="catalog-turn",
+        model_id=model_config.model_id,
+        model_revision=model_config.model_revision,
+        model_revision_policy=model_config.model_revision_policy,
+        reasoning_effort=model_config.support_flags.reasoning_efforts[-1],
+        content_blocks=(
+            AgenticRequestContentBlock(
+                content_block_id="catalog-user",
+                role="user",
+                data_class="public",
+                provenance="user_input",
+                trust_level="trusted_actor",
+                content_type="text/plain",
+                content=b"synthetic request",
+            ),
+        ),
+        tool_definitions=(
+            ()
+            if final
+            else (
+                AgenticToolDefinition(
+                    "fixture_tool",
+                    "Synthetic fixture tool.",
+                    {"type": "object", "additionalProperties": False},
+                ),
+            )
+        ),
+        tool_results=(),
+        provider_private_state=None,
+        routing_constraint=google_interactions_routing_constraint(),
+        max_output_tokens=1_024,
+        request_phase="finalization" if final else "exploration",
+    )
 
 
 def _endpoint_schema() -> dict[str, object]:

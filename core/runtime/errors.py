@@ -64,10 +64,10 @@ class RuntimeToolExecutionLeaseExpiredError(RuntimeProviderStateError):
     """Raised when a tool result tries to commit after its execution lease."""
 
 
-class RuntimeProfileUpgradeRequiredError(RuntimeDomainError):
+class RuntimeSessionRestartRequiredError(RuntimeDomainError):
     """Raised before admission when a pinned session cannot execute safely."""
 
     def __init__(self, reason_code: str, *, detail_code: str | None = None) -> None:
-        self.reason_code = str(reason_code or "runtime_profile_upgrade_required")
+        self.reason_code = str(reason_code or "runtime_session_restart_required")
         self.detail_code = str(detail_code or self.reason_code)
         super().__init__(self.reason_code)

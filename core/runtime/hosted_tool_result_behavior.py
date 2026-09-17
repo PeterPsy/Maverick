@@ -1,4 +1,4 @@
-"""Executable result-policy gate for the hosted Full Workspace contract."""
+"""Executable checks for hosted tool-result handling."""
 
 from __future__ import annotations
 

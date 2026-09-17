@@ -97,7 +97,6 @@ describe("composerRuntimeCapabilities", () => {
           workspace_binding_id: "binding-remote",
           runtime_engine_id: "maverick-tool-loop",
           model_id: "remote-model",
-          binding_digest: "remote-binding",
         },
       }),
       activeThread: thread({ provider_id: "maverick-tool-loop" }),
@@ -115,7 +114,6 @@ describe("composerRuntimeCapabilities", () => {
           workspace_binding_id: "binding-ambiguous",
           runtime_engine_id: "codex",
           model_id: "remote-model",
-          binding_digest: "ambiguous-codex",
         },
       }),
       activeThread: thread({ provider_id: "codex" }),
@@ -215,7 +213,6 @@ function exactCodexBinding(): NonNullable<RuntimeSession["execution_binding"]> {
     model_provider_id: "codex",
     provider_protocol: "codex-app-server-stdio",
     model_id: "gpt-5.6-sol",
-    binding_digest: "exact-codex-binding",
   };
 }
 

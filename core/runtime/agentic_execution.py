@@ -14,6 +14,7 @@ from core.providers.agentic_adapter import (
     RuntimeValidationContext,
 )
 from core.providers.models import RuntimeBackendLaunchSpec
+from core.providers.execution_families import effective_agentic_execution_family
 from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutionEventSink
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.authority import RuntimeAuthority, canonical_authority_digest
@@ -217,14 +218,16 @@ async def execute_agentic_runtime_turn(
             if event_sink is not None:
                 public_payload = dict(event.payload)
                 if event.event_type == "provider.usage":
+                    execution_family = effective_agentic_execution_family(
+                        runtime_engine_id=str(getattr(binding, "runtime_engine_id", "")),
+                        adapter_id=str(getattr(binding, "adapter_id", "")),
+                        model_provider_id=str(getattr(binding, "model_provider_id", "")),
+                        provider_protocol=str(getattr(binding, "provider_protocol", "")),
+                    )
                     defaults = {
                         "provider_id": binding.model_provider_id,
                         "model_id": binding.model_id,
-                        "source": (
-                            "native_agent"
-                            if getattr(binding, "execution_family", "") == "native_agent"
-                            else "hosted_agentic"
-                        ),
+                        "source": "native_agent" if execution_family == "native_agent" else "hosted_agentic",
                         "semantics": "incremental",
                         "token_accuracy": "exact",
                         "context_accuracy": "estimated",

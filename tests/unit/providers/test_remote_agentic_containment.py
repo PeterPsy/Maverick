@@ -36,7 +36,6 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         self.assertEqual(report.dry_run_status, "dry_run_verified")
         self.assertEqual(report.operational_status, "live_apply_pending_review")
         self.assertEqual(report.counts["bindings_to_disable"], 1)
-        self.assertEqual(report.counts["profiles_to_suspend"], 1)
         self.assertEqual(report.counts["sessions_to_quarantine"], 1)
         inventory = report.session_inventory[0]
         self.assertEqual(inventory.provider_acceptance_count, 5)
@@ -78,14 +77,9 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         binding = self.provider_store.get_workspace_agentic_profile_binding(
             self.remote_binding.binding_id
         )
-        profile_status = self.provider_store.get_agentic_profile_definition_status(
-            self.remote_definition.definition_id,
-            self.remote_definition.revision,
-        )
         session = self.runtime_store.get_session(self.remote_session.session_id)
         self.assertFalse(binding.enabled)
         self.assertFalse(binding.is_default)
-        self.assertEqual(profile_status.rollout_status, "suspended")
         self.assertEqual(session.status, "recovery_required")
         self.assertEqual(session.recovery_reason_code, "remote_agentic_state_ambiguous")
         projection_state = SimpleNamespace(
@@ -107,7 +101,7 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 governance["display_name"],
                 self.remote_definition.display_name,
             )
-            self.assertIn("Full Workspace preview", governance["display_name"])
+            self.assertEqual(governance["display_name"], "Google Gemini 3.6 Flash")
             self.assertEqual(governance["containment"]["status"], "NO-GO")
             self.assertEqual(
                 governance["data_destination"],
@@ -181,7 +175,6 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
             self.remote_definition.routing_constraint.allowed_upstream_ids,
         )
         self.assertEqual(remote_item["binding_status"], "disabled")
-        self.assertEqual(remote_item["profile_status"], "suspended")
         self.assertEqual(remote_item["effective_capabilities"]["status"], "blocked")
         self.assertEqual(
             remote_item["data_destination"],

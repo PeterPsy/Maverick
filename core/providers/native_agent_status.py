@@ -50,7 +50,7 @@ def _native_agent_status_item(registry, installation, *, store) -> dict[str, obj
     runtime_ready = status.availability == "installed" and status.health == "healthy"
     enabled = bool(definition is not None and definition.status == "active")
     selectable = contract_complete and runtime_ready and enabled
-    unavailable_reason = _native_unavailable_reason(
+    unavailable_reason = native_runtime_unavailable_reason(
         contract_complete=contract_complete,
         runtime_ready=runtime_ready,
         enabled=enabled,
@@ -114,7 +114,7 @@ def _native_agent_status_item(registry, installation, *, store) -> dict[str, obj
     }
 
 
-def _native_unavailable_reason(
+def native_runtime_unavailable_reason(
     *,
     contract_complete,
     runtime_ready,
@@ -142,4 +142,4 @@ def _native_unavailable_reason(
     return None
 
 
-__all__ = ["native_agent_status_items"]
+__all__ = ["native_agent_status_items", "native_runtime_unavailable_reason"]

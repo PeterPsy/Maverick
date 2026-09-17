@@ -1,54 +1,26 @@
-from __future__ import annotations
-
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from datetime import UTC, datetime
 import unittest
-from unittest.mock import patch
 
-from core.providers.agentic_migration import migrate_agentic_runtime_schema
-from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.providers.agentic_profiles import (
-    CODEX_PREVIOUS_PROFILE_REVISIONS,
-    CODEX_PROFILE_REVISION,
     _validated_reasoning_effort,
-    build_pinned_execution_binding,
     ensure_codex_workspace_profile,
+    publish_codex_agentic_profile,
 )
-from core.providers.agentic_workspace_policy import egress_policy_for_definition
-from core.providers.errors import AgenticProfileConflictError, AgenticProfileError
+from core.providers.errors import AgenticProfileError
 from core.providers.models import ProviderSelection
-from core.providers.service import (
-    builtin_provider_registry,
-    resolve_provider_for_runtime_session,
-)
-from core.providers.store import ProviderCollections, ProviderDocumentStore
-from core.runtime.errors import RuntimeProviderStateError
-from core.runtime.runtime_session import RuntimeSessionRecord
-from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
-from tests.support.collections import FakeCollection
+from core.providers.provider_codex_models import build_codex_definition
+from tests.support.maverick_agent_onboarding import provider_store
 
 
-NOW = datetime(2026, 8, 16, tzinfo=UTC)
+NOW = datetime(2026, 9, 17, tzinfo=UTC)
 
 
 class AgenticProfilesTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.provider_store = ProviderDocumentStore(
-            ProviderCollections(
-                definitions=FakeCollection(),
-                bindings=FakeCollection(),
-                selections=FakeCollection(),
-                agentic_profile_definitions=FakeCollection(),
-                agentic_profile_definition_statuses=FakeCollection(),
-                workspace_agentic_profile_bindings=FakeCollection(),
-                agentic_migrations=FakeCollection(),
-            )
-        )
-        self.registry = builtin_provider_registry()
-        self.codex = self.registry.get_provider_definition("codex")
-
-    def selection(self, *, model_id: str = "gpt-5.6-sol") -> ProviderSelection:
-        return ProviderSelection(
+        self.store = provider_store()
+        self.codex = build_codex_definition()
+        self.selection = ProviderSelection(
             selection_id="default:codex",
             workspace_id="default",
             provider_id="codex",
@@ -57,380 +29,42 @@ class AgenticProfilesTest(unittest.TestCase):
             selection_reason="test",
             created_at=NOW,
             updated_at=NOW,
-            model_id=model_id,
+            model_id="gpt-5.6-sol",
             model_reasoning_effort="high",
         )
 
-    def test_definition_is_installation_scoped_and_workspace_state_is_separate(self) -> None:
-        profile, binding = ensure_codex_workspace_profile(
-            self.provider_store,
+    def test_workspace_config_points_to_one_direct_model_definition(self) -> None:
+        definition, config = ensure_codex_workspace_profile(
+            self.store,
             definition=self.codex,
-            selection=self.selection(),
+            selection=self.selection,
             now=NOW,
         )
-        self.assertNotIn("workspace_id", asdict(profile))
-        self.assertNotIn("credential_binding_id", asdict(profile))
-        self.assertEqual(binding.workspace_id, "default")
-        self.assertEqual(binding.definition_id, profile.definition_id)
-        self.assertTrue(profile.capabilities.tool_orchestration)
-        self.assertTrue(profile.capabilities.filesystem_write)
 
-    def test_workspace_binding_compare_and_set_rejects_stale_revision(self) -> None:
-        _profile, binding = ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=self.selection(),
-            now=NOW,
-        )
-        updated = replace(binding, enabled=False, revision=1)
-        self.provider_store.save_workspace_agentic_profile_binding(
-            updated,
-            expected_revision=0,
-        )
-        with self.assertRaises(AgenticProfileConflictError):
-            self.provider_store.save_workspace_agentic_profile_binding(
-                replace(updated, enabled=True, revision=1),
-                expected_revision=0,
-            )
+        self.assertNotIn("revision", asdict(definition))
+        self.assertNotIn("execution_family", asdict(definition))
+        self.assertEqual(config.definition_id, definition.definition_id)
+        self.assertTrue(config.enabled)
+        self.assertTrue(config.is_default)
 
-    def test_session_resolution_remains_pinned_after_workspace_default_changes(self) -> None:
-        original = self.selection(model_id="gpt-5.6-sol")
-        self.provider_store.save_provider_selection(original)
-        ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=original,
-            now=NOW,
+    def test_republishing_a_model_replaces_the_same_definition(self) -> None:
+        first = publish_codex_agentic_profile(
+            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
         )
-        binding = build_pinned_execution_binding(
-            self.provider_store,
-            self.registry,
-            session_id="session-a",
-            workspace_id="default",
-            execution_mode="full-access",
-            now=NOW,
-        )
-        self.assertEqual(binding.reasoning_effort, binding.default_reasoning_effort)
-        self.assertIn(binding.reasoning_effort, binding.reasoning_efforts)
-        self.assertEqual(binding.capabilities_snapshot.tool_orchestration, True)
-
-        changed = replace(
-            original,
-            model_id="gpt-6-astra",
-            updated_at=replace_time(NOW),
-        )
-        self.provider_store.save_provider_selection(changed)
-        ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=changed,
-            now=replace_time(NOW),
-        )
-        session = runtime_session(execution_binding=binding)
-        _definition, selection = resolve_provider_for_runtime_session(
-            self.provider_store,
-            session=session,
-            registry=self.registry,
-        )
-        self.assertEqual(selection.model_id if selection else None, "gpt-5.6-sol")
-        self.assertEqual(session.execution_binding.binding_digest, binding.binding_digest)
-
-    def test_definition_egress_metadata_is_not_inferred_from_engine_id(self) -> None:
-        profile, _binding = ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=self.selection(),
-            now=NOW,
-        )
-        future_local_engine = replace(profile, runtime_engine_id="future-local-runtime")
-        self.assertEqual(
-            egress_policy_for_definition(future_local_engine),
-            ("local-runtime-no-remote-egress", "1"),
+        second = publish_codex_agentic_profile(
+            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
         )
 
-    def test_generic_pinning_uses_the_direct_profile_contract(self) -> None:
-        profile, _binding = ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=self.selection(),
-            now=NOW,
-        )
-        pinned = build_pinned_execution_binding(
-            self.provider_store,
-            self.registry,
-            session_id="session-direct-profile",
-            workspace_id="default",
-            execution_mode="full-access",
-            now=NOW,
-        )
-        self.assertEqual(pinned.capabilities_snapshot, profile.capabilities)
-        self.assertEqual(pinned.reasoning_efforts, profile.reasoning_efforts)
+        self.assertEqual(first.definition_id, second.definition_id)
+        self.assertEqual(self.store.list_agentic_profile_definitions(), [second])
 
-    def test_pinning_forwards_authoritative_workspace_store_to_profile_resolution(self) -> None:
-        workspace_store = object()
-        with patch(
-            "core.providers.agentic_profiles.feature_enabled",
-            return_value=True,
-        ), patch(
-            "core.providers.agentic_profiles.resolve_workspace_agentic_profile",
-            side_effect=AgenticProfileError("profile_resolution_stopped"),
-        ) as resolve, self.assertRaisesRegex(
-            AgenticProfileError,
-            "profile_resolution_stopped",
-        ):
-            build_pinned_execution_binding(
-                self.provider_store,
-                self.registry,
-                session_id="session-authoritative-workspace",
-                workspace_id="default",
-                execution_mode="sandbox",
-                workspace_store=workspace_store,
-                now=NOW,
-            )
-        resolve.assert_called_once_with(
-            self.provider_store,
-            workspace_id="default",
-            binding_id=None,
-            workspace_store=workspace_store,
+    def test_reasoning_is_validated_directly_against_the_model(self) -> None:
+        definition = publish_codex_agentic_profile(
+            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
         )
-
-    def test_pinning_rejects_every_authorized_profile_identity_drift(self) -> None:
-        profile, binding = ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=self.selection(),
-            now=NOW,
-        )
-        changed_definition = replace(profile, revision="changed-definition")
-        cases = (
-            ("binding", profile, replace(binding, binding_id="changed-binding")),
-            (
-                "default",
-                profile,
-                replace(binding, is_default=False, revision=binding.revision + 1),
-            ),
-            (
-                "revision",
-                profile,
-                replace(binding, revision=binding.revision + 1),
-            ),
-            (
-                "definition",
-                changed_definition,
-                replace(
-                    binding,
-                    definition_revision=changed_definition.revision,
-                    revision=binding.revision + 1,
-                ),
-            ),
-        )
-        for label, current_definition, current_binding in cases:
-            with self.subTest(drift=label), self.assertRaisesRegex(
-                AgenticProfileError,
-                "workspace_profile_binding_changed",
-            ), patch(
-                "core.providers.agentic_profiles.resolve_workspace_agentic_profile",
-                return_value=(current_definition, current_binding),
-            ):
-                build_pinned_execution_binding(
-                    self.provider_store,
-                    self.registry,
-                    session_id="session-drift",
-                    workspace_id="default",
-                    execution_mode="sandbox",
-                    authorized_definition_snapshot=profile,
-                    authorized_workspace_binding_snapshot=binding,
-                    now=NOW,
-                )
-
-    def test_reasoning_selection_uses_only_the_immutable_profile_contract(self) -> None:
-        profile = type(
-            "Profile",
-            (),
-            {
-                "reasoning_efforts": ("low", "high"),
-                "default_reasoning_effort": "high",
-            },
-        )()
-        self.assertEqual(_validated_reasoning_effort(profile, reasoning_effort=None), "high")
-        with self.assertRaisesRegex(
-            AgenticProfileError,
-            "profile_reasoning_effort_unsupported",
-        ):
-            _validated_reasoning_effort(profile, reasoning_effort="medium")
-
-    def test_migration_is_idempotent_and_preserves_legacy_continuation(self) -> None:
-        selection = self.selection()
-        self.provider_store.save_provider_selection(selection)
-        session_collection = FakeCollection()
-        provider_states = FakeCollection()
-        runtime_store = RuntimeDocumentStore(
-            RuntimeCollections(
-                sessions=session_collection,
-                turns=FakeCollection(),
-                events=FakeCollection(),
-                processes=FakeCollection(),
-                states=FakeCollection(),
-                threads=FakeCollection(),
-                provider_states=provider_states,
-            )
-        )
-        legacy = runtime_session(execution_binding=None, provider_thread_id="legacy-thread")
-        session_collection.update_one(
-            {"session_id": legacy.session_id, "workspace_id": legacy.workspace_id},
-            {"$set": asdict(legacy)},
-            upsert=True,
-        )
-
-        first = migrate_agentic_runtime_schema(
-            self.provider_store,
-            runtime_store,
-            self.registry,
-            now=NOW,
-        )
-        second = migrate_agentic_runtime_schema(
-            self.provider_store,
-            runtime_store,
-            self.registry,
-            now=replace_time(NOW),
-        )
-
-        migrated = runtime_store.get_session("session-a")
-        state = runtime_store.get_provider_state("session-a")
-        self.assertTrue(migrated.execution_binding.legacy_inferred)
-        self.assertEqual(migrated.execution_binding.reasoning_effort, "high")
-        self.assertTrue(migrated.execution_binding.capabilities_snapshot.tool_orchestration)
-        self.assertEqual(state.provider_thread_id, "legacy-thread")
-        self.assertEqual(first.summary_digest, second.summary_digest)
-        self.assertEqual(len(provider_states.documents), 1)
-        with self.assertRaises(RuntimeProviderStateError):
-            runtime_store.initialize_provider_state(
-                replace(state, provider_thread_id="other")
-            )
-
-    def test_codex_profile_suspends_previous_revisions(self) -> None:
-        selection = self.selection()
-        profile, _binding = ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=selection,
-            now=NOW,
-        )
-        self.assertTrue(profile.revision.startswith(CODEX_PROFILE_REVISION + "."))
-        for revision in CODEX_PREVIOUS_PROFILE_REVISIONS:
-            self.provider_store.save_agentic_profile_definition_status(
-                AgenticProfileDefinitionStatus(
-                    definition_id=profile.definition_id,
-                    definition_revision=revision,
-                    rollout_status="preview",
-                    revision=0,
-                    updated_at=NOW,
-                ),
-                expected_revision=None,
-            )
-        content_addressed_previous = replace(
-            profile,
-            revision="17.previous-catalog-digest",
-        )
-        self.provider_store.save_agentic_profile_definition(
-            content_addressed_previous
-        )
-        self.provider_store.save_agentic_profile_definition_status(
-            AgenticProfileDefinitionStatus(
-                definition_id=profile.definition_id,
-                definition_revision=content_addressed_previous.revision,
-                rollout_status="preview",
-                revision=0,
-                updated_at=NOW,
-            ),
-            expected_revision=None,
-        )
-        ensure_codex_workspace_profile(
-            self.provider_store,
-            definition=self.codex,
-            selection=selection,
-            now=replace_time(NOW),
-        )
-        for revision in CODEX_PREVIOUS_PROFILE_REVISIONS:
-            status = self.provider_store.get_agentic_profile_definition_status(
-                profile.definition_id,
-                revision,
-            )
-            self.assertEqual(status.rollout_status, "suspended")
-        content_addressed_status = (
-            self.provider_store.get_agentic_profile_definition_status(
-                profile.definition_id,
-                content_addressed_previous.revision,
-            )
-        )
-        self.assertEqual(content_addressed_status.rollout_status, "suspended")
-
-    def test_all_builtin_codex_models_publish_direct_capabilities(self) -> None:
-        runtime_store = RuntimeDocumentStore(
-            RuntimeCollections(
-                sessions=FakeCollection(),
-                turns=FakeCollection(),
-                events=FakeCollection(),
-                processes=FakeCollection(),
-                states=FakeCollection(),
-                threads=FakeCollection(),
-                provider_states=FakeCollection(),
-            )
-        )
-        migrate_agentic_runtime_schema(
-            self.provider_store,
-            runtime_store,
-            self.registry,
-            now=NOW,
-        )
-        self.assertTrue(self.codex.model_options)
-        for model in self.codex.model_options:
-            with self.subTest(model_id=model.model_id):
-                profile = next(
-                    item
-                    for item in self.provider_store.list_agentic_profile_definitions()
-                    if item.model_id == model.model_id
-                    and item.revision.startswith(CODEX_PROFILE_REVISION + ".")
-                )
-                status = self.provider_store.get_agentic_profile_definition_status(
-                    profile.definition_id,
-                    profile.revision,
-                )
-                self.assertEqual(status.rollout_status, "preview")
-                self.assertTrue(profile.capabilities.tool_orchestration)
-                self.assertEqual(
-                    profile.reasoning_efforts,
-                    tuple(item.effort for item in model.supported_reasoning_efforts),
-                )
-
-
-def runtime_session(
-    *,
-    execution_binding,
-    provider_thread_id: str | None = None,
-) -> RuntimeSessionRecord:
-    return RuntimeSessionRecord(
-        session_id="session-a",
-        workspace_id="default",
-        agent_id="chat",
-        status="running",
-        requested_mode="full-access",
-        effective_mode="full-access",
-        workspace_root="/workspace",
-        workdir="/workspace",
-        runtime_root="/runtime/session-a",
-        started_at=NOW,
-        updated_at=NOW,
-        ended_at=None,
-        last_progress_at=NOW,
-        execution_binding=execution_binding,
-        provider_id="codex",
-        provider_thread_id=provider_thread_id,
-    )
-
-
-def replace_time(value: datetime) -> datetime:
-    return value.replace(second=value.second + 1)
+        self.assertEqual(_validated_reasoning_effort(definition, reasoning_effort="high"), "high")
+        with self.assertRaisesRegex(AgenticProfileError, "profile_reasoning_effort_unsupported"):
+            _validated_reasoning_effort(definition, reasoning_effort="impossible")
 
 
 if __name__ == "__main__":

@@ -6,15 +6,12 @@ import unittest
 from core.runtime.prepared_session_config import prepared_session_fingerprint
 
 
-def _binding(*, revision: int = 14):
+def _binding(*, model_id: str = "gpt-5.6-sol"):
     return SimpleNamespace(
-        profile_definition_id="agentic-profile-codex",
-        profile_definition_revision="12",
         workspace_binding_id="workspace-agentic-default",
-        workspace_binding_revision=revision,
         runtime_engine_id="codex",
         model_provider_id="codex",
-        model_id="gpt-5.6-sol",
+        model_id=model_id,
         reasoning_effort="max",
         execution_mode="full-access",
     )
@@ -39,18 +36,18 @@ class PreparedSessionConfigTestCase(unittest.TestCase):
 
         self.assertEqual(implicit_default, explicit_default)
 
-    def test_resolved_binding_revision_fences_prepared_session_reuse(self) -> None:
+    def test_resolved_model_change_fences_prepared_session_reuse(self) -> None:
         body = {"source_app_id": "chat"}
 
         first = prepared_session_fingerprint(
             body,
             agent_id="chat",
-            execution_binding=_binding(revision=14),
+            execution_binding=_binding(model_id="gpt-5.6-sol"),
         )
         revised = prepared_session_fingerprint(
             body,
             agent_id="chat",
-            execution_binding=_binding(revision=15),
+            execution_binding=_binding(model_id="gpt-6-astra"),
         )
 
         self.assertNotEqual(first, revised)

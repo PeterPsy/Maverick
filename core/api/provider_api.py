@@ -32,9 +32,6 @@ from core.providers.execution_families import (
     NO_WORKSPACE_ACTIONS_MESSAGE,
     execution_family_catalog,
 )
-from core.providers.execution_family_migration import (
-    execution_family_selection_migration_payload,
-)
 from core.providers.execution_family_readiness import (
     inspect_agentic_family_readiness,
 )
@@ -576,16 +573,6 @@ def workspace_provider_status(
         workspace_id=workspace_id,
         projection_context=context,
     )
-    get_hosted_selection = getattr(
-        provider_store,
-        "get_hosted_provider_selection",
-        None,
-    )
-    hosted_selection = (
-        get_hosted_selection(workspace_id=workspace_id, profile="fast_model")
-        if callable(get_hosted_selection)
-        else None
-    )
     return {
         "workspace_id": workspace_id,
         "execution_families": [
@@ -598,11 +585,6 @@ def workspace_provider_status(
         "agentic_profiles": agentic_profiles,
         "native_agents": {"items": native_items},
         "hosted_text": hosted_text,
-        "selection_migration": execution_family_selection_migration_payload(
-            runtime_selection=status.selection,
-            hosted_selection=hosted_selection,
-            agentic_profile_items=agentic_profiles["items"],
-        ),
         "speech_stt": workspace_speech_stt_status(
             state,
             workspace_id=workspace_id,
@@ -708,9 +690,6 @@ def workspace_agentic_profile_status(
             "execution_family": readiness.execution_family or None,
             "runtime_status": readiness.contract_status,
             "runtime_status_reason": readiness.reason_code,
-            "family_contract_status": "complete" if selectable else readiness.contract_status,
-            "full_workspace_status": "available" if selectable else "unavailable",
-            "rollout_status": "available" if selectable else "disabled",
             "context_policy": None if definition.context_policy is None else asdict(definition.context_policy),
             "capabilities": asdict(definition.capabilities),
             "enabled": config.enabled,

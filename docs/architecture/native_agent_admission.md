@@ -1,57 +1,49 @@
 # Native Agent Admission
 
-Native agent admission is driven by the current installation contract, live
-model catalog, direct agentic profile and workspace policy.
+Native agent admission uses the installed runtime, its current model catalog and
+the workspace's direct model configuration. It has no certificate, rollout
+revision, profile lineage or renewal cycle.
 
-## Connection contract
+## Installation contract
 
-A native installation declares its runtime engine, adapter/version, structured
-protocol, harness recipe, model-provider connection, sandbox/effect mapping and
-Full Workspace revision. Registration validates those fields and the callable
-lifecycle controller.
+A native installation declares the runtime engine, adapter/version, structured
+protocol, process-launch settings and effect mapping needed to run it. Those
+fields describe executable integration code; they are not signed model
+authority and are not copied into workspace or session identity metadata.
 
-The connection is model-catalog scoped rather than a hard-coded slug allowlist.
-An authenticated catalog refresh reconciles immutable model projections. New
-model slugs become available through that reconciliation; removed or ambiguous
-models are unavailable for new sessions.
+The model catalog is refreshed for discovery. A successful refresh replaces the
+current list. A transient refresh failure retains the last usable snapshot and
+does not expire an otherwise working Codex installation.
 
-## New-session admission
+## New sessions
 
-Core admits a native session only when:
+Core admits a native session when:
 
-- the provider and profile rollout are enabled;
-- an enabled workspace binding selects the exact profile;
+- an enabled workspace config selects the provider and model;
 - the runtime is installed and healthy;
-- the current catalog contains the requested model/revision;
-- requested reasoning is declared by the profile;
-- installation, adapter, protocol, recipe and Full Workspace identities agree;
-- actor, execution-mode, feature, containment and workspace policy permit it.
+- the model and requested reasoning effort are supported;
+- actor policy and execution mode allow the session.
 
-Persisted provider model metadata is not admission authority. UI state is not
-admission authority.
+Core then stores only the concrete inputs needed to continue that session:
+workspace config id, runtime/adapter, provider/model/protocol, reasoning,
+capabilities, route, credential reference, execution mode, policy, egress and
+context/model settings.
 
 ## Codex
 
-Codex uses the `codex-app-server` native contract. Its model profile revision is
-content-addressed from the current catalog model identity and reasoning choices.
-Adapter identity is derived from declared engine/adapter ids and versions rather
-than mutable source-file bytes.
+Codex uses the `codex-app-server` native integration. Each currently advertised
+model has one stable direct config. Reconciliation updates that config in place;
+it does not publish historical revisions. Discovery failure keeps the last
+working catalog instead of turning a short refresh outage into model expiry.
 
-Ordinary Codex updates and newly advertised models follow the same catalog
-reconciliation path. Current installation health, catalog state, profile binding
-and live policy remain authoritative.
+## Existing sessions
 
-## Existing sessions and continuation
+Every turn rechecks only mutable authority that can actually change: the
+workspace config remains enabled, the actor is allowed, credentials and runtime
+health are available, the execution mode has not broadened, and tool/egress
+policy still permits the operation.
 
-An existing session retains its immutable execution binding. Every turn still
-revalidates live workspace, actor, health, model and policy authority.
-
-A compatible profile/binding evolution may fork a continuation child only after
-Core proves non-expansion, fences the predecessor, snapshots required private
-state and transfers provider-thread ownership. It never rewrites a predecessor.
-An incompatible change requires a new conversation or explicit transcript
-handoff.
-
-Runtime disablement, removed models, missing provider threads and failed
-non-expansion proofs fail closed with public reason codes. Operators correct the
-runtime, catalog, profile or policy state that caused the failure.
+If the session's concrete runtime inputs are no longer executable, Core returns
+`runtime_session_restart_required`. It does not create continuation children,
+lineage records, compatibility forks or provider snapshots. Starting a new
+conversation is the explicit recovery path for an incompatible configuration.

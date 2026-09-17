@@ -28,12 +28,12 @@ from core.providers.openrouter_agentic_profile import (
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget, estimate_hosted_request_tokens
 from core.runtime.hosted_agentic_models import HostedFinalizationPolicy
 from core.runtime.hosted_finalization_policy import provider_finalization_policy
-from core.runtime.hosted_harness_recipes import (
-    GOOGLE_GOVERNED_WORKSPACE_RECIPE, OPENROUTER_GOVERNED_WORKSPACE_RECIPE, hosted_full_context_policy,
+from core.runtime.hosted_provider_model_config import (
+    GOOGLE_HOSTED_MODEL_CONFIG, OPENROUTER_HOSTED_MODEL_CONFIG, hosted_full_context_policy,
 )
 
-GOOGLE_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(GOOGLE_INTERACTIONS_PROVIDER_CONFIG, GOOGLE_GOVERNED_WORKSPACE_RECIPE)
-OPENROUTER_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(OPENROUTER_RELACE_GLM_PROVIDER_CONFIG, OPENROUTER_GOVERNED_WORKSPACE_RECIPE)
+GOOGLE_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(GOOGLE_INTERACTIONS_PROVIDER_CONFIG, GOOGLE_HOSTED_MODEL_CONFIG)
+OPENROUTER_HOSTED_FINALIZATION_POLICY = provider_finalization_policy(OPENROUTER_RELACE_GLM_PROVIDER_CONFIG, OPENROUTER_HOSTED_MODEL_CONFIG)
 
 
 GOOGLE_REQUEST_COST_ESTIMATOR = (
@@ -280,7 +280,7 @@ class HostedAgenticBudgetTest(unittest.TestCase):
             input_microusd_per_million_tokens=3_000_000,
             output_microusd_per_million_tokens=5_000_000,
         ))
-        reserve = provider_finalization_policy(config, OPENROUTER_GOVERNED_WORKSPACE_RECIPE)
+        reserve = provider_finalization_policy(config, OPENROUTER_HOSTED_MODEL_CONFIG)
         policy = replace(
             openrouter_agentic_preview_policy(),
             max_estimated_cost_microusd=reserve.reserved_cost_microusd,
@@ -310,7 +310,7 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 ),
                 provider_finalization_policy(
                     config,
-                    OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
+                    OPENROUTER_HOSTED_MODEL_CONFIG,
                 ),
             )
 

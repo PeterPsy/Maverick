@@ -27,7 +27,7 @@ from core.providers.maverick_agent_onboarding import (
 from core.providers.store import ProviderStore
 from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
 from core.runtime.hosted_agentic_policy import HOSTED_CORE_TOOL_HANDLES
-from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
+from core.runtime.hosted_provider_model_config import GOOGLE_HOSTED_MODEL_CONFIG
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
@@ -104,7 +104,7 @@ def google_agentic_preview_publication(
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-        display_name="Google Gemini 3.6 Flash · Full Workspace preview",
+        display_name="Google Gemini 3.6 Flash",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="google-ai-studio",
         model_id="gemini-3.6-flash",
@@ -124,12 +124,12 @@ def google_agentic_preview_publication(
         created_at=timestamp,
         egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
-        context_policy=GOOGLE_GOVERNED_WORKSPACE_RECIPE.context_policy,
+        context_policy=GOOGLE_HOSTED_MODEL_CONFIG.context_policy,
     )
     return MaverickAgentProfilePublication(
         adapter=GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
         provider_config=GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
-        recipe=GOOGLE_GOVERNED_WORKSPACE_RECIPE,
+        model_config=GOOGLE_HOSTED_MODEL_CONFIG,
         profile=definition,
     )
 
@@ -140,7 +140,7 @@ def ensure_google_agentic_preview_profile(
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish a Full Workspace profile without enabling a binding."""
+    """Publish the current Google agentic model config without enabling it."""
     timestamp = now or datetime.now(tz=UTC)
     validate_maverick_runtime_adapter(GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER, adapter)
     return publish_maverick_agent_profile(

@@ -23,6 +23,25 @@ def _write_json_collection_records(path_text: str, start: int, count: int) -> No
 
 
 class JsonFileCollectionTestCase(unittest.TestCase):
+    def test_update_one_unsets_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = JsonFileCollection(Path(temp_dir) / "records.json")
+            collection.update_one(
+                {"record_id": "one"},
+                {"$set": {"record_id": "one", "retired": True}},
+                upsert=True,
+            )
+
+            collection.update_one(
+                {"record_id": "one"},
+                {"$set": {"current": True}, "$unset": {"retired": ""}},
+            )
+
+            self.assertEqual(
+                collection.find_one({"record_id": "one"}),
+                {"record_id": "one", "current": True},
+            )
+
     def test_reuses_parsed_documents_until_the_collection_file_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "records.json"

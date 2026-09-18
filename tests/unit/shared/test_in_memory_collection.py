@@ -7,6 +7,24 @@ from core.shared.in_memory_collection import InMemoryCollection
 
 
 class InMemoryCollectionTest(unittest.TestCase):
+    def test_update_one_unsets_fields(self) -> None:
+        collection = InMemoryCollection()
+        collection.update_one(
+            {"record_id": "one"},
+            {"$set": {"record_id": "one", "retired": True}},
+            upsert=True,
+        )
+
+        collection.update_one(
+            {"record_id": "one"},
+            {"$set": {"current": True}, "$unset": {"retired": ""}},
+        )
+
+        self.assertEqual(
+            collection.find_one({"record_id": "one"}),
+            {"record_id": "one", "current": True},
+        )
+
     def test_count_documents_does_not_materialize_results(self) -> None:
         collection = InMemoryCollection()
         for record_id in ("one", "two", "three"):

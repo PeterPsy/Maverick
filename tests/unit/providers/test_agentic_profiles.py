@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from datetime import UTC, datetime
 import unittest
+from unittest.mock import patch
 
 from core.providers.agentic_profiles import (
     _validated_reasoning_effort,
@@ -57,6 +58,43 @@ class AgenticProfilesTest(unittest.TestCase):
 
         self.assertEqual(first.definition_id, second.definition_id)
         self.assertEqual(self.store.list_agentic_profile_definitions(), [second])
+
+    def test_adapter_version_change_updates_the_same_definition(self) -> None:
+        first = publish_codex_agentic_profile(
+            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
+        )
+        with patch("core.providers.agentic_profiles.CODEX_ADAPTER_VERSION", "999"):
+            updated = publish_codex_agentic_profile(
+                self.store,
+                definition=self.codex,
+                model_id="gpt-5.6-sol",
+                now=NOW,
+            )
+
+        self.assertEqual(updated.definition_id, first.definition_id)
+        self.assertEqual(updated.adapter_version_constraint, "==999")
+        self.assertEqual(self.store.list_agentic_profile_definitions(), [updated])
+
+    def test_profile_hydration_ignores_and_republication_removes_retired_fields(self) -> None:
+        current = publish_codex_agentic_profile(
+            self.store, definition=self.codex, model_id="gpt-5.6-sol", now=NOW
+        )
+        collection = self.store.collections.agentic_profile_definitions
+        document = collection.documents[0]
+        document.update(
+            revision="retired-revision",
+            execution_family="retired-family",
+            retired_metadata="ignored",
+        )
+
+        self.assertEqual(
+            self.store.get_agentic_profile_definition(current.definition_id),
+            current,
+        )
+        self.store.save_agentic_profile_definition(current)
+        persisted = collection.documents[0]
+        self.assertNotIn("revision", persisted)
+        self.assertNotIn("execution_family", persisted)
 
     def test_reasoning_is_validated_directly_against_the_model(self) -> None:
         definition = publish_codex_agentic_profile(

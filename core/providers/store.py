@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Any, Protocol
 
 from core.providers.agentic_models import (
@@ -274,7 +274,10 @@ class ProviderDocumentStore:
     def save_agentic_profile_definition(self, record: AgenticProfileDefinition) -> AgenticProfileDefinition:
         self._agentic_profile_definitions.update_one(
             {"definition_id": record.definition_id},
-            {"$set": asdict(record)},
+            {
+                "$set": asdict(record),
+                "$unset": {"revision": "", "execution_family": ""},
+            },
             upsert=True,
         )
         return record
@@ -335,14 +338,22 @@ def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefin
     payload["reasoning_efforts"] = tuple(payload.get("reasoning_efforts", ()))
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
-    return AgenticProfileDefinition(**payload)
+    current_fields = {field.name for field in fields(AgenticProfileDefinition)}
+    return AgenticProfileDefinition(
+        **{key: value for key, value in payload.items() if key in current_fields}
+    )
 
 
 def _workspace_agentic_profile_binding(document: dict[str, Any]) -> WorkspaceAgenticProfileBinding:
     payload = dict(document)
     payload["actor_policy"] = _actor_selection_policy(payload["actor_policy"])
     payload["workspace_policy_ceiling"] = _agentic_runtime_policy(payload["workspace_policy_ceiling"])
-    return WorkspaceAgenticProfileBinding(**payload)
+    current_fields = {
+        field.name for field in fields(WorkspaceAgenticProfileBinding)
+    }
+    return WorkspaceAgenticProfileBinding(
+        **{key: value for key, value in payload.items() if key in current_fields}
+    )
 
 
 def _agentic_runtime_policy(document: dict[str, Any]) -> AgenticRuntimePolicy:

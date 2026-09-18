@@ -276,7 +276,7 @@ def _codex_profile_definition(
     now: datetime,
 ) -> AgenticProfileDefinition:
     identity = hashlib.sha256(
-        f"codex\0{model_id}\0codex-app-server-v{CODEX_ADAPTER_VERSION}".encode()
+        f"codex\0codex\0{model_id}".encode()
     ).hexdigest()[:16]
     return AgenticProfileDefinition(
         definition_id=f"agentic-profile-codex-{identity}",

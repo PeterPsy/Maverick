@@ -59,7 +59,7 @@ class JsonFileCollection:
                 documents = self._read_documents(mutable=True)
                 for index, document in enumerate(documents):
                     if _matches(document, query):
-                        documents[index] = {**document, **payload}
+                        documents[index] = _apply_update(document, update)
                         self._write_documents(documents)
                         return
                 if upsert:
@@ -68,13 +68,12 @@ class JsonFileCollection:
 
     def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
         """Apply one conditional update while holding the collection file lock."""
-        payload = deepcopy(update.get("$set", {}))
         with self._lock:
             with self._process_lock(exclusive=True):
                 documents = self._read_documents(mutable=True)
                 for index, document in enumerate(documents):
                     if _matches(document, query):
-                        documents[index] = {**document, **payload}
+                        documents[index] = _apply_update(document, update)
                         self._write_documents(documents)
                         return True
         return False
@@ -249,6 +248,16 @@ class JsonFileCollection:
 
 def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
     return all(_matches_value(document.get(key), value) for key, value in query.items())
+
+
+def _apply_update(
+    document: dict[str, Any],
+    update: dict[str, Any],
+) -> dict[str, Any]:
+    updated = {**document, **deepcopy(update.get("$set", {}))}
+    for field_name in update.get("$unset", {}):
+        updated.pop(field_name, None)
+    return updated
 
 
 def _matches_value(actual: Any, expected: Any) -> bool:

@@ -25,6 +25,8 @@ class FakeCollection:
         for index, document in enumerate(self.documents):
             if _matches(document, query):
                 self.documents[index] = {**document, **payload}
+                for field_name in update.get("$unset", {}):
+                    self.documents[index].pop(field_name, None)
                 return True
         if upsert:
             self.documents.append({**query, **payload})

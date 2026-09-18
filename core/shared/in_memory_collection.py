@@ -39,18 +39,17 @@ class InMemoryCollection:
         with self._lock:
             for index, document in enumerate(self._documents):
                 if _matches(document, query):
-                    self._documents[index] = {**document, **payload}
+                    self._documents[index] = _apply_update(document, update)
                     return
             if upsert:
                 self._documents.append({**deepcopy(query), **payload})
 
     def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
         """Apply one conditional update and report whether the query matched."""
-        payload = deepcopy(update.get("$set", {}))
         with self._lock:
             for index, document in enumerate(self._documents):
                 if _matches(document, query):
-                    self._documents[index] = {**document, **payload}
+                    self._documents[index] = _apply_update(document, update)
                     return True
         return False
 
@@ -108,6 +107,16 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
         elif actual != expected:
             return False
     return True
+
+
+def _apply_update(
+    document: dict[str, Any],
+    update: dict[str, Any],
+) -> dict[str, Any]:
+    updated = {**document, **deepcopy(update.get("$set", {}))}
+    for field_name in update.get("$unset", {}):
+        updated.pop(field_name, None)
+    return updated
 
 
 def _datetime_is_future(value: Any) -> bool:

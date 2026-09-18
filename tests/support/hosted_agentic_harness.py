@@ -28,6 +28,7 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
 )
 from core.runtime.execution_binding import build_runtime_execution_binding
+from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.hosted_agentic_engine import (
     HostedAgenticEngineAdapter,
     build_hosted_turn_status_callback,
@@ -49,6 +50,7 @@ from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.session_provider_state import initial_runtime_state
+from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
@@ -56,6 +58,7 @@ from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
 from core.runtime.tool_private_payloads import EncryptedRuntimeToolPrivatePayloadStore
 from core.runtime.tool_schema import provider_tool_name
+from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
 
@@ -67,6 +70,48 @@ OBJECT_SCHEMA = {
     "required": ["value"],
     "additionalProperties": False,
 }
+
+
+def _memory_runtime_collections() -> RuntimeCollections:
+    return RuntimeCollections(
+        sessions=FakeCollection(),
+        turns=FakeCollection(),
+        events=FakeCollection(),
+        processes=FakeCollection(),
+        states=FakeCollection(),
+        threads=FakeCollection(),
+        api_tokens=FakeCollection(),
+        provider_states=FakeCollection(),
+        tool_invocations=FakeCollection(),
+        tool_confirmation_grants=FakeCollection(),
+        egress_decisions=FakeCollection(),
+        provider_step_journals=FakeCollection(),
+    )
+
+
+def _json_runtime_collections(root) -> RuntimeCollections:
+    def session_collection(filename: str) -> RuntimeSessionJsonCollection:
+        return RuntimeSessionJsonCollection(start_path=root, filename=filename)
+
+    return RuntimeCollections(
+        sessions=session_collection("session.json"),
+        turns=session_collection("turns.json"),
+        events=RuntimeEventJsonCollection(start_path=root),
+        processes=session_collection("processes.json"),
+        states=session_collection("state.json"),
+        threads=WorkspaceRuntimeJsonCollection(
+            start_path=root,
+            filename="threads.json",
+        ),
+        api_tokens=session_collection("api_tokens.json"),
+        provider_states=session_collection("provider_state.json"),
+        tool_invocations=session_collection("tool_invocations.json"),
+        tool_confirmation_grants=session_collection(
+            "tool_confirmation_grants.json"
+        ),
+        egress_decisions=session_collection("egress_decisions.json"),
+        provider_step_journals=session_collection("provider_step_journal.json"),
+    )
 
 
 class HostedAgenticHarness:
@@ -83,6 +128,7 @@ class HostedAgenticHarness:
         filesystem_list: bool = False,
         model_config=None,
         execution_mode: str = "full-access",
+        json_store: bool = False,
     ) -> None:
         feature_flags = patch.dict(
             os.environ,
@@ -121,20 +167,9 @@ class HostedAgenticHarness:
         self.turn_statuses: list[tuple[str, str]] = []
         self.audit = FakeCollection()
         self.store = RuntimeDocumentStore(
-            RuntimeCollections(
-                sessions=FakeCollection(),
-                turns=FakeCollection(),
-                events=FakeCollection(),
-                processes=FakeCollection(),
-                states=FakeCollection(),
-                threads=FakeCollection(),
-                api_tokens=FakeCollection(),
-                provider_states=FakeCollection(),
-                tool_invocations=FakeCollection(),
-                tool_confirmation_grants=FakeCollection(),
-                egress_decisions=FakeCollection(),
-                provider_step_journals=FakeCollection(),
-            )
+            _json_runtime_collections(self.root)
+            if json_store
+            else _memory_runtime_collections()
         )
         self.policy = replace(
             codex_runtime_policy(),

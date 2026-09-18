@@ -153,7 +153,7 @@ class HostedAgenticTerminalGapTest(unittest.TestCase):
                 )
                 self.assertEqual(
                     result.failure_reason_code,
-                    "provider_acceptance_ambiguous",
+                    reason_code,
                 )
                 self._assert_terminal_pairing_contained(harness)
 

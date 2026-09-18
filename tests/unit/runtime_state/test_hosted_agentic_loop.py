@@ -201,7 +201,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
         self.assertEqual(len(client.requests), 1)
         self.assertEqual(client.closed_streams, 1)
         errors = [event.payload for event in events if event.event_type == "runtime.error"]
-        self.assertEqual(errors, [{"reason_code": "provider_acceptance_ambiguous"}])
+        self.assertEqual(errors, [{"reason_code": "runtime_cancelled"}])
         self.assertEqual(
             self.harness.store.get_session("session-hosted").status,
             "recovery_required",
@@ -282,7 +282,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         serialized = json.dumps([event.payload for event in events])
         self.assertNotIn("provider-secret-transport-detail", serialized)
-        self.assertIn("provider_acceptance_ambiguous", serialized)
+        self.assertIn("provider_response_invalid", serialized)
         self.assertEqual(
             self.harness.store.get_session("session-hosted").status,
             "recovery_required",
@@ -322,7 +322,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
         )
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "provider_acceptance_ambiguous"}],
+            [{"reason_code": "workspace_profile_binding_disabled"}],
         )
 
     def test_private_state_quota_failure_is_explicit_and_redaction_safe(self) -> None:
@@ -340,7 +340,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "provider_acceptance_ambiguous"}],
+            [{"reason_code": "provider_private_quota_exceeded"}],
         )
 
     def test_private_state_corruption_is_explicit_before_provider_dispatch(self) -> None:

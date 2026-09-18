@@ -102,7 +102,7 @@ class HostedSemanticEnvelopeCompiler:
                         context=context,
                         kind="content",
                         role="system",
-                        provenance="research_boundary",
+                        provenance="platform_instruction",
                         content_type="text/plain",
                         content=RESEARCH_BOUNDARY_INSTRUCTION,
                         classification=platform_classification(

@@ -260,7 +260,7 @@ class ResearchRuntimeTest(unittest.TestCase):
         )
         self.assertEqual(
             tuple(block.provenance for block in content_blocks),
-            ("research_boundary", "user_input"),
+            ("platform_instruction", "user_input"),
         )
         self.assertEqual(
             content_blocks[0].content,

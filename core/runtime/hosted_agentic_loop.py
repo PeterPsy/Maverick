@@ -151,7 +151,7 @@ class HostedAgenticLoop:
         except Exception:
             failure_reason = "hosted_runtime_failed"
         if failure_reason is not None:
-            recovered_reason = self._recover_after_failure(
+            self._recover_after_failure(
                 context,
                 trigger=(
                     f"cancellation_uncertain:{failure_reason}"
@@ -159,8 +159,6 @@ class HostedAgenticLoop:
                     else f"execution_failure:{failure_reason}"
                 ),
             )
-            if recovered_reason is not None:
-                failure_reason = recovered_reason
             yield event("runtime.error", {"reason_code": failure_reason})
             yield event(
                 "provider.execution.completed",
@@ -651,24 +649,7 @@ class HostedAgenticLoop:
                     if emission.response is not None:
                         response = emission.response
             except Exception as error:
-                current_journal = self.tool_ledger.store.get_provider_step_journal(
-                    step_journal.journal_id
-                )
-                if current_journal.stream_status == "pending":
-                    current_journal = self.provider_step_journal.fail_stream(
-                        current_journal,
-                        reason_code=(
-                            error.reason_code
-                            if isinstance(error, HostedAgenticLoopError)
-                            else "provider_response_invalid"
-                        ),
-                    )
-                if self.provider_step_journal.is_proven_terminal_failure(
-                    current_journal
-                ):
-                    self.provider_step_journal.roll_back_proven_terminal_failure(
-                        current_journal
-                    )
+                self._close_failed_stream(step_journal, error)
                 raise
             if response is None:
                 raise HostedAgenticLoopError("provider_response_invalid")
@@ -1149,14 +1130,14 @@ class HostedAgenticLoop:
             trigger=trigger,
         )
 
-    def _recover_after_failure(self, context, *, trigger: str) -> str | None:
+    def _recover_after_failure(self, context, *, trigger: str) -> None:
         failure_reason = trigger.partition(":")[2] or trigger
         try:
-            result = self.recover_session(context, trigger=trigger)
+            self.recover_session(context, trigger=trigger)
         except Exception:
-            result = None
+            pass
         try:
-            contained = self.recovery.contain_terminal_pairing(
+            self.recovery.contain_terminal_pairing(
                 session=context.session,
                 binding=context.binding,
                 provider_runtime=self.provider_runtimes.resolve(context.binding),
@@ -1165,12 +1146,32 @@ class HostedAgenticLoop:
                 terminal_reason_code=failure_reason,
             )
         except Exception:
-            return "provider_state_ambiguous"
-        if result is None:
-            return contained or "provider_state_ambiguous"
-        if not result.recovered:
-            return result.reason_code
-        return None
+            pass
+
+    def _close_failed_stream(self, record, error: Exception) -> None:
+        """Best-effort terminalize one stream without replacing its first error."""
+        reason_code = (
+            error.reason_code
+            if isinstance(error, HostedAgenticLoopError)
+            else "provider_response_invalid"
+        )
+        for _attempt in range(3):
+            try:
+                current = self.tool_ledger.store.get_provider_step_journal(
+                    record.journal_id
+                )
+                if current.stream_status == "pending":
+                    current = self.provider_step_journal.fail_stream(
+                        current,
+                        reason_code=reason_code,
+                    )
+                if self.provider_step_journal.is_proven_terminal_failure(current):
+                    self.provider_step_journal.roll_back_proven_terminal_failure(
+                        current
+                    )
+                return
+            except Exception:
+                continue
 
     def _read_final_output(self, context, provider_runtime, record) -> str:
         if (

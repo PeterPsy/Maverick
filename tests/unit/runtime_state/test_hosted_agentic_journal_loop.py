@@ -144,13 +144,13 @@ class HostedAgenticJournalLoopTest(unittest.TestCase):
         result, events, _adapter = self.execute(client)
 
         self.assertEqual(result.exit_code, 1)
-        self.assertEqual(result.failure_reason_code, "provider_acceptance_ambiguous")
+        self.assertEqual(result.failure_reason_code, "provider_unavailable")
         self.assertEqual(result.diagnostic_reference, "turn:turn-hosted")
         self.assertEqual(len(client.requests), 1)
         self.assertEqual(self.harness.cli_calls, 0)
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "provider_acceptance_ambiguous"}],
+            [{"reason_code": "provider_unavailable"}],
         )
 
     def test_call_observed_before_terminal_error_remains_in_ledger_and_journal(self) -> None:

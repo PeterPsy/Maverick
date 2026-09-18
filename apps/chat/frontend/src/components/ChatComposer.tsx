@@ -356,7 +356,7 @@ export function ChatComposer({
                     <button
                       aria-label={researchEnabled ? "Disable Research" : "Enable Research"}
                       aria-pressed={researchEnabled}
-                      className={`chatapp-composer__tool-button ${researchEnabled ? "is-active" : ""}`}
+                      className={`chatapp-composer__tool-button chatapp-research-control ${researchEnabled ? "is-active" : ""}`}
                       disabled={disabled || isSending || deviceUseEnabled || agentSelectorLocked}
                       onClick={() => {
                         onSelectAgent(researchEnabled ? "" : RESEARCH_RUNNER_ID);
@@ -367,6 +367,7 @@ export function ChatComposer({
                       <span aria-hidden="true" className="material-symbols-rounded">
                         travel_explore
                       </span>
+                      {researchEnabled ? <span className="chatapp-research-control__label">Research</span> : null}
                     </button>
                   ) : null}
                   {!researchEnabled ? (

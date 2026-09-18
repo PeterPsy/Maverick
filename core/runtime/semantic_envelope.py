@@ -34,6 +34,7 @@ from core.runtime.semantic_envelope_models import (
 from core.runtime.semantic_tool_blocks import append_semantic_tool_blocks
 from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.runtime.research_runtime import (
+    RESEARCH_BOUNDARY_INSTRUCTION,
     RESEARCH_WEB_TOOL_HANDLES,
     runtime_session_is_research,
 )
@@ -94,7 +95,24 @@ class HostedSemanticEnvelopeCompiler:
             )
         blocks: list[SemanticEnvelopeBlock] = []
         try:
-            if not research:
+            if research:
+                blocks.append(
+                    make_semantic_block(
+                        blocks,
+                        context=context,
+                        kind="content",
+                        role="system",
+                        provenance="research_boundary",
+                        content_type="text/plain",
+                        content=RESEARCH_BOUNDARY_INSTRUCTION,
+                        classification=platform_classification(
+                            "core:research-boundary",
+                            "1",
+                            RESEARCH_BOUNDARY_INSTRUCTION,
+                        ),
+                    )
+                )
+            else:
                 self._materializer.append_platform(blocks, context=context)
                 self._materializer.append_workspace(
                     blocks,

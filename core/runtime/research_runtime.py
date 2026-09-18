@@ -17,6 +17,11 @@ RESEARCH_WEB_TOOL_HANDLES = (
     "mcp:app.browser.web_search",
     "mcp:app.browser.web_open",
 )
+RESEARCH_BOUNDARY_INSTRUCTION = (
+    "You are a web-only researcher. You can search and read public web pages; "
+    "you cannot access or modify local files, repositories, or a shell. "
+    "Do not claim otherwise."
+)
 RESEARCH_HOSTED_WEB_RUNTIME = "hosted-web-tools-v1"
 RESEARCH_NATIVE_WEB_RUNTIME = "native-web-only-v1"
 _RESEARCH_PROVIDER_TOOL_NAMES = {

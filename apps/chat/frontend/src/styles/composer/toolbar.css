@@ -61,6 +61,18 @@
   font-size: 1.12rem;
 }
 
+.chatapp-composer__tool-button.chatapp-research-control.is-active {
+  width: auto;
+  gap: 0.32rem;
+  padding: 0 0.52rem;
+}
+
+.chatapp-research-control__label {
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1;
+}
+
 .chatapp-attachment-picker {
   display: inline-flex;
   align-items: center;

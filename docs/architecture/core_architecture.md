@@ -1876,10 +1876,13 @@ workspace, agent, skill, attachment, app-reference, filesystem, shell, and
 inter-agent context. Hosted Maverick-agent profiles inherit the exact Browser
 `web_search`/`web_open` surface. A native adapter may opt in only by declaring
 the reviewed `native-web-only-v1` contract and enforcing its provider-native
-equivalent; Codex uses a chat-durable, auth-only app-server thread with native live
-web search, an empty sandboxed workdir, and no base/developer instructions,
-project documents, environment context, skills, MCP servers, local tools, or
-Maverick runtime token. Research short-circuits workspace skill resolution and
+equivalent. Every Research transport receives one neutral capability boundary:
+it may search and read the public web, but cannot access or modify local files,
+repositories, or a shell. This is the only platform-owned Research instruction.
+Codex uses a chat-durable, auth-only app-server thread with native live web
+search, an empty sandboxed workdir, and no developer instructions, project
+documents, environment context, skills, MCP servers, local tools, or Maverick
+runtime token. Research short-circuits workspace skill resolution and
 never calls provider skill preparation, and Codex disables bundled skills and
 skips host skill discovery.
 Codex also starts from an environment

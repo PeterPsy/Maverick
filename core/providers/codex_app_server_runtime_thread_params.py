@@ -13,7 +13,10 @@ from core.providers.codex_prompt_budget import (
     CODEX_EXPLICIT_PROJECT_DOC_MAX_BYTES,
 )
 from core.providers.models import RuntimeBackendLaunchSpec
-from core.runtime.research_runtime import runtime_session_is_research
+from core.runtime.research_runtime import (
+    RESEARCH_BOUNDARY_INSTRUCTION,
+    runtime_session_is_research,
+)
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -110,7 +113,7 @@ def codex_thread_params(
             # later process can resume the same isolated conversation.
             "ephemeral": False,
             "environments": [],
-            "baseInstructions": "",
+            "baseInstructions": RESEARCH_BOUNDARY_INSTRUCTION,
             "developerInstructions": "",
             "personality": "none",
             "config": codex_research_config(),

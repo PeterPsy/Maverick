@@ -9,6 +9,7 @@ from core.providers.errors import AgenticRuntimeError
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.provider_input_context import runtime_provider_input_sources
 from core.runtime.research_runtime import (
+    RESEARCH_BOUNDARY_INSTRUCTION,
     RESEARCH_HOSTED_WEB_RUNTIME,
     RESEARCH_NATIVE_WEB_RUNTIME,
     RESEARCH_WEB_TOOL_HANDLES,
@@ -259,9 +260,13 @@ class ResearchRuntimeTest(unittest.TestCase):
         )
         self.assertEqual(
             tuple(block.provenance for block in content_blocks),
-            ("user_input",),
+            ("research_boundary", "user_input"),
         )
-        self.assertEqual(content_blocks[0].content, context.input_text)
+        self.assertEqual(
+            content_blocks[0].content,
+            RESEARCH_BOUNDARY_INSTRUCTION,
+        )
+        self.assertEqual(content_blocks[1].content, context.input_text)
         self.assertEqual(
             sum(block.kind == "tool_schema" for block in envelope.blocks),
             2,

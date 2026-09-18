@@ -1247,6 +1247,7 @@ describe("ChatComposer reference search", () => {
     });
     const research = element.querySelector('[aria-label="Disable Research"]');
     expect(research?.getAttribute("aria-pressed")).toBe("true");
+    expect(research?.textContent).toContain("Research");
     expect(element.querySelector('[aria-label="Agent runner: Free Agent"]')).toBeNull();
 
     await act(async () => {

@@ -14,6 +14,7 @@ import {
   prewarmSpeechWorker,
 } from "../api/client";
 import type { AppDependenciesPayload } from "../api/client";
+import { RESEARCH_RUNNER_ID } from "../lib/runtimeProfiles";
 import { useChatDependencies } from "./useChatDependencies";
 
 vi.mock("../api/client", () => ({
@@ -89,6 +90,38 @@ describe("useChatDependencies", () => {
     await waitForAssertion(() => {
       expect(snapshots.at(-1)?.agentCatalogLoaded).toBe(true);
       expect(snapshots.at(-1)?.agentCatalogLoading).toBe(false);
+    });
+  });
+
+  it("keeps Research selected when the agent catalog finishes loading", async () => {
+    const snapshots: Array<ReturnType<typeof useChatDependencies>> = [];
+    const catalog = deferred<Awaited<ReturnType<typeof listAgentCatalog>>>();
+    vi.mocked(getAppDependencies).mockResolvedValue(dependencyPayload(["agents"]));
+    vi.mocked(listAgentCatalog).mockReturnValue(catalog.promise);
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<DependencyProbe onSnapshot={(snapshot) => snapshots.push(snapshot)} />);
+    });
+
+    await waitForAssertion(() => {
+      expect(snapshots.at(-1)?.agentCatalogLoading).toBe(true);
+    });
+    await act(async () => {
+      snapshots.at(-1)?.setSelectedAgentTypeId(RESEARCH_RUNNER_ID);
+    });
+    expect(snapshots.at(-1)?.selectedAgentTypeId).toBe(RESEARCH_RUNNER_ID);
+
+    catalog.resolve({ agent_types: [] });
+    await act(async () => {
+      await catalog.promise;
+    });
+
+    await waitForAssertion(() => {
+      expect(snapshots.at(-1)?.agentCatalogLoaded).toBe(true);
+      expect(snapshots.at(-1)?.selectedAgentTypeId).toBe(RESEARCH_RUNNER_ID);
     });
   });
 

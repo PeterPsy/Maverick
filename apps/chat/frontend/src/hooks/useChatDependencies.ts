@@ -15,6 +15,7 @@ import {
   initialProviderSelectionId,
   providerItemsFromPayload,
 } from "../lib/providerRuntimeOptions";
+import { isResearchRunner } from "../lib/runtimeProfiles";
 import { clearAgentRuntimeConfigCache } from "./useChatRuntimeControls";
 
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
@@ -52,7 +53,7 @@ export function useChatDependencies() {
       setAgentCatalogLoading(false);
     }
     setAgentOptions([]);
-    setSelectedAgentTypeId("");
+    setSelectedAgentTypeId((current) => (isResearchRunner(current) ? current : ""));
   }, []);
 
   const loadAgentOptionsFromProvider = useCallback(
@@ -66,7 +67,14 @@ export function useChatDependencies() {
       const nextAgentOptions = catalog.agent_types || [];
       setAgentCatalogAppId(providerAppId);
       setAgentOptions(nextAgentOptions);
-      setSelectedAgentTypeId((current) => (current && !nextAgentOptions.some((agent) => agent.id === current) ? "" : current));
+      setSelectedAgentTypeId((current) => {
+        if (isResearchRunner(current)) {
+          return current;
+        }
+        return current && !nextAgentOptions.some((agent) => agent.id === current)
+          ? ""
+          : current;
+      });
     },
     [clearAgentOptions],
   );

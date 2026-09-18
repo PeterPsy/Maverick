@@ -25,6 +25,7 @@ from core.providers.errors import ProviderLaunchError
 from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
 )
+from core.runtime.research_runtime import RESEARCH_BOUNDARY_INSTRUCTION
 
 
 class CodexResearchRuntimeTest(unittest.TestCase):
@@ -82,7 +83,10 @@ class CodexResearchRuntimeTest(unittest.TestCase):
         self.assertFalse(params["ephemeral"])
         self.assertEqual(params["sandbox"], "read-only")
         self.assertEqual(params["environments"], [])
-        self.assertEqual(params["baseInstructions"], "")
+        self.assertEqual(
+            params["baseInstructions"],
+            RESEARCH_BOUNDARY_INSTRUCTION,
+        )
         self.assertEqual(params["developerInstructions"], "")
         self.assertEqual(params["personality"], "none")
         self.assertEqual(params["config"]["web_search"], "live")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 from datetime import datetime
 import hashlib
 import json
@@ -143,7 +143,12 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload["context_policy_snapshot"] = _context_policy_from_document(
         payload.get("context_policy_snapshot")
     )
-    return RuntimeExecutionBinding(**payload)
+    # Persisted sessions can outlive schema reductions. Retired metadata grants
+    # no authority and must not make the remaining execution inputs unreadable.
+    current_fields = {field.name for field in fields(RuntimeExecutionBinding)}
+    return RuntimeExecutionBinding(
+        **{key: value for key, value in payload.items() if key in current_fields}
+    )
 
 
 def canonical_digest(value: object) -> str:

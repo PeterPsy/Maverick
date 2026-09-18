@@ -52,6 +52,18 @@ class ExecutionBindingTest(unittest.TestCase):
         self.assertNotIn("binding_digest", {field.name for field in fields(RuntimeExecutionBinding)})
         self.assertNotIn("profile_definition_revision", asdict(current))
 
+    def test_hydration_discards_fields_retired_from_the_direct_schema(self) -> None:
+        current = binding()
+        document = asdict(current)
+        document.update(
+            profile_definition_id="retired-profile",
+            profile_definition_revision="retired-revision",
+            workspace_binding_revision=7,
+            binding_digest="retired-digest",
+        )
+
+        self.assertEqual(execution_binding_from_document(document), current)
+
     def test_child_copy_only_changes_session_identity_and_time(self) -> None:
         current = binding()
         later = datetime(2026, 9, 18, tzinfo=UTC)

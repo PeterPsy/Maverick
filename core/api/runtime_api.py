@@ -73,8 +73,9 @@ from core.runtime.runtime_threads import (
     list_runtime_threads,
     mark_runtime_thread_completed_response_read,
     promote_hidden_chat_root_session_with_turns,
+    runtime_thread_catalog_session_map,
+    thread_catalog_summary_payload,
     thread_detail_payload,
-    thread_summary_payload,
     update_runtime_thread,
 )
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
@@ -367,9 +368,15 @@ def _runtime_thread_page(
             threads = threads[cursor_index + 1 :] if cursor_index is not None else []
         bounded_limit = max(1, min(int(limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT), RUNTIME_THREAD_PAGE_MAX_LIMIT))
         page_threads = threads[:bounded_limit]
+        sessions_by_id = runtime_thread_catalog_session_map(
+            state.runtime_store,
+            workspace_id=workspace_id,
+        )
         items = [
-            thread_summary_payload(
+            thread_catalog_summary_payload(
+                state.runtime_store,
                 thread,
+                sessions_by_id=sessions_by_id,
                 viewer_user_id=viewer_user_id,
             )
             for thread in page_threads
@@ -427,7 +434,11 @@ def _thread_mutation_payload(
     action: str = "updated",
 ) -> dict[str, object]:
     detail = _thread_detail_payload_with_runtime(state, thread, viewer_user_id=viewer_user_id)
-    summary = thread_summary_payload(thread, viewer_user_id=viewer_user_id)
+    summary = thread_catalog_summary_payload(
+        state.runtime_store,
+        thread,
+        viewer_user_id=viewer_user_id,
+    )
     return {
         "thread": detail,
         "changed_thread": summary,
@@ -491,7 +502,7 @@ def _publish_thread_change(
         "action": action,
     }
     if thread is not None:
-        payload["thread"] = thread_summary_payload(thread)
+        payload["thread"] = thread_catalog_summary_payload(state.runtime_store, thread)
         payload["thread_id"] = thread.thread_id
     if deleted_thread_ids is not None:
         payload["deleted_thread_ids"] = deleted_thread_ids

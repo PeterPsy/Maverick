@@ -16,6 +16,13 @@ describe("chat sidebar scroll clearance", () => {
     expect(styles).toMatch(/\.bs-widget-root\s*{[\s\S]*--chat-sidebar-scroll-under-bottom:\s*6\.8rem;/);
     expect(styles).toMatch(/\.bs-widget-root\.is-shell-mobile\s*{[\s\S]*--chat-sidebar-scroll-under-bottom:\s*3\.9rem;/);
   });
+
+  it("keeps a single filtered project section vertically scrollable on mobile", () => {
+    const styles = readStyle("styles.css");
+
+    expect(styles).toMatch(/\.bs-chat-list\s*{[\s\S]*touch-action:\s*pan-y;/);
+    expect(styles).toMatch(/\.bs-chat-folder\s*{[\s\S]*flex:\s*0 0 auto;/);
+  });
 });
 
 describe("chat sidebar search", () => {
@@ -55,6 +62,9 @@ describe("chat sidebar search", () => {
     const unreadIndex = source.indexOf('sidebar.setThreadFilter("unread")');
     const separatorIndex = source.indexOf("bs-chat-sidebar-source-filter__separator");
     const openDesignIndex = source.indexOf('sidebar.setThreadFilter("opendesign")');
+    const researchIndex = source.indexOf('sidebar.setThreadFilter("research")');
+    const deviceUseIndex = source.indexOf('sidebar.setThreadFilter("device_use")');
+    const multiIndex = source.indexOf('sidebar.setThreadFilter("multi_agent")');
     const styles = readStyle("styles.css");
 
     expect(source).toContain("local_fire_department");
@@ -63,6 +73,9 @@ describe("chat sidebar search", () => {
     expect(unreadIndex).toBeGreaterThan(hotIndex);
     expect(separatorIndex).toBeGreaterThan(unreadIndex);
     expect(openDesignIndex).toBeGreaterThan(separatorIndex);
+    expect(researchIndex).toBeGreaterThan(openDesignIndex);
+    expect(deviceUseIndex).toBeGreaterThan(researchIndex);
+    expect(multiIndex).toBeGreaterThan(deviceUseIndex);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__separator\s*{[\s\S]*flex:\s*0 0 1px;/);
   });
 

@@ -12,7 +12,11 @@ from core.api.http import json_default
 from core.api.session_api import resolve_request_session
 from core.api.websocket_tasks import cancel_websocket_tasks
 from core.observability.startup_performance import startup_timer
-from core.runtime.runtime_threads import list_runtime_threads, thread_summary_payload
+from core.runtime.runtime_threads import (
+    list_runtime_threads,
+    runtime_thread_catalog_session_map,
+    thread_catalog_summary_payload,
+)
 from core.shared.entrypoints import EntrypointShutdownController
 
 if TYPE_CHECKING:
@@ -67,9 +71,15 @@ def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, vi
     """Build the current workspace runtime thread catalog snapshot."""
     with startup_timer("runtime.threads.websocket_snapshot", workspace_id=workspace_id) as timing:
         threads = list_runtime_threads(state.runtime_store, workspace_id=workspace_id)
+        sessions_by_id = runtime_thread_catalog_session_map(
+            state.runtime_store,
+            workspace_id=workspace_id,
+        )
         items = [
-            thread_summary_payload(
+            thread_catalog_summary_payload(
+                state.runtime_store,
                 thread,
+                sessions_by_id=sessions_by_id,
                 viewer_user_id=viewer_user_id,
             )
             for thread in threads
@@ -117,7 +127,11 @@ def runtime_thread_changed_frame(
         with suppress(Exception):
             thread = state.runtime_store.get_thread(thread_id)
             if thread.workspace_id == workspace_id:
-                frame["thread"] = thread_summary_payload(thread, viewer_user_id=viewer_user_id)
+                frame["thread"] = thread_catalog_summary_payload(
+                    state.runtime_store,
+                    thread,
+                    viewer_user_id=viewer_user_id,
+                )
     return frame
 
 

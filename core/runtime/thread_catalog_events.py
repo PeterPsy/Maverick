@@ -11,7 +11,7 @@ from core.runtime.runtime_threads import (
     mark_runtime_thread_response_completed,
     mark_runtime_thread_user_message,
     runtime_thread_availability_for_session,
-    thread_summary_payload,
+    thread_catalog_summary_payload,
     update_runtime_thread_availability,
 )
 from core.runtime.errors import RuntimeSessionNotFoundError
@@ -37,7 +37,7 @@ def publish_runtime_thread_catalog_change(
         "action": action,
     }
     if thread is not None:
-        payload["thread"] = thread_summary_payload(thread)
+        payload["thread"] = thread_catalog_summary_payload(state.runtime_store, thread)
         payload["thread_id"] = thread.thread_id
     thread_bus.publish(workspace_id=workspace_id, event=payload)
 

@@ -14,6 +14,7 @@ from core.api.runtime_thread_websocket import (
     runtime_thread_snapshot_frame,
     stream_runtime_thread_events,
 )
+from core.device_use.models import DeviceUseSessionBinding
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.thread_event_bus import RuntimeThreadEventBus
 from core.runtime.runtime_thread import RuntimeThreadRecord
@@ -161,6 +162,85 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
         self.assertTrue(all("provider_id" not in thread for thread in frame["threads"]))
         self.assertTrue(all("title_generation_input_hash" not in thread for thread in frame["threads"]))
         self.assertNotIn(long_system_prompt, encoded)
+
+    def test_snapshot_projects_research_and_device_use_classifiers_without_private_binding(self) -> None:
+        store = self.make_store()
+        state = SimpleNamespace(runtime_store=store)
+        started_at = datetime(2026, 9, 18, 10, 0, tzinfo=UTC)
+        sessions = [
+            RuntimeSessionRecord(
+                session_id="research-session",
+                workspace_id="default",
+                agent_id="research",
+                status="running",
+                requested_mode="full-access",
+                effective_mode="full-access",
+                workspace_root="/workspace",
+                workdir="/workspace",
+                runtime_root="/workspace/runtime/research-session",
+                started_at=started_at,
+                updated_at=started_at,
+                ended_at=None,
+                last_progress_at=started_at,
+                runtime_profile="research",
+            ),
+            RuntimeSessionRecord(
+                session_id="device-session",
+                workspace_id="default",
+                agent_id="chat",
+                status="running",
+                requested_mode="sandbox",
+                effective_mode="sandbox",
+                workspace_root="/workspace",
+                workdir="/workspace",
+                runtime_root="/workspace/runtime/device-session",
+                started_at=started_at,
+                updated_at=started_at,
+                ended_at=None,
+                last_progress_at=started_at,
+                device_use_binding=DeviceUseSessionBinding(
+                    activation_id="activation-1",
+                    workspace_id="default",
+                    owner_user_id="user-a",
+                    protocol_version="maverick.device-use.v1",
+                    executor_contract="macos-v42",
+                    tool_contract_digest="digest",
+                    mode="on",
+                    initial_app="com.apple.Safari",
+                    approved_apps=("com.apple.Safari",),
+                    created_at=started_at,
+                ),
+            ),
+        ]
+        for session in sessions:
+            store.save_session(session)
+            store.save_thread(
+                RuntimeThreadRecord(
+                    thread_id=session.session_id,
+                    workspace_id="default",
+                    runtime_session_id=session.session_id,
+                    title=session.agent_id,
+                    agent_label=session.agent_id,
+                    agent_type_id="",
+                    agent_role_id="",
+                    source_app_id="chat",
+                    system_prompt="",
+                    project_id=None,
+                    archived=False,
+                    availability="free",
+                    created_at=started_at,
+                    updated_at=started_at,
+                )
+            )
+
+        frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id="user-a")
+        by_session_id = {item["runtime_session_id"]: item for item in frame["threads"]}
+
+        self.assertEqual(by_session_id["research-session"]["runtime_profile"], "research")
+        self.assertFalse(by_session_id["research-session"]["device_use_enabled"])
+        self.assertEqual(by_session_id["device-session"]["runtime_profile"], "workspace")
+        self.assertTrue(by_session_id["device-session"]["device_use_enabled"])
+        self.assertNotIn("device_use_binding", by_session_id["device-session"])
 
 
 class RuntimeThreadWebSocketSchedulingTest(unittest.IsolatedAsyncioTestCase):

@@ -17,6 +17,15 @@ describe('approved Chat persistence', () => {
     expect(events.every((event) => event.event_id.startsWith('display:'))).toBe(true);
     expect(displayThread({ thread_id:'t' }).availability).toBe('unknown');
   });
+  it('keeps only the public thread classifiers needed by sidebar badges', () => {
+    expect(sanitizeChatReadModel({ kind: 'threads', data: { threads: [{
+      thread_id: 'research', runtime_session_id: 'session', title: 'Research', runtime_profile: 'research',
+      device_use_enabled: true, device_use_binding: { ticket: 'secret' },
+    }] } })).toEqual({ kind: 'threads', data: { threads: [{
+      thread_id: 'research', runtime_session_id: 'session', title: 'Research', runtime_profile: 'research',
+      device_use_enabled: true,
+    }] } });
+  });
   it('delivers warm display and changed revalidation without another dependency', async () => {
     const warm = { projects: [], has_more: false };
     mocks.read.mockResolvedValue({ payload: {kind:'projects',data:warm} });

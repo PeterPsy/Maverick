@@ -130,6 +130,22 @@ describe("ThreadRow", () => {
     expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBeNull();
   });
 
+  it("shows a Research badge for isolated Research threads", async () => {
+    await renderThreadRow(thread({ runtime_profile: "research", title: "Market research" }));
+
+    const badge = container?.querySelector(".bs-chat-list__source-badge");
+    expect(badge?.getAttribute("title")).toBe("Research");
+    expect(badge?.textContent?.trim()).toBe("travel_explore");
+  });
+
+  it("shows a macOS badge for Device Use threads", async () => {
+    await renderThreadRow(thread({ device_use_enabled: true, title: "Operate Safari" }));
+
+    const badge = container?.querySelector(".bs-chat-list__source-badge");
+    expect(badge?.getAttribute("title")).toBe("Device Use (macOS)");
+    expect(badge?.textContent?.trim()).toBe("desktop_windows");
+  });
+
   it("does not show a source badge for ordinary chat threads", async () => {
     await renderThreadRow(thread({ source_app_id: "chat" }));
 

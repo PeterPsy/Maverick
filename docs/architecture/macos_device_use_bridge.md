@@ -141,7 +141,9 @@ admitted list and applies the call ceiling. In Full it does neither.
 A binding is exact to activation, user, workspace, runtime session and contract.
 Only one activation per login generation and one physical call at a time are
 allowed. A new activation supersedes the prior lease. Tickets and raw private
-bindings never appear in public thread/status payloads.
+bindings never appear in public thread/status payloads. Compact public thread
+catalogs expose only `device_use_enabled` so Chat can label and filter the
+conversation without receiving native authority material.
 
 ## Invocation and image transport
 

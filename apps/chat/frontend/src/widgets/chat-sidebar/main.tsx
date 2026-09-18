@@ -109,6 +109,32 @@ function ChatSidebarWidget() {
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.senses}</span>
         </button>
         <button
+          aria-label="Research chats"
+          aria-pressed={sidebar.threadFilter === "research"}
+          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "research" ? "is-active" : ""}`}
+          onClick={() => sidebar.setThreadFilter("research")}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">
+            travel_explore
+          </span>
+          <span className="bs-chat-sidebar-source-filter__label">Research</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.research}</span>
+        </button>
+        <button
+          aria-label="Device Use chats (macOS)"
+          aria-pressed={sidebar.threadFilter === "device_use"}
+          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "device_use" ? "is-active" : ""}`}
+          onClick={() => sidebar.setThreadFilter("device_use")}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">
+            desktop_windows
+          </span>
+          <span className="bs-chat-sidebar-source-filter__label">Device Use</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.device_use}</span>
+        </button>
+        <button
           aria-label="Multi-agent chats"
           aria-pressed={sidebar.threadFilter === "multi_agent"}
           className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "multi_agent" ? "is-active" : ""}`}

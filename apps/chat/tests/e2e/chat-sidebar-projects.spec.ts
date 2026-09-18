@@ -1,4 +1,4 @@
-import { expect, test, type WebSocketRoute } from "@playwright/test";
+import { devices, expect, test, type WebSocketRoute } from "@playwright/test";
 
 const NOW = "2026-09-06T00:00:00.000Z";
 const projects = Array.from({ length: 27 }, (_, index) => ({
@@ -61,3 +61,72 @@ for (const width of [390, 1280]) {
     expect(projectReads).toBe(2);
   });
 }
+
+test.describe("mobile filtered chat scrolling", () => {
+  const iphone = devices["iPhone 13"];
+  test.use({
+    deviceScaleFactor: iphone.deviceScaleFactor,
+    hasTouch: iphone.hasTouch,
+    isMobile: iphone.isMobile,
+    userAgent: iphone.userAgent,
+    viewport: iphone.viewport,
+  });
+
+  test("keeps a single filtered project group vertically scrollable", async ({ page }) => {
+    const filteredThreads = Array.from({ length: 40 }, (_, index) => ({
+      thread_id: `senses-thread-${index}`,
+      runtime_session_id: `senses-session-${index}`,
+      title: `Senses chat ${index + 1}`,
+      source_app_id: "senses",
+      agent_label: "Senses",
+      agent_type_id: "",
+      agent_role_id: "",
+      project_id: null,
+      archived: false,
+      availability: "free",
+      created_at: NOW,
+      updated_at: NOW,
+    }));
+    let socket: WebSocketRoute | undefined;
+    await page.route(/^http:\/\/[^/]+\/api\//, async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const body = request.method() === "POST" ? request.postDataJSON() : {};
+      const json = (payload: unknown) => route.fulfill({ json: payload });
+      if (url.pathname === "/api/apps/chat/backend" && body.action === "pwa.read_model") {
+        return json({ revision: "projects-empty", payload: { kind: "projects", data: { projects: [], has_more: false } } });
+      }
+      if (url.pathname === "/api/apps/chat/backend" && body.action === "view_filter") {
+        return json({ state: { view_filter: { query: "" } } });
+      }
+      if (url.pathname === "/api/inter-agent/runs") return json({ items: [] });
+      if (url.pathname === "/api/runtime/threads") return json({ threads: filteredThreads, workspace_id: "default" });
+      throw new Error(`Unexpected sidebar request: ${request.method()} ${url.pathname}`);
+    });
+    await page.routeWebSocket("**/ws/runtime/threads", (connection) => {
+      socket = connection;
+      connection.send(JSON.stringify({
+        type: "runtime.thread.snapshot",
+        workspace_id: "default",
+        threads: filteredThreads,
+        at: NOW,
+      }));
+    });
+
+    await page.goto("/apps/chat/widgets/chat-sidebar/index.html");
+    await expect.poll(() => Boolean(socket)).toBe(true);
+    await page.getByRole("button", { name: "Senses chats" }).click();
+    await expect(page.locator(".bs-chat-list__item")).toHaveCount(filteredThreads.length);
+
+    const list = page.locator(".bs-chat-list");
+    const metrics = await list.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      touchAction: getComputedStyle(element).touchAction,
+    }));
+    expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+    expect(metrics.touchAction).toBe("pan-y");
+    await list.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  });
+});

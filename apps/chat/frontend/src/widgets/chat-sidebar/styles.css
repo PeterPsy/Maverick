@@ -409,6 +409,7 @@ input {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   padding: calc(var(--chat-sidebar-source-filter-top) + var(--chat-sidebar-source-filter-height) + 0.72rem) 0 var(--chat-sidebar-scroll-under-bottom);
   scrollbar-width: none;
@@ -490,6 +491,7 @@ input {
 
 .bs-chat-folder {
   display: grid;
+  flex: 0 0 auto;
   gap: 0.3rem;
 }
 

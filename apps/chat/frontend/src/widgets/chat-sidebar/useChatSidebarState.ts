@@ -50,7 +50,16 @@ const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
 const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
 const THREAD_PAGE_LIMIT = 50;
 const THREAD_BACKFILL_IDLE_DELAY_MS = 320;
-const THREAD_FILTERS: ThreadFilter[] = ["all", "hot", "unread", "opendesign", "senses", "multi_agent"];
+const THREAD_FILTERS: ThreadFilter[] = [
+  "all",
+  "hot",
+  "unread",
+  "opendesign",
+  "senses",
+  "research",
+  "device_use",
+  "multi_agent",
+];
 
 export function useChatSidebarState() {
   const {
@@ -106,6 +115,8 @@ export function useChatSidebarState() {
       unread: filterThreads(threads, "unread").length,
       opendesign: filterThreads(threads, "opendesign").length,
       senses: filterThreads(threads, "senses").length,
+      research: filterThreads(threads, "research").length,
+      device_use: filterThreads(threads, "device_use").length,
       multi_agent: filterThreads(threads, "multi_agent", multiAgentThreadIds).length,
     }),
     [multiAgentThreadIds, threads],

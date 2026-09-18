@@ -232,6 +232,9 @@ class RuntimeStore(Protocol):
     def runtime_session_thread_visibility_map(self, workspace_id: str) -> dict[str, bool]:
         ...
 
+    def runtime_session_thread_catalog_map(self, workspace_id: str) -> dict[str, RuntimeSessionRecord]:
+        ...
+
     def list_all_sessions(self) -> list[RuntimeSessionRecord]:
         ...
 
@@ -1271,6 +1274,16 @@ class RuntimeDocumentStore:
             except ValueError:
                 visibility[session_id] = False
         return visibility
+
+    def runtime_session_thread_catalog_map(self, workspace_id: str) -> dict[str, RuntimeSessionRecord]:
+        sessions: dict[str, RuntimeSessionRecord] = {}
+        for document in self.collections.sessions.find({"workspace_id": workspace_id}):
+            try:
+                session = runtime_session_from_document(document)
+            except ValueError:
+                continue
+            sessions[session.session_id] = session
+        return sessions
 
     def list_all_sessions(self) -> list[RuntimeSessionRecord]:
         return [

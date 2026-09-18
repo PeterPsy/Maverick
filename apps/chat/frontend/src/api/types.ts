@@ -480,6 +480,7 @@ export type ChatThreadSummary = {
   last_user_message_at?: string | null;
   last_completed_response_at?: string | null;
   has_unread_completed_response?: boolean;
+  runtime_profile?: "workspace" | "research" | string;
   device_use_enabled?: boolean;
 };
 
@@ -489,7 +490,6 @@ export type ChatThread = ChatThreadSummary & {
   system_prompt?: string;
   last_completed_turn_id?: string | null;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
-  runtime_profile?: "workspace" | "research" | string;
   provider_id?: string | null;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;

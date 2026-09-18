@@ -24,9 +24,9 @@ class ChatDisplayTest(TestCase):
         store.list_recent_events.assert_called_with('session', limit=5000)
 
     def test_thread_display_strips_admission_and_stable_revision(self):
-        page = {'threads':[{'thread_id':'t','runtime_session_id':'s','title':'Name','availability':'free','system_prompt':'secret','provider_id':'private'}]}
+        page = {'threads':[{'thread_id':'t','runtime_session_id':'s','title':'Name','availability':'free','system_prompt':'secret','provider_id':'private','runtime_profile':'research','device_use_enabled':True,'device_use_binding':{'ticket':'secret'}}]}
         first = thread_display_page(page)
-        self.assertEqual(first['payload']['data']['threads'], [{'thread_id':'t','runtime_session_id':'s','title':'Name','archived':False}])
+        self.assertEqual(first['payload']['data']['threads'], [{'thread_id':'t','runtime_session_id':'s','title':'Name','runtime_profile':'research','archived':False,'device_use_enabled':True}])
         page['threads'][0]['availability']='busy'
         self.assertEqual(thread_display_page(page,first['revision'])['not_modified'],True)
 

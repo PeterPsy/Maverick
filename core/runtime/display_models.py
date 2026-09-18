@@ -1,7 +1,7 @@
 """Read-only bounded display projections; never runtime admission or provider state."""
 from core.app_sdk.display_models import conditional_display_response
 
-_THREAD_TEXT = ('thread_id', 'runtime_session_id', 'title', 'project_id', 'agent_label', 'source_app_id', 'created_at', 'updated_at', 'last_user_message_at', 'last_completed_response_at')
+_THREAD_TEXT = ('thread_id', 'runtime_session_id', 'title', 'project_id', 'agent_label', 'source_app_id', 'created_at', 'updated_at', 'last_user_message_at', 'last_completed_response_at', 'runtime_profile')
 
 
 def thread_display_page(page: dict, known_revision=None) -> dict:
@@ -9,6 +9,7 @@ def thread_display_page(page: dict, known_revision=None) -> dict:
     for item in page.get('threads', page.get('items', [])):
         result = {key: item[key] for key in _THREAD_TEXT if key in item and (item[key] is None or isinstance(item[key], str))}
         result['archived'] = item.get('archived') is True
+        result['device_use_enabled'] = item.get('device_use_enabled') is True
         threads.append(result)
     pagination = {key: value for key, value in page.get('threads_page', page.get('page', {})).items() if key in ('cursor', 'has_more', 'limit', 'total', 'filtered_total')}
     return conditional_display_response({'kind': 'threads', 'data': {'threads': threads, 'page': pagination}}, known_revision)

@@ -131,6 +131,30 @@ describe("chat sidebar runtime status", () => {
     ]);
   });
 
+  it("filters and badges Research threads", () => {
+    const chatThread = thread({ thread_id: "chat-thread" });
+    const researchThread = thread({ thread_id: "research-thread", runtime_profile: "research" });
+
+    expect(filterThreads([chatThread, researchThread], "research").map((item) => item.thread_id)).toEqual([
+      "research-thread",
+    ]);
+    expect(threadSourceBadges(researchThread)).toEqual([
+      { icon: "travel_explore", kind: "research", label: "Research" },
+    ]);
+  });
+
+  it("filters and badges macOS Device Use threads", () => {
+    const chatThread = thread({ thread_id: "chat-thread" });
+    const deviceUseThread = thread({ thread_id: "device-use-thread", device_use_enabled: true });
+
+    expect(filterThreads([chatThread, deviceUseThread], "device_use").map((item) => item.thread_id)).toEqual([
+      "device-use-thread",
+    ]);
+    expect(threadSourceBadges(deviceUseThread)).toEqual([
+      { icon: "desktop_windows", kind: "device_use", label: "Device Use (macOS)" },
+    ]);
+  });
+
   it("anchors the Hot window to the newest chat instead of the current time", () => {
     const latestThread = thread({ thread_id: "latest-thread", updated_at: "2026-08-10T18:00:00.000Z" });
     const recentThread = thread({ thread_id: "recent-thread", updated_at: "2026-08-10T17:00:00.000Z" });

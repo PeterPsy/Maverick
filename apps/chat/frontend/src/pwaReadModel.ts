@@ -6,7 +6,11 @@ const schemas: Record<string, DisplayModelSchema> = {
   } } },
   threads: { required: ['threads'], lists: { threads: {
     required: ['thread_id', 'runtime_session_id', 'title'],
-    fields: { ...text(['thread_id', 'runtime_session_id', 'title', 'project_id', 'agent_label', 'source_app_id', 'created_at', 'updated_at', 'last_user_message_at', 'last_completed_response_at']), archived: 'boolean' },
+    fields: {
+      ...text(['thread_id', 'runtime_session_id', 'title', 'project_id', 'agent_label', 'source_app_id', 'created_at', 'updated_at', 'last_user_message_at', 'last_completed_response_at', 'runtime_profile']),
+      archived: 'boolean',
+      device_use_enabled: 'boolean',
+    },
   } }, objects: { page: { fields: { cursor: 'string', has_more: 'boolean', limit: 'number', total: 'number', filtered_total: 'number' } } } },
   messages: { required: ['messages'], lists: { messages: { required: ['id', 'turn_id', 'role', 'text', 'created_at'], fields: text(['id', 'turn_id', 'role', 'text', 'created_at']) } } },
 };

@@ -51,6 +51,44 @@ def thread_summary_payload(thread: RuntimeThreadRecord, *, viewer_user_id: str |
     return payload
 
 
+def thread_catalog_summary_payload(
+    store: RuntimeStore,
+    thread: RuntimeThreadRecord,
+    *,
+    sessions_by_id: Mapping[str, RuntimeSessionRecord] | None = None,
+    viewer_user_id: str | None = None,
+) -> dict[str, object]:
+    """Project safe session classifiers needed by user-facing thread catalogs."""
+    payload = thread_summary_payload(thread, viewer_user_id=viewer_user_id)
+    if not thread.runtime_session_id:
+        return payload
+    if sessions_by_id is not None:
+        session = sessions_by_id.get(thread.runtime_session_id)
+        if session is None:
+            return payload
+    else:
+        try:
+            session = store.get_session(thread.runtime_session_id)
+        except (RuntimeSessionNotFoundError, ValueError):
+            return payload
+    if session.workspace_id != thread.workspace_id:
+        return payload
+    payload["runtime_profile"] = session.runtime_profile
+    payload["device_use_enabled"] = session.device_use_binding is not None
+    return payload
+
+
+def runtime_thread_catalog_session_map(
+    store: RuntimeStore,
+    *,
+    workspace_id: str,
+) -> dict[str, RuntimeSessionRecord]:
+    catalog_map = getattr(store, "runtime_session_thread_catalog_map", None)
+    if callable(catalog_map):
+        return dict(catalog_map(workspace_id))
+    return {session.session_id: session for session in store.list_sessions(workspace_id)}
+
+
 def thread_detail_payload(thread: RuntimeThreadRecord, *, viewer_user_id: str | None = None) -> dict[str, object]:
     payload = asdict(thread)
     payload.pop("completed_response_read_at_by_user_id", None)

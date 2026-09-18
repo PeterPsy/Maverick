@@ -15,11 +15,19 @@ export type FolderSection = {
   emptyLabel: string;
 };
 
-export type ThreadFilter = "all" | "hot" | "unread" | "opendesign" | "senses" | "multi_agent";
+export type ThreadFilter =
+  | "all"
+  | "hot"
+  | "unread"
+  | "opendesign"
+  | "senses"
+  | "research"
+  | "device_use"
+  | "multi_agent";
 
 export type ThreadSourceBadge = {
   icon: string;
-  kind: "multi_agent" | "opendesign" | "senses" | "source_app";
+  kind: "device_use" | "multi_agent" | "opendesign" | "research" | "senses" | "source_app";
   label: string;
 };
 
@@ -114,6 +122,12 @@ export function filterThreads(
   if (threadFilter === "opendesign") {
     return threads.filter(isOpenDesignThread);
   }
+  if (threadFilter === "research") {
+    return threads.filter(isResearchThread);
+  }
+  if (threadFilter === "device_use") {
+    return threads.filter(isDeviceUseThread);
+  }
   if (threadFilter === "multi_agent") {
     return threads.filter((thread) => isMultiAgentThread(thread, multiAgentThreadIds));
   }
@@ -143,6 +157,14 @@ export function isOpenDesignThread(thread: ChatThread): boolean {
   return isOpenDesignSourceApp(thread.source_app_id);
 }
 
+export function isResearchThread(thread: ChatThread): boolean {
+  return thread.runtime_profile === "research";
+}
+
+export function isDeviceUseThread(thread: ChatThread): boolean {
+  return thread.device_use_enabled === true;
+}
+
 export function isMultiAgentThread(thread: ChatThread, multiAgentThreadIds: ReadonlySet<string>): boolean {
   return multiAgentThreadIds.has(thread.thread_id) || multiAgentThreadIds.has(thread.runtime_session_id);
 }
@@ -152,6 +174,12 @@ export function threadSourceBadges(thread: ChatThread, multiAgentThreadIds: Read
   const sourcePresentation = sourceAppPresentation(thread.source_app_id);
   if (sourcePresentation) {
     badges.push(sourcePresentation);
+  }
+  if (isResearchThread(thread)) {
+    badges.push({ icon: "travel_explore", kind: "research", label: "Research" });
+  }
+  if (isDeviceUseThread(thread)) {
+    badges.push({ icon: "desktop_windows", kind: "device_use", label: "Device Use (macOS)" });
   }
   if (isMultiAgentThread(thread, multiAgentThreadIds)) {
     badges.push({ icon: "account_tree", kind: "multi_agent", label: "Multi-chat" });

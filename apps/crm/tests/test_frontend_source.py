@@ -67,20 +67,20 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertIn("<colgroup>", records_table_source)
         self.assertIn("--records-table-content-width", records_table_source)
 
-    def test_primary_navigation_is_next_level_four_view_model(self) -> None:
+    def test_product_navigation_retains_advanced_tools_and_legacy_routes(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")
         routing_source = ROUTING_TS.read_text(encoding="utf-8")
         types_source = TYPES_TS.read_text(encoding="utf-8")
-        sidebar_source = SIDEBAR_TSX.read_text(encoding="utf-8")
+        sidebar_source = SIDEBAR_TSX.read_text(encoding="utf-8") + (TYPES_TS.parent / "navigation.ts").read_text(encoding="utf-8")
 
         self.assertIn("type ViewId = 'records' | 'pipeline' | 'reports' | 'import'", types_source)
         self.assertIn("const recordEntityFilters", routing_source)
         self.assertIn("view === 'records'", app_source)
         self.assertIn("view === 'pipeline'", app_source)
         self.assertIn("view === 'reports'", app_source)
-        self.assertIn("{ label: 'Records', page: 'records'", sidebar_source)
-        self.assertIn("{ label: 'Pipeline', page: 'pipeline'", sidebar_source)
-        self.assertIn("{ label: 'Reports', page: 'reports'", sidebar_source)
+        self.assertIn("{ page: 'records', label: 'Records'", sidebar_source)
+        self.assertIn("{ page: 'pipeline', label: 'Pipeline'", sidebar_source)
+        self.assertIn("{ page: 'reports', label: 'Reports'", sidebar_source)
         self.assertIn("route === 'operations'", routing_source)
         self.assertIn("return { view: 'pipeline'", routing_source)
         self.assertNotIn("label: 'Leads'", sidebar_source)
@@ -132,7 +132,7 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertIn("crm.clear_custom_view", view_actions_source)
         self.assertIn("activity: data.activities", controller_source)
 
-    def test_record_detail_uses_workspace_page(self) -> None:
+    def test_record_detail_uses_nonmodal_workspace_inspector(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")
         records_table_source = RECORDS_TABLE_TSX.read_text(encoding="utf-8")
         side_panel_source = RECORD_SIDE_PANEL_TSX.read_text(encoding="utf-8")
@@ -140,8 +140,9 @@ class CrmFrontendSourceTest(unittest.TestCase):
         app_styles = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
         records_styles = RECORDS_CSS.read_text(encoding="utf-8")
 
+        self.assertIn("RecordInspector", app_source)
         self.assertIn("RecordSidePanel", app_source)
-        self.assertIn("crm-app ${selected ? 'is-showing-detail' : ''}", app_source)
+        self.assertIn("crm-app product-shell ${selected ? 'is-showing-detail' : ''}", app_source)
         self.assertNotIn("RecordDetailModal", app_source)
         self.assertNotIn("RecordDetailModal", records_table_source)
         self.assertNotIn("records-row-action", records_table_source)
@@ -244,7 +245,7 @@ class CrmFrontendSourceTest(unittest.TestCase):
 
     def test_search_lives_in_workspace_topbar_not_sidebar(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")
-        sidebar_source = SIDEBAR_TSX.read_text(encoding="utf-8")
+        sidebar_source = SIDEBAR_TSX.read_text(encoding="utf-8") + (TYPES_TS.parent / "navigation.ts").read_text(encoding="utf-8")
         controller_source = DATA_CONTROLLER_TS.read_text(encoding="utf-8")
         views_source = VIEWS_TSX.read_text(encoding="utf-8")
 

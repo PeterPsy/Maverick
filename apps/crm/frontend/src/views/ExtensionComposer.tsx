@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { callBackend, CrmRecord } from '../api';
 import { allEntities, ExtensionSchema, label, useLiveCrm } from '../domain/vnext';
@@ -24,8 +24,11 @@ export function ExtensionComposer({ entity, record, defaults = {}, onClose, onSa
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [recipientType, setRecipientType] = useState(String(record?.record_type || 'contact'));
+  const panel = useRef<HTMLElement>(null);
+  useEffect(() => { const previous = document.activeElement as HTMLElement | null; return () => { if (previous?.isConnected) previous.focus(); }; }, []);
   const spec = schema.data?.entities[entity];
   const initial: Record<string, unknown> = { ...spec?.defaults, ...defaults, ...record };
+  const fieldAmount = (field: string) => entity === 'expense' && field === 'amount_minor';
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!spec) return;
@@ -34,7 +37,7 @@ export function ExtensionComposer({ entity, record, defaults = {}, onClose, onSa
     try {
       const values: Record<string, unknown> = Object.fromEntries(form);
       for (const [key, kind] of Object.entries(spec.fields)) {
-        if (kind === 'integer') values[key] = Number(values[key] || 0);
+        if (kind === 'integer') values[key] = fieldAmount(key) ? Math.round(Number(values[key] || 0) * 100) : Number(values[key] || 0);
         if (kind === 'json') values[key] = JSON.parse(String(values[key] || '{}'));
       }
       const result = await callBackend<{ record: CrmRecord }>({ action: record ? 'crm.update_extension_record' : 'crm.create_extension_record', entity_type: entity, ...(record ? { id: record.id } : {}), ...values });
@@ -42,13 +45,21 @@ export function ExtensionComposer({ entity, record, defaults = {}, onClose, onSa
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Unable to save record.'); }
     finally { setSaving(false); }
   }
-  return <div className="vn-modal-backdrop"><section className="vn-modal" role="dialog" aria-modal="true" aria-labelledby="vn-composer-title">
+  return <div className="vn-modal-backdrop"><section ref={panel} className="vn-modal" onKeyDown={(event) => {
+    if (event.key === 'Escape') { event.stopPropagation(); if (!saving) onClose(); }
+    if (event.key === 'Tab') {
+      const controls = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)') || []);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+  }} role="dialog" aria-modal="true" aria-labelledby="vn-composer-title">
     <header><h2 id="vn-composer-title">{record ? 'Edit' : 'New'} {label(entity).toLowerCase()}</h2><button aria-label="Close editor" onClick={onClose} disabled={saving}><X size={18} /></button></header>
     {error || schema.error ? <p className="crm-alert" role="alert">{error || schema.error}</p> : null}
     {!spec ? <p>Loading fields…</p> : <form onSubmit={submit}>
       <label>Title<input name="title" required autoFocus defaultValue={String(initial.title || '')} /></label>
-      <div className="vn-form-grid">{Object.entries(spec.fields).map(([field, kind]) => <label key={field}>{label(field)}
-        {kind.startsWith('ref:') ? <RecordPicker entity={kind.slice(4)} name={field} defaultValue={String(initial[field] || '')} required={spec.required?.includes(field)} />
+      <div className="vn-form-grid">{Object.entries(spec.fields).map(([field, kind]) => <label key={field}>{fieldAmount(field) ? 'Amount' : label(field)}
+        {fieldAmount(field) ? <input name={field} type="number" step="0.01" required defaultValue={Number(initial[field] || 0) / 100} /> : field === 'incurred_at' ? <input name={field} type="date" defaultValue={String(initial[field] || '').slice(0, 10)} /> : kind.startsWith('ref:') ? <RecordPicker entity={kind.slice(4)} name={field} defaultValue={String(initial[field] || '')} required={spec.required?.includes(field)} />
           : field === 'record_type' ? <select name={field} value={recipientType} onChange={(event) => setRecipientType(event.target.value)}>{allEntities.map((type) => <option key={type} value={type}>{label(type)}</option>)}</select>
           : field === 'record_id' ? <RecordPicker key={recipientType} entity={recipientType} name={field} defaultValue={String(initial[field] || '')} required />
           : kind === 'json' ? <textarea name={field} rows={4} defaultValue={JSON.stringify(initial[field] || {}, null, 2)} spellCheck={false} />

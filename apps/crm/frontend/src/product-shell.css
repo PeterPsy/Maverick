@@ -1,0 +1,51 @@
+/* Source-inspired structure; all product colors belong to Maverick. */
+.crm-app.product-shell { width: 100%; max-width: none; margin: 0; padding: 0; gap: 0; grid-template-columns: 224px minmax(0, 1fr); height: 100dvh; overflow: hidden; position: relative; }
+.product-shell .product-main { min-width: 0; min-height: 0; height: 100dvh; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+.product-sidebar { display: flex; flex-direction: column; gap: 20px; height: 100dvh; border-right: 1px solid var(--maverick-border); padding: 24px 14px 18px; background: var(--maverick-bg); overflow: auto; z-index: 20; }
+.product-sidebar > header { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 6px; }
+.product-sidebar strong { font-size: 15px; font-weight: 650; }
+.product-sidebar small { display: block; font-size: 10px; color: var(--maverick-text-muted); margin-top: 4px; }
+.product-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--maverick-text-on-accent); background: var(--maverick-accent); }
+.product-sidebar nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.product-sidebar nav button { display: flex; gap: 11px; align-items: center; width: 100%; background: transparent; padding: 11px 13px; border: 1px solid transparent; border-radius: 9px; text-align: left; color: var(--maverick-text-muted); font-size: 13px; }
+.product-sidebar nav button:hover { background: var(--maverick-surface-hover); color: var(--maverick-text); }
+.product-sidebar nav button[aria-current="page"] { background: var(--maverick-surface-active); color: var(--maverick-text); border-color: var(--maverick-border-strong); font-weight: 600; }
+.product-sidebar nav details { margin-top: 16px; }
+.product-sidebar nav summary { padding: 8px 13px; font-size: 11px; color: var(--maverick-text-muted); cursor: pointer; text-transform: uppercase; letter-spacing: .07em; }
+.product-sidebar footer { display: flex; align-items: center; gap: 9px; padding: 18px 7px 0; border-top: 1px solid var(--maverick-border); }
+.product-shell .crm-topbar { display: flex; flex-shrink: 0; align-items: center; gap: 12px; min-height: 72px; padding: 15px 32px; border: 0; border-radius: 0; border-bottom: 1px solid var(--maverick-border); background: var(--maverick-bg); box-shadow: none; }
+.product-shell .crm-search { max-width: 520px; min-width: 0; flex: 1; background: var(--maverick-surface); border: 1px solid var(--maverick-border); border-radius: 9px; }
+.product-shell .crm-search input { min-width: 0; width: 100%; background: transparent; font-size: 13px; }
+.product-shell .topbar-actions { display: flex; margin-left: auto; gap: 10px; }
+.product-shell .topbar-actions > button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--maverick-border); padding: 9px 12px; border-radius: 8px; background: var(--maverick-surface); font-size: 12px; }
+.product-shell .product-inspector { position: absolute; z-index: 15; inset: 72px 0 0 auto; width: min(680px, calc(100% - 250px)); padding: 0; background: var(--maverick-bg-strong); border-left: 1px solid var(--maverick-border-strong); box-shadow: -16px 0 60px var(--maverick-bg); overflow: auto; }
+.product-inspector .crm-detail-page { border: 0; border-radius: 0; background: var(--maverick-bg-strong); height: 100%; }
+.product-inspector .vn-extension-detail { padding: 24px; overflow: visible; height: auto; }
+.product-inspector .vn-overview-grid { grid-template-columns: minmax(0, 1fr); }
+.product-inspector .detail-header { background: var(--maverick-bg-strong); }
+.product-inspector .vn-page-heading { flex-wrap: wrap; }
+.product-inspector .vn-page-heading h1 { font-size: 24px; overflow-wrap: anywhere; }
+.product-shell .product-menu-toggle, .product-mobile-close { display: none; }
+.product-shell .vn-page, .product-shell .pipeline-command-center, .product-shell .records-view, .product-shell .reports-view { min-height: 0; overflow: auto; }
+.product-shell button:focus-visible, .product-shell summary:focus-visible, .product-shell a:focus-visible { outline: 2px solid var(--maverick-accent); outline-offset: 3px; }
+@media (max-width: 1050px) { .crm-app.product-shell { grid-template-columns: 196px minmax(0, 1fr); } .product-shell .crm-topbar { padding: 14px 22px; } .product-sidebar { padding-inline: 10px; } }
+@media (max-width: 760px) {
+  .crm-app.product-shell { grid-template-columns: minmax(0, 1fr); }
+  .product-sidebar { display: none; position: absolute; inset: 0 auto 0 0; width: min(290px, 90vw); box-shadow: 16px 0 80px var(--maverick-bg); }
+  .product-sidebar.is-open { display: flex; }
+  .product-shell .product-mobile-close { display: block; margin-left: auto; background: transparent; }
+  .product-shell .product-menu-toggle { display: grid; place-items: center; padding: 7px; background: transparent; }
+  .product-shell .crm-topbar { min-height: 62px; padding: 10px 12px; gap: 8px; }
+  .product-shell .topbar-actions > button { padding: 9px; }
+  .product-shell .topbar-actions > button span { display: none; }
+  .product-shell .product-inspector { inset: 62px 0 0; width: 100%; }
+}
+.product-shell .crm-topbar { flex-wrap: nowrap; }
+@media (max-width: 760px) { .product-shell .crm-search { width: auto; flex: 1; min-width: 0; } .product-shell .topbar-actions { flex-shrink: 0; gap: 4px; } }
+/* Legacy reports use intrinsic-height cards inside the new scrollable canvas. */
+.product-shell .reports-view { display: block; flex: 1; padding: 24px; }
+.product-shell .reports-view > .crm-metrics { margin-bottom: 20px; }
+.product-shell .reports-grid { align-items: start; }
+.product-shell .pipeline-command-center { flex: 1; align-content: start; padding: 20px; }
+.product-sidebar .product-nav-count { display: inline-grid; place-items: center; min-width: 23px; height: 18px; margin: 0 0 0 auto; border-radius: 10px; background: var(--maverick-surface-active); font-size: 9px; }
+.product-shell .topbar-actions { width: auto; min-width: 0; }

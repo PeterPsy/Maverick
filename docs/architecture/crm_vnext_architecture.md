@@ -87,3 +87,12 @@ operations, targeted reference synchronization and meeting workflows, documented
 [CRM operational integrations](crm_integrations_architecture.md). Campaign
 integration/delivery and scheduled competitive crawling remain excluded. Existing
 provider apps own external effects; no Versy production import is needed.
+
+
+## Product alignment release: 0.7.0 / schema 8
+
+The subsequent [product-alignment decision](crm_product_parity.md) replaces the
+loose visual inspiration with a source-compared sidebar/dashboard and dedicated
+operational screens, while retaining Maverick colors, existing records and
+provider boundaries. It introduces bounded live-only UI reads, not a migration,
+new cache authority, campaign delivery or a second CRM.

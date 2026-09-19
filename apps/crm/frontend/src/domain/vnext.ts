@@ -40,7 +40,8 @@ export function useLiveCrm<T>(request: Record<string, unknown>) {
       if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.data-changed' && event.data?.owner_app_id === 'crm') refresh();
     };
     window.addEventListener('message', changed);
-    return () => window.removeEventListener('message', changed);
+    window.addEventListener('crm-workspace-refresh', refresh);
+    return () => { window.removeEventListener('message', changed); window.removeEventListener('crm-workspace-refresh', refresh); };
   }, []);
   return { data, error, loading, refresh };
 }

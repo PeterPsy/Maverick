@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { backend, mount } from './backend_fixture';
+import { backend, mount, navigate } from './backend_fixture';
 
 let dataRoot: string;
 test.beforeEach(() => { dataRoot = mkdtempSync(`${tmpdir()}/crm-vnext-e2e-`); });
@@ -9,13 +9,13 @@ test.afterEach(() => { rmSync(dataRoot, { recursive: true, force: true }); });
 
 test('creates a conversation, connects a person and links the selected Mail provider', async ({ page }) => {
   await mount(page, dataRoot);
-  await page.getByRole('navigation', { name: 'CRM workspace' }).getByRole('button', { name: 'Conversations', exact: true }).click();
+  await navigate(page, 'Threads');
   await page.getByRole('button', { name: 'New conversation thread' }).click();
   await page.getByRole('dialog').getByLabel('Title', { exact: true }).fill('Quarterly relationship review');
   await page.getByRole('dialog').getByLabel('Notes / content').fill('Agree the next step with the customer.');
   await page.getByRole('dialog').getByRole('button', { name: 'Save record' }).click();
   await page.getByRole('button', { name: /Quarterly relationship review/ }).click();
-  await expect(page.getByRole('heading', { name: 'Quarterly relationship review' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Record inspector' }).getByRole('heading', { name: 'Quarterly relationship review' })).toBeVisible();
   await page.getByText('Connect a CRM record', { exact: true }).click();
   await page.locator('select[name="target_id"]').selectOption('contact_ada');
   await page.locator('input[name="relationship"]').fill('participant');
@@ -31,11 +31,16 @@ test('creates a conversation, connects a person and links the selected Mail prov
   const exported = backend(dataRoot, { action: 'crm.export' }).body.export;
   expect(exported.external_refs[0].source_app_id).toBe('test-mail');
   expect(exported.record_links).toHaveLength(1);
+  await page.getByRole('group', { name: 'Conversation state' }).getByRole('button', { name: 'Completed', exact: true }).click();
+  await expect(page.getByRole('group', { name: 'Conversation state' }).getByRole('button', { name: 'Completed', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: 'Completed (1)', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Quarterly relationship review/ })).toBeVisible();
 });
 
 test('campaign planning persists variants without delivery', async ({ page }) => {
   await mount(page, dataRoot);
-  await page.getByRole('navigation', { name: 'CRM workspace' }).getByRole('button', { name: 'Campaigns', exact: true }).click();
+  await navigate(page, 'Campaigns');
   await page.getByRole('button', { name: 'New campaign', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Title', { exact: true }).fill('Customer check-in');
   await page.getByRole('dialog').getByRole('button', { name: 'Save record' }).click();
@@ -52,7 +57,7 @@ test('campaign planning persists variants without delivery', async ({ page }) =>
 
 test('import requires a current simulation before writing', async ({ page }) => {
   await mount(page, dataRoot);
-  await page.getByRole('navigation', { name: 'CRM workspace' }).getByRole('button', { name: 'Import', exact: true }).click();
+  await navigate(page, 'Import');
   const apply = page.getByRole('button', { name: '2. Apply reviewed import' });
   await expect(apply).toBeDisabled();
   await page.getByLabel('Source content').fill('id,display_name,email\nnew,New Person,new@example.test');
@@ -70,8 +75,8 @@ test('import requires a current simulation before writing', async ({ page }) => 
 
 test('overview is responsive and shows live follow-up completion', async ({ page }, testInfo) => {
   await mount(page, dataRoot);
-  await page.getByRole('navigation', { name: 'CRM workspace' }).getByRole('button', { name: 'Overview', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'The relationship workspace' })).toBeVisible();
+  await navigate(page, 'Dashboard');
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('crm-vnext-desktop.png'), fullPage: true });
   await page.getByRole('button', { name: 'Complete Prepare next conversation' }).click();
   await expect(page.getByText('Nothing waiting on you')).toBeVisible();

@@ -1,3 +1,4 @@
+import { navigate } from './backend_fixture';
 import { expect, Page, test } from '@playwright/test';
 
 type BackendRequest = Record<string, unknown>;
@@ -430,6 +431,8 @@ async function mockCrmBackend(page: Page, options: { pipelineDealCount?: number 
       if (kind === 'pipeline_board') data = pipelineBoardPayload(options.pipelineDealCount || 1);
       if (kind === 'get') data = { record: [...baseBootstrap.leads, ...baseBootstrap.accounts, ...baseBootstrap.contacts, ...baseBootstrap.deals, ...baseBootstrap.tasks].find((record) => record.id === body.id) };
       payload = { revision: 'fixture-v1', payload: { kind, data } };
+    } else if (action === 'crm.overview') {
+      payload = { overdue_tasks: 0, pending_approvals: 0, active_deal_count: 0, tasks: [], threads: [], briefs: [], recent_contacts: [], pipeline: [], stage_totals: [] };
     } else if (action === 'crm.get_record') {
       payload = { record: [...baseBootstrap.leads, ...baseBootstrap.accounts, ...baseBootstrap.contacts, ...baseBootstrap.deals, ...baseBootstrap.tasks].find((record) => record.id === body.id) };
     } else if (action === 'crm.record_context') {
@@ -496,6 +499,7 @@ function lastRequest(requests: BackendRequest[], action: string) {
 test('routes between CRM cockpit views and opens a legacy record deep link', async ({ page }) => {
   const requests = await mockCrmBackend(page);
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
 
   await page.evaluate(() => {
@@ -537,7 +541,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
   await expect(page.getByText('Connect a CRM record', { exact: true })).toBeVisible();
   const detailPanel = page.getByRole('region', { name: 'Acme Corp' });
   await expect(detailPanel).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'CRM records' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
   await expect(detailPanel.getByRole('button', { name: 'Back' })).toBeVisible();
   await expect(detailPanel.getByTitle('More record actions')).toBeVisible();
   await expect(detailPanel.getByRole('button', { name: 'Tag record' })).toHaveCount(0);
@@ -558,6 +562,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
 test('paginates the records table with stable next and previous cursors', async ({ page }) => {
   const requests = await mockCrmBackend(page);
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
   await expect(page.getByText('Northwind Expansion')).toBeVisible();
 
   await page.getByRole('button', { name: 'Next' }).click();
@@ -573,6 +578,7 @@ test('scrolls the lead detail page content vertically', async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 500 });
   await mockCrmBackend(page);
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
 
   await page.evaluate(() => {
     window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'leads/lead_northwind' } }, window.location.origin);
@@ -597,6 +603,7 @@ test('renders the pipeline board with stage totals and deal context', async ({ p
     await dialog.accept();
   });
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
 
   await page.evaluate(() => {
     window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'pipeline' } }, window.location.origin);
@@ -626,6 +633,7 @@ test('renders the pipeline board with stage totals and deal context', async ({ p
 test('loads pipeline board deals from backend beyond bootstrap limits', async ({ page }) => {
   await mockCrmBackend(page, { pipelineDealCount: 105 });
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
 
   await page.evaluate(() => {
     window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'pipeline' } }, window.location.origin);
@@ -643,6 +651,7 @@ test('applies unified workspace search through backend-backed UI actions', async
     await dialog.dismiss();
   });
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
 
   await expect(page.getByPlaceholder('Status or stage')).toHaveCount(0);
   await expect(page.getByText('Saved views')).toHaveCount(0);
@@ -662,6 +671,7 @@ test('runs bulk tag actions from real row selection state', async ({ page }) => 
     await dialog.dismiss();
   });
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
 
   await page.getByLabel('Select Northwind Expansion').check();
   await expect(page.getByText('1 selected')).toBeVisible();
@@ -684,6 +694,7 @@ test('runs bulk tag actions from real row selection state', async ({ page }) => 
 test('shows agent-centric pipeline deck and workflow actions', async ({ page }) => {
   const requests = await mockCrmBackend(page);
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
 
   await page.evaluate(() => {
     window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'operations' } }, window.location.origin);
@@ -752,12 +763,14 @@ test('captures desktop and mobile CRM screenshots', async ({ page }, testInfo) =
   await mockCrmBackend(page);
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto('/apps/crm/');
+  await navigate(page, 'Records');
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
   const desktop = await page.screenshot({ path: testInfo.outputPath('crm-desktop.png'), fullPage: true });
   expect(desktop.length).toBeGreaterThan(10_000);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await navigate(page, 'Records');
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
   const mobile = await page.screenshot({ path: testInfo.outputPath('crm-mobile.png'), fullPage: true });
   expect(mobile.length).toBeGreaterThan(10_000);

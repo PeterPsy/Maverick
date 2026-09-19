@@ -1,3 +1,4 @@
+import { ThreadActions } from './workspace/ThreadActions';
 import { useState } from 'react';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { callBackend, CrmRecord } from '../api';
@@ -20,6 +21,7 @@ export function ExtensionDetail({ selected, select, onClose }: { selected: Selec
   }
   return <section className="vn-page vn-extension-detail"><header className="vn-page-heading"><div><button onClick={onClose}><ArrowLeft size={16} />Back</button><small>{label(selected.entity)}</small><h1>{record.title}</h1></div><div className="vn-actions"><button onClick={() => setEditing(true)}><Pencil size={15} />Edit</button><button onClick={() => void archive()}>Archive</button></div></header>
     {error || current.error ? <p className="crm-alert" role="alert">{error || current.error}</p> : null}
+    {selected.entity === 'conversation_thread' ? <ThreadActions record={record} saved={(updated) => { select({ entity: selected.entity, record: updated }); current.refresh(); }} /> : null}
     <div className="vn-overview-grid"><section className="vn-surface"><h2>Record context</h2><p className="vn-prose">{record.body || 'No notes yet.'}</p><dl className="vn-fields">{Object.keys(schema.data?.entities[selected.entity]?.fields || {}).map((key) => <div key={key}><dt>{label(key)}</dt><dd>{typeof record[key] === 'object' ? <pre>{JSON.stringify(record[key], null, 2)}</pre> : String(record[key] ?? '—')}</dd></div>)}</dl>
       {record.metadata && typeof record.metadata === 'object' && Object.keys(record.metadata).length ? <details><summary>Import provenance</summary><pre className="vn-provenance">{JSON.stringify(record.metadata, null, 2)}</pre></details> : null}
     </section><div><RecordRelationships selected={{ ...selected, record }} select={select} /><section className="vn-surface"><h2>Linked app records</h2>{current.data?.external_refs.length ? current.data.external_refs.map((ref) => <p key={ref.id} className="vn-hint">{ref.title} · {ref.source_app_id}<br /><code>{ref.source_entity_id}</code></p>) : <p className="vn-hint">Link Mail, Calendar, files, transcripts or checklists through the selected providers.</p>}<button onClick={current.refresh}>Refresh links</button></section></div></div>

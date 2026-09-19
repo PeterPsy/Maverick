@@ -99,6 +99,7 @@ MCP_TOOL_ACTIONS = {
 
 
 UI_HELPER_ACTIONS = [
+    "crm.workspace_view",
     "crm.pipeline_board",
     "crm.operations_feed",
     "crm.workflow_proposal_preview",
@@ -279,6 +280,7 @@ def operations_manifest() -> dict[str, Any]:
             "crm.unlink_records",
             "crm.record_context",
             "crm.overview",
+            "crm.workspace_view",
             "crm.integration_context",
             "crm.link_provider_record",
             "crm.import_plan",

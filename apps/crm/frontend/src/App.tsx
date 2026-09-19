@@ -1,3 +1,12 @@
+import { useState } from 'react';
+import { WorkspaceSidebar } from './views/workspace/WorkspaceSidebar';
+import { TasksWorkspace } from './views/workspace/TasksWorkspace';
+import { RelationshipsWorkspace } from './views/workspace/RelationshipsWorkspace';
+import { ContextWorkspace } from './views/workspace/ContextWorkspace';
+import { ExpensesWorkspace } from './views/workspace/ExpensesWorkspace';
+import { CalendarWorkspace } from './views/workspace/CalendarWorkspace';
+import { QualityWorkspace, ProposalsWorkspace, TranscriptsWorkspace } from './views/workspace/ReviewWorkspace';
+import { RecordInspector } from './views/workspace/RecordInspector';
 import { ExtensionDetail } from './views/ExtensionDetail';
 import { ExtensionList } from './views/ExtensionList';
 import { OverviewView } from './views/OverviewView';
@@ -19,6 +28,7 @@ import { useCrmDataController } from './domain/useCrmDataController';
 
 export function App() {
   const crm = useCrmDataController();
+  const [menuOpen, setMenuOpen] = useState(false);
   const actions = useCrmActions(crm);
   const {
     actionDialog,
@@ -83,40 +93,25 @@ export function App() {
     setSelected({ entity: 'deal', record: fullRecord as typeof viewModel.deals[number] });
   }
 
+  function navigate(page: ViewId) { setSelected(null); setView(page); setMenuOpen(false); }
+  function refreshWorkspace() { void crm.refresh(); }
+  function closeInspector() { setSelected(null); window.dispatchEvent(new Event('crm-workspace-refresh')); }
+
   return (
-    <main className={`crm-app ${selected ? 'is-showing-detail' : ''}`}>
-      <section className={`crm-workspace ${selected ? 'is-showing-detail' : ''}`}>
+    <main className={`crm-app product-shell ${selected ? 'is-showing-detail' : ''}`}>
+      <WorkspaceSidebar counts={data.counts} view={view} navigate={navigate} open={menuOpen} close={() => setMenuOpen(false)} />
+      <section className="crm-workspace product-main">
         <WorkspaceTopbar
+          onMenu={() => setMenuOpen(!menuOpen)}
+          onRefresh={refreshWorkspace}
+          onCreate={() => setIsCreateChooserOpen(true)}
           query={query}
           selectedCount={selected ? 0 : bulkSelection.size}
           onBulkArchive={() => actions.runBulk('archive')}
           onBulkTag={() => actions.runBulk('tag')}
-          onQueryChange={setQuery}
+          onQueryChange={(value) => { setQuery(value); if (value && ['overview', 'integrations', 'reports'].includes(view)) navigate('records'); }}
         />
-        {!selected ? <nav className="vn-navigation" aria-label="CRM workspace">{([
-          ['overview', 'Overview'], ['today', 'Today'], ['records', 'Relationships'], ['pipeline', 'Sales'],
-          ['conversations', 'Conversations'], ['campaigns', 'Campaigns'], ['expenses', 'Expenses'],
-          ['intelligence', 'Intelligence'], ['objects', 'Custom objects'], ['reports', 'Reports'],
-          ['integrations', 'Connections'], ['import', 'Import']
-        ] as [ViewId, string][]).map(([page, title]) => <button key={page} className={view === page ? 'is-active' : ''} aria-current={view === page ? 'page' : undefined} onClick={() => setView(page)}>{title}</button>)}</nav> : null}
-        {selected && extensionEntities.includes(selected.entity) ? <ExtensionDetail key={`${selected.entity}:${selected.record.id}`} selected={selected} select={setSelected} onClose={() => setSelected(null)} /> : selected ? (
-          <RecordSidePanel
-            selected={selected}
-            onSelectRelated={setSelected}
-            isSaving={isSaving}
-            onClose={() => setSelected(null)}
-            onEdit={(entity, record) => {
-              if (!isCreatableEntity(entity)) return;
-              setSelected(null);
-              setComposer({ mode: 'edit', entity, record });
-            }}
-            onArchive={actions.archiveSelectedRecord}
-            onDelete={actions.deleteSelectedRecord}
-            onTag={actions.tagSelectedRecord}
-            onConvertLead={actions.convertSelectedLead}
-          />
-        ) : (
-          <>
+        <>
             {error ? <div className="crm-alert">{error}</div> : null}
             {viewModel.isCustom ? (
               <div className="crm-view-banner">
@@ -126,8 +121,16 @@ export function App() {
               </div>
             ) : null}
 
-            {view === 'overview' || view === 'today' ? <OverviewView select={setSelected} navigate={setView} today={view === 'today'} createTask={() => setComposer({ mode: 'create', entity: 'task' })} /> : null}
-            {extensionPages[view] ? <ExtensionList key={view} page={view} query={query} select={setSelected} /> : null}
+            {view === 'overview' ? <OverviewView select={setSelected} navigate={navigate} createTask={() => setComposer({ mode: 'create', entity: 'task' })} /> : null}
+            {['campaigns', 'objects'].includes(view) && extensionPages[view] ? <ExtensionList key={view} page={view} query={query} select={setSelected} /> : null}
+            {view === 'today' ? <TasksWorkspace query={query} select={setSelected} create={() => setComposer({ mode: 'create', entity: 'task' })} /> : null}
+            {['people', 'companies', 'deals'].includes(view) ? <RelationshipsWorkspace key={view} entity={view === 'people' ? 'contact' : view === 'companies' ? 'account' : 'deal'} query={query} select={setSelected} create={(entity) => setComposer({ mode: 'create', entity })} navigate={navigate} stages={data.pipeline_stages} /> : null}
+            {view === 'conversations' || view === 'intelligence' || view === 'briefs' ? <ContextWorkspace key={view} page={view} query={query} select={setSelected} /> : null}
+            {view === 'expenses' ? <ExpensesWorkspace query={query} select={setSelected} /> : null}
+            {view === 'calendar' ? <CalendarWorkspace query={query} select={setSelected} /> : null}
+            {view === 'quality' ? <QualityWorkspace query={query} select={setSelected} navigate={navigate} /> : null}
+            {view === 'proposals' ? <ProposalsWorkspace query={query} select={setSelected} /> : null}
+            {view === 'transcripts' ? <TranscriptsWorkspace query={query} select={setSelected} /> : null}
             {view === 'integrations' ? <IntegrationsView /> : null}
             {view === 'records' ? (
               <RecordsView
@@ -172,8 +175,26 @@ export function App() {
             ) : null}
             {view === 'import' ? <ImportPanel onSubmit={actions.handleImport} isSaving={isSaving} preview={importPreview} /> : null}
           </>
-        )}
       </section>
+      {selected ? <RecordInspector recordKey={`${selected.entity}:${selected.record.id}`}>
+        {selected && extensionEntities.includes(selected.entity) ? <ExtensionDetail key={`${selected.entity}:${selected.record.id}`} selected={selected} select={setSelected} onClose={closeInspector} /> : selected ? (
+          <RecordSidePanel
+            selected={selected}
+            onSelectRelated={setSelected}
+            isSaving={isSaving}
+            onClose={closeInspector}
+            onEdit={(entity, record) => {
+              if (!isCreatableEntity(entity)) return;
+              setSelected(null);
+              setComposer({ mode: 'edit', entity, record });
+            }}
+            onArchive={actions.archiveSelectedRecord}
+            onDelete={actions.deleteSelectedRecord}
+            onTag={actions.tagSelectedRecord}
+            onConvertLead={actions.convertSelectedLead}
+          />
+        ) : null}
+      </RecordInspector> : null}
       {isCreateChooserOpen ? (
         <CreateChooserModal
           onClose={() => setIsCreateChooserOpen(false)}

@@ -16,5 +16,16 @@ export async function mount(page: Page, dataRoot: string, providers = { mail: 't
     await route.fulfill({ status: result.status, contentType: 'application/json', body: JSON.stringify(result.body) });
   });
   await page.goto('/apps/crm/');
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await navigate(page, 'Records');
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
+}
+
+export async function navigate(page: Page, name: string) {
+  const mobile = page.getByRole('button', { name: 'Open navigation', exact: true });
+  if (await mobile.isVisible()) await mobile.click();
+  const nav = page.getByRole('navigation', { name: 'CRM workspace' });
+  const button = nav.getByRole('button', { name, exact: true });
+  if (!await button.isVisible()) await nav.getByText('Workspace tools', { exact: true }).click();
+  await button.click();
 }

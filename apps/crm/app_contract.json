@@ -2,7 +2,7 @@
   "app_id": "crm",
   "contract_version": "1.0",
   "name": "CRM",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Generic workspace CRM for relationships, conversations, sales, campaign planning, expenses, intelligence and safe imports.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",

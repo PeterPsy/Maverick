@@ -2,7 +2,7 @@ import { extensionRoutes } from './vnext';
 import { CrmRecord, CrmViewRef } from '../api';
 import { CreatableEntity, PendingSelection, RecordEntityFilter, ViewId } from './types';
 
-export const viewIds: ViewId[] = ['records', 'pipeline', 'reports', 'import', 'overview', 'today', 'conversations', 'campaigns', 'expenses', 'intelligence', 'objects', 'integrations'];
+export const viewIds: ViewId[] = ['records', 'pipeline', 'reports', 'import', 'overview', 'today', 'conversations', 'campaigns', 'expenses', 'intelligence', 'objects', 'integrations', 'people', 'companies', 'deals', 'calendar', 'briefs', 'transcripts', 'quality', 'proposals'];
 export const recordEntityFilters: RecordEntityFilter[] = ['all', 'lead', 'account', 'contact', 'deal'];
 export const creatableEntities: CreatableEntity[] = ['lead', 'account', 'contact', 'deal', 'task', 'note'];
 
@@ -30,10 +30,10 @@ export function titleFor(record: CrmRecord) {
 
 export function viewFromAppPage(appPage: string): { view: ViewId; selection: PendingSelection; entityFilter: RecordEntityFilter } {
   const [segment, recordId] = appPage.split('/').filter(Boolean);
-  const route = segment || 'records';
+  const route = segment || 'overview';
   const extension = Object.entries(extensionRoutes).find(([, path]) => path === route)?.[0];
   if (extension && recordId) {
-    const view: ViewId = extension.startsWith('campaign') ? 'campaigns' : extension === 'expense' ? 'expenses' : extension === 'conversation_thread' ? 'conversations' : extension.startsWith('custom_object') ? 'objects' : 'intelligence';
+    const view: ViewId = extension.startsWith('campaign') ? 'campaigns' : extension === 'brief' ? 'briefs' : extension === 'expense' ? 'expenses' : extension === 'conversation_thread' ? 'conversations' : extension.startsWith('custom_object') ? 'objects' : 'intelligence';
     return { view, entityFilter: 'all', selection: { entity: extension, id: recordId } };
   }
   const legacyEntityByRoute: Record<string, RecordEntityFilter> = {
@@ -44,11 +44,11 @@ export function viewFromAppPage(appPage: string): { view: ViewId; selection: Pen
   };
   if (legacyEntityByRoute[route]) {
     const entityFilter = legacyEntityByRoute[route];
-    return { view: 'records', entityFilter, selection: recordId ? { entity: entityFilter, id: recordId } : null };
+    return { view: route === 'deals' && !recordId ? 'deals' : 'records', entityFilter, selection: recordId ? { entity: entityFilter, id: recordId } : null };
   }
   if (route === 'tasks' || route === 'notes' || route === 'activities') {
     const entity = route === 'activities' ? 'activity' : route.replace(/s$/, '');
-    return { view: 'pipeline', entityFilter: 'all', selection: recordId ? { entity, id: recordId } : null };
+    return { view: route === 'tasks' ? 'today' : 'pipeline', entityFilter: 'all', selection: recordId ? { entity, id: recordId } : null };
   }
   if (route === 'operations') {
     return { view: 'pipeline', entityFilter: 'all', selection: null };

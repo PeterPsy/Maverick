@@ -8,7 +8,7 @@ import { ActionDialogState, ComposerState, ImportPreview, PendingSelection, Reco
 import { entityFilterForEntity, isCreatableEntity, viewForEntity, viewFromAppPage } from './routing';
 
 export function useCrmDataController() {
-  const [view, setView] = useState<ViewId>('records');
+  const [view, setView] = useState<ViewId>('overview');
   const [recordEntityFilter, setRecordEntityFilter] = useState<RecordEntityFilter>('all');
   const [recordsCursor, setRecordsCursor] = useState('');
   const [recordsCursorHistory, setRecordsCursorHistory] = useState<string[]>([]);
@@ -51,6 +51,7 @@ export function useCrmDataController() {
   useEffect(() => () => { for (const controller of cacheReads.current.values()) controller.abort(); }, []);
 
   async function refresh() {
+    window.dispatchEvent(new Event('crm-workspace-refresh'));
     setIsLoading(true);
     setError('');
     try {

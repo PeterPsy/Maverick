@@ -1,6 +1,6 @@
 # CRM
 
-Native, generic Maverick CRM, version 0.6.0 / schema 8. One app (`crm`), one interface (`crm.records`), and one workspace-owned database: relationships, sales, conversations, follow-ups, campaign planning, expenses, intelligence, typed custom objects, import/export, and approvable agent workflows.
+Native, generic Maverick CRM, version 0.7.0 / schema 8. One app (`crm`), one interface (`crm.records`), and one workspace-owned database: relationships, sales, conversations, follow-ups, campaign planning, expenses, intelligence, typed custom objects, import/export, and approvable agent workflows.
 
 The implementation is native Python/SQLite and React/Vite. External CRM projects informed the domain and UX direction; no Cloudflare, Vinext, Ably, external authentication, industry-specific branding, owners, or seed data are bundled. CRM behavior stays app-owned; the core validates, registers, mounts, and invokes declared contract surfaces. See [the vNext decision](../../docs/architecture/crm_vnext_architecture.md) for source provenance, compatibility, and release boundaries.
 
@@ -64,15 +64,20 @@ The `crm.records_table` backend action is intentionally app-owned UI infrastruct
 
 ## vNext operational workspace
 
-- **Overview / Today:** live follow-ups, task completion, overdue counts, pending approvals, pipeline value and margin grouped by currency, expenses, conversations, and briefs.
-- **Relationships / Sales:** existing people, companies, leads, deal board, reports and workflow approval UI remain available. Deals gain `margin_minor`; existing values are unchanged.
-- **Conversations:** native thread records linked to participants, tasks, deals and provider references through one validated relationship graph.
+- **Dashboard:** reference-aligned sidebar and search bar, brief archive selector, joined financial KPIs, full-width value/margin pipeline chart, next tasks, recent people/threads and active deals. Maverick theme colors only; no seeded business data.
+- **Tasks:** local-time Today / 1–7 days / 8–30 days / undated queues, category or priority groups, completion/reopening and contextual inspector.
+- **People / Companies / Deals:** dedicated person table, company cards and deal table with inline stage movement, value and margin. Non-modal right inspectors retain the originating list. Advanced Records, Kanban/Pipeline, reports and import remain under Workspace tools; established record deep links are retained.
+- **Threads:** To reply / Waiting / Completed queues with explicit state transitions. Native threads link participants, tasks, deals and provider references through the existing validated relationship graph.
+- **Calendar:** date-filtered agenda of CRM-linked Calendar snapshots, explicit verification/failure state, provider links and scheduling/meeting context. Not a copy of the entire external calendar.
+- **Proposals / Data quality / Transcripts:** separate review queues, validated preview before approval/application, missing-field and duplicate review, Speech operation history and reviewable note context.
 - **Campaigns:** draft/ready/paused/completed planning, variants, ordered steps, recipients and event history. Cross-campaign references and duplicate recipients are rejected. These operations do **not** send, schedule workers, or authorize provider delivery.
 - **Expenses / Intelligence:** expenses, competitive profiles and periodic/meeting briefs, with typed dates, metadata, ownership and linked records.
 - **Custom objects:** user-defined typed schemas and records. Vertical source objects are imported as optional user data, not built-in real-estate concepts.
 - **Connections:** current selected-provider identities and linked counts. CRM detail pages search and verify Mail threads, Calendar events, Storage assets and Checklist records through the core-governed provider backend. Verified snapshots refresh in bounded batches; failures retain the last good context. Speech processes linked audio and returns reviewable transcript proposals, not reference entities. No private provider database or credential is read.
 
-New MCP/CLI actions include `extension_schema`, `list_extension_records`, `create_extension_record`, `update_extension_record`, `link_records`, `unlink_records`, `record_context`, `overview`, `integration_context`, `link_provider_record`, `import_plan`, `import_apply`, and `import_jobs` (CLI prefix `crm.`, MCP prefix `crm_`). New entities also participate in search, references, custom fields, lifecycle, audit and native export/import. New views use live reads; this release does not expand the reviewed offline/PWA data allowlist.
+New MCP/CLI actions include `extension_schema`, `list_extension_records`, `create_extension_record`, `update_extension_record`, `link_records`, `unlink_records`, `record_context`, `overview`, `integration_context`, `link_provider_record`, `import_plan`, `import_apply`, and `import_jobs` (CLI prefix `crm.`, MCP prefix `crm_`). New entities also participate in search, references, custom fields, lifecycle, audit and native export/import. The bounded, read-only `crm.workspace_view` helper supplies task/thread/expense/brief/intelligence/calendar/transcript/quality screens. Like the existing Records and Operations helpers, it is UI infrastructure, not a new public CLI/MCP action. New views use live reads; this release does not expand the reviewed offline/PWA data allowlist.
+
+See [CRM product alignment](../../docs/architecture/crm_product_parity.md) for the pinned upstream comparison, screen matrix and deliberate native differences.
 
 ## Operational app integrations
 

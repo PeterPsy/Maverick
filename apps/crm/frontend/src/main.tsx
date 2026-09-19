@@ -16,3 +16,5 @@ createRoot(document.getElementById('root')!).render(
 );
 
 import './vnext.css';
+import './product-shell.css';
+import './product-workspace.css';

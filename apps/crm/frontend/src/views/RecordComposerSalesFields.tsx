@@ -155,6 +155,10 @@ export function DealComposerFields({ record, data }: { record: Partial<CrmRecord
         <input name="value" type="number" min="0" step="0.01" defaultValue={numericValue(record, 'value', '0')} />
       </label>
       <label>
+        Margin (minor currency units)
+        <input name="margin_minor" type="number" step="1" defaultValue={numericValue(record, 'margin_minor', '0')} />
+      </label>
+      <label>
         Currency
         <input name="currency" defaultValue={textValue(record, 'currency', 'EUR')} />
       </label>

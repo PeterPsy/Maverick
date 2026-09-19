@@ -86,6 +86,7 @@ const detailFieldsByEntity: Record<string, DetailField[]> = {
     { key: 'name', label: 'Deal' },
     { key: 'stage', label: 'Stage' },
     { key: 'value', label: 'Value', format: 'money' },
+    { key: 'margin_minor', label: 'Margin (minor currency units)' },
     { key: 'probability', label: 'Probability', format: 'percent' },
     { key: 'close_date', label: 'Close date', format: 'date' },
     { key: 'account_id', label: 'Account' },

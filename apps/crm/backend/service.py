@@ -17,6 +17,10 @@ from domains.automation_rules import (
     update_automation_rule,
 )
 from domains.bootstrap import bootstrap_payload
+from domains.workspace_overview import overview
+from domains.provider_links import integration_context, link_provider_record
+from domains.extension_records import extension_schema, list_extensions, save_extension
+from domains.record_graph import link_records, unlink_records, record_context
 from domains.record_intelligence import intelligent_next_actions, propose_workflows, record_enrichment
 from domains.custom_fields import (
     archive_custom_field,
@@ -32,6 +36,7 @@ from domains.external_refs import (
 )
 from domains.health import health_report as domain_health_report
 from domains.import_export import import_commit, import_preview
+from domains.import_engine import import_plan, import_apply, import_jobs
 from domains.operations import audit_log, find_duplicates, list_next_actions
 from domains.operations_feed import operations_feed
 from domains.pipeline import create_pipeline, create_pipeline_stage, delete_pipeline_stage, move_deal, pipeline_board, update_pipeline, update_pipeline_stage
@@ -88,6 +93,32 @@ def handle_action(data_root: str | Path, action: str, payload: dict[str, Any]) -
     initialize(data_root)
     try:
         with connect(data_root) as db:
+            if action == "crm.overview":
+                return 200, overview(db)
+            if action == "crm.integration_context":
+                return 200, integration_context(db, payload)
+            if action == "crm.link_provider_record":
+                return 200, link_provider_record(db, payload)
+            if action == "crm.import_plan":
+                return 200, import_plan(db, payload)
+            if action == "crm.import_apply":
+                return 200, import_apply(db, payload)
+            if action == "crm.import_jobs":
+                return 200, import_jobs(db)
+            if action == "crm.extension_schema":
+                return 200, extension_schema()
+            if action == "crm.list_extension_records":
+                return 200, list_extensions(db, payload)
+            if action == "crm.create_extension_record":
+                return 201, {"ok": True, "record": save_extension(db, payload)}
+            if action == "crm.update_extension_record":
+                return 200, {"ok": True, "record": save_extension(db, payload, update=True)}
+            if action == "crm.link_records":
+                return 200, {"ok": True, "link": link_records(db, payload)}
+            if action == "crm.unlink_records":
+                return 200, unlink_records(db, payload)
+            if action == "crm.record_context":
+                return 200, record_context(db, payload)
             if action == "pwa.read_model":
                 return 200, read_model(db, data_root, payload)
             if action in {"operations.manifest", "crm.manifest"}:

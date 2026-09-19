@@ -11,9 +11,12 @@ from typing import Any, Iterable
 from uuid import uuid4
 
 from errors import NotFoundError, ValidationError
+from entity_catalog import ENTITY_TABLES, TABLE_ENTITIES
+from extension_storage import initialize_extensions, export_extensions
+from migration_safety import prepare_migration
 
-APP_VERSION = "0.4.2"
-SCHEMA_VERSION = "6"
+APP_VERSION = "0.5.0"
+SCHEMA_VERSION = "7"
 DB_NAME = "crm.sqlite"
 CUSTOM_FIELD_TYPES = {"text", "number", "date", "boolean", "select", "multi_select", "url", "email"}
 
@@ -44,9 +47,17 @@ def connect(data_root: str | Path):
 def initialize(data_root: str | Path) -> None:
     root = Path(data_root)
     root.mkdir(parents=True, exist_ok=True)
+    if (root / DB_NAME).exists():
+        with connect(root) as existing:
+            if existing.execute("SELECT 1 FROM sqlite_master WHERE name='schema_metadata'").fetchone():
+                version = existing.execute("SELECT value FROM schema_metadata WHERE key='schema_version'").fetchone()
+                if version and version[0] == SCHEMA_VERSION:
+                    return
     with connect(root) as db:
+        prepare_migration(db, root, SCHEMA_VERSION)
         db.executescript(
             """
+            BEGIN IMMEDIATE;
             CREATE TABLE IF NOT EXISTS schema_metadata (
               key TEXT PRIMARY KEY,
               value TEXT NOT NULL
@@ -381,6 +392,8 @@ def initialize(data_root: str | Path) -> None:
         _ensure_column(db, "crm_outbox", "provider_app_id", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "crm_outbox", "processed_at", "TEXT NOT NULL DEFAULT ''")
         db.execute("CREATE INDEX IF NOT EXISTS idx_external_refs_provider ON external_refs(provider_alias, source_interface, normalized_link_type, deleted_at)")
+        _ensure_column(db, "deals", "margin_minor", "INTEGER NOT NULL DEFAULT 0")
+        initialize_extensions(db)
         _seed_pipeline(db)
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("app_version", APP_VERSION))
@@ -536,6 +549,8 @@ def list_rows(db: sqlite3.Connection, table: str, *, limit: int = 50, query: str
                 f"SELECT * FROM deals WHERE {visibility} AND lower(name || ' ' || summary) LIKE ? ORDER BY updated_at DESC LIMIT ?",
                 (pattern, limit),
             ).fetchall()
+        elif table not in {"activities", "tasks", "notes"}:
+            rows = db.execute(f"SELECT * FROM {table} WHERE {visibility} AND (title LIKE ? OR body LIKE ?) ORDER BY updated_at DESC LIMIT ?", (pattern, pattern, limit)).fetchall()
         else:
             rows = db.execute(f"SELECT * FROM {table} WHERE {visibility} ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
     else:
@@ -555,7 +570,7 @@ def get_record(db: sqlite3.Connection, entity_type: str, entity_id: str) -> dict
 
 
 def table_for_entity(entity_type: str) -> str:
-    mapping = {"lead": "leads", "account": "accounts", "contact": "contacts", "deal": "deals", "activity": "activities", "task": "tasks", "note": "notes"}
+    mapping = ENTITY_TABLES
     try:
         return mapping[entity_type]
     except KeyError as error:
@@ -563,7 +578,7 @@ def table_for_entity(entity_type: str) -> str:
 
 
 def entity_type_for_table(table: str) -> str:
-    mapping = {"leads": "lead", "accounts": "account", "contacts": "contact", "deals": "deal", "activities": "activity", "tasks": "task", "notes": "note"}
+    mapping = TABLE_ENTITIES
     try:
         return mapping[table]
     except KeyError as error:
@@ -579,6 +594,9 @@ def parse_limit(payload: dict[str, Any], default: int = 50) -> int:
 
 def export_payload(db: sqlite3.Connection) -> dict[str, Any]:
     return {
+        **export_extensions(db),
+        **{table: [row_to_dict(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY 1")]
+           for table in ("pipelines", "pipeline_stages", "tags", "record_tags", "saved_views")},
         "schema_version": SCHEMA_VERSION,
         "exported_at": utc_now(),
         "custom_field_definitions": [row_to_dict(row) for row in db.execute("SELECT * FROM custom_field_definitions ORDER BY entity_type, position, label").fetchall()],

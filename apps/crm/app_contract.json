@@ -2,8 +2,8 @@
   "app_id": "crm",
   "contract_version": "1.0",
   "name": "CRM",
-  "version": "0.4.2",
-  "description": "Workspace CRM for accounts, contacts, deals, activities, tasks, typed custom fields, import/export, and agent-friendly CRM actions.",
+  "version": "0.5.0",
+  "description": "Generic workspace CRM for relationships, conversations, sales, campaign planning, expenses, intelligence and safe imports.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -61,6 +61,22 @@
       "required": false,
       "cardinality": "one",
       "description": "Optional workspace Storage write provider used by agents to save CRM briefs, attachments, and generated outputs before linking them back to CRM records."
+    },
+    {
+      "alias": "speech",
+      "interface": "speech.transcription",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional speech provider; transcripts and audio artifacts are linked, never private storage reads."
+    },
+    {
+      "alias": "tasks",
+      "interface": "checklist.task",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional Checklist provider for external task and checklist references."
     }
   ],
   "distribution": {
@@ -154,7 +170,20 @@
       "crm_reference_manifest",
       "crm_reference_search",
       "crm_reference_resolve",
-      "crm_reference_summarize"
+      "crm_reference_summarize",
+      "crm_extension_schema",
+      "crm_list_extension_records",
+      "crm_create_extension_record",
+      "crm_update_extension_record",
+      "crm_link_records",
+      "crm_unlink_records",
+      "crm_record_context",
+      "crm_overview",
+      "crm_integration_context",
+      "crm_link_provider_record",
+      "crm_import_plan",
+      "crm_import_apply",
+      "crm_import_jobs"
     ],
     "cli_commands": [
       "crm"
@@ -186,7 +215,18 @@
           "deal",
           "activity",
           "task",
-          "note"
+          "note",
+          "conversation_thread",
+          "campaign",
+          "campaign_variant",
+          "campaign_step",
+          "campaign_member",
+          "campaign_event",
+          "expense",
+          "brief",
+          "intelligence_profile",
+          "custom_object_definition",
+          "custom_object_record"
         ],
         "state_actions": [
           {
@@ -270,6 +310,94 @@
         "resolvable": true,
         "summarizable": true,
         "deep_link_supported": true
+      },
+      {
+        "entity_type": "conversation_thread",
+        "display_name": "Conversation Thread",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "campaign",
+        "display_name": "Campaign",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "campaign_variant",
+        "display_name": "Campaign Variant",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "campaign_step",
+        "display_name": "Campaign Step",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "campaign_member",
+        "display_name": "Campaign Member",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "campaign_event",
+        "display_name": "Campaign Event",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "expense",
+        "display_name": "Expense",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "brief",
+        "display_name": "Brief",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "intelligence_profile",
+        "display_name": "Intelligence Profile",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "custom_object_definition",
+        "display_name": "Custom Object Definition",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "custom_object_record",
+        "display_name": "Custom Object Record",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
       }
     ]
   },
@@ -289,7 +417,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "6",
+    "data_schema_version": "7",
     "primary_paths": [
       "data/crm/crm.sqlite",
       "data/crm/view_state.json"

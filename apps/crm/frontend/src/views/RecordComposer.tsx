@@ -83,6 +83,7 @@ export function RecordComposerModal({
     } else if (state.entity === 'deal') {
       ['name', 'account_id', 'contact_id', 'stage_id', 'currency', 'close_date', 'owner_id', 'summary'].forEach((key) => appendText(form, values, key));
       appendNumber(form, values, 'value');
+      appendNumber(form, values, 'margin_minor');
       appendNumber(form, values, 'probability');
     } else if (state.entity === 'task') {
       ['title', 'status', 'priority', 'due_at', 'account_id', 'contact_id', 'deal_id', 'owner_id', 'body'].forEach((key) => appendText(form, values, key));

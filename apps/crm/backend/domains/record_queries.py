@@ -2,21 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from errors import ValidationError
 from store import list_rows, parse_limit, require_text, table_for_entity
 
 
-ENTITY_TABLES = {
-    "lead": "leads",
-    "account": "accounts",
-    "contact": "contacts",
-    "deal": "deals",
-    "activity": "activities",
-    "task": "tasks",
-    "note": "notes",
-}
+from entity_catalog import ENTITY_TABLES as ENTITY_TABLES
 TABLE_ENTITY_TYPES = {table: entity_type for entity_type, table in ENTITY_TABLES.items()}
 VIEW_ENTITY_TYPES = {"all", *ENTITY_TABLES.keys()}
 
@@ -35,7 +28,12 @@ def search(db, payload: dict[str, Any]) -> dict[str, Any]:
     if not query:
         tables = list(ENTITY_TABLES.values()) if entity_type == "all" else [table_for_entity(entity_type)]
         return {"results": [{"entity_type": TABLE_ENTITY_TYPES[table], "record": item} for table in tables for item in list_rows(db, table, limit=limit)]}
-    pattern = f"{query}*"
+    # Search is text, not an FTS expression. Emails, quotes and punctuation in
+    # provider/relationship pickers must never become FTS operators or syntax.
+    tokens = re.findall(r"\w+", query, flags=re.UNICODE)
+    if not tokens:
+        return {"results": []}
+    pattern = " AND ".join('"' + token + '"*' for token in tokens)
     where = ""
     params: list[Any] = [pattern]
     if entity_type != "all":

@@ -212,6 +212,7 @@
           "contact_id": { "type": "string" },
           "name": { "type": "string" },
           "stage_id": { "type": "string" },
+          "margin_minor": { "type": "integer" },
           "value": { "type": "number" },
           "currency": { "type": "string" },
           "probability": { "type": "number" },
@@ -235,6 +236,7 @@
           "contact_id": { "type": "string" },
           "name": { "type": "string" },
           "stage_id": { "type": "string" },
+          "margin_minor": { "type": "integer" },
           "value": { "type": "number" },
           "currency": { "type": "string" },
           "probability": { "type": "number" },
@@ -1083,6 +1085,578 @@
         "additionalProperties": false
       },
       "output_schema": { "type": "object" }
+    },
+    "crm_extension_schema": {
+      "effect_class": "read",
+      "description": "Discover typed native CRM extension fields and defaults.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_list_extension_records": {
+      "effect_class": "read",
+      "description": "List a bounded page of conversations, campaigns, expenses, briefs, intelligence or custom objects.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "conversation_thread",
+              "campaign",
+              "campaign_variant",
+              "campaign_step",
+              "campaign_member",
+              "campaign_event",
+              "expense",
+              "brief",
+              "intelligence_profile",
+              "custom_object_definition",
+              "custom_object_record"
+            ]
+          },
+          "query": {
+            "type": "string"
+          },
+          "campaign_id": {
+            "type": "string"
+          },
+          "definition_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "required": [
+          "entity_type"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_create_extension_record": {
+      "effect_class": "mutating",
+      "description": "Create one typed CRM extension record. Campaign preparation never sends messages.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "conversation_thread",
+              "campaign",
+              "campaign_variant",
+              "campaign_step",
+              "campaign_member",
+              "campaign_event",
+              "expense",
+              "brief",
+              "intelligence_profile",
+              "custom_object_definition",
+              "custom_object_record"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "last_activity_at": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "segment": {
+            "type": "object"
+          },
+          "campaign_id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "integer"
+          },
+          "variant_id": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "delay_hours": {
+            "type": "integer"
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          },
+          "next_action_at": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "amount_minor": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "incurred_at": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "supplier": {
+            "type": "string"
+          },
+          "deal_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "period_start": {
+            "type": "string"
+          },
+          "period_end": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "reviewed_at": {
+            "type": "string"
+          },
+          "object_key": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object"
+          },
+          "definition_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_update_extension_record": {
+      "effect_class": "mutating",
+      "description": "Update one typed CRM extension record; no provider side effects.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "enum": [
+              "conversation_thread",
+              "campaign",
+              "campaign_variant",
+              "campaign_step",
+              "campaign_member",
+              "campaign_event",
+              "expense",
+              "brief",
+              "intelligence_profile",
+              "custom_object_definition",
+              "custom_object_record"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "last_activity_at": {
+            "type": "string"
+          },
+          "objective": {
+            "type": "string"
+          },
+          "segment": {
+            "type": "object"
+          },
+          "campaign_id": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "integer"
+          },
+          "variant_id": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "delay_hours": {
+            "type": "integer"
+          },
+          "record_type": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "string"
+          },
+          "next_action_at": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "amount_minor": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "incurred_at": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "supplier": {
+            "type": "string"
+          },
+          "deal_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "period_start": {
+            "type": "string"
+          },
+          "period_end": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string"
+          },
+          "reviewed_at": {
+            "type": "string"
+          },
+          "object_key": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "object"
+          },
+          "definition_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_link_records": {
+      "effect_class": "mutating",
+      "description": "Link two existing CRM records, including participants and campaign context.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "relationship": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_type",
+          "source_id",
+          "target_type",
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_unlink_records": {
+      "effect_class": "mutating",
+      "description": "Remove one CRM graph relationship without deleting either record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_record_context": {
+      "effect_class": "read",
+      "description": "Read a CRM record, related records and external provider references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_overview": {
+      "effect_class": "read",
+      "description": "Read the live operational dashboard with follow-ups, approvals and per-currency financials.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_context": {
+      "effect_class": "read",
+      "description": "Read interface-selected providers and linked reference counts; never credentials.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_link_provider_record": {
+      "effect_class": "mutating",
+      "description": "Link a provider-owned record through a configured dependency alias. No remote reads or sends.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "provider_alias": {
+            "type": "string"
+          },
+          "crm_entity_type": {
+            "type": "string"
+          },
+          "crm_entity_id": {
+            "type": "string"
+          },
+          "source_entity_type": {
+            "type": "string"
+          },
+          "source_entity_id": {
+            "type": "string"
+          },
+          "link_type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_alias",
+          "crm_entity_type",
+          "crm_entity_id",
+          "source_entity_type",
+          "source_entity_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_import_plan": {
+      "effect_class": "read",
+      "description": "Simulate a bounded import against an isolated database. Returns a stale-safe plan token and row errors.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object"
+          },
+          "conflict_policy": {
+            "type": "string",
+            "enum": [
+              "skip",
+              "duplicate",
+              "fill_empty",
+              "overwrite",
+              "manual"
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_import_apply": {
+      "effect_class": "mutating",
+      "description": "Atomically apply an unchanged import source and current plan token. Fails closed on stale plans.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object"
+          },
+          "conflict_policy": {
+            "type": "string",
+            "enum": [
+              "skip",
+              "duplicate",
+              "fill_empty",
+              "overwrite",
+              "manual"
+            ]
+          },
+          "plan_token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "plan_token"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_import_jobs": {
+      "effect_class": "read",
+      "description": "Read the last 50 committed import reports.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
     }
   }
 }

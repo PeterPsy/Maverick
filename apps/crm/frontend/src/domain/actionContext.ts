@@ -5,6 +5,7 @@ export type EntitySelection = { entity: string; record: CrmRecord } | null;
 
 export type CrmActionContext = {
   actionDialog: ActionDialogState;
+  importPreview: ImportPreview | null;
   bulkSelection: Set<string>;
   filters: Record<string, string>;
   recordsCursor: string;

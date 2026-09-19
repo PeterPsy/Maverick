@@ -1,3 +1,9 @@
+import { ExtensionDetail } from './views/ExtensionDetail';
+import { ExtensionList } from './views/ExtensionList';
+import { OverviewView } from './views/OverviewView';
+import { IntegrationsView } from './views/IntegrationsView';
+import { extensionPages, extensionEntities } from './domain/vnext';
+import { ViewId } from './domain/types';
 import { ActionDialog, ActionDialogValues } from './views/ActionDialogs';
 import { CreateChooserModal, RecordComposerModal } from './views/RecordComposer';
 import { RecordSidePanel } from './views/RecordSidePanel';
@@ -87,9 +93,16 @@ export function App() {
           onBulkTag={() => actions.runBulk('tag')}
           onQueryChange={setQuery}
         />
-        {selected ? (
+        {!selected ? <nav className="vn-navigation" aria-label="CRM workspace">{([
+          ['overview', 'Overview'], ['today', 'Today'], ['records', 'Relationships'], ['pipeline', 'Sales'],
+          ['conversations', 'Conversations'], ['campaigns', 'Campaigns'], ['expenses', 'Expenses'],
+          ['intelligence', 'Intelligence'], ['objects', 'Custom objects'], ['reports', 'Reports'],
+          ['integrations', 'Connections'], ['import', 'Import']
+        ] as [ViewId, string][]).map(([page, title]) => <button key={page} className={view === page ? 'is-active' : ''} aria-current={view === page ? 'page' : undefined} onClick={() => setView(page)}>{title}</button>)}</nav> : null}
+        {selected && extensionEntities.includes(selected.entity) ? <ExtensionDetail key={`${selected.entity}:${selected.record.id}`} selected={selected} select={setSelected} onClose={() => setSelected(null)} /> : selected ? (
           <RecordSidePanel
             selected={selected}
+            onSelectRelated={setSelected}
             isSaving={isSaving}
             onClose={() => setSelected(null)}
             onEdit={(entity, record) => {
@@ -113,6 +126,9 @@ export function App() {
               </div>
             ) : null}
 
+            {view === 'overview' || view === 'today' ? <OverviewView select={setSelected} navigate={setView} today={view === 'today'} createTask={() => setComposer({ mode: 'create', entity: 'task' })} /> : null}
+            {extensionPages[view] ? <ExtensionList key={view} page={view} query={query} select={setSelected} /> : null}
+            {view === 'integrations' ? <IntegrationsView /> : null}
             {view === 'records' ? (
               <RecordsView
                 data={recordsData}

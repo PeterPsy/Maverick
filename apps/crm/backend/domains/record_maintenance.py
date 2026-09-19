@@ -17,6 +17,10 @@ def archive_record(db, payload: dict[str, Any]) -> dict[str, Any]:
     record = get_non_deleted_record(db, entity_type, entity_id)
     if record.get("archived_at"):
         return record
+    from .record_graph import extension_dependents
+    dependents = extension_dependents(db, entity_type, entity_id, active_only=True)
+    if any(count for key, count in dependents.items() if key != "record_links"):
+        raise ValidationError("Archive dependent extension records before their parent.")
     table = table_for_entity(entity_type)
     now = utc_now()
     db.execute(f"UPDATE {table} SET archived_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL", (now, now, entity_id))
@@ -28,7 +32,11 @@ def archive_record(db, payload: dict[str, Any]) -> dict[str, Any]:
 def unarchive_record(db, payload: dict[str, Any]) -> dict[str, Any]:
     entity_type = require_text(payload, "entity_type", required=True)
     entity_id = require_text(payload, "id") or require_text(payload, "entity_id", required=True)
-    get_non_deleted_record(db, entity_type, entity_id)
+    record = get_non_deleted_record(db, entity_type, entity_id)
+    from entity_catalog import EXTENSIONS
+    if entity_type in EXTENSIONS:
+        from .extension_records import validate_extension
+        validate_extension(db, entity_type, {**record, "archived_at": None})
     table = table_for_entity(entity_type)
     now = utc_now()
     db.execute(f"UPDATE {table} SET archived_at = NULL, updated_at = ? WHERE id = ? AND deleted_at IS NULL", (now, entity_id))
@@ -144,6 +152,8 @@ def merge_records(db, payload: dict[str, Any]) -> dict[str, Any]:
     now = utc_now()
     reassigned_counts: dict[str, int] = {}
     for source_id in source_ids:
+        from .record_graph import merge_graph
+        merge_graph(db, entity_type, source_id, target_id)
         _merge_record_tags(db, entity_type, source_id, target_id, now)
         _merge_custom_field_values(db, entity_type, source_id, target_id, now)
         _merge_external_refs(db, entity_type, source_id, target_id, now)

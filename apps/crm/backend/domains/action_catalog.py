@@ -3,9 +3,23 @@
 from __future__ import annotations
 
 from typing import Any
+from entity_catalog import ENTITY_TABLES
 
 
 MCP_TOOL_ACTIONS = {
+    "crm_extension_schema": "crm.extension_schema",
+    "crm_list_extension_records": "crm.list_extension_records",
+    "crm_create_extension_record": "crm.create_extension_record",
+    "crm_update_extension_record": "crm.update_extension_record",
+    "crm_link_records": "crm.link_records",
+    "crm_unlink_records": "crm.unlink_records",
+    "crm_record_context": "crm.record_context",
+    "crm_overview": "crm.overview",
+    "crm_integration_context": "crm.integration_context",
+    "crm_link_provider_record": "crm.link_provider_record",
+    "crm_import_plan": "crm.import_plan",
+    "crm_import_apply": "crm.import_apply",
+    "crm_import_jobs": "crm.import_jobs",
     "crm_search": "crm.search",
     "crm_get_record": "crm.get_record",
     "crm_create_lead": "crm.create_lead",
@@ -100,6 +114,12 @@ CONFIG_HELPER_ACTIONS = [
 
 
 WRITE_ACTIONS = {
+    "crm.create_extension_record",
+    "crm.update_extension_record",
+    "crm.link_records",
+    "crm.unlink_records",
+    "crm.link_provider_record",
+    "crm.import_apply",
     "crm.create_account",
     "create_account",
     "crm.update_account",
@@ -217,8 +237,21 @@ def operations_manifest() -> dict[str, Any]:
         "ok": True,
         "app_id": "crm",
         "default_action": "operations.manifest",
-        "entities": ["lead", "account", "contact", "deal", "activity", "task", "note"],
+        "entities": list(ENTITY_TABLES),
         "actions": [
+            "crm.extension_schema",
+            "crm.list_extension_records",
+            "crm.create_extension_record",
+            "crm.update_extension_record",
+            "crm.link_records",
+            "crm.unlink_records",
+            "crm.record_context",
+            "crm.overview",
+            "crm.integration_context",
+            "crm.link_provider_record",
+            "crm.import_plan",
+            "crm.import_apply",
+            "crm.import_jobs",
             "crm.search",
             "crm.records_table",
             "crm.get_record",

@@ -12,13 +12,16 @@ from .custom_fields import _upsert_custom_field_definition_export, _upsert_custo
 from .export_records import TABLE_ENTITY_TYPES, upsert_export_record
 from .external_refs import _upsert_external_ref_export
 from .workflow import _workflow_proposal
+from entity_catalog import EXTENSIONS
+from .export_extensions import CONFIG_TABLES, restore_configuration, restore_extensions, restore_graph
 
 
-EXPORT_ENTITY_ORDER = ["leads", "accounts", "contacts", "deals", "activities", "tasks", "notes"]
-EXPORT_CONFIG_TABLES = ["custom_field_definitions", "custom_field_values", "automation_rules", "workflow_proposals", "external_refs"]
+EXPORT_ENTITY_ORDER = ["accounts", "contacts", "deals", "leads", "activities", "tasks", "notes"]
+EXPORT_CONFIG_TABLES = ["custom_field_definitions", "custom_field_values", "automation_rules", "workflow_proposals", "external_refs", *CONFIG_TABLES, *(s["table"] for s in EXTENSIONS.values()), "record_links", "import_identities"]
 
 
 def restore_export_payload(db, payload: dict[str, Any]) -> dict[str, Any]:
+    restore_configuration(db, payload, ("pipelines", "pipeline_stages", "tags", "saved_views"))
     created: list[dict[str, Any]] = []
     updated: list[dict[str, Any]] = []
     for row in payload.get("custom_field_definitions") or []:
@@ -37,6 +40,9 @@ def restore_export_payload(db, payload: dict[str, Any]) -> dict[str, Any]:
                 created.append(record)
             else:
                 updated.append(record)
+    for record, was_created in restore_extensions(db, payload):
+        (created if was_created else updated).append(record)
+    restore_configuration(db, payload, ("record_tags",))
     for row in payload.get("custom_field_values") or []:
         if not isinstance(row, dict):
             raise ValidationError("`custom_field_values` must contain objects.")
@@ -57,6 +63,7 @@ def restore_export_payload(db, payload: dict[str, Any]) -> dict[str, Any]:
             raise ValidationError("`workflow_proposals` must contain objects.")
         record, was_created = _upsert_workflow_proposal_export(db, row)
         (created if was_created else updated).append(record)
+    restore_graph(db, payload)
     return {"ok": True, "format": "crm_export", "created_count": len(created), "updated_count": len(updated), "records": created + updated}
 
 

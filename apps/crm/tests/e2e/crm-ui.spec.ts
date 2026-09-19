@@ -5,10 +5,10 @@ type BackendRequest = Record<string, unknown>;
 const baseBootstrap = {
   ok: true,
   leads: [
-    { id: 'lead_northwind', name: 'Northwind Expansion', status: 'new', updated_at: '2026-05-20T10:00:00Z', tags: [{ name: 'growth' }] }
+    { id: 'lead_northwind', name: 'Northwind Expansion', status: 'new', updated_at: '2026-05-20T10:00:00Z', tags: [{ id: 'tag_growth', name: 'growth' }] }
   ],
   accounts: [
-    { id: 'account_acme', name: 'Acme Corp', status: 'priority', updated_at: '2026-05-21T11:00:00Z', tags: [{ name: 'enterprise' }] }
+    { id: 'account_acme', name: 'Acme Corp', status: 'priority', updated_at: '2026-05-21T11:00:00Z', tags: [{ id: 'tag_enterprise', name: 'enterprise' }] }
   ],
   contacts: [
     { id: 'contact_jane', display_name: 'Jane Example', account_id: 'account_acme', email: 'jane@example.com', updated_at: '2026-05-22T12:00:00Z' }
@@ -55,7 +55,7 @@ const baseBootstrap = {
             owner_id: 'owner_1',
             status: 'priority',
             summary: 'Primary account',
-            tags: [{ name: 'enterprise' }],
+            tags: [{ id: 'tag_enterprise', name: 'enterprise' }],
             custom_fields: { segment: 'Strategic' }
           },
           {
@@ -65,7 +65,7 @@ const baseBootstrap = {
             owner_id: 'owner_2',
             status: 'new',
             summary: 'Imported duplicate',
-            tags: [{ name: 'imported' }],
+            tags: [{ id: 'tag_imported', name: 'imported' }],
             custom_fields: { segment: 'Commercial' }
           }
         ]
@@ -422,7 +422,21 @@ async function mockCrmBackend(page: Page, options: { pipelineDealCount?: number 
     requests.push(body);
     const action = String(body.action || '');
     let payload: unknown = { ok: true };
-    if (action === 'bootstrap') {
+    if (action === 'pwa.read_model') {
+      const kind = String(body.kind);
+      let data: unknown = {};
+      if (kind === 'bootstrap') data = baseBootstrap;
+      if (kind === 'records_table') data = recordsTablePayload({ ...body, pagination: { cursor: body.cursor } });
+      if (kind === 'pipeline_board') data = pipelineBoardPayload(options.pipelineDealCount || 1);
+      if (kind === 'get') data = { record: [...baseBootstrap.leads, ...baseBootstrap.accounts, ...baseBootstrap.contacts, ...baseBootstrap.deals, ...baseBootstrap.tasks].find((record) => record.id === body.id) };
+      payload = { revision: 'fixture-v1', payload: { kind, data } };
+    } else if (action === 'crm.get_record') {
+      payload = { record: [...baseBootstrap.leads, ...baseBootstrap.accounts, ...baseBootstrap.contacts, ...baseBootstrap.deals, ...baseBootstrap.tasks].find((record) => record.id === body.id) };
+    } else if (action === 'crm.record_context') {
+      payload = { links: [], external_refs: [] };
+    } else if (action === 'crm.integration_context') {
+      payload = { providers: [] };
+    } else if (action === 'bootstrap') {
       payload = baseBootstrap;
     } else if (action === 'crm.records_table') {
       payload = recordsTablePayload(body);
@@ -473,7 +487,10 @@ async function mockCrmBackend(page: Page, options: { pipelineDealCount?: number 
 }
 
 function lastRequest(requests: BackendRequest[], action: string) {
-  return [...requests].reverse().find((request) => request.action === action);
+  // Assert the logical read across the current display-model transport.
+  const kind = ({ 'crm.records_table': 'records_table', 'crm.pipeline_board': 'pipeline_board' } as Record<string, string>)[action];
+  const request = [...requests].reverse().find((request) => request.action === action || (kind && request.action === 'pwa.read_model' && request.kind === kind));
+  return request?.action === 'pwa.read_model' ? { ...request, action, pagination: { cursor: request.cursor } } : request;
 }
 
 test('routes between CRM cockpit views and opens a legacy record deep link', async ({ page }) => {
@@ -517,7 +534,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
   await page.evaluate(() => {
     window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'accounts/account_acme' } }, window.location.origin);
   });
-  await expect(page.getByLabel('Record type')).toHaveCount(0);
+  await expect(page.getByText('Connect a CRM record', { exact: true })).toBeVisible();
   const detailPanel = page.getByRole('region', { name: 'Acme Corp' });
   await expect(detailPanel).toBeVisible();
   await expect(page.getByRole('heading', { name: 'CRM records' })).toHaveCount(0);

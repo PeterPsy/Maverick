@@ -110,6 +110,7 @@ def _write_export_record(db, entity_type: str, row: dict[str, Any]) -> dict[str,
             "name": require_text(row, "name", required=True),
             "stage": _stage_name(db, stage_id, pipeline_id),
             "value": _coerce_number(row, "value", 0),
+            "margin_minor": _margin_minor(row),
             "currency": require_text(row, "currency", default="EUR") or "EUR",
             "probability": _coerce_number(row, "probability", _stage_probability(db, stage_id, pipeline_id)),
             "close_date": require_text(row, "close_date"),
@@ -227,3 +228,8 @@ def _coerce_number(payload: dict[str, Any], key: str, default: float) -> float:
     if not math.isfinite(number):
         raise ValidationError(f"`{key}` must be finite.", details={key: value})
     return number
+
+
+def _margin_minor(row):
+    from .extension_records import validate_field
+    return validate_field("margin_minor", "integer", row.get("margin_minor", 0))

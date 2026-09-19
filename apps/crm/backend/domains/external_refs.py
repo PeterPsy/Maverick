@@ -10,8 +10,9 @@ from store import get_record, new_id, parse_limit, require_text, row_to_dict, ta
 
 from .record_lifecycle import record_exists, title_for_record
 
-PROVIDER_ALIASES = {"mail", "calendar", "files", "agent"}
+PROVIDER_ALIASES = {"mail", "calendar", "files", "agent", "speech", "tasks"}
 PROVIDER_INTERFACE_PREFIXES = {
+    "speech": "speech", "checklist": "tasks", "tasks": "tasks",
     "mail": "mail",
     "email": "mail",
     "calendar": "calendar",

@@ -22,15 +22,7 @@ from store import (
 from .record_lifecycle import record_exists, reindex_record
 
 
-ENTITY_TABLES = {
-    "lead": "leads",
-    "account": "accounts",
-    "contact": "contacts",
-    "deal": "deals",
-    "activity": "activities",
-    "task": "tasks",
-    "note": "notes",
-}
+from entity_catalog import ENTITY_TABLES, EXTENSIONS
 FIELD_KEY_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789_")
 
 
@@ -57,6 +49,10 @@ def _standard_fields_for_entity(entity_type: str) -> list[dict[str, str]]:
         "task": ["title", "status", "priority", "due_at", "account_id", "contact_id", "deal_id", "owner_id", "body"],
         "note": ["body", "account_id", "contact_id", "deal_id", "owner_id"],
     }
+    if entity_type in EXTENSIONS:
+        fields[entity_type] = ["title", "body", "owner_id", *EXTENSIONS[entity_type]["fields"]]
+    if entity_type == "deal":
+        fields[entity_type].append("margin_minor")
     return [{"key": key, "label": key.replace("_", " ").title()} for key in fields.get(entity_type, [])]
 
 

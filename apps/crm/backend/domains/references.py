@@ -15,15 +15,8 @@ SearchRecords = Callable[[Any, dict[str, Any]], dict[str, Any]]
 
 def reference_manifest() -> dict[str, Any]:
     return {
-        "entity_types": [
-            {"entity_type": "lead", "display_name": "Lead"},
-            {"entity_type": "account", "display_name": "Account"},
-            {"entity_type": "contact", "display_name": "Contact"},
-            {"entity_type": "deal", "display_name": "Deal"},
-            {"entity_type": "activity", "display_name": "Activity"},
-            {"entity_type": "task", "display_name": "Task"},
-            {"entity_type": "note", "display_name": "Note"},
-        ]
+        "entity_types": [{"entity_type": entity, "display_name": entity.replace("_", " ").title()}
+                         for entity in ENTITY_ROUTE_SEGMENTS]
     }
 
 

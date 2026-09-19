@@ -86,7 +86,7 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertNotIn("label: 'Leads'", sidebar_source)
         self.assertNotIn("label: 'Accounts'", sidebar_source)
         self.assertNotIn("label: 'Contacts'", sidebar_source)
-        self.assertNotIn("label: 'Import'", sidebar_source)
+        self.assertIn("label: 'Import'", sidebar_source)
 
     def test_pipeline_renders_agent_deck_and_workflow_lifecycle(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")

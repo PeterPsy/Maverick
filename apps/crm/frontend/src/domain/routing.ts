@@ -1,7 +1,8 @@
+import { extensionRoutes } from './vnext';
 import { CrmRecord, CrmViewRef } from '../api';
 import { CreatableEntity, PendingSelection, RecordEntityFilter, ViewId } from './types';
 
-export const viewIds: ViewId[] = ['records', 'pipeline', 'reports', 'import'];
+export const viewIds: ViewId[] = ['records', 'pipeline', 'reports', 'import', 'overview', 'today', 'conversations', 'campaigns', 'expenses', 'intelligence', 'objects', 'integrations'];
 export const recordEntityFilters: RecordEntityFilter[] = ['all', 'lead', 'account', 'contact', 'deal'];
 export const creatableEntities: CreatableEntity[] = ['lead', 'account', 'contact', 'deal', 'task', 'note'];
 
@@ -30,6 +31,11 @@ export function titleFor(record: CrmRecord) {
 export function viewFromAppPage(appPage: string): { view: ViewId; selection: PendingSelection; entityFilter: RecordEntityFilter } {
   const [segment, recordId] = appPage.split('/').filter(Boolean);
   const route = segment || 'records';
+  const extension = Object.entries(extensionRoutes).find(([, path]) => path === route)?.[0];
+  if (extension && recordId) {
+    const view: ViewId = extension.startsWith('campaign') ? 'campaigns' : extension === 'expense' ? 'expenses' : extension === 'conversation_thread' ? 'conversations' : extension.startsWith('custom_object') ? 'objects' : 'intelligence';
+    return { view, entityFilter: 'all', selection: { entity: extension, id: recordId } };
+  }
   const legacyEntityByRoute: Record<string, RecordEntityFilter> = {
     leads: 'lead',
     accounts: 'account',

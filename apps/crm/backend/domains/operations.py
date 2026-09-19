@@ -7,15 +7,7 @@ from typing import Any
 from store import attach_tags, parse_limit, require_text, row_to_dict, table_for_entity
 
 
-ENTITY_TABLES = {
-    "lead": "leads",
-    "account": "accounts",
-    "contact": "contacts",
-    "deal": "deals",
-    "activity": "activities",
-    "task": "tasks",
-    "note": "notes",
-}
+from entity_catalog import ENTITY_TABLES as ENTITY_TABLES
 
 
 def list_next_actions(db, payload: dict[str, Any]) -> list[dict[str, Any]]:

@@ -1,3 +1,5 @@
+import { RecordRelationships } from './RecordRelationships';
+import { Selection } from '../domain/vnext';
 import { FormEvent, useEffect, useState } from 'react';
 import { Archive, ArrowLeft, CopyCheck, MoreHorizontal, Pencil, Tag, Trash2, X } from 'lucide-react';
 import { CrmRecord, callBackend } from '../api';
@@ -23,7 +25,8 @@ export function RecordSidePanel({
   onArchive,
   onDelete,
   onTag,
-  onConvertLead
+  onConvertLead,
+  onSelectRelated
 }: {
   selected: { entity: string; record: CrmRecord };
   isSaving: boolean;
@@ -33,6 +36,7 @@ export function RecordSidePanel({
   onDelete: () => void;
   onTag: () => void;
   onConvertLead: () => void;
+  onSelectRelated?: (selection: Selection) => void;
 }) {
   const tags = Array.isArray(selected.record.tags) ? selected.record.tags.filter((tag): tag is { name?: unknown; color?: unknown } => typeof tag === 'object' && tag !== null) : [];
   const customFields = selected.record.custom_fields && typeof selected.record.custom_fields === 'object' ? (selected.record.custom_fields as Record<string, unknown>) : {};
@@ -228,6 +232,7 @@ export function RecordSidePanel({
         <ConnectionSummarySection summary={connectionSummary} linkedItems={linkedItems} />
         <AgentSection entity={selected.entity} brief={brief} enrichment={enrichment} isSaving={isSaving} onGenerateBrief={generateBrief} onEnrich={enrichRecord} />
         <LinkedItemsSection linkedItems={linkedItems} linkDraft={linkDraft} setLinkDraft={setLinkDraft} isSaving={isSaving} isLinking={isLinking} onLink={linkExternalItem} onUnlink={(item) => void unlinkExternalItem(item)} />
+        <RecordRelationships key={`${selected.entity}:${selected.record.id}`} selected={selected} select={onSelectRelated} />
         <TimelineSection timeline={timeline} />
         <AuditSection auditFilters={auditFilters} setAuditFilters={setAuditFilters} auditEvents={auditEvents} />
       </div>

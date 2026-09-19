@@ -8,15 +8,9 @@ from errors import NotFoundError, ValidationError
 from store import attach_tags, require_text, row_to_dict, table_for_entity, upsert_fts
 
 
-ENTITY_ROUTE_SEGMENTS = {
-    "lead": "leads",
-    "account": "accounts",
-    "contact": "contacts",
-    "deal": "deals",
-    "activity": "activities",
-    "task": "tasks",
-    "note": "notes",
-}
+from entity_catalog import ENTITY_TABLES
+
+ENTITY_ROUTE_SEGMENTS = ENTITY_TABLES
 
 
 def get_non_deleted_record(db, entity_type: str, entity_id: str) -> dict[str, Any]:
@@ -51,6 +45,8 @@ def ensure_no_dependents(db, entity_type: str, entity_id: str) -> None:
         },
     }
     counts = {name: int(db.execute(sql, (entity_id,)).fetchone()[0]) for name, sql in dependency_queries.get(entity_type, {}).items()}
+    from .record_graph import extension_dependents
+    counts.update(extension_dependents(db, entity_type, entity_id))
     if any(counts.values()):
         raise ValidationError("Cannot delete CRM record while active linked records exist.", details={"entity_type": entity_type, "id": entity_id, "dependents": counts})
 

@@ -60,6 +60,9 @@ def create_deal(db, payload: dict[str, Any]) -> dict[str, Any]:
             now,
         ),
     )
+    from .extension_records import validate_field
+    margin = validate_field("margin_minor", "integer", payload.get("margin_minor", 0))
+    db.execute("UPDATE deals SET margin_minor=? WHERE id=?", (margin, deal_id))
     record = get_record(db, "deal", deal_id)
     upsert_fts(db, "deal", deal_id, record["name"], f"{record.get('stage', '')} {record.get('summary', '')}")
     write_event(db, "deal.created", "deal", deal_id)
@@ -70,4 +73,8 @@ def update_deal(db, payload: dict[str, Any]) -> dict[str, Any]:
     deal_id = require_text(payload, "id", required=True)
     current = get_record(db, "deal", deal_id)
     merged = {**current, **{key: value for key, value in payload.items() if key in {"account_id", "contact_id", "pipeline_id", "stage_id", "name", "value", "currency", "probability", "close_date", "owner_id", "summary", "metadata"}}}
+    from .extension_records import validate_field
+    if "margin_minor" in payload:
+        margin = validate_field("margin_minor", "integer", payload["margin_minor"])
+        db.execute("UPDATE deals SET margin_minor=? WHERE id=?", (margin, deal_id))
     return _write_deal_update(db, deal_id, merged, "deal.updated")

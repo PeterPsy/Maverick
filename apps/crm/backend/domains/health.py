@@ -9,17 +9,11 @@ from errors import ValidationError
 from store import SCHEMA_VERSION, count_tables, export_payload, row_to_dict
 
 
-EXPORT_ENTITY_ORDER = ["leads", "accounts", "contacts", "deals", "activities", "tasks", "notes"]
+from entity_catalog import ENTITY_TABLES, TABLE_ENTITIES, EXTENSIONS
+
+EXPORT_ENTITY_ORDER = list(ENTITY_TABLES.values())
 EXPORT_CONFIG_TABLES = ["custom_field_definitions", "custom_field_values", "automation_rules", "workflow_proposals", "external_refs"]
-TABLE_ENTITY_TYPES = {
-    "leads": "lead",
-    "accounts": "account",
-    "contacts": "contact",
-    "deals": "deal",
-    "activities": "activity",
-    "tasks": "task",
-    "notes": "note",
-}
+TABLE_ENTITY_TYPES = TABLE_ENTITIES
 
 
 def health_report(db, data_root: str | Path, *, read_view_state, import_preview, workflow_proposal_action_issues, record_exists) -> dict[str, Any]:
@@ -28,6 +22,7 @@ def health_report(db, data_root: str | Path, *, read_view_state, import_preview,
         "schema": _schema_health(db),
         "fts": _fts_health(db),
         "references": _reference_health(db),
+        "extensions": _extension_health(db),
         "view_state": _view_state_health(data_root, read_view_state),
         "export": _export_health(db),
         "archive_import": _archive_import_health(db, import_preview),
@@ -67,6 +62,8 @@ def _schema_health(db) -> dict[str, Any]:
         "events",
         "crm_fts",
     }
+    expected_tables.update(ENTITY_TABLES.values())
+    expected_tables.update({"record_links", "import_jobs", "import_rows", "import_identities"})
     existing_tables = {str(row["name"]) for row in db.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual table')").fetchall()}
     metadata_row = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
     integrity_row = db.execute("PRAGMA integrity_check").fetchone()
@@ -277,3 +274,24 @@ def _external_refs_health(db, record_exists) -> dict[str, Any]:
         "unresolved_count": len(unresolved),
         "unresolved": unresolved[:20],
     }
+
+
+def _extension_health(db):
+    from .extension_records import validate_extension
+    from .record_lifecycle import record_exists
+    issues = []
+    for entity, spec in EXTENSIONS.items():
+        for row in db.execute(f"SELECT * FROM {spec['table']} WHERE deleted_at IS NULL"):
+            try:
+                validate_extension(db, entity, row_to_dict(row))
+            except ValidationError as error:
+                issues.append({"entity_type": entity, "id": row["id"], "message": str(error)})
+    for row in db.execute("SELECT * FROM record_links"):
+        for prefix in ("source", "target"):
+            try:
+                valid = record_exists(db, row[f"{prefix}_type"], row[f"{prefix}_id"]) in {"active", "archived"}
+            except ValidationError:
+                valid = False
+            if not valid:
+                issues.append({"link_id": row["id"], "message": "Missing graph endpoint"})
+    return {"ok": not issues, "invalid_count": len(issues), "issues": issues[:20]}

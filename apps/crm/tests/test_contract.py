@@ -19,6 +19,25 @@ from domains.action_catalog import CONFIG_HELPER_ACTIONS, MCP_TOOL_ACTIONS, UI_H
 
 
 class GeneratedAppContractTest(unittest.TestCase):
+    def test_cli_effects_and_schema_keys_are_unambiguous(self) -> None:
+        def unique_keys(pairs):
+            result = {}
+            for key, value in pairs:
+                self.assertNotIn(key, result, f'Duplicate JSON key: {key}')
+                result[key] = value
+            return result
+        root = Path(__file__).resolve().parents[1]
+        schema = json.loads((root / 'cli/command_schemas.json').read_text(), object_pairs_hook=unique_keys)['commands']['crm']
+        self.assertEqual(schema['effect_class'], 'destructive')
+        self.assertEqual(schema['effect_class_by_argument']['argument_name'], 'subcommand')
+        effects = schema['effect_class_by_argument']['value_effect_classes']
+        self.assertEqual(effects['crm.import_plan'], 'read')
+        self.assertEqual(effects['crm.import_apply'], 'mutating')
+        self.assertEqual(effects['crm.delete_record'], 'destructive')
+        properties = schema['argument_schema']['properties']
+        self.assertEqual([item['type'] for item in properties['action']['oneOf']], ['string', 'object'])
+        self.assertEqual([item['type'] for item in properties['source']['oneOf']], ['string', 'object'])
+
     def test_contract_parses(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         parsed = parse_app_contract_file(app_root)
@@ -33,6 +52,8 @@ class GeneratedAppContractTest(unittest.TestCase):
                 "files": "file.catalog",
                 "file-preview": "file.preview",
                 "file-write": "file.content.write",
+                "speech": "speech.transcription",
+                "tasks": "checklist.task",
             },
         )
         self.assertTrue(all(not requirement.required for requirement in parsed.contract.requires))
@@ -45,7 +66,7 @@ class GeneratedAppContractTest(unittest.TestCase):
         descriptor_payload = json.loads((app_root / "mcp" / "tool_schemas.json").read_text())["tools"]
         self.assertEqual(declared, set(MCP_TOOL_ACTIONS))
         self.assertEqual(descriptors, declared)
-        self.assertEqual(len(declared), 64)
+        self.assertEqual(len(declared), 77)
         self.assertEqual(
             set(descriptor_payload["crm_link_external_ref"]["input_schema"]["required"]),
             {"crm_entity_type", "crm_entity_id", "source_app_id", "source_entity_type", "source_entity_id"},

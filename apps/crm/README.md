@@ -1,8 +1,8 @@
 # CRM
 
-Source-available Maverick CRM app for lead, account, contact, deal, activity, task, note, typed custom fields, import/export, and agent-facing CRM workflows.
+Native, generic Maverick CRM, version 0.5.0 / schema 7. One app (`crm`), one interface (`crm.records`), and one workspace-owned database: relationships, sales, conversations, follow-ups, campaign planning, expenses, intelligence, typed custom objects, import/export, and approvable agent workflows.
 
-The implementation is native Maverick source. External CRM projects informed the domain and UX direction, but this app does not copy Relaticle, Twenty, EspoCRM, or Krayin code. CRM behavior stays app-owned; the core only validates, registers, mounts, and invokes the declared contract surfaces.
+The implementation is native Python/SQLite and React/Vite. External CRM projects informed the domain and UX direction; no Cloudflare, Vinext, Ably, external authentication, industry-specific branding, owners, or seed data are bundled. CRM behavior stays app-owned; the core validates, registers, mounts, and invokes declared contract surfaces. See [the vNext decision](../../docs/architecture/crm_vnext_architecture.md) for source provenance, compatibility, and release boundaries.
 
 ## Repository Model
 
@@ -29,11 +29,14 @@ data/crm/
   .maverick-app.json
   crm.sqlite
   view_state.json
+  backups/schema-6-before-7-<unique-id>.sqlite
 ```
 
 The SQLite schema is initialized idempotently by install and migrate hooks. The current release includes leads, accounts, contacts, deals, configurable pipelines, pipeline stages, activities, tasks, notes, website intake receipts, CRM notification outbox rows, events, tags, record tags, saved views, typed custom field definitions/values, automation rules, workflow proposals, external reference snapshots, and an embedded FTS index. Task and note records are first-class service, MCP, CLI/import, reference, and frontend entities. Archive, soft-delete, tag, untag, bulk operations, lead conversion, saved views, timeline, audit log, native sales reports, duplicate discovery and merge, typed custom fields, deterministic enrichment, approvable workflow proposals, automation proposal generation, external reference linking, and import row validation are exposed through backend, CLI/MCP where appropriate, and the operational UI. The app does not store raw secrets; external connectors use selected provider apps and core secret grants.
 
-## MVP Scope
+Migration to schema 7 first takes a consistent, integrity-checked SQLite backup. The migration is additive and transactional: existing IDs, records, references, pipelines, field definitions, and provider selections remain in place. A newer database is never silently downgraded. Do not replace the live SQLite file to upgrade the app.
+
+## Existing capabilities retained
 
 Included:
 
@@ -44,7 +47,7 @@ Included:
 - Search, record lookup, account summary, and next-action listing for open tasks only.
 - Timeline retrieval for account, contact, deal, and lead records.
 - External reference snapshots for linking CRM records to provider records through declared CRM surfaces only. CRM stores `source_app_id`, source entity identity, link type, normalized `provider_alias`, `source_interface`, title, summary, occurrence time, and metadata; it does not read provider private data.
-- Optional app-link requirements for Mail (`mail.workspace`), Calendar (`calendar.events`), and Storage (`file.catalog`, `file.preview`, `file.content.write`) let workspace Settings select the concrete providers an agent may use. CRM still stores only lightweight `external_refs` snapshots and provider-supplied app or HTTPS deep-link metadata, then shows the business connection summary inside Records, Pipeline, Reports, Operations, and the record detail side panel.
+- Optional app-link requirements for Mail (`mail.workspace`), Calendar (`calendar.events`), Storage (`file.catalog`, `file.preview`, `file.content.write`), Speech (`speech.transcription`), and Checklist (`checklist.task`) let workspace Settings select concrete providers. Existing selections are not changed by migration. Unselected optional providers remain visibly unconfigured.
 - Typed custom fields with schema/config discovery, validation, record values, filtering support, export/import round trip, and frontend detail rendering.
 - Saved views, advanced local filters, bulk tag/archive actions, and duplicate detection for account/contact/lead email/domain data.
 - Native sales reports for pipeline value by stage, weighted forecast, deal aging, lead conversion, overdue tasks, and activities by owner.
@@ -59,10 +62,56 @@ Included:
 
 The `crm.records_table` backend action is intentionally app-owned UI infrastructure for the Records view. `crm.operations_feed` follows the same pattern for the Pipeline agent deck, aggregating open tasks, workflow proposal lifecycle buckets, and recent relevant audit events into UI-ready sections without exposing a separate Operations page. These helpers are covered by service tests and listed in the operations manifest, but they are not declared as new MCP/CLI capabilities because they do not yet need to be agent-facing public surfaces. Saved views, custom-field definition administration, and direct automation-rule execution follow the same governance split: they remain backend/CLI actions for the frontend and operators, while MCP exposes the smaller stable agent-facing surface declared in `app_contract.json` and `mcp/tool_schemas.json`, including the standard view-state tools required by the CRM view surface.
 
+## vNext operational workspace
+
+- **Overview / Today:** live follow-ups, task completion, overdue counts, pending approvals, pipeline value and margin grouped by currency, expenses, conversations, and briefs.
+- **Relationships / Sales:** existing people, companies, leads, deal board, reports and workflow approval UI remain available. Deals gain `margin_minor`; existing values are unchanged.
+- **Conversations:** native thread records linked to participants, tasks, deals and provider references through one validated relationship graph.
+- **Campaigns:** draft/ready/paused/completed planning, variants, ordered steps, recipients and event history. Cross-campaign references and duplicate recipients are rejected. These operations do **not** send, schedule workers, or authorize provider delivery.
+- **Expenses / Intelligence:** expenses, competitive profiles and periodic/meeting briefs, with typed dates, metadata, ownership and linked records.
+- **Custom objects:** user-defined typed schemas and records. Vertical source objects are imported as optional user data, not built-in real-estate concepts.
+- **Connections:** current selected-provider identities and linked counts. CRM detail pages link Mail threads, Calendar events, Storage assets, Speech transcripts and Checklist tasks after their real identities have been obtained from the selected provider. Snapshots are not a live-sync guarantee; no private provider database or credential is read.
+
+New MCP/CLI actions include `extension_schema`, `list_extension_records`, `create_extension_record`, `update_extension_record`, `link_records`, `unlink_records`, `record_context`, `overview`, `integration_context`, `link_provider_record`, `import_plan`, `import_apply`, and `import_jobs` (CLI prefix `crm.`, MCP prefix `crm_`). New entities also participate in search, references, custom fields, lifecycle, audit and native export/import. New views use live reads; this release does not expand the reviewed offline/PWA data allowlist.
+
+## Reviewed imports
+
+The Import UI accepts CSV, JSON rows, native CRM exports and external table exports through the Versy adapter. CSV supports explicit column mapping. The public `crm.import_plan` action uses an isolated database copy and the **same writer** as `crm.import_apply`; it does not create records, jobs or view-state changes in the live CRM. Apply requires its returned `plan_token` and rejects a changed source, policy or target database. Every batch is atomic; any invalid row or relationship rolls back all its changes. Successful imports persist reports, per-row outcomes and stable source identities. Replaying the same applied plan is harmless.
+
+Limits: **8 MB and 2,000 records/relationships per batch**, including derived records. Larger source migrations require ordered, independently reviewed batches. Use the same `source_id` for subsequent batches/imports; supply stable `id` or `external_id` values. Rows without either use a content fingerprint, so edited rows cannot be recognized as the same source identity automatically.
+
+Conflict policies: `skip`, `duplicate` (still idempotent per source identity), `fill_empty`, `overwrite` (supplied fields), and `manual` (stop for explicit review). Only unique exact email/domain matches are deduplicated; no fuzzy merge is automatic. Native restore requires explicit `overwrite` and preserves source IDs. Legacy `import_preview` / `import_commit` remain for existing integrations; use plan/apply for the new guarded workflow.
+
+Example backend/CLI payload for `crm.import_plan`:
+
+```json
+{
+  "source": {
+    "format": "json",
+    "source_id": "customer-system-production",
+    "entity_type": "contact",
+    "rows": [{"external_id": "person-1", "display_name": "Ada", "email": "ada@example.test"}]
+  },
+  "conflict_policy": "fill_empty"
+}
+```
+
+Apply the identical payload with the returned `plan_token`. Inspect `crm.import_jobs` for successful receipts. Failed simulations report errors without creating a persisted job. Native business exports intentionally omit soft-deleted rows and their source identities; use the SQLite backup when deletion history/complete receipts must be preserved.
+
+### External source adapter
+
+`scripts/read_external_sqlite.py <export.sqlite> --source-id <stable-source-id>` reads an explicitly supplied SQLite export in read-only mode, emits adapter JSON on stdout, and reports excluded tables on stderr. It never executes arbitrary SQL dumps or accesses production D1. Submit the result to import planning, not directly to the database. The utility rejects oversized sources instead of truncating them.
+
+The adapter maps people/companies, activities, follow-ups, deals, conversations, campaigns, expenses, briefs and competitive profiles. Source-only fields are retained as redacted provenance; expenses and margins retain integer cents, while deal values use the existing CRM decimal-value representation. Real-estate agencies become accounts; listings/presentations become optional custom objects. Data-quality suggestions become pending proposals for **review tasks**, not trusted imported update/send commands. Provider snapshots remain evidence until matched to authoritative Mail/Calendar/Storage/Speech identities. Credentials, integration settings, caches and transient workers are excluded; unknown tables are reported.
+
+Production Versy data and R2 assets are **not in Git**. A real export, asset inventory, count/relationship reconciliation and explicit cutover validation are required before claiming a completed production migration.
+
 Deferred intentionally:
 
 - Live external CRM sync.
-- Persistent import job queues.
+- Background import queues (synchronous committed-job receipts are implemented).
+- Campaign delivery and automatic Mail/Calendar/Storage/Speech synchronization.
+- Automatic meeting/brief generation or competitive crawling; records and approved workflows are native, not a port of external workers.
 - Deep permission model beyond platform workspace enablement.
 - AI scoring or automation execution that cannot be deterministically verified.
 
@@ -77,15 +126,23 @@ maverick app crm mcp list --json
 
 ## Contract Notes
 
-CRM is a source-available, forkable platform app. Its contract declares sandbox compatibility, app-owned SQLite storage, frontend/backend/CLI/MCP surfaces, one sidebar widget, CRM reference entities, standard CRM view-state actions, install/migrate/export/import/health hooks, and optional provider dependencies for Mail, Calendar, and Storage.
+CRM declares sandbox compatibility, app-owned SQLite, frontend/backend/CLI/MCP surfaces, one sidebar widget, CRM reference entities, view-state actions, lifecycle hooks, and optional provider dependencies. Read/planning actions and mutating/apply actions have separate effect declarations. Existing website-intake customer configuration is preserved for compatibility; it is not a new CRM owner default.
 
 ## Verification
 
-Frontend behavior is covered by Playwright tests with a mocked CRM backend:
+Run focused verification from the repository root:
+
+```bash
+python3 -m unittest discover -s apps/crm/tests -p 'test_*.py'
+python3 scripts/check_unused_imports.py apps/crm
+apps/crm/node_modules/.bin/tsc --noEmit -p apps/crm/tsconfig.json
+```
+
+Browser tests (from `apps/crm`) include existing UI transport fixtures and a real Python backend on isolated temporary databases:
 
 ```bash
 npx playwright install chromium
-npm run test:e2e
+npm run test:e2e -- --workers=1
 ```
 
-The suite exercises cockpit routing, record-table pagination, filters, saved views, bulk actions, and desktop/mobile screenshot capture.
+The suites cover migration backups, data/reference fidelity, future-schema refusal, typed extensions, campaign integrity, archive lifecycle, exact dedupe/policies, read-only simulation, stale plans, replay, rollback, secret exclusion, export round trips, provider selection, contracts, routing, pagination, record linking, campaign planning, import application, and desktop/mobile screenshots. No test writes to the live workspace database.

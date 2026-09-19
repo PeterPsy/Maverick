@@ -1,9 +1,9 @@
 import { BootstrapPayload, CrmRecord, IntelligentNextAction, PipelineStage } from '../api';
 
-export type ViewId = 'records' | 'pipeline' | 'reports' | 'import';
+export type ViewId = 'records' | 'pipeline' | 'reports' | 'import' | 'overview' | 'today' | 'conversations' | 'campaigns' | 'expenses' | 'intelligence' | 'objects' | 'integrations';
 export type RecordEntityFilter = 'all' | 'lead' | 'account' | 'contact' | 'deal';
 export type PendingSelection = { entity: string; id: string } | null;
-export type ImportPreview = { ok?: boolean; row_count?: number; counts?: Record<string, number>; warnings?: string[]; errors?: Array<{ row: number; errors: string[] }> };
+export type ImportPreview = { plan_token?: string; committed?: boolean; created_count?: number; updated_count?: number; skipped_count?: number; job_id?: string; ok?: boolean; row_count?: number; counts?: Record<string, number>; warnings?: string[]; errors?: Array<{ row: number; errors: string[] }> };
 export type EntityRecord = { entity: string; record: CrmRecord };
 export type CreatableEntity = 'lead' | 'account' | 'contact' | 'deal' | 'task' | 'note';
 export type AccountBrief = { brief?: string; metrics?: Record<string, unknown>; risks?: string[]; opportunities?: string[]; next_actions?: IntelligentNextAction[] };

@@ -1,3 +1,4 @@
+import { extensionEntities } from './vnext';
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { readCrmDisplay } from '../pwaCache';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -129,6 +130,7 @@ export function useCrmDataController() {
           return;
         }
         const navigation = viewFromAppPage(appPage);
+        setSelected(null);
         setView(navigation.view);
         setRecordEntityFilter(navigation.entityFilter);
         setPendingSelection(navigation.selection);
@@ -158,6 +160,13 @@ export function useCrmDataController() {
   useEffect(() => {
     const target = pendingSelection ?? (selected ? { entity: selected.entity, id: selected.record.id } : null);
     if (!target) return;
+    if (extensionEntities.includes(target.entity) || target.entity === 'deal') {
+      let active = true;
+      void callBackend<{ record: CrmRecord }>({ action: 'crm.get_record', entity_type: target.entity, id: target.id })
+        .then((value) => { if (active) { setSelected({ entity: target.entity, record: value.record }); setPendingSelection(null); } })
+        .catch((failure) => { if (active) setError(failure instanceof Error ? failure.message : 'Unable to load record.'); });
+      return () => { active = false; };
+    }
     void displayRead<{ record: CrmRecord }>('detail', { kind: 'get', entity_type: target.entity, id: target.id }, (value) => {
       setSelected({ entity: target.entity, record: value.record });
       setPendingSelection(null);

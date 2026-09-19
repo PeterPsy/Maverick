@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BarChart3, Handshake, Rows3 } from 'lucide-react';
+import { BarChart3, Handshake, Rows3, LayoutDashboard, ListTodo, MessageSquare, Megaphone, Radar, Receipt, Boxes, PlugZap, Download } from 'lucide-react';
 import './styles.css';
 
 const nav = [
+  { label: 'Overview', page: 'overview', icon: LayoutDashboard },
+  { label: 'Today', page: 'today', icon: ListTodo },
   { label: 'Records', page: 'records', icon: Rows3 },
   { label: 'Pipeline', page: 'pipeline', icon: Handshake },
-  { label: 'Reports', page: 'reports', icon: BarChart3 }
+  { label: 'Conversations', page: 'conversations', icon: MessageSquare },
+  { label: 'Campaigns', page: 'campaigns', icon: Megaphone },
+  { label: 'Expenses', page: 'expenses', icon: Receipt },
+  { label: 'Intelligence', page: 'intelligence', icon: Radar },
+  { label: 'Custom objects', page: 'objects', icon: Boxes },
+  { label: 'Reports', page: 'reports', icon: BarChart3 },
+  { label: 'Connections', page: 'integrations', icon: PlugZap },
+  { label: 'Import', page: 'import', icon: Download }
 ];
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';
@@ -48,7 +57,11 @@ function activePageFromContext(context: WidgetContext) {
 function activePageFromAppPage(appPage: string) {
   const [segment] = appPage.split('/').filter(Boolean);
   const route = segment || 'records';
-  if (route === 'reports') return 'reports';
+  if (nav.some((item) => item.page === route)) return route;
+  if (route.startsWith('campaign_')) return 'campaigns';
+  if (route.startsWith('custom_object')) return 'objects';
+  if (route === 'conversation_threads') return 'conversations';
+  if (route === 'briefs' || route === 'intelligence_profiles') return 'intelligence';
   if (route === 'pipeline' || route === 'operations' || route === 'tasks' || route === 'notes' || route === 'activities') return 'pipeline';
   return 'records';
 }

@@ -11,6 +11,7 @@ from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError, HostedContentClassification
 from core.runtime.hosted_agentic_policy import hosted_egress_policy
 from core.runtime.provider_input_context import RuntimeProviderInputSource
+from core.runtime.semantic_envelope_models import make_semantic_block
 from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.skills.models import SkillDefinition
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
@@ -18,6 +19,34 @@ from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 
 
 class SemanticEnvelopeGovernanceTest(unittest.TestCase):
+    def test_semantic_block_rejects_unknown_provenance_before_projection(self) -> None:
+        harness = HostedAgenticHarness(self)
+        classification = HostedContentClassification(
+            "public",
+            "trusted_platform",
+            content_digest="a" * 64,
+        )
+
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "semantic_block_not_projectable",
+        ):
+            make_semantic_block(
+                [],
+                context=type("Context", (), {"correlation_id": "turn-hosted"})(),
+                kind="content",
+                role="system",
+                provenance="future_typo",
+                content_type="text/plain",
+                content="must not reach egress",
+                classification=classification,
+            )
+
+        self.assertEqual(
+            harness.store.list_egress_decisions(session_id="session-hosted"),
+            [],
+        )
+
     def test_semantic_block_rejects_a_classification_for_different_bytes(self) -> None:
         harness = HostedAgenticHarness(self, execution_mode="sandbox")
         mismatched = validated_classification(

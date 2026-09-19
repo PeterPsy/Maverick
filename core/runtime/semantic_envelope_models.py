@@ -6,8 +6,9 @@ from dataclasses import asdict, dataclass
 import hashlib
 from typing import Literal
 
+from core.egress.agentic_models import EgressProvenance
 from core.egress.agentic_transforms import canonical_egress_content
-from core.egress.classification import CanonicalSourceClassification
+from core.egress.classification import CanonicalSourceClassification, KNOWN_PROVENANCE
 from core.providers.agentic_models import RuntimeDataClass
 from core.providers.agentic_protocol import AgenticMessageRole
 from core.runtime.hosted_agentic_models import (
@@ -36,7 +37,7 @@ class SemanticEnvelopeBlock:
     schema_version: str
     kind: SemanticBlockKind
     role: AgenticMessageRole
-    provenance: str
+    provenance: EgressProvenance
     trust_level: str
     data_class: RuntimeDataClass
     content_type: str
@@ -74,7 +75,7 @@ def make_semantic_block(
     context,
     kind: SemanticBlockKind,
     role: AgenticMessageRole,
-    provenance: str,
+    provenance: EgressProvenance,
     content_type: str,
     content: object,
     classification: HostedContentClassification,
@@ -83,7 +84,11 @@ def make_semantic_block(
     resource_identity: str = "",
 ) -> SemanticEnvelopeBlock:
     """Construct one content-addressed block with deterministic identity."""
-    if not content_type or role not in {"system", "developer", "user", "assistant"}:
+    if (
+        provenance not in KNOWN_PROVENANCE
+        or not content_type
+        or role not in {"system", "developer", "user", "assistant"}
+    ):
         raise HostedAgenticLoopError("semantic_block_not_projectable")
     try:
         encoded = canonical_egress_content(content)

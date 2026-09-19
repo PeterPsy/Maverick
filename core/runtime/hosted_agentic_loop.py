@@ -7,6 +7,7 @@ import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
 import json
+import logging
 from typing import Callable
 from uuid import NAMESPACE_URL, uuid5
 
@@ -84,6 +85,9 @@ from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
 
 
+logger = logging.getLogger(__name__)
+
+
 class HostedAgenticLoop:
     """Own budgets, egress, tools, confirmation and provider-private state."""
 
@@ -151,7 +155,7 @@ class HostedAgenticLoop:
         except Exception:
             failure_reason = "hosted_runtime_failed"
         if failure_reason is not None:
-            self._recover_after_failure(
+            containment_proven = self._recover_after_failure(
                 context,
                 trigger=(
                     f"cancellation_uncertain:{failure_reason}"
@@ -159,10 +163,23 @@ class HostedAgenticLoop:
                     else f"execution_failure:{failure_reason}"
                 ),
             )
-            yield event("runtime.error", {"reason_code": failure_reason})
+            public_reason = (
+                failure_reason
+                if containment_proven
+                else "provider_state_ambiguous"
+            )
+            if not containment_proven:
+                logger.error(
+                    "Hosted failure containment could not be proven: "
+                    "session_id=%s turn_id=%s primary_reason_code=%s",
+                    context.session.session_id,
+                    context.correlation_id,
+                    failure_reason,
+                )
+            yield event("runtime.error", {"reason_code": public_reason})
             yield event(
                 "provider.execution.completed",
-                {"output_text": "", "exit_code": 1, "reason_code": failure_reason},
+                {"output_text": "", "exit_code": 1, "reason_code": public_reason},
             )
 
     async def _execute(
@@ -649,7 +666,16 @@ class HostedAgenticLoop:
                     if emission.response is not None:
                         response = emission.response
             except Exception as error:
-                self._close_failed_stream(step_journal, error)
+                if not self._close_failed_stream(step_journal, error):
+                    logger.warning(
+                        "Hosted stream cleanup was deferred to recovery: "
+                        "session_id=%s turn_id=%s journal_id=%s "
+                        "primary_reason_code=%s",
+                        step_journal.session_id,
+                        step_journal.turn_id,
+                        step_journal.journal_id,
+                        _hosted_failure_reason(error),
+                    )
                 raise
             if response is None:
                 raise HostedAgenticLoopError("provider_response_invalid")
@@ -1130,7 +1156,7 @@ class HostedAgenticLoop:
             trigger=trigger,
         )
 
-    def _recover_after_failure(self, context, *, trigger: str) -> None:
+    def _recover_after_failure(self, context, *, trigger: str) -> bool:
         failure_reason = trigger.partition(":")[2] or trigger
         try:
             self.recover_session(context, trigger=trigger)
@@ -1147,14 +1173,15 @@ class HostedAgenticLoop:
             )
         except Exception:
             pass
+        return self._failure_containment_proven(context)
 
-    def _close_failed_stream(self, record, error: Exception) -> None:
-        """Best-effort terminalize one stream without replacing its first error."""
-        reason_code = (
-            error.reason_code
-            if isinstance(error, HostedAgenticLoopError)
-            else "provider_response_invalid"
-        )
+    def _close_failed_stream(
+        self,
+        record: ProviderStepJournalRecord,
+        error: Exception,
+    ) -> bool:
+        """Return whether the stream or its journal is durably terminal."""
+        reason_code = _hosted_failure_reason(error)
         for _attempt in range(3):
             try:
                 current = self.tool_ledger.store.get_provider_step_journal(
@@ -1169,9 +1196,32 @@ class HostedAgenticLoop:
                     self.provider_step_journal.roll_back_proven_terminal_failure(
                         current
                     )
-                return
+                    current = self.tool_ledger.store.get_provider_step_journal(
+                        record.journal_id
+                    )
+                return (
+                    current.stream_status != "pending"
+                    or current.commit_status != "pending"
+                )
             except Exception:
                 continue
+        return False
+
+    def _failure_containment_proven(self, context) -> bool:
+        try:
+            records = self.tool_ledger.store.list_provider_step_journals(
+                session_id=context.session.session_id
+            )
+        except Exception:
+            return False
+        return not any(
+            record.commit_status == "pending"
+            or (
+                record.commit_status == "committed"
+                and record.pairing_status == "ready"
+            )
+            for record in records
+        )
 
     def _read_final_output(self, context, provider_runtime, record) -> str:
         if (
@@ -1240,6 +1290,14 @@ class HostedAgenticLoop:
             or state.turn_generation != pairing_source.turn_id
         ):
             raise HostedAgenticLoopError("provider_pairing_ambiguous")
+
+
+def _hosted_failure_reason(error: Exception) -> str:
+    return (
+        error.reason_code
+        if isinstance(error, HostedAgenticLoopError)
+        else "provider_response_invalid"
+    )
 
 
 def _turn_budget_elapsed(records: list[ProviderStepJournalRecord]) -> float:

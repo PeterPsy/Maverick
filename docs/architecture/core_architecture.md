@@ -642,6 +642,9 @@ replay cannot export bytes that the original step excluded.
 The loop refreshes effective authority before each provider request and side
 effect, journals request identity before acceptance, and routes tools through
 the official CLI, MCP, app-interface or Core capability surface.
+Semantic-envelope construction accepts only canonical provenance values before
+any egress or provider call. Full-access audit-only policy may bypass content
+filtering, but it never bypasses this structural validation.
 On backend restart, the interrupted hosted turn is closed and Core creates a
 new recovery turn. When the old turn owns the sole committed tool-result
 pairing, the recovery turn persists that exact source turn id as immutable
@@ -651,6 +654,9 @@ the linked journal budget, pairs the persisted tool result under the new turn
 correlation id, marks that lineage as Core-authorized before provider preflight,
 and continues without repeating the effect. Ordinary turns without this
 server-owned lineage remain blocked by an unresolved pairing.
+If failure cleanup cannot prove that every provider-step journal is contained,
+the public failure is `provider_state_ambiguous`; diagnostics retain the first
+normalized failure reason without exposing provider-private state.
 
 Tool-schema review is separate from provider/model admission. Only Core-owned
 schemas marked with the reviewed schema component may be projected directly to

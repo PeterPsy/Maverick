@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 import unittest
+from unittest.mock import patch
 
 from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.providers.agentic_protocol import EphemeralCredential
@@ -24,6 +25,7 @@ from core.providers.openrouter_agentic_models import (
 from core.providers.openrouter_agentic_profile import openrouter_agentic_routing_constraint
 from core.providers.openrouter_agentic_state import inspect_openrouter_chat_state
 from core.runtime.execution import execute_runtime_turn
+from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedProviderPrivateCodec,
@@ -202,6 +204,74 @@ class OpenRouterAgenticHostedLoopTest(unittest.TestCase):
         self.assertEqual(
             session.recovery_reason_code,
             "provider_acceptance_ambiguous",
+        )
+
+    def test_research_cleanup_falls_back_when_json_cas_never_terminalizes(
+        self,
+    ) -> None:
+        harness = self._research_harness()
+        adapter = self._adapter(
+            harness,
+            _ScriptedTransport([
+                _text_stream("generation-research-uncontained", "Complete answer"),
+            ]),
+        )
+
+        def fail_after_staging(point, _record):
+            if point == "provider_state_staged":
+                raise HostedAgenticLoopError("primary_stream_failure")
+
+        journal = ProviderStepJournal(
+            store=harness.store,
+            fault_hook=fail_after_staging,
+        )
+        adapter.loop.provider_step_journal = journal
+        adapter.loop.recovery = HostedAgenticRecovery(
+            journal=journal,
+            tool_ledger=harness.orchestrator.ledger,
+            private_state_service=harness.private_state_service,
+        )
+        update = harness.store.update_provider_step_journal
+        blocked_stream_updates = 0
+
+        def reject_terminal_cas(record, *, expected_revision):
+            nonlocal blocked_stream_updates
+            if record.stream_status == "failed":
+                blocked_stream_updates += 1
+                raise RuntimeProviderStateError("fixture_pre_cas_failure")
+            if record.commit_status == "recovery_required":
+                raise RuntimeProviderStateError("fixture_pre_cas_failure")
+            return update(record, expected_revision=expected_revision)
+
+        with (
+            patch.object(
+                harness.store,
+                "update_provider_step_journal",
+                side_effect=reject_terminal_cas,
+            ),
+            self.assertLogs("core.runtime.hosted_agentic_loop", level="ERROR") as logs,
+        ):
+            result = execute_runtime_turn(
+                session=harness.session,
+                provider=harness.provider,
+                input_text="Research only public sources.",
+                agentic_adapter=adapter,
+                provider_state=harness.store.get_provider_state("session-hosted"),
+                correlation_id="turn-hosted",
+                effective_authority=harness.authority,
+            )
+
+        self.assertEqual(blocked_stream_updates, 3)
+        self.assertEqual(result.failure_reason_code, "provider_state_ambiguous")
+        self.assertIn("primary_stream_failure", "\n".join(logs.output))
+        record = harness.store.list_provider_step_journals(
+            session_id=harness.session.session_id
+        )[0]
+        self.assertEqual(record.stream_status, "pending")
+        self.assertEqual(record.commit_status, "pending")
+        self.assertEqual(
+            harness.store.get_session(harness.session.session_id).status,
+            "recovery_required",
         )
 
     def _research_harness(self) -> HostedAgenticHarness:

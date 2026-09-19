@@ -2126,10 +2126,11 @@ instead of inheriting them from the operator home. The fallback model is
 `gpt-5.6-sol`. New sessions choose the deepest supported single-agent effort;
 `ultra` remains a multi-agent mode and is not a reasoning choice.
 
-The Core creates a model-bound immutable profile and copies its direct reasoning
-and capability contract into the session execution binding. Newly advertised
-Codex models become eligible through normal catalog reconciliation. Persisted
-provider model metadata cannot override the current built-in/live Codex catalog.
+The Core maintains one current model-bound definition and copies its direct
+reasoning and capability contract into the session execution binding. Newly
+advertised Codex models become eligible through normal catalog reconciliation.
+Persisted provider model metadata cannot override the current built-in/live
+Codex catalog.
 
 Every agentic model identity carries an `exact` or `provider_alias` revision
 policy. An exact revision is checked against actual provider requests and

@@ -43,10 +43,10 @@ agentic activation remains an explicit administrator decision
 and continues to require credentials, workspace policy, containment, sandbox,
 egress, tool-effect, recovery and monitoring controls.
 
-The OpenRouter GLM profile is published as `available` so a configured workspace
-can use it. It is not silently enabled for every workspace and is never selected
-without an active workspace binding. Google API activation is independent and is
-not required for the OpenRouter path.
+The current OpenRouter GLM configuration is exposed to configured workspaces,
+but it is not silently enabled for every workspace and is never selected without
+an active workspace binding. Google API activation is independent and is not
+required for the OpenRouter path.
 
 Core computes one effective authority intersection from the direct profile,
 workspace binding, actor policy, credential availability, model/runtime health,

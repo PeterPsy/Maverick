@@ -745,10 +745,14 @@ That means:
 - each custom definition is one record; role records, common prompts, trace
   verbosity, implicit activation, and composed prompt previews do not exist
 
-The built-in Skills app may seed the optional `prompt-library` template. It
-performs on-demand public prompt search and retrieval from prompts.chat; it does
-not import the upstream dataset or create agent records. Like every product
-skill, it affects a runtime only after explicit selection and invocation.
+The built-in Skills app may seed the optional `prompt-library` template. Through
+the Skills app's bounded public action surface it performs on-demand prompt and
+Agent Skill search and retrieval from prompts.chat. Importing one reviewed
+multi-file Agent Skill requires explicit confirmation bound to the exact content
+digest, never replaces an existing workspace skill, and emits the normal Skills
+data-change event. It does not import the upstream dataset, call remote mutation
+endpoints, or create agent records. Like every product skill, it affects a
+runtime only after explicit selection and invocation.
 
 The first provider implementation should not blur these concerns:
 

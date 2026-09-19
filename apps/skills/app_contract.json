@@ -2,7 +2,7 @@
   "app_id": "skills",
   "contract_version": "1.0",
   "name": "Skills",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Workspace app for creating, editing, validating, and deleting workspace-owned runtime skills.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
@@ -38,7 +38,9 @@
       "write": []
     },
     "network": {
-      "outbound": []
+      "outbound": [
+        "prompts.chat"
+      ]
     },
     "runtime": {
       "create_sessions": false,

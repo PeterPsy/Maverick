@@ -30,7 +30,7 @@ SKILLS_BACKEND = Path(__file__).resolve().parents[1] / "backend"
 def load_skills_backend_modules():
     """Load app backend modules despite generic app-local module names."""
     sys.path.insert(0, str(SKILLS_BACKEND))
-    for module_name in ("models", "store", "seeds", "service"):
+    for module_name in ("models", "store", "prompts_chat_client", "prompts_chat", "seeds", "service"):
         sys.modules.pop(module_name, None)
     store = importlib.import_module("store")
     service = importlib.import_module("service")
@@ -98,6 +98,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertIn("skills_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("skills_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["skills", "sync"])
+        self.assertEqual(parsed.contract.permissions.network.outbound, ["prompts.chat"])
         self.assertIn("skills-ops", parsed.contract.capabilities.skills)
         self.assertIn("skill", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "skills")
@@ -148,10 +149,21 @@ class SkillsAppTestCase(unittest.TestCase):
             / "SKILL.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("/api/prompts/search", content)
-        self.assertIn("/api/prompts/<id>", content)
-        self.assertIn("never import or cache the full", content)
-        self.assertIn("Do not\ncall save, improve", content)
+        self.assertIn("prompts_chat.search_prompts", content)
+        self.assertIn("prompts_chat.search_skills", content)
+        self.assertIn("prompts_chat.install_skill", content)
+        self.assertIn("Never import or cache the full", content)
+        self.assertIn("explicit confirmation", content)
+
+        cli_schema = json.loads((Path(__file__).resolve().parents[1] / "cli" / "command_schemas.json").read_text())
+        mcp_schema = json.loads((Path(__file__).resolve().parents[1] / "mcp" / "tool_schemas.json").read_text())
+        for schema in (
+            cli_schema["commands"]["skills"],
+            mcp_schema["tools"]["maverick_skills_app"],
+        ):
+            effects = schema["effect_class_by_argument"]["value_effect_classes"]
+            self.assertEqual(effects["prompts_chat.search_skills"], "read")
+            self.assertEqual(effects["prompts_chat.install_skill"], "mutating")
 
     def test_app_creator_requires_an_app_owned_compact_icon(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

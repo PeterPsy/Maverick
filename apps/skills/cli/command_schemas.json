@@ -13,6 +13,11 @@
           "set_custom_view": "mutating",
           "clear_custom_view": "mutating",
           "get_skill": "read",
+          "prompts_chat.search_prompts": "read",
+          "prompts_chat.get_prompt": "read",
+          "prompts_chat.search_skills": "read",
+          "prompts_chat.get_skill": "read",
+          "prompts_chat.install_skill": "mutating",
           "create_skill": "mutating",
           "update_skill": "mutating",
           "delete_skill": "destructive",
@@ -38,6 +43,11 @@
               "set_custom_view",
               "clear_custom_view",
               "get_skill",
+              "prompts_chat.search_prompts",
+              "prompts_chat.get_prompt",
+              "prompts_chat.search_skills",
+              "prompts_chat.get_skill",
+              "prompts_chat.install_skill",
               "create_skill",
               "update_skill",
               "delete_skill",
@@ -50,6 +60,34 @@
               "references.summarize"
             ],
             "default": "catalog"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 5
+          },
+          "remote_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "local_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,62}$"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "default": false
+          },
+          "expected_content_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
           }
         },
         "additionalProperties": true

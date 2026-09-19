@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from models import DEFAULT_SKILL_CONTENT
+from prompts_chat import PromptsChatClient, PromptsChatError, install_remote_skill
 from seeds import seed_default_skills
 from store import (
     clear_custom_view_payload,
@@ -27,7 +28,13 @@ REFERENCE_MANIFEST = {
     ],
 }
 
-DATA_CHANGED_ACTIONS = {"create_skill", "update_skill", "delete_skill", "sync_bundled_skills"}
+DATA_CHANGED_ACTIONS = {
+    "create_skill",
+    "update_skill",
+    "delete_skill",
+    "sync_bundled_skills",
+    "prompts_chat.install_skill",
+}
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 
 
@@ -76,7 +83,13 @@ def _skill_reference(item: dict) -> dict:
     }
 
 
-def handle_action(data_root: Path, body: dict, *, repository_root: Path | None = None) -> tuple[int, dict]:
+def handle_action(
+    data_root: Path,
+    body: dict,
+    *,
+    repository_root: Path | None = None,
+    prompts_chat_client: PromptsChatClient | None = None,
+) -> tuple[int, dict]:
     action = str(body.get("action") or "catalog")
     ensure_data_root(data_root)
     if action == "catalog":
@@ -105,6 +118,16 @@ def handle_action(data_root: Path, body: dict, *, repository_root: Path | None =
         if repository_root is None or not repository_root.exists():
             return 400, {"error": "repository_root_required"}
         return 200, sync_bundled_skills(data_root, repository_root=repository_root)
+    if action.startswith("prompts_chat."):
+        try:
+            return _handle_prompts_chat_action(
+                data_root,
+                action,
+                body,
+                client=prompts_chat_client or PromptsChatClient(),
+            )
+        except PromptsChatError as error:
+            return error.status_code, {"error": error.code, "detail": error.detail}
     if action == "preview_markdown":
         return 200, {"markdown": skill_markdown(body)}
     if action == "health.check":
@@ -129,4 +152,37 @@ def handle_action(data_root: Path, body: dict, *, repository_root: Path | None =
             "safe_fields": {"name": skill.get("name"), "enabled": skill.get("enabled", True)},
             "source_updated_at": skill.get("updated_at", ""),
         }
+    return 400, {"error": "unsupported_action", "action": action}
+
+
+def _handle_prompts_chat_action(
+    data_root: Path,
+    action: str,
+    body: dict,
+    *,
+    client: PromptsChatClient,
+) -> tuple[int, dict]:
+    if action == "prompts_chat.search_prompts":
+        return 200, client.search_prompts(str(body.get("query") or ""), body.get("limit", 5))
+    if action == "prompts_chat.get_prompt":
+        return 200, {"prompt": client.get_prompt(str(body.get("remote_id") or ""))}
+    if action == "prompts_chat.search_skills":
+        return 200, client.search_skills(str(body.get("query") or ""), body.get("limit", 5))
+    if action == "prompts_chat.get_skill":
+        return 200, {"remote_skill": client.get_skill(str(body.get("remote_id") or ""))}
+    if action == "prompts_chat.install_skill":
+        if body.get("confirmed") is not True:
+            raise PromptsChatError(
+                "prompts_chat_confirmation_required",
+                "Explicit confirmation is required before installing a remote skill.",
+                status_code=409,
+            )
+        remote_skill = client.get_skill(str(body.get("remote_id") or ""))
+        local_id = str(body.get("local_id") or remote_skill.get("slug") or "").strip()
+        return 200, install_remote_skill(
+            data_root,
+            remote_skill,
+            local_id=local_id,
+            expected_content_sha256=str(body.get("expected_content_sha256") or ""),
+        )
     return 400, {"error": "unsupported_action", "action": action}

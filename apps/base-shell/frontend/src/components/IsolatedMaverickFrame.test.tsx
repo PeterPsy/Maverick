@@ -151,6 +151,7 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
 
     const frame = container.querySelector("iframe");
     expect(frame?.srcdoc).toContain("#070708");
+    expect(frame?.srcdoc).toContain("#ffffff");
     expect(frame?.srcdoc).toContain("color-scheme:dark");
     expect(frame?.srcdoc).toContain("maverick.app-frame.bootstrap");
     expect(frame?.srcdoc).toContain('form.target="_self"');

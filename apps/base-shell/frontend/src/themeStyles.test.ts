@@ -53,8 +53,8 @@ describe("base shell light theme surfaces", () => {
     const styles = readStyleFile(resolve(currentDir, "styles/main.css"));
     const index = readFileSync(resolve(currentDir, "../index.html"), "utf8");
 
-    expect(styles).toContain("--maverick-loading-accent: #a0e84f;");
-    expect(styles).toMatch(/\.bs-shell-pending-indicator__icon\s*{[^}]*color:\s*var\(--maverick-loading-accent\);/);
+    expect(styles).not.toContain("--maverick-loading-accent");
+    expect(styles).toMatch(/\.bs-shell-pending-indicator__icon\s*{[^}]*color:\s*var\(--maverick-text\);/);
     expect(index).toContain('id="maverick-first-paint"');
     expect(index).toContain("background: #070708;");
   });

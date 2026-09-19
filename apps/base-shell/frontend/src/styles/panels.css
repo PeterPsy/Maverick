@@ -78,7 +78,7 @@
   position: relative;
   display: inline-block;
   flex: 0 0 auto;
-  color: var(--maverick-loading-accent);
+  color: var(--maverick-text);
 }
 
 .bs-shell-pending-indicator--sm .bs-shell-pending-indicator__icon {

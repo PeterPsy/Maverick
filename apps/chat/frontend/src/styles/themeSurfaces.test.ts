@@ -92,6 +92,24 @@ describe("chat light theme surfaces", () => {
     expect(computedBackgroundColor(element("input", "chat-floating-thread-menu__rename-input"))).toBe("rgba(15, 23, 42, 0.055)");
     expect(computedBackgroundColor(element("input", "bs-chat-folder__title-input"))).toBe("rgba(15, 23, 42, 0.055)");
   });
+
+  it("gives every chat document a themed first paint", () => {
+    const documents = [
+      resolve(sourceRoot, "../index.html"),
+      resolve(sourceRoot, "../widgets/chat-floating/index.html"),
+      resolve(sourceRoot, "../widgets/chat-floating-dock/index.html"),
+      resolve(sourceRoot, "../widgets/chat-sidebar/index.html"),
+      resolve(sourceRoot, "../widgets/chat-sidebar-footer/index.html"),
+      resolve(sourceRoot, "../widgets/runtime-text/index.html"),
+    ];
+
+    documents.forEach((filePath) => {
+      const html = readFileSync(filePath, "utf8");
+      expect(html, filePath).toContain('id="maverick-first-paint"');
+      expect(html, filePath).toContain("background: #070708;");
+      expect(html, filePath).toContain("background: #f7f8fb;");
+    });
+  });
 });
 
 describe("chat theme token governance", () => {

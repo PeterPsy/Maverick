@@ -67,7 +67,7 @@ describe("isolated Maverick frame policy", () => {
     expect(widgetFrameBrowserFeaturePolicy("storage")).toBe("fullscreen");
   });
 
-  it("keeps the iframe on about:blank until it submits the isolated bootstrap", async () => {
+  it("keeps the iframe on a themed local document until it self-submits the isolated bootstrap", async () => {
     const isolatedOrigin = "https://af-session.sidecars.maverick.test";
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       bootstrap_url: `${isolatedOrigin}/.well-known/maverick-app-frame-bootstrap`,
@@ -77,10 +77,12 @@ describe("isolated Maverick frame policy", () => {
       ticket_field: "ticket",
     }), { status: 200 })));
     let submittedAction = "";
+    let submittedOwner: Document | null = null;
     let submittedTarget = "";
     let submittedTicket = "";
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function submit(this: HTMLFormElement) {
       submittedAction = this.action;
+      submittedOwner = this.ownerDocument;
       submittedTarget = this.target;
       submittedTicket = this.querySelector<HTMLInputElement>('input[name="ticket"]')?.value || "";
     });
@@ -98,10 +100,12 @@ describe("isolated Maverick frame policy", () => {
     await vi.waitFor(() => expect(submittedTicket).toBe("one-shot-ticket"));
 
     const frame = container.querySelector("iframe");
-    expect(frame?.getAttribute("src")).toBe("about:blank");
+    expect(frame?.getAttribute("src")).toBeNull();
+    expect(frame?.srcdoc).toContain("#070708");
     expect(frame?.dataset.maverickFrameOrigin).toBe(isolatedOrigin);
     expect(submittedAction).toBe(`${isolatedOrigin}/.well-known/maverick-app-frame-bootstrap`);
-    expect(submittedTarget).toBe(frame?.name);
+    expect(submittedOwner).toBe(frame?.contentDocument);
+    expect(submittedTarget).toBe("_self");
     expect(fetch).toHaveBeenCalledWith(
       "/api/app-frames/browser-launch",
       expect.objectContaining({

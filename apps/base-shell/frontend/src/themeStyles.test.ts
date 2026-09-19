@@ -48,6 +48,16 @@ describe("base shell light theme surfaces", () => {
     expect(cssBlock(styles, ".bs-shell.is-mobile-layout::before")).toContain("background: var(--maverick-mobile-safe-area-fade);");
     expect(cssBlock(styles, ".bs-app-grid-panel,\n.bs-empty-panel")).toContain("background: var(--maverick-panel-gradient);");
   });
+
+  it("uses branded loading surfaces before application CSS is available", () => {
+    const styles = readStyleFile(resolve(currentDir, "styles/main.css"));
+    const index = readFileSync(resolve(currentDir, "../index.html"), "utf8");
+
+    expect(styles).toContain("--maverick-loading-accent: #a0e84f;");
+    expect(styles).toMatch(/\.bs-shell-pending-indicator__icon\s*{[^}]*color:\s*var\(--maverick-loading-accent\);/);
+    expect(index).toContain('id="maverick-first-paint"');
+    expect(index).toContain("background: #070708;");
+  });
 });
 
 function installShellStyles(): void {

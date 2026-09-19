@@ -648,6 +648,7 @@ export function WidgetSlot({
           frameScope={frameScope}
           className="bs-widget-slot__frame"
           key={widgetFrameKey}
+          loadingTheme={shellTheme.effective}
           onLoad={() => {
             setLoadedFrameKey(widgetFrameKey);
             postMaverickShellTheme(widgetFrameRef.current, shellTheme);

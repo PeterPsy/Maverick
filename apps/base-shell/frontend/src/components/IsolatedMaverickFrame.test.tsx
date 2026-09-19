@@ -42,10 +42,11 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
       .mockResolvedValueOnce(jsonResponse(laterLaunch));
     vi.stubGlobal("fetch", fetchMock);
 
-    const submissions: Array<{ action: string; target: string; ticket: string }> = [];
+    const submissions: Array<{ action: string; owner: Document; target: string; ticket: string }> = [];
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function (this: HTMLFormElement) {
       submissions.push({
         action: this.action,
+        owner: this.ownerDocument,
         target: this.target,
         ticket: this.querySelector<HTMLInputElement>('input[name="ticket"]')?.value || "",
       });
@@ -72,6 +73,8 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     await finishBootstrap(frame as HTMLIFrameElement);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(submissions).toHaveLength(1);
+    expect(submissions[0]?.owner).toBe(frame?.contentDocument);
+    expect(submissions[0]?.target).toBe("_self");
     expect(frame?.dataset.maverickFrameOrigin).toBe(origin);
     expect(registeredMaverickFrameOwner(new MessageEvent("message", {
       origin,
@@ -129,6 +132,31 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
       path: laterPath,
     });
     expect(submissions.at(-1)).toEqual(expect.objectContaining({ ticket: "later-ticket" }));
+  });
+
+  it("paints the initial frame with Maverick colors before the remote document loads", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    await act(async () => {
+      root.render(
+        <IsolatedMaverickFrame
+          appId="chat"
+          frameScope={FRAME_SCOPE}
+          launchPath="/apps/chat/"
+          loadingTheme="dark"
+          title="Chat"
+        />,
+      );
+    });
+
+    const frame = container.querySelector("iframe");
+    expect(frame?.srcdoc).toContain("#070708");
+    expect(frame?.srcdoc).toContain("color-scheme:dark");
+    expect(frame?.src).not.toContain("about:blank");
   });
 });
 

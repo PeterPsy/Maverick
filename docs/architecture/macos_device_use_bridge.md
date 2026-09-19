@@ -21,6 +21,12 @@ native status/setup toolbar and no `Sul server` / `Su questo Mac` selector. Chat
 renders its Device Use control only when the trusted macOS bridge answers the
 status probe; browsers never render it.
 
+The native window, `WKWebView`, overscroll surface, and every WebKit frame use
+Maverick's dark loading background from construction and inject the same
+first-paint color at document start. The web shell replaces it with the
+selected theme when ready; a default white WebKit canvas is never a loading
+state.
+
 The composer control mirrors the Usage badge style:
 
 - its computer icon opens the settings modal;

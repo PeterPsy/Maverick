@@ -503,6 +503,7 @@ export function AppFrameHost({
               aria-hidden={!isDisplayed}
               className={`bs-workspace-app-frame ${isDisplayed ? "is-active" : "is-hidden"}`}
               key={frameKey}
+              loadingTheme={shellTheme.effective}
               onLoad={(event) => {
                 syncAppFrameShellLayout(event.currentTarget, isMobileLayout);
                 postMaverickShellTheme(event.currentTarget, shellTheme);

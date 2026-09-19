@@ -13,6 +13,7 @@ import {
   type MaverickFrameScope,
 } from "../iframePolicy";
 import { revokeShellAuthorization } from "../pwaCacheRuntime";
+import type { ShellEffectiveTheme } from "../theme";
 
 const APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch";
 export const APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "maverick.app-frame.authorization-required";
@@ -38,14 +39,24 @@ type IsolatedMaverickFrameProps = Omit<IframeHTMLAttributes<HTMLIFrameElement>, 
   appId: string;
   frameScope: MaverickFrameScope;
   launchPath: string;
+  loadingTheme?: ShellEffectiveTheme;
   onLaunchError?: (error: Error) => void;
 };
 
 export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaverickFrameProps>(
-  function IsolatedMaverickFrame({ appId, frameScope, launchPath, onLoad, onLaunchError, ...iframeProps }, forwardedRef) {
+  function IsolatedMaverickFrame({
+    appId,
+    frameScope,
+    launchPath,
+    loadingTheme = "dark",
+    onLoad,
+    onLaunchError,
+    ...iframeProps
+  }, forwardedRef) {
     const frameRef = useRef<HTMLIFrameElement | null>(null);
     const frameNameRef = useRef(`maverick-app-frame-${crypto.randomUUID()}`);
     const bootstrapPendingRef = useRef(false);
+    const loadingDocumentRef = useRef(maverickLoadingDocument(loadingTheme));
 
     useEffect(() => {
       const frame = frameRef.current;
@@ -118,7 +129,7 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
           frameRef.current = frame;
           assignRef(forwardedRef, frame);
         }}
-        src="about:blank"
+        srcDoc={loadingDocumentRef.current}
       />
     );
   },
@@ -177,22 +188,32 @@ export async function requestAppFrameLaunch(
 }
 
 function submitBootstrapForm(frame: HTMLIFrameElement, launch: AppFrameLaunch) {
-  const form = document.createElement("form");
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument?.body) {
+    throw new Error("The isolated app frame is not ready for bootstrap.");
+  }
+  const form = frameDocument.createElement("form");
   form.action = launch.bootstrap_url;
   form.method = launch.method;
-  form.target = frame.name;
+  form.target = "_self";
   form.hidden = true;
-  const ticket = document.createElement("input");
+  const ticket = frameDocument.createElement("input");
   ticket.name = launch.ticket_field;
   ticket.type = "hidden";
   ticket.value = launch.ticket;
   form.append(ticket);
-  document.body.append(form);
+  frameDocument.body.append(form);
   try {
     form.submit();
   } finally {
     form.remove();
   }
+}
+
+function maverickLoadingDocument(theme: ShellEffectiveTheme): string {
+  const background = theme === "light" ? "#f7f8fb" : "#070708";
+  const accent = theme === "light" ? "#5f8f1e" : "#a0e84f";
+  return `<!doctype html><html style="color-scheme:${theme};background:${background}"><head><meta charset="utf-8"><meta name="color-scheme" content="${theme}"><style>html,body{width:100%;height:100%;margin:0;background:${background}}body{display:grid;place-items:center}.m{width:22px;height:22px;background:${accent};animation:m 1.6s ease-in-out infinite}@keyframes m{0%,100%{border-radius:50%;transform:scale(.82) rotate(0)}50%{border-radius:18%;transform:scale(1) rotate(135deg)}}</style></head><body><span class="m" aria-hidden="true"></span></body></html>`;
 }
 
 function isolatedNavigationLoaded(frame: HTMLIFrameElement): boolean {

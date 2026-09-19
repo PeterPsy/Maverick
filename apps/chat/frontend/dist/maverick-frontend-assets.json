@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "082e65080f2733c1cce442c5459250f6f99575406646a9c5ebfcd11cc2fd6310",
+  "build_id": "83ee80e92de024cccfff140dacd7a50e2e96f5a51a3e857d1bc4810d3662405d",
   "entrypoints": [
     "index.html",
     "widgets/chat-floating/index.html",
@@ -129,33 +129,33 @@
     },
     {
       "path": "index.html",
-      "sha256": "28de24e7031bceaf8777f103ac6a44b53de90a60e545ede734625fc980fad288",
-      "size_bytes": 1763
+      "sha256": "7dbb990ef9acf32d3be3fc001331f8463ee2877d87179b2051f013d8d274dbb5",
+      "size_bytes": 2053
     },
     {
       "path": "widgets/chat-floating/index.html",
-      "sha256": "6fb2a32cb25f6721e3887abeb0d5a0cb34265dcd656dee71141e9fdc834d23f5",
-      "size_bytes": 2071
+      "sha256": "a0f89a57052fd529abb536a435693b7c58c59a3f51f82d371797c656d2e7660a",
+      "size_bytes": 2361
     },
     {
       "path": "widgets/chat-floating-dock/index.html",
-      "sha256": "1a1128cd1914bc4619ec423a938882df7a1849fe2e4c3d317da6945d803881ab",
-      "size_bytes": 2081
+      "sha256": "25b79f4baa94c7fb2e266be6e659c59c96a24b04b2787dd1a180dfb8df751b2b",
+      "size_bytes": 2371
     },
     {
       "path": "widgets/chat-sidebar/index.html",
-      "sha256": "ea89496ed4124275c73a24a94787432c29ebd058c29367605b386c441be9566e",
-      "size_bytes": 1825
+      "sha256": "9f049fc74466daa55a82df5693af1e55d3081c361d79843adc85a1960b31ad99",
+      "size_bytes": 2141
     },
     {
       "path": "widgets/chat-sidebar-footer/index.html",
-      "sha256": "d23833e98f95c25a6975e863a42c3b1f80a76c03c7edbbfaa51503a7eae949c3",
-      "size_bytes": 1535
+      "sha256": "47c6111f19f4542f605a68b2ee622d8405006103f261e41f55ffed7e00d01e29",
+      "size_bytes": 1865
     },
     {
       "path": "widgets/runtime-text/index.html",
-      "sha256": "e654f4e536af48d7765a2b92b23a14578a795c04d9fab7d56abc4d59f69c2189",
-      "size_bytes": 1491
+      "sha256": "c234afaebac7b0729d1b5511f09cbcab286848a9f27a1ba9a52af03419068f83",
+      "size_bytes": 1781
     }
   ]
 }

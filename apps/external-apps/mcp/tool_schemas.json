@@ -1,0 +1,126 @@
+{
+  "tools": {
+    "external_apps": {
+      "description": "Manage bounded immutable static publications. Publish and rollback require an exact plan approved by a human in the authenticated UI.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "external_app_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "source_entity_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "build_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "format": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "plan_id": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "plan_digest": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "domain": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "operations.manifest",
+              "list",
+              "get",
+              "publish.plan",
+              "publish.apply",
+              "suspend",
+              "rollback.plan",
+              "rollback.apply",
+              "archive",
+              "health",
+              "deployment.configure"
+            ]
+          },
+          "confirm": {
+            "type": "boolean"
+          },
+          "expected_generation": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "list": "read",
+          "get": "read",
+          "publish.plan": "mutating",
+          "publish.apply": "mutating",
+          "suspend": "mutating",
+          "rollback.plan": "mutating",
+          "rollback.apply": "mutating",
+          "archive": "destructive",
+          "health": "read",
+          "deployment.configure": "mutating"
+        }
+      },
+      "supports_idempotency": true,
+      "safe_to_retry": false,
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "external_apps_reference_manifest": {
+      "description": "External Apps V1 exposes no reference entities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "effect_class": "read",
+      "safe_to_retry": true,
+      "supports_idempotency": false
+    }
+  }
+}

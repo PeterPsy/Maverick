@@ -586,6 +586,25 @@
     },
     {
       "app_ids": [
+        "external-apps"
+      ],
+      "resource": "publication-plans-catalog-and-authority",
+      "owner": "external-apps",
+      "read_surface": "authenticated app backend list/get/health",
+      "canonical_data_class": "host_operational_metadata",
+      "provenance": "provider_state",
+      "local_persistence_policy": "deny",
+      "fresh_ttl_seconds": 0,
+      "expiry_ttl_seconds": 0,
+      "revision": "fresh server response and binding generation",
+      "max_entry_bytes": 0,
+      "max_scope_bytes": 0,
+      "invalidation": "RAM only; clear on app navigation/workspace scope change",
+      "data_event": "state",
+      "rollout": "no browser persistence of private publication state or approvals"
+    },
+    {
+      "app_ids": [
         "core-control-plane"
       ],
       "resource": "agentic-authority",

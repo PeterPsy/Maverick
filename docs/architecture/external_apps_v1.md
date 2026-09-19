@@ -7,6 +7,11 @@ The product specification is maintained through Storage at
 `storage/generated/external-apps/external-apps-development-spec-simple-v1.md`.
 This decision records repository boundaries and the concrete preflight choices.
 
+The app declares portable `sandbox` compatibility (also admitted in full-access
+workspaces by Core's existing compatibility rule). Private catalog, plans and
+approval state are RAM-only in the browser, with a deny-persistence entry in
+`docs/product/pwa_cache_resource_inventory.v2.json`.
+
 ## Ownership and scope
 
 `apps/external-apps` is one sealed first-party app. Website Studio exports only
@@ -53,8 +58,10 @@ end-to-end mutation support.
 
 Existing authenticated sidecar browser routes are not weakened. An app-owned,
 operator-supervised public service listens on a Unix socket behind a dedicated
-wildcard ingress. A private supervisor reads canonical app-hosting state with
-all bootstrap writers disabled. It projects only active, approved public mounts
+wildcard ingress. A private supervisor reads canonical app-hosting state without
+bootstrapping the backend. It reconciles interrupted app-owned operations under
+the same publication lock and OS operation leases before refreshing authority.
+It projects only active, approved public mounts
 and a short expiration to a confined child; no private catalog or credentials
 are delivered. Workspace close/app disable/uninstall revoke serving within the
 projection's maximum 10-second freshness window. App-level suspend is synchronous
@@ -89,3 +96,19 @@ and real Website Studio static/SPA output through hosted dependency callbacks.
 Local isolated tests do not establish Internet DNS/TLS readiness. Backend restart
 and live ingress changes require an explicit safe operational window; repository
 implementation does not silently activate them.
+
+## Implementation evidence (2026-09-19)
+
+The implementation has isolated proofs for real Website static and Vite SPA
+builds through Core dependency dispatch/callbacks, CLI/MCP reads, immutable bytes
+after source edits, interprocess generation conflicts, failed/interrupted probes,
+revocation and the actual bubblewrap Unix HTTP listener. Desktop/mobile Chromium
+checks cover consent, cancellation, frame identity/theme and scope reset. The
+frontend was built with Core's official build service against a temporary store,
+not by registering an app or restarting the active backend.
+
+App-specific and app-contract checks pass. The repository-wide fast suite was
+also run; unrelated repository-convention failures in existing Core/test files
+remain outside this change. No live ingress, TLS, DNS or supervisor was activated.
+Internet acceptance and hosted Chat mutation admission remain the explicit gates
+above, not implied by the local tests.

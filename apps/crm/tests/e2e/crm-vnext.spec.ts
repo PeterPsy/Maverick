@@ -1,37 +1,8 @@
-import { expect, Page, test } from '@playwright/test';
-import { spawnSync } from 'node:child_process';
+import { expect, test } from '@playwright/test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { backend, mount } from './backend_fixture';
 
-const root = resolve(process.cwd(), '../..');
-const python = `
-import json, sys
-sys.path.insert(0, 'apps/crm/backend')
-from service import handle_action
-from errors import CrmError, error_payload
-request = json.load(sys.stdin)
-try:
-    status, body = handle_action(request['root'], request['body'].get('action', 'bootstrap'), request['body'])
-except CrmError as error:
-    status, body = error.status_code, error_payload(error)
-print(json.dumps({'status': status, 'body': body}))
-`;
-function backend(dataRoot: string, body: Record<string, unknown>) {
-  const result = spawnSync('python3', ['-c', python], { cwd: root, input: JSON.stringify({ root: dataRoot, body }), encoding: 'utf8', timeout: 15_000 });
-  if (result.status !== 0) throw new Error(result.stderr || String(result.error));
-  return JSON.parse(result.stdout) as { status: number; body: Record<string, any> };
-}
-async function mount(page: Page, dataRoot: string) {
-  backend(dataRoot, { action: 'crm.create_contact', id: 'contact_ada', display_name: 'Ada Example', email: 'ada@example.test' });
-  backend(dataRoot, { action: 'crm.create_task', title: 'Prepare next conversation', due_at: '2026-01-01', contact_id: 'contact_ada' });
-  await page.route('**/api/apps/crm/backend', async (route) => {
-    const result = backend(dataRoot, { ...route.request().postDataJSON(), _app_dependencies: { dependencies: [{ alias: 'mail', selected_provider_app_ids: ['test-mail'] }] } });
-    await route.fulfill({ status: result.status, contentType: 'application/json', body: JSON.stringify(result.body) });
-  });
-  await page.goto('/apps/crm/');
-  await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
-}
 let dataRoot: string;
 test.beforeEach(() => { dataRoot = mkdtempSync(`${tmpdir()}/crm-vnext-e2e-`); });
 test.afterEach(() => { rmSync(dataRoot, { recursive: true, force: true }); });

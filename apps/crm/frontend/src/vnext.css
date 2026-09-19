@@ -7,13 +7,13 @@
 .vn-page-heading small { display: block; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .14em; font-size: 10px; color: var(--maverick-text-soft); }
 .vn-page-heading h1 { font-size: clamp(24px, 3vw, 34px); font-weight: 500; letter-spacing: -.035em; }
 .vn-page-heading p { margin-top: 10px; color: var(--maverick-text-muted); max-width: 690px; line-height: 1.6; font-size: 13px; }
-.vn-page button, .vn-modal button, .vn-relationships button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--maverick-surface); border: 1px solid var(--maverick-border); border-radius: 10px; padding: 9px 12px; font-size: 12px; }
-.vn-page button:hover, .vn-modal button:hover, .vn-relationships button:hover { background: var(--maverick-surface-hover); }
-.vn-page .vn-primary, .vn-modal .vn-primary, .vn-relationships .vn-primary { background: var(--maverick-accent); color: var(--maverick-text-on-accent); }
-.vn-page button:focus-visible, .vn-modal button:focus-visible, .vn-navigation button:focus-visible { outline: 2px solid var(--maverick-text); outline-offset: 3px; }
+.vn-page button, .vn-modal button, .vn-relationships button, .vn-integrations button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--maverick-surface); border: 1px solid var(--maverick-border); border-radius: 10px; padding: 9px 12px; font-size: 12px; }
+.vn-page button:hover, .vn-modal button:hover, .vn-relationships button:hover, .vn-integrations button:hover { background: var(--maverick-surface-hover); }
+.vn-page .vn-primary, .vn-modal .vn-primary, .vn-relationships .vn-primary, .vn-integrations .vn-primary { background: var(--maverick-accent); color: var(--maverick-text-on-accent); }
+.vn-page button:focus-visible, .vn-modal button:focus-visible, .vn-navigation button:focus-visible, .vn-integrations :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--maverick-text); outline-offset: 3px; }
 .vn-actions, .vn-list-toolbar, .vn-list-toolbar > div { display: flex; align-items: center; gap: 10px; }
 .vn-list-toolbar { justify-content: space-between; flex-wrap: wrap; }
-.vn-page h2, .vn-relationships h2 { font-size: 15px; font-weight: 500; letter-spacing: -.02em; }
+.vn-page h2, .vn-relationships h2, .vn-integrations h2 { font-size: 15px; font-weight: 500; letter-spacing: -.02em; }
 .vn-surface { min-width: 0; padding: 22px; border: 1px solid var(--maverick-border); background: var(--maverick-surface); border-radius: 16px; }
 .vn-surface + .vn-surface { margin-top: 18px; }
 .vn-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 265px), 1fr)); gap: 14px; }
@@ -45,7 +45,7 @@
 .vn-modal header, .vn-modal footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }.vn-modal h2 { font-size: 20px; font-weight: 500; }.vn-modal footer { margin: 22px 0 0; justify-content: flex-end; }
 .vn-modal form, .vn-import-form, .vn-relationships form { display: grid; gap: 16px; }
 .vn-modal label, .vn-import-form label, .vn-relationships label { display: grid; gap: 8px; min-width: 0; color: var(--maverick-text-muted); font-size: 12px; }
-.vn-modal input, .vn-modal select, .vn-modal textarea, .vn-import-form input, .vn-import-form select, .vn-import-form textarea, .vn-relationships input, .vn-relationships select { width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--maverick-border-strong); background: var(--maverick-bg); border-radius: 9px; color: var(--maverick-text); font-size: 13px; }
+.vn-modal input, .vn-modal select, .vn-modal textarea, .vn-import-form input, .vn-import-form select, .vn-import-form textarea, .vn-relationships input, .vn-relationships select, .vn-integrations :is(input, select, textarea) { width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--maverick-border-strong); background: var(--maverick-bg); border-radius: 9px; color: var(--maverick-text); font-size: 13px; }
 .vn-modal textarea, .vn-import-form textarea { resize: vertical; }.vn-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }.vn-picker { display: grid; gap: 6px; }
 .vn-fields { display: grid; gap: 14px; font-size: 12px; }.vn-fields > div { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px; }.vn-fields dt { color: var(--maverick-text-soft); }.vn-fields dd { margin: 0; overflow-wrap: anywhere; }.vn-fields pre { margin: 0; white-space: pre-wrap; }
 .vn-prose { white-space: pre-wrap; font-size: 13px; line-height: 1.8; margin: 22px 0; overflow-wrap: anywhere; }.vn-provenance { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; max-height: 320px; overflow: auto; }
@@ -55,3 +55,16 @@
 .crm-workspace.is-showing-detail:has(.vn-extension-detail) { display: block; overflow: auto; }
 @media (max-width: 900px) { .vn-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.vn-overview-grid { grid-template-columns: 1fr; }.vn-page-heading { gap: 14px; } }
 @media (max-width: 520px) { .vn-page { padding: 14px 0 30px; gap: 16px; }.vn-surface { padding: 16px; }.vn-form-grid { grid-template-columns: 1fr; }.vn-page-heading { flex-direction: column; }.vn-metrics { gap: 8px; }.vn-metrics button { padding: 15px; }.vn-modal { padding: 18px; }.vn-modal-backdrop { padding: 10px; }.vn-actions { flex-wrap: wrap; }.vn-fields > div { grid-template-columns: 100px minmax(0, 1fr); } }
+
+.vn-integrations { margin-top: 16px; min-width: 0; }
+.vn-integrations details { margin: 14px 0; }
+.vn-integrations form { display: grid; gap: 12px; padding-top: 12px; }
+.vn-integrations label { display: grid; gap: 6px; font-size: 12px; color: var(--maverick-text-muted); }
+.vn-integrations textarea { resize: vertical; }
+.vn-integrations summary { cursor: pointer; padding: 10px 0; font-size: 12px; }
+.vn-integrations h3 { font-size: 13px; font-weight: 500; margin-top: 22px; }
+.vn-integrations button:disabled { opacity: .5; cursor: not-allowed; }
+.vn-integrations .vn-linked-row > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.vn-integrations .vn-linked-row > button { flex-shrink: 0; }
+.vn-operation { border-top: 1px solid var(--maverick-border); padding: 14px 0; overflow-wrap: anywhere; }
+.vn-integrations .vn-linked-row a { color: inherit; text-decoration: underline; }

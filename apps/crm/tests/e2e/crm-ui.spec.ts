@@ -548,7 +548,7 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
   await detailPanel.getByRole('textbox', { name: 'Title' }).fill('Intro thread');
   await detailPanel.getByRole('textbox', { name: 'Date' }).fill('2026-05-20');
   await detailPanel.getByRole('textbox', { name: 'Summary' }).fill('Initial conversation');
-  await expect(detailPanel.getByRole('button', { name: 'Link' })).toBeDisabled();
+  await expect(detailPanel.getByRole('button', { name: 'Link', exact: true })).toBeDisabled();
   expect(lastRequest(requests, 'crm.link_external_ref')).toBeUndefined();
   await detailPanel.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();

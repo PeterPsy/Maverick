@@ -56,15 +56,14 @@ files or copies tokens. Provider IDs must come from workspace dependency selecti
 Legacy provider snapshots are unresolved migration evidence until matched to real
 provider record identities. A provider outage must not erase a CRM link.
 
-## Production cutover (separate from code delivery)
+## External source data decision
 
-Git has schema and source, not the authoritative production D1 database or R2
-objects. Production migration requires a supplied export and object inventory,
-dry-run reports, count and relationship reconciliation, Storage-owned asset import,
-and explicit validation before cutover. Never claim production parity based on
-synthetic fixtures. Keep the source and the existing CRM data intact throughout.
+The user explicitly excluded production Versy data and assets. No D1 export,
+R2 inventory or Versy cutover is required. Preserve the existing Maverick business
+data and connections. The optional adapter remains available for explicitly
+supplied exports; fixtures do not imply migration of any production source.
 
-## Delivered and verified (2026-09-19)
+## Initial release: 0.5.0 (2026-09-19)
 
 Version 0.5.0 / schema 7 implements the generic domains, relationship graph,
 typed forms/detail pages, overview/today workspace, selected-provider reference
@@ -82,8 +81,9 @@ archived/deleted data, events, intake receipts, notification outbox and all 15
 external references remained unchanged. Live health reports healthy schema 7;
 Mail, Calendar and Storage selections remain available.
 
-This is not a claim of complete production Versy parity. Delivery workers,
-provider live synchronization, automatic meeting/transcript processing and
-scheduled brief/competitive generation are not ported. Existing provider apps and
-explicit approved workflows own those effects. Production D1/R2 import and
-provider identity reconciliation still require the real source export and assets.
+This is not a claim of complete production Versy parity. The subsequent 0.6.0 /
+schema 8 integration release adds approved Mail/Calendar/Storage/Checklist/Speech
+operations, targeted reference synchronization and meeting workflows, documented in
+[CRM operational integrations](crm_integrations_architecture.md). Campaign
+integration/delivery and scheduled competitive crawling remain excluded. Existing
+provider apps own external effects; no Versy production import is needed.

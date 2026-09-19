@@ -1,6 +1,6 @@
 # CRM
 
-Native, generic Maverick CRM, version 0.5.0 / schema 7. One app (`crm`), one interface (`crm.records`), and one workspace-owned database: relationships, sales, conversations, follow-ups, campaign planning, expenses, intelligence, typed custom objects, import/export, and approvable agent workflows.
+Native, generic Maverick CRM, version 0.6.0 / schema 8. One app (`crm`), one interface (`crm.records`), and one workspace-owned database: relationships, sales, conversations, follow-ups, campaign planning, expenses, intelligence, typed custom objects, import/export, and approvable agent workflows.
 
 The implementation is native Python/SQLite and React/Vite. External CRM projects informed the domain and UX direction; no Cloudflare, Vinext, Ably, external authentication, industry-specific branding, owners, or seed data are bundled. CRM behavior stays app-owned; the core validates, registers, mounts, and invokes declared contract surfaces. See [the vNext decision](../../docs/architecture/crm_vnext_architecture.md) for source provenance, compatibility, and release boundaries.
 
@@ -17,7 +17,7 @@ Track app source, tests, contract files, and intentional frontend build artifact
 - CLI: `crm`, described by `cli/command_schemas.json`.
 - MCP: a stable agent-facing subset for search/read, lead/account/contact/deal CRUD, website intake ingestion, task/note/activity creation and updates, deal movement, record archive/delete/tag/bulk/merge, timeline/audit/report/filter/dedupe, external references, typed custom field value reads/writes, deterministic enrichment, next actions, workflow proposal approve/apply/dismiss/reject lifecycle, account brief, import/export, reference resolution, standard CRM view-state actions, and health. Saved views, custom-field definition management, and automation-rule administration stay backend/CLI helpers rather than public MCP tools.
 - Widget: `crm-sidebar` for the `base-shell` primary sidebar slot.
-- Lifecycle hooks: install, migrate, export, import, and health check.
+- Lifecycle hooks: install, migrate, export, import, health check and bounded background reference refresh.
 - Skill template: `skills/crm-ops/SKILL.md`.
 
 ## Storage
@@ -29,12 +29,12 @@ data/crm/
   .maverick-app.json
   crm.sqlite
   view_state.json
-  backups/schema-6-before-7-<unique-id>.sqlite
+  backups/schema-<previous>-before-<next>-<unique-id>.sqlite
 ```
 
 The SQLite schema is initialized idempotently by install and migrate hooks. The current release includes leads, accounts, contacts, deals, configurable pipelines, pipeline stages, activities, tasks, notes, website intake receipts, CRM notification outbox rows, events, tags, record tags, saved views, typed custom field definitions/values, automation rules, workflow proposals, external reference snapshots, and an embedded FTS index. Task and note records are first-class service, MCP, CLI/import, reference, and frontend entities. Archive, soft-delete, tag, untag, bulk operations, lead conversion, saved views, timeline, audit log, native sales reports, duplicate discovery and merge, typed custom fields, deterministic enrichment, approvable workflow proposals, automation proposal generation, external reference linking, and import row validation are exposed through backend, CLI/MCP where appropriate, and the operational UI. The app does not store raw secrets; external connectors use selected provider apps and core secret grants.
 
-Migration to schema 7 first takes a consistent, integrity-checked SQLite backup. The migration is additive and transactional: existing IDs, records, references, pipelines, field definitions, and provider selections remain in place. A newer database is never silently downgraded. Do not replace the live SQLite file to upgrade the app.
+Migration first takes a consistent, integrity-checked SQLite backup. Schema 8 adds an integration-operation journal; existing IDs, records, references, pipelines, field definitions, and provider selections remain in place. A newer database is never silently downgraded. Do not replace the live SQLite file to upgrade the app.
 
 ## Existing capabilities retained
 
@@ -70,9 +70,28 @@ The `crm.records_table` backend action is intentionally app-owned UI infrastruct
 - **Campaigns:** draft/ready/paused/completed planning, variants, ordered steps, recipients and event history. Cross-campaign references and duplicate recipients are rejected. These operations do **not** send, schedule workers, or authorize provider delivery.
 - **Expenses / Intelligence:** expenses, competitive profiles and periodic/meeting briefs, with typed dates, metadata, ownership and linked records.
 - **Custom objects:** user-defined typed schemas and records. Vertical source objects are imported as optional user data, not built-in real-estate concepts.
-- **Connections:** current selected-provider identities and linked counts. CRM detail pages link Mail threads, Calendar events, Storage assets, Speech transcripts and Checklist tasks after their real identities have been obtained from the selected provider. Snapshots are not a live-sync guarantee; no private provider database or credential is read.
+- **Connections:** current selected-provider identities and linked counts. CRM detail pages search and verify Mail threads, Calendar events, Storage assets and Checklist records through the core-governed provider backend. Verified snapshots refresh in bounded batches; failures retain the last good context. Speech processes linked audio and returns reviewable transcript proposals, not reference entities. No private provider database or credential is read.
 
 New MCP/CLI actions include `extension_schema`, `list_extension_records`, `create_extension_record`, `update_extension_record`, `link_records`, `unlink_records`, `record_context`, `overview`, `integration_context`, `link_provider_record`, `import_plan`, `import_apply`, and `import_jobs` (CLI prefix `crm.`, MCP prefix `crm_`). New entities also participate in search, references, custom fields, lifecycle, audit and native export/import. New views use live reads; this release does not expand the reviewed offline/PWA data allowlist.
+
+## Operational app integrations
+
+Every non-campaign record has **Connected work**:
+
+- **Mail:** search and connect real threads/messages/drafts/attachments; prepare a new message or reply, optionally with verified Storage attachments. Approve and execute to create a draft, then open Mail to review and explicitly send. CRM does not send mail or run campaigns.
+- **Calendar:** create native Maverick meetings with timezone-aware times, attendees, CRM context and provider idempotency keys. External Google invitations are not implicitly created. Existing linked provider events can be resolved and refreshed.
+- **Storage:** search/link documents and audio; create a Markdown document, optionally prefilled with the CRM meeting brief. Storage owns paths and file writes.
+- **Checklist:** connect a real checklist, propose a task in an existing section, and propose status changes. The task remains canonical in Checklist, not an editable duplicate CRM task.
+- **Speech:** transcribe an explicitly linked local Storage audio file using the selected provider's configured engine. The resulting text is a separate note proposal requiring review, approval and application. No transcript can authorize subsequent actions.
+- **Meetings:** deterministic briefing from CRM context and linked snapshots; record human-supplied outcomes as activities and follow-up proposals with idempotent submission. Applied follow-ups stay linked to their contact, deal or generic conversation context.
+
+New public actions: `integration_prepare`, `integration_run`, `integration_retry`, `integration_search`, `integration_link`, `integration_reconcile`, `integration_get`, `integration_list`, `integration_refresh`, `meeting_brief`, `meeting_outcome`. Read-only receipts/briefs and mutating preparations/execution have distinct effects. Callback and tick actions are private trusted-core surfaces, not CLI/MCP tools.
+
+Execution follows **prepare → inspect exact request → approve → execute**. Provider selection is checked again at execution; the immutable request cannot be edited after approval. Claims prevent concurrent/replayed execution. Uncertain non-idempotent writes cannot be blindly retried: verify an existing provider identity and reconcile it instead. Calendar retries reuse the provider idempotency key. Speech failures require checking Speech before preparing a new operation.
+
+Background ticks refresh up to five opted-in links, due every five minutes; manual refresh handles up to ten links. Trusted linked-provider UI events trigger a debounced refresh of the visible CRM record. This is targeted snapshot synchronization, not provider-wide replication or two-way editing. Legacy links are not automatically opted in: explicit refresh or verified reconnection enables synchronization. Missing remote records never delete CRM records.
+
+Operation receipts export as history. Restoring them cannot restore execution authority or edit a local operation's approval. Records with receipts cannot be deleted or merged, and running operations prevent archive, protecting their immutable context. Resolve/reconcile running work before archiving. See [integration architecture](../../docs/architecture/crm_integrations_architecture.md).
 
 ## Reviewed imports
 
@@ -104,14 +123,15 @@ Apply the identical payload with the returned `plan_token`. Inspect `crm.import_
 
 The adapter maps people/companies, activities, follow-ups, deals, conversations, campaigns, expenses, briefs and competitive profiles. Source-only fields are retained as redacted provenance; expenses and margins retain integer cents, while deal values use the existing CRM decimal-value representation. Real-estate agencies become accounts; listings/presentations become optional custom objects. Data-quality suggestions become pending proposals for **review tasks**, not trusted imported update/send commands. Provider snapshots remain evidence until matched to authoritative Mail/Calendar/Storage/Speech identities. Credentials, integration settings, caches and transient workers are excluded; unknown tables are reported.
 
-Production Versy data and R2 assets are **not in Git**. A real export, asset inventory, count/relationship reconciliation and explicit cutover validation are required before claiming a completed production migration.
+Production Versy data and R2 assets are **not required and are not being migrated**, by explicit product decision. The adapter remains an optional generic import utility, not a release dependency.
 
 Deferred intentionally:
 
 - Live external CRM sync.
 - Background import queues (synchronous committed-job receipts are implemented).
-- Campaign delivery and automatic Mail/Calendar/Storage/Speech synchronization.
-- Automatic meeting/brief generation or competitive crawling; records and approved workflows are native, not a port of external workers.
+- Campaign delivery and campaign integrations; existing planning remains unchanged.
+- Provider-wide replication, external calendar invitations and unreviewed automation execution.
+- Scheduled AI brief generation or competitive crawling; deterministic meeting briefs and explicitly approved transcription are implemented, not a port of external workers.
 - Deep permission model beyond platform workspace enablement.
 - AI scoring or automation execution that cannot be deterministically verified.
 
@@ -145,4 +165,4 @@ npx playwright install chromium
 npm run test:e2e -- --workers=1
 ```
 
-The suites cover migration backups, data/reference fidelity, future-schema refusal, typed extensions, campaign integrity, archive lifecycle, exact dedupe/policies, read-only simulation, stale plans, replay, rollback, secret exclusion, export round trips, provider selection, contracts, routing, pagination, record linking, campaign planning, import application, and desktop/mobile screenshots. No test writes to the live workspace database.
+The suites cover migration backups, data/reference fidelity, future-schema refusal, typed extensions, campaign integrity, archive lifecycle, exact dedupe/policies, read-only simulation, stale plans, replay, rollback, secret exclusion, export round trips, provider selection, callback forgery, concurrent delivery claims, uncertain writes/reconciliation, safe retry, failed-refresh preservation, secret preflight without execution, and real isolated Mail/Calendar/Storage/Checklist contracts. Browser tests cover routing, pagination, record linking, campaign planning, import application, approved Calendar/Storage execution, follow-up review, and desktop/mobile screenshots. No test writes to the live workspace database or sends real email.

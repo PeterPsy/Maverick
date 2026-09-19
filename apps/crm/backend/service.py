@@ -18,6 +18,7 @@ from domains.automation_rules import (
 )
 from domains.bootstrap import bootstrap_payload
 from domains.workspace_overview import overview
+from domains.integration_routes import ACTIONS as INTEGRATION_ACTIONS, route as integration_route
 from domains.provider_links import integration_context, link_provider_record
 from domains.extension_records import extension_schema, list_extensions, save_extension
 from domains.record_graph import link_records, unlink_records, record_context
@@ -93,6 +94,8 @@ def handle_action(data_root: str | Path, action: str, payload: dict[str, Any]) -
     initialize(data_root)
     try:
         with connect(data_root) as db:
+            if action.removeprefix("crm.") in INTEGRATION_ACTIONS:
+                return 200, integration_route(db, action, payload)
             if action == "crm.overview":
                 return 200, overview(db)
             if action == "crm.integration_context":

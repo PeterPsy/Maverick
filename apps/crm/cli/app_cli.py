@@ -25,6 +25,7 @@ if payload_json:
         raise ValueError("payload_json must decode to an object")
     parsed_payload.update(arguments)
     arguments = parsed_payload
+arguments["_trusted_surface"] = "cli"
 action = str(arguments.get("subcommand") or arguments.get("action") or "operations.manifest")
 try:
     status_code, result = handle_action(payload.data_root, action, arguments)

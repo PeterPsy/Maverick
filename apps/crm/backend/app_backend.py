@@ -13,7 +13,8 @@ from service import app_events_for_action, handle_action
 
 
 payload = read_entrypoint_payload()
-body = dict(payload.body)
+body = {key: value for key, value in payload.body.items() if not key.startswith("_")}
+body["_trusted_surface"] = payload.raw.get("surface", "")
 body["_app_dependencies"] = payload.raw.get("app_dependencies", {})
 body["_workspace_apps"] = payload.raw.get("workspace_apps", {})
 body["_workspace_id"] = payload.workspace_id

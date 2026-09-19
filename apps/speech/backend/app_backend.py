@@ -29,6 +29,14 @@ def _response(status_code: int, payload: dict) -> None:
 
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
+    if payload.get("surface") == "secret_selector":
+        # A credential preflight must never launch a worker or process audio.
+        from store import read_settings
+        body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+        engine = read_settings(Path(payload["data_root"])).get("transcription_engine", "auto")
+        needs = body.get("action") in {"transcribe_file", "transcribe_audio"} and engine == "deepgram"
+        print(json.dumps({"requires_secrets": needs, "logical_names": ["deepgram-api-key"] if needs else []}))
+        return
     if streaming_response_requested(payload):
         handle_streaming_entrypoint_payload(payload)
         return

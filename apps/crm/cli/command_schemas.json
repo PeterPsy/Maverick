@@ -186,7 +186,18 @@
                   "crm_reference_manifest",
                   "crm_reference_search",
                   "crm_reference_resolve",
-                  "crm_reference_summarize"
+                  "crm_reference_summarize",
+                  "crm.integration_prepare",
+                  "crm.integration_run",
+                  "crm.integration_retry",
+                  "crm.integration_search",
+                  "crm.integration_link",
+                  "crm.integration_reconcile",
+                  "crm.integration_get",
+                  "crm.integration_list",
+                  "crm.integration_refresh",
+                  "crm.meeting_brief",
+                  "crm.meeting_outcome"
                 ]
               },
               {
@@ -371,7 +382,18 @@
               "crm_reference_manifest",
               "crm_reference_search",
               "crm_reference_resolve",
-              "crm_reference_summarize"
+              "crm_reference_summarize",
+              "crm.integration_prepare",
+              "crm.integration_run",
+              "crm.integration_retry",
+              "crm.integration_search",
+              "crm.integration_link",
+              "crm.integration_reconcile",
+              "crm.integration_get",
+              "crm.integration_list",
+              "crm.integration_refresh",
+              "crm.meeting_brief",
+              "crm.meeting_outcome"
             ]
           },
           "payload_json": {
@@ -881,6 +903,50 @@
           },
           "provider_alias": {
             "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mail_draft",
+              "calendar_event",
+              "document",
+              "checklist_task",
+              "task_status",
+              "transcription"
+            ]
+          },
+          "parameters": {
+            "type": "object"
+          },
+          "ref_id": {
+            "type": "string"
+          },
+          "original_operation_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "followups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "due_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "task_id": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -1063,7 +1129,18 @@
           "crm_reference_manifest": "read",
           "crm_reference_search": "read",
           "crm_reference_resolve": "read",
-          "crm_reference_summarize": "read"
+          "crm_reference_summarize": "read",
+          "crm.integration_prepare": "mutating",
+          "crm.integration_run": "mutating",
+          "crm.integration_retry": "mutating",
+          "crm.integration_search": "mutating",
+          "crm.integration_link": "mutating",
+          "crm.integration_reconcile": "mutating",
+          "crm.integration_get": "read",
+          "crm.integration_list": "read",
+          "crm.integration_refresh": "mutating",
+          "crm.meeting_brief": "read",
+          "crm.meeting_outcome": "mutating"
         }
       }
     }

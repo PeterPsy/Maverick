@@ -66,7 +66,7 @@ class GeneratedAppContractTest(unittest.TestCase):
         descriptor_payload = json.loads((app_root / "mcp" / "tool_schemas.json").read_text())["tools"]
         self.assertEqual(declared, set(MCP_TOOL_ACTIONS))
         self.assertEqual(descriptors, declared)
-        self.assertEqual(len(declared), 77)
+        self.assertEqual(len(declared), 88)
         self.assertEqual(
             set(descriptor_payload["crm_link_external_ref"]["input_schema"]["required"]),
             {"crm_entity_type", "crm_entity_id", "source_app_id", "source_entity_type", "source_entity_id"},

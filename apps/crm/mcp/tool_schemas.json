@@ -1657,6 +1657,339 @@
       "output_schema": {
         "type": "object"
       }
+    },
+    "crm_integration_prepare": {
+      "description": "Prepare an immutable provider operation and pending CRM workflow proposal; never executes.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mail_draft",
+              "calendar_event",
+              "document",
+              "checklist_task",
+              "task_status",
+              "transcription"
+            ]
+          },
+          "parameters": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "kind",
+          "parameters"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_run": {
+      "description": "Execute a separately approved provider operation at most once per attempt.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_retry": {
+      "description": "Retry only a safely replayable provider read or idempotent event creation.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_search": {
+      "description": "Search selected provider references; persists a bounded result receipt, not remote business data.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "provider_alias": {
+            "type": "string",
+            "enum": [
+              "mail",
+              "calendar",
+              "files",
+              "tasks"
+            ]
+          },
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "provider_alias"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_link": {
+      "description": "Resolve and verify a selected provider identity before linking and enabling bounded refresh.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "provider_alias": {
+            "type": "string"
+          },
+          "source_entity_type": {
+            "type": "string"
+          },
+          "source_entity_id": {
+            "type": "string"
+          },
+          "ref_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "provider_alias",
+          "source_entity_type",
+          "source_entity_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_reconcile": {
+      "description": "Adopt a verified remote record for an uncertain operation without repeating its write.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "provider_alias": {
+            "type": "string"
+          },
+          "source_entity_type": {
+            "type": "string"
+          },
+          "source_entity_id": {
+            "type": "string"
+          },
+          "original_operation_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "provider_alias",
+          "source_entity_type",
+          "source_entity_id",
+          "original_operation_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_get": {
+      "description": "Read one bounded integration operation and its result.",
+      "effect_class": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_list": {
+      "description": "List integration operations for one CRM record.",
+      "effect_class": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_integration_refresh": {
+      "description": "Refresh up to ten explicitly linked records without deleting last-good snapshots.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_meeting_brief": {
+      "description": "Compose a deterministic CRM meeting brief with snapshot freshness, not invented conclusions.",
+      "effect_class": "read",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "crm_meeting_outcome": {
+      "description": "Record a meeting outcome and propose follow-ups without executing them.",
+      "effect_class": "mutating",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "ref_id": {
+            "type": "string"
+          },
+          "followups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "due_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id",
+          "idempotency_key",
+          "summary"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
     }
   }
 }

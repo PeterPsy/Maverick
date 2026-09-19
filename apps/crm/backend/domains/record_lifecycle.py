@@ -47,6 +47,7 @@ def ensure_no_dependents(db, entity_type: str, entity_id: str) -> None:
     counts = {name: int(db.execute(sql, (entity_id,)).fetchone()[0]) for name, sql in dependency_queries.get(entity_type, {}).items()}
     from .record_graph import extension_dependents
     counts.update(extension_dependents(db, entity_type, entity_id))
+    counts["integration_operations"] = db.execute("SELECT count(*) FROM integration_operations WHERE entity_type=? AND entity_id=?", (entity_type, entity_id)).fetchone()[0]
     if any(counts.values()):
         raise ValidationError("Cannot delete CRM record while active linked records exist.", details={"entity_type": entity_type, "id": entity_id, "dependents": counts})
 

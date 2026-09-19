@@ -7,7 +7,7 @@ from typing import Any
 from errors import NotFoundError, ValidationError
 from domains.custom_fields import list_custom_fields, set_custom_fields
 from domains.record_lifecycle import record_exists
-from domains.record_mutations import _update_entity_record, create_task
+from domains.record_mutations import _update_entity_record, create_task, create_note
 from domains.workflow import _workflow_proposal, approve_workflow_proposal
 from store import get_record, require_text, table_for_entity, utc_now, write_event
 
@@ -26,6 +26,17 @@ ENTITY_TABLES = {
 def apply_workflow_proposal(db, payload: dict[str, Any]) -> dict[str, Any]:
     proposal_id = require_text(payload, "id", required=True)
     proposal = _workflow_proposal(db, proposal_id)
+    proposal_action = (proposal.get("proposal") or {}).get("action") or {}
+    if proposal_action.get("type") == "provider_operation":
+        if payload.get("approve"):
+            raise ValidationError("Provider actions require separate approval and execution.")
+        if workflow_proposal_action_issues(db, proposal):
+            raise ValidationError("Provider operation does not match its proposal.")
+        from .integration_operations import dispatch
+        return dispatch(db, {**payload, "id": proposal_action.get("operation_id")})
+    # Re-read under the write lock so concurrent clicks cannot apply a follow-up twice.
+    db.execute('BEGIN IMMEDIATE')
+    proposal = _workflow_proposal(db, proposal_id)
     if proposal["status"] == "pending" and payload.get("approve"):
         proposal = approve_workflow_proposal(db, payload)
     if proposal["status"] != "approved":
@@ -36,6 +47,15 @@ def apply_workflow_proposal(db, payload: dict[str, Any]) -> dict[str, Any]:
     action_type = str(action.get("type") or "")
     if action_type == "create_task":
         applied_record = create_task(db, action)
+        if proposal.get('source') == 'crm.meetings':
+            from .record_graph import link_records
+            link_records(db, {'source_type': proposal['entity_type'], 'source_id': proposal['entity_id'],
+                              'target_type': 'task', 'target_id': applied_record['id'], 'relationship': 'followup'})
+    elif action_type == "create_note":
+        applied_record = create_note(db, {"body": action.get("body", "")})
+        from .record_graph import link_records
+        link_records(db, {"source_type": proposal['entity_type'], "source_id": proposal['entity_id'],
+                          "target_type": "note", "target_id": applied_record['id'], "relationship": "transcript"})
     elif action_type == "update_record":
         entity_type = str(action.get("entity_type") or proposal["entity_type"])
         changes = dict(action.get("changes") if isinstance(action.get("changes"), dict) else {})
@@ -89,6 +109,13 @@ def workflow_proposal_action_issues(db, proposal: dict[str, Any]) -> list[str]:
             entity_id = str(action.get(field) or "").strip()
             if entity_id and record_exists(db, entity_type, entity_id) != "active":
                 issues.append(f"create_task {field} is not active")
+    elif action_type == "create_note":
+        if not isinstance(action.get("body"), str) or not action['body'].strip():
+            issues.append("create_note missing text")
+    elif action_type == "provider_operation":
+        row = db.execute('SELECT proposal_id FROM integration_operations WHERE id=?', (action.get('operation_id', ''),)).fetchone()
+        if not row or row['proposal_id'] != proposal['id']:
+            issues.append("provider operation does not match its proposal")
     elif action_type == "update_record":
         entity_type = str(action.get("entity_type") or proposal.get("entity_type") or "").strip()
         entity_id = str(action.get("id") or proposal.get("entity_id") or "").strip()

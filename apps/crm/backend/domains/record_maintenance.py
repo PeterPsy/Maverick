@@ -15,6 +15,8 @@ def archive_record(db, payload: dict[str, Any]) -> dict[str, Any]:
     entity_type = require_text(payload, "entity_type", required=True)
     entity_id = require_text(payload, "id") or require_text(payload, "entity_id", required=True)
     record = get_non_deleted_record(db, entity_type, entity_id)
+    if db.execute("SELECT 1 FROM integration_operations WHERE entity_type=? AND entity_id=? AND status='running'", (entity_type, entity_id)).fetchone():
+        raise ValidationError("Reconcile in-flight provider operations before archiving this record.")
     if record.get("archived_at"):
         return record
     from .record_graph import extension_dependents
@@ -142,6 +144,9 @@ def merge_records(db, payload: dict[str, Any]) -> dict[str, Any]:
             source_ids.append(normalized)
     if not source_ids:
         raise ValidationError("At least one source record is required.")
+    for record_id in [target_id, *source_ids]:
+        if db.execute('SELECT 1 FROM integration_operations WHERE entity_type=? AND entity_id=?', (entity_type, record_id)).fetchone():
+            raise ValidationError('Records with integration receipts cannot be merged; retain their audit identity and use relationships.')
     target = get_record(db, entity_type, target_id)
     sources = [get_record(db, entity_type, source_id) for source_id in source_ids]
     field_overrides = payload.get("field_overrides") or {}

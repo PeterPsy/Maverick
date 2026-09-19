@@ -2,7 +2,7 @@
   "app_id": "crm",
   "contract_version": "1.0",
   "name": "CRM",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Generic workspace CRM for relationships, conversations, sales, campaign planning, expenses, intelligence and safe imports.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
@@ -183,7 +183,18 @@
       "crm_link_provider_record",
       "crm_import_plan",
       "crm_import_apply",
-      "crm_import_jobs"
+      "crm_import_jobs",
+      "crm_integration_prepare",
+      "crm_integration_run",
+      "crm_integration_retry",
+      "crm_integration_search",
+      "crm_integration_link",
+      "crm_integration_reconcile",
+      "crm_integration_get",
+      "crm_integration_list",
+      "crm_integration_refresh",
+      "crm_meeting_brief",
+      "crm_meeting_outcome"
     ],
     "cli_commands": [
       "crm"
@@ -412,12 +423,13 @@
       "migrate": "hooks/migrate.py",
       "export": "hooks/export.py",
       "import": "hooks/import.py",
-      "health_check": "hooks/health_check.py"
+      "health_check": "hooks/health_check.py",
+      "background_tick": "hooks/background_tick.py"
     }
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "7",
+    "data_schema_version": "8",
     "primary_paths": [
       "data/crm/crm.sqlite",
       "data/crm/view_state.json"

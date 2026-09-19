@@ -63,7 +63,7 @@ def _schema_health(db) -> dict[str, Any]:
         "crm_fts",
     }
     expected_tables.update(ENTITY_TABLES.values())
-    expected_tables.update({"record_links", "import_jobs", "import_rows", "import_identities"})
+    expected_tables.update({"record_links", "import_jobs", "import_rows", "import_identities", "integration_operations"})
     existing_tables = {str(row["name"]) for row in db.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'virtual table')").fetchall()}
     metadata_row = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
     integrity_row = db.execute("PRAGMA integrity_check").fetchone()

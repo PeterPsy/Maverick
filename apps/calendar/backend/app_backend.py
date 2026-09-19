@@ -8,10 +8,19 @@ import sys
 from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from service import app_events_for_action, handle_action
+from service import app_events_for_action, handle_action, secret_lookup_for_remote_mutation
 
 
 payload = read_entrypoint_payload()
+if payload.raw.get("surface") == "secret_selector":
+    selector = secret_lookup_for_remote_mutation(Path(payload.data_root), payload.body)
+    if selector.get("requires_secrets"):
+        selector["secret_requests"] = [
+            {"logical_names": ["google-oauth-client-id", "google-oauth-client-secret"]},
+            {"logical_names": ["google-calendar-refresh-token"], "resource_type": "calendar_connection", "resource_id": selector["resource_id"]},
+        ]
+    emit_json(selector)
+    raise SystemExit(0)
 local_app_id = payload.app_id or "calendar"
 action = str(payload.body.get("action") or "list")
 try:

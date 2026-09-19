@@ -14,9 +14,10 @@ from errors import NotFoundError, ValidationError
 from entity_catalog import ENTITY_TABLES, TABLE_ENTITIES
 from extension_storage import initialize_extensions, export_extensions
 from migration_safety import prepare_migration
+from integration_storage import initialize_integrations
 
-APP_VERSION = "0.5.0"
-SCHEMA_VERSION = "7"
+APP_VERSION = "0.6.0"
+SCHEMA_VERSION = "8"
 DB_NAME = "crm.sqlite"
 CUSTOM_FIELD_TYPES = {"text", "number", "date", "boolean", "select", "multi_select", "url", "email"}
 
@@ -394,6 +395,7 @@ def initialize(data_root: str | Path) -> None:
         db.execute("CREATE INDEX IF NOT EXISTS idx_external_refs_provider ON external_refs(provider_alias, source_interface, normalized_link_type, deleted_at)")
         _ensure_column(db, "deals", "margin_minor", "INTEGER NOT NULL DEFAULT 0")
         initialize_extensions(db)
+        initialize_integrations(db)
         _seed_pipeline(db)
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("app_version", APP_VERSION))
@@ -593,7 +595,9 @@ def parse_limit(payload: dict[str, Any], default: int = 50) -> int:
 
 
 def export_payload(db: sqlite3.Connection) -> dict[str, Any]:
+    from domains.integration_exports import export_integrations
     return {
+        "integration_operations": export_integrations(db),
         **export_extensions(db),
         **{table: [row_to_dict(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY 1")]
            for table in ("pipelines", "pipeline_stages", "tags", "record_tags", "saved_views")},

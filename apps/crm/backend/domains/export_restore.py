@@ -17,7 +17,7 @@ from .export_extensions import CONFIG_TABLES, restore_configuration, restore_ext
 
 
 EXPORT_ENTITY_ORDER = ["accounts", "contacts", "deals", "leads", "activities", "tasks", "notes"]
-EXPORT_CONFIG_TABLES = ["custom_field_definitions", "custom_field_values", "automation_rules", "workflow_proposals", "external_refs", *CONFIG_TABLES, *(s["table"] for s in EXTENSIONS.values()), "record_links", "import_identities"]
+EXPORT_CONFIG_TABLES = ["custom_field_definitions", "custom_field_values", "automation_rules", "workflow_proposals", "external_refs", *CONFIG_TABLES, *(s["table"] for s in EXTENSIONS.values()), "record_links", "import_identities", "integration_operations"]
 
 
 def restore_export_payload(db, payload: dict[str, Any]) -> dict[str, Any]:
@@ -64,6 +64,8 @@ def restore_export_payload(db, payload: dict[str, Any]) -> dict[str, Any]:
         record, was_created = _upsert_workflow_proposal_export(db, row)
         (created if was_created else updated).append(record)
     restore_graph(db, payload)
+    from .integration_exports import restore_integrations
+    restore_integrations(db, payload.get("integration_operations", []))
     return {"ok": True, "format": "crm_export", "created_count": len(created), "updated_count": len(updated), "records": created + updated}
 
 
@@ -96,6 +98,13 @@ def _upsert_automation_rule_export(db, row: dict[str, Any]) -> tuple[dict[str, A
 
 def _upsert_workflow_proposal_export(db, row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     proposal_id = require_text(row, "id") or new_id("wf")
+    # Imported workflows cannot edit the approval/context of a local delivery claim,
+    # even if a partial export omits its integration receipt.
+    if db.execute('SELECT 1 FROM integration_operations WHERE proposal_id=?', (proposal_id,)).fetchone():
+        return _workflow_proposal(db, proposal_id), False
+    action = (row.get('proposal') or {}).get('action', {})
+    if isinstance(action, dict) and action.get('type') == 'provider_operation':
+        row = {**row, 'status': 'dismissed', 'approved_at': ''}
     exists = db.execute("SELECT 1 FROM workflow_proposals WHERE id = ?", (proposal_id,)).fetchone() is not None
     db.execute(
         """

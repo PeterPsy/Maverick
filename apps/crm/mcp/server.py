@@ -25,6 +25,7 @@ try:
     arguments["_app_dependencies"] = payload.raw.get("app_dependencies", {})
     arguments["_workspace_id"] = payload.workspace_id
     arguments["_app_id"] = payload.app_id
+    arguments["_trusted_surface"] = "mcp"
     status_code, result = handle_action(payload.data_root, action, arguments)
 except CrmError as error:
     status_code, result = error.status_code, error_payload(error)

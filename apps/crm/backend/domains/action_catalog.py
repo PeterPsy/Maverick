@@ -7,6 +7,17 @@ from entity_catalog import ENTITY_TABLES
 
 
 MCP_TOOL_ACTIONS = {
+    "crm_integration_prepare": "crm.integration_prepare",
+    "crm_integration_run": "crm.integration_run",
+    "crm_integration_retry": "crm.integration_retry",
+    "crm_integration_search": "crm.integration_search",
+    "crm_integration_link": "crm.integration_link",
+    "crm_integration_reconcile": "crm.integration_reconcile",
+    "crm_integration_get": "crm.integration_get",
+    "crm_integration_list": "crm.integration_list",
+    "crm_integration_refresh": "crm.integration_refresh",
+    "crm_meeting_brief": "crm.meeting_brief",
+    "crm_meeting_outcome": "crm.meeting_outcome",
     "crm_extension_schema": "crm.extension_schema",
     "crm_list_extension_records": "crm.list_extension_records",
     "crm_create_extension_record": "crm.create_extension_record",
@@ -114,6 +125,16 @@ CONFIG_HELPER_ACTIONS = [
 
 
 WRITE_ACTIONS = {
+    "crm.integration_prepare",
+    "crm.integration_run",
+    "crm.integration_retry",
+    "crm.integration_search",
+    "crm.integration_link",
+    "crm.integration_reconcile",
+    "crm.integration_refresh",
+    "crm.meeting_outcome",
+    "crm.integration_callback",
+    "crm.integration_tick",
     "crm.create_extension_record",
     "crm.update_extension_record",
     "crm.link_records",
@@ -239,6 +260,17 @@ def operations_manifest() -> dict[str, Any]:
         "default_action": "operations.manifest",
         "entities": list(ENTITY_TABLES),
         "actions": [
+            "crm.integration_prepare",
+            "crm.integration_run",
+            "crm.integration_retry",
+            "crm.integration_search",
+            "crm.integration_link",
+            "crm.integration_reconcile",
+            "crm.integration_get",
+            "crm.integration_list",
+            "crm.integration_refresh",
+            "crm.meeting_brief",
+            "crm.meeting_outcome",
             "crm.extension_schema",
             "crm.list_extension_records",
             "crm.create_extension_record",

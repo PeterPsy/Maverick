@@ -64,7 +64,7 @@ class HostedExportTests(AppHostingTestBase):
             build = call("website-studio", {"action": "build_validate", "site_id": site["id"]})["json"]["build"]
             self.assertEqual(build["status"], "passed", build)
             self.assertEqual(build["runtime_kind"], "node_build" if spa else "static_export")
-            call("publisher", {"action": "deployment.configure", "domain": "apps.example.test"})
+            call("publisher", {"action": "deployment.configure", "installation_domain": "example.test"})
             result = call("publisher", {"action": "publish.plan", "source_entity_id": site["id"], "build_id": build["id"], "name": "Proof", "format": "spa_bundle" if spa else "static_bundle"})
             source, parsed = resolve_workspace_app_surface(store, binding=bindings["publisher"], start_path=root)
             state = SimpleNamespace(app_store=store, workspace_store=None, secret_store=None, observability_store=None, app_event_bus=AppEventBus())
@@ -95,7 +95,7 @@ class HostedExportTests(AppHostingTestBase):
                 self.assertNotIn(b"Changed after plan", content)
                 return {"status": "healthy", "checked_at": time.time()}
             call("publisher", {"action": "plan.approve", "plan_id": plan["id"], "plan_digest": plan["plan_digest"], "confirm": True})
-            app = Service(data_root, context("proof", user_id="admin-proof", provider_id="website-studio"), probe=local_probe)
+            app = Service(data_root, context("proof", user_id="admin-proof", provider_id="website-studio"), probe=local_probe, preflight=lambda _host: None)
             self.assertEqual(app.handle(apply_args(plan))["status"], "published")
             for surface, entrypoint, name_key, name in (("cli", "cli/app_cli.py", "command_name", "external-apps"), ("mcp", "mcp/server.py", "tool_name", "external_apps")):
                 response = run_json_entrypoint(APP_ROOT / entrypoint, cwd=APP_ROOT, payload={

@@ -7,7 +7,7 @@ from .bindings import read_binding
 from .errors import AppError
 from .files import publication_lock
 from .maintenance import capacity, cleanup
-from .probe import verify_https
+from .probe import verify_https, verify_tls
 from .store import Store
 
 READS = {"operations.manifest", "list", "get", "health"}
@@ -16,10 +16,11 @@ ACTIONS = READS | MUTATIONS
 
 
 class Service:
-    def __init__(self, root: Path, ctx, *, probe=verify_https):
+    def __init__(self, root: Path, ctx, *, probe=verify_https, preflight=verify_tls):
         if not root.is_absolute() or not ctx.workspace_id:
             raise AppError("workspace_context_required", 403)
         self.root, self.ctx, self.probe = root, ctx, probe
+        self.preflight = preflight
         self.store = Store(root, ctx.workspace_id)
         self.store.assert_workspace()
 
@@ -37,7 +38,8 @@ class Service:
         if action == "health":
             try:
                 config = deployment.load(self.root)
-                return {"status": "configured", "domain": config["domain"], "public_verification": "per_release"}
+                return {"status": "configured", "domain": config["domain"],
+                        "installation_domain": config["installation_domain"], "public_verification": "per_release"}
             except AppError as error:
                 return {"status": "not_configured", "error_code": error.code}
         if action == "list":
@@ -66,13 +68,19 @@ class Service:
             plan = self.store.get("plans", body.get("plan_id"))
             if not plan["hostname"].endswith("." + config["domain"]):
                 raise AppError("deployment_changed", 409)
+            # Do not consume a plan or switch public bytes while ACME is pending.
+            # Durable replays need no network; apply rechecks all authority under lock.
+            idem, _fingerprint = operations.request_identity(self.ctx, body)
+            if not self.store.operation(idem):
+                plans.assert_applicable(plan, self.ctx, body)
+                self.preflight(plan["hostname"])
             return operations.apply(self.store, self.ctx, body, self.probe)
         if action in {"suspend", "archive"}:
             return operations.disable(self.store, self.ctx, body)
         with publication_lock(self.root):
             operations.recover(self.store)
             if action == "deployment.configure":
-                config = deployment.configure(self.root, body.get("domain"), has_apps=bool(self.store.list("apps", limit=1)))
+                config = deployment.configure(self.root, body.get("installation_domain"), has_apps=bool(self.store.list("apps", limit=1)))
                 self.store.audit("", "deployment.configured", self.ctx.user_id)
                 return {"deployment": config}
             if action == "publish.plan":

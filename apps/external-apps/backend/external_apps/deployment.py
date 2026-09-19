@@ -8,10 +8,25 @@ from .files import atomic_write, encoded, read_regular
 from .policy import domain_name, identifier
 
 
+def public_domain(installation_domain):
+    """Operator-attested Maverick hostname, never a browser Host/frame origin."""
+    import ipaddress
+    hostname = domain_name(installation_domain)
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return domain_name("apps." + hostname)
+    raise AppError("installation_domain_required")
+
+
 def load(root: Path):
     try:
         value = json.loads(read_regular(root / "deployment.json", 4096))
         value["domain"] = domain_name(value["domain"])
+        if not value["domain"].startswith("apps."):
+            raise AppError("deployment_invalid", 503)
+        value["installation_domain"] = value["domain"][5:]
+        public_domain(value["installation_domain"])
         identifier(value["namespace"], length=12)
         if value.get("version") != 1:
             raise AppError("deployment_invalid", 503)
@@ -22,8 +37,8 @@ def load(root: Path):
         raise AppError("deployment_invalid", 503) from error
 
 
-def configure(root, domain, *, has_apps):
-    domain = domain_name(domain)
+def configure(root, installation_domain, *, has_apps):
+    domain = public_domain(installation_domain)
     if (root / "deployment.json").exists():
         current = load(root)
         if current["domain"] == domain:

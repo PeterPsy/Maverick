@@ -55,7 +55,7 @@ test('safe backend errors and honest deployment setup', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Prepara pubblicazione' })).toBeDisabled();
   await page.unroute('**/api/apps/external-apps/backend');
   await page.route('**/api/apps/external-apps/backend', route => route.fulfill({ status: 403, json: { error_code: 'admin_required' } }));
-  await page.getByLabel('Dominio pubblico').fill('apps.example.test');
+  await page.getByLabel('Dominio di Maverick').fill('maverick.example.test');
   await page.getByRole('button', { name: 'Salva dominio' }).click();
   await expect(page.getByRole('alert')).toHaveText('admin_required');
 });

@@ -45,7 +45,7 @@
             "type": "string",
             "maxLength": 256
           },
-          "domain": {
+          "installation_domain": {
             "type": "string",
             "maxLength": 256
           },

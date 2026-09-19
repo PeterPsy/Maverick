@@ -10,7 +10,7 @@ export function PrepareForm({ busy, appId, onPrepare }: { busy: boolean; appId?:
   }
   return <form className="prepare-form" onSubmit={submit}>
     <h3>{appId ? 'Nuova release' : 'Nuova pubblicazione'}</h3>
-    <p className="muted">Usa una build completata in Website Studio. La preparazione non pubblica nulla.</p>
+    <p className="muted">Usa una build completata in Website Studio. Il contenuto resta privato fino alla conferma; il nome host può già comparire nei registri pubblici dei certificati HTTPS.</p>
     <label>Nome<input required value={name} onChange={e => setName(e.target.value)} maxLength={120} placeholder="Nome del sito" /></label>
     <label>Site ID<input required value={site} onChange={e => setSite(e.target.value)} maxLength={128} placeholder="site_…" /></label>
     <label>Build ID<input required value={build} onChange={e => setBuild(e.target.value)} maxLength={128} placeholder="build_…" /></label>

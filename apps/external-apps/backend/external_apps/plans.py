@@ -153,3 +153,15 @@ def assert_ready(plan, body):
         raise AppError("plan_digest_mismatch", 409)
     if body.get("confirm") is not True:
         raise AppError("confirmation_required", 403)
+
+
+def assert_applicable(plan, ctx, body):
+    assert_ready(plan, body)
+    if body["action"] != plan["kind"] + ".apply":
+        raise AppError("plan_kind_mismatch", 409)
+    if not plan.get("approved_by"):
+        raise AppError("human_ui_confirmation_required", 403)
+    if ctx.user_id not in {plan["created_by"], plan["approved_by"]}:
+        raise AppError("plan_actor_mismatch", 403)
+    if ctx.provider_id != plan["provider_id"]:
+        raise AppError("exporter_changed", 409)

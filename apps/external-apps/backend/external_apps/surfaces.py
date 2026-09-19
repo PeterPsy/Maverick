@@ -18,7 +18,7 @@ FIELDS = {
     "rollback.apply": {"plan_id", "plan_digest", "confirm", "idempotency_key"},
     "suspend": {"external_app_id", "expected_generation", "confirm", "idempotency_key"},
     "archive": {"external_app_id", "expected_generation", "confirm", "idempotency_key"},
-    "deployment.configure": {"domain"},
+    "deployment.configure": {"installation_domain"},
     "plan.approve": {"plan_id", "plan_digest", "confirm"},
 }
 

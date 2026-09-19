@@ -25,8 +25,8 @@ def success_probe(*_args):
 
 
 def service(root, *, workspace="tenant-a", probe=success_probe):
-    result = Service(root, context(workspace), probe=probe)
-    result.handle({"action": "deployment.configure", "domain": "apps.example.test"})
+    result = Service(root, context(workspace), probe=probe, preflight=lambda _host: None)
+    result.handle({"action": "deployment.configure", "installation_domain": "example.test"})
     return result
 
 

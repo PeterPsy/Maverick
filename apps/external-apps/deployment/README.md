@@ -1,167 +1,175 @@
-# Public hosting activation
+# Public hosting on the installation domain
 
-This is an operator procedure, not a second installer or an app-side daemon.
-Changing the app's domain field does not activate any of these resources.
-Do not restart Maverick Core to install this independent service.
+The rule is **`<app>.apps.<Maverick installation hostname>`**, on every machine.
+Here it is `<app>.apps.maverick.loopino.ai`. `<app>` is the stable readable slug
+plus opaque publication id, not a private workspace id. No sslip.io fallback,
+new domain purchase, private same-origin path, or public Core route.
 
-## 1. Confirm the public domain and DNS authority
+This is operator setup. Saving app settings does not provision infrastructure.
+It never requires restarting Maverick Core or the chat.
 
-Prefer an operator-owned registrable domain **different from Maverick's**.
-`apps.example.com` below is only a placeholder. Do not reuse private app-frame
-or sidecar hosts, buy a domain, or repoint existing records implicitly.
-When DNS-provider access is unavailable, use the explicitly reviewed
-[IP-based DNS profile](no-dns-access.md), with its external-dependency tradeoffs.
+## 1. Domain and DNS
 
-Create `apps.example.com` and `*.apps.example.com` A records for this ingress.
-Add AAAA only if IPv6 actually reaches this ingress. Verify both with a fresh,
-unallocated hostname; testing one existing name does not prove wildcard DNS.
-Every returned address must be the intended ingress. Keep any CDN response cache
-disabled: serving authorization must be revalidated by the public runtime.
+Use the canonical Maverick installation hostname (the same value configured as
+`MAVERICK_SIDECAR_INSTALLATION_DOMAIN`), without scheme, port, wildcard or path.
+Do not infer it from a browser Host, forwarded header or app-frame origin.
 
-## 2. Provision and renew TLS independently
+The base `apps.<hostname>` and a fresh random `*.apps.<hostname>` must resolve to
+this ingress; check all A/AAAA answers. Publish AAAA only if IPv6 reaches it.
+Existing wildcard DNS may already cover these names, as on the current host.
+Without matching DNS, setup is blocked: HTTP-01 cannot create DNS records.
+Do not replace the user's domain to conceal missing DNS. Disable CDN response
+caching: every request must revalidate public serving authority.
 
-Obtain a trusted certificate with SANs `apps.example.com` and
-`*.apps.example.com`. For Let's Encrypt, wildcard issuance uses
-[DNS-01, not HTTP-01](https://letsencrypt.org/docs/challenge-types/).
-Use the DNS provider's supported ACME plugin with narrowly scoped credentials,
-or an externally managed certificate with an automated delivery/renewal path.
-Never put DNS credentials, private keys, or Core's `.env` in this app or Git.
-Do not issue certificates before the operator has identified the actual domain.
+## 2. App and isolated listener
 
-For Certbot, prefer a separate `maverick-external-apps` lineage. Point nginx at
-its `fullchain.pem` and `privkey.pem`; do not copy keys into the repository or
-change existing Maverick certificate lineages. Validate SANs, validity and key
-matching before enabling the virtual host. A manual one-time TXT challenge is
-not a renewal strategy.
+Install/enable the sealed platform External Apps source through Maverick, select
+Website Studio for `static-exporter`, and configure **installation_domain** in
+the authenticated app UI or its discovered official CLI. The public suffix is
+always derived as `apps.<installation_domain>`. An existing nonempty catalog
+blocks a domain change, rather than rewriting approved URLs. No site is published
+by infrastructure setup; exact-plan human UI approval is still mandatory.
 
-Configure a lineage-scoped deploy hook that runs `nginx -t` followed by
-`systemctl reload nginx` only after successful renewal of this certificate.
-Test renewal with the selected provider's staging/dry-run flow before activation.
-The ACME client owns renewal; neither Core nor the public runtime needs DNS keys.
+Render `supervisor.example.json` into `/etc/maverick/external-apps.json` with the
+same installation hostname and only explicitly selected workspace/app ids.
+Render `maverick-external-apps.service.example`, replacing:
 
-## 3. Prepare the app through Maverick
-
-Install/enable the sealed **platform** External Apps source using App Store,
-select Website Studio as `static-exporter`, then configure the chosen domain in
-the authenticated External Apps UI. Do not edit control-plane records or create
-a workspace-local copy to bypass a missing catalog registration. If the running
-catalog does not yet expose the platform source, resolve registration through
-the supported hosting flow in a safe operational window; do not bootstrap or
-restart the active chat as a shortcut.
-
-No existing site is published by deployment setup. Publication still requires a
-specific passing build, reviewed immutable plan and authenticated human approval.
-
-## 4. Render and review the service files
-
-Copy `supervisor.example.json` to a staging directory outside live `/etc`.
-Set the actual domain and only the explicitly selected workspace/local app ids.
-Keep its two `/run/maverick-external-apps-*` paths aligned with the unit and nginx.
-
-Render `maverick-external-apps.service.example` into
-`maverick-external-apps.service`, replacing every `{{...}}` token:
-
-| Token | Actual host value |
+| Token | Value |
 | --- | --- |
-| `INSTALL_ROOT` | Canonical Maverick checkout, without symlink ancestors |
+| `INSTALL_ROOT` | Canonical Maverick checkout without symlink ancestors |
 | `SERVICE_USER` | Trusted backend service account, not root |
-| `SERVICE_GROUP` | Backend's operating group for app data/control-store locks |
+| `SERVICE_GROUP` | Account group for app data and canonical JSON lock files |
 | `INGRESS_GROUP` | nginx worker group, commonly `www-data` |
 | `CONTROL_STORE_ROOT` | Absolute active canonical JSON store root |
-| `APP_DATA_ROOT` | Exact existing `workspaces/<id>/data/<local_app_id>` root |
+| `APP_DATA_ROOT` | Exact `workspaces/<id>/data/<local_app_id>` path |
 
-The template is deliberately for the **JSON adapter**. Confirm the running
-backend's adapter/path through `core.persistence.status` after official CLI
-discovery. Never silently use the default store if the backend uses another one.
-For multiple explicitly selected workspaces, add one `ReadWritePaths` per app
-data root. Do not grant whole-workspace or whole-control-store write access.
+Confirm the active persistence adapter/path through official `core.persistence.status`
+discovery. This unit is for the JSON adapter: only its three canonical read-lock
+files and selected app data are writable. Do not grant a whole workspace/store.
+For additional workspaces, add exact app-data `ReadWritePaths`. A Mongo deployment
+needs a separately reviewed unit; never silently read a different store.
+The child receives only read-only public mounts, no host network or private data.
 
-JSON read operations use the canonical shared lock files; the unit exposes only
-the three existing lock files as writable, not their JSON collections. App
-recovery can write its own data. A missing lock/data directory is a setup error,
-not a reason to remove the sandbox. Keep service persistence settings aligned
-with any later backend adapter migration. Mongo deployment needs a separately
-reviewed unit: the canonical Mongo collection factory also ensures indexes.
-
-Systemd creates the runtime directories with the service user and ingress group.
-The socket inherits that group and allows group connection; no `chmod 777` or
-global user/group membership change is needed. The public child still runs inside
-bubblewrap without host networking, private mounts or inherited credentials.
-Do not add namespace restrictions that prevent bubblewrap, or an unconfined
-fallback. Use system Python under `/usr/bin` as declared by the unit.
-
-## 5. Enable only the independent service and public virtual hosts
-
-Before installing, verify no other operator owns these exact destination files.
-Keep a private backup of any pre-existing file you are explicitly replacing.
+Before replacing owned operator files, preserve a private backup and check no
+other agent/operator is editing them. Validate and enable only this service:
 
 ```bash
-# Run against the reviewed staged unit, with no remaining {{...}} placeholders.
 systemd-analyze verify ./maverick-external-apps.service
 sudo install -d -m 0755 /etc/maverick
 sudo install -m 0644 ./external-apps.json /etc/maverick/external-apps.json
 sudo install -m 0644 ./maverick-external-apps.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now maverick-external-apps.service
-sudo systemctl status maverick-external-apps.service --no-pager
 sudo -u www-data curl --unix-socket /run/maverick-external-apps-listener/public.sock \
   -sS -o /dev/null -w '%{http_code}\n' -H 'Host: invalid' http://localhost/
 ```
 
-Replace `www-data` with the real ingress user. The anonymous socket probe must
-return **404**, not fail to connect. That proves listener/permissions, not a
-mounted workspace or Internet readiness. Inspect the fresh projection's namespace
-list against the selected app's deployment metadata before proceeding; an empty
-list means no app is admitted even if the listener is healthy.
+Expect 404. Confirm `/run/maverick-external-apps-state/mounts.json` has the intended
+namespace and fresh expiry. A healthy socket with an empty mount list does not
+prove workspace availability.
 
-Render `nginx.example.conf` with the actual domain/certificate paths. Install it
-as a **new dedicated file** in the host's normal nginx include directory; on
-Debian-style hosts, use a reviewed `sites-available` file and one `sites-enabled`
-symlink. Do not run the general Maverick installer or overwrite its virtual hosts.
-The template has no `default_server`, so it does not take over shared port 443.
-It covers the base and wildcard names, closes plain HTTP, forwards only required
-request headers and fails 503 if the public Unix listener is lost. It has no
-private ASGI fallback, including on upstream errors.
+## 3. HTTP-01 and exact HTTPS hosts
 
-Record Core's PID/start time and check private/public Maverick health first.
-Run `sudo nginx -t` against the **complete live configuration**. Only on success,
-use `sudo systemctl reload nginx` (not restart). Recheck Maverick health and
-unchanged Core PID/start time. A failed check blocks activation; restore only
-this deployment's file/symlink, validate again, then reload. Never replace another
-agent's nginx configuration or reload a known-invalid shared configuration.
+Prerequisites: nginx with `ssl_reject_handshake`, Certbot, system Python with
+`cryptography`, public port 80 for HTTP-01 and port 443 for HTTPS. No port 53, DNS
+API token or wildcard certificate is needed. The root-owned timer issues exact
+SAN certificates only for catalog-derived names, never arbitrary incoming SNI.
 
-## 6. Acceptance and stop path
-
-From outside the host, verify a fresh wildcard name resolves and negotiates
-trusted TLS without `-k`; an unknown publication must return 404, not Maverick's
-login or another site's content. Publish only an approved synthetic static site
-and genuine SPA, then complete the [deployment acceptance checks](../README.md#deployment-acceptance).
-Local fixture certificates and loopback tests are not evidence of public DNS/TLS.
+From this directory, render the dedicated ingress in a staging directory:
 
 ```bash
-sudo systemctl status maverick-external-apps.service --no-pager
-sudo journalctl -u maverick-external-apps.service -n 50 --no-pager
-# Revoke the service without touching Core, nginx, or other apps:
+python3 -B -c 'from tls_config import render_ingress; print(render_ingress("maverick.example.com"))' > /tmp/external-apps-nginx.conf
+```
+
+Use the actual installation hostname. Keep the generated upstream, HTTP-01 root,
+owned include path and Unix listener aligned. The namespace catch-all rejects
+unknown TLS names instead of routing them to the private default host. The exact
+base certificate serves only a runtime 404; it is not an application.
+
+Review nginx's existing `http`-context hash policy: long exact publication names
+need `server_names_hash_bucket_size 256`; the 64 × 100 cap is covered by
+`server_names_hash_max_size 8192`. If neither directive already exists, install
+`nginx-http.conf` as `/etc/nginx/conf.d/maverick-external-apps-hash.conf`. Otherwise
+review the existing owner's values; do not add duplicate global directives.
+
+Install root-owned operator material (not writable by the app/public child):
+
+```bash
+sudo install -d -m 0700 /var/lib/maverick/external-apps-tls
+sudo install -d -m 0755 /var/lib/maverick/external-apps-acme
+sudo install -d -m 0755 /usr/local/libexec/maverick-external-apps /etc/nginx/snippets
+sudo install -m 0644 tls.py tls_config.py /usr/local/libexec/maverick-external-apps/
+sudo install -m 0644 nginx-proxy.conf /etc/nginx/snippets/maverick-external-apps-proxy.conf
+# First installation ONLY; never truncate an existing hosts.conf:
+sudo test -e /var/lib/maverick/external-apps-tls/hosts.conf || \
+  sudo install -m 0644 /dev/null /var/lib/maverick/external-apps-tls/hosts.conf
+sudo install -m 0644 /tmp/external-apps-nginx.conf /etc/nginx/sites-available/maverick-external-apps.conf
+# Create the matching sites-enabled symlink only if absent.
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+The ACME challenge path must now be reachable. Test staging HTTP-01 against the
+same webroot, using separate temporary Certbot config/work/log directories; never
+install an untrusted staging certificate in production nginx. Then install
+`maverick-external-apps-tls.service` and `.timer` in `/etc/systemd/system/`, run
+`systemd-analyze verify`, `systemctl daemon-reload`, and
+`systemctl enable --now maverick-external-apps-tls.timer`. For initial provisioning,
+`systemctl start maverick-external-apps-tls.service` runs one pass synchronously.
+
+The worker uses its own `/var/lib/maverick/external-apps-tls/{config,work,logs}`;
+existing `/etc/letsencrypt` lineages and `certbot.timer` are untouched. It checks
+fresh supervisor intent and renews within 30 days of expiry, once per minute.
+Certificates group up to 100 names per app namespace, plus a separate base lineage.
+Four orders per pass, 2-minute success coalescing and 1-hour failure backoff limit
+work. CA quotas can still delay issuance. Certbot diagnostics stay operator-only.
+Prepared hostname metadata enters certificate transparency before publication;
+no content becomes public until human-approved apply. TLS pending returns
+`public_tls_not_ready` without consuming the plan or changing the binding.
+
+The worker validates key matching, SAN scope and dates; only exact nginx hosts
+are generated. It checks the complete live nginx configuration before every
+reload, restores only its owned include on failure and retains a retry marker.
+Never reload a configuration known to be invalid. Existing private hosts and
+Core PID/start time must remain unchanged. Do not run the general installer.
+
+## 4. Browser boundary and acceptance
+
+Subdomains share a site, not an origin. Public static documents use CSP
+`sandbox allow-scripts` without `allow-same-origin`: no cookies, browser storage,
+document.domain, forms, frames, workers or network APIs. Public CORS `*` allows
+anonymous modules, lazy chunks and fonts, never credentials. Ingress strips
+Cookie/Authorization/Set-Cookie and has no private/error-page fallback.
+This is a stateless static/SPA product; authenticated apps require a separate design.
+
+Verify trusted HTTPS for the base and provisioned hosts without `-k`. Unknown
+names must reject TLS (not request a certificate or show Maverick). Check HTTP-01,
+GET/HEAD, ETag revalidation, private-route rejection, listener loss and Core health.
+Complete the [publication acceptance gates](../README.md#deployment-acceptance)
+with an explicitly approved synthetic static build and SPA from an external browser.
+Local tests/base TLS are not proof of a published application.
+
+## Status, renewal proof and stop
+
+```bash
+sudo systemctl status maverick-external-apps.service maverick-external-apps-tls.timer
+sudo journalctl -u maverick-external-apps-tls.service -n 30 --no-pager
+sudo certbot renew --dry-run --non-interactive --no-random-sleep-on-renew \
+  --config-dir /var/lib/maverick/external-apps-tls/config \
+  --work-dir /var/lib/maverick/external-apps-tls/work \
+  --logs-dir /var/lib/maverick/external-apps-tls/logs
+# Stop future issuance/renewal; this does not revoke already served content:
+sudo systemctl disable --now maverick-external-apps-tls.timer
+sudo systemctl stop maverick-external-apps-tls.service
+# Revoke content without touching Core or other apps:
 sudo systemctl disable --now maverick-external-apps.service
 ```
 
-Stopping expires the projection and terminates the confined child. Leave the
-dedicated nginx virtual hosts in place to fail closed with 503; removing them
-while DNS still points here could send those hostnames to a private default host.
-Data and publication history remain intact. Re-enabling after verification uses
-`systemctl enable --now maverick-external-apps.service`.
+Do not remove the dedicated nginx catch-all while DNS still points here; retain
+fail-closed routing. Supervisor loss expires public authority within 10 seconds.
+Certificates alone confer no access. Resume by verifying prerequisites and enabling
+the two units again. Never disable the shared host's unrelated Certbot timer.
 
-## Verification and current deployment status
-
-`EXTERNAL_APPS_INGRESS_TEST=1 python3 -m unittest discover -s apps/external-apps/tests -p test_deployment.py -v`
-runs a foreground-only nginx on ephemeral loopback ports with a disposable test
-certificate and Unix upstream. It verifies TLS, shared-host preservation,
-credential stripping, HEAD/ETag forwarding, denied writes and fail-closed outage.
-It never changes live nginx or systemd.
-
-Initial inspection found no dedicated domain/certificate or live app registration.
-On 2026-09-19, after explicit user authorization to proceed without DNS-provider
-access, the [IP-based profile](no-dns-access.md) was activated with a genuine
-wildcard certificate, automatic renewal, installed app and isolated systemd
-service. No publication was automatically approved. The linked evidence separates
-live infrastructure verification from the remaining per-release Internet gate.
+The former sslip.io profile is retired. Its certificate renewal and uniquely
+scoped DNS-01 port-53 firewall/tag must be removed only after migration. Retain an
+HTTP-close/TLS-reject tombstone for its old namespace while that DNS still resolves
+here, so old public links cannot fall through to the private default host.

@@ -10,16 +10,32 @@ from .errors import AppError
 from .policy import MAX_FILE
 
 
+def public_connection(hostname):
+    addresses = socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
+    ips = list(dict.fromkeys(item[4][0] for item in addresses))
+    if not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
+        raise AppError("public_probe_address_denied", 503)
+    connection = http.client.HTTPSConnection(hostname, 443, timeout=5, context=ssl.create_default_context())
+    connection._create_connection = lambda address, timeout, source_address: socket.create_connection((ips[0], 443), timeout, source_address)
+    return connection
+
+
+def verify_tls(hostname):
+    try:
+        connection = public_connection(hostname)
+        try:
+            connection.connect()
+        finally:
+            connection.close()
+    except (OSError, http.client.HTTPException) as error:
+        raise AppError("public_tls_not_ready", 503) from error
+
+
 def verify_https(hostname, release, entrypoint_hash):
     started = time.monotonic()
     try:
-        addresses = socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
-        ips = list(dict.fromkeys(item[4][0] for item in addresses))
-        if not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
-            raise AppError("public_probe_address_denied", 503)
         # Pin the selected address; TLS SNI and certificate validation use hostname.
-        connection = http.client.HTTPSConnection(hostname, 443, timeout=5, context=ssl.create_default_context())
-        connection._create_connection = lambda address, timeout, source_address: socket.create_connection((ips[0], 443), timeout, source_address)
+        connection = public_connection(hostname)
         try:
             connection.request("GET", "/", headers={"Host": hostname, "Accept": "text/html", "Cache-Control": "no-cache"})
             response = connection.getresponse()

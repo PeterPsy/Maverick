@@ -1,5 +1,5 @@
 {
-  "domain": "apps.example.com",
+  "installation_domain": "maverick.example.com",
   "state_directory": "/run/maverick-external-apps-state",
   "listener_directory": "/run/maverick-external-apps-listener",
   "workspaces": [{"workspace_id": "default", "local_app_id": "external-apps"}]

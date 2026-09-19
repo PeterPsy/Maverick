@@ -9,7 +9,8 @@ Repository decision: [`external_apps_v1.md`](../../docs/architecture/external_ap
 1. Install/enable the platform app through Maverick App Store. Do not register it
    as a workspace-local app. Select an enabled Website Studio provider for the
    `static-exporter` dependency in App Store.
-2. An administrator configures the deployment domain in External Apps. Saving
+2. An administrator supplies the Maverick installation hostname in External Apps;
+   public names derive as `<app>.apps.<hostname>`. Saving
    this value does **not** provision DNS, TLS, ingress or a public service.
 3. Complete a passing static or Node build in Website Studio. PHP/SSR are rejected.
 4. Enter site/build ids, name and static/SPA routing; prepare the publication.
@@ -20,7 +21,8 @@ Repository decision: [`external_apps_v1.md`](../../docs/architecture/external_ap
    approval. Archive retains history and cannot be republished in V1.
 
 State (`draft`, `published`, `suspended`, `archived`) and HTTP health are separate.
-Publishing verifies the real credential-free HTTPS endpoint and exact entrypoint
+TLS must be ready before switching a binding; a pending certificate leaves the
+approved plan reusable. Publishing verifies the credential-free HTTPS endpoint and exact entrypoint
 bytes after cutover. A failed probe conditionally restores the previous binding;
 the candidate can briefly be visible before compensation. Downloads already
 received cannot be revoked. The opaque URL is not authentication.
@@ -42,7 +44,9 @@ the UI handoff, not a direct-file or policy bypass.
   preparation and lifecycle recovery; published history is retained.
 - Closed MIME allowlist; no executable backend, secret delivery, private Maverick
   routes, service worker, external fetch, forms or embedded frames. Local JS/CSS
-  and inline scripts/styles are supported. Static bundles must be self-contained.
+  and inline scripts/styles are supported. Documents have opaque sandbox origins:
+  no cookies, localStorage or document.domain. Anonymous CORS supports ESM/lazy
+  chunks/fonts, and SPA history routing works. Bundles must be self-contained.
 - 64 explicit workspace mounts, 32 concurrent public connections, 32 MiB content
   cache. Authority is reread before every request/304; no independent proxy cache.
 
@@ -50,12 +54,11 @@ the UI handoff, not a direct-file or policy bypass.
 
 Production requires Linux, the system Python under `/usr/bin` and bubblewrap with
 user namespaces available. Unsupported confinement fails closed; there is no
-unconfined fallback. Prefer a dedicated registrable public domain separate from
-Maverick's, not merely a sibling subdomain. Without DNS-provider access, the
-[reviewed IP-based DNS profile](deployment/no-dns-access.md) preserves that
-private/public domain separation with an explicit external DNS dependency.
-Platform session cookies must still
-be host-only, not parent-domain cookies.
+unconfined fallback. The namespace is always `apps.<installation-domain>`; in this
+installation, `apps.maverick.loopino.ai`. DNS must resolve its base and wildcard
+to the host. No alternate DNS provider/domain is selected automatically.
+Because public documents are same-site with Maverick, their CSP sandbox blocks
+parent-cookie injection; stripping ingress cookies alone would not be sufficient.
 
 The private foreground supervisor reads the **same canonical control-store
 configuration as the backend**, without bootstrapping or restarting it. It checks
@@ -65,10 +68,11 @@ public artifact/binding mounts and a writable Unix-socket directory. Do not pass
 whole workspace, repository or control-store directories to that child.
 
 Follow the [activation runbook](deployment/README.md), including the independently
-managed systemd unit, DNS-01 renewal, shared-nginx safety and stop path.
+managed systemd units, HTTP-01 exact certificates, shared-nginx safety and stop paths.
 Review [`deployment/supervisor.example.json`](deployment/supervisor.example.json)
 and [`deployment/nginx.example.conf`](deployment/nginx.example.conf). Replace the
-example domain and certificate paths. The two service directories must be
+example installation hostname. A root-owned TLS timer provisions only validated
+ready catalog names, batches SANs and renews certificates without DNS API access. The two service directories must be
 dedicated, distinct, outside published trees, and accessible only to the operator
 service account and the ingress group as appropriate. The supervisor needs read
 access to canonical hosting state and write access to selected External Apps
@@ -113,7 +117,7 @@ From the repository root:
 
 ```bash
 python3 -m unittest discover -s apps/external-apps/tests -p 'test_*.py' -v
-EXTERNAL_APPS_CONFINEMENT_TEST=1 EXTERNAL_APPS_VITE_TEST=1 \
+EXTERNAL_APPS_BROWSER_TEST=1 EXTERNAL_APPS_CONFINEMENT_TEST=1 EXTERNAL_APPS_VITE_TEST=1 \
   python3 -m unittest discover -s apps/external-apps/tests -p 'test_*.py' -v
 EXTERNAL_APPS_INGRESS_TEST=1 \
   python3 -m unittest discover -s apps/external-apps/tests -p test_deployment.py -v

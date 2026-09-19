@@ -25,7 +25,7 @@ MIME = {
     ".pdf": "application/pdf",
 }
 PRIVATE_NAMES = {"package.json", "package-lock.json", "tsconfig.json", "composer.json", "composer.lock"}
-CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+CSP = ("sandbox allow-scripts; default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
        "img-src 'self' data:; font-src 'self'; connect-src 'none'; worker-src 'none'; "
        "object-src 'none'; frame-src 'none'; frame-ancestors 'none'; form-action 'none'; base-uri 'self'")
 HEADERS = {
@@ -33,6 +33,9 @@ HEADERS = {
     "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-cache, must-revalidate",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    # Stateless static documents have opaque origins: allow anonymous ESM/fonts,
+    # not credentials. Scripts cannot toss cookies onto the installation domain.
+    "Access-Control-Allow-Origin": "*", "Cross-Origin-Opener-Policy": "same-origin",
 }
 
 

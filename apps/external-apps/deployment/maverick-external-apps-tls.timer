@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile Maverick External Apps certificates
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=maverick-external-apps-tls.service
+
+[Install]
+WantedBy=timers.target

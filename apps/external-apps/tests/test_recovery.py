@@ -22,7 +22,7 @@ from tests.support.app_hosting import AppHostingTestBase
 def apply_worker(root, plan, gate, queue):
     gate.wait(5)
     try:
-        result = Service(Path(root), context(), probe=success_probe).handle(apply_args(plan, plan["id"]))
+        result = Service(Path(root), context(), probe=success_probe, preflight=lambda _host: None).handle(apply_args(plan, plan["id"]))
         queue.put(result["status"])
     except AppError as error:
         queue.put(error.code)

@@ -7,7 +7,7 @@ from .artifacts import verify
 from .bindings import read_binding, write_binding
 from .errors import AppError
 from .files import encoded, operation_lease, publication_lock
-from .plans import assert_ready
+from .plans import assert_applicable
 
 
 def request_identity(ctx, body):
@@ -61,15 +61,7 @@ def apply(store, ctx, body, probe):
             if existing:
                 return existing
             plan = store.get("plans", body.get("plan_id"))
-            assert_ready(plan, body)
-            if body["action"] != plan["kind"] + ".apply":
-                raise AppError("plan_kind_mismatch", 409)
-            if not plan.get("approved_by"):
-                raise AppError("human_ui_confirmation_required", 403)
-            if ctx.user_id not in {plan["created_by"], plan["approved_by"]}:
-                raise AppError("plan_actor_mismatch", 403)
-            if ctx.provider_id != plan["provider_id"]:
-                raise AppError("exporter_changed", 409)
+            assert_applicable(plan, ctx, body)
             app = store.get("apps", plan["app_id"])
             before = read_binding(store.root / "public", app["public_id"])
             if before["generation"] != plan["expected_generation"] or before["archived"]:

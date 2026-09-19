@@ -1,0 +1,20 @@
+[Unit]
+Description=Maverick External Apps exact-host TLS
+After=network-online.target nginx.service maverick-external-apps.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/maverick-external-apps/tls.py
+User=root
+Group=root
+UMask=0077
+TimeoutStartSec=15min
+MemoryMax=256M
+TasksMax=16
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+# nginx -t checks that its existing PID file can be opened, without changing it.
+ReadWritePaths=/var/lib/maverick/external-apps-tls /var/lib/maverick/external-apps-acme /var/log/nginx /run/nginx.pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

@@ -11,7 +11,7 @@ export async function callBackend<T>(body: Record<string, unknown>, signal?: Abo
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
   });
   const result = await response.json();
-  if (!response.ok || result.error_code || result.status === 'failed') throw new Error(result.error_code || `HTTP ${response.status}`);
+  if (!response.ok || result.error_code || result.status === 'failed') throw new Error(result.error_code === 'public_tls_not_ready' ? 'Certificato HTTPS in preparazione. Attendi un minuto e riprova: il piano non è stato consumato.' : result.error_code || `HTTP ${response.status}`);
   return result as T;
 }
 

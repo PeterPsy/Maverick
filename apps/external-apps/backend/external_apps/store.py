@@ -128,6 +128,13 @@ class Store:
             rows = db.execute("SELECT payload FROM operations WHERE done=0 ORDER BY created LIMIT 100").fetchall()
         return [json.loads(row[0]) for row in rows]
 
+    def ready_app_ids(self):
+        if not self.path.exists():
+            return set()
+        with self.connection(readonly=True) as db:
+            return {row[0] for row in db.execute(
+                "SELECT DISTINCT app_id FROM plans WHERE status='ready' AND expires>? LIMIT 100", (time.time(),))}
+
     def audit(self, app_id, action, actor, detail=""):
         with self.connection() as db:
             db.execute("INSERT INTO audit(app_id,created,action,actor,detail) VALUES(?,?,?,?,?)",

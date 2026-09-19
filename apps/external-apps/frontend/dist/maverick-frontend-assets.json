@@ -1,14 +1,14 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "2c62e0d7fcf3b9a156092640d62404490c8e34aa0c9aad38f7e3f439685b3c60",
+  "build_id": "e270f0ebe32c748db34400516920aa03807fc57d206ac6dc6f74acf15b834cfc",
   "entrypoints": [
     "index.html"
   ],
   "immutable": [
     {
-      "path": "assets/index-BkDMQTUv.js",
-      "sha256": "207d4812d5887206fd7edc600949d2ea393dcdf1a131c45e341f0d6b45324112",
-      "size_bytes": 237144
+      "path": "assets/index-DMdQIqeb.js",
+      "sha256": "1c3a139504611f1cb6002101f863d40aa0badd3e1c840e5c7a823f40cd8eedbc",
+      "size_bytes": 237445
     },
     {
       "path": "assets/index-dVdNvzy6.css",
@@ -19,7 +19,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "c76d4b132ff590007f2e1d5843af7e492f9015e54f350316369f23726b53c689",
+      "sha256": "3b001af9e1c3557027e9e533b58f39a463f87ebaf6ae929db94e3f986fa8fc16",
       "size_bytes": 622
     }
   ]

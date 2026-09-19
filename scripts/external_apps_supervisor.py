@@ -23,15 +23,15 @@ from core.api.control_store import ControlStoreSettings, build_control_plane_col
 from core.apps.store import AppDocumentStore
 from core.apps.surfaces import resolve_workspace_app_surface
 from core.workspaces.store import WorkspaceDocumentStore
-from external_apps.deployment import load as load_deployment
+from external_apps.deployment import load as load_deployment, public_domain
 from external_apps.files import atomic_write, encoded, publication_lock
 from external_apps.operations import recover
-from external_apps.policy import domain_name
 from external_apps.store import Store
+from external_apps.tls_requests import requested_hosts
 from public_server.confinement import command
 
 
-def selected_mounts(app_store, workspace_store, *, selections, domain, repository=REPOSITORY):
+def selected_mounts(app_store, workspace_store, *, selections, domain, repository=REPOSITORY, tls_hosts=None):
     """Select declared operator targets with live workspace/app/source checks."""
     roots = {}
     duplicates = set()
@@ -67,7 +67,11 @@ def selected_mounts(app_store, workspace_store, *, selections, domain, repositor
             if namespace in roots or namespace in duplicates:
                 duplicates.add(namespace)
                 roots.pop(namespace, None)
+                if tls_hosts is not None:
+                    tls_hosts.pop(namespace, None)
                 continue
+            if tls_hosts is not None:
+                tls_hosts[namespace] = requested_hosts(store, namespace, domain)
             roots[namespace] = public
         except (KeyError, OSError):
             continue
@@ -78,7 +82,7 @@ def selected_mounts(app_store, workspace_store, *, selections, domain, repositor
 
 
 def run(config, *, app_store, workspace_store):
-    domain = domain_name(config["domain"])
+    domain = public_domain(config["installation_domain"])
     state_dir = Path(config["state_directory"])
     listener_dir = Path(config["listener_directory"])
     if (not state_dir.is_absolute() or not listener_dir.is_absolute()
@@ -100,7 +104,8 @@ def run(config, *, app_store, workspace_store):
     signal.signal(signal.SIGINT, stop)
     try:
         while not stopping:
-            roots = selected_mounts(app_store, workspace_store, selections=config["workspaces"], domain=domain)
+            tls_hosts = {}
+            roots = selected_mounts(app_store, workspace_store, selections=config["workspaces"], domain=domain, tls_hosts=tls_hosts)
             signature = [(namespace, str(path), path.stat().st_dev, path.stat().st_ino) for namespace, path in sorted(roots.items())]
             if signature != previous:
                 atomic_write(projection, encoded({"version": 1, "domain": domain, "namespaces": [], "expires": time.time()}))
@@ -121,7 +126,8 @@ def run(config, *, app_store, workspace_store):
             if not listener_healthy(listener_dir / "public.sock"):
                 atomic_write(projection, encoded({"version": 1, "domain": domain, "namespaces": [], "expires": time.time()}))
             else:
-                atomic_write(projection, encoded({"version": 1, "domain": domain, "namespaces": sorted(roots), "expires": time.time() + 8}))
+                atomic_write(projection, encoded({"version": 1, "domain": domain, "namespaces": sorted(roots),
+                                                  "tls_hosts": tls_hosts, "expires": time.time() + 8}))
             time.sleep(2)
     finally:
         atomic_write(projection, encoded({"version": 1, "domain": domain, "namespaces": [], "expires": time.time()}))

@@ -14,8 +14,13 @@ import unittest
 
 from support import APP_ROOT
 
+import sys
+sys.path.insert(0, str(APP_ROOT / "deployment"))
+from tls_config import render_hosts, render_ingress
+
 
 DEPLOYMENT = APP_ROOT / "deployment"
+PUBLIC_HOST = "a" * 25 + "-" + "b" * 32 + ".apps.maverick.example.com"
 
 
 class DeploymentContractTests(unittest.TestCase):
@@ -29,39 +34,6 @@ class DeploymentContractTests(unittest.TestCase):
         writes = [line for line in unit.splitlines() if line.startswith("ReadWritePaths=")]
         self.assertEqual(len(writes), 4)
         self.assertTrue(all(line.endswith(".lock") for line in writes[1:]))
-
-
-class RenewalHookTests(unittest.TestCase):
-    def test_only_matching_installed_lineage_reloads_after_valid_configuration(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            enabled, log = root / "enabled.conf", root / "calls"
-            script = (DEPLOYMENT / "renew-nginx.sh").read_text().replace(
-                "/etc/nginx/sites-enabled/maverick-external-apps.conf", str(enabled))
-            for name, original in (("nginx", "/usr/sbin/nginx"), ("systemctl", "/usr/bin/systemctl")):
-                script = script.replace(original, str(root / name))
-                (root / name).write_text(f"#!/bin/sh\nprintf '%s\\n' '{name}' >> '{log}'\n")
-                (root / name).chmod(0o700)
-            hook = root / "hook.sh"
-            hook.write_text(script)
-
-            def run(lineage):
-                return subprocess.run(["/bin/sh", str(hook)], timeout=5, capture_output=True,
-                                      env={"RENEWED_LINEAGE": lineage}).returncode
-
-            lineage = "/etc/letsencrypt/live/maverick-external-apps"
-            self.assertEqual(run(lineage), 0)  # Initial issuance, before ingress.
-            self.assertFalse(log.exists())
-            enabled.touch()
-            self.assertEqual(run("/etc/letsencrypt/live/private-maverick"), 0)
-            self.assertFalse(log.exists())
-            self.assertEqual(run(lineage), 0)
-            self.assertEqual(log.read_text().splitlines(), ["nginx", "systemctl"])
-            log.unlink()
-            with (root / "nginx").open("a") as handle:
-                handle.write("exit 7\n")
-            self.assertEqual(run(lineage), 7)
-            self.assertEqual(log.read_text().splitlines(), ["nginx"])
 
 
 class Upstream(socketserver.StreamRequestHandler):
@@ -98,17 +70,25 @@ class NginxIngressTests(unittest.TestCase):
             cert, key = root / "cert.pem", root / "key.pem"
             subprocess.run([
                 "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-                "-subj", "/CN=apps.example.com", "-addext",
-                "subjectAltName=DNS:apps.example.com,DNS:*.apps.example.com,DNS:private.example.net",
+                "-subj", "/CN=apps.maverick.example.com", "-addext",
+                "subjectAltName=DNS:apps.maverick.example.com,DNS:*.apps.maverick.example.com,DNS:private.example.net",
                 "-keyout", str(key), "-out", str(cert),
             ], capture_output=True, check=True, timeout=15)
-            template = (DEPLOYMENT / "nginx.example.conf").read_text()
+            challenge = root / 'acme/.well-known/acme-challenge'
+            challenge.mkdir(parents=True)
+            (challenge / 'proof').write_text('challenge proof')
+            (root / 'fullchain.pem').symlink_to(cert)
+            (root / 'privkey.pem').symlink_to(key)
+            proxy = root / 'proxy.conf'
+            proxy.write_text((DEPLOYMENT / 'nginx-proxy.conf').read_text())
+            exact = render_hosts([({PUBLIC_HOST, 'apps.maverick.example.com'}, root)], str(proxy))
+            template = render_ingress('maverick.example.com').replace(
+                'include /var/lib/maverick/external-apps-tls/hosts.conf;', exact)
             template = (template.replace("listen 80;", f"listen 127.0.0.1:{plain};")
                         .replace("listen [::]:80;", "")
                         .replace("listen 443 ssl;", f"listen 127.0.0.1:{tls} ssl;")
                         .replace("listen [::]:443 ssl;", "")
-                        .replace("/etc/ssl/external-apps/fullchain.pem", str(cert))
-                        .replace("/etc/ssl/external-apps/privkey.pem", str(key))
+                        .replace('/var/lib/maverick/external-apps-acme', str(root / 'acme'))
                         .replace("/run/maverick-external-apps-listener/public.sock", str(root / "public.sock")))
             # Existing private/default hosts must not be taken over by the template.
             private = (f"server {{ listen 127.0.0.1:{plain} default_server; "
@@ -118,6 +98,7 @@ class NginxIngressTests(unittest.TestCase):
             config = root / "nginx.conf"
             config.write_text(f"pid {root}/nginx.pid; error_log {root}/error.log; "
                               "events { worker_connections 64; } http { access_log off; "
+                              + (DEPLOYMENT / "nginx-http.conf").read_text() + "\n"
                               f"client_body_temp_path {root}/body; proxy_temp_path {root}/proxy; "
                               + private + template + " }")
             args = [nginx, "-p", str(root), "-c", str(config)]
@@ -125,7 +106,7 @@ class NginxIngressTests(unittest.TestCase):
             self.assertEqual(checked.returncode, 0, checked.stderr)
             context = ssl.create_default_context(cafile=str(cert))
 
-            def request(host="sample.apps.example.com", path="/", method="GET", headers=None, secure=True):
+            def request(host=PUBLIC_HOST, path="/", method="GET", headers=None, secure=True):
                 with socket.create_connection(("127.0.0.1", tls if secure else plain), timeout=3) as raw:
                     with (context.wrap_socket(raw, server_hostname=host) if secure else raw) as sock:
                         extra = "".join(f"{name}: {value}\r\n" for name, value in (headers or {}).items())
@@ -151,6 +132,11 @@ class NginxIngressTests(unittest.TestCase):
                                     time.sleep(.05)
                             self.assertIsNone(process.poll(), (root / "error.log").read_text())
                             self.assertEqual(request("private.example.net")[2], b"private marker")
+                            self.assertEqual(request('unknown.apps.maverick.example.com', '/.well-known/acme-challenge/proof', secure=False)[2], b'challenge proof')
+                            with self.assertRaises(ssl.SSLError):
+                                request('unknown.apps.maverick.example.com')
+                            self.assertEqual(request('apps.maverick.example.com')[0], 200)
+                            upstream.received.clear()
                             with self.assertRaises(http.client.RemoteDisconnected):
                                 request(secure=False)
                             status, headers, body = request(headers={

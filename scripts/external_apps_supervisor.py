@@ -134,7 +134,8 @@ def listener_healthy(path):
         with socket.socket(socket.AF_UNIX) as sock:
             sock.settimeout(1)
             sock.connect(str(path))
-            sock.sendall(b"GET / HTTP/1.0\r\nHost: invalid\r\n\r\n")
+            # No response body: closing this short probe must not break a writer.
+            sock.sendall(b"HEAD / HTTP/1.0\r\nHost: invalid\r\n\r\n")
             return sock.recv(128).startswith(b"HTTP/1.0 404")
     except OSError:
         return False

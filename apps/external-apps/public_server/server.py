@@ -41,6 +41,11 @@ class PublicServer(ThreadingMixIn, UnixStreamServer):
         finally:
             self.slots.release()
 
+    def handle_error(self, request, client_address):
+        if isinstance(sys.exception(), (ConnectionError, TimeoutError)):
+            return  # Normal peer disconnects must not flood the service journal.
+        super().handle_error(request, client_address)
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "ExternalApps"

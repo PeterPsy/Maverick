@@ -1,0 +1,42 @@
+# Render the named template values using the reviewed host configuration before install.
+# This unit targets the canonical JSON adapter; it does not load Core secrets.
+[Unit]
+Description=Maverick External Apps public static hosting
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User={{SERVICE_USER}}
+Group={{INGRESS_GROUP}}
+SupplementaryGroups={{SERVICE_GROUP}}
+WorkingDirectory={{INSTALL_ROOT}}
+Environment=PATH=/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1
+Environment=MAVERICK_CONTROL_STORE=json
+Environment=MAVERICK_JSON_CONTROL_STORE_ROOT={{CONTROL_STORE_ROOT}}
+ExecStart=/usr/bin/python3 -B {{INSTALL_ROOT}}/scripts/external_apps_supervisor.py --config /etc/maverick/external-apps.json
+RuntimeDirectory=maverick-external-apps-state maverick-external-apps-listener
+RuntimeDirectoryMode=0750
+UMask=0007
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+# Recovery may write this app's data only. JSON reads need writable existing locks,
+# not write access to the authoritative control-plane collection files.
+ReadWritePaths={{APP_DATA_ROOT}}
+ReadWritePaths={{CONTROL_STORE_ROOT}}/apps/.app_sources.json.lock
+ReadWritePaths={{CONTROL_STORE_ROOT}}/apps/.workspace_app_bindings.json.lock
+ReadWritePaths={{CONTROL_STORE_ROOT}}/workspaces/.workspaces.json.lock
+MemoryMax=768M
+TasksMax=64
+KillMode=mixed
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

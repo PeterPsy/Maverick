@@ -61,6 +61,8 @@ under OS locks. It launches a no-network, no-credentials child with only read-on
 public artifact/binding mounts and a writable Unix-socket directory. Do not pass
 whole workspace, repository or control-store directories to that child.
 
+Follow the [activation runbook](deployment/README.md), including the independently
+managed systemd unit, DNS-01 renewal, shared-nginx safety and stop path.
 Review [`deployment/supervisor.example.json`](deployment/supervisor.example.json)
 and [`deployment/nginx.example.conf`](deployment/nginx.example.conf). Replace the
 example domain and certificate paths. The two service directories must be
@@ -110,6 +112,8 @@ From the repository root:
 python3 -m unittest discover -s apps/external-apps/tests -p 'test_*.py' -v
 EXTERNAL_APPS_CONFINEMENT_TEST=1 EXTERNAL_APPS_VITE_TEST=1 \
   python3 -m unittest discover -s apps/external-apps/tests -p 'test_*.py' -v
+EXTERNAL_APPS_INGRESS_TEST=1 \
+  python3 -m unittest discover -s apps/external-apps/tests -p test_deployment.py -v
 python3 -m unittest discover -s apps/website-studio/tests -p test_external_export.py -v
 python3 scripts/check_unused_imports.py apps/external-apps scripts/external_apps_supervisor.py
 ```

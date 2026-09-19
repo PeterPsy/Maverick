@@ -112,3 +112,10 @@ also run; unrelated repository-convention failures in existing Core/test files
 remain outside this change. No live ingress, TLS, DNS or supervisor was activated.
 Internet acceptance and hosted Chat mutation admission remain the explicit gates
 above, not implied by the local tests.
+
+The [operator activation runbook](../../apps/external-apps/deployment/README.md)
+now includes a bounded JSON-adapter systemd unit, DNS-01 certificate renewal,
+shared-nginx virtual hosts without a default-server takeover, and an independent
+stop path. A real foreground nginx fixture verifies ingress behavior without
+modifying the running platform. A selected separate domain, certificate and
+live app registration are still required before operational activation.

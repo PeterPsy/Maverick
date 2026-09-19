@@ -36,21 +36,12 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     const initialLaunch = launchPayload(origin, "initial-ticket");
     const recoveredLaunch = launchPayload(origin, "recovered-ticket");
     const laterLaunch = launchPayload(origin, "later-ticket");
+    const initialResponse = deferred<Response>();
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse(initialLaunch))
+      .mockReturnValueOnce(initialResponse.promise)
       .mockResolvedValueOnce(jsonResponse(recoveredLaunch))
       .mockResolvedValueOnce(jsonResponse(laterLaunch));
     vi.stubGlobal("fetch", fetchMock);
-
-    const submissions: Array<{ action: string; owner: Document; target: string; ticket: string }> = [];
-    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function (this: HTMLFormElement) {
-      submissions.push({
-        action: this.action,
-        owner: this.ownerDocument,
-        target: this.target,
-        ticket: this.querySelector<HTMLInputElement>('input[name="ticket"]')?.value || "",
-      });
-    });
 
     const container = document.createElement("div");
     document.body.append(container);
@@ -70,11 +61,17 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
 
     const frame = container.querySelector("iframe");
     expect(frame).not.toBeNull();
+    initialResponse.resolve(jsonResponse(initialLaunch));
+    await flushPromises();
+    const initialPostMessage = vi.spyOn(frame!.contentWindow!, "postMessage").mockImplementation(() => undefined);
     await finishBootstrap(frame as HTMLIFrameElement);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(submissions).toHaveLength(1);
-    expect(submissions[0]?.owner).toBe(frame?.contentDocument);
-    expect(submissions[0]?.target).toBe("_self");
+    expect(initialPostMessage).toHaveBeenCalledWith(expect.objectContaining({
+      bootstrap_id: expect.any(String),
+      launch: initialLaunch,
+      type: "maverick.app-frame.bootstrap",
+    }), "*");
+    const initialRelayDocument = frame!.srcdoc;
     expect(frame?.dataset.maverickFrameOrigin).toBe(origin);
     expect(registeredMaverickFrameOwner(new MessageEvent("message", {
       origin,
@@ -106,18 +103,15 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
 
     window.dispatchEvent(trustedMessage);
     await flushPromises();
+    const recoveredRelayDocument = frame!.srcdoc;
+    expect(recoveredRelayDocument).not.toBe(initialRelayDocument);
+    await finishBootstrap(frame as HTMLIFrameElement);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
       app_id: "chat",
       path: currentPath,
     });
-    expect(submissions).toEqual([
-      expect.objectContaining({ ticket: "initial-ticket" }),
-      expect.objectContaining({ ticket: "recovered-ticket" }),
-    ]);
-
-    await finishBootstrap(frame as HTMLIFrameElement);
     const laterPath = "/apps/chat/?thread=later";
     window.dispatchEvent(new MessageEvent("message", {
       data: { path: laterPath, type: APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE },
@@ -125,13 +119,15 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
       source: frame?.contentWindow,
     }));
     await flushPromises();
+    expect(frame!.srcdoc).not.toBe(recoveredRelayDocument);
+    await finishBootstrap(frame as HTMLIFrameElement);
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({
       app_id: "chat",
       path: laterPath,
     });
-    expect(submissions.at(-1)).toEqual(expect.objectContaining({ ticket: "later-ticket" }));
+    expect(frame?.dataset.maverickFrameOrigin).toBe(laterLaunch.origin);
   });
 
   it("paints the initial frame with Maverick colors before the remote document loads", async () => {
@@ -156,6 +152,8 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     const frame = container.querySelector("iframe");
     expect(frame?.srcdoc).toContain("#070708");
     expect(frame?.srcdoc).toContain("color-scheme:dark");
+    expect(frame?.srcdoc).toContain("maverick.app-frame.bootstrap");
+    expect(frame?.srcdoc).toContain('form.target="_self"');
     expect(frame?.src).not.toContain("about:blank");
   });
 });
@@ -177,6 +175,14 @@ function jsonResponse(payload: LaunchPayload): Response {
   } as Response;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
 async function flushPromises() {
   await act(async () => {
     await Promise.resolve();
@@ -186,7 +192,19 @@ async function flushPromises() {
 
 async function finishBootstrap(frame: HTMLIFrameElement) {
   await act(async () => {
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    frame.dispatchEvent(new Event("load"));
+    await Promise.resolve();
+    const bootstrapId = frame.srcdoc.match(/data-maverick-loader="([^"]+)"/)?.[1];
+    if (!bootstrapId) throw new Error("Expected a local app-frame bootstrap relay.");
+    window.dispatchEvent(new MessageEvent("message", {
+      data: {
+        bootstrap_id: bootstrapId,
+        type: "maverick.app-frame.bootstrap-submitted",
+      },
+      origin: window.location.origin,
+      source: frame.contentWindow,
+    }));
+    await Promise.resolve();
     frame.dispatchEvent(new Event("load"));
   });
 }

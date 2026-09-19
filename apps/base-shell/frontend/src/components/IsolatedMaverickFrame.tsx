@@ -16,6 +16,8 @@ import { revokeShellAuthorization } from "../pwaCacheRuntime";
 import type { ShellEffectiveTheme } from "../theme";
 
 const APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch";
+const APP_FRAME_BOOTSTRAP_MESSAGE = "maverick.app-frame.bootstrap";
+const APP_FRAME_BOOTSTRAP_SUBMITTED_MESSAGE = "maverick.app-frame.bootstrap-submitted";
 export const APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "maverick.app-frame.authorization-required";
 
 type AppFrameLaunch = {
@@ -24,6 +26,11 @@ type AppFrameLaunch = {
   origin: string;
   ticket: string;
   ticket_field: "ticket";
+};
+
+type PendingAppFrameLaunch = {
+  bootstrapId: string;
+  launch: AppFrameLaunch;
 };
 
 type RawLaunchPayload = {
@@ -56,14 +63,19 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
     const frameRef = useRef<HTMLIFrameElement | null>(null);
     const frameNameRef = useRef(`maverick-app-frame-${crypto.randomUUID()}`);
     const bootstrapPendingRef = useRef(false);
-    const loadingDocumentRef = useRef(maverickLoadingDocument(loadingTheme));
+    const pendingLaunchRef = useRef<PendingAppFrameLaunch | null>(null);
+    const activeBootstrapIdRef = useRef<string | null>(null);
+    const loadingThemeRef = useRef(loadingTheme);
+    const loadingDocumentRef = useRef(maverickLoadingDocument(loadingTheme, crypto.randomUUID()));
+    loadingThemeRef.current = loadingTheme;
 
     useEffect(() => {
       const frame = frameRef.current;
       if (!frame) return;
       let activeController: AbortController | null = null;
-      let armTimer: number | undefined;
       bootstrapPendingRef.current = false;
+      pendingLaunchRef.current = null;
+      activeBootstrapIdRef.current = null;
       setMaverickFrameOrigin(frame, null, appId, frameScope);
       delete frame.dataset.maverickFrameBootstrapArmed;
 
@@ -74,22 +86,19 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
         void requestAppFrameLaunch(appId, requestedPath, controller.signal)
           .then((launch) => {
             if (controller.signal.aborted || frameRef.current !== frame) return;
-            if (armTimer !== undefined) window.clearTimeout(armTimer);
             delete frame.dataset.maverickFrameBootstrapArmed;
             setMaverickFrameOrigin(frame, launch.origin, appId, frameScope);
             bootstrapPendingRef.current = true;
-            try {
-              submitBootstrapForm(frame, launch);
-            } catch (error) {
-              bootstrapPendingRef.current = false;
-              throw error;
-            }
-            armTimer = window.setTimeout(() => {
-              frame.dataset.maverickFrameBootstrapArmed = "true";
-            }, 0);
+            const bootstrapId = crypto.randomUUID();
+            activeBootstrapIdRef.current = bootstrapId;
+            pendingLaunchRef.current = { bootstrapId, launch };
+            frame.srcdoc = maverickLoadingDocument(loadingThemeRef.current, bootstrapId);
           })
           .catch((error: unknown) => {
             if (controller.signal.aborted || frameRef.current !== frame) return;
+            bootstrapPendingRef.current = false;
+            pendingLaunchRef.current = null;
+            activeBootstrapIdRef.current = null;
             if (!preserveCurrentOrigin) setMaverickFrameOrigin(frame, null, appId, frameScope);
             onLaunchError?.(error instanceof Error ? error : new Error("Unable to launch isolated app frame."));
           })
@@ -103,13 +112,28 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
         launchFrame(recoveryLaunchPath(event.data, launchPath), true);
       };
 
+      const handleBootstrapSubmitted = (event: MessageEvent) => {
+        if (event.source !== frame.contentWindow || !event.data || typeof event.data !== "object") return;
+        if (event.origin !== window.location.origin && event.origin !== "null") return;
+        const data = event.data as { bootstrap_id?: unknown; type?: unknown };
+        if (
+          data.type !== APP_FRAME_BOOTSTRAP_SUBMITTED_MESSAGE
+          || typeof data.bootstrap_id !== "string"
+          || data.bootstrap_id !== activeBootstrapIdRef.current
+        ) return;
+        frame.dataset.maverickFrameBootstrapArmed = "true";
+      };
+
       window.addEventListener("message", handleAuthorizationRequired);
+      window.addEventListener("message", handleBootstrapSubmitted);
       launchFrame(launchPath, false);
       return () => {
         window.removeEventListener("message", handleAuthorizationRequired);
+        window.removeEventListener("message", handleBootstrapSubmitted);
         activeController?.abort();
         bootstrapPendingRef.current = false;
-        if (armTimer !== undefined) window.clearTimeout(armTimer);
+        pendingLaunchRef.current = null;
+        activeBootstrapIdRef.current = null;
         delete frame.dataset.maverickFrameBootstrapArmed;
         setMaverickFrameOrigin(frame, null, appId, frameScope);
       };
@@ -120,8 +144,23 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
         {...iframeProps}
         name={frameNameRef.current}
         onLoad={(event) => {
-          if (isolatedNavigationLoaded(event.currentTarget)) {
+          const frame = event.currentTarget;
+          const pendingLaunch = pendingLaunchRef.current;
+          if (pendingLaunch) {
+            pendingLaunchRef.current = null;
+            try {
+              postBootstrapLaunch(frame, pendingLaunch);
+            } catch (error) {
+              bootstrapPendingRef.current = false;
+              activeBootstrapIdRef.current = null;
+              delete frame.dataset.maverickFrameBootstrapArmed;
+              onLaunchError?.(error instanceof Error ? error : new Error("Unable to bootstrap isolated app frame."));
+            }
+            return;
+          }
+          if (isolatedNavigationLoaded(frame)) {
             bootstrapPendingRef.current = false;
+            activeBootstrapIdRef.current = null;
             onLoad?.(event);
           }
         }}
@@ -187,33 +226,20 @@ export async function requestAppFrameLaunch(
   };
 }
 
-function submitBootstrapForm(frame: HTMLIFrameElement, launch: AppFrameLaunch) {
-  const frameDocument = frame.contentDocument;
-  if (!frameDocument?.body) {
-    throw new Error("The isolated app frame is not ready for bootstrap.");
-  }
-  const form = frameDocument.createElement("form");
-  form.action = launch.bootstrap_url;
-  form.method = launch.method;
-  form.target = "_self";
-  form.hidden = true;
-  const ticket = frameDocument.createElement("input");
-  ticket.name = launch.ticket_field;
-  ticket.type = "hidden";
-  ticket.value = launch.ticket;
-  form.append(ticket);
-  frameDocument.body.append(form);
-  try {
-    form.submit();
-  } finally {
-    form.remove();
-  }
+function postBootstrapLaunch(frame: HTMLIFrameElement, pending: PendingAppFrameLaunch) {
+  if (!frame.contentWindow) throw new Error("The isolated app frame is not ready for bootstrap.");
+  frame.contentWindow.postMessage({
+    bootstrap_id: pending.bootstrapId,
+    launch: pending.launch,
+    type: APP_FRAME_BOOTSTRAP_MESSAGE,
+  }, "*");
 }
 
-function maverickLoadingDocument(theme: ShellEffectiveTheme): string {
+function maverickLoadingDocument(theme: ShellEffectiveTheme, revision: string): string {
   const background = theme === "light" ? "#f7f8fb" : "#070708";
   const accent = theme === "light" ? "#5f8f1e" : "#a0e84f";
-  return `<!doctype html><html style="color-scheme:${theme};background:${background}"><head><meta charset="utf-8"><meta name="color-scheme" content="${theme}"><style>html,body{width:100%;height:100%;margin:0;background:${background}}body{display:grid;place-items:center}.m{width:22px;height:22px;background:${accent};animation:m 1.6s ease-in-out infinite}@keyframes m{0%,100%{border-radius:50%;transform:scale(.82) rotate(0)}50%{border-radius:18%;transform:scale(1) rotate(135deg)}}</style></head><body><span class="m" aria-hidden="true"></span></body></html>`;
+  const parentOrigin = JSON.stringify(window.location.origin);
+  return `<!doctype html><html data-maverick-loader="${revision}" style="color-scheme:${theme};background:${background}"><head><meta charset="utf-8"><meta name="color-scheme" content="${theme}"><style>html,body{width:100%;height:100%;margin:0;background:${background}}body{display:grid;place-items:center}.m{width:22px;height:22px;background:${accent};animation:m 1.6s ease-in-out infinite}@keyframes m{0%,100%{border-radius:50%;transform:scale(.82) rotate(0)}50%{border-radius:18%;transform:scale(1) rotate(135deg)}}</style><script>(()=>{const parentOrigin=${parentOrigin};const bootstrapId="${revision}";let submitted=false;addEventListener("message",event=>{if(submitted||event.source!==parent||event.origin!==parentOrigin)return;const message=event.data;const launch=message&&message.type==="${APP_FRAME_BOOTSTRAP_MESSAGE}"&&message.bootstrap_id===bootstrapId&&message.launch;if(!launch||launch.method!=="POST"||launch.ticket_field!=="ticket"||typeof launch.bootstrap_url!=="string"||typeof launch.origin!=="string"||typeof launch.ticket!=="string"||!launch.ticket||launch.ticket.length>512||/\\s/u.test(launch.ticket))return;let action;try{action=new URL(launch.bootstrap_url)}catch{return}if(action.origin!==launch.origin)return;submitted=true;const form=document.createElement("form");form.action=action.href;form.method="POST";form.target="_self";form.hidden=true;const ticket=document.createElement("input");ticket.name="ticket";ticket.type="hidden";ticket.value=launch.ticket;form.append(ticket);document.body.append(form);parent.postMessage({bootstrap_id:bootstrapId,type:"${APP_FRAME_BOOTSTRAP_SUBMITTED_MESSAGE}"},parentOrigin);form.submit()})})();</script></head><body><span class="m" aria-hidden="true"></span></body></html>`;
 }
 
 function isolatedNavigationLoaded(frame: HTMLIFrameElement): boolean {

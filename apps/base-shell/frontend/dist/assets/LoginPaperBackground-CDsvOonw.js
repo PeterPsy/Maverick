@@ -1,4 +1,4 @@
-import{r as f,j as R}from"./index-CI9ld3WG.js";const P=`#version 300 es
+import{r as f,j as R}from"./index-D2ilXy6j.js";const P=`#version 300 es
 precision mediump float;
 
 layout(location = 0) in vec4 a_position;

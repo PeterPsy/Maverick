@@ -69,23 +69,18 @@ describe("isolated Maverick frame policy", () => {
 
   it("keeps the iframe on a themed local document until it self-submits the isolated bootstrap", async () => {
     const isolatedOrigin = "https://af-session.sidecars.maverick.test";
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+    let resolveLaunch!: (response: Response) => void;
+    const launchResponse = new Promise<Response>((resolve) => {
+      resolveLaunch = resolve;
+    });
+    vi.stubGlobal("fetch", vi.fn(() => launchResponse));
+    const launchPayload = {
       bootstrap_url: `${isolatedOrigin}/.well-known/maverick-app-frame-bootstrap`,
       method: "POST",
       origin: isolatedOrigin,
       ticket: "one-shot-ticket",
       ticket_field: "ticket",
-    }), { status: 200 })));
-    let submittedAction = "";
-    let submittedOwner: Document | null = null;
-    let submittedTarget = "";
-    let submittedTicket = "";
-    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function submit(this: HTMLFormElement) {
-      submittedAction = this.action;
-      submittedOwner = this.ownerDocument;
-      submittedTarget = this.target;
-      submittedTicket = this.querySelector<HTMLInputElement>('input[name="ticket"]')?.value || "";
-    });
+    };
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -97,15 +92,19 @@ describe("isolated Maverick frame policy", () => {
         launchPath: "/apps/storage/",
       }));
     });
-    await vi.waitFor(() => expect(submittedTicket).toBe("one-shot-ticket"));
 
     const frame = container.querySelector("iframe");
+    resolveLaunch(new Response(JSON.stringify(launchPayload), { status: 200 }));
+    await vi.waitFor(() => expect(frame?.dataset.maverickFrameOrigin).toBe(isolatedOrigin));
+    act(() => frame?.dispatchEvent(new Event("load")));
+    acknowledgeBootstrap(frame!);
+
     expect(frame?.getAttribute("src")).toBeNull();
     expect(frame?.srcdoc).toContain("#070708");
+    expect(frame?.srcdoc).toContain("maverick.app-frame.bootstrap");
+    expect(frame?.srcdoc).toContain('form.target="_self"');
     expect(frame?.dataset.maverickFrameOrigin).toBe(isolatedOrigin);
-    expect(submittedAction).toBe(`${isolatedOrigin}/.well-known/maverick-app-frame-bootstrap`);
-    expect(submittedOwner).toBe(frame?.contentDocument);
-    expect(submittedTarget).toBe("_self");
+    expect(frame?.dataset.maverickFrameBootstrapArmed).toBe("true");
     expect(fetch).toHaveBeenCalledWith(
       "/api/app-frames/browser-launch",
       expect.objectContaining({
@@ -163,5 +162,20 @@ function message(frame: HTMLIFrameElement, origin: string): MessageEvent {
     data: { type: "test" },
     origin,
     source: frame.contentWindow,
+  });
+}
+
+function acknowledgeBootstrap(frame: HTMLIFrameElement) {
+  const bootstrapId = frame.srcdoc.match(/data-maverick-loader="([^"]+)"/)?.[1];
+  if (!bootstrapId) throw new Error("Expected a local app-frame bootstrap relay.");
+  act(() => {
+    window.dispatchEvent(new MessageEvent("message", {
+      data: {
+        bootstrap_id: bootstrapId,
+        type: "maverick.app-frame.bootstrap-submitted",
+      },
+      origin: window.location.origin,
+      source: frame.contentWindow,
+    }));
   });
 }

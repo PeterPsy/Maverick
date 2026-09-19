@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
 import { AppFrameHost } from "../src/components/AppFrameHost";
-import { setMaverickFrameOrigin, type MaverickFrameScope } from "../src/iframePolicy";
+import type { MaverickFrameScope } from "../src/iframePolicy";
 import { StorageFileCacheBroker } from "../src/storageFileCacheBroker";
 import type { ShellThemeState } from "../src/theme";
 
@@ -309,18 +309,32 @@ async function waitForFrame(
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const frame = parent.querySelector(`iframe[title="${title}"]`);
     if (frame instanceof HTMLIFrameElement) {
-      if (!frame.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(frame, "https://af-test.sidecars.maverick.test", ownerAppId, frameScope);
+      const bootstrapId = frame.srcdoc.match(/data-maverick-loader="([^"]+)"/)?.[1];
+      if (frame.dataset.maverickFrameOrigin && bootstrapId) {
+        await act(async () => {
+          frame.dispatchEvent(new Event("load"));
+          await Promise.resolve();
+          window.dispatchEvent(new MessageEvent("message", {
+            data: {
+              bootstrap_id: bootstrapId,
+              type: "maverick.app-frame.bootstrap-submitted",
+            },
+            origin: window.location.origin,
+            source: frame.contentWindow,
+          }));
+          await Promise.resolve();
+          frame.dispatchEvent(new Event("load"));
+          await Promise.resolve();
+        });
+        return frame;
       }
-      frame.dataset.maverickFrameBootstrapArmed = "true";
-      return frame;
     }
     await act(async () => {
       await Promise.resolve();
       vi.advanceTimersByTime(0);
     });
   }
-  throw new Error(`Frame ${title} was not mounted.`);
+  throw new Error(`Frame ${title} for ${ownerAppId}/${frameScope.sessionGeneration} was not mounted.`);
 }
 
 function frameByTitle(parent: HTMLElement, title: string): HTMLIFrameElement {

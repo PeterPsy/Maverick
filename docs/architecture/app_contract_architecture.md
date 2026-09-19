@@ -1972,16 +1972,20 @@ This avoids losing navigation requests when an app iframe is freshly mounted aft
 - the receiving app must ignore messages that do not come through the
   exact-parent relay bound to the platform origin
 
-The physical iframe starts with an inert inline loading document whose
-background and branded activity mark are frozen from the shell's initial
-theme. It performs no network access and prevents the browser's default white
-canvas from appearing before bootstrap. Base Shell posts the registry
-`frontend_mount` (including frozen initial theme and mobile-layout parameters)
-to `/api/app-frames/browser-launch`, validates the returned distinct exact
-origin, then creates the body-only hidden bootstrap form inside that initial
-frame document and submits it to `_self`. Keeping the navigation inside the
-target browsing context is required for consistent WebKit/WKWebView behavior;
-the ticket is never placed in a URL. Core binds
+The physical iframe starts with a themed inline loading relay whose background
+and branded activity mark are frozen from the shell's initial theme. It makes
+no network request before receiving a validated launch and prevents the
+browser's default white canvas from appearing before bootstrap. Base Shell
+posts the registry `frontend_mount` (including frozen initial theme and
+mobile-layout parameters) to `/api/app-frames/browser-launch`, validates the
+returned distinct exact origin, and navigates the target iframe to a fresh copy
+of that local relay. The shell sends the validated launch only to that frame
+window. The relay accepts it only from its exact parent source and platform
+origin, creates the body-only hidden bootstrap form in its own document, and
+submits it to `_self`. The parent never reaches into the iframe DOM. Keeping
+form creation and navigation wholly inside the target browsing context is
+required for consistent macOS and iOS WKWebView behavior, including session
+recovery; the ticket is never placed in a URL. Core binds
 the resulting host-only `HttpOnly`, `SameSite=Strict` cookie to actor,
 workspace, app generation, platform login session, and exact host; logout or a
 stale binding revokes it. HTTP and WebSocket forwarding preserve the bound app

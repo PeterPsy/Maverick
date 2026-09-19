@@ -7,6 +7,7 @@ from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_pa
 from .context import from_envelope
 from .errors import AppError
 from .service import ACTIONS, READS, Service
+from .source_scope import SCOPED_ACTIONS
 
 FIELDS = {
     "operations.manifest": set(), "health": set(),
@@ -27,7 +28,7 @@ def validate(body, *, backend=False):
     action = body.get("action", "operations.manifest")
     if action not in (ACTIONS | {"plan.approve"} if backend else ACTIONS):
         raise AppError("unsupported_action")
-    if set(body) - (FIELDS[action] | {"action"}):
+    if set(body) - (FIELDS[action] | {"action"} | ({"source_app_id"} if action in SCOPED_ACTIONS else set())):
         raise AppError("unexpected_argument")
     for key, value in body.items():
         if key in {"limit", "offset", "expected_generation"}:
@@ -37,6 +38,8 @@ def validate(body, *, backend=False):
             if type(value) is not bool:
                 raise AppError("invalid_argument")
         elif not isinstance(value, str) or len(value) > 256:
+            raise AppError("invalid_argument")
+        elif key == "source_app_id" and not value.strip():
             raise AppError("invalid_argument")
     return {**body, "action": action}
 

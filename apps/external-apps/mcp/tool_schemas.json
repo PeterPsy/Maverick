@@ -9,6 +9,11 @@
             "type": "string",
             "maxLength": 256
           },
+          "source_app_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
           "source_entity_id": {
             "type": "string",
             "maxLength": 256

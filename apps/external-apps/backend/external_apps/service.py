@@ -9,6 +9,7 @@ from .files import publication_lock
 from .maintenance import capacity, cleanup
 from .probe import verify_https, verify_tls
 from .store import Store
+from .source_scope import assert_source_scope
 
 READS = {"operations.manifest", "list", "get", "health"}
 MUTATIONS = {"publish.plan", "publish.apply", "rollback.plan", "rollback.apply", "suspend", "archive", "deployment.configure"}
@@ -32,6 +33,7 @@ class Service:
         self.ctx.require_user(admin=action not in READS)
         if action not in ACTIONS | {"plan.approve"}:
             raise AppError("unsupported_action")
+        assert_source_scope(self.store, self.ctx, body)
         if action == "operations.manifest":
             return {"actions": sorted(ACTIONS), "approval": "authenticated_ui_only", "publish_format": "zip.v1",
                     "hosted_mutation_policy": "core_admission_required_otherwise_use_ui"}
@@ -39,7 +41,8 @@ class Service:
             try:
                 config = deployment.load(self.root)
                 return {"status": "configured", "domain": config["domain"],
-                        "installation_domain": config["installation_domain"], "public_verification": "per_release"}
+                        "installation_domain": config["installation_domain"], "selected_exporter_app_id": self.ctx.provider_id,
+                        "public_verification": "per_release"}
             except AppError as error:
                 return {"status": "not_configured", "error_code": error.code}
         if action == "list":
@@ -48,7 +51,8 @@ class Service:
             if type(offset) is not int or type(limit) is not int or not 1 <= limit <= 100:
                 raise AppError("invalid_pagination")
             # Catalog cap is 100; filter before pagination to avoid sparse pages.
-            items = [self.describe(app) for app in self.store.list("apps", limit=100)]
+            items = [self.describe(app) for app in self.store.list("apps", limit=100)
+                     if not body.get("source_app_id") or app["provider_id"] == body["source_app_id"]]
             query = str(body.get("query", "")).casefold()[:120]
             status = body.get("status", "")
             items = [app for app in items if (not query or query in app["name"].casefold())

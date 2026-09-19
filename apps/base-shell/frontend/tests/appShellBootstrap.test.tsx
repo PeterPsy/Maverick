@@ -11,7 +11,6 @@ import { revokeShellAuthorization, shellCacheLifecycle, shellRetryCoordinator } 
 
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
-  createWorkspace: vi.fn(),
   getPlatformSettings: vi.fn(),
   getProviderSetupSettings: vi.fn(),
   getPlatformStatus: vi.fn(),
@@ -33,7 +32,6 @@ vi.mock("../src/api", async (importOriginal) => {
   return {
     ...actual,
     configureActiveProvider: api.configureActiveProvider,
-    createWorkspace: api.createWorkspace,
     getPlatformSettings: api.getPlatformSettings,
     getProviderSetupSettings: api.getProviderSetupSettings,
     getPlatformStatus: api.getPlatformStatus,
@@ -68,6 +66,8 @@ vi.mock("../src/components/Sidebar", () => ({
     isLoading,
     isWorkspacesLoading,
     onReorderPinnedApps,
+    onOpenAppSettings,
+    onOpenApp,
     onWorkspaceChange,
     pinnedAppIds,
     workspaces,
@@ -75,6 +75,8 @@ vi.mock("../src/components/Sidebar", () => ({
     isLoading: boolean;
     isWorkspacesLoading: boolean;
     onReorderPinnedApps: (appIds: string[]) => Promise<void>;
+    onOpenAppSettings: () => void;
+    onOpenApp: (appId: string) => void;
     onWorkspaceChange: (workspaceId: string) => Promise<void>;
     pinnedAppIds: string[];
     workspaces: WorkspaceItem[];
@@ -86,9 +88,16 @@ vi.mock("../src/components/Sidebar", () => ({
       data-workspace-count={String(workspaces.length)}
       data-workspaces-loading={String(isWorkspacesLoading)}
     >
+      <button data-testid="app-settings" onClick={onOpenAppSettings} type="button" />
+      <button data-testid="open-mail" onClick={() => onOpenApp("mail")} type="button" />
       <button data-testid="reorder-pins" onClick={() => void onReorderPinnedApps(["mail", "crm", "chat"])} type="button" />
       <button data-testid="switch-workspace" onClick={() => void onWorkspaceChange("other")} type="button" />
     </aside>
+  ),
+}));
+vi.mock("../src/components/AppSettingsDialog", () => ({
+  AppSettingsDialog: ({ app, frameScope }: { app: AppRegistryItem; frameScope: { workspaceId: string } }) => (
+    <div data-testid="app-settings-dialog" data-app-id={app.app_id} data-workspace-id={frameScope.workspaceId} />
   ),
 }));
 vi.mock("../src/components/FloatingChatHost", () => ({
@@ -125,7 +134,6 @@ describe("AppShell bootstrap", () => {
     api.getPlatformSettings.mockRejectedValue(new Error("/api/settings/platform should not be part of shell bootstrap"));
     api.getProviderSetupSettings.mockResolvedValue(platformSettings());
     api.getPlatformStatus.mockRejectedValue(new Error("/api/status should not be part of shell bootstrap"));
-    api.createWorkspace.mockResolvedValue(workspace("created"));
     api.switchWorkspace.mockResolvedValue({ active_workspace_id: "other" });
   });
 
@@ -143,6 +151,31 @@ describe("AppShell bootstrap", () => {
       await Promise.resolve();
     });
   }
+
+  it("discards app settings on app switches, workspace changes and authorization loss", async () => {
+    api.listApps.mockResolvedValue({ items: [app("chat"), app("mail")] });
+    await renderShell();
+    const panel = () => container.querySelector("[data-testid='app-settings-dialog']");
+    const open = async () => { await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='app-settings']")!.click()); };
+    await open();
+    expect(panel()?.getAttribute("data-app-id")).toBe("chat");
+    await act(async () => container.querySelector<HTMLButtonElement>("[data-testid='open-mail']")!.click());
+    expect(panel()).toBeNull();
+    await open();
+    expect(panel()?.getAttribute("data-app-id")).toBe("mail");
+    api.getSession.mockResolvedValueOnce(sessionPayload("other"));
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("[data-testid='switch-workspace']")!.click();
+      await Promise.resolve(); await Promise.resolve();
+    });
+    expect(panel()).toBeNull();
+    await open();
+    expect(panel()?.getAttribute("data-workspace-id")).toBe("other");
+    vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockResolvedValue(completeCleanup());
+    await act(async () => { await revokeShellAuthorization(403); });
+    expect(panel()).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+  });
 
   it("shows the shell from session workspace without waiting for platform status", async () => {
     await act(async () => {

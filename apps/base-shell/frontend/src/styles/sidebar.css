@@ -249,8 +249,7 @@
 
 .bs-sidebar__rail-skeleton-logo,
 .bs-sidebar__brand-mark-skeleton,
-.bs-workspace-switcher__skeleton-frame,
-.bs-workspace-switcher__skeleton-button {
+.bs-workspace-switcher__skeleton-frame {
   position: relative;
   overflow: hidden;
   background: rgba(var(--maverick-contrast-rgb), 0.08);
@@ -258,8 +257,7 @@
 
 .bs-sidebar__rail-skeleton-logo::after,
 .bs-sidebar__brand-mark-skeleton::after,
-.bs-workspace-switcher__skeleton-frame::after,
-.bs-workspace-switcher__skeleton-button::after {
+.bs-workspace-switcher__skeleton-frame::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -622,17 +620,17 @@
     "opsz" 24;
 }
 
-.bs-workspace-switcher__create {
+.bs-sidebar__app-settings {
   display: grid;
   place-items: center;
 }
 
-.bs-workspace-switcher__create:hover {
+.bs-sidebar__app-settings:hover {
   background: var(--bs-sidebar-soft-surface-hover);
   color: var(--maverick-text);
 }
 
-.bs-workspace-switcher__create:active,
+.bs-sidebar__app-settings:active,
 .bs-sidebar__nav-button:active {
   transform: scale(0.985);
 }
@@ -994,7 +992,9 @@
   outline: none;
 }
 
-.bs-workspace-switcher__create {
+.bs-sidebar__app-settings {
+  flex: 0 0 2.65rem;
+  height: 2.65rem;
   width: 2.65rem;
   border: 1px solid var(--bs-sidebar-composer-border);
   border-radius: var(--bs-sidebar-cell-radius);
@@ -1007,14 +1007,13 @@
     transform 150ms ease;
 }
 
-.bs-workspace-switcher__create:focus,
-.bs-workspace-switcher__create:focus-visible {
+.bs-sidebar__app-settings:focus,
+.bs-sidebar__app-settings:focus-visible {
   outline: none;
   box-shadow: var(--bs-sidebar-inner-edge);
 }
 
-.bs-workspace-switcher__skeleton-frame,
-.bs-workspace-switcher__skeleton-button {
+.bs-workspace-switcher__skeleton-frame {
   pointer-events: none;
 }
 

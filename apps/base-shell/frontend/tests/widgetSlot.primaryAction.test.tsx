@@ -93,6 +93,33 @@ describe("WidgetSlot primary action protocol", () => {
     vi.clearAllMocks();
   });
 
+  it("replays context only for readiness from the exact mounted widget", async () => {
+    await act(async () => root.render(<PrimaryActionHarness onOpenSidebar={vi.fn()} />));
+    const iframe = await waitForIframe(container);
+    const source = iframe.contentWindow!;
+    const send = vi.spyOn(source, "postMessage");
+    const origin = iframe.dataset.maverickFrameOrigin!;
+    async function ready(sender: MessageEventSource, owner = ownerAppId, from = origin) {
+      await act(async () => window.dispatchEvent(new MessageEvent("message", {
+        source: sender, origin: from,
+        data: { type: "maverick.widget.ready", owner_app_id: owner, widget_id: widgetId },
+      })));
+    }
+    await act(async () => {
+      iframe.dispatchEvent(new Event("load"));
+      await new Promise(resolve => window.setTimeout(resolve, 0));
+    });
+    send.mockClear();
+    await ready(window);
+    await ready(source, "wrong-owner");
+    await ready(source, ownerAppId, "https://foreign.invalid");
+    expect(send).not.toHaveBeenCalled();
+    await ready(source);
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      type: "maverick.widget.context-changed", owner_app_id: ownerAppId, widget_id: widgetId,
+    }), origin);
+  });
+
   it("accepts state only from the mounted footer frame and invokes that frame from the enabled header action", async () => {
     const openSidebar = vi.fn();
     await act(async () => {

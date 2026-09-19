@@ -639,14 +639,6 @@ export function listWorkspaces(signal?: AbortSignal, retryKey?: string): Promise
     : requestJson<WorkspacesPayload>("/api/workspaces", { signal });
 }
 
-export function createWorkspace(name: string): Promise<WorkspaceItem> {
-  return requestJson<WorkspaceItem>("/api/workspaces", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-}
-
 export function switchWorkspace(workspace_id: string): Promise<{ active_workspace_id: string }> {
   return requestJson<{ active_workspace_id: string }>("/api/workspaces/active", {
     method: "POST",

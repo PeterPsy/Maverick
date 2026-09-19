@@ -2,17 +2,13 @@ import type { WorkspaceItem } from "../api";
 
 export function WorkspaceSwitcher({
   activeWorkspaceId,
-  canCreateWorkspace,
   isLoading = false,
   onWorkspaceChange,
-  onWorkspaceCreate,
   workspaces,
 }: {
   activeWorkspaceId: string;
-  canCreateWorkspace: boolean;
   isLoading?: boolean;
   onWorkspaceChange: (workspaceId: string) => Promise<void> | void;
-  onWorkspaceCreate: (name: string) => Promise<void> | void;
   workspaces: WorkspaceItem[];
 }) {
   const hasActiveWorkspace = workspaces.some((workspace) => workspace.workspace_id === activeWorkspaceId);
@@ -24,14 +20,6 @@ export function WorkspaceSwitcher({
     await onWorkspaceChange(workspaceId);
   }
 
-  async function handleCreate() {
-    const name = window.prompt("Nome del nuovo workspace");
-    if (!name?.trim()) {
-      return;
-    }
-    await onWorkspaceCreate(name.trim());
-  }
-
   if (isLoading) {
     return (
       <div className="bs-workspace-switcher" aria-hidden="true">
@@ -39,7 +27,6 @@ export function WorkspaceSwitcher({
           <div className="bs-workspace-switcher__select-frame bs-workspace-switcher__skeleton-frame">
             <span className="bs-workspace-switcher__skeleton-line" />
           </div>
-          {canCreateWorkspace ? <span className="bs-workspace-switcher__create bs-workspace-switcher__skeleton-button" /> : null}
         </div>
       </div>
     );
@@ -60,11 +47,6 @@ export function WorkspaceSwitcher({
           </select>
           <span aria-hidden="true" className="material-symbols-rounded bs-workspace-switcher__chevron">expand_more</span>
         </div>
-        {canCreateWorkspace ? (
-          <button aria-label="Crea workspace" className="bs-workspace-switcher__create" onClick={handleCreate} type="button">
-            <span aria-hidden="true" className="material-symbols-rounded">add</span>
-          </button>
-        ) : null}
       </div>
     </div>
   );

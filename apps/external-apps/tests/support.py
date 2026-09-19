@@ -48,8 +48,8 @@ def prepare(service, *, app_id=None, content="one", format_="static_bundle"):
     callback = {"action": "export.completed", "plan_id": plan["id"], "request_id": plan["id"],
                 "dependency_alias": "static-exporter", "request": initial["dependency_backend_requests"][0],
                 "dependency_backend_status": "completed", "dependency_backend_result": {
-                    "dependency_provider_app_id": "selected-exporter", "status_code": 200, "json": exported}}
-    worker = Service(service.root, context(service.ctx.workspace_id, surface="dependency_backend_request_callback"))
+                    "dependency_provider_app_id": service.ctx.provider_id, "status_code": 200, "json": exported}}
+    worker = Service(service.root, replace(service.ctx, surface="dependency_backend_request_callback"))
     return worker.handle(callback)["plan"]
 
 

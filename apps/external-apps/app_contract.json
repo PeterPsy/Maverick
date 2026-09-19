@@ -6,7 +6,16 @@
   "description": "Publish immutable static Website Studio releases on an isolated public origin.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
-  "provides": [],
+  "provides": [
+    {
+      "interface": "external.surfaces.settings",
+      "version": "1",
+      "description": "App-scoped public surface management for the shell settings panel.",
+      "surfaces": [
+        "widget"
+      ]
+    }
+  ],
   "requires": [
     {
       "alias": "static-exporter",
@@ -25,7 +34,7 @@
     "platform_roles": null
   },
   "presentation": {
-    "frontend_role": "workspace"
+    "frontend_role": "supporting"
   },
   "permissions": {
     "secrets": {
@@ -131,5 +140,23 @@
     "data": false,
     "repair_only": false
   },
-  "widgets": []
+  "widgets": [
+    {
+      "widget_id": "external-surfaces-settings",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.app.external.surfaces"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/external-surfaces-settings",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ]
 }

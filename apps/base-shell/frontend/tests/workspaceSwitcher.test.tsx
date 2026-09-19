@@ -16,9 +16,7 @@ describe("WorkspaceSwitcher", () => {
       root.render(
         <WorkspaceSwitcher
           activeWorkspaceId="default"
-          canCreateWorkspace={false}
           onWorkspaceChange={() => undefined}
-          onWorkspaceCreate={() => undefined}
           workspaces={[]}
         />,
       );
@@ -32,21 +30,19 @@ describe("WorkspaceSwitcher", () => {
     container.remove();
   });
 
-  it("delegates workspace mutations to the shell owner", async () => {
+  it("switches existing workspaces without offering workspace creation", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
     const onWorkspaceChange = vi.fn().mockResolvedValue(undefined);
-    const onWorkspaceCreate = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("prompt", vi.fn(() => " New workspace "));
+    const prompt = vi.fn();
+    vi.stubGlobal("prompt", prompt);
 
     act(() => {
       root.render(
         <WorkspaceSwitcher
           activeWorkspaceId="default"
-          canCreateWorkspace
           onWorkspaceChange={onWorkspaceChange}
-          onWorkspaceCreate={onWorkspaceCreate}
           workspaces={[
             {
               workspace_id: "default",
@@ -80,12 +76,8 @@ describe("WorkspaceSwitcher", () => {
     expect(onWorkspaceChange).toHaveBeenCalledOnce();
     expect(onWorkspaceChange).toHaveBeenCalledWith("other");
 
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("[aria-label='Crea workspace']")?.click();
-      await Promise.resolve();
-    });
-    expect(onWorkspaceCreate).toHaveBeenCalledOnce();
-    expect(onWorkspaceCreate).toHaveBeenCalledWith("New workspace");
+    expect(container.querySelector("button")).toBeNull();
+    expect(prompt).not.toHaveBeenCalled();
 
     act(() => root.unmount());
     container.remove();

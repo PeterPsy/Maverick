@@ -52,6 +52,16 @@ describe("Sidebar widget mount gate", () => {
     container.remove();
   });
 
+  it("offers current-app settings, not workspace creation, also for non-admin users", async () => {
+    const openSettings = vi.fn();
+    await renderSidebar(root, primaryActionStateChange, { isOpen: true, onOpenAppSettings: openSettings, user: { platform_role: "user", username: "member" } as SessionUser });
+    const button = container.querySelector<HTMLButtonElement>('.bs-sidebar__app-settings')!;
+    expect(button.getAttribute("aria-label")).toBe("Impostazioni di chat");
+    await act(async () => button.click());
+    expect(openSettings).toHaveBeenCalledOnce();
+    expect(container.querySelector('.bs-workspace-switcher__create')).toBeNull();
+  });
+
   it("does not mount primary or footer widgets while the detail layer is closed", async () => {
     await renderSidebar(root, primaryActionStateChange, { isOpen: false, isPinned: false });
 
@@ -181,7 +191,7 @@ function sidebarElement(
       onSidebarDetailsWidthChange={vi.fn()}
       onThemeModeChange={vi.fn()}
       onWorkspaceChange={vi.fn()}
-      onWorkspaceCreate={vi.fn()}
+      onOpenAppSettings={vi.fn()}
       pinnedAppIds={["chat"]}
       railMetrics={{}}
       shellTheme={shellTheme}

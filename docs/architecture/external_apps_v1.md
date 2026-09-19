@@ -22,6 +22,17 @@ bounded ZIP/base64 response to the private dependency callback (2 MiB ZIP,
 8 MiB expanded, 512 files). Build preparation remains Website Studio-owned.
 PHP, SSR, external authentication and arbitrary backend execution are excluded.
 
+## Per-app management
+
+External Apps is a supporting app. Its `external.surfaces.settings` v1 widget is
+mounted in the current app’s settings dialog beside the shell workspace selector,
+not as a separate rail destination. Base Shell discovers the capability rather
+than importing this app’s implementation. See `app_settings.md` for the precise
+widget and scope contract. `source_app_id` narrows authenticated list/get/plan and
+mutation lookups to the selected source app; it cannot override Core dependency
+selection. Unsupported apps have no public enable switch. Existing publication,
+confirmation and revocation semantics below are unchanged.
+
 ## Publication authority
 
 App-owned SQLite contains catalog, immutable release metadata, plans, operations

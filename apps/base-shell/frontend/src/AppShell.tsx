@@ -4,7 +4,6 @@ import { flushSync } from "react-dom";
 import {
   AppRegistryItem,
   configureActiveProvider,
-  createWorkspace,
   getProviderSetupSettings,
   getSession,
   listApps,
@@ -59,6 +58,7 @@ import { LoginScreen } from "./components/LoginScreen";
 import { MobileShellHeader } from "./components/MobileShellHeader";
 import { MobilePinnedAppsPanel } from "./components/MobilePinnedAppsPanel";
 import { Sidebar } from "./components/Sidebar";
+import { AppSettingsDialog } from "./components/AppSettingsDialog";
 import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
 import { ShellPendingIndicator } from "./components/ShellPendingIndicator";
 import { WorkspaceView } from "./components/WorkspaceView";
@@ -81,6 +81,7 @@ export function AppShell() {
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [settings, setSettings] = useState<ProviderSetupSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
+  const [appSettingsScope, setAppSettingsScope] = useState<{ appId: string; sessionGeneration: string } | null>(null);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
   const [sidebarDetailsWidthPx, setSidebarDetailsWidthPx] = useState(() => clampSidebarDetailsWidth(initialSession.sidebarDetailsWidthPx));
@@ -141,6 +142,7 @@ export function AppShell() {
         })
       : null
   ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId]);
+  useEffect(() => { setAppSettingsScope(null); }, [activeAppId, frameScope?.sessionGeneration]);
   useDeviceUseBroker(frameScope);
   const cancelShellLoading = useCallback(({ resetRecovery = false } = {}) => {
     shellLoadAbortRef.current?.abort();
@@ -752,14 +754,6 @@ export function AppShell() {
     }
   }
 
-  async function handleWorkspaceCreate(name: string) {
-    try {
-      await runWorkspaceMutation(() => createWorkspace(name));
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Unable to create workspace.");
-    }
-  }
-
   function handleSidebarModeChange(nextMode: SidebarMode) {
     setSidebarMode(nextMode);
     if (nextMode === "fixed" && !isMobileLayout) {
@@ -881,7 +875,9 @@ export function AppShell() {
       const rollbackAppIds = pinnedAppsOrDefault(persistedPinnedAppIdsRef.current);
       pinnedAppIdsRef.current = rollbackAppIds;
       setPinnedAppIds(rollbackAppIds);
-      setError(saveError instanceof Error ? saveError.message : "Unable to save app rail order.");
+      const message = saveError instanceof Error ? saveError.message : "Unable to save app rail order.";
+      setError(message);
+      return message;
     }
   }
 
@@ -975,9 +971,11 @@ export function AppShell() {
         onOpenSidebar={openSidebar}
         onPrimaryActionStateChange={setMobilePrimaryAction}
         onOpenSettings={openSettingsApp}
+        onOpenAppSettings={() => {
+          if (activeApp) setAppSettingsScope({ appId: activeApp.app_id, sessionGeneration: frameScope.sessionGeneration });
+        }}
         onReorderPinnedApps={handlePinnedAppsReorder}
         onWorkspaceChange={handleWorkspaceChange}
-        onWorkspaceCreate={handleWorkspaceCreate}
         pinnedAppIds={pinnedAppIds}
         railMetrics={shellSidebarMetrics}
         sidebarDetailsWidthPx={sidebarDetailsWidthPx}
@@ -989,6 +987,22 @@ export function AppShell() {
         user={authenticatedSession.user}
         workspaces={workspaces}
       />
+      {activeApp && appSettingsScope?.appId === activeApp.app_id && appSettingsScope.sessionGeneration === frameScope.sessionGeneration && <AppSettingsDialog
+        key={`${frameScope.sessionGeneration}:${activeApp.app_id}`}
+        app={activeApp}
+        apps={apps}
+        frameScope={frameScope}
+        isPinned={pinnedAppIds.includes(activeApp.app_id)}
+        isLastPinned={pinnedAppIds.length === 1 && pinnedAppIds[0] === activeApp.app_id}
+        onClose={() => setAppSettingsScope(null)}
+        onOpenApp={openApp}
+        onTogglePin={async () => {
+          const next = pinnedAppIds.includes(activeApp.app_id) ? pinnedAppIds.filter(id => id !== activeApp.app_id) : [...pinnedAppIds, activeApp.app_id];
+          const failure = await handlePinnedAppsReorder(next);
+          if (failure) throw new Error(failure);
+        }}
+        shellTheme={shellTheme}
+      />}
       <FloatingChatHost
         activeApp={activeApp}
         activeAppParams={activeAppParams}

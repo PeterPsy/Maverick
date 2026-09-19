@@ -46,12 +46,12 @@ export function Sidebar({
   onOpenSidebar,
   onPrimaryActionStateChange,
   onOpenSettings,
+  onOpenAppSettings,
   onReorderPinnedApps,
   onSidebarDetailsWidthChange,
   onSidebarResizeActiveChange,
   onThemeModeChange = () => undefined,
   onWorkspaceChange,
-  onWorkspaceCreate,
   pinnedAppIds,
   railMetrics,
   sidebarDetailsWidthPx,
@@ -78,12 +78,12 @@ export function Sidebar({
   onOpenSidebar: () => void;
   onPrimaryActionStateChange: (state: WidgetPrimaryActionState) => void;
   onOpenSettings: () => void;
+  onOpenAppSettings: () => void;
   onReorderPinnedApps: (appIds: string[]) => void;
   onSidebarDetailsWidthChange: (widthPx: number) => void;
   onSidebarResizeActiveChange?: (active: boolean) => void;
   onThemeModeChange?: (mode: ShellThemeMode) => void;
   onWorkspaceChange: (workspaceId: string) => Promise<void> | void;
-  onWorkspaceCreate: (name: string) => Promise<void> | void;
   pinnedAppIds: string[];
   railMetrics: CSSProperties;
   sidebarDetailsWidthPx: number;
@@ -342,12 +342,20 @@ export function Sidebar({
             )}
             <WorkspaceSwitcher
               activeWorkspaceId={activeWorkspaceId}
-              canCreateWorkspace={user?.platform_role === "admin"}
               isLoading={isWorkspacesLoading}
               onWorkspaceChange={onWorkspaceChange}
-              onWorkspaceCreate={onWorkspaceCreate}
               workspaces={workspaces}
             />
+            <button
+              aria-label={activeApp ? `Impostazioni di ${activeApp.name}` : "Impostazioni app"}
+              title={activeApp ? `Impostazioni di ${activeApp.name}` : "Impostazioni app"}
+              className="bs-sidebar__app-settings"
+              disabled={!activeApp || isLoading}
+              onClick={onOpenAppSettings}
+              type="button"
+            >
+              <span aria-hidden="true" className="material-symbols-rounded">settings</span>
+            </button>
           </div>
 
         </div>

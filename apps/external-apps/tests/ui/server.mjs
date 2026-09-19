@@ -8,7 +8,8 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, 'http://localhost');
-    const name = url.pathname.includes('/assets/') ? url.pathname.slice(url.pathname.indexOf('/assets/') + 1) : 'index.html';
+    const name = url.pathname.includes('/assets/') ? url.pathname.slice(url.pathname.indexOf('/assets/') + 1)
+      : url.pathname.includes('/external-surfaces-settings/') ? 'widgets/external-surfaces-settings/index.html' : 'index.html';
     const path = resolve(root, name);
     if (!path.startsWith(root + sep)) throw new Error('invalid path');
     response.setHeader('Content-Type', mime[extname(path)] || 'application/octet-stream');

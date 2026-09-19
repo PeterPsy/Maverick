@@ -9,16 +9,28 @@ Repository decision: [`external_apps_v1.md`](../../docs/architecture/external_ap
 1. Install/enable the platform app through Maverick App Store. Do not register it
    as a workspace-local app. Select an enabled Website Studio provider for the
    `static-exporter` dependency in App Store.
-2. An administrator supplies the Maverick installation hostname in External Apps;
-   public names derive as `<app>.apps.<hostname>`. Saving
+2. An administrator supplies the Maverick installation hostname through the
+   authenticated `deployment.configure` action; public names derive as
+   `<app>.apps.<hostname>`. Saving
    this value does **not** provision DNS, TLS, ingress or a public service.
 3. Complete a passing static or Node build in Website Studio. PHP/SSR are rejected.
-4. Enter site/build ids, name and static/SPA routing; prepare the publication.
+4. Open Website Studio → sidebar gear → **Superfici esterne**. Enter site/build
+   ids, name and static/SPA routing; prepare the publication.
 5. Review URL, exact release digest, revision, size and replaced release. Confirm
    in the authenticated UI, then publish. All exported files become public.
 6. Suspend blocks subsequent requests, including revalidation and retained asset
    URLs. Rollback prepares the retained previous release; it requires a new human
    approval. Archive retains history and cannot be republished in V1.
+
+External Apps is a **supporting** app, not a separate workspace rail destination.
+Its settings widget supplies `external.surfaces.settings` v1 through the existing
+`base-shell` widget protocol (`shell.app.external.surfaces`). Each app’s panel
+only lists/manages that source app’s publications. The optional `source_app_id`
+argument narrows catalog, plans and mutations; it is not actor authority or a
+provider selector. Only the Core-selected exporter can prepare new publications.
+Unsupported apps show an unavailable state; no private app is exposed implicitly.
+Global DNS/TLS configuration remains installation-owned, not a per-app override.
+See [`app_settings.md`](../../docs/architecture/app_settings.md).
 
 State (`draft`, `published`, `suspended`, `archived`) and HTTP health are separate.
 TLS must be ready before switching a binding; a pending certificate leaves the
@@ -151,8 +163,8 @@ Core frontend build service; lifecycle hooks initialize only app-owned data.
 
 ## Contract Notes
 
-No widgets, skills, reference entities, persisted view state, workspace export
-or workspace import are declared in V1. The common reference manifest is empty
+One app-settings widget is declared. No skills, reference entities, persisted
+view state, workspace export or workspace import are declared in V1. The common reference manifest is empty
 schema metadata, not a public catalog. No secrets or anonymous Core routes are
 requested. The portable app and operator-deployed Linux public service have
 separate lifecycle responsibilities; disabling the app never starts a service.

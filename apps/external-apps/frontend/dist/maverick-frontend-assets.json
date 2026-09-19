@@ -1,26 +1,47 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "e270f0ebe32c748db34400516920aa03807fc57d206ac6dc6f74acf15b834cfc",
+  "build_id": "c4cb2913b5e76d4e71af00f27c7a5f430fafcac5c30ed5923334d9166c09caed",
   "entrypoints": [
-    "index.html"
+    "index.html",
+    "widgets/external-surfaces-settings/index.html"
   ],
   "immutable": [
     {
-      "path": "assets/index-DMdQIqeb.js",
-      "sha256": "1c3a139504611f1cb6002101f863d40aa0badd3e1c840e5c7a823f40cd8eedbc",
-      "size_bytes": 237445
+      "path": "assets/app-Cl2MYdLT.js",
+      "sha256": "61caec018d48bf9e7bdf05bf55041db780f0ddffb7f5cbed36f2824b0c61681b",
+      "size_bytes": 155
     },
     {
-      "path": "assets/index-dVdNvzy6.css",
-      "sha256": "4bdbc66d3ce59b3a80c5d1fb501cba648c1d385cec92116a1919c9c4cd8b2a67",
-      "size_bytes": 4583
+      "path": "assets/externalSettings-CRWu_O0i.js",
+      "sha256": "ecd2fae3f7dd256669865b885e414255f21df58f786a469d632be6ab0c3a0ff7",
+      "size_bytes": 1144
+    },
+    {
+      "path": "assets/externalSettings-tmjyjPtE.css",
+      "sha256": "fbefaef5f5c8037b576fdb6b169185ec2ec9ca04ae2f482ae9853731b21c13b0",
+      "size_bytes": 718
+    },
+    {
+      "path": "assets/styles-DbaIcpsJ.js",
+      "sha256": "3273d7468f8efadd25672d1958d36f0a7d46d6585e6b747c1db0f4e400f08db2",
+      "size_bytes": 238018
     }
   ],
   "revalidated": [
     {
+      "path": "assets/styles-dVdNvzy6.css",
+      "sha256": "4bdbc66d3ce59b3a80c5d1fb501cba648c1d385cec92116a1919c9c4cd8b2a67",
+      "size_bytes": 4583
+    },
+    {
       "path": "index.html",
-      "sha256": "3b001af9e1c3557027e9e533b58f39a463f87ebaf6ae929db94e3f986fa8fc16",
-      "size_bytes": 622
+      "sha256": "57512dd2095d427c5664d3b4c003c514a22a24826e97c4cee1872938f1f543b9",
+      "size_bytes": 717
+    },
+    {
+      "path": "widgets/external-surfaces-settings/index.html",
+      "sha256": "ddf526e6a47ad8d5e8388049d95632ae3e9d8c9e166f14b540bd788b941f8c7b",
+      "size_bytes": 791
     }
   ]
 }

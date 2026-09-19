@@ -82,6 +82,7 @@ export function WidgetSlot({
   frameScope,
   hostAppId,
   label,
+  emptyMessage,
   isActive = true,
   onCloseSidebar,
   onActiveThreadChange,
@@ -102,6 +103,7 @@ export function WidgetSlot({
   frameScope: MaverickFrameScope;
   hostAppId: string;
   label: string;
+  emptyMessage?: string;
   isActive?: boolean;
   onCloseDock?: () => void;
   onCloseSidebar?: () => void;
@@ -296,6 +298,10 @@ export function WidgetSlot({
         return;
       }
       const payload = event.data as WidgetMessagePayload;
+      if (payload.type === "maverick.widget.ready" && isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)) {
+        postWidgetContextChanged();
+        return;
+      }
       if (
         ["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(payload.type || "") &&
         typeof payload.owner_app_id === "string" &&
@@ -618,13 +624,13 @@ export function WidgetSlot({
       : size === "compact"
         ? { height: compactSlotHeight, maxHeight: compactSlotHeight, minHeight: compactSlotHeight }
         : undefined;
-  const supportsShellPending = contentKind === "shell.sidebar.primary";
+  const supportsShellPending = contentKind === "shell.sidebar.primary" || emptyMessage !== undefined;
 
   if (!widget || !contextToken || (size === "overlay" && activeAppId && activeAppId === widget.owner_app_id)) {
     if (isResolvingWidget && supportsShellPending) {
       return <WidgetSlotPending label={label} size={size} style={slotStyle} />;
     }
-    return error ? <p className="bs-widget-slot__fallback">{error}</p> : null;
+    return error || emptyMessage ? <p className="bs-widget-slot__fallback">{error || emptyMessage}</p> : null;
   }
 
   const widgetFrameKey = `${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`;

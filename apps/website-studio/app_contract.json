@@ -6,7 +6,14 @@
   "description": "Import, index, edit, preview, approve, and maintain workspace website projects inside Maverick.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
-  "provides": [],
+  "provides": [
+    {
+      "interface": "external.static-bundle.export",
+      "version": "1",
+      "description": "Export a bounded, self-contained immutable static ZIP from an existing passing build.",
+      "surfaces": ["backend"]
+    }
+  ],
   "requires": [
     {
       "alias": "storage-writer",

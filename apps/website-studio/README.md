@@ -140,3 +140,24 @@ python3 -m unittest apps/website-studio/tests/test_phase_acceptance_smoke.py -v
 WEBSITE_STUDIO_STORAGE_CLI_SMOKE=1 \
 python3 -m unittest apps/website-studio/tests/test_phase_acceptance_smoke.py -v
 ```
+
+## External static export v1
+
+Website Studio provides `external.static-bundle.export` version `1` through the
+official dependency backend. External Apps selects this interface rather than
+reading Website Studio's private files. `external.static-bundle.export` takes a
+site id, existing passing build id, requested static/SPA format and consumer-minted
+release id. It returns a bounded ZIP/base64 envelope with a source revision and
+SHA-256; no host path or preview session is exposed.
+
+The exporter rejects stale builds, PHP/server runtimes, unsupported output and
+private Maverick routes. It selects only static web output, excludes development
+material, and prepares release-scoped asset URLs. It does not invoke Website
+Studio's existing publish/approval workflow or mistake its `managed_static`
+source snapshot for a public deployment. Export and public activation remain
+different operations. The exact limits and deployment/confirmation boundaries
+are in `docs/architecture/external_apps_v1.md` at repository root.
+
+```bash
+python3 -m unittest discover -s apps/website-studio/tests -p test_external_export.py -v
+```

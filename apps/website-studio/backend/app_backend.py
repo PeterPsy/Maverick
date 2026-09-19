@@ -75,7 +75,23 @@ body = {
     "_app_secrets": dict(payload.raw.get("app_secrets") or {}),
     "_app_secret_errors": list(payload.raw.get("app_secret_errors") or []),
 }
-status_code, result = handle_action(Path(payload.data_root), body)
+if action == "external.static-bundle.export":
+    from external_export import export_static_bundle
+    from external_export_assets import ExportError
+
+    if payload.raw.get("surface") == "secret_selector":
+        status_code, result = 200, {"requires_secrets": False}
+    elif payload.raw.get("surface") != "dependency_backend":
+        status_code, result = 403, {"error_code": "dependency_surface_required"}
+    else:
+        try:
+            status_code, result = 200, export_static_bundle(Path(payload.data_root), request_body)
+        except ExportError as error:
+            status_code, result = 400, {"error_code": str(error)}
+        except (OSError, ValueError, KeyError):
+            status_code, result = 400, {"error_code": "source_not_exportable"}
+else:
+    status_code, result = handle_action(Path(payload.data_root), body)
 response = {"status_code": status_code}
 response_payload = dict(result)
 file_response = response_payload.pop("file_response", None)

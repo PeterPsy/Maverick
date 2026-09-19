@@ -12,8 +12,6 @@ Current ADR set:
 - `0004-committed-dist-policy.md`
 - `0005-secret-storage-model.md`
 - `0006-mit-licensing-choice.md`
-- `0007-video-studio-remotion-4-license-and-version.md`
-- `0008-video-studio-ffmpeg-build-and-distribution.md`
 - `0009-design-studio-opendesign-incremental-cycle.md`
 - `0010-agentic-multimodel-runtime.md`
 - `0011-pwa-cache-and-offline-boundaries.md`

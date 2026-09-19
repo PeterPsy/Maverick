@@ -32,7 +32,7 @@ class AppRuntimeCleanupRequestsTest(unittest.TestCase):
             session_id="hidden-child",
             workspace_id="default",
             agent_id="child-agent",
-            source_app_id="video-studio",
+            source_app_id="sample-consumer",
             session_kind="inter_agent_participant",
             thread_visibility="hidden",
             start_path=repo_root,
@@ -43,7 +43,7 @@ class AppRuntimeCleanupRequestsTest(unittest.TestCase):
             app_runtime_cleanup_requests._runtime_cleanup_session_ids_for_request(
                 state,
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
                 item={"runtime_session_id": "hidden-child"},
             )
 
@@ -64,7 +64,7 @@ class AppRuntimeCleanupRequestsTest(unittest.TestCase):
             app_runtime_cleanup_requests._runtime_cleanup_session_ids_for_request(
                 state,
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
                 item={"runtime_session_id": "foreign-session"},
             )
 

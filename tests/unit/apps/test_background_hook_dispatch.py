@@ -14,9 +14,9 @@ from core.apps.errors import AppLifecycleError
 class BackgroundHookDispatchTestCase(unittest.TestCase):
     def test_missing_app_source_does_not_block_healthy_app_hook(self) -> None:
         missing_binding = SimpleNamespace(
-            app_id="video-studio",
+            app_id="sample-consumer",
             status="enabled",
-            data_root="/workspaces/default/data/video-studio",
+            data_root="/workspaces/default/data/sample-consumer",
         )
         healthy_binding = SimpleNamespace(
             app_id="senses",
@@ -35,7 +35,7 @@ class BackgroundHookDispatchTestCase(unittest.TestCase):
         state = SimpleNamespace(app_store=object(), app_event_bus=None)
 
         def resolve_surface(_store, *, binding, start_path=None, surface_cache=None):
-            if binding.app_id == "video-studio":
+            if binding.app_id == "sample-consumer":
                 raise AppLifecycleError("source root is missing")
             return Path("/apps/senses"), parsed
 

@@ -49,7 +49,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
             session_id=session_id,
             workspace_id="default",
             agent_id="video-agent",
-            source_app_id="video-studio",
+            source_app_id="sample-consumer",
             start_path=repo_root,
         )
         now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
@@ -90,7 +90,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
                 state,
                 request={"turn_id": "app-owned-turn"},
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
             )
 
         self.assertEqual(interrupt.call_count, 2)
@@ -139,7 +139,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
                 state,
                 request={"turn_id": "app-worker-claims-outbox-turn"},
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
             )
 
         cancelled_events = [
@@ -182,7 +182,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
                         "reason": f"{owner} reason",
                     },
                     workspace_id="default",
-                    app_id="video-studio",
+                    app_id="sample-consumer",
                 )
             except BaseException as error:  # pragma: no cover - asserted below
                 errors.append(error)
@@ -263,7 +263,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
                 state,
                 request={"turn_id": cancelled.turn_id},
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
             )
 
         cancelled_events = [
@@ -303,7 +303,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
                 state,
                 request={"turn_id": "app-completion-wins-turn"},
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
             )
 
         self.assertFalse(result["interrupted"])
@@ -345,7 +345,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
                         state,
                         request={"turn_id": "app-concurrent-interrupt-turn"},
                         workspace_id="default",
-                        app_id="video-studio",
+                        app_id="sample-consumer",
                     )
                 )
             except BaseException as error:  # pragma: no cover - asserted below

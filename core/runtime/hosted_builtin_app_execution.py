@@ -35,7 +35,6 @@ HOSTED_BUILTIN_APP_IDS = (
     "speech",
     "storage",
     "vault",
-    "video-studio",
     "website-studio",
 )
 _SURFACE_PATHS = {

@@ -86,7 +86,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             result = runtime_requests._invoke_dependency_backend(
                 self._state(),
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
                 dependency_alias="storage-local-path",
                 body={"action": "file.local_path.resolve"},
                 start_path=Path(__file__).resolve().parents[3],
@@ -98,7 +98,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         self.assertEqual(payload["surface"], "dependency_backend")
         self.assertEqual(payload["effective_mode"], "full-access")
         self.assertEqual(payload["app_id"], "storage")
-        self.assertEqual(payload["consumer_app_id"], "video-studio")
+        self.assertEqual(payload["consumer_app_id"], "sample-consumer")
         self.assertEqual(payload["dependency_alias"], "storage-local-path")
         self.assertTrue(str(payload["uploaded_storage_root"]).endswith("workspaces/default/storage/uploaded"))
         self.assertTrue(str(payload["generated_storage_root"]).endswith("workspaces/default/storage/generated"))
@@ -192,7 +192,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 runtime_requests._invoke_dependency_backend(
                     self._state(),
                     workspace_id="default",
-                    app_id="video-studio",
+                    app_id="sample-consumer",
                     dependency_alias="storage-local-path",
                     body={"action": "file.local_path.resolve"},
                     start_path=Path(__file__).resolve().parents[3],
@@ -250,7 +250,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             result = runtime_requests._invoke_dependency_backend(
                 self._state(),
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
                 dependency_alias="storage-local-path",
                 body={"action": "file.local_path.resolve", "stable_storage_file_id": "file_drive"},
                 start_path=Path(__file__).resolve().parents[3],
@@ -296,10 +296,10 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 SimpleNamespace(),
                 result=result,
                 workspace_id="default",
-                app_id="video-studio",
-                source_root=Path("/apps/video-studio"),
+                app_id="sample-consumer",
+                source_root=Path("/apps/sample-consumer"),
                 backend_entrypoint=None,
-                data_root="workspaces/default/data/video-studio",
+                data_root="workspaces/default/data/sample-consumer",
                 parsed=parsed,
                 start_path=Path(__file__).resolve().parents[3],
             )
@@ -328,7 +328,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             session_id="hidden-child",
             workspace_id="default",
             agent_id="child-agent",
-            source_app_id="video-studio",
+            source_app_id="sample-consumer",
             session_kind="inter_agent_participant",
             thread_visibility="hidden",
             start_path=repo_root,
@@ -354,7 +354,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 state,
                 request={"runtime_session_id": "hidden-child"},
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
                 actor_user_id=None,
             )
         with self.assertRaisesRegex(runtime_requests.AppHostingError, "hidden"):
@@ -362,7 +362,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 state,
                 request={"turn_id": "hidden-turn"},
                 workspace_id="default",
-                app_id="video-studio",
+                app_id="sample-consumer",
             )
 
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
@@ -403,7 +403,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             app_event_bus=None,
             observability_store=None,
             app_store=SimpleNamespace(
-                get_workspace_app_binding=lambda **_kwargs: SimpleNamespace(workspace_id="default", app_id="video-studio")
+                get_workspace_app_binding=lambda **_kwargs: SimpleNamespace(workspace_id="default", app_id="sample-consumer")
             ),
         )
         with (
@@ -417,10 +417,10 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 callback_state,
                 result=result,
                 workspace_id="default",
-                app_id="video-studio",
-                source_root=Path("/apps/video-studio"),
+                app_id="sample-consumer",
+                source_root=Path("/apps/sample-consumer"),
                 backend_entrypoint="backend/app_backend.py",
-                data_root="workspaces/default/data/video-studio",
+                data_root="workspaces/default/data/sample-consumer",
                 parsed=parsed,
                 start_path=Path(__file__).resolve().parents[3],
             )

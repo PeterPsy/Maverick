@@ -487,8 +487,7 @@
     },
     {
       "app_ids": [
-        "design-studio",
-        "video-studio"
+        "design-studio"
       ],
       "resource": "sidecar-html-api-and-runtime",
       "owner": "each owning app",

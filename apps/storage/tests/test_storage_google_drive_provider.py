@@ -611,7 +611,7 @@ class GoogleDriveProviderTest(unittest.TestCase):
                     "_app_secrets": SECRETS,
                     "_surface": "dependency_backend",
                     "_effective_mode": "full-access",
-                    "_consumer_app_id": "video-studio",
+                    "_consumer_app_id": "sample-consumer",
                 },
                 drive_transport=transport,
             )

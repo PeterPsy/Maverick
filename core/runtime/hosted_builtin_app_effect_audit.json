@@ -210,16 +210,6 @@
         "execution_sha256": "1ccc5f8b191d26e1e54622b999832969d22f82220dceac429304c0503ece4cad"
       }
     },
-    "video-studio": {
-      "cli": {
-        "descriptor_sha256": "df8e59811f3e573c688d9d5277e4fc652c0d74e1fe3beca8e4a8fc7488b1330b",
-        "execution_sha256": "c87cd857d3cd11365b34e0b6b9377fb3fae552bd48d40eb48a99cc7629c56d1e"
-      },
-      "mcp": {
-        "descriptor_sha256": "446b59dd1904e9312f710d7d7fea0cb7cdf7ea176314d1e5b0dee372ba02ea8f",
-        "execution_sha256": "0b0d65c7059868f9ade169ca63dd629c82fbf1d6280bb49ee6af1ca3b546c627"
-      }
-    },
     "website-studio": {
       "cli": {
         "descriptor_sha256": "fc841b515cc759a526aba923138500f1c9ce839ad26b7dc83c3362f354ecf68e",

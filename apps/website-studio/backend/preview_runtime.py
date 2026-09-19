@@ -70,7 +70,9 @@ def runtime_process_policy() -> dict[str, object]:
             "HOME",
             "LANG",
             "LC_ALL",
+            "MALLOC_ARENA_MAX",
             "NO_COLOR",
+            "NODE_OPTIONS",
             "NPM_CONFIG_AUDIT",
             "NPM_CONFIG_FUND",
             "NPM_CONFIG_IGNORE_SCRIPTS",
@@ -1099,9 +1101,13 @@ def _safe_env(cwd: Path) -> dict[str, str]:
         "PATH": os.environ.get("PATH", ""),
         "LANG": os.environ.get("LANG", "C.UTF-8"),
         "LC_ALL": os.environ.get("LC_ALL", "C.UTF-8"),
+        "MALLOC_ARENA_MAX": "2",
         "TMPDIR": str(tmpdir),
         "CI": "true",
         "NO_COLOR": "1",
+        # Avoid V8's multi-GiB Wasm guard reservation under RLIMIT_AS. Bounds
+        # checks remain enabled, inline; never inherit caller-supplied Node flags.
+        "NODE_OPTIONS": "--disable-wasm-trap-handler",
         "NPM_CONFIG_IGNORE_SCRIPTS": "true",
         "NPM_CONFIG_AUDIT": "false",
         "NPM_CONFIG_FUND": "false",

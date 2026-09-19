@@ -43,17 +43,24 @@ def export_static_bundle(data_root: Path, body: dict):
             relative = ref.get("artifact_root", "")
         else:
             relative = ref.get("runtime_root", "")
-            docroot = ref.get("docroot", "")
-            # A Node source root is not a distributable. Require a built directory.
-            if docroot not in {"dist", "build", "out", "public"}:
-                raise ExportError("source_not_exportable")
-            relative = str(Path(relative) / docroot)
         if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
             raise ExportError("source_not_exportable")
         candidate = data_root / relative
         allowed = data_root / "sites" / site["id"] / "builds" / build["id"]
         if not candidate.is_dir() or not candidate.resolve().is_relative_to(allowed.resolve()):
             raise ExportError("source_not_exportable")
+        if build["runtime_kind"] == "node_build":
+            # Preview metadata may point to the source index.html. Never export
+            # that root: require one actual built web directory, without guessing
+            # between ambiguous outputs or rebuilding during publication.
+            docroot = ref.get("docroot", "")
+            outputs = [name for name in ("dist", "build", "out", "public") if (candidate / name / "index.html").is_file()]
+            if docroot in outputs:
+                candidate /= docroot
+            elif not docroot and len(outputs) == 1:
+                candidate /= outputs[0]
+            else:
+                raise ExportError("source_not_exportable")
         if any(path.is_symlink() for path in (candidate, *candidate.parents)):
             raise ExportError("source_not_exportable")
         files = prepare_assets(collect_files(candidate), release_id)

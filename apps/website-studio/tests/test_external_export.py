@@ -12,9 +12,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from external_export import export_static_bundle
 from external_export_assets import ExportError, prepare_assets
 from store import create_site, read_file, validate_build, write_file
+from preview_runtime import _safe_env
 
 
 class ExternalExportTest(unittest.TestCase):
+    def test_bounded_build_uses_inline_wasm_bounds_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            from unittest.mock import patch
+            with patch.dict("os.environ", {"NODE_OPTIONS": "--require=/private/unsafe.js"}):
+                env = _safe_env(Path(directory))
+            self.assertEqual(env["NODE_OPTIONS"], "--disable-wasm-trap-handler")
+            self.assertEqual(env["MALLOC_ARENA_MAX"], "2")
+
     def test_real_static_build_export_pins_assets_and_rejects_stale_build(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

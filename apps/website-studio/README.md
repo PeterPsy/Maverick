@@ -158,6 +158,13 @@ source snapshot for a public deployment. Export and public activation remain
 different operations. The exact limits and deployment/confirmation boundaries
 are in `docs/architecture/external_apps_v1.md` at repository root.
 
+Node export selects a built `dist`, `build`, `out` or `public` directory, never
+the source index used by private preview. Ambiguous/missing output is rejected.
+Bounded Node builds set fixed `NODE_OPTIONS=--disable-wasm-trap-handler` and
+`MALLOC_ARENA_MAX=2`: inline Wasm bounds checks and fewer allocator arenas avoid
+large virtual-memory reservations without increasing the existing 1.5 GiB
+address-space limit or inheriting caller-supplied Node options.
+
 ```bash
 python3 -m unittest discover -s apps/website-studio/tests -p test_external_export.py -v
 ```

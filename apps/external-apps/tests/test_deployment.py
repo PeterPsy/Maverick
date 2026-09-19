@@ -31,6 +31,39 @@ class DeploymentContractTests(unittest.TestCase):
         self.assertTrue(all(line.endswith(".lock") for line in writes[1:]))
 
 
+class RenewalHookTests(unittest.TestCase):
+    def test_only_matching_installed_lineage_reloads_after_valid_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            enabled, log = root / "enabled.conf", root / "calls"
+            script = (DEPLOYMENT / "renew-nginx.sh").read_text().replace(
+                "/etc/nginx/sites-enabled/maverick-external-apps.conf", str(enabled))
+            for name, original in (("nginx", "/usr/sbin/nginx"), ("systemctl", "/usr/bin/systemctl")):
+                script = script.replace(original, str(root / name))
+                (root / name).write_text(f"#!/bin/sh\nprintf '%s\\n' '{name}' >> '{log}'\n")
+                (root / name).chmod(0o700)
+            hook = root / "hook.sh"
+            hook.write_text(script)
+
+            def run(lineage):
+                return subprocess.run(["/bin/sh", str(hook)], timeout=5, capture_output=True,
+                                      env={"RENEWED_LINEAGE": lineage}).returncode
+
+            lineage = "/etc/letsencrypt/live/maverick-external-apps"
+            self.assertEqual(run(lineage), 0)  # Initial issuance, before ingress.
+            self.assertFalse(log.exists())
+            enabled.touch()
+            self.assertEqual(run("/etc/letsencrypt/live/private-maverick"), 0)
+            self.assertFalse(log.exists())
+            self.assertEqual(run(lineage), 0)
+            self.assertEqual(log.read_text().splitlines(), ["nginx", "systemctl"])
+            log.unlink()
+            with (root / "nginx").open("a") as handle:
+                handle.write("exit 7\n")
+            self.assertEqual(run(lineage), 7)
+            self.assertEqual(log.read_text().splitlines(), ["nginx"])
+
+
 class Upstream(socketserver.StreamRequestHandler):
     def handle(self):
         request = self.rfile.readline()

@@ -1,7 +1,7 @@
 # External Apps V1: immutable static publishing
 
-Date: 2026-09-19. Status: implementation decision; Internet deployment requires
-operator DNS/TLS/ingress configuration and its own acceptance evidence.
+Date: 2026-09-19. Status: implemented; public DNS/TLS/ingress activated for the
+default workspace. Actual publication Internet acceptance remains a separate gate.
 
 The product specification is maintained through Storage at
 `storage/generated/external-apps/external-apps-development-spec-simple-v1.md`.
@@ -109,7 +109,8 @@ not by registering an app or restarting the active backend.
 
 App-specific and app-contract checks pass. The repository-wide fast suite was
 also run; unrelated repository-convention failures in existing Core/test files
-remain outside this change. No live ingress, TLS, DNS or supervisor was activated.
+remain outside this change. That initial implementation did not activate live
+ingress, TLS, DNS or a supervisor.
 Internet acceptance and hosted Chat mutation admission remain the explicit gates
 above, not implied by the local tests.
 
@@ -117,5 +118,23 @@ The [operator activation runbook](../../apps/external-apps/deployment/README.md)
 now includes a bounded JSON-adapter systemd unit, DNS-01 certificate renewal,
 shared-nginx virtual hosts without a default-server takeover, and an independent
 stop path. A real foreground nginx fixture verifies ingress behavior without
-modifying the running platform. A selected separate domain, certificate and
-live app registration are still required before operational activation.
+modifying the running platform.
+
+## Operational activation without DNS-provider access
+
+After explicit operator authorization, the
+[IP-based DNS deployment](../../apps/external-apps/deployment/no-dns-access.md)
+was activated on `apps.34-17-71-112.sslip.io`. Its IP was already reserved. The
+provider's live DNS-01 delegation lets a small existing Certbot plugin obtain
+and renew one real wildcard certificate without a DNS API account. It listens
+only during ACME validation; the cloud port-53 rule targets this VM alone.
+No per-app TLS algorithm or new Core domain is introduced. DNS availability and
+the provider's experimental delegation are explicit dependencies, not guarantees.
+
+The platform source/app/provider/domain are configured through canonical Core
+registration and official CLI operations. The confined systemd service, dedicated
+nginx hosts and guarded renewal hook are active. Staging issuance, production
+issuance, renewal with hook, unknown-host denial and service-stop failure were
+verified. Readiness now uses HEAD and routine disconnected peers are not logged
+as runtime defects. No existing site was exposed or human approval fabricated;
+the final synthetic publication/external-browser proof is still pending.

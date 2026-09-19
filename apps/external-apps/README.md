@@ -50,8 +50,11 @@ the UI handoff, not a direct-file or policy bypass.
 
 Production requires Linux, the system Python under `/usr/bin` and bubblewrap with
 user namespaces available. Unsupported confinement fails closed; there is no
-unconfined fallback. Use a dedicated registrable public domain separate from
-Maverick's, not merely a sibling subdomain. Platform session cookies must still
+unconfined fallback. Prefer a dedicated registrable public domain separate from
+Maverick's, not merely a sibling subdomain. Without DNS-provider access, the
+[reviewed IP-based DNS profile](deployment/no-dns-access.md) preserves that
+private/public domain separation with an explicit external DNS dependency.
+Platform session cookies must still
 be host-only, not parent-domain cookies.
 
 The private foreground supervisor reads the **same canonical control-store

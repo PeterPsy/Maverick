@@ -6,9 +6,11 @@ Do not restart Maverick Core to install this independent service.
 
 ## 1. Confirm the public domain and DNS authority
 
-Choose an operator-owned registrable domain **different from Maverick's**.
+Prefer an operator-owned registrable domain **different from Maverick's**.
 `apps.example.com` below is only a placeholder. Do not reuse private app-frame
 or sidecar hosts, buy a domain, or repoint existing records implicitly.
+When DNS-provider access is unavailable, use the explicitly reviewed
+[IP-based DNS profile](no-dns-access.md), with its external-dependency tradeoffs.
 
 Create `apps.example.com` and `*.apps.example.com` A records for this ingress.
 Add AAAA only if IPv6 actually reaches this ingress. Verify both with a fresh,
@@ -157,8 +159,9 @@ certificate and Unix upstream. It verifies TLS, shared-host preservation,
 credential stripping, HEAD/ETag forwarding, denied writes and fail-closed outage.
 It never changes live nginx or systemd.
 
-Host inspection on 2026-09-19 found healthy Core/nginx and the JSON adapter, but
-no operator-selected separate public domain or matching wildcard certificate.
-The live catalog did not expose External Apps. These templates are prepared,
-**not an activated public deployment**; DNS, TLS issuance, app installation and
-service activation remain gated on that operational setup.
+Initial inspection found no dedicated domain/certificate or live app registration.
+On 2026-09-19, after explicit user authorization to proceed without DNS-provider
+access, the [IP-based profile](no-dns-access.md) was activated with a genuine
+wildcard certificate, automatic renewal, installed app and isolated systemd
+service. No publication was automatically approved. The linked evidence separates
+live infrastructure verification from the remaining per-release Internet gate.

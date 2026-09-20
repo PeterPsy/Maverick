@@ -181,9 +181,4 @@ def _seconds_until_heartbeat(last_heartbeat_at: datetime, heartbeat_interval_sec
 def _shutdown_task(controller: EntrypointShutdownController | None) -> asyncio.Task | None:
     if controller is None:
         return None
-    return asyncio.create_task(_wait_for_shutdown(controller))
-
-
-async def _wait_for_shutdown(controller: EntrypointShutdownController) -> None:
-    while not controller.is_shutting_down():
-        await asyncio.sleep(0.1)
+    return asyncio.create_task(controller.wait_shutdown())

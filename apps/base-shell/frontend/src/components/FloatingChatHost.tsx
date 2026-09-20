@@ -190,6 +190,7 @@ export function FloatingChatHost({
           frameScope={frameScope}
           hostAppId="base-shell"
           label={widgetLabel}
+          isActive={isVisible}
           onActiveThreadChange={({ navigationScope: nextNavigationScope, threadId: nextThreadId }) =>
             onActiveThreadChange({
               navigationScope: nextNavigationScope || navigationScope,

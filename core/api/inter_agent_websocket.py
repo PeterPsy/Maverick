@@ -416,9 +416,4 @@ def _ack_event_id(payload: dict[str, Any]) -> str | None:
 def _shutdown_task(shutdown_controller: EntrypointShutdownController | None) -> asyncio.Task | None:
     if shutdown_controller is None:
         return None
-    return asyncio.create_task(_wait_for_shutdown(shutdown_controller))
-
-
-async def _wait_for_shutdown(shutdown_controller: EntrypointShutdownController) -> None:
-    while not shutdown_controller.is_shutting_down():
-        await asyncio.sleep(0.1)
+    return asyncio.create_task(shutdown_controller.wait_shutdown())

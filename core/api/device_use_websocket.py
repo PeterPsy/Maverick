@@ -205,12 +205,8 @@ def _shutdown_task(
 ) -> asyncio.Task | None:
     if controller is None:
         return None
-    return asyncio.create_task(_wait_for_shutdown(controller))
+    return asyncio.create_task(controller.wait_shutdown())
 
-
-async def _wait_for_shutdown(controller: EntrypointShutdownController) -> None:
-    while not controller.is_shutting_down():
-        await asyncio.sleep(0.1)
 
 
 def _json_default(value: object) -> str:

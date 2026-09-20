@@ -15,6 +15,7 @@ import {
 import { FileCard } from '../../components/ui/file-card-collections';
 import { DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, currentStorageAppId, disconnectDriveConnection, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter, syncDriveConnection } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
+import { useStorageReadLifecycle } from '../../hooks/useStorageReadLifecycle';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta, type StorageCatalogDelta } from '../../lib/storageCatalogDelta';
@@ -703,13 +704,22 @@ function StorageSidebarWidget() {
   ), [filteredTreeNodes, query]);
   const treeProviderKey = query.trim().toLowerCase() || 'tree';
 
+  const reads = useStorageReadLifecycle(() => { setDriveChildrenCache({}); void refreshAll(); });
+
   async function refreshCatalog() {
-    const payload = await loadCatalog({ limit: 1, offset: 0 });
-    setFolders(payload.folders);
-    setAvailableKinds(new Set(payload.available_kinds));
-    setActiveKind(normalizeKind(payload.state.view_filter.kind));
-    setActiveViewMode(payload.state.view_filter.mode);
-    setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
+    const read = reads.replace('catalog');
+    if (!read) return;
+    try {
+      const payload = await loadCatalog({ limit: 1, offset: 0 }, { signal: read.controller.signal });
+      if (!read.current()) return;
+      setFolders(payload.folders);
+      setAvailableKinds(new Set(payload.available_kinds));
+      setActiveKind(normalizeKind(payload.state.view_filter.kind));
+      setActiveViewMode(payload.state.view_filter.mode);
+      setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
+    } catch (error) {
+      if (read.current()) setError(error instanceof Error ? error.message : 'Unable to load folders.');
+    } finally { read.finish(); }
   }
 
   async function syncStorageRoot() {
@@ -730,11 +740,18 @@ function StorageSidebarWidget() {
   }
 
   async function refreshDriveConnections() {
-    const payload = await listDriveConnections();
-    setDriveConnections(payload.connections || []);
+    const read = reads.replace('connections');
+    if (!read) return;
+    try {
+      const payload = await listDriveConnections({ signal: read.controller.signal });
+      if (read.current()) setDriveConnections(payload.connections || []);
+    } catch (error) {
+      if (read.current()) setError(error instanceof Error ? error.message : 'Unable to load connections.');
+    } finally { read.finish(); }
   }
 
   async function refreshDriveState() {
+    reads.invalidate('refresh');
     setDriveChildrenCache({});
     await refreshDriveConnections();
   }
@@ -748,9 +765,14 @@ function StorageSidebarWidget() {
   }
 
   async function refreshViewFilter() {
-    const payload = (await loadViewFilter()) as ViewFilterPayload;
-    const nextFilter = payload.state?.view_filter;
-    applyViewFilter(nextFilter);
+    const read = reads.replace('filter');
+    if (!read) return;
+    try {
+      const payload = (await loadViewFilter({ signal: read.controller.signal })) as ViewFilterPayload;
+      if (read.current()) applyViewFilter(payload.state?.view_filter);
+    } catch (error) {
+      if (read.current()) setError(error instanceof Error ? error.message : 'Unable to load view.');
+    } finally { read.finish(); }
   }
 
   function applyViewFilter(nextFilter?: Partial<StorageViewFilter> | null) {
@@ -761,13 +783,15 @@ function StorageSidebarWidget() {
   }
 
   async function refreshAll() {
+    const read = reads.replace('bootstrap');
+    if (!read) return;
     try {
       await Promise.all([refreshCatalog(), refreshViewFilter(), refreshDriveConnections()]);
-      setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load Storage.');
+      if (read.current()) setError(loadError instanceof Error ? loadError.message : 'Unable to load Storage.');
     } finally {
-      setIsInitialLoading(false);
+      if (read.current()) setIsInitialLoading(false);
+      read.finish();
     }
   }
 
@@ -809,14 +833,17 @@ function StorageSidebarWidget() {
     if (!force && (cached?.loaded || cached?.loading || node.status === 'reconnect_required')) {
       return;
     }
+    const read = force ? reads.replace(`drive:${node.id}`) : reads.start(`drive:${node.id}`);
+    if (!read) return;
     setDriveChildrenCache((current) => ({
       ...current,
       [node.id]: { ...(current[node.id] || { children: [] }), loading: true }
     }));
     try {
       const payload = node.driveFileId
-        ? await listDriveChildren(node.connectionId, node.driveFileId, { limit: DRIVE_PAGE_LIMIT })
-        : await listDriveRoots(node.connectionId, { limit: DRIVE_PAGE_LIMIT });
+        ? await listDriveChildren(node.connectionId, node.driveFileId, { limit: DRIVE_PAGE_LIMIT, signal: read.controller.signal })
+        : await listDriveRoots(node.connectionId, { limit: DRIVE_PAGE_LIMIT, signal: read.controller.signal });
+      if (!read.current()) return;
       const children = (payload.folders || []).map((folder) => driveFolderNode(node.connectionId || payload.connection_id, folder, node.displayPath));
       setDriveChildrenCache((current) => ({
         ...current,
@@ -824,6 +851,7 @@ function StorageSidebarWidget() {
       }));
       setError(null);
     } catch (loadError) {
+      if (!read.current()) return;
       setDriveChildrenCache((current) => ({
         ...current,
         [node.id]: {
@@ -834,7 +862,7 @@ function StorageSidebarWidget() {
         }
       }));
       setError(loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folders.');
-    }
+    } finally { read.finish(); }
   }
 
   async function ensureDriveChildren(node: FolderTreeNode) {
@@ -927,6 +955,7 @@ function StorageSidebarWidget() {
         return;
       }
       if (payload.resource === 'files') {
+        reads.invalidate('refresh');
         void refreshCatalog();
         setDriveChildrenCache({});
       }

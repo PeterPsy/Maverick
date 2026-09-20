@@ -118,7 +118,7 @@ export function Sidebar({
         frameScope={frameScope}
         hostAppId="base-shell"
         label="App sidebar footer"
-        isActive={appId === activeAppId}
+        isActive={appId === activeAppId && isDetailLayerOpen}
         onCloseSidebar={onClose}
         onOpenApp={onOpenApp}
         onOpenSidebar={onOpenSidebar}
@@ -369,7 +369,7 @@ export function Sidebar({
               frameScope={frameScope}
               hostAppId="base-shell"
               label="App sidebar content"
-              isActive={appId === activeAppId}
+              isActive={appId === activeAppId && isDetailLayerOpen}
               onCloseSidebar={onClose}
               onOpenApp={onOpenApp}
               onOpenSidebar={onOpenSidebar}

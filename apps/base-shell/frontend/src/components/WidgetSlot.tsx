@@ -1,5 +1,6 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
+import { widgetVisible } from "../lib/widgetVisibility";
 import {
   MAVERICK_IFRAME_SANDBOX,
   isShellWindowMessage,
@@ -278,7 +279,8 @@ export function WidgetSlot({
     if (!widget) {
       return;
     }
-    const visible = size !== "overlay" || !(overlaySize.width === "3rem" && overlaySize.height === "3rem");
+    const visible = widgetVisible(isActive, document.visibilityState !== "hidden",
+      size === "overlay" && overlaySize.width === "3rem" && overlaySize.height === "3rem");
     postMaverickFrameVisibility(widgetFrameRef.current, {
       owner_app_id: widget.owner_app_id,
       visible,
@@ -296,7 +298,9 @@ export function WidgetSlot({
 
   useEffect(() => {
     postWidgetVisibility();
-  }, [overlaySize.height, overlaySize.width, size, widget?.owner_app_id, widget?.widget_id]);
+    document.addEventListener("visibilitychange", postWidgetVisibility);
+    return () => document.removeEventListener("visibilitychange", postWidgetVisibility);
+  }, [isActive, overlaySize.height, overlaySize.width, size, widget?.owner_app_id, widget?.widget_id]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {

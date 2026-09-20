@@ -364,8 +364,8 @@ function dispatchCatalogRevalidated(entityId: string) {
   window.dispatchEvent(new CustomEvent(STORAGE_CATALOG_REVALIDATED_EVENT, { detail: { entityId } }));
 }
 
-export function loadViewFilter() {
-  return callBackend<{ state: CatalogPayload['state'] }>({ action: 'view_filter' });
+export function loadViewFilter(options: CatalogReadOptions = {}) {
+  return callBackend<{ state: CatalogPayload['state'] }>({ action: 'view_filter' }, options);
 }
 
 export function setViewFilter(filter: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>> & { preserve_custom?: boolean }) {

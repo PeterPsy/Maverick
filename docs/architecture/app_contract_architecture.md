@@ -728,6 +728,11 @@ Rules:
 - the core must ignore app-returned events whose type is not allowed for that surface or whose `resource` is not declared in `capabilities.data_events`
 - mounted app frontends should listen on the core app-event WebSocket and refresh only the affected app/resource
 - frontends must not use periodic polling as their default live-update mechanism
+- mounted widget read activity follows the intersection of document visibility,
+  the active owner surface, sidebar/dock visibility and overlay expansion.
+  Hidden surfaces retain their UI state while cancelling reads; late responses
+  and cleanup callbacks cannot change a newer view. Resume reloads authoritative
+  state. This does not interrupt accepted mutations or server-side agent turns.
 - app frontends that render generic runtime sessions for user-visible UI state must use the core runtime WebSocket snapshot and live frames; HTTP runtime reads are diagnostics or explicit operator refresh surfaces, not product bootstrap or realtime fallback paths
 - chat-style runtime frontends must treat the core runtime thread as the user-visible conversation record and maintain a strict one-thread-per-user-visible-runtime-session invariant; they must not create app-owned placeholder conversations without a runtime session, must not expose `thread_visibility=hidden` sessions as chat conversations, and must delete conversations through the core runtime thread cleanup surface so the provider process and session root are removed with the thread
 - `resource` values are lowercase slugs owned by the app contract

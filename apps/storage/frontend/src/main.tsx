@@ -18,6 +18,7 @@ import { fileFolderSelection, folderParentPath, folderStatsForSelection, normali
 import { attachStorageFolderDragImage } from './lib/storageDragImage';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFile, storageDragPayloadFromFolder, storageDragPayloadFromSelection, storageDriveDragPayloadFromFile, storageDriveDragPayloadFromFolder, storageMoveDropStatus, writeStorageDriveFileDragData, writeStorageDriveFolderDragData, writeStorageFileDragData, writeStorageFolderDragData, writeStorageSelectionDragData, type StorageFileDragPayload, type StorageMoveDropStatus, type StorageSelectionDragPayload } from './lib/storageDragDrop';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from './lib/browserFullscreen';
+import { StorageCatalogRequests } from './lib/storageCatalogRequests';
 import { sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
 import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storagePickerAcceptsFile, storagePickerContextFromParams, storagePickerResultForFile, type StoragePickerContext } from './lib/storagePicker';
@@ -34,7 +35,7 @@ import type { CatalogPayload, FileRole, StorageFile, StorageFolder, StorageViewF
 import './styles/main.css';
 
 const DOWNLOAD_BYTES = 100 * 1024 * 1024;
-const VIEW_SYNC_MS = 2000;
+const VIEW_SYNC_MS = 60_000;
 const LAYOUT_STORAGE_KEY = 'storage.layout-mode';
 const FILE_SORT_STORAGE_KEY = 'storage.file-sort';
 const PREVIEW_VIEWPORT_GAP = 44;
@@ -308,10 +309,6 @@ function driveUploadTargetLabel(target: DriveFolderTarget) {
   return target.displayPath || 'Google Drive';
 }
 
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
-}
-
 function FolderCard({ canDelete, canDownload, canDrag, dragging, folder, onDelete, onDownload, onDragEnd, onDragStart, onDropStatus, onDropStorageItem, onLongPress, onOpen, onShowDetails, onToggleSelection, selected, selectionMode }: {
   canDelete: boolean;
   canDownload: boolean;
@@ -529,6 +526,9 @@ function App() {
   const driveFolderAbortRef = useRef<AbortController | null>(null);
   const driveLoadMoreAbortRef = useRef<AbortController | null>(null);
   const catalogReadAbortRef = useRef<AbortController | null>(null);
+  const catalogRequestsRef = useRef(new StorageCatalogRequests());
+  const viewFilterWriteVersionRef = useRef(0);
+  const viewFilterWritesRef = useRef(Promise.resolve());
   const appVisibleRef = useRef(true);
   const catalogRefreshRequestRef = useRef(0);
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
@@ -617,6 +617,8 @@ function App() {
   }
 
   function applyLocalCatalogDelta(delta: StorageCatalogDelta) {
+    catalogRequestsRef.current.invalidate('refresh');
+    setCatalogLoadingMore(false);
     catalogRefreshRequestRef.current += 1;
     setFiles((current) => {
       const nextFiles = applyStorageFilesDelta(current, delta);
@@ -638,19 +640,29 @@ function App() {
     refresh(filter, options).catch((err: Error) => setError(err.message));
   }
 
+  function persistViewFilter(filter: Parameters<typeof setViewFilter>[0]) {
+    // Preserve submission order even when an earlier accepted mutation is slow.
+    const result = viewFilterWritesRef.current.then(() => setViewFilter(filter));
+    viewFilterWritesRef.current = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
   async function loadDriveFolder(target: DriveFolderTarget, loading: CatalogRefreshLoading = 'foreground', breadcrumbTrail?: DriveBreadcrumbTarget[]) {
     const requestId = ++catalogRefreshRequestRef.current;
     const transitionToken = loading === 'foreground' ? beginCatalogTransitionLoading(requestId) : null;
     const previousDriveTarget = driveTargetRef.current;
-    driveFolderAbortRef.current?.abort();
-    const abortController = new AbortController();
+    catalogRequestsRef.current.transition(JSON.stringify({ target, query: queryRef.current, kind: kindRef.current, pickerContext }));
+    setCatalogLoadingMore(false);
+    const read = catalogRequestsRef.current.start('catalog');
+    if (!read) return;
+    const abortController = read.controller;
     driveFolderAbortRef.current = abortController;
     driveTargetRef.current = target;
     try {
       const payload = target.driveFileId
         ? await listDriveChildren(target.connectionId, target.driveFileId, { limit: DRIVE_PAGE_LIMIT, signal: abortController.signal })
         : await listDriveRoots(target.connectionId, { limit: DRIVE_PAGE_LIMIT, signal: abortController.signal });
-      if (requestId !== catalogRefreshRequestRef.current) return;
+      if (!read.current() || requestId !== catalogRefreshRequestRef.current) return;
       const nextFiles = payload.files || [];
       const nextFolders = payload.folders || [];
       filesRef.current = nextFiles;
@@ -682,18 +694,18 @@ function App() {
       setDriveBreadcrumbTrailScoped(nextBreadcrumbTrail);
       setError('');
     } catch (loadError) {
-      if (isAbortError(loadError)) return;
+      if (!read.current()) return;
       driveTargetRef.current = previousDriveTarget;
       setError(loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folder.');
     } finally {
       if (driveFolderAbortRef.current === abortController) {
         driveFolderAbortRef.current = null;
       }
-      if (transitionToken !== null) {
-        clearCatalogTransitionLoading(transitionToken);
-      } else {
-        settleCatalogTransitionLoading(requestId);
+      if (read.current()) {
+        if (transitionToken !== null) clearCatalogTransitionLoading(transitionToken);
+        else settleCatalogTransitionLoading(requestId);
       }
+      read.finish();
     }
   }
 
@@ -727,13 +739,18 @@ function App() {
     filter?: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
     options: CatalogRefreshOptions = {}
   ) {
+    if (!appVisibleRef.current || document.hidden || !navigator.onLine) return;
     catalogReadAbortRef.current?.abort();
     catalogReadAbortRef.current = null;
     if (driveTargetRef.current) {
       await loadDriveFolder(driveTargetRef.current, options.loading ?? 'background');
       return;
     }
-    const catalogController = new AbortController();
+    catalogRequestsRef.current.transition(JSON.stringify(catalogRequest(filter, 0, options)), 'refresh');
+    setCatalogLoadingMore(false);
+    const read = catalogRequestsRef.current.start('catalog');
+    if (!read) return;
+    const catalogController = read.controller;
     catalogReadAbortRef.current = catalogController;
     const requestId = ++catalogRefreshRequestRef.current;
     const { loading = 'background', ...requestOptions } = options;
@@ -743,7 +760,7 @@ function App() {
     try {
       let request = catalogRequest(filter, 0, requestOptions);
       let payload = await loadCatalog(request, { signal: catalogController.signal });
-      if (requestId !== catalogRefreshRequestRef.current) return;
+      if (!read.current() || requestId !== catalogRefreshRequestRef.current) return;
       let remoteFilter = normalizedViewFilter(payload.state.view_filter);
       if (remoteFilter.mode === 'custom' && !request.file_ids?.length && !request.workspace_relative_paths?.length) {
         request = catalogRequest(
@@ -757,7 +774,7 @@ function App() {
           }
         );
         payload = await loadCatalog(request, { signal: catalogController.signal });
-        if (requestId !== catalogRefreshRequestRef.current) return;
+        if (!read.current() || requestId !== catalogRefreshRequestRef.current) return;
         remoteFilter = normalizedViewFilter(payload.state.view_filter);
       }
       filesRef.current = payload.files;
@@ -773,6 +790,7 @@ function App() {
       } else if (pendingNavigationTargetRef.current?.targetType === 'file') {
         const target = pendingNavigationTargetRef.current;
         const targetFile = await loadNavigationTarget(target, catalogController.signal);
+        if (!read.current()) return;
         if (targetFile) {
           pendingNavigationTargetRef.current = null;
           await focusResolvedNavigationFile(targetFile);
@@ -796,8 +814,12 @@ function App() {
           setError(missingTarget.error);
         }
       }
+    } catch (loadError) {
+      if (read.current()) setError(loadError instanceof Error ? loadError.message : 'Unable to load files.');
     } finally {
-      settleCatalogTransitionLoading(requestId);
+      if (read.current()) settleCatalogTransitionLoading(requestId);
+      if (catalogReadAbortRef.current === catalogController) catalogReadAbortRef.current = null;
+      read.finish();
     }
   }
 
@@ -813,7 +835,9 @@ function App() {
   }
 
   async function loadMoreFiles() {
-    if (!catalogPagination?.has_more || catalogLoadingMore) return;
+    if (!appVisibleRef.current || document.hidden || !navigator.onLine || !catalogPagination?.has_more || catalogLoadingMore) return;
+    const read = catalogRequestsRef.current.start('page');
+    if (!read) return;
     setCatalogLoadingMore(true);
     let driveAbortController: AbortController | null = null;
     try {
@@ -821,11 +845,12 @@ function App() {
       if (driveTarget) {
         const pageToken = catalogPagination.next_page_token || '';
         driveLoadMoreAbortRef.current?.abort();
-        driveAbortController = new AbortController();
+        driveAbortController = read.controller;
         driveLoadMoreAbortRef.current = driveAbortController;
         const payload = driveTarget.driveFileId
           ? await listDriveChildren(driveTarget.connectionId, driveTarget.driveFileId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal })
           : await listDriveRoots(driveTarget.connectionId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal });
+        if (!read.current()) return;
         const nextFiles = mergeUniqueFiles(filesRef.current, payload.files || []);
         const nextFolders = mergeUniqueFolders(folders, payload.folders || []);
         catalogLoadedCountRef.current = driveLoadedItemCount(nextFiles, nextFolders);
@@ -836,7 +861,8 @@ function App() {
         setError('');
         return;
       }
-      const payload = await loadCatalog(catalogRequest(undefined, catalogLoadedCountRef.current));
+      const payload = await loadCatalog(catalogRequest(undefined, catalogLoadedCountRef.current), { signal: read.controller.signal });
+      if (!read.current()) return;
       catalogLoadedCountRef.current = catalogLoadedCountAfterPage(catalogLoadedCountRef.current, payload.files.length);
       const nextFiles = mergeUniqueFiles(filesRef.current, payload.files);
       filesRef.current = nextFiles;
@@ -845,22 +871,31 @@ function App() {
       setCatalogPagination(payload.pagination || null);
       setError('');
     } catch (loadError) {
-      if (!isAbortError(loadError)) {
+      if (read.current()) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load more files.');
       }
     } finally {
       if (driveAbortController && driveLoadMoreAbortRef.current === driveAbortController) {
         driveLoadMoreAbortRef.current = null;
       }
-      setCatalogLoadingMore(false);
+      if (read.current()) setCatalogLoadingMore(false);
+      read.finish();
     }
   }
 
   async function syncViewFilter() {
-    const payload = await loadViewFilter();
-    const remoteFilter = normalizedViewFilter(payload.state.view_filter);
-    if (applyRemoteViewFilter(remoteFilter)) {
-      await refreshForViewFilter(remoteFilter);
+    if (!appVisibleRef.current || document.hidden || !navigator.onLine) return;
+    const read = catalogRequestsRef.current.start('filter');
+    if (!read) return;
+    try {
+      const payload = await loadViewFilter({ signal: read.controller.signal });
+      if (!read.current()) return;
+      const remoteFilter = normalizedViewFilter(payload.state.view_filter);
+      if (applyRemoteViewFilter(remoteFilter)) await refreshForViewFilter(remoteFilter);
+    } catch (loadError) {
+      if (read.current()) setError(loadError instanceof Error ? loadError.message : 'Unable to refresh view.');
+    } finally {
+      read.finish();
     }
   }
 
@@ -926,6 +961,8 @@ function App() {
     }, VIEW_SYNC_MS);
     return () => {
       window.clearInterval(interval);
+      catalogRequestsRef.current.dispose();
+      viewFilterWriteVersionRef.current += 1;
       catalogReadAbortRef.current?.abort();
       catalogReadAbortRef.current = null;
       if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
@@ -989,8 +1026,10 @@ function App() {
       };
       if (payload.type === 'maverick.app.visibility-changed' && (!payload.app_id || payload.app_id === storageAppId)) {
         const isVisible = payload.visible !== false;
+        if (isVisible === appVisibleRef.current) return;
         appVisibleRef.current = isVisible;
         if (!isVisible) {
+          catalogRequestsRef.current.invalidate('suspend');
           catalogReadAbortRef.current?.abort();
           catalogReadAbortRef.current = null;
           abortDriveRequests();
@@ -1031,10 +1070,30 @@ function App() {
   }, []);
 
   useEffect(() => {
+    function updateDocumentVisibility() {
+      if (document.hidden || !navigator.onLine) {
+        catalogRequestsRef.current.invalidate('suspend');
+        setCatalogLoadingMore(false);
+        clearCatalogTransitionLoading();
+      } else if (appVisibleRef.current) {
+        void refresh(undefined, { loading: 'background' });
+      }
+    }
+    document.addEventListener('visibilitychange', updateDocumentVisibility);
+    window.addEventListener('online', updateDocumentVisibility);
+    window.addEventListener('offline', updateDocumentVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', updateDocumentVisibility);
+      window.removeEventListener('online', updateDocumentVisibility);
+      window.removeEventListener('offline', updateDocumentVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
     function handleCatalogRevalidated() {
       if (!appVisibleRef.current || driveTargetRef.current) return;
       refresh(undefined, { loading: 'background' }).catch((err: Error) => {
-        if (!isAbortError(err)) setError(err.message);
+        setError(err.message);
       });
     }
     window.addEventListener(STORAGE_CATALOG_REVALIDATED_EVENT, handleCatalogRevalidated);
@@ -1070,6 +1129,9 @@ function App() {
     filter: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
     options: { folderPath?: string; loading?: CatalogRefreshLoading; preserveCustom?: boolean } = {}
   ) {
+    catalogRequestsRef.current.invalidate('navigation');
+    setCatalogLoadingMore(false);
+    const writeVersion = ++viewFilterWriteVersionRef.current;
     const preserveCustom = options.preserveCustom ?? viewMode === 'custom';
     const loading = options.loading ?? 'foreground';
     const transitionToken = loading === 'foreground' ? beginCatalogTransitionLoading() : null;
@@ -1093,10 +1155,12 @@ function App() {
     if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
     viewFilterWriteRef.current = window.setTimeout(() => {
       let refreshStarted = false;
-      setViewFilter({ query: next.query, role: next.role, kind: next.kind, preserve_custom: preserveCustom })
+      persistViewFilter({ query: next.query, role: next.role, kind: next.kind, preserve_custom: preserveCustom })
         .then((payload) => {
+          if (writeVersion !== viewFilterWriteVersionRef.current) return;
           const remote = normalizedViewFilter(payload.state.view_filter);
           viewFilterUpdatedAtRef.current = remote.updated_at;
+          if (!appVisibleRef.current) return;
           refreshStarted = true;
           return refresh(
             { query: remote.query, role: remote.role, kind: remote.kind },
@@ -1110,12 +1174,14 @@ function App() {
           );
         })
         .catch((err: Error) => {
+          if (writeVersion !== viewFilterWriteVersionRef.current) return;
           setError(err.message);
           if (!refreshStarted && transitionToken !== null) {
             clearCatalogTransitionLoading(transitionToken);
           }
         })
         .finally(() => {
+          if (writeVersion !== viewFilterWriteVersionRef.current) return;
           viewFilterPendingRef.current = false;
           viewFilterWriteRef.current = null;
         });
@@ -1125,6 +1191,10 @@ function App() {
   async function focusResolvedNavigationFile(file: StorageFile) {
     const transitionToken = beginCatalogTransitionLoading();
     const plan = resolvedFileNavigationPlan(file);
+    catalogRequestsRef.current.transition(JSON.stringify(plan));
+    setCatalogLoadingMore(false);
+    const read = catalogRequestsRef.current.start('catalog');
+    if (!read) return;
     queryRef.current = plan.filter.query;
     activeRoleRef.current = plan.filter.role;
     kindRef.current = plan.filter.kind;
@@ -1141,7 +1211,8 @@ function App() {
     setCurrentFolderPathScoped(plan.folderPath);
 
     try {
-      const payload = await loadCatalog(catalogRequest(plan.filter, 0, plan.refreshOptions));
+      const payload = await loadCatalog(catalogRequest(plan.filter, 0, plan.refreshOptions), { signal: read.controller.signal });
+      if (!read.current()) return;
       const nextFiles = mergeUniqueFiles(payload.files, [file]);
       filesRef.current = nextFiles;
       catalogLoadedCountRef.current = catalogLoadedCountAfterRefresh(payload.files.length);
@@ -1149,8 +1220,11 @@ function App() {
       setFolders(payload.folders || []);
       setCatalogPagination(payload.pagination || null);
       focusFile(file, { persistFilter: true, preserveCustom: false, query: plan.filter.query });
+    } catch (loadError) {
+      if (read.current()) setError(loadError instanceof Error ? loadError.message : 'Unable to open file.');
     } finally {
-      clearCatalogTransitionLoading(transitionToken);
+      if (read.current()) clearCatalogTransitionLoading(transitionToken);
+      read.finish();
     }
   }
 
@@ -1172,20 +1246,23 @@ function App() {
       setQuery(options.query);
     }
     if (options.persistFilter) {
+      const writeVersion = ++viewFilterWriteVersionRef.current;
       viewFilterPendingRef.current = true;
       if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
-      setViewFilter({
+      persistViewFilter({
         query: nextQuery,
         role: file.role,
         kind: 'all',
         preserve_custom: options.preserveCustom ?? (viewModeRef.current === 'custom')
       })
         .then((payload) => {
+          if (writeVersion !== viewFilterWriteVersionRef.current) return;
           const remote = normalizedViewFilter(payload.state.view_filter);
           viewFilterUpdatedAtRef.current = remote.updated_at;
         })
-        .catch((err: Error) => setError(err.message))
+        .catch((err: Error) => { if (writeVersion === viewFilterWriteVersionRef.current) setError(err.message); })
         .finally(() => {
+          if (writeVersion !== viewFilterWriteVersionRef.current) return;
           viewFilterPendingRef.current = false;
           viewFilterWriteRef.current = null;
         });
@@ -1278,9 +1355,13 @@ function App() {
   }
 
   function chooseFileSortKey(nextKey: FileSortKey) {
+    catalogRequestsRef.current.invalidate('navigation');
+    setCatalogLoadingMore(false);
+    clearCatalogTransitionLoading();
     setFileSortKey(nextKey);
     window.localStorage.setItem(FILE_SORT_STORAGE_KEY, nextKey);
     setSortMenuOpen(false);
+    revalidateCatalog();
   }
 
   function openFolder(folder: StorageFolder) {

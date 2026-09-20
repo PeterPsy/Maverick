@@ -102,3 +102,14 @@ This deliberately avoids blind full-Drive indexing. Agents index only relevant f
 `validate --app-root apps/storage` is the authoritative source-tree check for this installation-level app. `status --app-id storage` is a partial SDK diagnostic aimed at workspace-local app projects; for Storage it may report `source_exists: false` or a failed binding when the install-level source is absent or unhealthy. Use `maverick apps list --json` to verify that Storage is actually mounted in the active workspace.
 
 `register-local`, `install-local`, and `package` operate on workspace-local app projects under `workspaces/<workspace_id>/apps/<app_id>/`; they are not the correct flow for this installation-level Storage app source.
+
+## Request lifecycle and performance
+
+Catalog, pagination and deep-link reads are fenced by the current view and
+cancelled on navigation or suspension. An old response or `finally` cannot
+change the next view. Local cancellation is silent; current network failures
+remain visible. Sidebar reads suspend with their owning widget and revalidate
+on resume. Foreground view-state recovery runs at 60 seconds, alongside the
+existing app-event invalidations. See
+[`server_performance.md`](../../docs/development/server_performance.md) for
+repeatable isolated benchmarks and the explicit SQLite migration prerequisites.

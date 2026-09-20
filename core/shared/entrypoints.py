@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 import json
 import os
@@ -51,6 +52,7 @@ class EntrypointShutdownController:
         self._lock = Lock()
         self._processes: set[subprocess.Popen[str]] = set()
         self._cleanup_callbacks: set[Callable[[], None]] = set()
+        self._shutdown_waiters: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = set()
         self._parent = parent
         self._interruption_reason = interruption_reason
 
@@ -58,9 +60,15 @@ class EntrypointShutdownController:
         """Mark shutdown started and terminate registered subprocesses."""
         self._shutting_down.set()
         with self._lock:
+            waiters = list(self._shutdown_waiters)
             processes = list(self._processes)
             callbacks = list(self._cleanup_callbacks)
             self._cleanup_callbacks.clear()
+        for loop, event in waiters:
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                pass  # A cancelled waiter may have already closed its loop.
         for process in processes:
             _terminate_process_tree(process)
         for callback in callbacks:
@@ -69,6 +77,25 @@ class EntrypointShutdownController:
     def is_shutting_down(self) -> bool:
         """Return whether the host has started shutdown."""
         return self._shutting_down.is_set() or bool(self._parent and self._parent.is_shutting_down())
+
+    async def wait_shutdown(self) -> None:
+        """Wake on local or parent shutdown without polling or occupying a worker."""
+        waiter = (asyncio.get_running_loop(), asyncio.Event())
+        owners: list[EntrypointShutdownController] = []
+        owner: EntrypointShutdownController | None = self
+        try:
+            while owner is not None:
+                with owner._lock:
+                    owner._shutdown_waiters.add(waiter)
+                owners.append(owner)
+                owner = owner._parent
+            # Registration precedes the check, closing the concurrent-shutdown race.
+            if not self.is_shutting_down():
+                await waiter[1].wait()
+        finally:
+            for owner in owners:
+                with owner._lock:
+                    owner._shutdown_waiters.discard(waiter)
 
     def interruption_reason(self) -> str | None:
         """Return the reason supplied by the controller that initiated shutdown."""

@@ -7,7 +7,7 @@ import re
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from drive_oauth import (
+from drive_oauth_constants import (
     GOOGLE_DRIVE_CLIENT_ID_SECRET,
     GOOGLE_DRIVE_CLIENT_SECRET_SECRET,
     GOOGLE_DRIVE_REFRESH_TOKEN_SECRET,

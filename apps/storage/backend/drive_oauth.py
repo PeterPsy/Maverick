@@ -14,6 +14,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
+from drive_oauth_constants import (
+    GOOGLE_DRIVE_CLIENT_ID_SECRET,
+    GOOGLE_DRIVE_CLIENT_SECRET_SECRET,
+    GOOGLE_DRIVE_REFRESH_TOKEN_SECRET,
+)
 from drive_connection_store import (
     append_audit,
     get_connection,
@@ -28,9 +33,6 @@ from errors import StorageValidationError
 
 
 GOOGLE_DRIVE_PROVIDER = "google_drive"
-GOOGLE_DRIVE_CLIENT_ID_SECRET = "google-drive-oauth-client-id"
-GOOGLE_DRIVE_CLIENT_SECRET_SECRET = "google-drive-oauth-client-secret"
-GOOGLE_DRIVE_REFRESH_TOKEN_SECRET = "google-drive-refresh-token"
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_PROFILE_URL = "https://www.googleapis.com/oauth2/v2/userinfo"

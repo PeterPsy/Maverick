@@ -47,7 +47,7 @@ import app_backend  # noqa: E402
 import drive_localization  # noqa: E402
 from google_drive_provider import GoogleDriveProvider, stable_storage_file_id  # noqa: E402
 from inventory import load_inventory, upsert_remote_file_records  # noqa: E402
-import service as storage_service  # noqa: E402
+import service_actions as storage_service  # noqa: E402
 from service import app_events_for_action, handle_action, prepare_media_response_body, secret_lookup_for_drive_action, stream_media_response_body  # noqa: E402
 
 

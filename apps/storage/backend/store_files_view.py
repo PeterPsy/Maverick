@@ -9,7 +9,6 @@ import re
 from core.app_sdk.storage import read_json_state, write_json_state
 from errors import StorageValidationError
 from inventory import stable_file_id
-from store_files_paths import reference_from_payload, safe_relative_path
 
 
 SCHEMA_VERSION = "1"
@@ -81,6 +80,7 @@ def _string_list(raw_value: object, *, max_items: int) -> list[str]:
 
 
 def _normalize_file_id(file_id: str) -> str:
+    from store_files_paths import safe_relative_path
     if stable_file_id(file_id):
         return file_id
     role, _, relative_path = file_id.partition(":")
@@ -91,6 +91,7 @@ def _normalize_file_id(file_id: str) -> str:
 
 
 def _normalize_workspace_relative_path(workspace_relative_path: str) -> str:
+    from store_files_paths import reference_from_payload
     role, relative_path = reference_from_payload(role="", relative_path="", workspace_relative_path=workspace_relative_path)
     return f"storage/{role}/{relative_path}"
 

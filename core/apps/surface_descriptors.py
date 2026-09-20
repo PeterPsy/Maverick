@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Literal
 
+from core.apps.surface_descriptor_cache import read_descriptor_object
 from core.secrets.app_delivery import AppSecretRequest
 from core.shared.tool_effects import ToolArgumentEffectMap
 
@@ -408,7 +409,7 @@ def _descriptor_item(
 ) -> dict[str, Any] | None:
     if not path.is_file():
         return None
-    payload = _load_json_object(path)
+    payload = read_descriptor_object(path)
     unexpected = set(payload) - {root_field}
     if unexpected:
         names = ", ".join(sorted(unexpected))
@@ -427,18 +428,7 @@ def _descriptor_item(
         raise ValueError(
             f"App surface descriptor `{path}` item `{item_name}` has unsupported field(s): {names}."
         )
-    return item
-
-
-def _load_json_object(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
-        raise ValueError(f"App surface descriptor `{path}` is not valid JSON.") from error
-    if not isinstance(payload, dict):
-        raise ValueError(f"App surface descriptor `{path}` must be a JSON object.")
-    return payload
-
+    return deepcopy(item)
 
 def _optional_string(payload: dict[str, Any], key: str, *, default: str) -> str:
     value = payload.get(key, default)

@@ -3,18 +3,42 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.apps.surface_descriptors import (
     AppSurfaceSecretSelector,
     app_cli_command_execution_metadata,
+    app_mcp_tool_metadata,
     app_secret_requests_for_arguments,
 )
 
 
 class SurfaceDescriptorSecretSelectorTest(unittest.TestCase):
+    def test_descriptor_parse_cache_invalidates_full_signature_and_isolates_returned_schemas(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'mcp').mkdir()
+            descriptor = root / 'mcp/tool_schemas.json'
+            descriptor.write_text(json.dumps({'tools': {'read': {'description': 'first', 'input_schema': {'type': 'object'}}}}))
+            original_read = Path.read_bytes
+            with patch.object(Path, 'read_bytes', autospec=True, side_effect=original_read) as reads:
+                first = app_mcp_tool_metadata(root, 'read', default_description='default')
+                first[1]['type'] = 'mutated'
+                second = app_mcp_tool_metadata(root, 'read', default_description='default')
+                self.assertEqual(second[1]['type'], 'object')
+                self.assertEqual(reads.call_count, 1)
+                before = descriptor.stat()
+                descriptor.write_text(descriptor.read_text().replace('first', 'other'))
+                os.utime(descriptor, ns=(before.st_atime_ns, before.st_mtime_ns))
+                self.assertEqual(app_mcp_tool_metadata(root, 'read', default_description='default')[0], 'other')
+                self.assertEqual(reads.call_count, 2)
+            descriptor.write_text('{bad json')
+            self.assertEqual(app_mcp_tool_metadata(root, 'read', default_description='default')[0], 'default')
+
     def test_argument_effect_map_resolves_exactly_and_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

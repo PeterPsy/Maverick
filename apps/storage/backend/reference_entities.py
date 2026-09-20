@@ -10,7 +10,7 @@ from urllib.parse import quote, unquote
 
 from errors import StorageValidationError
 from inventory import resolve_file_record, uses_sqlite
-from store import catalog_files_payload, storage_root_for_role
+from inventory import catalog_inventory_payload as catalog_files_payload
 
 
 REFERENCE_MANIFEST = {
@@ -398,6 +398,7 @@ def _resolve_folder_record(
         offset=0,
         limit=1,
     )
+    from store_files_paths import storage_root_for_role
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     folder = (root / relative_path).resolve() if relative_path else root
     if folder != root and root not in folder.parents:

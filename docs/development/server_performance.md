@@ -237,3 +237,23 @@ The 100k Usage isolated-service probe at commit `c1848478` measured median 8.69 
 p95 9.94 ms and 102,645,760 physical write bytes over 500 distinct observations
 plus five warmups. It confirms the measured hot path is independent of the total
 sample count in this fixture; it does not substitute for HTTP concurrency tests.
+
+## Mounted HTTP measurements and startup work
+
+`scripts/server_mounted_performance_probe.py` boots an isolated temporary tenant,
+installs the real Storage source, logs in with fixture-only credentials, and
+uses authenticated loopback HTTP through `PlatformHost`. It never reads the
+active tenant. It supports 500 requests plus warmup and `--concurrent` (four
+readers, two writers); `--profile` is a separate sequential diagnostic run.
+Frontend assets are copied only for contract validation and are not measured.
+
+Before startup optimization, the 10k flat fixture measured catalog median
+215.65 ms / p95 236.14 ms and resolver median 250.74 ms / p95 270.56 ms over
+500 requests each. These mounted boundaries have not passed the release gates.
+The profile found repeated discovery JSON parsing and unnecessary read-path
+imports. Core now caches descriptor parsing with a full filesystem signature,
+128-file / 8 MiB source-byte limits, and copies only the requested descriptor.
+Authorization is still evaluated on every invocation. Storage's service router
+loads catalog/reference reads separately from Drive, upload and media actions;
+shared OAuth secret names no longer import network clients into inventory reads.
+All other actions keep the same governed request and event protocol.

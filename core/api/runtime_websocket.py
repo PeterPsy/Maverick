@@ -52,6 +52,7 @@ def runtime_websocket_manifest() -> dict[str, object]:
             "runtime.history.before": "exclusive before_event_id, bounded limit, optional request_id",
             "runtime.history.after": "exclusive after_event_id, bounded limit, optional request_id",
             "runtime.history.latest": "bounded latest page, optional request_id",
+            "runtime.history.around": "bounded window including around_event_id, optional request_id",
         },
         "frames": {
             "runtime.snapshot": "runtime session metadata, authoritative token usage, and persisted event replay after the requested cursor",
@@ -169,7 +170,7 @@ def runtime_history_page_frame(
 
 def requested_runtime_history_frame(state: PlatformState, session_id: str, frame: dict[str, Any]) -> dict[str, Any] | None:
     direction = str(frame.get("type", "")).removeprefix("runtime.history.")
-    if direction not in {"before", "after", "latest"}:
+    if direction not in {"before", "after", "latest", "around"}:
         return None
     limit = _bounded_positive_int(
         str(frame.get("limit") or "") or None,
@@ -181,7 +182,19 @@ def requested_runtime_history_frame(state: PlatformState, session_id: str, frame
     cursor = frame.get(f"{direction}_event_id")
     if direction != "latest" and (not isinstance(cursor, str) or not cursor or len(cursor) > 256):
         return None
-    if direction == "after":
+    if direction == "around":
+        anchor = state.runtime_store.find_event(session_id, cursor)
+        if anchor is None:
+            page = RuntimeEventPage([], False, None, None, None)
+        else:
+            before = turn_anchored_runtime_event_page(state, session_id, before_event_id=cursor, limit=max(1, limit // 2))
+            after = state.runtime_store.list_event_page(session_id, after_event_id=cursor, limit=max(1, limit // 2))
+            events = [*before.events, anchor, *after.events]
+            page = RuntimeEventPage(
+                events, before.has_more_before, None, events[0].event_id, events[-1].event_id,
+                has_more_after=after.has_more_after,
+            )
+    elif direction == "after":
         # Forward windows start strictly after the retained tail. The existing
         # canonical turn records supply missing anchors without replaying it.
         page = state.runtime_store.list_event_page(session_id, after_event_id=cursor, limit=limit)

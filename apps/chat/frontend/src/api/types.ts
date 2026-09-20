@@ -723,7 +723,7 @@ export type RuntimeWebSocketFrame =
     }
   | {
       type: "runtime.history.page";
-      direction?: "before" | "after" | "latest";
+      direction?: "before" | "after" | "latest" | "around";
       request_id?: string | null;
       after_event_id?: string | null;
       has_more_after?: boolean;
@@ -753,6 +753,7 @@ export type RuntimeThreadWebSocketFrame =
 
 export type ChatMessage = {
   id: string;
+  runtimeEventId?: string;
   role: "human" | "agent" | "system" | "tool" | "structured" | "step";
   content: string;
   createdAt: string;

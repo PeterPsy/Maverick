@@ -9,6 +9,7 @@ import type { ChatUsageSummary, RuntimeEvent, RuntimeSession, RuntimeTurn } from
 import type { PendingMessage } from "../lib/messageState";
 import { eventsToMessages } from "../lib/transcript";
 import { useRuntimeEvents } from "./useRuntimeEvents";
+import type { HistoryRestoreRequest } from './useRuntimeHistoryWindow';
 
 vi.mock('../pwaCache', async (importOriginal) => ({
   ...await importOriginal<typeof import('../pwaCache')>(),
@@ -63,6 +64,7 @@ type RuntimeEventsHarnessState = {
   pendingUserMessages: PendingMessage[];
   usage: ChatUsageSummary | null;
   hasNewerHistory: boolean;
+  restoredHistoryRequestId: number;
 };
 
 function event(eventId: string): RuntimeEvent {
@@ -83,6 +85,7 @@ function RuntimeEventsHarness({
   newerHistoryRequestId = 0,
   latestHistoryRequestId = 0,
   followLatestRef,
+  historyRestoreRequest,
   onState,
   runtimeSessionId = "session-1",
 }: {
@@ -92,6 +95,7 @@ function RuntimeEventsHarness({
   newerHistoryRequestId?: number;
   latestHistoryRequestId?: number;
   followLatestRef?: { current: boolean };
+  historyRestoreRequest?: HistoryRestoreRequest;
   onState?: (state: RuntimeEventsHarnessState) => void;
   runtimeSessionId?: string;
 }) {
@@ -100,14 +104,15 @@ function RuntimeEventsHarness({
   const [events, setEvents] = useState<RuntimeEvent[]>(initialEvents);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [hasNewerHistory, setHasNewerHistory] = useState(false);
+  const [restoredHistoryRequestId, setRestoredHistoryRequestId] = useState(0);
   const [, setIsOlderHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingUserMessages, setPendingUserMessages] = useState<PendingMessage[]>(initialPendingUserMessages);
   const [usage, setUsage] = useState<ChatUsageSummary | null>(null);
 
   useEffect(() => {
-    onState?.({ activeSession, activeTurn, error, events, pendingUserMessages, usage, hasNewerHistory });
-  }, [activeSession, activeTurn, error, events, onState, pendingUserMessages, usage, hasNewerHistory]);
+    onState?.({ activeSession, activeTurn, error, events, pendingUserMessages, usage, hasNewerHistory, restoredHistoryRequestId });
+  }, [activeSession, activeTurn, error, events, onState, pendingUserMessages, usage, hasNewerHistory, restoredHistoryRequestId]);
 
   useRuntimeEvents({
     activeTurn,
@@ -118,6 +123,8 @@ function RuntimeEventsHarness({
     followLatestRef,
     hasNewerHistory,
     setHasNewerHistory,
+    historyRestoreRequest,
+    setRestoredHistoryRequestId,
     onUsageSnapshot: setUsage,
     runtimeSessionId,
     setActiveSession,
@@ -147,6 +154,26 @@ describe("useRuntimeEvents", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+  });
+
+  it('restores one contiguous reading window after connection and acknowledges its committed data', async () => {
+    const onState = vi.fn();
+    await act(async () => root?.render(<RuntimeEventsHarness initialEvents={[]} onState={onState}
+      historyRestoreRequest={{ id: 1, sessionId: 'session-1', eventId: 'old-anchor' }} />));
+    const socket = MockWebSocket.instances[0];
+    await act(async () => socket.onmessage?.({ data: JSON.stringify({ type: 'runtime.snapshot', session, events: [event('latest')] }) } as MessageEvent));
+    expect(socket.sent).toHaveLength(1);
+    const request = JSON.parse(socket.sent[0]);
+    expect(request).toMatchObject({ type: 'runtime.history.around', around_event_id: 'old-anchor' });
+    await act(async () => socket.onmessage?.({ data: JSON.stringify({ type: 'runtime.history.page', direction: 'around',
+      request_id: request.request_id, events: [event('old-anchor')], has_more_before: true, has_more_after: true }) } as MessageEvent));
+    const final = onState.mock.calls.at(-1)![0] as RuntimeEventsHarnessState;
+    expect(final.events.map(event => event.event_id)).toEqual(['old-anchor']);
+    expect(final.hasNewerHistory).toBe(true);
+    expect(final.restoredHistoryRequestId).toBe(1);
+    const acknowledged = onState.mock.calls.map(([state]) => state as RuntimeEventsHarnessState)
+      .filter(state => state.restoredHistoryRequestId === 1);
+    expect(acknowledged.every(state => state.events[0]?.event_id === 'old-anchor')).toBe(true);
   });
 
   it('bounds cold data while reading history, tracks live control, and rejects superseded pages', async () => {

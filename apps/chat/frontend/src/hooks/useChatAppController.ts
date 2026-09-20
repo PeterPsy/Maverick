@@ -24,6 +24,7 @@ import { openAppParamsInShell } from "../lib/shellNavigation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
 import { useChatControllerPresentation } from "./useChatControllerPresentation";
+import type { HistoryRestoreRequest } from './useRuntimeHistoryWindow';
 import { useChatDependencies } from "./useChatDependencies";
 import { useChatHibernation } from "./useChatHibernation";
 import { useChatVisibility } from "./useChatVisibility";
@@ -300,6 +301,9 @@ export function useChatAppController({
   const [isNewerHistoryLoading, setIsNewerHistoryLoading] = useState(false);
   const [newerHistoryRequestId, setNewerHistoryRequestId] = useState(0);
   const [latestHistoryRequestId, setLatestHistoryRequestId] = useState(0);
+  const [historyRestoreRequest, setHistoryRestoreRequest] = useState<HistoryRestoreRequest | null>(null);
+  const [restoredHistoryRequestId, setRestoredHistoryRequestId] = useState(0);
+  const historyRestoreSequence = useRef(0);
   const followLatestRef = useRef(true);
   const handleFollowLatestChange = useCallback((follow: boolean) => { followLatestRef.current = follow; }, []);
   const handleLoadNewerHistory = useCallback(() => {
@@ -702,7 +706,7 @@ export function useChatAppController({
   useChatHibernation({
     ready: composerReady && !isBootstrapping,
     historyReady: !activeThread || hasLoadedHistory,
-    canHibernate: !isSending && !attachments.length && !pendingUserMessages.length
+    canHibernate: !isRuntimeBusy && !isSending && !attachments.length && !pendingUserMessages.length
       && !queuedMessages.length && !failedUserMessages.length && !deviceUse.enabled && !deviceUse.busy,
     conversationKey: activeConversationKey, composer, references: selectedReferences,
     params: activeThread ? { thread_id: activeThread.thread_id,
@@ -710,6 +714,12 @@ export function useChatAppController({
       : { new_chat: "1", project_id: draftChat?.projectId || null },
     settings: { provider: activeProviderId, agent: selectedAgentTypeId, mode: multiAgentMode, effort: runtimeControls.reasoningEffort },
     visibleMessages: visibleMessageLimit, navigate: handleNavigationParams,
+    restoredHistoryRequestId,
+    restoreHistory: (eventId) => {
+      const id = ++historyRestoreSequence.current;
+      setHistoryRestoreRequest({ id, sessionId: activeThread?.runtime_session_id || '', eventId });
+      return id;
+    },
     setVisibleMessages: setVisibleMessageLimit,
     restoreDraft: (draft) => {
       setComposer(draft.text);
@@ -830,6 +840,8 @@ export function useChatAppController({
       olderHistoryRequestId,
       newerHistoryRequestId,
       latestHistoryRequestId,
+      historyRestoreRequest,
+      setRestoredHistoryRequestId,
       followLatestRef,
       setIsNewerHistoryLoading,
       runtimeSessionId: activeThread?.runtime_session_id || null,

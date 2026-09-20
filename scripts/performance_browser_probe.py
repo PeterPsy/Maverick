@@ -16,6 +16,7 @@ from pwa_shell_cache_smoke import ROOT, _local_environment, _free_port, _stop_se
 sys.path[:0] = [str(ROOT), str(ROOT / 'apps/storage/backend')]
 
 from tests.support.performance_fixtures import storage_files
+from tests.support.performance_chat_fixture import seed_chat_history
 from inventory_migration import prepare_inventory, cutover_inventory
 import inventory_legacy
 
@@ -49,6 +50,7 @@ def main() -> int:
             contract = json.loads(contract_path.read_text())
             contract['presentation']['frontend_resumable'] = True
             contract_path.write_text(json.dumps(contract))
+        chat_fixture = seed_chat_history(repository)
         env = _local_environment(root, 'fixture-admin', 'fixture-only-password')
         env['MAVERICK_PERFORMANCE_BROWSER_FIXTURE'] = '1'
         env['MAVERICK_USAGE_STORE'] = 'document'
@@ -66,11 +68,12 @@ def main() -> int:
                     raise
                 result = subprocess.run(['node', str(ROOT / 'scripts/performance_browser_probe.mjs'),
                     f'http://maverick.localhost:{port}'], cwd=ROOT, env=env, check=False,
-                    capture_output=True, text=True, timeout=240)
+                    capture_output=True, text=True, timeout=360)
                 sys.stderr.write(result.stderr)
                 if result.returncode:
                     return result.returncode
                 evidence = json.loads(result.stdout)
+                evidence['chat_fixture'] = chat_fixture
                 evidence['source_commit'] = subprocess.check_output(
                     ['git', '-c', f'safe.directory={ROOT}', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
                 evidence['source_dirty'] = bool(subprocess.check_output(

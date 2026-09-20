@@ -394,6 +394,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             {"type": "websocket.receive", "text": json.dumps({"type": "runtime.history.after",
                 "after_event_id": "event-1", "limit": 1, "request_id": "next", "session_id": "other-session"})},
             {"type": "websocket.receive", "text": json.dumps({"type": "runtime.history.latest", "limit": 2, "request_id": "latest"})},
+            {"type": "websocket.receive", "text": json.dumps({"type": "runtime.history.around", "around_event_id": "event-2", "limit": 2, "request_id": "restore"})},
             {"type": "websocket.disconnect"},
         ]
 
@@ -417,7 +418,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         history_frames = [frame for frame in frames if frame["type"] == "runtime.history.page"]
-        self.assertEqual(len(history_frames), 3)
+        self.assertEqual(len(history_frames), 4)
         self.assertEqual([event["event_id"] for event in history_frames[0]["events"]], ["event-1"])
         self.assertFalse(history_frames[0]["has_more_before"])
 
@@ -428,6 +429,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(history_frames[2]["direction"], "latest")
         self.assertEqual(history_frames[2]["events"][-1]["event_id"], "event-3")
         self.assertFalse(history_frames[2]["has_more_after"])
+        self.assertEqual([event["event_id"] for event in history_frames[3]["events"]], ["event-1", "event-2", "event-3"])
 
     async def test_runtime_websocket_history_page_with_unknown_cursor_is_empty(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

@@ -46,7 +46,8 @@ export function firstPersistedRuntimeEventId(events: RuntimeEvent[]): string | n
 }
 
 export function isSyntheticRuntimeEvent(event: RuntimeEvent): boolean {
-  return event.event_id.startsWith(SYNTHETIC_TURN_ANCHOR_PREFIX) || event.event_id.startsWith(SYNTHETIC_TURN_STATUS_PREFIX);
+  return event.event_id.startsWith('display:') || event.event_id.startsWith(SYNTHETIC_TURN_ANCHOR_PREFIX)
+    || event.event_id.startsWith(SYNTHETIC_TURN_STATUS_PREFIX);
 }
 
 export function hydrateMissingTurnAnchors(events: RuntimeEvent[], turns: RuntimeTurn[] | undefined): RuntimeEvent[] {

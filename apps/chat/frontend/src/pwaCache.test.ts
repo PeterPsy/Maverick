@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { sanitizeChatReadModel } from './pwaReadModel';
 import { displayMessageEvents, displayThread, readChatDisplay } from './pwaCache';
+import { firstPersistedRuntimeEventId } from './lib/runtimeEvents';
+import { eventsToMessages } from './lib/transcript';
 const mocks = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('@maverick/pwa-cache', async (original) => ({ ...await original<object>(), readAppCacheModel: mocks.read }));
 describe('approved Chat persistence', () => {
@@ -15,6 +17,8 @@ describe('approved Chat persistence', () => {
     const events = displayMessageEvents('s', [{id:'m',turn_id:'t',role:'assistant',text:'Done',created_at:'2026-09-05'}]);
     expect(events.map((event) => event.event_type)).toEqual(['runtime.output.final','runtime.turn.completed']);
     expect(events.every((event) => event.event_id.startsWith('display:'))).toBe(true);
+    expect(firstPersistedRuntimeEventId(events)).toBeNull();
+    expect(eventsToMessages(events).every(message => message.runtimeEventId === undefined)).toBe(true);
     expect(displayThread({ thread_id:'t' }).availability).toBe('unknown');
   });
   it('keeps only the public thread classifiers needed by sidebar badges', () => {

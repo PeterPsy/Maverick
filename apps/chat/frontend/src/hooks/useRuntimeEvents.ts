@@ -104,7 +104,7 @@ export function useRuntimeEvents({
   const onUsageSnapshotRef = useRef<typeof onUsageSnapshot>(onUsageSnapshot);
   const onRuntimeSessionUnavailableRef = useRef<typeof onRuntimeSessionUnavailable>(onRuntimeSessionUnavailable);
   const socketRef = useRef<WebSocket | null>(null);
-  const { apply: applyWindow, receive: receiveHistoryPage, resetRequest: resetHistoryRequest } = useRuntimeHistoryWindow({
+  const { apply: applyWindow, receive: receiveHistoryPage, resetRequest: resetHistoryRequest, resumeRestore } = useRuntimeHistoryWindow({
     ...historyArgs, runtimeSessionId, setHasMoreHistory, setEvents, activeTurnRef, socketRef,
   });
   useEffect(() => {
@@ -278,6 +278,7 @@ export function useRuntimeEvents({
             }
             onUsageSnapshotRef.current?.(chatUsageSummaryFromPayload(frame.usage));
             onRuntimeSnapshotRef.current?.();
+            resumeRestore();
             return;
           }
           if (frame.type === "runtime.history.page") {
@@ -362,7 +363,7 @@ export function useRuntimeEvents({
         socketRef.current = null;
       }
     };
-  }, [runtimeSessionId, visible, setActiveSession, setActiveTurn, setError, setEvents, setHasMoreHistory, setPendingUserMessages, applyWindow, receiveHistoryPage, resetHistoryRequest]);
+  }, [runtimeSessionId, visible, setActiveSession, setActiveTurn, setError, setEvents, setHasMoreHistory, setPendingUserMessages, applyWindow, receiveHistoryPage, resetHistoryRequest, resumeRestore]);
 }
 
 export function chatUsageSummaryFromPayload(value: unknown): ChatUsageSummary | null {

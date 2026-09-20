@@ -30,5 +30,7 @@ class RuntimeEventPagingTest(unittest.TestCase):
         missing = store.list_event_page("session", after_event_id="unknown", limit=2)
         self.assertEqual(missing.events, [])
         self.assertFalse(missing.has_more_before or missing.has_more_after)
+        self.assertEqual(store.find_event("session", "event-2").event_id, "event-2")
+        self.assertIsNone(store.find_event("other-session", "event-2"))
         with self.assertRaises(ValueError):
             store.list_event_page("session", before_event_id="event-1", after_event_id="event-3")

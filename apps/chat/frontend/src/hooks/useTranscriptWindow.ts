@@ -46,6 +46,21 @@ export function useTranscriptWindow(messages: ChatMessage[], viewport: RefObject
   const rowIdentity = rows.map(message => message.id).join('\0');
 
   useLayoutEffect(() => {
+    const element = viewport?.current;
+    if (!element || !container.current) return;
+    const restore = (event: Event) => {
+      const anchor = (event as CustomEvent<{ rowId: string; offset: number }>).detail;
+      const index = messages.findIndex(message => message.id === anchor.rowId);
+      if (!enabled || index < 0) return;
+      const origin = container.current!.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
+      element.scrollTop = origin + offsets[index] - anchor.offset;
+      element.dispatchEvent(new Event('scroll'));
+    };
+    element.addEventListener('chatapp.restore-reading-anchor', restore);
+    return () => element.removeEventListener('chatapp.restore-reading-anchor', restore);
+  }, [enabled, messages, offsets, viewport]);
+
+  useLayoutEffect(() => {
     if (!enabled || !viewport?.current || !container.current) return;
     const element = viewport.current;
     let frame: number | null = null;

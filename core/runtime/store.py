@@ -392,6 +392,9 @@ class RuntimeStore(Protocol):
     def list_recent_events(self, session_id: str, *, limit: int) -> list[RuntimeEventRecord]:
         ...
 
+    def find_event(self, session_id: str, event_id: str) -> RuntimeEventRecord | None:
+        ...
+
     def list_event_page(
         self,
         session_id: str,
@@ -2476,6 +2479,14 @@ class RuntimeDocumentStore:
             documents.sort(key=lambda item: str(item.get("created_at") or ""))
             documents = documents[-limit:]
         return [RuntimeEventRecord(**document) for document in documents]
+
+    def find_event(self, session_id: str, event_id: str) -> RuntimeEventRecord | None:
+        query = {**self._session_query(session_id), "event_id": event_id}
+        history_read = getattr(self.collections.events, "find_history_one", None)
+        document = history_read(query) if callable(history_read) else None
+        if document is None:
+            document = self.collections.events.find_one(query)
+        return RuntimeEventRecord(**document) if document is not None else None
 
     def list_event_page(
         self,

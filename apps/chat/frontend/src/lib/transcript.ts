@@ -10,6 +10,7 @@ import { structuredContentFromAgentLinks } from "./linkPreviews";
 import { isNoisyRuntimeLabel, isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
 
 import { TranscriptProjection, type OrderedMessage } from './transcriptProjection';
+import { isSyntheticRuntimeEvent } from './runtimeEvents';
 
 let transcriptProjections = new WeakMap<RuntimeEvent, TranscriptProjection>();
 let latestProjection: { session: string; projection: TranscriptProjection } | null = null;
@@ -308,6 +309,9 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
   const persistedTerminalFailureCodesByTurn = new Map<string, string>();
 
   function pushMessage(message: ChatMessage, order: number): OrderedMessage {
+    const source = events[order];
+    message.runtimeEventId = source && !isSyntheticRuntimeEvent(source) ? source.event_id
+      : events.find(event => !isSyntheticRuntimeEvent(event) && event.turn_id === source?.turn_id)?.event_id;
     const entry = { order, sequence: messageSequence, message };
     orderedMessages.push(entry);
     messageSequence += 1;

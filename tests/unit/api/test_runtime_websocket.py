@@ -19,6 +19,25 @@ BASE_TIME = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
 
 
 class RuntimeWebSocketReplayPagingTestCase(unittest.TestCase):
+    def test_reading_window_includes_anchor_once_and_handles_both_archive_edges(self) -> None:
+        state = _state_with_events([_event(f"event-{i}", i, "runtime.output.delta", turn_id=None) for i in range(9)])
+        for anchor, expected, before, after in [
+            ("event-4", ["event-2", "event-3", "event-4", "event-5", "event-6"], True, True),
+            ("event-0", ["event-0", "event-1", "event-2"], False, True),
+            ("event-8", ["event-6", "event-7", "event-8"], True, False),
+            ("missing", [], False, False),
+        ]:
+            frame = requested_runtime_history_frame(state, "session-1", {
+                "type": "runtime.history.around", "around_event_id": anchor, "limit": 4, "request_id": "restore",
+            })
+            self.assertEqual([event["event_id"] for event in frame["events"]], expected)
+            self.assertEqual((frame["has_more_before"], frame["has_more_after"]), (before, after))
+            self.assertEqual(frame["request_id"], "restore")
+        other = requested_runtime_history_frame(state, "other-session", {
+            "type": "runtime.history.around", "around_event_id": "event-4", "limit": 4,
+        })
+        self.assertEqual(other["events"], [])
+
     def test_forward_page_and_latest_keep_cursor_direction_and_request_identity(self) -> None:
         state = _state_with_events([_event(f"event-{i}", i, "runtime.output.delta", turn_id=None) for i in range(8)])
         frame = requested_runtime_history_frame(state, "session-1", {
@@ -123,6 +142,9 @@ class _RuntimeStore:
 
     def get_session(self, session_id: str):
         return self.sessions[session_id]
+
+    def find_event(self, session_id: str, event_id: str):
+        return next((event for event in self.events if event.session_id == session_id and event.event_id == event_id), None)
 
     def list_event_page(self, session_id: str, *, before_event_id: str | None = None, after_event_id: str | None = None, limit: int = 200) -> RuntimeEventPage:
         self.page_calls.append((session_id, before_event_id, limit))

@@ -210,7 +210,17 @@ data through the existing authenticated WebSocket. While a historical window is
 away from live, event data cannot join disconnected ranges; control/usage remain
 live and the UI exposes newer history. Correlated requests reject late pages,
 and reading old turn metadata cannot change the active turn. Cold navigation
-entries retain the newer-history flag. The server archive is not truncated. Scroll/ResizeObserver
+entries retain the newer-history flag. The server archive is not truncated.
+
+Chat hibernation keeps a small reading anchor (persisted event ID, message ID and
+pixel offset), never transcript payloads. On resume, an `around` history request
+loads bounded data on both sides of that anchor. The iframe acknowledges resume
+only after React has committed the window and the visible row is aligned. The
+virtual list can mount the requested row before precise alignment; hidden frames
+pause that work. Active turns and unfinished history initialization are ineligible
+for hibernation. The disposable Chromium probe seeds 3,000 completed turns / 12,000
+events with Markdown and tools to exercise eviction, forward paging, return to
+latest and hibernation of the reading position. Scroll/ResizeObserver
 integration requires browser and physical Safari checks before release.
 An offscreen message currently being read aloud keeps its existing component
 mounted outside the layout and data windows, adding at most one hidden row and

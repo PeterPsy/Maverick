@@ -46,7 +46,17 @@ page.on('request', request => {
 });
 page.on('pageerror', error => errors.push(error.message));
 const sockets = new Set();
+const historyPages = [];
 page.on('websocket', socket => {
+  if (socket.url().includes('/ws/runtime/sessions/performance-chat-history')) {
+    socket.on('framereceived', ({ payload }) => {
+      const frame = JSON.parse(String(payload));
+      if (frame.type === 'runtime.history.page' || frame.type === 'runtime.snapshot') {
+        historyPages.push({ type: frame.type, direction: frame.direction, count: frame.events.length,
+          first: frame.events[0]?.event_id, last: frame.events.at(-1)?.event_id });
+      }
+    });
+  }
   if (!socket.url().includes('/api/apps/events/ws')) return;
   sockets.add(socket);
   socket.on('close', () => sockets.delete(socket));
@@ -125,12 +135,51 @@ try {
   await restoredStorage.waitForFunction(() => document.querySelector('.content-counts')?.textContent.includes('350 files'));
   assert.equal(await restoredStorage.locator('.animated-file-item').count(), 350);
   assert.equal(await restoredStorage.locator('.storage-error').count(), 0);
+  let historyChat = await openApp('chat', { thread_id: 'performance-chat-thread' });
+  await historyChat.getByText('Fixture request 02999', { exact: true }).waitFor({ timeout: 30_000 });
+  const transcript = historyChat.locator('.chatapp-chat-scroll__inner');
+  let iterations = 0;
+  let maxRows = 0;
+  while (!await historyChat.getByRole('button', { name: 'Load newer messages', exact: true }).count() && iterations++ < 100) {
+    await transcript.evaluate(element => { element.scrollTop = 0; element.dispatchEvent(new Event('scroll')); });
+    await page.waitForTimeout(200);
+    maxRows = Math.max(maxRows, await historyChat.locator('[data-transcript-row]:not([hidden])').count());
+  }
+  assert(iterations < 100, `Cold data never evicted: ${JSON.stringify(historyPages)}`);
+  const visibleRows = await historyChat.locator('[data-transcript-row]:not([hidden])').count();
+  assert(visibleRows < 40, `History DOM grew to ${visibleRows} rows after eviction.`);
+  const readingAnchor = await historyChat.evaluate(() => {
+    const viewport = document.querySelector('.chatapp-chat-scroll__inner');
+    const top = viewport.getBoundingClientRect().top;
+    const row = [...viewport.querySelectorAll('[data-transcript-row]:not([hidden])')]
+      .find(element => element.getBoundingClientRect().bottom > top && element.getBoundingClientRect().top < top + viewport.clientHeight);
+    return row ? { id: row.dataset.transcriptRow, offset: row.getBoundingClientRect().top - top } : null;
+  });
+  assert(readingAnchor, 'History must have an actual visible reading anchor.');
+  await openApp('storage');
+  await openApp('calendar');
+  await page.locator('iframe[title="Chat viewport"]').waitFor({ state: 'detached', timeout: 10_000 });
+  historyChat = await openApp('chat');
+  await historyChat.waitForFunction(anchor => {
+    const viewport = document.querySelector('.chatapp-chat-scroll__inner');
+    const row = [...document.querySelectorAll('[data-transcript-row]:not([hidden])')]
+      .find(element => element.dataset.transcriptRow === anchor.id);
+    return viewport && row && Math.abs(row.getBoundingClientRect().top - viewport.getBoundingClientRect().top - anchor.offset) < 3;
+  }, readingAnchor, { timeout: 30_000 });
+  await historyChat.getByRole('button', { name: 'Load newer messages', exact: true }).click();
+  for (let attempt = 0; !historyPages.some(frame => frame.direction === 'after') && attempt < 30; attempt++) await page.waitForTimeout(100);
+  assert(historyPages.some(frame => frame.direction === 'after'), 'Newer history did not use forward paging.');
+  await historyChat.getByRole('button', { name: 'Jump to latest message', exact: true }).click();
+  await historyChat.getByText('Fixture request 02999', { exact: true }).waitFor();
+  assert(historyPages.some(frame => frame.direction === 'latest'), 'Jump to latest did not replace the data window.');
   assert.equal(sockets.size, 1, 'Only the Shell should own app events.');
   assert.deepEqual(errors, [], 'App frames emitted browser errors.');
   process.stdout.write(JSON.stringify({ schema: 1, boundary: 'authenticated-disposable-chromium',
     browser: browser.version(), fixture_files: 350, chat_draft_hibernation: 'passed',
     storage_folder_sort_selection_paging_scroll_hibernation: 'passed', shared_app_event_socket_count: sockets.size,
     storage_pagination_during_other_folder_writes: 'passed', catalog_reads: catalogReads,
+    chat_bidirectional_data_window: 'passed', chat_history_pages: historyPages, chat_max_visible_rows: maxRows,
+    chat_history_reading_anchor_hibernation: 'passed', chat_reading_anchor: readingAnchor,
     errors, physical_device_gate: 'not-tested' }, null, 2) + '\n');
 } catch (error) {
   const frames = await Promise.all(page.frames().map(async frame => ({

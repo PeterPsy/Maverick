@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type { RuntimeEvent, RuntimeTurn, RuntimeWebSocketFrame } from '../api/client';
 import { firstPersistedRuntimeEventId, isSyntheticRuntimeEvent, mergeRuntimeEvents, hydrateMissingTurnAnchors } from '../lib/runtimeEvents';
 import { boundRuntimeEventWindow } from '../lib/runtimeEventWindow';
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
 type Page = Extract<RuntimeWebSocketFrame, { type: 'runtime.history.page' }>;
-type Source = 'live' | 'snapshot' | 'before' | 'after' | 'latest';
+type Source = 'live' | 'snapshot' | 'before' | 'after' | 'latest' | 'around';
+export type HistoryRestoreRequest = { id: number; sessionId: string; eventId: string };
 export type RuntimeHistoryArgs = {
   runtimeSessionId: string | null;
   hasMoreHistory?: boolean;
@@ -13,6 +14,8 @@ export type RuntimeHistoryArgs = {
   olderHistoryRequestId?: number;
   newerHistoryRequestId?: number;
   latestHistoryRequestId?: number;
+  historyRestoreRequest?: HistoryRestoreRequest | null;
+  setRestoredHistoryRequestId?: Setter<number>;
   followLatestRef?: MutableRefObject<boolean>;
   setHasMoreHistory?: Setter<boolean>;
   setHasNewerHistory?: Setter<boolean>;
@@ -28,6 +31,11 @@ export function useRuntimeHistoryWindow(args: RuntimeHistoryArgs & {
 }) {
   const latest = useRef(args);
   latest.current = args;
+  const [appliedRestore, setAppliedRestore] = useState(0);
+  const appliedRestoreRef = useRef(0);
+  useEffect(() => {
+    if (appliedRestore) latest.current.setRestoredHistoryRequestId?.(appliedRestore);
+  }, [appliedRestore]);
   const state = useRef({ session: args.runtimeSessionId, before: args.hasMoreHistory === true,
     after: args.hasNewerHistory === true, oldest: null as string | null, newest: null as string | null,
     request: null as string | null, direction: null as Source | null, sequence: 0 });
@@ -49,7 +57,7 @@ export function useRuntimeHistoryWindow(args: RuntimeHistoryArgs & {
       const ids = historical ? new Set(existing.map(event => event.event_id)) : null;
       const accepted = incoming.filter(event => event.session_id === window.session && (!ids || ids.has(event.event_id)));
       let base = existing;
-      if (source === 'latest') base = [];
+      if (source === 'latest' || source === 'around') base = [];
       if (source === 'snapshot' && !historical && incoming.length && existing.length) {
         const incomingIds = new Set(incoming.map(event => event.event_id));
         if (!existing.some(event => incomingIds.has(event.event_id))) base = [];
@@ -62,10 +70,10 @@ export function useRuntimeHistoryWindow(args: RuntimeHistoryArgs & {
         activeTurnId: !keepEarlier && !historical && (source === 'live' || source === 'snapshot' || source === 'latest')
           && activeTurn?.session_id === window.session ? activeTurn.turn_id : null,
       });
-      if (source === 'before' || source === 'latest' || (source === 'snapshot' && !historical && !base.length)) {
+      if (source === 'before' || source === 'latest' || source === 'around' || (source === 'snapshot' && !historical && !base.length)) {
         window.before = page?.has_more_before === true;
       }
-      if (source === 'after' || source === 'latest') window.after = page?.has_more_after === true;
+      if (source === 'after' || source === 'latest' || source === 'around') window.after = page?.has_more_after === true;
       window.before ||= bounded.removedBefore;
       window.after ||= bounded.removedAfter;
       window.oldest = firstPersistedRuntimeEventId(bounded.events);
@@ -89,6 +97,10 @@ export function useRuntimeHistoryWindow(args: RuntimeHistoryArgs & {
     window.request = null;
     window.direction = null;
     apply(hydrateMissingTurnAnchors(page.events || [], page.turns), page.direction || 'before', page);
+    if (page.direction === 'around' && latest.current.historyRestoreRequest) {
+      appliedRestoreRef.current = latest.current.historyRestoreRequest.id;
+      setAppliedRestore(appliedRestoreRef.current);
+    }
     latest.current.setIsOlderHistoryLoading?.(false);
     latest.current.setIsNewerHistoryLoading?.(false);
   }, [apply]);
@@ -100,11 +112,11 @@ export function useRuntimeHistoryWindow(args: RuntimeHistoryArgs & {
     latest.current.setIsNewerHistoryLoading?.(false);
   }, []);
 
-  const request = useCallback((direction: 'before' | 'after' | 'latest') => {
+  const request = useCallback((direction: 'before' | 'after' | 'latest' | 'around', eventId?: string) => {
     const options = latest.current;
     const window = state.current;
     const socket = options.socketRef.current;
-    const cursor = direction === 'before' ? window.oldest : window.newest;
+    const cursor = eventId || (direction === 'before' ? window.oldest : window.newest);
     if (!socket || socket.readyState !== WebSocket.OPEN || (direction !== 'latest' && !cursor)) {
       resetRequest();
       return;
@@ -115,6 +127,15 @@ export function useRuntimeHistoryWindow(args: RuntimeHistoryArgs & {
     socket.send(JSON.stringify({ type: `runtime.history.${direction}`, request_id: requestId,
       ...(direction !== 'latest' ? { [`${direction}_event_id`]: cursor } : {}), limit: 250 }));
   }, [resetRequest]);
+
+  const resumeRestore = useCallback(() => {
+    const restore = latest.current.historyRestoreRequest;
+    if (state.current.direction === 'around' && state.current.request) return;
+    if (restore && restore.sessionId === state.current.session && restore.id !== appliedRestoreRef.current) {
+      request('around', restore.eventId);
+    }
+  }, [request]);
+  useEffect(resumeRestore, [args.historyRestoreRequest, args.runtimeSessionId, resumeRestore]);
 
   const { olderHistoryRequestId = 0, newerHistoryRequestId = 0, latestHistoryRequestId = 0, runtimeSessionId } = args;
   // Counter changes are explicit UI intents. A thread change must not replay a
@@ -129,5 +150,5 @@ export function useRuntimeHistoryWindow(args: RuntimeHistoryArgs & {
     else if (olderHistoryRequestId !== previous.olderHistoryRequestId) request('before');
   }, [olderHistoryRequestId, newerHistoryRequestId, latestHistoryRequestId, runtimeSessionId, request]);
 
-  return { apply, receive, resetRequest };
+  return { apply, receive, resetRequest, resumeRestore };
 }

@@ -1955,6 +1955,14 @@ The `document` Usage adapter remains an explicit transition exception: before cu
 
 The root runtime WebSocket snapshot includes an authoritative `usage` projection. Usage produced by the root session is direct; usage produced by inter-agent descendants linked through `creator_runtime_session_id` is delegated. Newly inserted samples publish disposable `runtime.usage.updated` snapshots to the root session through the existing event bus. Subscriber loops coalesce these notifications to at most two per second, flush the latest pending snapshot immediately at turn completion, and cancel pending callbacks on unsubscribe. The durable Usage store and reconnect snapshot are authoritative; there is no duplicate runtime-log write for every observation. `GET /api/runtime/sessions/<session_id>/usage` exposes the same session-authorized projection for diagnostics. `GET /api/usage/timeseries?resolution=hour|day&periods=<n>` is platform-admin-only, derives workspace scope from the authenticated session, supports provider/model filtering, fills empty UTC buckets, and returns only redaction-safe aggregate data plus provider/model facets for the requested period. Chat renders the current-context percentage and numeric non-cached tokens in the composer and keeps cached input and the complete processed breakdown behind a dialog. Settings defaults workspace charts to non-cached usage, exposes metric/provider/model/range filters, and keeps cached and processed totals visible while provider subscription gauges remain separate.
 
+An operator may explicitly install `core.usage.startup_maintenance` as a temporary
+systemd prestart for a one-shot cutover. It verifies the stopped backend control
+group, runs existing owner migration phases under the exclusive fence, and stores
+a durable progress receipt in `data/control-plane/usage/maintenance/`. The receipt
+allows retry after promotion without adopting another migration, and a completed
+receipt never migrates again. Normal bootstrap remains unchanged. Remove the
+temporary hook after health, adapter and post-cutover observation checks.
+
 ### Runtime model decomposition
 
 The runtime domain should separate at least these concepts:

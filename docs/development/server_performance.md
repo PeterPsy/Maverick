@@ -285,6 +285,13 @@ command `core.persistence.usage-migration` accepts `phase=prepare`, `validate`,
 producers drained, then restart with the returned `MAVERICK_USAGE_STORE` setting.
 The command does not modify service credentials or restart the operator's session.
 The fence drains in-flight operations and rejects stale adapter instances.
+For cutover initiated by an agent hosted by that same backend, the explicit
+operator `core.usage.startup_maintenance` entry point can run once in a temporary
+systemd `ExecStartPre`, after its prior control group has stopped and before any
+new writer starts. It preserves a retryable receipt under the Usage owner and
+never hooks ordinary reads or bootstrap. See
+[`usage_sqlite_cutover.md`](../runbooks/usage_sqlite_cutover.md) for activation,
+health verification and removal of the temporary hook.
 
 Preparation archives the document source and preserves canonical sample/quota
 identities. Validation checks SQLite integrity, counters and stream cursors.

@@ -205,8 +205,9 @@ try {
   assert.equal(await calendar.locator('.calendar-error').count(), 0, 'Calendar displayed an intentional cancellation error.');
   await page.setViewportSize({ width: 600, height: 900 });
   await page.getByRole('button', { name: 'Apri sidebar', exact: true }).click();
-  await page.waitForFunction(() => [...document.querySelectorAll('iframe')].some(frame => frame.src.includes('calendar-sidebar')));
-  const calendarSidebar = page.frames().find(frame => frame.url().includes('calendar-sidebar') && !frame.url().includes('calendar-sidebar-footer'));
+  const isAccountSidebar = frame => frame.url().includes('calendar-sidebar') && !frame.url().includes('calendar-sidebar-footer');
+  const calendarSidebar = page.frames().find(isAccountSidebar)
+    ?? await page.waitForEvent('framenavigated', { predicate: isAccountSidebar });
   assert(calendarSidebar, 'Calendar account sidebar was not mounted.');
   await calendarSidebar.locator('.calendar-sidebar-widget').waitFor();
   await page.waitForTimeout(750);

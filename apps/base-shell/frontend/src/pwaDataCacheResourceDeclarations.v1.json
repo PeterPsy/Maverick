@@ -137,7 +137,7 @@
       "expiry_ttl_ms": 21600000,
       "max_entry_bytes": 2097152,
       "max_scope_bytes": 16777216,
-      "schema_revision": "crm.lists-and-recent-records.v1"
+      "schema_revision": "crm.lists-and-recent-records.v2"
     },
     {
       "app_id": "mail",

@@ -11,6 +11,7 @@ import {
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
 import { shellCacheLifecycle, shellRetryCoordinator, shellPwaMetrics, subscribeShellAuthorizationRevocation } from "./pwaCacheRuntime";
 import { setMaverickFrameOrigin, type MaverickFrameScope } from "./iframePolicy";
+import resourceDeclarations from "./pwaDataCacheResourceDeclarations.v1.json";
 
 type PortMessage = Record<string, unknown>;
 
@@ -165,7 +166,7 @@ describe("Base Shell structured data-cache broker", () => {
   it.each([
     ['calendar', 'bounded-event-window', { events: [], calendars: [], has_more: false }],
     ['chat', 'projects-and-completed-messages', { kind: 'projects', data: { projects: [], has_more: false } }],
-    ['crm', 'lists-and-recent-records', { kind: 'get', data: { record: { id: 'r', name: 'Customer' } } }],
+    ['crm', 'lists-and-recent-records', { kind: 'records_table', data: { records: [{ id: 'r', entity_type: 'deal', title: 'Customer', record: { id: 'r', name: 'Customer', margin_minor: 50000 } }], columns: [], next_cursor: '', has_more: false } }],
     ['mail', 'thread-headers-snippets-and-bodies', { kind: 'mailboxes', data: { items: [], folders: [] } }],
     ['fitness-coach', 'sanitized-bootstrap-and-thumbnails', { schema: 'fitness-coach.bootstrap.v1', workspace_id: 'default', app_id: 'fitness-coach', state_version: 'one', workouts: [], workout_summaries: [], exercises: [], tags: [], runs: [], selected_workout: null, view_state: { selected_workout_id: null, setup_tab: 'workout-settings', sidebar_query: '' } }],
   ] as const)('persists the approved %s projection and delivers warm paint before conditional network', async (appId, resource, payload) => {
@@ -180,7 +181,8 @@ describe("Base Shell structured data-cache broker", () => {
     const open = (id: string) => {
       const channel = new MessageChannel();
       const messages = portMessages(channel.port1);
-      subject.handleWindowMessage(requestEvent(channel, { app_id: appId, resource, schema_revision: `${appId}.${resource}.v1`, entity_id: entityId, request_id: id }), new Set([appId]));
+      const schemaRevision = resourceDeclarations.resources.find((item) => item.app_id === appId && item.resource === resource)!.schema_revision;
+      subject.handleWindowMessage(requestEvent(channel, { app_id: appId, resource, schema_revision: schemaRevision, entity_id: entityId, request_id: id }), new Set([appId]));
       return { channel, messages };
     };
     const first = open('approved-first');

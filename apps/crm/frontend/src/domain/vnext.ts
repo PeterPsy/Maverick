@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
-import { callBackend, CrmRecord } from '../api';
+import { CrmRecord } from '../api';
+export { useLiveCrm } from './useCrmRead';
 
 export const extensionPages: Record<string, { title: string; description: string; entities: string[] }> = {
   conversations: { title: 'Conversations', description: 'Keep the context. Connect people, decisions and the next step.', entities: ['conversation_thread'] },
@@ -17,31 +16,3 @@ export type ExtensionSpec = { fields: Record<string, string>; defaults?: Record<
 export type ExtensionSchema = { entities: Record<string, ExtensionSpec> };
 export type Selection = { entity: string; record: CrmRecord };
 export type Provider = { alias: string; interface: string; configured: boolean; selected_provider_app_ids: string[]; linked_count: number };
-
-// These are live-only reads. New fields and workflow authority do not widen the
-// platform-reviewed persistent PWA display schemas.
-export function useLiveCrm<T>(request: Record<string, unknown>) {
-  const key = JSON.stringify(request);
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [revision, setRevision] = useState(0);
-  const refresh = () => setRevision((value) => value + 1);
-  useEffect(() => {
-    let active = true;
-    setLoading(true); setError('');
-    callBackend<T>(JSON.parse(key)).then((value) => { if (active) setData(value); })
-      .catch((failure) => { if (active) setError(failure instanceof Error ? failure.message : 'Unable to load CRM data.'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [key, revision]);
-  useEffect(() => {
-    const changed = (event: MessageEvent) => {
-      if (isExactMaverickParentMessage(event) && ['maverick.app.data-changed', 'maverick.widget.data-changed'].includes(event.data?.type) && event.data?.owner_app_id === 'crm') refresh();
-    };
-    window.addEventListener('message', changed);
-    window.addEventListener('crm-workspace-refresh', refresh);
-    return () => { window.removeEventListener('message', changed); window.removeEventListener('crm-workspace-refresh', refresh); };
-  }, []);
-  return { data, error, loading, refresh };
-}

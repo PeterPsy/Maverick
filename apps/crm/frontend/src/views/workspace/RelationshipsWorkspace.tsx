@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ArrowRight, Building2, Plus, Users } from 'lucide-react';
 import { callBackend, PipelineStage, RecordsTablePayload } from '../../api';
-import { Selection, useLiveCrm } from '../../domain/vnext';
+import { Selection } from '../../domain/vnext';
+import { useCrmDisplay } from '../../domain/useCrmRead';
 import { CreatableEntity, ViewId } from '../../domain/types';
 import { currency, date, LoadState, PageHeading, Refresh } from './WorkspacePrimitives';
 
@@ -11,7 +12,7 @@ export function RelationshipsWorkspace({ entity, query, select, create, navigate
   const key = JSON.stringify({ entity, query, status, sort });
   const [page, setPage] = useState({ key, cursors: [''] });
   const cursors = page.key === key ? page.cursors : [''];
-  const result = useLiveCrm<RecordsTablePayload>({ action: 'crm.records_table', entity_type: entity, query, filters: status ? { status } : {}, sort: { field: sort, direction: sort === 'name' ? 'asc' : 'desc' }, pagination: { limit: 40, cursor: cursors.at(-1) || '' } });
+  const result = useCrmDisplay<RecordsTablePayload>({ kind: 'records_table', entity_type: entity, query, filters: status ? { status } : {}, sort_field: sort, sort_direction: sort === 'name' ? 'asc' : 'desc', limit: 40, cursor: cursors.at(-1) || '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const title = entity === 'contact' ? 'People' : entity === 'account' ? 'Companies' : 'Deals';

@@ -2981,6 +2981,17 @@ credentials or deferred sends. Warm list paint does not wait for mailbox counts,
 provider connection authority or view preferences. CRM and Mail use the standard
 immutable-asset and isolated-frame Vite plugins, not fallback asset classification.
 
+CRM's People, Companies and Deals screens also use this display path, not an
+independent live `crm.records_table` read. The shared request lifecycle cancels
+superseded reads, clears rows on query changes, retains rows during same-query
+refresh and accepts changed revalidation without allowing an older initial
+snapshot to overwrite it. Resource revision `crm.lists-and-recent-records.v2`
+adds only numeric `margin_minor` to the reviewed relationship record projection;
+the backend and host sanitizer share the schema, so deal margins do not silently
+become zero on warm paint. Other extension/workflow screens and every mutation
+remain live. The separately hosted public CRM uses its existing network-only
+adapter, not the platform's persistent broker.
+
 Chat's project display action and existing authenticated runtime GETs with
 `projection=display` expose stable conditional envelopes. Runtime reads remain
 Core-owned and app-agnostic: workspace/visibility checks precede projection, and

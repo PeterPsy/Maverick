@@ -322,7 +322,7 @@
       "cache_approved": true,
       "privacy_approved": true,
       "regulated_allowlisted": true,
-      "runtime_schema_revision": "crm.lists-and-recent-records.v1",
+      "runtime_schema_revision": "crm.lists-and-recent-records.v2",
       "invalidation_aliases": [
         "records",
         "schema",

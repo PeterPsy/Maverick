@@ -75,7 +75,14 @@ The `crm.records_table` backend action is intentionally app-owned UI infrastruct
 - **Custom objects:** user-defined typed schemas and records. Vertical source objects are imported as optional user data, not built-in real-estate concepts.
 - **Connections:** current selected-provider identities and linked counts. CRM detail pages search and verify Mail threads, Calendar events, Storage assets and Checklist records through the core-governed provider backend. Verified snapshots refresh in bounded batches; failures retain the last good context. Speech processes linked audio and returns reviewable transcript proposals, not reference entities. No private provider database or credential is read.
 
-New MCP/CLI actions include `extension_schema`, `list_extension_records`, `create_extension_record`, `update_extension_record`, `link_records`, `unlink_records`, `record_context`, `overview`, `integration_context`, `link_provider_record`, `import_plan`, `import_apply`, and `import_jobs` (CLI prefix `crm.`, MCP prefix `crm_`). New entities also participate in search, references, custom fields, lifecycle, audit and native export/import. The bounded, read-only `crm.workspace_view` helper supplies task/thread/expense/brief/intelligence/calendar/transcript/quality screens. Like the existing Records and Operations helpers, it is UI infrastructure, not a new public CLI/MCP action. New views use live reads; this release does not expand the reviewed offline/PWA data allowlist.
+New MCP/CLI actions include `extension_schema`, `list_extension_records`, `create_extension_record`, `update_extension_record`, `link_records`, `unlink_records`, `record_context`, `overview`, `integration_context`, `link_provider_record`, `import_plan`, `import_apply`, and `import_jobs` (CLI prefix `crm.`, MCP prefix `crm_`). New entities also participate in search, references, custom fields, lifecycle, audit and native export/import. The bounded, read-only `crm.workspace_view` helper supplies task/thread/expense/brief/intelligence/calendar/transcript/quality screens. Like the existing Records and Operations helpers, it is UI infrastructure, not a new public CLI/MCP action. Extension and workflow views use live reads and do not expand the reviewed PWA display allowlist.
+
+People, Companies and Deals reuse the approved `records_table` display cache.
+Schema revision `crm.lists-and-recent-records.v2` includes the displayed numeric
+deal margin; unknown fields and mutation authority are still excluded. Warm rows
+remain visible during refresh, changed queries cancel obsolete reads, and stage
+changes are sent once to the server. This is transparent display caching, not a
+mode or a deferred-write queue. The public CRM adapter remains network-only.
 
 See [CRM product alignment](../../docs/architecture/crm_product_parity.md) for the pinned upstream comparison, screen matrix and deliberate native differences.
 

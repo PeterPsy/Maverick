@@ -721,7 +721,8 @@
               "probability": "number",
               "age_days": "number",
               "stuck_days": "number",
-              "entity_type": "string"
+              "entity_type": "string",
+              "margin_minor": "number"
             },
             "required": [
               "id"

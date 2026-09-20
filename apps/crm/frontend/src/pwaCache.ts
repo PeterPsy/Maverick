@@ -3,7 +3,7 @@ import { sanitizeCrmReadModel } from './pwaReadModel';
 
 export async function readCrmDisplay<T>(parameters: Record<string, unknown>, options: AppReadModelOptions<T> = {}): Promise<T> {
   const result = await readAppCacheModel({
-    appId: 'crm', resource: 'lists-and-recent-records', schemaRevision: 'crm.lists-and-recent-records.v1', parameters,
+    appId: 'crm', resource: 'lists-and-recent-records', schemaRevision: 'crm.lists-and-recent-records.v2', parameters,
   }, (value) => {
     const model = sanitizeCrmReadModel(value);
     return model?.kind === parameters.kind ? model : null;

@@ -1,0 +1,62 @@
+{
+  "build_id": "b9f244231adc4ec1612453bca171d4e1a22e5d05a912c463aadf0dac4ab4eb6c",
+  "entrypoints": [
+    "index.html",
+    "widgets/skills-sidebar/index.html",
+    "widgets/skills-sidebar-footer/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/activeSkillSelection-kBfn921X.js",
+      "sha256": "71b59eefa33d03a7598c326178639e1159d41aecc93ecb7a1a4b0cd61bc4ba5b",
+      "size_bytes": 1705
+    },
+    {
+      "path": "assets/app-5i4Qq1uG.js",
+      "sha256": "70492cff54c15c5f8260807072e0a164058ee0d5005352493299bf0672efb9fe",
+      "size_bytes": 5343
+    },
+    {
+      "path": "assets/app-DCiPGfOw.js",
+      "sha256": "f3e5c915d51788b8bc60255d8ae64b10754d938a0d3a56e09ca75c1ec2003bb8",
+      "size_bytes": 144455
+    },
+    {
+      "path": "assets/app-SM3RFzpG.js",
+      "sha256": "ac44469b46827bf00658700191ba15c0f054c4f3a13a9980cfbc5aa7f35962b1",
+      "size_bytes": 1554
+    },
+    {
+      "path": "assets/app-yjDhgdGb.css",
+      "sha256": "0dc046394c18b26bf799ed7fef79438a6e2d2b95d34a3bb96cd534bb5f83f421",
+      "size_bytes": 21279
+    },
+    {
+      "path": "assets/createLucideIcon-BZ1Fd3_Z.js",
+      "sha256": "12e2180f6bd58ea535d64d566896ef68cb9c0973b404c908132b311db3d02150",
+      "size_bytes": 194468
+    },
+    {
+      "path": "assets/sidebar-widget-BL8xUXB3.css",
+      "sha256": "261589013337c9c13f10c529a2ca2d515b0933805793495bbaacde0b6a743524",
+      "size_bytes": 6502
+    },
+    {
+      "path": "index.html",
+      "sha256": "160688e6ce2d9ff6622735276730759f68bcde9f5d80d62b094210c43fb03b0c",
+      "size_bytes": 810
+    },
+    {
+      "path": "widgets/skills-sidebar/index.html",
+      "sha256": "d35795d2657b5c1f479fe37e0f9dd191c37de916085540bac05aef51a7381d00",
+      "size_bytes": 844
+    },
+    {
+      "path": "widgets/skills-sidebar-footer/index.html",
+      "sha256": "6ebbc8a1e8fb0bb129c19e087543f7a083ad9dd1cae8a21e847dbb7f8a7e6206",
+      "size_bytes": 587
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

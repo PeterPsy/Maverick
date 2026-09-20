@@ -1,11 +1,16 @@
 {
-  "build_id": "06625aaaf4e92d6a371beba6bc396f064ff25c69240ab4ff1a921b296bd7180c",
+  "build_id": "20298e973e4758d87916ee9ea6998716cafc1ce449343e8253bef1af4c163b33",
   "entrypoints": [
     "index.html",
     "widgets/senses-sidebar/index.html"
   ],
   "immutable": [],
   "revalidated": [
+    {
+      "path": "assets/app-ByGyWArR.js",
+      "sha256": "5d120f2ad34b26213ff5869c3980925b8e7cfdbc53471095d1b17d8395b278b3",
+      "size_bytes": 56697
+    },
     {
       "path": "assets/app-DJsAwbUl.css",
       "sha256": "a911057819e973d6f679ebc53550cba9e07e0e8e207228ea8c8932551da24d7b",
@@ -15,11 +20,6 @@
       "path": "assets/app-DobVIctD.js",
       "sha256": "792fe6808528dbe8d61db21f8d63913d7699062be57b1d3273206b5792b21cd2",
       "size_bytes": 3248
-    },
-    {
-      "path": "assets/app-ciOKbOKE.js",
-      "sha256": "ed593125235fe945114028f747d745bd1d26a0df4bfe23cc84364f73235eb0e9",
-      "size_bytes": 56591
     },
     {
       "path": "assets/index-CrtjZ5Xz.js",
@@ -33,7 +33,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "6b3a938440377434b07db6ecb56efcf65dff6c5dce36618150ece09812aaa4bd",
+      "sha256": "1eb70175936f1af5ccf8f10beed203a2a2b9df2b904895745abce8de3bdc85f1",
       "size_bytes": 519
     },
     {

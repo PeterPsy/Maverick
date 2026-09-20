@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "ece7d6bf4f3de30ee1d943a979ffbb989c778fd5ed6d8248e6c588e5c6cc30f3",
+  "build_id": "3f8e1419d35c52ef022f5aa627702c5a2360df77db600b2d6f7b1d74e6b2c77f",
   "entrypoints": [
     "index.html",
     "widgets/mail-sidebar/index.html",
@@ -8,14 +8,14 @@
   ],
   "immutable": [
     {
+      "path": "assets/app-B7KsEq6Z.js",
+      "sha256": "264fd95f90c0d9bfe5340e9808790e187a34e3a82b75f96bc32243b8329b6016",
+      "size_bytes": 38724
+    },
+    {
       "path": "assets/app-DsGIIRm0.css",
       "sha256": "bc94072e29f23ceda3adfc7f13b08f32f5e787b844bf28f13da3897e9e59d264",
       "size_bytes": 23220
-    },
-    {
-      "path": "assets/app-otYonY94.js",
-      "sha256": "ae7ca4cbe850ca18b70ce68495546ad99f1f7ecffbe0dca35186dd5930ffc73c",
-      "size_bytes": 38724
     },
     {
       "path": "assets/createLucideIcon-CwCer74m.js",
@@ -33,13 +33,13 @@
       "size_bytes": 1969
     },
     {
-      "path": "assets/mailboxSelection-BeebsV-O.js",
-      "sha256": "2c3216ed941923df431491ad98c71a6e0f4a9beb68b29e1e5e0609ebbc841b06",
-      "size_bytes": 35044
+      "path": "assets/mailboxSelection-CzDndavi.js",
+      "sha256": "9009aa1589e032b528ef8685e12845cd97935fcf7c3c3677a42e4b67162231ca",
+      "size_bytes": 35222
     },
     {
-      "path": "assets/widgets/mail-sidebar/index-aH0aIa1M.js",
-      "sha256": "c2960e0805b107e0092f11cf0e5d2f8c287ab57341b02092c73f7caf432797af",
+      "path": "assets/widgets/mail-sidebar/index-Ct3lHNhN.js",
+      "sha256": "b84acabb17d3b172aa3af2cc1ffc4dad376234a7b371f92c9cc5de780980954c",
       "size_bytes": 142113
     },
     {
@@ -51,12 +51,12 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "13f295d1b064780131836e58e08b709bc6cc3804ddb63c9d9e46bba26c8c4fb3",
+      "sha256": "0c13a1dd659ca0ff4fc4ed78e6f090587189c5c3d6afd50538eb296e6a2ebd9e",
       "size_bytes": 599
     },
     {
       "path": "widgets/mail-sidebar/index.html",
-      "sha256": "8b3c46d5ce4b297a1a4a72ceb79f8b8359c5380da4df77f9492d6ebedbe94272",
+      "sha256": "7d83f1b0c8eb631571b44e0d89fb8b3a5fd7b63031b7483d817f1063ae9f7752",
       "size_bytes": 645
     },
     {

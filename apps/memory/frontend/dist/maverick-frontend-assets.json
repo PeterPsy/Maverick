@@ -1,5 +1,5 @@
 {
-  "build_id": "eba54a4ed21090e8ecaf4c89669f20fd86984c7a2b6e6cdb4bae65126b16319d",
+  "build_id": "d1facb78ea0e90dc28817f202bf53b57c6005e9dd34468518a49e869d3262dac",
   "entrypoints": [
     "index.html",
     "widgets/memory-sidebar/index.html",
@@ -28,9 +28,9 @@
       "size_bytes": 2003
     },
     {
-      "path": "assets/app-W3rvwKPU.js",
-      "sha256": "aa586bf54ddb026b73c0dab38c5940c799b8d0e2ea4c7517692ee07d63eca49f",
-      "size_bytes": 29356
+      "path": "assets/app-tZIjqHCM.js",
+      "sha256": "cff81dcf55dda21a2595ac591ddf3b57593b94a92f8478519b041480c0b01c6d",
+      "size_bytes": 29462
     },
     {
       "path": "assets/memoryApi-DRux5XP8.js",
@@ -44,7 +44,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "d127761bcd6032e0d6c910d2ceff9052aaa609cc86bdb6af042afd153b12fca5",
+      "sha256": "02ad1cb0f4df3765bf64c7ff362216a94f9b416ecfd878a669c1f952381ecbf8",
       "size_bytes": 636
     },
     {

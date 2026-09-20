@@ -49,6 +49,40 @@ describe("RAM retry coordinator", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not start HTTP or timers offline and resumes once on connectivity', async () => {
+    vi.useFakeTimers();
+    const navigator = { onLine: false };
+    const window = new EventTarget();
+    vi.stubGlobal('navigator', navigator);
+    vi.stubGlobal('window', window);
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse('online'));
+    const coordinator = new RetryCoordinator();
+    try {
+      const result = coordinator.runRequest({ executor: safeRequest(), key: 'offline-initial' });
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+      navigator.onLine = true;
+      window.dispatchEvent(new Event('online'));
+      await expect(result).resolves.toBe('online');
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally { coordinator.dispose(); }
+  });
+
+  it('cancels an offline read without ever issuing HTTP', async () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const coordinator = new RetryCoordinator();
+    const controller = new AbortController();
+    try {
+      const result = coordinator.runRequest({ executor: safeRequest(), key: 'offline-cancel', signal: controller.signal });
+      controller.abort();
+      await expect(result).rejects.toBeInstanceOf(RetryCancelledError);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally { coordinator.dispose(); }
   });
 
   it("retries idempotent reads with capped exponential delay and single flight", async () => {

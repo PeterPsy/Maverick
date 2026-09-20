@@ -48,6 +48,11 @@ resume refreshes display state once. Reconnect uses bounded exponential backoff
 with jitter. `observeMaverickVisibility` intersects shell, document and connectivity
 hints so subscribers can suspend nonessential work; these hints never authorize
 cached data or change persistence policy.
+Display consumers can pass `{ requireOnline: false }` to visibility reads and
+subscriptions when a foreground view must render an already authorized offline
+cache. Network work keeps the default connectivity requirement. Safe HTTP reads
+wait without issuing an initial request while offline or hidden; cached values
+remain available before that network boundary, and abort cancels the wait.
 
 M4 adds a separate `maverick-pwa-file-v1` IndexedDB manifest and the owned
 `maverick-pwa-file-cache-v1` OPFS directory. File names are opaque, writes are

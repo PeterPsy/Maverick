@@ -25,7 +25,16 @@ The first agentic surface exposes:
 - descriptor sidecars at `mcp/tool_schemas.json` and `cli/command_schemas.json`
 - Google Calendar OAuth connection setup, remote calendar source selection, sync, and disconnect using Core Secrets for client credentials and per-connection refresh tokens
 
-Widgets remain intentionally out of this phase.
+Calendar also supplies account-tree and primary-action sidebar widgets. Their
+display reads suspend when the sidebar, app or document is hidden. Reopening
+coalesces a fresh read without replacing the already displayed account tree.
+
+The main view cancels window, preferences, metadata and event-detail reads on
+suspension, ignores late results and preserves current content. App-events owns
+the single online resume refresh. Offline foreground views may still paint the
+authorized cached event window; network-only preferences and account metadata
+wait for connectivity. Accepted event edits and provider sync operations keep
+their existing completion semantics.
 
 ## Surfaces
 

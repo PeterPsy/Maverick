@@ -1,5 +1,5 @@
 {
-  "build_id": "612ff3857d14d70d8b285430103680a8d54ff0e1393e517da0bc7f0b3e5cc7d6",
+  "build_id": "2b73fc2d04c2b9d8e340432ed5f5dfd5e7007bb3e72631d7299ab67ce602c029",
   "entrypoints": [
     "index.html",
     "widgets/checklist-sidebar/index.html",
@@ -19,8 +19,8 @@
       "size_bytes": 1017
     },
     {
-      "path": "assets/app--XMbeQVF.js",
-      "sha256": "0f25cc6515d69fba8fdb5df7ae66375005b5f978de4e1e67fd031988c6eca37c",
+      "path": "assets/app--bFmKy17.js",
+      "sha256": "a14cd2794867a7f3c357a5f31d11bc41b9cf160f893b6493f8093693570253d5",
       "size_bytes": 4107
     },
     {
@@ -29,8 +29,8 @@
       "size_bytes": 1166
     },
     {
-      "path": "assets/app-ByBw7ekt.js",
-      "sha256": "b0cc2ade0c001cfb21064559116f1ab4fb406af839aaea5ad0849770ceebd3ef",
+      "path": "assets/app-C1ivvpJA.js",
+      "sha256": "d37a74e7c54b12d405627710f8d11a77c5e62b6a1a45bbc612fbae573d40167d",
       "size_bytes": 7033
     },
     {
@@ -44,9 +44,9 @@
       "size_bytes": 194468
     },
     {
-      "path": "assets/main-BtV1o9h_.js",
-      "sha256": "560aae25c352cf26780f49789e5f48af733fa455bb04ed21c5609b4503c7990a",
-      "size_bytes": 149982
+      "path": "assets/main-CY8ginL5.js",
+      "sha256": "7f2e82c7f3d116e661b8d8e37cadf0038d383b851f5a52355e2eb9383ee2663f",
+      "size_bytes": 150088
     },
     {
       "path": "assets/main-Cey0S0sv.css",
@@ -60,7 +60,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "848a60ea51b849e87243a32aa2581246c7d704b40c1fae672099ae6a9923af15",
+      "sha256": "5acb94879e588179253eb3cac96654d073b36aad05281363d01f2f2b050d97ff",
       "size_bytes": 832
     },
     {
@@ -75,7 +75,7 @@
     },
     {
       "path": "widgets/design-checklist/index.html",
-      "sha256": "71c1b248d5873689b36bb9d22bbb22a678761cae73dda62cfdb8d4531c73cf92",
+      "sha256": "cf7b13e84169a85ef9514c8e20d1f3ebcb8ee103a2709af061d98fed7eedaeac",
       "size_bytes": 759
     }
   ],

@@ -20,6 +20,16 @@ describe("Calendar API OAuth helpers", () => {
     vi.unstubAllGlobals()
   })
 
+  it('passes cancellation to every display-only metadata request', async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({}));
+    vi.stubGlobal('fetch', fetch);
+    const controller = new AbortController();
+    await Promise.all([listEvents('calendar', controller.signal), readViewFilter('calendar', controller.signal),
+      listConnections('calendar', controller.signal), listCalendars('calendar', undefined, controller.signal)]);
+    expect(fetch).toHaveBeenCalledTimes(4);
+    for (const [, init] of fetch.mock.calls) expect(init?.signal).toBe(controller.signal);
+  });
+
   it("starts Google OAuth with an explicit client-id secret request but no secret values", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

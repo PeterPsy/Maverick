@@ -10,7 +10,7 @@ export class RetryVisibilityMonitor {
   ) {}
 
   visible(): boolean {
-    return this.clientVisible && this.documentVisible();
+    return this.clientVisible && this.documentVisible() && globalThis.navigator?.onLine !== false;
   }
 
   setClientVisibility(visible: boolean): void {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache'
 import {
   CALENDAR_UI_STATE_CHANGED_EVENT,
   CALENDAR_UI_STATE_RESOURCE,
@@ -71,7 +72,7 @@ export function CalendarEventOverlay({
     }
 
     function handleShellMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") {
         return
       }
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string }

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "31da3d5bf45542bc8c2c4f4cc9fa3d1e3f7eaf28aa3b45dae13c25a5ecea5dab",
+  "build_id": "66bafbf1bc0c5abff52f1fe58c124731cf103c47ff62894a947f8980800de532",
   "entrypoints": [
     "index.html",
     "widgets/crm-external-settings/index.html",
@@ -8,9 +8,9 @@
   ],
   "immutable": [
     {
-      "path": "assets/WorkspaceSidebar-Cwef25RU.js",
-      "sha256": "210c68c10a2d90517a8fb0475402243a0c3c2725beb3ead9bb84ceb6d4170085",
-      "size_bytes": 55338
+      "path": "assets/WorkspaceSidebar-DI3UuPd7.js",
+      "sha256": "d1217b2593e8aa912c4b12720251289051a70028bba818f4750b02afb639746a",
+      "size_bytes": 55542
     },
     {
       "path": "assets/app-5BDrWmOr.css",
@@ -18,8 +18,8 @@
       "size_bytes": 55148
     },
     {
-      "path": "assets/app-BJKATHu5.js",
-      "sha256": "748d4c273511b3b31a45d48564452ae672fea277b62426f460745bc7e43fec2c",
+      "path": "assets/app-BKRNZMm3.js",
+      "sha256": "930cca17025d5a8b4cbcf561a0b9fa48d296beaf62e1f5d29e0fa24d742a33e9",
       "size_bytes": 314059
     },
     {
@@ -48,8 +48,8 @@
       "size_bytes": 8462
     },
     {
-      "path": "assets/widgets/crm-sidebar/index-DuyPdldR.js",
-      "sha256": "81cec7a6917fe642193df017ad665a4084bf6be578aef7ade844e9c3c600e448",
+      "path": "assets/widgets/crm-sidebar/index-BrXykH42.js",
+      "sha256": "d5cbaaaf7214f8cbb6563d8303ba01e68518b69c5160a777075161237f552bd0",
       "size_bytes": 1702
     }
   ],
@@ -61,7 +61,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "be5175e57b50267740dc89164da33caac76e19e42ed986c8e47f28a0f232336f",
+      "sha256": "799449deaaaa35bf4a0a3a7802aee18499a803cd970835b1f762cf6e49de22e9",
       "size_bytes": 762
     },
     {
@@ -71,7 +71,7 @@
     },
     {
       "path": "widgets/crm-sidebar/index.html",
-      "sha256": "31e9beec41509c8b65efc74e42998ff5f37965b7298973f660b54d5eb1e078b3",
+      "sha256": "989ca980a234c473d31db92a9f7367745907f954cedea2675a686a6d2f4ae08e",
       "size_bytes": 636
     }
   ]

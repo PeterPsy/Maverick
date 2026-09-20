@@ -80,10 +80,11 @@ function googleCalendarRefreshTokenSelector(connectionId: string): AppSecretSele
   };
 }
 
-async function request(appId: string, body: Record<string, unknown>): Promise<CalendarActionResult> {
+async function request(appId: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<CalendarActionResult> {
   const response = await fetch(`/api/apps/${encodeURIComponent(appId)}/backend`, {
     method: 'POST',
     credentials: 'same-origin',
+    signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
@@ -94,27 +95,27 @@ async function request(appId: string, body: Record<string, unknown>): Promise<Ca
   return data;
 }
 
-export async function listEvents(appId: string): Promise<CalendarEvent[]> {
-  const data = await request(appId, { action: 'list', ...noAppSecrets() });
+export async function listEvents(appId: string, signal?: AbortSignal): Promise<CalendarEvent[]> {
+  const data = await request(appId, { action: 'list', ...noAppSecrets() }, signal);
   return (data.events || []).map(fromPayload);
 }
 
-export async function readViewFilter(appId: string): Promise<CalendarViewState> {
-  const data = await request(appId, { action: 'view_filter', ...noAppSecrets() });
+export async function readViewFilter(appId: string, signal?: AbortSignal): Promise<CalendarViewState> {
+  const data = await request(appId, { action: 'view_filter', ...noAppSecrets() }, signal);
   return data.view_state || {};
 }
 
-export async function listConnections(appId: string): Promise<CalendarConnection[]> {
-  const data = await request(appId, { action: 'calendar_connections.list', ...noAppSecrets() });
+export async function listConnections(appId: string, signal?: AbortSignal): Promise<CalendarConnection[]> {
+  const data = await request(appId, { action: 'calendar_connections.list', ...noAppSecrets() }, signal);
   return (data.connections || []).map(fromConnectionPayload);
 }
 
-export async function listCalendars(appId: string, connectionId?: string): Promise<CalendarRemoteCalendar[]> {
+export async function listCalendars(appId: string, connectionId?: string, signal?: AbortSignal): Promise<CalendarRemoteCalendar[]> {
   const data = await request(appId, {
     action: 'calendar_calendars.list',
     ...(connectionId ? { connection_id: connectionId } : {}),
     ...noAppSecrets(),
-  });
+  }, signal);
   return (data.calendars || []).map((calendar) => fromCalendarPayload(calendar as CalendarRemoteCalendarPayload));
 }
 

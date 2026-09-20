@@ -1,5 +1,5 @@
 {
-  "build_id": "a0fa400dbfc56329d9259a876e0c42bfd58c7f8ae479cbd487a63b8f0a3461cb",
+  "build_id": "33d82d4f45ca63651b8e0ac5f268ac28dd25b3ebc9169fed0af980fe6d419531",
   "entrypoints": [
     "index.html",
     "widgets/docs-studio-sidebar/index.html"
@@ -17,9 +17,9 @@
       "size_bytes": 9486
     },
     {
-      "path": "assets/app-vpuuQg3v.js",
-      "sha256": "7696f26687594ea5f5b7ff6368160a2ecd1326143f9c2216837d13b62a25b527",
-      "size_bytes": 12653
+      "path": "assets/app-rN3VsHEG.js",
+      "sha256": "ce1c1bc221bbcc1c2134e8d4edd4054dcd61dc7a16b55615d15e6ae2995cee8f",
+      "size_bytes": 12760
     },
     {
       "path": "assets/docNavigationParams-D29GvZiQ.js",
@@ -33,7 +33,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "ee926cd855d1be55f10ef96f9cf76613ec476ca20daf5802ae6923c394dfdf37",
+      "sha256": "b2a20f9294a6e0db492e74ea26b27a587839c14cb6deb16e41bfa72d747027f6",
       "size_bytes": 581
     },
     {

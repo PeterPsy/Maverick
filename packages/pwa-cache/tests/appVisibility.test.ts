@@ -14,6 +14,8 @@ it('intersects exact-parent visibility, document visibility and connectivity for
   vi.stubGlobal('navigator', navigator);
   const changed = vi.fn();
   const dispose = observeMaverickVisibility(changed);
+  const foreground = vi.fn();
+  const disposeForeground = observeMaverickVisibility(foreground, { requireOnline: false });
   const message = (visible: boolean, source = parent) => target.dispatchEvent(Object.assign(new Event('message'), {
     data: { type: 'maverick.app.visibility-changed', visible }, origin: 'https://shell.test', source,
   }));
@@ -30,11 +32,16 @@ it('intersects exact-parent visibility, document visibility and connectivity for
     message(true);
     expect(maverickAppIsVisible()).toBe(false);
     navigator.onLine = false;
+    target.dispatchEvent(new Event('offline'));
     document.hidden = false;
     document.dispatchEvent(new Event('visibilitychange'));
     expect(maverickAppIsVisible()).toBe(false);
+    expect(maverickAppIsVisible({ requireOnline: false })).toBe(true);
+    message(false);
+    message(true);
     navigator.onLine = true;
     target.dispatchEvent(new Event('online'));
     expect(changed.mock.calls).toEqual([[true], [false], [true]]);
-  } finally { dispose(); }
+    expect(foreground.mock.calls).toEqual([[true], [false], [true], [false], [true]]);
+  } finally { dispose(); disposeForeground(); }
 });

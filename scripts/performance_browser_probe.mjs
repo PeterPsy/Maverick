@@ -39,7 +39,12 @@ await context.addInitScript(() => {
 const page = await context.newPage();
 const errors = [];
 const catalogReads = [];
+const calendarReads = [];
 page.on('request', request => {
+  if (request.url().includes('/api/apps/calendar/backend')) {
+    const body = request.postDataJSON();
+    calendarReads.push({ action: body?.action, frame: request.frame().url().split(/[?#]/)[0], time: Date.now() });
+  }
   if (!request.url().includes('/api/apps/storage/backend')) return;
   const body = request.postDataJSON();
   if (body?.action === 'catalog') catalogReads.push({ offset: body.offset, folder: body.folder_path, time: Date.now() });
@@ -120,18 +125,30 @@ try {
   await restoredStorage.getByRole('button', { name: 'Select report-000199.md', exact: true }).first().waitFor();
   await restoredStorage.waitForFunction(top => Math.abs(document.querySelector('.storage-browser').scrollTop - top) < 2,
     scrollTop, { timeout: 15_000 });
-  for (let index = 0; index < 3; index += 1) {
-    const write = await context.request.post(`${baseUrl}/api/apps/storage/backend`, { headers: { Origin: baseUrl }, data: {
-      action: 'write_file', role: 'generated', relative_path: `uploads/unrelated-${index}.md`, content: '# Concurrent fixture',
-      _app_secret_request: { logical_names: [], required: false },
-    } });
-    assert(write.ok(), `Fixture upload failed: ${write.status()}`);
-    if (index < 2) {
+  let writing = true;
+  const uploadTimes = [];
+  let uploadError;
+  const uploads = (async () => {
+    for (let index = 0; (writing || index < 8) && index < 100; index++) {
+      const started = Date.now();
+      const write = await context.request.post(`${baseUrl}/api/apps/storage/backend`, { headers: { Origin: baseUrl }, data: {
+        action: 'write_file', role: 'generated', relative_path: `uploads/unrelated-${index}.md`, content: '# Concurrent fixture',
+        _app_secret_request: { logical_names: [], required: false },
+      } });
+      assert(write.ok(), `Fixture upload failed: ${write.status()}`);
+      uploadTimes.push({ started, completed: Date.now() });
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  })().catch(error => { uploadError = error; });
+  try {
+    for (let index = 0; index < 2; index++) {
       await restoredStorage.getByRole('button', { name: 'Load more', exact: true }).click();
       const last = index === 0 ? '000299' : '000349';
       await restoredStorage.getByRole('button', { name: `Select report-${last}.md`, exact: true }).first().waitFor();
     }
-  }
+  } finally { writing = false; await uploads; }
+  if (uploadError) throw uploadError;
+  assert(uploadTimes.length >= 8, 'Continuous writer did not complete its fixture workload.');
   await restoredStorage.waitForFunction(() => document.querySelector('.content-counts')?.textContent.includes('350 files'));
   assert.equal(await restoredStorage.locator('.animated-file-item').count(), 350);
   assert.equal(await restoredStorage.locator('.storage-error').count(), 0);
@@ -172,14 +189,51 @@ try {
   await historyChat.getByRole('button', { name: 'Jump to latest message', exact: true }).click();
   await historyChat.getByText('Fixture request 02999', { exact: true }).waitFor();
   assert(historyPages.some(frame => frame.direction === 'latest'), 'Jump to latest did not replace the data window.');
+  const calendar = await openApp('calendar');
+  await calendar.locator('.calendar-board').waitFor();
+  await page.waitForTimeout(500);
+  await openApp('storage');
+  await page.waitForTimeout(1_000);
+  const hiddenReads = calendarReads.length;
+  await page.waitForTimeout(1_000);
+  assert.equal(calendarReads.length, hiddenReads, 'Hidden Calendar issued background reads.');
+  const resumedAt = Date.now();
+  await openApp('calendar');
+  await page.waitForTimeout(750);
+  const resumedWindows = calendarReads.filter(read => read.time >= resumedAt && read.action === 'pwa.read_model');
+  assert.equal(resumedWindows.length, 1, 'Calendar resume must perform one useful window refresh.');
+  assert.equal(await calendar.locator('.calendar-error').count(), 0, 'Calendar displayed an intentional cancellation error.');
+  await page.setViewportSize({ width: 600, height: 900 });
+  await page.getByRole('button', { name: 'Apri sidebar', exact: true }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('iframe')].some(frame => frame.src.includes('calendar-sidebar')));
+  const calendarSidebar = page.frames().find(frame => frame.url().includes('calendar-sidebar') && !frame.url().includes('calendar-sidebar-footer'));
+  assert(calendarSidebar, 'Calendar account sidebar was not mounted.');
+  await calendarSidebar.locator('.calendar-sidebar-widget').waitFor();
+  await page.waitForTimeout(750);
+  await page.getByRole('button', { name: 'Chiudi sidebar', exact: true }).click();
+  await page.waitForTimeout(1_000);
+  const widgetReads = () => calendarReads.filter(read => read.frame.includes('calendar-sidebar'));
+  const closedWidgetReads = widgetReads().length;
+  await page.waitForTimeout(1_000);
+  assert.equal(widgetReads().length, closedWidgetReads, 'Closed sidebar issued background reads.');
+  assert.equal(calendarSidebar.isDetached(), false, 'Closing sidebar destroyed the active widget state.');
+  const sidebarResumedAt = Date.now();
+  await page.getByRole('button', { name: 'Apri sidebar', exact: true }).click();
+  await page.waitForTimeout(750);
+  const resumedAccountReads = widgetReads().filter(read => read.time >= sidebarResumedAt && read.action === 'list');
+  assert.equal(resumedAccountReads.length, 1, 'Reopening sidebar must perform one account refresh.');
+  assert.equal(calendarSidebar.isDetached(), false, 'Reopening sidebar replaced the retained widget.');
   assert.equal(sockets.size, 1, 'Only the Shell should own app events.');
   assert.deepEqual(errors, [], 'App frames emitted browser errors.');
   process.stdout.write(JSON.stringify({ schema: 1, boundary: 'authenticated-disposable-chromium',
     browser: browser.version(), fixture_files: 350, chat_draft_hibernation: 'passed',
     storage_folder_sort_selection_paging_scroll_hibernation: 'passed', shared_app_event_socket_count: sockets.size,
-    storage_pagination_during_other_folder_writes: 'passed', catalog_reads: catalogReads,
+    storage_pagination_during_other_folder_writes: 'passed', catalog_reads: catalogReads, continuous_uploads: uploadTimes,
     chat_bidirectional_data_window: 'passed', chat_history_pages: historyPages, chat_max_visible_rows: maxRows,
     chat_history_reading_anchor_hibernation: 'passed', chat_reading_anchor: readingAnchor,
+    calendar_hidden_reads: 0, calendar_resume_window_reads: resumedWindows.length, calendar_reads: calendarReads,
+    calendar_sidebar_hidden_reads: 0, calendar_sidebar_resume_reads: resumedAccountReads.length,
+    calendar_sidebar_retains_frame: true,
     errors, physical_device_gate: 'not-tested' }, null, 2) + '\n');
 } catch (error) {
   const frames = await Promise.all(page.frames().map(async frame => ({

@@ -283,6 +283,12 @@ export class RetryCoordinator {
     try {
       while (true) {
         throwIfAborted(flight.controller.signal);
+        // A safe-request executor performs HTTP only. Cache reads happen before
+        // this boundary and remain available while the network is offline.
+        if (options.safeRequest && !this.visibility.visible()) {
+          await this.waitForRetry(flight, 0);
+          throwIfAborted(flight.controller.signal);
+        }
         flight.attempt = attempt;
         lastAttemptAt = this.now();
         if (attempt > 0) {

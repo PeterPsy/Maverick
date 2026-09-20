@@ -234,6 +234,15 @@ merge/projection CPU, not browser rendering, startup or server-side batching.
 
 ## Background scheduling and idle providers
 
+Calendar owns separate abortable read lanes for its event window, preferences
+and focused detail. Hidden/closed surfaces clear queued refreshes and abort
+metadata and display reads without showing intentional cancellation errors.
+The sidebar retains its rendered account tree during refresh; embedded app-events
+coalesces one online resume read. The visibility SDK also supports foreground
+subscriptions independent of connectivity for offline cached display. Safe HTTP
+executors wait before their first attempt while offline/hidden, so cache painting
+does not start a background network retry loop.
+
 The backend retains each app hook's bounded `next_due_in_seconds` hint and checks
 it before resolving the app surface or launching Python. Failure uses the normal
 interval; app revision changes invalidate its deadline, and disabled apps or

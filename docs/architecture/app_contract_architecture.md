@@ -1921,7 +1921,9 @@ and caller cancellation are not. Retry hints may shorten exponential backoff
 but never the server's Retry-After deadline, including HTTP-date delays beyond
 the normal backoff cap.
 
-The SDK's retry coordinator is RAM-only. It automatically pauses for document
+The SDK's retry coordinator is RAM-only. Safe HTTP reads wait before their first
+attempt when offline or hidden; cache reads remain outside that network boundary.
+It automatically pauses retries for connectivity, document
 visibility and `maverick.app.visibility-changed`, treats browser `online`,
 focus, and successful Maverick responses only as early retry hints, and
 cancels work at unmount or principal/scope change. Unsafe requests are not
@@ -2076,6 +2078,11 @@ header, because that prevents app content from appearing behind the transparent
 mobile header chrome.
 
 The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
+
+The shared visibility observer includes connectivity by default. Display-only
+consumers can use `requireOnline: false` to observe foreground state and render
+authorized offline cached data. This option neither enables network work nor
+changes cache authorization; background reads retain the connectivity gate.
 
 Apps that declare a frontend entrypoint may be rebuilt through the official core app-hosting frontend build operation when they provide a real build script. After a successful rebuild, the core publishes `maverick.app.frontend-changed` on the app event WebSocket. The shell should react to that event by remounting only the affected app iframe and shell-hosted widget iframes owned by that app with a shell-owned cache-busting query parameter. This refresh path is for updated frontend artifacts after rebuilds. It must not be used for app-owned internal navigation, must not poll mounted frontend documents, and must not require a full shell page reload for already-mounted app or widget iframes.
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react"
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache'
 import { CALENDAR_UI_STATE_RESOURCE, notifyCalendarUiStateChanged, readCalendarUiState, writeCalendarUiState } from "@/calendar-ui-state"
 import { cn } from "@/lib/utils"
 import { CalendarBoardViews } from "./calendar-board-views"
@@ -54,7 +55,7 @@ export function EventManager({
 
   useEffect(() => {
     function handleUiStateMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") {
         return
       }
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string }

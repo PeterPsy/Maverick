@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "c80556baeefe0517e680cf522867f477e513937cb2385b7caf14cd4dfa786f4c",
+  "build_id": "17cc7b7f96b7043a703d21d44f8b5850adb683202d428d8574312e01b53061c9",
   "entrypoints": [
     "index.html",
     "widgets/file-preview/index.html",
@@ -14,13 +14,13 @@
       "size_bytes": 43048
     },
     {
-      "path": "assets/app-UcL5IV66.js",
-      "sha256": "e892d77c0d9e3118567c1e6454d271672be8e595ae36265616d6eda3453d1e0a",
+      "path": "assets/app-Ebecp2FI.js",
+      "sha256": "0bf8d529af248285eaa68e922aa2666cdc2c022b89e2e6eeb16a263d0e9f870f",
       "size_bytes": 107074
     },
     {
-      "path": "assets/docx-preview-nAgXyGNr.js",
-      "sha256": "f378bbb1cecb733c09264a0ff628bdf1c5f990fda84658372b83312c14e62b27",
+      "path": "assets/docx-preview-CUut3F9I.js",
+      "sha256": "636b27417182f1463b0462f5b2227ffad37fb802e2a741cae7a974bfc3f41296",
       "size_bytes": 172976
     },
     {
@@ -34,18 +34,18 @@
       "size_bytes": 1232303
     },
     {
-      "path": "assets/sidebar-widget-BLM8PkCA.js",
-      "sha256": "868a7f39dc121eff15db05ba1d09ca2c96977a61314c537c44a5d85472c1ecfb",
+      "path": "assets/sidebar-widget-DUqPwzC1.js",
+      "sha256": "2405ab800b341e327b74cc0ab960e10669c4f1a8d38f0b4de903dd9b77970324",
       "size_bytes": 351
     },
     {
-      "path": "assets/storageApi-DKUiK6Tl.js",
-      "sha256": "b90adc0700ee5ea70772195d2457fc0446bda2b5e91f2ced7c15676684687fbc",
-      "size_bytes": 244520
+      "path": "assets/storageApi-CzkAE53q.js",
+      "sha256": "49823dd7a574705e61d9a07fab6b5547e2e03af7a95ef0f9e0300079ad129b7d",
+      "size_bytes": 244759
     },
     {
-      "path": "assets/storageNavigationParams-CsexYbG3.js",
-      "sha256": "3ffd3c1645672fe7e6e19a31ceb61fccd8519dc3a37df929dc0b14eb4253d935",
+      "path": "assets/storageNavigationParams-dNEjPjGm.js",
+      "sha256": "47a8decb8a2cf0c25e61c711b7220d5977d5c1366c81767b70a95150cbc6b9dd",
       "size_bytes": 11276
     },
     {
@@ -54,28 +54,28 @@
       "size_bytes": 789
     },
     {
-      "path": "assets/storageViewFilterEvents-2Ttige86.js",
-      "sha256": "08dfd4639dd0002ffb0d1c81abe31244e80425d244f9170937220e64b6b12750",
+      "path": "assets/storageViewFilterEvents-EB1PugsC.js",
+      "sha256": "14500a26091b5bf411250c5aa3627945bfdfbfafa9c73d269983284adc3eac97",
       "size_bytes": 175020
     },
     {
-      "path": "assets/useStorageVisibility-CV5z4RUP.js",
-      "sha256": "45526926d0255f9ffba7a12d978148591fb6d0525eba89af4420a093a1c407ac",
+      "path": "assets/useStorageVisibility-XxbkxdXk.js",
+      "sha256": "6ddc28e9a21adc1bebeec2bc45bba388286d495602163bc25962808b8bd27b16",
       "size_bytes": 11934
     },
     {
-      "path": "assets/widgets/file-preview/index-CLUuFWth.js",
-      "sha256": "5319e6977af14d4d326aec061f4784a011273a7ca161014a1c63e8e19a7be313",
+      "path": "assets/widgets/file-preview/index-DR5DvvFz.js",
+      "sha256": "e81fdccc4cc7d24b402081c67f69847a20642a415fe53ffe3853dd436059ca8c",
       "size_bytes": 427635
     },
     {
-      "path": "assets/widgets/storage-sidebar/index-Bgc3Ge4f.js",
-      "sha256": "65484da8906c66a79e6e4e2c27806af4bd32a5b6bf211f827e36ae2c66e4de6f",
+      "path": "assets/widgets/storage-sidebar/index-Cy5Xfg9I.js",
+      "sha256": "8740fdca981e435f31fdd8b805e9abfe2cf8f02c3e865d4d18801677e29e89c0",
       "size_bytes": 29869
     },
     {
-      "path": "assets/widgets/storage-sidebar-footer/index-D2ordBIu.js",
-      "sha256": "eb60d6813634a32aa96cc4203853077e7a59399df178b226fa3f1289eed2d498",
+      "path": "assets/widgets/storage-sidebar-footer/index-DIoeRLQz.js",
+      "sha256": "35cb74d4171a41bc26acb298ff994122a6330b13cb778ee2d27ee973182973c5",
       "size_bytes": 10106
     }
   ],
@@ -92,22 +92,22 @@
     },
     {
       "path": "index.html",
-      "sha256": "2efcb3856f1709fb4980549bee5990a510295e010eccd24224f4ce9d2ab358ca",
+      "sha256": "78d39cad1ac3c2dfb45f71c1b489fe103ec0742458ccb789f2be1563e40eea46",
       "size_bytes": 1060
     },
     {
       "path": "widgets/file-preview/index.html",
-      "sha256": "75dc3c1d5916184d8d74f93f6dbec398e15fa67f81d7d1d3af1f7e502318b470",
+      "sha256": "18eed2a9433c2700169c0efca9a3c16dab8d3e5454f7685ce1786ab61768c59e",
       "size_bytes": 773
     },
     {
       "path": "widgets/storage-sidebar/index.html",
-      "sha256": "4dfbef37341edaeecd478f7f190e19199a8fd87ed1e286275acbe98465deda0b",
+      "sha256": "673b85afdc0db1eeadb629aaa901d61217ec309a1e2a4c4385b3507cd8a5d56e",
       "size_bytes": 906
     },
     {
       "path": "widgets/storage-sidebar-footer/index.html",
-      "sha256": "1143c6f23eb597f95d08feea77e87d80ff9fb6c26ac4171af125075a77950a9b",
+      "sha256": "07b0b5eae7fba395a111996d1ddbf4477e0e1dfecbdca2dc667c5295b8bc3899",
       "size_bytes": 898
     }
   ]

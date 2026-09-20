@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { createRoot } from 'react-dom/client';
 import { CircleUserRound, RefreshCw, Square, SquareCheck, TriangleAlert } from 'lucide-react';
-import { listCalendars, listConnections, listEvents, selectCalendar, syncCalendar } from '../../api';
+import { selectCalendar, syncCalendar } from '../../api';
+import { useCalendarSidebarReads } from './useCalendarSidebarReads';
 import {
   CALENDAR_UI_STATE_RESOURCE,
   readCalendarUiState,
@@ -46,13 +48,10 @@ type CalendarTreeNode = {
 
 function CalendarSidebarWidget() {
   const appId = runtimeAppIdFromPathname(window.location.pathname);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [connections, setConnections] = useState<CalendarConnection[]>([]);
-  const [calendars, setCalendars] = useState<CalendarRemoteCalendar[]>([]);
+  const { events, connections, calendars, setCalendars, isLoading, error, setError,
+    refreshCalendarState, scheduleRefresh } = useCalendarSidebarReads(appId);
   const [uiState, setUiState] = useState<CalendarUiState>(() => readCalendarUiState(appId));
-  const [isLoading, setIsLoading] = useState(true);
   const [activeOperation, setActiveOperation] = useState('');
-  const [error, setError] = useState('');
 
   const accountGroups = useMemo(
     () => buildAccountGroups(events, connections, calendars),
@@ -74,28 +73,9 @@ function CalendarSidebarWidget() {
   );
   const treeProviderKey = `${accountGroups.length}:${calendars.length}:${defaultExpandedIds.join('|')}`;
 
-  async function refreshCalendarState() {
-    setIsLoading(true);
-    try {
-      const [nextEvents, nextConnections, nextCalendars] = await Promise.all([listEvents(appId), listConnections(appId), listCalendars(appId)]);
-      setEvents(nextEvents);
-      setConnections(nextConnections);
-      setCalendars(nextCalendars);
-      setError('');
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load Calendar accounts.');
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void refreshCalendarState();
-  }, [appId]);
-
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
         return;
       }
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
@@ -104,7 +84,7 @@ function CalendarSidebarWidget() {
       }
       if (payload.type === 'maverick.widget.context-changed') {
         setUiState(readCalendarUiState(appId));
-        void refreshCalendarState();
+        scheduleRefresh();
         return;
       }
       if (payload.type === 'maverick.widget.data-changed') {
@@ -112,12 +92,12 @@ function CalendarSidebarWidget() {
           setUiState(readCalendarUiState(appId));
           return;
         }
-        void refreshCalendarState();
+        scheduleRefresh();
       }
     }
     window.addEventListener('message', handleShellMessage);
     return () => window.removeEventListener('message', handleShellMessage);
-  }, [appId]);
+  }, [appId, scheduleRefresh]);
 
   async function toggleRemoteCalendar(calendar: CalendarRemoteCalendar, checked: boolean) {
     setActiveOperation(calendar.id);

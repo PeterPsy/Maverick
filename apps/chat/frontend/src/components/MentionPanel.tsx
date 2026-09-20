@@ -6,7 +6,6 @@ export function MentionPanel({
   activeIndex,
   className = "",
   items,
-  kind,
   onSelect,
   onSearchKeyDown,
   onSearchQueryChange,
@@ -23,7 +22,6 @@ export function MentionPanel({
   activeIndex: number;
   className?: string;
   items: MentionItem[];
-  kind: "app" | "skill";
   onSelect: (item: MentionItem) => void;
   onSearchKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSearchQueryChange?: (query: string) => void;
@@ -43,12 +41,9 @@ export function MentionPanel({
     activeItemRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  const panelLabel = kind === "app" ? "App and reference suggestions" : "Skill suggestions";
-  const panelTitle = kind === "app" ? "Apps and references" : "Skills";
-
   return (
-    <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={panelLabel}>
-      {showHeader ? <div className="chatapp-mention-panel__header">{panelTitle}</div> : null}
+    <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label="App and reference suggestions">
+      {showHeader ? <div className="chatapp-mention-panel__header">Apps and references</div> : null}
       {onSearchQueryChange ? (
         <label className="chatapp-mention-panel__search">
           {showSearchLabel ? <span className="chatapp-mention-panel__search-label">Search</span> : null}
@@ -84,8 +79,7 @@ export function MentionPanel({
             type="button"
           >
             <span className="chatapp-mention-panel__name">
-              {item.kind === "skill" ? "$" : "@"}
-              {item.label}
+              @{item.label}
             </span>
             {item.description ? <span className="chatapp-mention-panel__description">{item.description}</span> : null}
           </button>

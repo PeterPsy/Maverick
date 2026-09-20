@@ -21,7 +21,6 @@ import {
   listInterAgentRunEvents,
   listInterAgentRuns,
   listProviders,
-  listSkills,
   prepareRuntimeSessionAppReferences,
   prewarmRuntimeSession,
   prewarmSpeechWorker,
@@ -110,7 +109,6 @@ vi.mock("./api/client", () => ({
   listInterAgentRunEvents: vi.fn(),
   listInterAgentRuns: vi.fn(),
   listProviders: vi.fn(),
-  listSkills: vi.fn(),
   markThreadRead: vi.fn(),
   orderChatThreads: vi.fn((threads: unknown[]) => threads),
   prepareRuntimeSessionAppReferences: vi.fn(),
@@ -324,7 +322,6 @@ beforeEach(() => {
     oldest_event_id: null,
     newest_event_id: null,
   });
-  vi.mocked(listSkills).mockResolvedValue([]);
   vi.mocked(getAppDependencies).mockResolvedValue(dependencyPayload(["agents"]));
   vi.mocked(getSpeechCapabilities).mockResolvedValue({
     interfaces: {

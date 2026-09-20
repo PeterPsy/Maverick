@@ -30,9 +30,6 @@ export function referenceKindLabel(input: ReferenceKindLabelInput): string {
   if (input.kind === "app") {
     return "App";
   }
-  if (input.kind === "skill") {
-    return "Skill";
-  }
   const reference = input.reference?.type === "entity" ? input.reference : null;
   return entityReferenceKindLabel({
     appId: reference?.app_id || input.appId,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeMentionAt, appReferencesFromText, applyMention, filterMentionItems, findMentionTokens, removeMentionToken, skillIdsFromText } from "./mentions";
+import { activeMentionAt, appReferencesFromText, applyMention, filterMentionItems, findMentionTokens, removeMentionToken } from "./mentions";
 import type { MentionItem } from "./mentions";
 
 const items: MentionItem[] = [
@@ -35,7 +35,6 @@ const items: MentionItem[] = [
       deep_link: "/app/storage/folders/generated/Client%20Docs",
     },
   },
-  { id: "maverick-code-skill", label: "Maverick Code Skill", description: "Code work", kind: "skill" },
 ];
 
 describe("mention autocomplete helpers", () => {
@@ -49,8 +48,8 @@ describe("mention autocomplete helpers", () => {
     });
   });
 
-  it("detects skill mentions from the dollar trigger", () => {
-    expect(activeMentionAt("use $Maverick", "use $Maverick".length)?.kind).toBe("skill");
+  it("leaves dollar-prefixed text as ordinary composer content", () => {
+    expect(activeMentionAt("use $Maverick", "use $Maverick".length)).toBeNull();
   });
 
   it("does not treat email-style symbols as mention starts", () => {
@@ -59,7 +58,6 @@ describe("mention autocomplete helpers", () => {
 
   it("filters by label, id, and description", () => {
     expect(filterMentionItems(items, "views").map((item) => item.label)).toEqual(["Dynamic Views"]);
-    expect(filterMentionItems(items, "code").map((item) => item.label)).toEqual(["Maverick Code Skill"]);
   });
 
   it("filters entity references by reference identity, plural forms, and query tokens", () => {
@@ -102,13 +100,6 @@ describe("mention autocomplete helpers", () => {
   it("finds readable mention tokens for chips", () => {
     expect(findMentionTokens("Use @Test App with $maverick-code-skill", items).map((token) => token.text)).toEqual([
       "@Test App",
-      "$maverick-code-skill",
-    ]);
-  });
-
-  it("extracts stable skill ids from structured dollar mentions", () => {
-    expect(skillIdsFromText("Use $maverick-code-skill twice: $maverick-code-skill", items)).toEqual([
-      "maverick-code-skill",
     ]);
   });
 

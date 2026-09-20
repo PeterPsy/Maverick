@@ -10,7 +10,6 @@ import type {
   DependencyResolutionItem,
   ProviderPayload,
   SearchAppReferencesOptions,
-  SkillSummary,
 } from "./types";
 
 export function listProviders(): Promise<ProviderPayload> {
@@ -136,15 +135,6 @@ export function getAgentDefinition(providerAppId: string, agentTypeId: string): 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "get_agent_definition", id: agentTypeId }),
   });
-}
-
-export async function listSkills(): Promise<SkillSummary[]> {
-  const payload = await requestJson<{ skills?: SkillSummary[] }>("/api/apps/skills/backend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "catalog" }),
-  });
-  return (payload.skills || []).filter((skill) => skill.enabled);
 }
 
 export async function searchAppReferences(

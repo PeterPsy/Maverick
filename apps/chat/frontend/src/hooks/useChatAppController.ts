@@ -314,19 +314,6 @@ export function useChatAppController({
   const interAgentRefreshScopeRef = useRef("");
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const activeConversationKey = conversationKeyFor(activeThread, draftChat);
-  const selectedAgent = agentOptions.find((agent) => agent.id === selectedAgentTypeId) || null;
-  const skillMentionContext = useMemo(() => ({
-    activationMode: activeThread
-      ? activeSession?.skill_activation_mode
-      : "explicit",
-    allowedSkillIds: activeThread ? activeSession?.skill_ids : selectedAgent?.skill_ids || [],
-    provider: selectedProvider,
-  }), [
-    activeSession?.skill_activation_mode,
-    activeSession?.skill_ids,
-    activeThread,
-    selectedProvider,
-  ]);
   const appReferencesAllowed = composerCapabilities.appReferencesAllowed;
   const interAgentRefreshScope = `${activeThread?.runtime_session_id || ""}:${activeInterAgentGraphRunId || ""}`;
   interAgentRefreshScopeRef.current = interAgentRefreshScope;
@@ -358,7 +345,6 @@ export function useChatAppController({
     externalFileDrop,
     externalMentionDrop,
     navigationScope,
-    skillMentionContext,
     setComposer,
     setComposerError,
     workspaceId,

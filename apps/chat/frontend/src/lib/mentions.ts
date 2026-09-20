@@ -1,9 +1,9 @@
 import type { AppReference } from "../api/client";
 
-export type MentionKind = "app" | "entity" | "skill";
+export type MentionKind = "app" | "entity";
 
-export type MentionTrigger = "@" | "$";
-export type MentionTriggerKind = "app" | "skill";
+export type MentionTrigger = "@";
+export type MentionTriggerKind = "app";
 
 export type MentionItem = {
   id: string;
@@ -42,12 +42,11 @@ export type EntityReferenceMarker = {
 
 const TRIGGER_KIND: Record<MentionTrigger, MentionTriggerKind> = {
   "@": "app",
-  "$": "skill",
 };
 const ENTITY_REFERENCE_MARKER_PATTERN = /\[ref:([^/\]\s]+)\/([^/\]\s]+)\/([^\]\s]+)\]/g;
 
 function isMentionTrigger(value: string): value is MentionTrigger {
-  return value === "@" || value === "$";
+  return value === "@";
 }
 
 function canStartMention(text: string, index: number): boolean {
@@ -124,9 +123,6 @@ export function applyMention(text: string, mention: ActiveMention, item: Mention
 }
 
 export function mentionText(item: MentionItem): string {
-  if (item.kind === "skill") {
-    return `$${item.id}`;
-  }
   if (item.reference?.type === "entity") {
     return `@${item.label} [ref:${item.reference.app_id}/${item.reference.entity_type}/${item.reference.entity_id}]`;
   }
@@ -192,16 +188,6 @@ export function appReferencesFromText(text: string, items: MentionItem[]): Menti
     }
   }
   return [...referencesById.values()];
-}
-
-export function skillIdsFromText(text: string, items: MentionItem[]): string[] {
-  const skillIds = new Set<string>();
-  for (const token of findMentionTokens(text, items)) {
-    if (token.item.kind === "skill") {
-      skillIds.add(token.item.id);
-    }
-  }
-  return [...skillIds];
 }
 
 export function findEntityReferenceMarkers(text: string): EntityReferenceMarker[] {

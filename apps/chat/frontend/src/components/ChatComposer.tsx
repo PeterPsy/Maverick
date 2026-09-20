@@ -141,7 +141,6 @@ export function ChatComposer({
   const editorRef = useRef<HTMLDivElement | null>(null);
   const pendingCaretIndexRef = useRef<number | null>(null);
   const {
-    activeSkillMention,
     appMentionPickerQuery,
     appPickerButtonRef,
     appPickerItems,
@@ -150,19 +149,14 @@ export function ChatComposer({
     appPickerSearchPending,
     appPickerSearchRef,
     clearDismissedMention,
-    dismissSkillMention,
-    filteredMentionItems,
     handleAppMentionPickerKey,
     insertAppMentions,
-    insertMention,
     isAppMentionPickerOpen,
     mentionTokens,
     openAppPicker,
     removeMention,
     selectAppMentionPickerItem,
     selectedAppIndex,
-    selectedMentionIndex,
-    setSelectedMentionIndex,
     updateActiveAppMentionQuery,
   } = useMentionPicker({
     caretIndex,
@@ -191,21 +185,15 @@ export function ChatComposer({
     clearDismissedMention,
     disabled,
     editorRef,
-    filteredMentionItems,
     handleAppMentionPickerKey,
     insertAppMentions,
-    insertMention,
-    isSkillMentionPanelOpen: Boolean(activeSkillMention),
     mentionTokens,
     onAddAttachments,
     onChange,
     onRemoveMention: removeMention,
     onSubmit,
     pendingCaretIndexRef,
-    selectedMentionIndex,
     setCaretIndex,
-    setDismissedSkillMention: () => dismissSkillMention(activeSkillMention),
-    setSelectedMentionIndex,
     value,
   });
 
@@ -238,7 +226,6 @@ export function ChatComposer({
                 activeIndex={Math.min(selectedAppIndex, Math.max(appPickerItems.length - 1, 0))}
                 className="chatapp-mention-panel--app-picker"
                 items={appPickerItems}
-                kind="app"
                 onSelect={selectAppMentionPickerItem}
                 onSearchKeyDown={onAppPickerSearchKeyDown}
                 onSearchQueryChange={updateActiveAppMentionQuery}
@@ -273,15 +260,6 @@ export function ChatComposer({
                 suppressContentEditableWarning
                 tabIndex={disabled ? -1 : 0}
               />
-              {activeSkillMention ? (
-                <MentionPanel
-                  activeIndex={Math.min(selectedMentionIndex, Math.max(filteredMentionItems.length - 1, 0))}
-                  items={filteredMentionItems}
-                  kind={activeSkillMention.kind}
-                  onSelect={insertMention}
-                  query={activeSkillMention.query}
-                />
-              ) : null}
             </div>
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">

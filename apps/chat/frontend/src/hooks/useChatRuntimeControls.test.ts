@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderItem } from "../api/client";
 import {
+  activationModeForAssignedSkills,
   effectiveNewChatReasoningEffort,
   genericAgenticRuntimeConfig,
   researchRuntimeConfig,
@@ -29,6 +30,9 @@ describe("genericAgenticRuntimeConfig", () => {
     expect(genericAgenticRuntimeConfig(agenticProvider(), "max")).toMatchObject({
       agent_id: "chat",
       runtime_mode: "agentic",
+      skill_catalog_app_id: "skills",
+      skill_ids: [],
+      skill_activation_mode: "implicit",
       title: "Gemini · 3.5 Pro",
       workspace_profile_binding_id: "binding-google-gemini-35-pro",
       reasoning_effort: "max",
@@ -36,6 +40,11 @@ describe("genericAgenticRuntimeConfig", () => {
     expect(genericAgenticRuntimeConfig(agenticProvider(), "max")).not.toHaveProperty(
       "declared_remote_data_class",
     );
+  });
+
+  it("limits custom agents to assigned skills without expanding an empty allowlist", () => {
+    expect(activationModeForAssignedSkills([])).toBe("explicit");
+    expect(activationModeForAssignedSkills(["review-skill"])).toBe("implicit");
   });
 
   it("preserves Codex reasoning without adding a remote-data declaration", () => {

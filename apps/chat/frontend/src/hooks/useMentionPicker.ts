@@ -9,7 +9,7 @@ import {
   mentionText,
   removeMentionToken,
 } from "../lib/mentions";
-import type { ActiveMention, MentionItem, MentionToken } from "../lib/mentions";
+import type { MentionItem, MentionToken } from "../lib/mentions";
 import { useAppPickerDismiss } from "./useAppPickerDismiss";
 import { mergeMentionItems } from "./mentionPickerUtils";
 import { useAppReferenceSearch } from "./useAppReferenceSearch";
@@ -50,7 +50,6 @@ export function useMentionPicker({
   value,
 }: UseMentionPickerParams) {
   const [dismissedMentionStart, setDismissedMentionStart] = useState<number | null>(null);
-  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [showAppPicker, setShowAppPicker] = useState(false);
   const [selectedAppIndex, setSelectedAppIndex] = useState(0);
   const [appPickerQuery, setAppPickerQuery] = useState("");
@@ -71,8 +70,7 @@ export function useMentionPicker({
     ? mentionTokens.some((token) => token.start === activeMentionCandidate.start && caretIndex >= token.end)
     : false;
   const activeMention = isMentionCandidateDismissed || activeMentionComplete ? null : activeMentionCandidate;
-  const activeAppMention = activeMention?.kind === "app" ? activeMention : null;
-  const activeSkillMention = activeMention?.kind === "skill" ? activeMention : null;
+  const activeAppMention = activeMention;
   const isAppMentionPickerOpen = showAppPicker || Boolean(activeAppMention);
   const appMentionPickerQuery = activeAppMention ? activeAppMention.query : appPickerQuery;
   useAppReferenceSearch({
@@ -91,20 +89,6 @@ export function useMentionPicker({
     const matchingReferences = filterMentionItems(appPickerReferenceItems, appMentionPickerQuery, APP_PICKER_REFERENCE_LIMIT);
     return mergeMentionItems(matchingApps, matchingReferences);
   }, [appMentionPickerQuery, appPickerReferenceItems, searchableMentionItems]);
-  const filteredMentionItems = useMemo(() => {
-    if (!activeSkillMention) {
-      return [];
-    }
-    return filterMentionItems(
-      searchableMentionItems.filter((item) => item.kind === activeSkillMention.kind),
-      activeSkillMention.query,
-    );
-  }, [activeSkillMention, searchableMentionItems]);
-  const isSkillMentionPanelOpen = Boolean(activeSkillMention);
-
-  useEffect(() => {
-    setSelectedMentionIndex(0);
-  }, [activeSkillMention?.kind, activeSkillMention?.query]);
   useEffect(() => {
     setSelectedAppIndex(0);
   }, [appPickerItems]);
@@ -250,10 +234,6 @@ export function useMentionPicker({
     return false;
   }
 
-  function dismissSkillMention(mention: ActiveMention | null) {
-    setDismissedMentionStart(mention?.start ?? null);
-  }
-
   function clearDismissedMention() {
     setDismissedMentionStart(null);
   }
@@ -269,7 +249,6 @@ export function useMentionPicker({
   }
 
   return {
-    activeSkillMention,
     appMentionPickerQuery,
     appPickerButtonRef,
     appPickerItems,
@@ -279,20 +258,14 @@ export function useMentionPicker({
     appPickerSearchRef,
     clearDismissedMention,
     closeAppMentionPicker,
-    dismissSkillMention,
-    filteredMentionItems,
     handleAppMentionPickerKey,
     insertAppMentions,
-    insertMention,
     isAppMentionPickerOpen,
-    isSkillMentionPanelOpen,
     mentionTokens,
     openAppPicker,
     removeMention,
     selectAppMentionPickerItem,
     selectedAppIndex,
-    selectedMentionIndex,
-    setSelectedMentionIndex,
     updateActiveAppMentionQuery,
   };
 }

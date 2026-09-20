@@ -1,6 +1,5 @@
 import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppReference, listApps, listSkills } from "../api/client";
-import type { ProviderItem } from "../api/client";
+import { AppReference, listApps } from "../api/client";
 import {
   ActiveAppContext,
   mergeSelectedReferenceMentionItems,
@@ -10,7 +9,6 @@ import { mentionText, referenceKey } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
 import { searchComposerReferences } from "../lib/referenceSearch";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
-import { skillIdsVisibleInComposer } from "../lib/skillMentionPolicy";
 
 type UseChatComposerContextParams = {
   activeAppContext: ActiveAppContext | null;
@@ -19,11 +17,6 @@ type UseChatComposerContextParams = {
   externalFileDrop: ExternalFileDrop | null;
   externalMentionDrop: ExternalMentionDrop | null;
   navigationScope: string;
-  skillMentionContext: {
-    activationMode?: string;
-    allowedSkillIds?: string[];
-    provider: ProviderItem | null;
-  };
   setComposer: Dispatch<SetStateAction<string>>;
   setComposerError: Dispatch<SetStateAction<string | null>>;
   workspaceId: string;
@@ -36,7 +29,6 @@ export function useChatComposerContext({
   externalFileDrop,
   externalMentionDrop,
   navigationScope,
-  skillMentionContext,
   setComposer,
   setComposerError,
   workspaceId,
@@ -46,21 +38,11 @@ export function useChatComposerContext({
   const consumedExternalFileDrops = useRef<Set<string>>(new Set());
   const consumedExternalMentionDrops = useRef<Set<string>>(new Set());
   const composerMentionItems = useMemo(() => {
-    const visibleSkillIds = new Set(skillIdsVisibleInComposer({
-      activationMode: skillMentionContext.activationMode,
-      allowedSkillIds: skillMentionContext.allowedSkillIds,
-      availableSkillIds: mentionItems.filter((item) => item.kind === "skill").map((item) => item.id),
-      provider: skillMentionContext.provider,
-    }));
-    const governedItems = mentionItems.filter((item) => (
-      (item.kind !== "skill" || visibleSkillIds.has(item.id))
-      && (appReferencesAllowed || item.kind === "skill")
-    ));
     return mergeSelectedReferenceMentionItems(
-      governedItems,
+      appReferencesAllowed ? mentionItems : [],
       appReferencesAllowed ? selectedReferences : [],
     );
-  }, [appReferencesAllowed, mentionItems, selectedReferences, skillMentionContext]);
+  }, [appReferencesAllowed, mentionItems, selectedReferences]);
 
   useEffect(() => {
     if (!appReferencesAllowed) {
@@ -89,26 +71,17 @@ export function useChatComposerContext({
   }, [externalFileDrop]);
 
   async function loadMentionItems() {
-    const [appsResult, skillsResult] = await Promise.allSettled([listApps(), listSkills()]);
-    const appMentions =
-      appsResult.status === "fulfilled"
-        ? appsResult.value.map((app) => ({
-            id: app.app_id,
-            label: app.name,
-            description: app.description,
-            kind: "app" as const,
-          }))
-        : [];
-    const skillMentions =
-      skillsResult.status === "fulfilled"
-        ? skillsResult.value.map((skill) => ({
-            id: skill.id,
-            label: skill.name,
-            description: skill.description,
-            kind: "skill" as const,
-          }))
-        : [];
-    setMentionItems([...appMentions, ...skillMentions]);
+    try {
+      const apps = await listApps();
+      setMentionItems(apps.map((app) => ({
+        id: app.app_id,
+        label: app.name,
+        description: app.description,
+        kind: "app" as const,
+      })));
+    } catch {
+      setMentionItems([]);
+    }
   }
 
   function handleAddAttachments(files: File[]) {

@@ -23,7 +23,7 @@ import type { ComposerAttachment } from "../lib/attachments";
 import type { RuntimeSessionOptions, RuntimeTurnClientMetrics } from "../api/client";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
-import { appReferencesFromText, skillIdsFromText } from "../lib/mentions";
+import { appReferencesFromText } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
 import {
   HISTORICAL_OPENDESIGN_THREAD_READ_ONLY,
@@ -281,9 +281,9 @@ export function runtimeSessionOptionsForNewChat({
       : draftChat?.projectId ?? null,
     source_app_id: agentRuntimeConfig?.source_app_id || "chat",
     system_prompt: systemPrompt,
-    skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
+    skill_catalog_app_id: agentRuntimeConfig ? agentRuntimeConfig.skill_catalog_app_id : "skills",
     skill_ids: agentRuntimeConfig?.skill_ids || [],
-    skill_activation_mode: agentRuntimeConfig?.skill_activation_mode || (agentRuntimeConfig ? "implicit" : "explicit"),
+    skill_activation_mode: agentRuntimeConfig?.skill_activation_mode || "implicit",
     runtime_mode: agentRuntimeConfig?.runtime_mode,
     runtime_profile: agentRuntimeConfig?.runtime_profile,
     requested_mode: agentRuntimeConfig?.requested_mode,
@@ -1558,7 +1558,6 @@ export function useMessageSubmission({
     const appReferences = deviceUseEnabled
       ? []
       : mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
-    const invokedSkillIds = deviceUseEnabled ? [] : skillIdsFromText(input, composerMentionItems);
     const targetMultiAgentMode = deviceUseEnabled ? "off" : isComposerSubmission ? multiAgentMode : "off";
     const clientSubmissionMetrics: RuntimeTurnClientMetrics = {};
     const localMessage: QueuedMessage = {
@@ -1568,7 +1567,7 @@ export function useMessageSubmission({
       content: input,
       attachments: targetAttachments.map(attachmentToMessageAttachment),
       appReferences,
-      invokedSkillIds,
+      invokedSkillIds: [],
       multiAgentMode: targetMultiAgentMode,
     };
     const shouldQueue = Boolean(sendingByConversationKeyRef.current[target.conversationKey]);
@@ -1613,7 +1612,7 @@ export function useMessageSubmission({
         content: input,
         attachments: messageAttachments,
         appReferences,
-        invokedSkillIds,
+        invokedSkillIds: [],
         multiAgentMode: targetMultiAgentMode,
       };
       const immediateTarget = currentSubmissionTarget(queueConversationKey);

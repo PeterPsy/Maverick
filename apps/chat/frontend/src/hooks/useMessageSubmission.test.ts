@@ -38,9 +38,11 @@ describe("interAgentOrchestrationIntent", () => {
 });
 
 describe("runtimeSessionOptionsForNewChat", () => {
-  it("uses explicit skill activation for a new generalist chat", () => {
+  it("exposes the enabled Skills catalog to a new generalist chat", () => {
     const options = runtimeSessionOptionsForNewChat({ agentRuntimeConfig: null, draftChat: null, systemPrompt: "" });
-    expect(options.skill_activation_mode).toBe("explicit");
+    expect(options.skill_catalog_app_id).toBe("skills");
+    expect(options.skill_ids).toEqual([]);
+    expect(options.skill_activation_mode).toBe("implicit");
   });
 
   it("preserves implicit activation for legacy specialized agent definitions", () => {

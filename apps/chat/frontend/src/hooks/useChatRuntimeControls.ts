@@ -54,9 +54,9 @@ export function genericAgenticRuntimeConfig(
     agent_id: "chat",
     agent_role_id: "",
     agent_type_id: "",
-    skill_catalog_app_id: "",
+    skill_catalog_app_id: "skills",
     skill_ids: [],
-    skill_activation_mode: "explicit",
+    skill_activation_mode: "implicit",
     source_app_id: "chat",
     system_prompt: "",
     title: provider.label || "Chat",
@@ -106,6 +106,10 @@ function agentRuntimeConfigCacheKey(workspaceId: string, agentCatalogAppId: stri
   return `${workspaceId}:${agentCatalogAppId}:${agentTypeId}`;
 }
 
+export function activationModeForAssignedSkills(skillIds: string[]): "implicit" | "explicit" {
+  return skillIds.length ? "implicit" : "explicit";
+}
+
 function loadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: string, agentTypeId: string): Promise<CachedAgentRuntimeConfig> {
   const key = agentRuntimeConfigCacheKey(workspaceId, agentCatalogAppId, agentTypeId);
   const cached = agentRuntimeConfigCache.get(key);
@@ -118,14 +122,15 @@ function loadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: string, 
       if (!definitionPayload.exists || !definition) {
         throw new Error("Selected agent is no longer available.");
       }
+      const skillIds = definition.skill_ids || [];
       return {
         agent_id: definition.name,
         agent_role_id: "",
         agent_type_id: definition.id,
         renderedPrompt: definition.instructions || "",
         skill_catalog_app_id: "skills",
-        skill_ids: definition.skill_ids || [],
-        skill_activation_mode: "explicit" as const,
+        skill_ids: skillIds,
+        skill_activation_mode: activationModeForAssignedSkills(skillIds),
         source_app_id: agentCatalogAppId,
         title: definition.name,
       };

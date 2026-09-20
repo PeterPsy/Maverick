@@ -1112,13 +1112,6 @@ export type AppRegistryItem = {
   backend_mount: string;
 };
 
-export type SkillSummary = {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-};
-
 export type RuntimeSessionOptions = {
   agent_id?: string;
   agent_role_id?: string;

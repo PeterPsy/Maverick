@@ -27,21 +27,15 @@ type UseComposerEditorParams = {
   clearDismissedMention: () => void;
   disabled: boolean;
   editorRef: RefObject<HTMLDivElement | null>;
-  filteredMentionItems: MentionItem[];
   handleAppMentionPickerKey: (event: KeyboardEvent<HTMLElement>, focusEditorOnClose?: boolean) => boolean;
   insertAppMentions: (items: MentionItem[]) => void;
-  insertMention: (item: MentionItem) => void;
-  isSkillMentionPanelOpen: boolean;
   mentionTokens: MentionToken[];
   onAddAttachments: (files: File[]) => void;
   onChange: (value: string) => void;
   onRemoveMention: (token: MentionToken) => void;
   onSubmit: () => void;
   pendingCaretIndexRef: RefObject<number | null>;
-  selectedMentionIndex: number;
   setCaretIndex: Dispatch<SetStateAction<number>>;
-  setDismissedSkillMention: () => void;
-  setSelectedMentionIndex: Dispatch<SetStateAction<number>>;
   value: string;
 };
 
@@ -77,21 +71,15 @@ export function useComposerEditor({
   clearDismissedMention,
   disabled,
   editorRef,
-  filteredMentionItems,
   handleAppMentionPickerKey,
   insertAppMentions,
-  insertMention,
-  isSkillMentionPanelOpen,
   mentionTokens,
   onAddAttachments,
   onChange,
   onRemoveMention,
   onSubmit,
   pendingCaretIndexRef,
-  selectedMentionIndex,
   setCaretIndex,
-  setDismissedSkillMention,
-  setSelectedMentionIndex,
   value,
 }: UseComposerEditorParams) {
   const [dictationError, setDictationError] = useState<string | null>(null);
@@ -238,30 +226,6 @@ export function useComposerEditor({
     }
     if (handleAppMentionPickerKey(event)) {
       return;
-    }
-    if (isSkillMentionPanelOpen) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setDismissedSkillMention();
-        return;
-      }
-      if (filteredMentionItems.length) {
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setSelectedMentionIndex((current) => (current + 1) % filteredMentionItems.length);
-          return;
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setSelectedMentionIndex((current) => (current - 1 + filteredMentionItems.length) % filteredMentionItems.length);
-          return;
-        }
-        if (event.key === "Enter" || event.key === "Tab") {
-          event.preventDefault();
-          insertMention(filteredMentionItems[selectedMentionIndex] || filteredMentionItems[0]);
-          return;
-        }
-      }
     }
     if (event.key === "Enter" && (event.shiftKey || event.altKey || isMobileComposerInput())) {
       event.preventDefault();

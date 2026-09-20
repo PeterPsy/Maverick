@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { AppRegistryItem } from "../api";
 import type { MaverickFrameScope } from "../iframePolicy";
 import type { ShellThemeState } from "../theme";
@@ -31,20 +32,17 @@ export function WorkspaceView({
   sessionExpiresAt: string;
   shellTheme: ShellThemeState;
 }) {
-  if (!activeApp) {
-    return (
-      <AppsPanel
-        apps={apps}
-        error={error}
-        isLoading={isLoading}
-        onOpenApp={onOpenApp}
-      />
-    );
-  }
-  return (
-    <AppFrameHost
-      activeApp={activeApp}
-      activeAppParams={activeAppParams}
+  const scopeKey = `${frameScope.sessionGeneration}:${activeWorkspaceId}`;
+  const last = useRef<{ scope: string; app: AppRegistryItem; params: typeof activeAppParams } | null>(null);
+  if (last.current?.scope !== scopeKey) last.current = null;
+  if (activeApp) last.current = { scope: scopeKey, app: activeApp, params: activeAppParams };
+  const retained = last.current;
+  return <>
+    {!activeApp && <AppsPanel apps={apps} error={error} isLoading={isLoading} onOpenApp={onOpenApp} />}
+    {retained && <AppFrameHost
+      activeApp={retained.app}
+      activeAppParams={retained.params}
+      visible={Boolean(activeApp)}
       activeWorkspaceId={activeWorkspaceId}
       cacheUserId={cacheUserId}
       frameScope={frameScope}
@@ -52,6 +50,6 @@ export function WorkspaceView({
       onOpenApp={onOpenApp}
       sessionExpiresAt={sessionExpiresAt}
       shellTheme={shellTheme}
-    />
-  );
+    />}
+  </>;
 }

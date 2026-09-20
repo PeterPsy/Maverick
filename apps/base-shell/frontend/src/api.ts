@@ -34,6 +34,7 @@ export type AppRegistryItem = {
   frontend_mount: string;
   frontend_role: "workspace" | "supporting" | "none" | string;
   frontend_launchable: boolean;
+  frontend_resumable?: boolean;
   backend_mount: string;
 };
 

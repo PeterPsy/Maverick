@@ -49,7 +49,7 @@ export function describeReadModelRequest(request: ReadModelRequest): { endpoint:
       break;
     case "storage/file-catalog":
       action = "catalog";
-      fields = ["query", "role", "kind", "folder_path", "offset", "limit", "file_ids", "workspace_relative_paths", "known_revision"];
+      fields = ["query", "role", "kind", "folder_path", "offset", "limit", "file_ids", "workspace_relative_paths", "known_revision", "sort_by", "sort_direction", "dataset_revision"];
       if (parameters.offset !== undefined && parameters.offset !== 0) throw new TypeError("Only the initial catalog page is approved.");
       break;
     case "website-studio/site-snapshots":

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { clampPrivateAccessLease, connectAppEventSocket } from "@maverick/pwa-cache";
+import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import {
   MAVERICK_IFRAME_SANDBOX,
@@ -12,6 +12,7 @@ import {
   registeredMaverickFrameOwner,
   type MaverickFrameScope,
 } from "../iframePolicy";
+import { useAppFrameHibernation } from "../hooks/useAppFrameHibernation";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
 import {
   externalHttpUrlFromMessage,
@@ -24,7 +25,6 @@ import { ShellPendingIndicator } from "./ShellPendingIndicator";
 import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
 import { StorageFileCacheBroker } from "../storageFileCacheBroker";
 import { shellPwaMetrics, shellPwaQuotaAdapter } from "../pwaCacheRuntime";
-import runtimeResources from "../pwaDataCacheResourceDeclarations.v1.json";
 
 type AppFrameParams = Record<string, string | boolean | null>;
 
@@ -64,6 +64,7 @@ export function AppFrameHost({
   onOpenApp,
   sessionExpiresAt,
   shellTheme = DEFAULT_SHELL_THEME_STATE,
+  visible = true,
 }: {
   activeApp: AppRegistryItem;
   activeAppParams: AppFrameParams;
@@ -74,6 +75,7 @@ export function AppFrameHost({
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
   sessionExpiresAt: string;
   shellTheme?: ShellThemeState;
+  visible?: boolean;
 }) {
   const mountScopePrefix = `${frameScope.sessionGeneration}:${activeWorkspaceId}:`;
   const activeMountKey = `${mountScopePrefix}${activeApp.app_id}`;
@@ -112,6 +114,10 @@ export function AppFrameHost({
   const activeFrameKey = appFrameInstanceKey(activeMountKey, activeFrameRevision);
   const activeFrameReady = Boolean(readyFrames[activeFrameKey]);
   const visibleFrameIsMounted = scopedMountedApps.some(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0) === visibleFrameKey);
+  const resumeHibernatedApp = useAppFrameHibernation({
+    activeKey: activeMountKey, scope: mountScopePrefix, ready: activeFrameReady,
+    mounted: scopedMountedApps, frames: frameRefs, setMounted: setMountedApps,
+  });
   const activeFramePending = !activeFrameReady;
   const showPendingState = activeFramePending && (!visibleFrameIsMounted || showDelayedPendingOverlay);
 
@@ -279,10 +285,10 @@ export function AppFrameHost({
       syncAppFrameShellLayout(frameRefs.current[app.app_id], isMobileLayout);
       postMaverickFrameVisibility(frameRefs.current[app.app_id], {
         app_id: app.app_id,
-        visible: frameKey === visibleFrameKey,
+        visible: visible && frameKey === visibleFrameKey,
       });
     });
-  }, [frameRevisions, isMobileLayout, scopedMountedApps, visibleFrameKey]);
+  }, [frameRevisions, isMobileLayout, scopedMountedApps, visible, visibleFrameKey]);
 
   useEffect(() => {
     latestDependenciesRef.current = null;
@@ -315,39 +321,16 @@ export function AppFrameHost({
   }, [activeApp.app_id, activeDependencyCacheKey, hasDeclaredDependencies]);
 
   useEffect(() => {
-    return connectAppEventSocket<AppEventMessage>((event) => {
-      if (event.workspace_id && event.workspace_id !== activeWorkspaceId) {
-        return;
-      }
-      if (event.type === "maverick.app.data-changed" && event.owner_app_id) {
-        window.postMessage(event, window.location.origin);
-        return;
-      }
-      if (
-        !["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(event.type || "") ||
-        !event.owner_app_id
-      ) {
-        return;
-      }
-      window.postMessage(event, window.location.origin);
+    const changed = (message: MessageEvent) => {
+      if (!isShellWindowMessage(message)) return;
+      const event = message.data as AppEventMessage;
+      if (event.workspace_id && event.workspace_id !== activeWorkspaceId) return;
+      if (!["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(event.type || "") || !event.owner_app_id) return;
       const eventMountKey = `${mountScopePrefix}${event.owner_app_id}`;
-      setFrameRevisions((current) => ({
-        ...current,
-        [eventMountKey]: (current[eventMountKey] || 0) + 1,
-      }));
-    }, () => {
-      // Do not remount frames or invent a connectivity mode. Live events may
-      // have been lost; reuse each owner's ordinary display refresh route.
-      for (const declaration of runtimeResources.resources) {
-        if (!frameRefs.current[declaration.app_id]) continue;
-        window.postMessage({
-          type: "maverick.app.data-changed",
-          owner_app_id: declaration.app_id,
-          resource: declaration.aliases[0] ?? declaration.resource,
-          workspace_id: activeWorkspaceId,
-        }, window.location.origin);
-      }
-    });
+      setFrameRevisions((current) => ({ ...current, [eventMountKey]: (current[eventMountKey] || 0) + 1 }));
+    };
+    window.addEventListener('message', changed);
+    return () => window.removeEventListener('message', changed);
   }, [activeWorkspaceId, mountScopePrefix]);
 
   useEffect(() => {
@@ -367,26 +350,6 @@ export function AppFrameHost({
       }
       const payload = event.data as AppReadyMessage;
       if (!payload.type) {
-        return;
-      }
-      if (
-        payload.type === "maverick.app.data-changed"
-        && payload.owner_app_id
-        && (senderIsShell || senderOwnerAppId === payload.owner_app_id)
-      ) {
-        const ownerFrame = frameRefs.current[payload.owner_app_id];
-        if (ownerFrame?.contentWindow && event.source !== ownerFrame.contentWindow) {
-          postToMaverickFrame(
-            ownerFrame,
-            {
-              type: "maverick.app.data-changed",
-              ...(payload.detail && typeof payload.detail === "object" ? { detail: payload.detail } : {}),
-              owner_app_id: payload.owner_app_id,
-              resource: payload.resource || "",
-              deleted_thread_id: payload.deleted_thread_id || "",
-            },
-          );
-        }
         return;
       }
       const senderIsMountedApp = Boolean(senderFrame);
@@ -442,7 +405,8 @@ export function AppFrameHost({
           const navigationSignature = appNavigationSignature(payload.app_id, latestNavigation.params);
           if (readyDeliveredNavigationSignaturesRef.current[frameKey] !== navigationSignature) {
             postMaverickShellTheme(frame, shellTheme);
-            if (postNavigation(frame, payload.app_id, latestNavigation.params, shellTheme)) {
+            if (resumeHibernatedApp(payload.app_id, latestNavigation.params)
+                || postNavigation(frame, payload.app_id, latestNavigation.params, shellTheme)) {
               readyDeliveredNavigationSignaturesRef.current[frameKey] = navigationSignature;
             }
           }
@@ -488,7 +452,7 @@ export function AppFrameHost({
   }
 
   return (
-    <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>
+    <section className="bs-workspace-app-panel" style={visible ? undefined : { display: "none" }} aria-label={`${activeApp.name} app`}>
       <div className="bs-workspace-app-surface">
         {scopedMountedApps.map(({ app, mountKey }) => {
           const revision = frameRevisions[mountKey] || 0;
@@ -509,7 +473,7 @@ export function AppFrameHost({
                 postMaverickShellTheme(event.currentTarget, shellTheme);
                 postMaverickFrameVisibility(event.currentTarget, {
                   app_id: app.app_id,
-                  visible: isDisplayed,
+                  visible: visible && isDisplayed,
                 });
                 if (app.app_id === activeApp.app_id) {
                   postNavigation(event.currentTarget, app.app_id, activeAppParams, shellTheme);

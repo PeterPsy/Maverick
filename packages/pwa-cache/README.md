@@ -34,11 +34,20 @@ clear cannot race updates to the controller's current principal. A terminating
 operation queued during a delayed transition observes and clears the resulting
 principal rather than capturing the preceding one.
 
-The package never renders UI, reads `navigator.onLine`, calls
+The package never renders UI, calls
 `navigator.storage.persist()`, stores pending requests, or turns cached data
 into authority. See `docs/runbooks/pwa_data_cache_m3.md` for integration and
 recovery details and `docs/runbooks/pwa_file_cache_m4.md` for the file-cache
 broker, failure drills, and rollout boundary.
+
+App event transport and visibility are separate from cache authority.
+`connectAppEventSocket` shares one socket per standalone document; isolated apps
+receive the shell's stream through exact-parent messages scoped to the current
+workspace/session. Hidden or offline documents pause that transport, and a useful
+resume refreshes display state once. Reconnect uses bounded exponential backoff
+with jitter. `observeMaverickVisibility` intersects shell, document and connectivity
+hints so subscribers can suspend nonessential work; these hints never authorize
+cached data or change persistence policy.
 
 M4 adds a separate `maverick-pwa-file-v1` IndexedDB manifest and the owned
 `maverick-pwa-file-cache-v1` OPFS directory. File names are opaque, writes are
@@ -132,8 +141,8 @@ handoff, not permission to replay an arbitrary failing loader or a mutation.
 
 `connectAppEventSocket` treats an opened connection after interruption as a
 display-refresh trigger: live events have no replay cursor. Shell routes scoped
-owner refreshes to mounted display apps without remounting them; Calendar also
-refreshes on its own socket recovery. Initial connection, reconnect backoff,
+owner refreshes to mounted display apps without remounting them. Embedded apps
+consume that shared recovery; standalone pages own their socket. Initial connection, reconnect backoff,
 and teardown cannot create extra refreshes or revive an obsolete scope.
 
 Historical counters and completed-duration summaries merge across documents.
@@ -162,3 +171,17 @@ shared packages, rejects legacy/raw/computed declarations and mutation
 callbacks, and requires factory source, policy, runtime registry, server
 deduplication, and replay evidence to agree. The runtime also enforces the
 three-attempt cap.
+
+`observeMaverickVisibility` shares one exact-parent/document/connectivity observer
+per frame. `connectAppEventSocket` consumes the Shell stream inside registered app
+frames and shares one reconnecting WebSocket only for standalone pages. Hidden
+views stop transport/retry work and refresh once when useful delivery resumes.
+After document background/offline suspension, embedded views wait for the Shell
+stream's resync before refreshing, including frames that were already hidden.
+
+`registerMaverickAppHibernation` is opt-in for frontends whose contract declares
+`presentation.frontend_resumable`. The app returns an opaque JSON snapshot or
+`null` when busy, and restores its route/draft/scroll after normal bootstrap.
+`preventMaverickAppHibernation()` pins component-owned work until its idempotent
+release callback runs. Snapshots stay in authenticated Shell RAM (64 KiB each,
+2 MiB total) and never enable the private persistent cache.

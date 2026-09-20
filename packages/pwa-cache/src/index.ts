@@ -1,4 +1,5 @@
 export { readCacheModelJson, type ReadModelRequest } from "./readModelRetry";
+export { maverickAppIsVisible, observeMaverickVisibility } from './appVisibility';
 export { createReadModelRequestExecutor } from "./safeRequestRetry";
 export {
   DEFAULT_PWA_CACHE_APP_BUDGET_BYTES,
@@ -199,3 +200,5 @@ export { displayRecord, displayFields, displayList, displayStrings } from "./rea
 export { projectDisplayModel, type DisplayModelSchema } from "./displayModelSchema";
 export { readAppCachePages } from './appReadModelPages';
 export { connectAppEventSocket } from "./appEventSocket";
+export { registerMaverickAppHibernation, preventMaverickAppHibernation, appSnapshotBytes, MAX_APP_SNAPSHOT_BYTES } from './appHibernation';
+export type { MaverickAppSnapshot, MaverickResumeParams } from './appHibernation';

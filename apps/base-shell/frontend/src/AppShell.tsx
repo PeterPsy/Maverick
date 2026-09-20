@@ -44,6 +44,7 @@ import {
   shellRetryCoordinator,
   subscribeShellAuthorizationRevocation,
 } from "./pwaCacheRuntime";
+import { useShellAppEvents } from "./hooks/useShellAppEvents";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import {
   isMaverickOwnerMessage,
@@ -144,6 +145,7 @@ export function AppShell() {
   ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId]);
   useEffect(() => { setAppSettingsScope(null); }, [activeAppId, frameScope?.sessionGeneration]);
   useDeviceUseBroker(frameScope);
+  useShellAppEvents(frameScope);
   const cancelShellLoading = useCallback(({ resetRecovery = false } = {}) => {
     shellLoadAbortRef.current?.abort();
     shellLoadAbortRef.current = null;

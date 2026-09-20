@@ -142,6 +142,13 @@ export function postMaverickFrameVisibility(
   });
 }
 
+/** Broadcast only within the current authenticated workspace/session generation. */
+export function broadcastMaverickFrameEvent(scope: MaverickFrameScope, message: unknown): void {
+  for (const [frame, identity] of registeredFrames) {
+    if (sameMaverickFrameScope(identity.scope, scope)) postToMaverickFrame(frame, message);
+  }
+}
+
 export function postMaverickShellTheme(frame: HTMLIFrameElement | null | undefined, theme: ShellThemeState) {
   postToMaverickFrame(frame, shellThemeMessage(theme));
 }

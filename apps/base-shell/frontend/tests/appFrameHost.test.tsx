@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
+import { useShellAppEvents } from "../src/hooks/useShellAppEvents";
 import { AppFrameHost } from "../src/components/AppFrameHost";
 import type { MaverickFrameScope } from "../src/iframePolicy";
 import { StorageFileCacheBroker } from "../src/storageFileCacheBroker";
@@ -90,6 +91,40 @@ describe("AppFrameHost app frame readiness", () => {
     vi.clearAllMocks();
   });
 
+  it("hibernates only after an exact inactive-frame acknowledgement and restores its RAM snapshot", async () => {
+    const resumableChat = { ...chat, frontend_resumable: true };
+    await renderHost(root, resumableChat);
+    const first = await waitForFrame(container, "Chat viewport", "chat");
+    const posted = vi.spyOn(first.contentWindow!, "postMessage");
+    await renderHost(root, storage);
+    const second = await waitForFrame(container, "Storage viewport", "storage");
+    await dispatchAppReady(second, "storage");
+    expect(container.querySelectorAll('iframe')).toHaveLength(2);
+    await renderHost(root, agents);
+    const third = await waitForFrame(container, "Agents viewport", "agents");
+    await dispatchAppReady(third, "agents");
+    const request = posted.mock.calls.map(([message]) => message).find((message) => message.type === 'maverick.app.hibernate');
+    expect(request).toBeDefined();
+    const snapshot = { params: { thread_id: 'thread-a' }, state: { composer: 'unsent', scroll: 400 } };
+    const reply = { type: 'maverick.app.hibernated', app_id: 'chat', request_id: request.request_id, snapshot };
+    await act(async () => window.dispatchEvent(new MessageEvent('message', {
+      data: reply, source: second.contentWindow, origin: first.dataset.maverickFrameOrigin,
+    })));
+    expect(container.querySelectorAll('iframe')).toHaveLength(3);
+    await act(async () => window.dispatchEvent(new MessageEvent('message', {
+      data: reply, source: first.contentWindow, origin: first.dataset.maverickFrameOrigin,
+    })));
+    expect(container.querySelectorAll('iframe')).toHaveLength(2);
+    expect(container.querySelector('iframe[title="Storage viewport"]')).toBe(second);
+    await renderHost(root, resumableChat);
+    const resumed = await waitForFrame(container, "Chat viewport", "chat");
+    expect(resumed).not.toBe(first);
+    const resumePost = vi.spyOn(resumed.contentWindow!, 'postMessage');
+    await dispatchAppReady(resumed, 'chat');
+    expect(resumePost.mock.calls.some(([message]) => message.type === 'maverick.app.resume'
+      && message.snapshot.state.composer === 'unsent' && message.snapshot.state.scroll === 400)).toBe(true);
+  });
+
   it.each([
     { owner: storage, resource: "files" },
     { owner: websiteStudio, resource: "records" },
@@ -102,11 +137,11 @@ describe("AppFrameHost app frame readiness", () => {
     MockWebSocket.instances[0].onopen?.();
     expect(post.mock.calls.some(([message]) => message.type === "maverick.app.data-changed")).toBe(false);
     MockWebSocket.instances[0].onclose?.();
-    await act(async () => { vi.advanceTimersByTime(1_000); });
+    await act(async () => { vi.advanceTimersByTime(1_200); });
     expect(MockWebSocket.instances).toHaveLength(2);
     await act(async () => { MockWebSocket.instances[1].onopen?.(); });
     expect(post).toHaveBeenCalledWith({
-      type: "maverick.app.data-changed", owner_app_id: owner.app_id, resource, workspace_id: "default",
+      type: "maverick.app.data-changed", owner_app_id: owner.app_id, resource, workspace_id: "default", resync: true, frames_notified: true,
     }, window.location.origin);
     expect(frameByTitle(container, title)).toBe(frame);
   });
@@ -275,6 +310,11 @@ describe("AppFrameHost app frame readiness", () => {
   });
 });
 
+function ShellEvents({ scope }: { scope: MaverickFrameScope }) {
+  useShellAppEvents(scope);
+  return null;
+}
+
 async function renderHost(
   root: Root,
   activeApp: AppRegistryItem,
@@ -284,6 +324,8 @@ async function renderHost(
 ) {
   await act(async () => {
     root.render(
+      <>
+      <ShellEvents scope={frameScope} />
       <AppFrameHost
         activeApp={activeApp}
         activeAppParams={activeAppParams}
@@ -294,7 +336,8 @@ async function renderHost(
         onOpenApp={vi.fn()}
         sessionExpiresAt="2099-01-01T00:00:00Z"
         shellTheme={shellTheme}
-      />,
+      />
+      </>,
     );
     await Promise.resolve();
   });

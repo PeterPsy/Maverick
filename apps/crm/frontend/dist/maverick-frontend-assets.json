@@ -1,47 +1,73 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "0699477aaa87f8e7f06139ec0113e2ba5d20164899ebb66d457227068ffa403a",
+  "build_id": "3dcd17e2f0c21710d94675cbd4f8a0ed0ccf4150ba08b8eb3a5c7f197d7a5e16",
   "entrypoints": [
     "index.html",
+    "widgets/crm-external-settings/index.html",
     "widgets/crm-sidebar/index.html"
   ],
   "immutable": [
     {
-      "path": "assets/app-AXUAqfMD.js",
-      "sha256": "46abd5d2628334bcc5bfa30ea7d010343e2ffb02ef727872761c5bf1450be540",
-      "size_bytes": 313619
+      "path": "assets/WorkspaceSidebar-iWHSjfTf.js",
+      "sha256": "f4853ba2393beec763c3a9f1dbe2582f6bc262eb1f1041fbfdec12ea57114b11",
+      "size_bytes": 58128
     },
     {
-      "path": "assets/app-DH9Z14Fb.css",
-      "sha256": "2c79728478ecfac8645103c8e3b97fe797e14df22328af707ed08ad4ddd12e22",
-      "size_bytes": 70480
+      "path": "assets/app-CI4h97Hb.css",
+      "sha256": "5db816d227f877dbb9623fc164a35750664cf06910946704a4e1f4d70e3cf037",
+      "size_bytes": 55289
     },
     {
-      "path": "assets/index-CjZ6xg0W.css",
-      "sha256": "92030adcb2b4e517438b99c9240216e842f2713790724ec3229a16be517a6ae0",
+      "path": "assets/app-DVCvPIpB.js",
+      "sha256": "eac35da6cbf762a926c7841237d3a6b6d4e44e63e208414ad828f252f7584b65",
+      "size_bytes": 315100
+    },
+    {
+      "path": "assets/index-BfIpzQ2I.css",
+      "sha256": "84cb20c0eecf13d2ac25d2b93f6aea0a331f8d5d1a9f683a5ad6a0127dec9eda",
       "size_bytes": 3454
     },
     {
-      "path": "assets/shellMessaging-CAAIt9E1.js",
-      "sha256": "40a4d8e744f9e36d6073826ecfd69710265dce2213ce841b20f20e3cfeb903fd",
-      "size_bytes": 253459
+      "path": "assets/index-C_ygSVwd.css",
+      "sha256": "c93ebfb1ba0b2b8c410f736045d83cb9e2d9d96fbee3ede37c3d6f4a7b10bb29",
+      "size_bytes": 1061
     },
     {
-      "path": "assets/widgets/crm-sidebar/index-CsojWxB0.js",
-      "sha256": "1f0c48aed9e04b27b92a359541b4b5064f4144d919d44f106c88c332cd534f33",
-      "size_bytes": 10268
+      "path": "assets/shellMessaging-DOWRmmLl.js",
+      "sha256": "6b21369bb9b0228613ca174a222e328dcd9019d70539bc29ce012d2a462baa5a",
+      "size_bytes": 204506
+    },
+    {
+      "path": "assets/widgets/crm-external-settings/index-CMIJyjJQ.js",
+      "sha256": "c2e5de96ae98e8487ff262d2944cc4e8e0d16b5bc070b1e89c36979b02ed76c5",
+      "size_bytes": 3711
+    },
+    {
+      "path": "assets/widgets/crm-sidebar/index-b7sxa_8U.js",
+      "sha256": "e3c659d84d121fd9c4ce90d77b05ec475f2d784002dcbce222f0ecbfa8e4c460",
+      "size_bytes": 1702
     }
   ],
   "revalidated": [
     {
+      "path": "assets/styles-Cq7ryGgM.css",
+      "sha256": "70f5c3b433805eda274b8f6c39e0f9515cb68e1eeec87f6f8a354070f4e07145",
+      "size_bytes": 18491
+    },
+    {
       "path": "index.html",
-      "sha256": "3e2444b88e5f8912a13961f27e0404a5ec7aa1f3e44c3b72489d9ea4931ab08b",
-      "size_bytes": 496
+      "sha256": "20d25f5a739830c3103bf8766e7bd22df9a5f743a58458b976a9c0ddd68a27e6",
+      "size_bytes": 676
+    },
+    {
+      "path": "widgets/crm-external-settings/index.html",
+      "sha256": "83a0f6e227860ecbc6128c7cfb33f2e459b8bdca7f20454e0c7f1551b178b998",
+      "size_bytes": 595
     },
     {
       "path": "widgets/crm-sidebar/index.html",
-      "sha256": "8232478ebd810b59c8ef4e3fa320587e6da75472a7aaee40f2989ff2db58d9a6",
-      "size_bytes": 540
+      "sha256": "52641cc17837b31ddd4a67a341f0ab09636186e06e3c309afe4b7fcc152aee21",
+      "size_bytes": 636
     }
   ]
 }

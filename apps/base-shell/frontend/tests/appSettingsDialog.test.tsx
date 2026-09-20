@@ -39,6 +39,12 @@ describe("Per-app settings", () => {
     expect(externalSettingsProvider([provider, { ...provider, app_id: "duplicate" }])).toBeNull();
     expect(externalSettingsProvider([{ ...provider, provides: [{ ...provider.provides[0], version: "2" }] }])).toBeNull();
   });
+  it("prefers the selected app's own surface without hijacking other apps", () => {
+    const owner = { ...app, provides: [{ interface: "app.external.surfaces.settings", version: "1", description: "Own surfaces", surfaces: ["widget"] }] };
+    expect(externalSettingsProvider([owner, provider], owner)).toBe(owner);
+    expect(externalSettingsProvider([owner, provider], app)).toBe(provider);
+    expect(externalSettingsProvider([owner], app)).toBeNull();
+  });
   it("opens a native modal with exact app-owned settings and scoped external context", async () => {
     await render();
     expect(container.querySelector("dialog")?.open).toBe(true);

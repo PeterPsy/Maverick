@@ -19,6 +19,14 @@
         "view",
         "widget"
       ]
+    },
+    {
+      "interface": "app.external.surfaces.settings",
+      "version": "1",
+      "description": "Manage this CRM live public surface.",
+      "surfaces": [
+        "widget"
+      ]
     }
   ],
   "requires": [
@@ -491,6 +499,23 @@
       "frontend": {
         "kind": "iframe",
         "mount": "frontend/dist/widgets/crm-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "crm-external-settings",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.app.external.surfaces"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/crm-external-settings",
         "spa_fallback": true
       },
       "actions": {

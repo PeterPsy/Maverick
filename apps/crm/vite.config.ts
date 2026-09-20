@@ -13,6 +13,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: 'frontend/index.html',
+        'widgets/crm-external-settings/index': 'frontend/widgets/crm-external-settings/index.html',
         'widgets/crm-sidebar/index': 'frontend/widgets/crm-sidebar/index.html'
       },
       output: {

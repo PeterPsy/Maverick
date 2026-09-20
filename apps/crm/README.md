@@ -178,3 +178,16 @@ npm run test:e2e -- --workers=1
 ```
 
 The suites cover migration backups, data/reference fidelity, future-schema refusal, typed extensions, campaign integrity, archive lifecycle, exact dedupe/policies, read-only simulation, stale plans, replay, rollback, secret exclusion, export round trips, provider selection, callback forgery, concurrent delivery claims, uncertain writes/reconciliation, safe retry, failed-refresh preservation, secret preflight without execution, and real isolated Mail/Calendar/Storage/Checklist contracts. Browser tests cover routing, pagination, record linking, campaign planning, import application, approved Calendar/Storage execution, follow-up review, and desktop/mobile screenshots. No test writes to the live workspace database or sends real email.
+
+## Public CRM surface
+
+CRM → sidebar gear → **Superfici esterne** manages the live CRM at
+`crm.apps.<installation-domain>`. An operator must first provision its confined
+service, DNS and exact TLS certificate. Anonymous read-only is the default;
+anonymous creation/modification/deletion requires a separate explicit setting.
+The full native interface and CRM-owned data are shared, not copied. Provider
+execution and other apps remain private. The shell uses CRM's own settings widget
+without changing External Apps' immutable static publishing contract.
+
+See [architecture](../../docs/architecture/crm_external_surface.md) and the
+[operator runbook](public_server/README.md), including stop/rollback commands.

@@ -1,0 +1,13 @@
+.crm-app.product-shell.crm-public { grid-template-columns: 250px minmax(0, 1fr); }
+.crm-public-navigation { min-height: 0; border-right: 1px solid var(--maverick-border); --crm-sidebar-scroll-under-top: 0px; --crm-sidebar-scroll-under-bottom: 16px; }
+.crm-public-notice { flex-shrink: 0; padding: 8px 20px; font-size: 11px; line-height: 1.5; color: var(--maverick-text-muted); border-bottom: 1px solid var(--maverick-border); }
+.crm-public-menu { display: none; }
+.crm-app.crm-public .product-inspector { top: 112px; }
+@media (max-width: 760px) {
+  .crm-app.product-shell.crm-public { grid-template-columns: minmax(0, 1fr); }
+  .crm-public-menu { display: grid; place-items: center; position: fixed; top: 6px; left: 8px; z-index: 31; width: 32px; height: 32px; border-radius: 6px; background: var(--maverick-bg-strong); }
+  .crm-public-navigation { position: absolute; height: 0; }
+  .crm-public-navigation .product-sidebar { display: none; }
+  .crm-public-navigation.is-open .product-sidebar { display: flex; position: fixed; inset: 0 auto 0 0; width: min(300px, 90vw); padding-top: 48px; z-index: 30; background: var(--maverick-bg-strong); box-shadow: 0 0 0 100vmax #0008; }
+  .crm-public-notice { padding-left: 48px; min-height: 44px; }
+}

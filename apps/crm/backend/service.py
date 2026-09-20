@@ -7,7 +7,6 @@ import sqlite3
 from typing import Any
 
 from errors import ValidationError
-from pwa_read_model import read_model
 from domains.account_insights import account_brief, summarize_account
 from domains.action_catalog import app_events_for_action, operations_manifest
 from domains.automation_rules import (
@@ -126,6 +125,7 @@ def handle_action(data_root: str | Path, action: str, payload: dict[str, Any]) -
             if action == "crm.record_context":
                 return 200, record_context(db, payload)
             if action == "pwa.read_model":
+                from pwa_read_model import read_model
                 return 200, read_model(db, data_root, payload)
             if action in {"operations.manifest", "crm.manifest"}:
                 return 200, operations_manifest()

@@ -1,0 +1,13 @@
+body { overflow: auto; }
+.crm-external-settings { padding: 24px; max-width: 760px; margin: auto; font-size: 14px; line-height: 1.6; }
+.crm-external-settings h1 { font-size: 24px; margin: 0; }
+.crm-external-settings p { color: var(--maverick-text-muted); }
+.crm-external-settings form { display: grid; gap: 16px; margin: 24px 0; }
+.crm-external-settings label { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.crm-external-settings input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--maverick-accent); }
+.crm-external-settings button, .crm-external-settings select { padding: 10px 14px; border-radius: 8px; background: var(--maverick-surface-active); }
+.crm-external-settings button:disabled { opacity: .4; cursor: default; }
+.crm-external-address { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--maverick-border); border-radius: 12px; overflow-wrap: anywhere; }
+.crm-external-address a { color: inherit; }
+.crm-external-settings .crm-external-warning { padding: 14px; border-left: 3px solid var(--maverick-text-muted); background: var(--maverick-surface); }
+.crm-external-settings [role=alert] { color: var(--maverick-danger); }

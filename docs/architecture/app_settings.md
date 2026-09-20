@@ -12,7 +12,10 @@ app-owned through an optional existing iframe widget contract:
 without such a widget has no invented preferences. The ordinary Settings app and
 its platform/workspace administration remain unchanged.
 
-The external section discovers the enabled provider of
+The external section first selects the active app itself if it provides
+`app.external.surfaces.settings` v1. This capability manages only its own live
+surfaces through the same widget content kind; it is not a global provider for
+other apps. Otherwise the section discovers the unique enabled provider of
 `external.surfaces.settings` v1 and its `shell.app.external.surfaces` widget.
 External Apps supplies that supporting surface; the shell does not import its
 code, catalog, publication actions or app id. The widget receives only the selected
@@ -24,7 +27,10 @@ The initial public capability remains `external.static-bundle.export` v1, with
 immutable build plans, exact human approval and suspend/rollback. Unsupported apps
 show an explicit unavailable state, not a switch that exposes private app frames,
 Core APIs or user data. The selected exporter still comes from Core dependency
-resolution. Settings do not make authenticated applications anonymously public.
+resolution. Settings do not make authenticated applications anonymously public
+implicitly. CRM explicitly implements its own live surface and opt-in access
+controls; see [`crm_external_surface.md`](crm_external_surface.md). This does not
+relax the static publisher or grant public callers access to Core.
 
 Dialog state is memory-only. App/workspace/session transitions discard the old
 scope, and widget frames are separately authenticated origins. Native dialog

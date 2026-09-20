@@ -10,6 +10,7 @@ from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_pa
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from errors import CrmError, error_payload
 from service import app_events_for_action, handle_action
+from external_hosting import handle as handle_external_hosting
 
 
 payload = read_entrypoint_payload()
@@ -21,7 +22,10 @@ body["_workspace_id"] = payload.workspace_id
 body["_app_id"] = payload.app_id
 action = str(body.get("action") or "bootstrap")
 try:
-    status_code, result = handle_action(payload.data_root, action, body)
+    if action in {'crm.external.status', 'crm.external.configure'}:
+        status_code, result = handle_external_hosting(payload.data_root, payload.body, payload)
+    else:
+        status_code, result = handle_action(payload.data_root, action, body)
 except CrmError as error:
     status_code, result = error.status_code, error_payload(error)
 except Exception as error:  # pragma: no cover - final mount boundary guard

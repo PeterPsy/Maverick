@@ -23,6 +23,8 @@ import { ReportsView } from './views/ReportsView';
 import { entityFilterForEntity, isCreatableEntity, viewForEntity } from './domain/routing';
 import { useCrmActions } from './domain/useCrmActions';
 import { useCrmDataController } from './domain/useCrmDataController';
+import { PublicNavigation } from './public/PublicNavigation';
+import { isPublicCrm, publicAccess } from './public/context';
 
 export function App() {
   const crm = useCrmDataController();
@@ -95,8 +97,10 @@ export function App() {
   function closeInspector() { setSelected(null); window.dispatchEvent(new Event('crm-workspace-refresh')); }
 
   return (
-    <main className={`crm-app product-shell ${selected ? 'is-showing-detail' : ''}`}>
+    <main className={`crm-app product-shell ${selected ? 'is-showing-detail' : ''} ${isPublicCrm ? 'crm-public' : ''}`}>
+      {isPublicCrm && <PublicNavigation view={view} navigate={navigate} />}
       <section className="crm-workspace product-main">
+        {isPublicCrm && <div className="crm-public-notice" role="status">CRM pubblico · {publicAccess === 'read-only' ? 'Sola lettura: le modifiche sono disabilitate.' : 'Modificabile da chiunque abbia il link.'} Le integrazioni con altre app restano private.</div>}
         <WorkspaceTopbar
           onRefresh={refreshWorkspace}
           onCreate={() => setIsCreateChooserOpen(true)}

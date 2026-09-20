@@ -8,6 +8,7 @@ import { ActionDialogState, ComposerState, ImportPreview, PendingSelection, Reco
 import { entityFilterForEntity, isCreatableEntity, viewForEntity, viewFromAppPage } from './routing';
 import { useCrmNavigation } from './useCrmNavigation';
 import { postToShell } from './shellMessaging';
+import { isPublicCrm } from '../public/context';
 
 export function useCrmDataController() {
   const { view, setView, applyShellView, consumeNavigationEcho } = useCrmNavigation();
@@ -234,7 +235,7 @@ export function useCrmDataController() {
   }, [data.view_state]);
 
   useEffect(() => {
-    if (!hasLoadedSearchFilter.current) return;
+    if (isPublicCrm || !hasLoadedSearchFilter.current) return;
     const entityType = view === 'records' ? recordEntityFilter : 'all';
     const nextQuery = query.trim();
     const signature = JSON.stringify({ query: nextQuery, entity_type: entityType });

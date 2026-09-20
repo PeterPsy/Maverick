@@ -1,0 +1,11 @@
+[Unit]
+Description=Check CRM public certificate renewal daily
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+Unit=maverick-crm-public-renew.service
+
+[Install]
+WantedBy=timers.target

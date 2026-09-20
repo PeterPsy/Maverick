@@ -6,7 +6,9 @@ import { APP_STORE_APP_ID, SETTINGS_APP_ID } from "../navigation";
 import { AppLogo } from "./AppLogo";
 import { WidgetSlot } from "./WidgetSlot";
 
-export function externalSettingsProvider(apps: AppRegistryItem[]) {
+export function externalSettingsProvider(apps: AppRegistryItem[], owner?: AppRegistryItem) {
+  // App-owned live surfaces need not delegate to the shared static publisher.
+  if (owner?.provides.some(item => item.interface === "app.external.surfaces.settings" && item.version === "1")) return owner;
   const providers = apps.filter(app => app.provides.some(item => item.interface === "external.surfaces.settings" && item.version === "1"));
   return providers.length === 1 ? providers[0] : null;
 }
@@ -27,7 +29,7 @@ export function AppSettingsDialog({ app, apps, frameScope, isPinned, isLastPinne
   const [section, setSection] = useState<"general" | "external">("general");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const provider = externalSettingsProvider(apps);
+  const provider = externalSettingsProvider(apps, app);
   useEffect(() => {
     alive.current = true;
     const node = dialog.current;

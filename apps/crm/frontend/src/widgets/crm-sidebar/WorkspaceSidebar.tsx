@@ -7,12 +7,13 @@ const countTables: Partial<Record<ViewId, string>> = {
   conversations: 'conversation_threads', expenses: 'expenses', intelligence: 'intelligence_profiles',
 };
 
-export function WorkspaceSidebar({ view, navigate, counts, countsError, retry }: {
+export function WorkspaceSidebar({ view, navigate, counts, countsError, retry, publicSurface = false }: {
   view: ViewId;
   navigate: (view: ViewId) => void;
   counts: Record<string, number>;
   countsError: boolean;
   retry: () => void;
+  publicSurface?: boolean;
 }) {
   function navigationItem({ page, label, icon: Icon, secondary }: typeof productNavigation[number]) {
     const count = counts[countTables[page] || ''];
@@ -36,6 +37,6 @@ export function WorkspaceSidebar({ view, navigate, counts, countsError, retry }:
       </details>
     </nav>
     {countsError ? <div className="sidebar-count-error" role="status">Counts unavailable. <button onClick={retry}>Retry counts</button></div> : null}
-    <footer><span className="product-avatar">M</span><div><strong>CRM</strong><small>Private workspace · Maverick</small></div></footer>
+    <footer><span className="product-avatar">M</span><div><strong>CRM</strong><small>{publicSurface ? 'Public CRM · Maverick' : 'Private workspace · Maverick'}</small></div></footer>
   </aside>;
 }

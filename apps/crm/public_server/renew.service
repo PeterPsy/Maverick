@@ -1,0 +1,17 @@
+[Unit]
+Description=Renew the exact CRM public HTTPS certificate
+After=network-online.target nginx.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/bin/certbot renew --quiet --cert-name crm-public --config-dir /var/lib/maverick/crm-public-tls/config --work-dir /var/lib/maverick/crm-public-tls/work --logs-dir /var/lib/maverick/crm-public-tls/logs --deploy-hook "/usr/sbin/nginx -t && /usr/bin/systemctl reload nginx"
+TimeoutStartSec=10min
+MemoryMax=256M
+TasksMax=16
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/maverick/crm-public-tls /var/lib/maverick/external-apps-acme /var/log/nginx /run/nginx.pid

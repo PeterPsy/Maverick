@@ -170,6 +170,7 @@ def submit_runtime_turn(
     lock.acquire()
     try:
         worker_metrics["session_lock_wait_ms"] = (time.perf_counter() - lock_wait_started_at) * 1000
+        output_recorder = None
         try:
             turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
             if turn.status != "active":
@@ -310,6 +311,8 @@ def submit_runtime_turn(
                         event_sink=output_recorder.record,
                     )
         except Exception as error:
+            if output_recorder is not None:
+                output_recorder.flush_usage()
             turn = terminalize_sync_execution_failure(
                 state,
                 session=session,
@@ -320,6 +323,7 @@ def submit_runtime_turn(
                 plain_hosted=plain_hosted,
             )
             return turn, events
+        output_recorder.flush_usage()
         current = state.runtime_store.get_turn(turn.turn_id)
         if current.status == "cancelled":
             terminalization = _terminalize_worker_observed_cancellation(

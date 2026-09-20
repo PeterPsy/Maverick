@@ -325,3 +325,22 @@ authentication path. With 10k samples, 500 HTTP reads and 250 concurrent runtime
 observations, the follow-up measured p95 36.10 ms for reads and 42.86 ms for
 observations. Saturated Usage acceptance remains open; isolated-service gains
 must not be presented as concurrent HTTP gains.
+
+At `f81bdc92`, 500 sequential Usage HTTP reads measured p95 3.82 ms and 500
+internal observations p95 11.68 ms with a 10k fixture. At 100k, four readers and
+two producers measured p95 38.68 ms and 38.22 ms respectively; all 100,255 samples
+and 17,544,625 tokens were verified. Storage's 100k mounted fixture, with 26 apps,
+measured sequential p95 45.53 ms for catalog and 10.59 ms for resolver.
+
+The isolated Storage matrix also covers 1k, 10k and 100k flat/tree datasets with
+500 reads plus five warmups. The 100k cases measured p95 32.25 ms (flat) and
+32.80 ms (tree), with no `Path.stat` or `os.scandir` calls in the instrumented
+read. These are adapter measurements; database page reads and exact SQL totals
+still scale with the selected dataset.
+
+Terminal Usage flushing also covers provider failures and post-execution
+cancellation, before the terminal event is published. The recorder remembers
+the root destination from its last committed observation, so delivery does not
+need to look up a session again during teardown. Chat's variable-height window
+preserves the bottom position when content grows and adjusts the reading anchor
+only after updated spacer heights commit.

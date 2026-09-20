@@ -30,9 +30,10 @@ class _RuntimeStore:
 class _EventBus:
     def __init__(self) -> None:
         self.events = []
+        self.flushed = []
 
     def flush_usage(self, session_id) -> None:
-        pass
+        self.flushed.append(session_id)
 
     def publish(self, event) -> None:
         self.events.append(event)
@@ -102,6 +103,10 @@ class UsageServiceTest(unittest.TestCase):
         self.assertEqual(recorded.payload["tokens"]["total_tokens"], 25)
         self.assertEqual(self.state.runtime_store.events, [])
         self.assertEqual(self.state.runtime_event_bus.events, [recorded])
+        # Teardown may remove the reporting child before its final notification.
+        self.state.runtime_store.sessions.pop(self.child.session_id)
+        recorder.flush_usage()
+        self.assertEqual(self.state.runtime_event_bus.flushed, [self.root.session_id])
 
     def test_cumulative_reports_track_context_without_double_counting_chat_tokens(self) -> None:
         first = ingest_runtime_usage(

@@ -725,6 +725,7 @@ def submit_runtime_turn_async(
                 message="Runtime turn debug: async worker entered",
                 payload={"phase": "async_worker_entered"},
             )
+            output_recorder = None
             try:
                 turn_lookup_started_at = time.perf_counter()
                 current = state.runtime_store.get_turn(turn.turn_id)
@@ -1063,6 +1064,7 @@ def submit_runtime_turn_async(
                             on_provider_accepted=provider_accepted,
                             event_sink=output_recorder.record,
                         )
+                output_recorder.flush_usage()
                 _debug_log_runtime_turn(
                     state,
                     session=current_session,
@@ -1134,6 +1136,8 @@ def submit_runtime_turn_async(
                 )
                 prewarm_after_turn = not plain_hosted
             except Exception as error:
+                if output_recorder is not None:
+                    output_recorder.flush_usage()
                 failure_reason_code, public_error_message = runtime_failure_details(error)
                 reason_codes = getattr(error, "reason_codes", None)
                 _debug_log_runtime_turn(

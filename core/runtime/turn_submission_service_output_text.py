@@ -11,7 +11,7 @@ from core.runtime.output_compaction import ToolOutputCompactionContext, compact_
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.service import record_runtime_event, record_runtime_turn_event_once
 from core.usage.payloads import chat_usage_summary_payload
-from core.usage.service import ingest_runtime_usage, resolve_current_root_session_id
+from core.usage.service import ingest_runtime_usage
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -28,15 +28,19 @@ class _RuntimeTurnOutputRecorder:
         self.session_id = session_id
         self.turn_id = turn_id
         self._streamed_text_parts: list[str] = []
+        self._usage_session_id: str | None = None
 
     def record(self, event: RuntimeExecutionEvent) -> RuntimeEventRecord | None:
         if event.event_type in {"provider.usage", "runtime.usage.reported"}:
-            return _record_usage_summary_event(
+            recorded = _record_usage_summary_event(
                 self.state,
                 session_id=self.session_id,
                 turn_id=self.turn_id,
                 payload=event.payload,
             )
+            if recorded is not None:
+                self._usage_session_id = recorded.session_id
+            return recorded
         if event.event_type == "runtime.output.delta":
             text = event.payload.get("text")
             if isinstance(text, str) and text:
@@ -86,10 +90,9 @@ class _RuntimeTurnOutputRecorder:
         return _record_execution_event(self.state, session_id=self.session_id, turn_id=self.turn_id, event=event)
 
     def flush_usage(self) -> None:
-        if self.state.runtime_event_bus is None:
+        if self.state.runtime_event_bus is None or self._usage_session_id is None:
             return
-        session = self.state.runtime_store.get_session(self.session_id)
-        self.state.runtime_event_bus.flush_usage(resolve_current_root_session_id(self.state.runtime_store, session))
+        self.state.runtime_event_bus.flush_usage(self._usage_session_id)
 
     def final_text(self, output_text: str) -> str:
         self.flush_usage()

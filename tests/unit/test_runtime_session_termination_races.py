@@ -6,12 +6,15 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import core.runtime.session_termination as session_termination
 import core.runtime.turn_submission_service_runtime as turn_submission_runtime
 import core.runtime.turn_submission_service_submit as turn_submission_submit
 from core.runtime.event_collection import RuntimeEventJsonCollection
+from core.runtime.execution_events import RuntimeExecutionEvent
+from core.shared.in_memory_collection import InMemoryCollection
+from core.usage.store import UsageCollections, UsageDocumentStore
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session, request_runtime_turn_cancellation, transition_runtime_turn
 from core.runtime.session_collection import RuntimeSessionJsonCollection
@@ -96,11 +99,24 @@ class RuntimeSessionTerminationRaceTest(unittest.TestCase):
         self.assertEqual(events[-1].event_id, cancelled_events[0].event_id)
 
     def test_async_exception_terminalizes_turn_already_cancelled_by_provider_path(self) -> None:
+        self._assert_exception_flushes_usage(asynchronous=True, cancelled=True)
+
+    def test_async_failure_flushes_committed_usage_before_terminal_event(self) -> None:
+        self._assert_exception_flushes_usage(asynchronous=True, cancelled=False)
+
+    def test_sync_cancellation_flushes_committed_usage_before_terminal_event(self) -> None:
+        self._assert_exception_flushes_usage(asynchronous=False, cancelled=True)
+
+    def test_sync_failure_flushes_committed_usage_before_terminal_event(self) -> None:
+        self._assert_exception_flushes_usage(asynchronous=False, cancelled=False)
+
+    def _assert_exception_flushes_usage(self, *, asynchronous: bool, cancelled: bool) -> None:
+        module = turn_submission_runtime if asynchronous else turn_submission_submit
         repo_root = make_temp_repo_root(self)
         store = _runtime_json_store(repo_root)
         session = create_runtime_session(
             store,
-            session_id="async-exception-cancelled",
+            session_id="usage-terminal-session",
             workspace_id="default",
             agent_id="chat",
             start_path=repo_root,
@@ -108,11 +124,11 @@ class RuntimeSessionTerminationRaceTest(unittest.TestCase):
         now = datetime(2026, 8, 10, 9, 0, tzinfo=UTC)
         queued = store.save_turn(
             RuntimeTurnRecord(
-                turn_id="async-exception-cancelled-turn",
+                turn_id="usage-terminal-turn",
                 session_id=session.session_id,
                 workspace_id="default",
                 status="queued",
-                input_text="provider observes cancellation then raises",
+                input_text="provider reports usage then terminates",
                 created_at=now,
                 updated_at=now,
                 started_at=None,
@@ -120,9 +136,12 @@ class RuntimeSessionTerminationRaceTest(unittest.TestCase):
                 failure_reason=None,
             )
         )
+        bus = Mock()
         state = SimpleNamespace(
             runtime_store=store,
-            runtime_event_bus=None,
+            runtime_event_bus=bus,
+            usage_store=UsageDocumentStore(UsageCollections(samples=InMemoryCollection(),
+                buckets=InMemoryCollection(), quota_snapshots=InMemoryCollection())),
             repository_root=repo_root,
         )
 
@@ -133,53 +152,50 @@ class RuntimeSessionTerminationRaceTest(unittest.TestCase):
             def start(self) -> None:
                 self.target()
 
-        def cancel_then_raise(*_args, **_kwargs):
-            request_runtime_turn_cancellation(
-                store,
-                turn_id=queued.turn_id,
-                reason="provider observed cancellation",
-                now=now,
-            )
-            transition_runtime_turn(
-                store,
-                turn_id=queued.turn_id,
-                target_status="cancelled",
-                failure_reason="provider observed cancellation",
-                now=now,
-            )
-            raise RuntimeError("provider stopped after cancellation")
+        def report_then_raise(*_args, **kwargs):
+            sink = kwargs['event_sink'] if asynchronous else kwargs['output_recorder'].record
+            sink(RuntimeExecutionEvent(event_type='provider.usage', payload={
+                'usage_id': 'committed-before-failure', 'provider_id': 'codex', 'model_id': 'model',
+                'semantics': 'incremental', 'input_tokens': 20, 'output_tokens': 5,
+                'total_tokens': 25, 'context_window_tokens': 1000,
+            }))
+            if cancelled:
+                request_runtime_turn_cancellation(store, turn_id=queued.turn_id, reason='provider stopped', now=now)
+                transition_runtime_turn(store, turn_id=queued.turn_id, target_status='cancelled', now=now)
+            raise RuntimeError('provider stopped after committed usage')
 
         with (
-            patch.object(turn_submission_runtime, "runtime_session_is_plain_hosted_chat", return_value=True),
+            patch.object(module, "runtime_session_is_plain_hosted_chat", return_value=True),
             patch.object(
-                turn_submission_runtime,
+                module,
                 "_queue_turn_with_event_result",
                 return_value=(queued, [], True),
             ),
-            patch.object(turn_submission_runtime, "Thread", InlineThread),
-            patch.object(turn_submission_runtime, "_record_turn_worker_entered"),
-            patch.object(turn_submission_runtime, "_debug_log_runtime_turn"),
-            patch.object(turn_submission_runtime, "_debug_log_runtime_turn_with_timing"),
+            patch.object(module, "Thread", InlineThread) if asynchronous else nullcontext(),
+            patch.object(module, "_record_turn_worker_entered"),
+            patch.object(module, "_debug_log_runtime_turn"),
+            patch.object(module, "_debug_log_runtime_turn_with_timing") if asynchronous else nullcontext(),
             patch.object(
-                turn_submission_runtime,
+                module,
                 "_record_turn_started",
                 return_value=SimpleNamespace(created_at=now),
             ),
-            patch.object(turn_submission_runtime, "_record_turn_worker_started"),
-            patch.object(turn_submission_runtime, "_record_turn_activation_completed"),
-            patch.object(turn_submission_runtime, "_record_provider_dispatching"),
+            patch.object(module, "_record_turn_worker_started"),
+            patch.object(module, "_record_turn_activation_completed"),
+            patch.object(module, "_record_provider_dispatching") if asynchronous else nullcontext(),
             patch.object(
-                turn_submission_runtime,
+                module,
                 "runtime_provider_start_handoff",
                 return_value=nullcontext((session, lambda _metadata: None)),
-            ),
+            ) if asynchronous else nullcontext(),
             patch.object(
-                turn_submission_runtime,
-                "execute_plain_hosted_text_turn",
-                side_effect=cancel_then_raise,
+                module,
+                "execute_plain_hosted_text_turn" if asynchronous else "execute_sync_plain_hosted_turn",
+                side_effect=report_then_raise,
             ),
         ):
-            turn_submission_runtime.submit_runtime_turn_async(
+            submit = module.submit_runtime_turn_async if asynchronous else module.submit_runtime_turn
+            submit(
                 state,
                 session=session,
                 input_text=queued.input_text,
@@ -191,9 +207,17 @@ class RuntimeSessionTerminationRaceTest(unittest.TestCase):
             for event in store.list_events(session.session_id)
             if event.event_type == "runtime.turn.cancelled"
         ]
-        self.assertEqual(persisted.status, "cancelled")
-        self.assertIsNotNone(persisted.terminalization_event_id)
-        self.assertEqual(len(cancelled_events), 1)
+        self.assertEqual(persisted.status, 'cancelled' if cancelled else 'failed')
+        if cancelled:
+            self.assertIsNotNone(persisted.terminalization_event_id)
+        self.assertEqual(len(cancelled_events), 1 if cancelled else 0)
+        self.assertEqual(state.usage_store.list_samples()[0].total_tokens, 25)
+        terminal_type = 'runtime.turn.cancelled' if cancelled else 'runtime.turn.failed'
+        flush_index = next(index for index, call in enumerate(bus.mock_calls) if call[0] == 'flush_usage')
+        terminal_index = next(index for index, call in enumerate(bus.mock_calls)
+            if call[0] == 'publish' and call.args[0].event_type == terminal_type)
+        self.assertLess(flush_index, terminal_index)
+        bus.flush_usage.assert_called_once_with(session.session_id)
 
     def test_worker_completion_drains_cancellation_outbox_claimed_after_status_check(self) -> None:
         repo_root = make_temp_repo_root(self)

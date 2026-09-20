@@ -783,7 +783,7 @@ def handle_app_backend(
                     for item in parsed.contract.capabilities.mcp_tools
                     if str(item).strip()
                 ],
-            ),
+            ) if result.get("platform_secret_writes") else None,
         )
     except SecretError as error:
         return json_response(start_response, {"error": "secret_error", "detail": str(error)}, status=status_line(500))

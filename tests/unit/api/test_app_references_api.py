@@ -12,6 +12,7 @@ from core.app_sdk.cli import run_cli_json
 from core.apps.models import AppVisibilityDeclaration
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.identity.service import create_user
+from core.apps.surface_descriptors import app_mcp_tool_metadata
 from core.workspaces.service import ensure_workspace_membership
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
@@ -51,13 +52,18 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 body={"query": "launch"},
                 cookie=cookie,
             )
-            resolve_status, resolve_payload, _headers = self._invoke(
-                app,
-                path="/api/app-references/resolve",
-                method="POST",
-                body={"app_id": "records", "entity_type": "record", "entity_id": "record-1"},
-                cookie=cookie,
-            )
+            with (
+                patch("core.mcp.app_tools.app_mcp_tool_metadata", wraps=app_mcp_tool_metadata) as metadata,
+                patch("core.mcp.registry_builder._core_tool_specs", side_effect=AssertionError("unrelated core discovery")),
+            ):
+                resolve_status, resolve_payload, _headers = self._invoke(
+                    app,
+                    path="/api/app-references/resolve",
+                    method="POST",
+                    body={"app_id": "records", "entity_type": "record", "entity_id": "record-1"},
+                    cookie=cookie,
+                )
+            self.assertEqual([call.args[1] for call in metadata.call_args_list], ["records_reference_resolve"])
 
         self.assertEqual(manifest_status, 200)
         self.assertEqual(manifest_payload["items"][0]["app_id"], "records")

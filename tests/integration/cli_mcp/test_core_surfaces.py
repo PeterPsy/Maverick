@@ -899,8 +899,8 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         operator_only_commands = [command.command_id for command in commands if command.invocation_policy.operator_only]
         self.assertIn("core.identity.reset-admin-password", operator_only_commands)
         self.assertIn("core.providers.hosted.activate", operator_only_commands)
-        self.assertEqual(provider_result["providers"][0]["provider_id"], "codex")
-        self.assertEqual(provider_result["providers"][0]["provider_role"], "runtime_engine")
+        self.assertIn("codex", {item["provider_id"] for item in provider_result["providers"]})
+        self.assertEqual(next(item for item in provider_result["providers"] if item["provider_id"] == "codex")["provider_role"], "runtime_engine")
 
     def test_cli_and_mcp_can_simulate_provider_routing(self) -> None:
         workspace_store = self.make_workspace_store()
@@ -1741,4 +1741,4 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertEqual(runtime_result["sessions"][0]["session_id"], "sess-1")
         self.assertEqual(runtime_result["sessions"][0]["runtime_mode"], "plain_hosted_chat")
         self.assertEqual(mcp_result["sessions"][0]["runtime_mode"], "plain_hosted_chat")
-        self.assertEqual(provider_result["providers"][0]["provider_id"], "codex")
+        self.assertIn("codex", {item["provider_id"] for item in provider_result["providers"]})

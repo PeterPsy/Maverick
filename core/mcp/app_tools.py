@@ -45,6 +45,7 @@ def _workspace_app_tool_definitions(
     *,
     workspace_id: str,
     bindings: list[WorkspaceAppBindingRecord] | None = None,
+    only_tool_name: str | None = None,
     workspace_store=None,
     provider_store=None,
     runtime_store=None,
@@ -81,6 +82,8 @@ def _workspace_app_tool_definitions(
         app_requires_full_access = app_requires_full_access_runtime(parsed.contract.compatibility)
         paths = workspace_paths(workspace_id=workspace_id, start_path=start_path)
         for tool_name in parsed.contract.capabilities.mcp_tools:
+            if only_tool_name is not None and only_tool_name != f"app.{binding.app_id}.{tool_name}":
+                continue
             local_app_id = binding.app_id
             public_app_id = binding.public_app_id or parsed.app_id
             hosted_tool_name = f"app.{local_app_id}.{tool_name}"

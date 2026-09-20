@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 def build_core_mcp_registry(
     *,
+    only_tool_name: str | None = None,
     app_store: AppStore | None = None,
     identity_store: IdentityStore | None = None,
     workspace_store: WorkspaceStore | None = None,
@@ -53,32 +54,37 @@ def build_core_mcp_registry(
 ) -> McpToolRegistry:
     """Build the platform-managed MCP registry for core and enabled app tools."""
     registry = McpToolRegistry()
-    for definition, handler in _core_tool_specs(
-        app_store=app_store,
-        identity_store=identity_store,
-        workspace_store=workspace_store,
-        provider_store=provider_store,
-        runtime_store=runtime_store,
-        inter_agent_store=inter_agent_store,
-        secret_store=secret_store,
-        recovery_store=recovery_store,
-        job_service=job_service,
-        provider_registry=provider_registry,
-        observability_store=observability_store,
-        runtime_event_bus=runtime_event_bus,
-        runtime_thread_event_bus=runtime_thread_event_bus,
-        app_event_bus=app_event_bus,
-        orchestration_resume=orchestration_resume,
-        start_path=start_path,
-    ):
-        registry.register_tool(definition, handler)
+    if only_tool_name is None or not only_tool_name.startswith("app."):
+        for definition, handler in _core_tool_specs(
+            app_store=app_store,
+            identity_store=identity_store,
+            workspace_store=workspace_store,
+            provider_store=provider_store,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            secret_store=secret_store,
+            recovery_store=recovery_store,
+            job_service=job_service,
+            provider_registry=provider_registry,
+            observability_store=observability_store,
+            runtime_event_bus=runtime_event_bus,
+            runtime_thread_event_bus=runtime_thread_event_bus,
+            app_event_bus=app_event_bus,
+            orchestration_resume=orchestration_resume,
+            start_path=start_path,
+        ):
+            if only_tool_name is None or definition.tool_name == only_tool_name:
+                registry.register_tool(definition, handler)
     if app_store is not None and workspace_id is not None:
         for binding in enabled_workspace_app_bindings(app_store, workspace_id=workspace_id):
+            if only_tool_name is not None and not only_tool_name.startswith(f"app.{binding.app_id}."):
+                continue
             try:
                 app_definitions = _workspace_app_tool_definitions(
                     app_store,
                     workspace_id=workspace_id,
                     bindings=[binding],
+                    only_tool_name=only_tool_name,
                     workspace_store=workspace_store,
                     provider_store=provider_store,
                     runtime_store=runtime_store,
@@ -210,6 +216,7 @@ def call_mcp_tool(
 ) -> dict[str, Any]:
     """Invoke one visible MCP tool under a trusted invocation context."""
     registry = build_core_mcp_registry(
+        only_tool_name=tool_name,
         app_store=app_store,
         identity_store=identity_store,
         workspace_store=workspace_store,
@@ -274,6 +281,7 @@ def _hidden_app_tool_exists(
     if app_store is None or workspace_id is None:
         return False
     unfiltered = build_core_mcp_registry(
+        only_tool_name=tool_name,
         app_store=app_store,
         identity_store=identity_store,
         workspace_store=workspace_store,

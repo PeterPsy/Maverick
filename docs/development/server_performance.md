@@ -253,7 +253,11 @@ Before startup optimization, the 10k flat fixture measured catalog median
 The profile found repeated discovery JSON parsing and unnecessary read-path
 imports. Core now caches descriptor parsing with a full filesystem signature,
 128-file / 8 MiB source-byte limits, and copies only the requested descriptor.
-Authorization is still evaluated on every invocation. Storage's service router
+Authorization is still evaluated on every invocation. A single MCP invocation
+builds only the requested app/tool definition; full discovery remains available
+for catalog and multi-provider reference search. Storage's service router
 loads catalog/reference reads separately from Drive, upload and media actions;
 shared OAuth secret names no longer import network clients into inventory reads.
-All other actions keep the same governed request and event protocol.
+All other actions keep the same governed request and event protocol. Backend
+responses without secret writes skip secret-consumer metadata discovery; actual
+secret writes still resolve consumers and enforce their declared resource scope.

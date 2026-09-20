@@ -148,8 +148,8 @@ from application metadata mutations instead of calling all catalog reads
 zero-write. The isolated real-scheduler probe on 100k flat files completed a full
 cycle in 37.51 seconds, with a maximum pass of 483.60 ms and both same-size,
 restored-mtime external edits discovered. Run `scripts/storage_reconciliation_probe.py`
-under the verified SQLite runtime to reproduce. Mounted HTTP, concurrent workloads
-and physical-device release gates still require their dedicated validation.
+under the verified SQLite runtime to reproduce. Mounted HTTP and concurrent
+results appear below; physical-device release gates remain separate.
 
 ## Chat projection and memory
 
@@ -385,3 +385,34 @@ sit eleven directory levels below their root. The measured cycle completed in
 5.85 seconds across five passes (maximum 456.45 ms); both same-size, restored-mtime
 edits were found within 4.81 seconds. The flat and three-level tree fixture shapes
 stay unchanged, preserving comparability with earlier latency measurements.
+
+## Frontend checkpoint and remaining release evidence
+
+The September 20 frontend checkpoints include official builds for Base Shell,
+Storage, Chat, Calendar, Checklist, Docs Studio, Memory and Senses. Source and
+committed assets are published together. The final reconnect regressions passed
+35 Chat tests; the visibility/resume/hibernation checks passed eight SDK tests
+and its typecheck. Embedded frames also handle document suspension while already
+hidden: they wait for the Shell stream's resync before refreshing.
+
+The authenticated disposable Chromium smoke passed with Shell build
+`53e90de1737e8885c50af77748b77ae364c5b11469591655a8c6c6d48f5aaa55`. It verifies
+shell installation, offline restart, preserved mounted trees, recovery and the
+existing five app display fixtures. Its private-cache flags apply only to the
+temporary host. A governed Browser smoke of the live host reaches sign-in and
+therefore does not certify authenticated Storage navigation.
+
+Static gzip totals for all JavaScript chunks changed from 147,791 to 149,762
+bytes for Shell, 353,017 to 359,752 for Storage, and 347,020 to 350,942 for Chat,
+relative to `3c966580`. These totals include lazy chunks; they are not startup
+transfer or useful-content latency. No startup improvement is inferred from
+them. Raw benchmark artifacts retain their original source/dirty metadata;
+the isolated Chat comparison lacks an immutable build id and is diagnostic.
+
+Live core activation must precede the Storage worker/capability and certified
+frontend contract opt-ins. Storage and Usage have separate operator cutovers;
+Usage producers must be drained for its cutover and coordinated restart.
+Browser pagination under continuous uploads, twenty-app resource bounds,
+useful-content latency, hidden idle CPU and physical installed Safari/iOS remain
+release gates. The older PWA technical closeout does not satisfy these newer
+performance-plan gates. Live private persistent-cache flags stay off.

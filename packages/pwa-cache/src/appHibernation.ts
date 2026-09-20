@@ -35,7 +35,11 @@ export function registerMaverickAppHibernation(options: {
     };
     if (type === 'maverick.app.hibernate') {
       let snapshot: MaverickAppSnapshot | null = null;
-      try { if (!blockers && !maverickAppIsVisible()) snapshot = options.capture(); } catch { /* Keep the app mounted. */ }
+      try {
+        const media = globalThis.document?.querySelectorAll?.<HTMLMediaElement>('audio, video') ?? [];
+        const ownsMedia = [...media].some((element) => !element.paused || element.currentTime > 0);
+        if (!blockers && !ownsMedia && !maverickAppIsVisible()) snapshot = options.capture();
+      } catch { /* Keep the app mounted. */ }
       if (snapshot && appSnapshotBytes(snapshot) > MAX_APP_SNAPSHOT_BYTES) snapshot = null;
       reply({ type: 'maverick.app.hibernated', snapshot });
     } else if (type === 'maverick.app.resume' && !restored.has(requestId)) {

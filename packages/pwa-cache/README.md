@@ -185,3 +185,6 @@ stream's resync before refreshing, including frames that were already hidden.
 `preventMaverickAppHibernation()` pins component-owned work until its idempotent
 release callback runs. Snapshots stay in authenticated Shell RAM (64 KiB each,
 2 MiB total) and never enable the private persistent cache.
+Playing media and paused media with a retained playback position also keep their
+document mounted. Owners of audio outside the DOM, such as Chat speech playback,
+hold an explicit blocker while loading or playing.

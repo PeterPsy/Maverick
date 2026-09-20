@@ -9,6 +9,7 @@ import { recordSpeechPlaybackMetrics, synthesizeSpeech, synthesizeSpeechStream }
 import { speechChunks, speechLanguageHint, speechLanguageTextFromMarkdown, speechTextFromMarkdown } from "../lib/messageSpeech";
 import * as speechPcmPlayback from "../lib/speechPcmPlayback";
 import { MessageSpeechButton } from "./MessageSpeechButton";
+import * as appLifecycle from '@maverick/pwa-cache';
 
 vi.mock("../api/client", () => ({
   recordSpeechPlaybackMetrics: vi.fn(async () => ({})),
@@ -53,6 +54,12 @@ describe("MessageSpeechButton", () => {
   });
 
   it("requests backend synthesis and controls audio playback", async () => {
+    const releases: Array<ReturnType<typeof vi.fn>> = [];
+    const pin = vi.spyOn(appLifecycle, 'preventMaverickAppHibernation').mockImplementation(() => {
+      const release = vi.fn();
+      releases.push(release);
+      return release;
+    });
     const audioMock = installAudioMock();
     const objectUrlMock = installObjectUrlMock();
     vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_base64: "UklGRg==", content_type: "audio/wav" });
@@ -77,6 +84,8 @@ describe("MessageSpeechButton", () => {
     expect(audioMock.instances[0]?.play).toHaveBeenCalled();
     expect(button?.getAttribute("aria-label")).toBe("Stop reading response");
     expect(button?.textContent?.trim()).toBe("stop_circle");
+    expect(pin).toHaveBeenCalled();
+    expect(releases.at(-1)).not.toHaveBeenCalled();
 
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
@@ -86,6 +95,7 @@ describe("MessageSpeechButton", () => {
     expect(objectUrlMock.revokeObjectURL).toHaveBeenCalledWith("blob:speech-audio");
     expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(button?.textContent?.trim()).toBe("volume_up");
+    expect(releases.every((release) => release.mock.calls.length === 1)).toBe(true);
   });
 
   it("uses the PCM stream when both Speech and the browser advertise support", async () => {

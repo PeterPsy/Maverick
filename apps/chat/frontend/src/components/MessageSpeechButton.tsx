@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
+import { preventMaverickAppHibernation } from '@maverick/pwa-cache';
 import { recordSpeechPlaybackMetrics, synthesizeSpeech, synthesizeSpeechStream } from "../api/client";
 import {
   isSplittableSynthesisError,
@@ -89,6 +90,7 @@ function SupportedMessageSpeechButton({
   const selfActivationRef = useRef(false);
   const isActive = activeMessageId === messageId;
   const isReading = isActive && (status === "loading" || status === "playing");
+  useEffect(() => status === 'loading' || status === 'playing' ? preventMaverickAppHibernation() : undefined, [status]);
 
   useEffect(() => {
     if (isActive) {

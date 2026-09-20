@@ -12,6 +12,8 @@ it('captures only hidden, unblocked apps from the exact parent and restores once
   vi.stubGlobal('navigator', { onLine: true });
   const snapshot = { params: { thread_id: 'thread-a' }, state: { draft: 'unsent' } };
   const capture = vi.fn(() => snapshot);
+  const media: Array<{ paused: boolean; currentTime: number }> = [];
+  Object.assign(document, { querySelectorAll: () => media });
   const restore = vi.fn();
   const dispose = registerMaverickAppHibernation({ appId: 'chat', capture, restore });
   const message = (data: object, source = parent, origin = 'https://shell.test') => target.dispatchEvent(Object.assign(new Event('message'), {
@@ -31,6 +33,13 @@ it('captures only hidden, unblocked apps from the exact parent and restores once
     release(); release();
     message(request);
     expect(parent.postMessage).toHaveBeenLastCalledWith({ type: 'maverick.app.hibernated', app_id: 'chat', request_id: 'one', snapshot }, 'https://shell.test');
+    media.push({ paused: false, currentTime: 0 });
+    message(request);
+    expect(parent.postMessage.mock.lastCall?.[0].snapshot).toBeNull();
+    media[0] = { paused: true, currentTime: 42 };
+    message(request);
+    expect(parent.postMessage.mock.lastCall?.[0].snapshot).toBeNull();
+    media.length = 0;
     capture.mockReturnValueOnce({ params: {}, state: { draft: 'x'.repeat(MAX_APP_SNAPSHOT_BYTES) } } as typeof snapshot);
     message(request);
     expect(parent.postMessage.mock.lastCall?.[0].snapshot).toBeNull();

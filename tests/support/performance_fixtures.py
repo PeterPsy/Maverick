@@ -18,6 +18,8 @@ def storage_files(root: Path, count: int, *, shape: str) -> tuple[Path, Path, Pa
         path.mkdir(parents=True)
     for index in range(count):
         parent = generated if shape == 'flat' else generated / f'project-{index % 20}' / f'year-{index % 5}' / 'reports'
+        if shape == 'deep':
+            parent = parent.joinpath(*(f'level-{depth}' for depth in range(8)))
         parent.mkdir(parents=True, exist_ok=True)
         (parent / f'report-{index:06d}.md').write_text(f'# Fixture {index}\n' + 'Bounded synthetic document.\n' * 10)
     (generated / 'empty').mkdir()

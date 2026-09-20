@@ -24,8 +24,10 @@ from inventory_sqlite import InventoryIndex
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--count', type=int, default=10000)
-    parser.add_argument('--shape', choices=('flat', 'tree'), default='flat')
+    parser.add_argument('--shape', choices=('flat', 'tree', 'deep'), default='flat')
     args = parser.parse_args()
+    if args.count < 2:
+        parser.error('count must be at least two for distinct first/last edit targets')
     with tempfile.TemporaryDirectory(prefix='storage-reconciliation-probe-') as scratch:
         uploaded, generated, data = storage_files(Path(scratch), args.count, shape=args.shape)
         roots = {'uploaded_root': uploaded, 'generated_root': generated}

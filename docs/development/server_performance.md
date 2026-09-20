@@ -371,3 +371,9 @@ resources: the measured run used one owner thread, dispatched every callback
 within 0.23 ms of its deadline and consumed 1.77 ms of process CPU. This is a
 scheduler probe without provider execution; active-turn exclusion remains covered
 by the provider lifecycle tests, and physical-client idle CPU is a separate gate.
+
+The reconciliation probe also accepts `--shape deep`: the same 10k local files
+sit eleven directory levels below their root. The measured cycle completed in
+5.85 seconds across five passes (maximum 456.45 ms); both same-size, restored-mtime
+edits were found within 4.81 seconds. The flat and three-level tree fixture shapes
+stay unchanged, preserving comparability with earlier latency measurements.

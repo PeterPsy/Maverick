@@ -8,6 +8,9 @@ from typing import Any
 STORAGE_ACTIONS = [
     "operations.manifest",
     "catalog",
+    "catalog.summary",
+    "directory.children",
+    "inventory.migration",
     "file.catalog.list",
     "view_filter",
     "set_view_filter",
@@ -205,6 +208,11 @@ def operations_manifest_payload() -> dict[str, Any]:
             },
         ],
         "operations": [
+            {'action': 'catalog.summary', 'description': 'Read exact local root counts and byte totals without loading file pages.'},
+            {'action': 'directory.children', 'description': 'Read a bounded page of direct child directories.',
+                'required': ['role'], 'optional': ['folder_path', 'offset', 'limit', 'dataset_revision']},
+            {'action': 'inventory.migration', 'description': 'Administrative CLI: explicitly prepare, validate, cut over or reverse-export Storage metadata.',
+                'optional': ['phase', 'migration_id']},
             {
                 "action": "catalog",
                 "aliases": ["file.catalog.list"],
@@ -219,6 +227,9 @@ def operations_manifest_payload() -> dict[str, Any]:
                     "offset",
                     "limit",
                     "known_revision",
+                    "dataset_revision",
+                    "sort_by",
+                    "sort_direction",
                 ],
                 "payload_profile": "paginated_metadata",
             },

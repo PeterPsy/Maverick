@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from inventory_operations import mutate
+
 import json
 import re
 import shutil
@@ -12,20 +14,7 @@ from typing import Any
 
 from errors import StorageValidationError
 from inventory import upsert_file_record
-from store_files_paths import (
-    atomic_write_bytes,
-    enforce_storage_budget,
-    hash_file,
-    normalize_write_mode,
-    prepare_write_target,
-    reference_from_payload,
-    resolve_storage_file,
-    safe_file_name,
-    safe_folder_relative_path,
-    storage_root_for_role,
-    storage_write_lock,
-    write_audit_payload,
-)
+from store_files_paths import enforce_storage_budget, hash_file, normalize_write_mode, prepare_write_target, reference_from_payload, resolve_storage_file, safe_file_name, safe_folder_relative_path, storage_root_for_role, storage_write_lock, write_audit_payload
 
 
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp", ".gif"}
@@ -122,9 +111,9 @@ def image_compose_pair_payload(
             background_color=_background_color(body.get("background_color")),
         )
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(composed_bytes))
-        atomic_write_bytes(target, composed_bytes)
-        sha256 = hash_file(target)
-        record = upsert_file_record(data_root=data_root, role="generated", root=root, path=target.resolve(), sha256=sha256)
+        record = mutate(data_root=data_root, role="generated", root=root, target=target,
+            kind="write", payload=composed_bytes)
+        sha256 = record["sha256"]
     return {
         "status": "created",
         "operation": "image.compose_pair",

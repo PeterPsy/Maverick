@@ -25,11 +25,12 @@ class StorageCatalog:
         kind: str = "all",
         offset: int = 0,
         limit: int | None = None,
-        sort_by: str = "modified_at",
+        sort_by: str | None = None,
         sort_direction: str = "desc",
         folder_path: str | None = None,
         file_ids: list[str] | None = None,
         workspace_relative_paths: list[str] | None = None,
+        dataset_revision: int | None = None,
     ) -> dict[str, Any]:
         return self.local_provider.catalog(
             data_root=data_root,
@@ -44,6 +45,7 @@ class StorageCatalog:
             folder_path=folder_path,
             file_ids=file_ids,
             workspace_relative_paths=workspace_relative_paths,
+            dataset_revision=dataset_revision,
         )
 
     def list_folders(self, *, data_root: Path, sync: bool = False) -> list[dict[str, Any]]:

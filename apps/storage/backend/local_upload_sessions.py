@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from inventory_operations import mutate
+
 from base64 import b64decode
 import binascii
 from datetime import UTC, datetime, timedelta
@@ -13,7 +15,6 @@ import secrets
 from typing import Any
 
 from errors import StorageValidationError
-from inventory import upsert_file_record
 from limits import LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_STORAGE_FILE_TRANSFER_BYTES
 from storage_mime import normalize_content_type
 from store_files_paths import (
@@ -272,8 +273,8 @@ def _complete_upload(
     previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
     previous_sha256 = hash_file(previous_path) if previous_path else ""
     sha256 = _hash_file(part_path)
-    part_path.replace(target)
-    record = upsert_file_record(data_root=data_root, role=role, root=root, path=target, sha256=sha256)
+    record = mutate(data_root=data_root, role=role, root=root, target=target,
+        kind="write", staged_file=part_path, sha256=sha256)
     audit = write_audit_payload(
         operation="local_upload_session.complete",
         requested_mode=write_mode,

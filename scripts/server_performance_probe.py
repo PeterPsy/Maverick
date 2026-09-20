@@ -50,9 +50,13 @@ def measure(call, requests: int, warmup: int) -> dict:
             'maximum_ms': max(timings), 'process_physical_write_bytes': disk_bytes() - before}
 
 
-def storage_probe(root: Path, count: int, shape: str, requests: int, warmup: int) -> dict:
+def storage_probe(root: Path, count: int, shape: str, requests: int, warmup: int, *, adapter: str = 'json') -> dict:
     uploaded, generated, data = storage_files(root, count, shape=shape)
     inventory.sync_inventory(data, uploaded_root=uploaded, generated_root=generated)
+    if adapter == 'sqlite':
+        from inventory_migration import prepare_inventory, cutover_inventory
+        prepared = prepare_inventory(data, uploaded_root=uploaded, generated_root=generated)
+        cutover_inventory(data, prepared['migration_id'], uploaded_root=uploaded, generated_root=generated)
 
     def call():
         result = inventory.catalog_inventory_payload(data_root=data, uploaded_root=uploaded,
@@ -74,7 +78,7 @@ def storage_probe(root: Path, count: int, shape: str, requests: int, warmup: int
 
     with patch.object(Path, 'stat', stat), patch('os.scandir', scan):
         call()
-    return {**result, 'one_instrumented_read': dict(counts), 'shape': shape}
+    return {**result, 'one_instrumented_read': dict(counts), 'shape': shape, 'adapter': adapter}
 
 
 def usage_probe(root: Path, count: int, requests: int, warmup: int) -> dict:
@@ -101,15 +105,17 @@ def main() -> None:
     parser.add_argument('--requests', type=int, default=500)
     parser.add_argument('--warmup', type=int, default=5)
     parser.add_argument('--shape', choices=('flat', 'tree'), default='flat')
+    parser.add_argument('--storage-adapter', choices=('json', 'sqlite'), default='json')
     args = parser.parse_args()
     if args.count < 1 or args.requests < 1 or args.warmup < 0:
         parser.error('count and requests must be positive; warmup cannot be negative')
     with tempfile.TemporaryDirectory(prefix='maverick-performance-') as scratch:
         root = Path(scratch)
-        result = storage_probe(root, args.count, args.shape, args.requests, args.warmup) if args.domain == 'storage' else usage_probe(root, args.count, args.requests, args.warmup)
+        result = storage_probe(root, args.count, args.shape, args.requests, args.warmup, adapter=args.storage_adapter) if args.domain == 'storage' else usage_probe(root, args.count, args.requests, args.warmup)
     revision = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     print(json.dumps({'schema': 1, 'boundary': 'isolated-service', 'domain': args.domain,
         'dataset_count': args.count, 'fixture_revision': 1, 'source_commit': revision,
+        'source_dirty': bool(subprocess.check_output(['git', '-c', f'safe.directory={ROOT}', 'status', '--porcelain'], cwd=ROOT, text=True).strip()),
         'python': platform.python_version(), 'sqlite': sqlite3.sqlite_version,
         'cpu_count': os.cpu_count(), 'system': platform.system(), 'machine': platform.machine(),
         'result': result}, indent=2))

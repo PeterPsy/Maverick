@@ -6,8 +6,10 @@ usage accounting. The intended local SQLite owners are
 `data/control-plane/usage/usage.sqlite` for Core. Neither is a cache: file
 identities, Memory links, tombstones and usage observations require backup.
 Migration is explicit, validated and fenced; ordinary startup and reads must
-never perform a cutover. Until their respective cutovers are implemented and
-validated, the configured existing stores remain authoritative.
+never perform a cutover. Storage selects its adapter through
+`inventory-store.json`; the JSON adapter is retained only for pre-cutover
+workspaces and verified reverse exports. Usage still uses its existing adapter
+until its independent transactional implementation and cutover are verified.
 
 ## Reproducible baseline
 
@@ -73,3 +75,51 @@ controller wakes loop-owned events; cancellation unregisters every waiter.
 Private PWA cache rollout still requires the existing resource privacy and
 physical Safari/macOS/iOS gates. A server or Chromium result cannot satisfy
 those gates.
+
+## Storage index and migration
+
+New Storage installations explicitly initialize schema 2. Existing installations
+keep their current store until an administrator runs the migration through the
+Storage CLI. Inspect `inventory.migration` with `phase=status`, then use
+`phase=prepare`, `phase=validate`, and `phase=cutover`, passing the returned
+`migration_id` to the last two operations. `phase=rollback` reverse-exports the
+current index, including writes made after cutover; it never restores a stale
+pre-cutover JSON backup. `phase=recover` handles interrupted filesystem commits.
+
+Preparation snapshots the original JSON with a manifest, imports exact records,
+checks duplicate identities/paths and existing content hashes, and verifies
+record counts and digests. Cutover rechecks both the source and filesystem
+fingerprints under the app's interprocess mutation fence. Catalog readers share
+that fence; writers, recovery and migration acquire it exclusively with a
+bounded wait. Unsupported schemas and SQLite runtimes fail closed. Neither
+ordinary reads nor writes implicitly migrate a workspace.
+
+Indexed catalog and stable-ID resolution never scan document paths or rewrite
+the inventory. Filters and deterministic natural sorting precede the SQL limit.
+Continuations carry `dataset_revision`; a mismatch returns `catalog_changed`
+without an appendable page. `catalog.summary` supplies local root totals, and
+`directory.children` provides bounded child pages. Exact counts and byte totals
+are maintained with file and directory mutations. Custom reference order applies
+until an explicit sort is requested. `state.json` remains the small UI-state
+store; remote locators, tombstones and Memory links remain in authoritative rows.
+
+Filesystem mutations use durable intents, reserved IDs and atomic replacement
+or rename. Success follows metadata commit. Recovery can finish prepared writes,
+complete metadata after a filesystem commit, or report a conflict with external
+changes. Pending intents block catalog reads and reconciliation until recovered.
+Conversions and network transfer remain outside SQLite write transactions.
+
+The existing `background_tick` hook drives a resumable scan capped at 5,000 stat
+calls and a 500 ms work budget per invocation. It preserves its directory cursor
+and observed names between processes. Absence is established only after a full,
+stable directory enumeration; permission and I/O failures cause retries rather
+than tombstones. The signature includes size, nanosecond mtime/ctime, device and
+inode. Unchanged observations preserve record timestamps, hashes and revision.
+
+Use SQLite's backup API for the authoritative index, including committed WAL
+pages. Read connections use `mode=ro`; short-lived connections can still cause
+SQLite shared-memory filesystem traffic. Report that physical I/O separately
+from application metadata mutations instead of calling all catalog reads
+zero-write. Mounted HTTP, concurrent workloads, freshness at 100k entries,
+operator backup integration and physical-device release gates still require
+their dedicated validation.

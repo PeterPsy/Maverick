@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from inventory_operations import mutate
+
 from pathlib import Path
 import re
 
 
-from inventory import remove_file_record, upsert_file_record
+from inventory import upsert_file_record
 from store_files_paths import resolve_storage_file, storage_root_for_role, storage_write_lock
 
 SCHEMA_VERSION = "1"
@@ -34,6 +36,5 @@ def delete_file_payload(*, role: str, relative_path: str, data_root: Path, uploa
             generated_root=generated_root,
         )
         record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
-        path.unlink()
-        remove_file_record(data_root=data_root, role=role, relative_path=relative_path)
+        mutate(data_root=data_root, role=role, root=root, target=path, kind="delete_file")
         return {"deleted": True, "file": record}

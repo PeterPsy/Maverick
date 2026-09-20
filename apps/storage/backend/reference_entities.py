@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import quote, unquote
 
 from errors import StorageValidationError
-from inventory import resolve_file_record
+from inventory import resolve_file_record, uses_sqlite
 from store import catalog_files_payload, storage_root_for_role
 
 
@@ -55,6 +55,17 @@ def reference_search_payload(
     query = str(body.get("query") or "")
     entity_type = str(body.get("entity_type") or "file").strip() or "file"
     limit = _optional_positive_int(body, "limit", maximum=50) or 10
+    if entity_type in ('file', 'folder') and uses_sqlite(data_root):
+        from inventory_queries import reference_records
+        from inventory_records import _public_folder_record, _public_record
+        from inventory_sqlite import InventoryIndex
+        from storage_mutation_lock import storage_mutation_lock
+        with storage_mutation_lock(data_root, shared=True):
+            records = reference_records(InventoryIndex(data_root), query=query, folder=entity_type == 'folder', limit=limit)
+        if entity_type == 'folder':
+            return {'results': [_folder_reference(_public_folder_record(item)) for item in records
+                if not _is_hidden_folder(role=item['role'], relative_path=item['relative_path'])]}
+        return {'results': [_file_reference(_public_record(item)) for item in records]}
     if entity_type == "folder":
         folders = _rank_folder_records(
             [
@@ -370,6 +381,14 @@ def _resolve_folder_record(
     role, relative_path = parsed
     if relative_path and _is_hidden_folder(role=role, relative_path=relative_path):
         return None
+    if uses_sqlite(data_root):
+        import json
+        from inventory_records import _public_folder_record
+        from inventory_sqlite import InventoryIndex
+        from storage_mutation_lock import storage_mutation_lock
+        with storage_mutation_lock(data_root, shared=True), InventoryIndex(data_root).transaction() as connection:
+            row = connection.execute("SELECT document FROM directories WHERE role=? AND path=? AND status='active'", (role, relative_path)).fetchone()
+        return _public_folder_record(json.loads(row[0])) if row else None
     catalog_files_payload(
         data_root=data_root,
         uploaded_root=uploaded_root,

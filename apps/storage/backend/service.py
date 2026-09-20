@@ -338,6 +338,25 @@ def handle_action(
     )
     if action == "operations.manifest":
         return 200, operations_manifest_payload()
+    if action == 'inventory.migration':
+        from inventory_admin import migration_action
+        return 200, migration_action(data_root, uploaded_root, generated_root, body)
+    if action == 'catalog.summary':
+        from inventory_admin import catalog_summary
+        summary = catalog_summary(data_root, uploaded_root, generated_root)
+        response = {'schema': 'storage.file-catalog.v1', 'state': load_state(data_root),
+            'files': [], 'folders': [], 'summary': summary, 'dataset_revision': summary.get('dataset_revision'),
+            'available_kinds': summary.get('available_kinds', []),
+            'pagination': {'offset': 0, 'limit': 0, 'total': 0, 'has_more': False}}
+        return 200, {**response, 'revision': hashlib.sha256(json.dumps(response, sort_keys=True).encode()).hexdigest()}
+    if action == 'directory.children':
+        from inventory_admin import catalog_directories
+        return 200, catalog_directories(data_root, uploaded_root, generated_root,
+            role=_catalog_filter_value(body, 'role', {'uploaded', 'generated'}, 'generated'),
+            parent=str(body.get('folder_path') or '').strip('/'),
+            offset=_optional_nonnegative_int(body, 'offset') or 0,
+            limit=_optional_positive_int(body, 'limit', maximum=2000) or 100,
+            dataset_revision=_optional_nonnegative_int(body, 'dataset_revision'))
     if action == "drive_connections.list":
         return 200, list_drive_connections(data_root, body)
     if action == "drive_connections.start_oauth":
@@ -843,12 +862,15 @@ def handle_action(
             kind=_catalog_filter_value(body, "kind", CATALOG_KINDS, "all"),
             offset=_optional_nonnegative_int(body, "offset") or 0,
             limit=_optional_positive_int(body, "limit", maximum=2000),
-            sort_by=str(body.get("sort_by") or "modified_at"),
+            sort_by=str(body['sort_by']) if body.get('sort_by') else None,
             sort_direction=str(body.get("sort_direction") or "desc"),
             folder_path=_catalog_folder_path(body),
             file_ids=_optional_string_list(body, "file_ids"),
             workspace_relative_paths=_optional_string_list(body, "workspace_relative_paths"),
+            dataset_revision=_optional_nonnegative_int(body, "dataset_revision"),
         )
+        if catalog.get('status') == 'catalog_changed':
+            return 200, {**catalog, 'schema': 'storage.file-catalog.v1'}
         response = {
             "schema": "storage.file-catalog.v1",
             "state": load_state(data_root),
@@ -857,6 +879,7 @@ def handle_action(
             "pagination": catalog["pagination"],
             "inventory": catalog["inventory"],
             "available_kinds": catalog["available_kinds"],
+            **{key: catalog[key] for key in ('dataset_revision', 'summary', 'totals') if key in catalog},
         }
         revision_payload = {
             **response,

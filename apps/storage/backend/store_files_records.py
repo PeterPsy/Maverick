@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from inventory_operations import mutate
+
 from base64 import b64encode
 from contextlib import contextmanager
 import fcntl
 from io import BytesIO
 from pathlib import Path
 import re
-import shutil
 import tempfile
 import time
 import zipfile
@@ -16,25 +17,9 @@ from xml.etree import ElementTree
 
 from core.app_sdk.storage import read_json_state, write_json_state
 from errors import StorageConflictError, StorageValidationError
-from inventory import content_hash, remove_folder_records, rename_file_record, upsert_directory_record, upsert_file_record
+from inventory import content_hash, upsert_file_record
 from limits import MAX_INLINE_READ_BYTES, MAX_INLINE_WRITE_BYTES, MAX_STORAGE_FILE_TRANSFER_BYTES, MAX_STORAGE_TRANSIENT_TRANSFER_BYTES
-from store_files_paths import (
-    atomic_write_bytes,
-    enforce_storage_budget,
-    folder_record,
-    hash_file,
-    is_system_upload_folder,
-    normalize_write_mode,
-    prepare_write_target,
-    resolve_storage_file,
-    resolve_storage_folder,
-    safe_file_name,
-    safe_folder_name,
-    storage_write_lock,
-    storage_root_for_role,
-    write_audit_payload,
-    write_content_bytes,
-)
+from store_files_paths import enforce_storage_budget, folder_record, hash_file, is_system_upload_folder, normalize_write_mode, prepare_write_target, resolve_storage_file, resolve_storage_folder, safe_file_name, safe_folder_name, storage_write_lock, storage_root_for_role, write_audit_payload, write_content_bytes
 from storage_reference_resolver import StorageReferenceResolver
 from store_files_view import text_preview_cache_path
 from text_preview import (
@@ -100,9 +85,9 @@ def upload_file_payload(
         previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
         previous_sha256 = hash_file(previous_path) if previous_path else ""
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
-        atomic_write_bytes(target, payload)
         new_sha256 = content_hash(payload)
-        record = upsert_file_record(data_root=data_root, role=role, root=root, path=target, sha256=new_sha256)
+        record = mutate(data_root=data_root, role=role, root=root, target=target,
+            kind="write", payload=payload, sha256=new_sha256)
     audit = write_audit_payload(
         operation="upload_file",
         requested_mode=write_mode,
@@ -115,7 +100,6 @@ def upload_file_payload(
         bytes_written=len(payload),
     )
     return {"file": record, "bytes_written": len(payload), "audit": audit}
-
 
 
 def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, generated_root: Path, data_root: Path, max_chars: int | None) -> dict:
@@ -139,7 +123,6 @@ def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, 
     cache[cache_key] = preview_text
     _write_text_preview_cache(data_root, cache)
     return {"file": record, "preview_text": preview_text, "cache_hit": False}
-
 
 
 def read_text_payload(
@@ -194,7 +177,6 @@ def preview_table_payload(*, role: str, relative_path: str, data_root: Path, upl
     return {"file": record, "sheets": table["sheets"]}
 
 
-
 def file_info_payload(*, role: str, relative_path: str, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
     path = resolve_storage_file(
         role=role,
@@ -222,7 +204,6 @@ def _upsert_record_with_markdown_edit_hash(*, data_root: Path, role: str, root: 
             sha256=hash_file(path),
         )
     return record
-
 
 
 def update_markdown_file_payload(
@@ -284,16 +265,11 @@ def update_markdown_file_payload(
         if len(encoded) > MAX_MARKDOWN_EDIT_BYTES:
             raise StorageValidationError(f"Markdown content must be at most {MAX_MARKDOWN_EDIT_BYTES} bytes.")
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=path, payload_size=len(encoded))
-        atomic_write_bytes(path, encoded)
         sha256 = content_hash(encoded)
+        record = mutate(data_root=data_root, role=role, root=root, target=path,
+            kind="write", payload=encoded, sha256=sha256)
         return {
-            "file": upsert_file_record(
-                data_root=data_root,
-                role=role,
-                root=root,
-                path=path.resolve(),
-                sha256=sha256,
-            ),
+            "file": record,
             "write_strategy": write_strategy,
             "previous_sha256": current_sha256,
             "sha256": sha256,
@@ -350,7 +326,6 @@ def _apply_exact_replacements(content: str, raw_replacements: object) -> tuple[s
     return updated, len(raw_replacements), matched_occurrences
 
 
-
 def create_folder_payload(*, role: str, parent_relative_path: object, folder_name: object, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     with storage_write_lock(data_root):
@@ -365,8 +340,7 @@ def create_folder_payload(*, role: str, parent_relative_path: object, folder_nam
             raise StorageValidationError("Folder must stay inside the selected storage root.")
         if target.exists():
             raise StorageValidationError("A folder or file with that name already exists.")
-        target.mkdir()
-        return {"folder": upsert_directory_record(data_root=data_root, role=role, root=root, path=target)}
+        return {"folder": mutate(data_root=data_root, role=role, root=root, target=target, kind="create_directory")}
 
 
 def read_folder_payload(
@@ -522,10 +496,8 @@ def delete_folder_payload(*, role: str, relative_path: object, data_root: Path, 
         if is_system_upload_folder(role=role, relative_path=relative):
             raise StorageValidationError("Folder is not visible in Storage.")
         record = folder_record(role=role, root=root, path=folder)
-        shutil.rmtree(folder)
-        remove_folder_records(data_root=data_root, role=role, relative_path=relative)
+        mutate(data_root=data_root, role=role, root=root, target=folder, kind="delete_directory")
         return {"deleted": True, "folder": record}
-
 
 
 def _load_text_preview_cache(data_root: Path) -> dict:
@@ -536,12 +508,10 @@ def _load_text_preview_cache(data_root: Path) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-
 def _write_text_preview_cache(data_root: Path, cache: dict) -> None:
     data_root.mkdir(parents=True, exist_ok=True)
     entries = list(cache.items())[-MAX_TEXT_PREVIEW_CACHE_ENTRIES:]
     write_json_state(data_root, "preview_cache.json", dict(entries))
-
 
 
 def _text_preview_cache_key(record: dict, max_chars: int | None) -> str:
@@ -554,7 +524,6 @@ def _text_preview_cache_key(record: dict, max_chars: int | None) -> str:
             "full" if max_chars is None else str(max_chars),
         ]
     )
-
 
 
 def rename_file_payload(*, role: str, relative_path: str, new_name: str, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
@@ -574,5 +543,4 @@ def rename_file_payload(*, role: str, relative_path: str, new_name: str, data_ro
             raise StorageValidationError("A file with that name already exists.")
         if target == source:
             return {"file": upsert_file_record(data_root=data_root, role=role, root=root, path=source)}
-        source.rename(target)
-        return {"file": rename_file_record(data_root=data_root, role=role, root=root, old_relative_path=relative_path, new_path=target)}
+        return {"file": mutate(data_root=data_root, role=role, root=root, target=target, source=source, kind="move_file")}

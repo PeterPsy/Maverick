@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from inventory_operations import mutate
+
+from storage_mutation_lock import storage_mutation_lock
+
 from base64 import b64decode, b64encode
 import binascii
-from contextlib import contextmanager
 from datetime import UTC, datetime
-import fcntl
 import hashlib
 import os
 from pathlib import Path
@@ -273,27 +275,28 @@ def catalog_files_payload(
     kind: str = "all",
     offset: int = 0,
     limit: int | None = None,
-    sort_by: str = "modified_at",
+    sort_by: str | None = None,
     sort_direction: str = "desc",
     folder_path: str | None = None,
     file_ids: list[str] | None = None,
     workspace_relative_paths: list[str] | None = None,
+    dataset_revision: int | None = None,
 ) -> dict:
-    with storage_write_lock(data_root):
-        return _storage_catalog(uploaded_root=uploaded_root, generated_root=generated_root).catalog_files(
-            data_root=data_root,
-            sync=sync,
-            query=query,
-            role=role,
-            kind=kind,
-            offset=offset,
-            limit=limit,
-            sort_by=sort_by,
-            sort_direction=sort_direction,
-            folder_path=folder_path,
-            file_ids=file_ids,
-            workspace_relative_paths=workspace_relative_paths,
-        )
+    return _storage_catalog(uploaded_root=uploaded_root, generated_root=generated_root).catalog_files(
+        data_root=data_root,
+        sync=sync,
+        query=query,
+        role=role,
+        kind=kind,
+        offset=offset,
+        limit=limit,
+        sort_by=sort_by,
+        sort_direction=sort_direction,
+        folder_path=folder_path,
+        file_ids=file_ids,
+        workspace_relative_paths=workspace_relative_paths,
+        dataset_revision=dataset_revision,
+    )
 
 
 def list_files(*, data_root: Path, uploaded_root: Path, generated_root: Path) -> list[dict]:
@@ -302,8 +305,7 @@ def list_files(*, data_root: Path, uploaded_root: Path, generated_root: Path) ->
 
 
 def list_folders(*, data_root: Path, uploaded_root: Path, generated_root: Path, sync: bool = False) -> list[dict]:
-    with storage_write_lock(data_root):
-        return _storage_catalog(uploaded_root=uploaded_root, generated_root=generated_root).list_folders(data_root=data_root, sync=sync)
+    return _storage_catalog(uploaded_root=uploaded_root, generated_root=generated_root).list_folders(data_root=data_root, sync=sync)
 
 
 def _storage_catalog(*, uploaded_root: Path, generated_root: Path) -> StorageCatalog:
@@ -379,15 +381,9 @@ def write_file_payload(
         previous_sha256 = hash_file(previous_path) if previous_path else ""
         target.parent.mkdir(parents=True, exist_ok=True)
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
-        atomic_write_bytes(target, payload)
         new_sha256 = content_hash(payload)
-        record = upsert_file_record(
-            data_root=data_root,
-            role=role,
-            root=root,
-            path=target,
-            sha256=new_sha256,
-        )
+        record = mutate(data_root=data_root, role=role, root=root, target=target,
+            kind="write", payload=payload, sha256=new_sha256)
     audit = write_audit_payload(
         operation="file.content.write",
         requested_mode=write_mode,
@@ -441,16 +437,8 @@ def enforce_storage_budget(*, uploaded_root: Path, generated_root: Path, target:
         raise StorageValidationError("workspace_storage_quota_exceeded")
 
 
-@contextmanager
 def storage_write_lock(data_root: Path):
-    data_root.mkdir(parents=True, exist_ok=True)
-    lock_path = data_root / ".storage-write.lock"
-    with lock_path.open("a+") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    return storage_mutation_lock(data_root)
 
 
 def _configured_storage_budget() -> int | None:

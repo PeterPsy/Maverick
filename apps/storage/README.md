@@ -113,3 +113,17 @@ on resume. Foreground view-state recovery runs at 60 seconds, alongside the
 existing app-event invalidations. See
 [`server_performance.md`](../../docs/development/server_performance.md) for
 repeatable isolated benchmarks and the explicit SQLite migration prerequisites.
+
+Schema 2 uses the app-owned `inventory.sqlite` for stable file identities,
+remote metadata, Memory links, tombstones and directory totals. File bytes stay
+under the existing storage roots and UI state stays in `state.json`. New
+installations require the verified SQLite runtime; existing installations use
+the explicitly selected adapter until `inventory.migration` completes its
+prepare/validate/cutover phases. A reverse export includes post-cutover writes.
+
+The catalog accepts `sort_by`, `sort_direction` and `dataset_revision`.
+`catalog_changed` means the caller must reload the first page. `catalog.summary`
+and `directory.children` provide metadata without loading invisible file pages.
+Filesystem discovery runs in the app's bounded `background_tick`; ordinary
+indexed reads do not trigger discovery. All local mutation surfaces share the
+same durable-intent boundary and recovery fence.

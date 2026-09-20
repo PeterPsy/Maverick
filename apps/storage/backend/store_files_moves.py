@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from inventory_operations import mutate
+
 from pathlib import Path
-import shutil
 
 from errors import StorageValidationError
-from inventory import move_file_record, move_folder_records, upsert_directory_record, upsert_file_record
+from inventory import upsert_directory_record, upsert_file_record
 from store_files_paths import (
     is_system_upload_folder,
     reference_from_payload,
@@ -41,8 +42,7 @@ def move_file_payload(*, role: str, relative_path: str, target_folder_relative_p
             raise StorageValidationError("A file or folder with that name already exists in the target folder.")
         if target == source:
             return {"file": upsert_file_record(data_root=data_root, role=role, root=root, path=source)}
-        shutil.move(str(source), str(target))
-        return {"file": move_file_record(data_root=data_root, role=role, root=root, old_relative_path=relative_path, new_path=target)}
+        return {"file": mutate(data_root=data_root, role=role, root=root, target=target, source=source, kind="move_file")}
 
 
 def move_folder_payload(*, role: str, relative_path: object, target_folder_relative_path: object, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
@@ -77,8 +77,7 @@ def move_folder_payload(*, role: str, relative_path: object, target_folder_relat
             raise StorageValidationError("A file or folder with that name already exists in the target folder.")
         if target == source:
             return {"folder": upsert_directory_record(data_root=data_root, role=role, root=root, path=source)}
-        shutil.move(str(source), str(target))
-        return {"folder": move_folder_records(data_root=data_root, role=role, root=root, old_relative_path=source_relative, new_path=target)}
+        return {"folder": mutate(data_root=data_root, role=role, root=root, target=target, source=source, kind="move_directory")}
 
 
 def move_items_payload(
@@ -284,8 +283,7 @@ def _execute_file_move(entry: dict, *, data_root: Path, root: Path) -> dict:
     if target == source:
         record = upsert_file_record(data_root=data_root, role=role, root=root, path=source)
     else:
-        shutil.move(str(source), str(target))
-        record = move_file_record(data_root=data_root, role=role, root=root, old_relative_path=relative_path, new_path=target)
+        record = mutate(data_root=data_root, role=role, root=root, target=target, source=source, kind="move_file")
     return {"previous": entry["previous"], "file": record}
 
 
@@ -297,8 +295,7 @@ def _execute_folder_move(entry: dict, *, data_root: Path, root: Path) -> dict:
     if target == source:
         record = upsert_directory_record(data_root=data_root, role=role, root=root, path=source)
     else:
-        shutil.move(str(source), str(target))
-        record = move_folder_records(data_root=data_root, role=role, root=root, old_relative_path=relative_path, new_path=target)
+        record = mutate(data_root=data_root, role=role, root=root, target=target, source=source, kind="move_directory")
     return {"previous": entry["previous"], "folder": record}
 
 

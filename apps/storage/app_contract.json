@@ -324,20 +324,24 @@
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
-      "health_check": "hooks/health_check.py"
+      "health_check": "hooks/health_check.py",
+      "background_tick": "hooks/background_tick.py"
     }
   },
   "storage": {
-    "storage_kind": "json",
-    "data_schema_version": "1",
+    "storage_kind": "sqlite+files",
+    "data_schema_version": "2",
     "primary_paths": [
       "data/storage/state.json",
+      "data/storage/inventory.sqlite",
+      "data/storage/inventory-store.json",
+      "data/storage/migrations",
       "data/storage/files.json",
       "data/storage/preview_cache.json",
       "data/storage/rendered_previews"
     ],
     "indices": {
-      "kind": "file_based"
+      "kind": "sqlite"
     },
     "supports_export": false,
     "supports_import": false,

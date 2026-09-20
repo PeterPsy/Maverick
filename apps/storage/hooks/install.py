@@ -9,7 +9,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from store import seed_state
+from inventory_migration import initialize_inventory
 
 
 payload = json.loads(sys.stdin.read() or "{}")
 seed_state(Path(payload["data_root"]))
+initialize_inventory(Path(payload['data_root']))

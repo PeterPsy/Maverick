@@ -60,7 +60,17 @@ stay blocked by the cleanup marker until a later clear confirms deletion.
 
 ## Automated hardening gate
 
-Run before every rollout change and whenever an app or frontend asset is added:
+Development completion uses focused regression tests, builds and the disposable
+browser smoke below. It does not require a physical-device matrix, production
+cohort rollout or operational rollback drill for every code correction. Per the
+2026-09-20 product decision, those exercises are deferred for technical closeout,
+not reported as passed. No task is assigned to the user to finish development.
+See `docs/development/pwa_cache_technical_closeout_2026-09-20.md`.
+
+Production promotion is separate: the existing candidate-bound device gate and
+rollout/recovery safeguards still apply, and private-cache flags stay default-off
+unless explicitly enabled. Run the full gate before a rollout change or a broad
+cache/asset-contract change; use the affected subset for ordinary development:
 
 ```bash
 python3 scripts/audit_pwa_cache.py
@@ -74,7 +84,7 @@ npm --prefix apps/base-shell run test:service-worker
 npm --prefix apps/settings test -- --maxWorkers=1
 npm --prefix apps/website-studio test -- --maxWorkers=1
 npm --prefix apps/website-studio run test:visual -- website-studio-recovery.spec.ts --workers=1
-python3 scripts/pwa_shell_cache_smoke.py
+python3 scripts/pwa_shell_cache_smoke.py --app-read-models
 ```
 
 The policy audit verifies every committed frontend manifest and file digest,

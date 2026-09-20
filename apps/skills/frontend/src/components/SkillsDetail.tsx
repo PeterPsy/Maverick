@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { BookOpen, FileText, Fingerprint, Layers3, Save, ScrollText, Trash2, ToggleLeft } from 'lucide-react';
+import { BookOpen, ExternalLink, FileText, Fingerprint, Layers3, Save, ScrollText, Trash2, ToggleLeft } from 'lucide-react';
 import type { Catalog, SkillDetail, SkillEdits } from '../types';
 
 type SkillsDetailProps = {
@@ -251,8 +251,24 @@ export function SkillsDetail({ catalog, selectedSkill, savingSkill, onDeleteSkil
             </div>
             <div>
               <span>Source</span>
-              <strong>{selectedSkill.source_path || 'workspace skill catalog'}</strong>
+              {selectedSkill.source_url ? (
+                <a href={selectedSkill.source_url} rel="noreferrer" target="_blank">
+                  prompts.chat <ExternalLink size={13} aria-hidden="true" />
+                </a>
+              ) : <strong>{selectedSkill.origin === 'maverick' ? 'Maverick built-in' : 'Workspace catalog'}</strong>}
             </div>
+            {selectedSkill.remote_id ? (
+              <div>
+                <span>Remote ID</span>
+                <strong>{selectedSkill.remote_id}</strong>
+              </div>
+            ) : null}
+            {selectedSkill.source_content_sha256 ? (
+              <div>
+                <span>Imported digest</span>
+                <strong>{selectedSkill.source_content_sha256.slice(0, 12)}…</strong>
+              </div>
+            ) : null}
           </div>
         </motion.section>
 

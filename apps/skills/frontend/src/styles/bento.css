@@ -287,11 +287,19 @@
   font-weight: 400;
 }
 
-.skill-identity-list strong {
+.skill-identity-list strong,
+.skill-identity-list a {
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
   font-size: 0.78rem;
   font-weight: 600;
+}
+
+.skill-identity-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--maverick-accent);
 }
 
 .bento-card-preview pre {

@@ -15,37 +15,22 @@ from store import (
     SkillsValidationError,
     get_skill,
     parse_skill_markdown,
+    set_skill_source,
     skill_dir,
     skills_root,
 )
 
 
 MAX_SEARCH_RESULTS = 5
-MAX_PROMPT_BYTES = 256 * 1024
 MAX_SKILL_FILES = 64
 MAX_SKILL_FILE_BYTES = 256 * 1024
 MAX_SKILL_TOTAL_BYTES = 768 * 1024
 
 class PromptsChatClient:
-    """Small MCP client restricted to the four public read operations."""
+    """Small MCP client restricted to public Agent Skill reads."""
 
     def __init__(self, transport: HttpTransport | None = None) -> None:
         self._mcp = PublicPromptsChatMcpClient(transport)
-
-    def search_prompts(self, query: str, limit: int) -> dict:
-        payload = self._mcp.call("search_prompts", {"query": _query(query), "limit": _limit(limit)})
-        prompts = payload.get("prompts") if isinstance(payload.get("prompts"), list) else []
-        return {
-            "query": _query(query),
-            "content_trust": "untrusted_external",
-            "prompts": [_prompt_summary(item) for item in prompts[: _limit(limit)] if isinstance(item, dict)],
-        }
-
-    def get_prompt(self, remote_id: str) -> dict:
-        return {
-            "content_trust": "untrusted_external",
-            **_prompt_detail(self._mcp.call("get_prompt", {"id": _remote_id(remote_id)})),
-        }
 
     def search_skills(self, query: str, limit: int) -> dict:
         payload = self._mcp.call("search_skills", {"query": _query(query), "limit": _limit(limit)})
@@ -102,6 +87,14 @@ def install_remote_skill(
     finally:
         if not installed:
             shutil.rmtree(temporary, ignore_errors=True)
+    set_skill_source(
+        data_root,
+        local_id,
+        origin="prompts.chat",
+        remote_id=str(remote_skill["id"]),
+        source_url=str(remote_skill.get("link") or ""),
+        source_content_sha256=actual,
+    )
     saved = get_skill(data_root, local_id)
     if saved is None:
         raise SkillsValidationError(f"Imported skill `{local_id}` could not be read after installation.")
@@ -154,25 +147,6 @@ def _public_link(item: dict) -> str:
     slug = _text(item, "slug", maximum=200)
     suffix = f"_{quote(slug, safe='-')}" if slug else ""
     return f"https://prompts.chat/prompts/{quote(remote_id, safe='')}{suffix}"
-
-
-def _prompt_summary(item: dict) -> dict:
-    content = str(item.get("content") or "").strip()
-    return {
-        "id": _remote_id(item.get("id")),
-        "title": _text(item, "title", maximum=240),
-        "description": _text(item, "description", maximum=500),
-        "preview": content[:320],
-        "author": _author(item),
-        "link": _public_link(item),
-    }
-
-
-def _prompt_detail(item: dict) -> dict:
-    content = str(item.get("content") or "")
-    if not content or len(content.encode("utf-8")) > MAX_PROMPT_BYTES:
-        raise PromptsChatError("prompts_chat_prompt_invalid", "The remote prompt is empty or too large.")
-    return {**_prompt_summary(item), "content": content}
 
 
 def _skill_summary(item: dict) -> dict:

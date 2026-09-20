@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 
 PROMPTS_CHAT_MCP_URL = "https://prompts.chat/api/mcp"
-READ_ONLY_TOOLS = {"search_prompts", "get_prompt", "search_skills", "get_skill"}
+READ_ONLY_TOOLS = {"search_skills", "get_skill"}
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 HttpTransport = Callable[[Request], bytes]
@@ -26,7 +26,7 @@ class PromptsChatError(ValueError):
 
 
 class PublicPromptsChatMcpClient:
-    """Call only the four public read operations with a bounded response."""
+    """Call only public Agent Skill reads with a bounded response."""
 
     def __init__(self, transport: HttpTransport | None = None) -> None:
         self._transport = transport or _urlopen_bytes

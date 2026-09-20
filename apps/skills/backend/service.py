@@ -162,10 +162,6 @@ def _handle_prompts_chat_action(
     *,
     client: PromptsChatClient,
 ) -> tuple[int, dict]:
-    if action == "prompts_chat.search_prompts":
-        return 200, client.search_prompts(str(body.get("query") or ""), body.get("limit", 5))
-    if action == "prompts_chat.get_prompt":
-        return 200, {"prompt": client.get_prompt(str(body.get("remote_id") or ""))}
     if action == "prompts_chat.search_skills":
         return 200, client.search_skills(str(body.get("query") or ""), body.get("limit", 5))
     if action == "prompts_chat.get_skill":

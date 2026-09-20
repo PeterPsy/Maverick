@@ -2,8 +2,8 @@
   "app_id": "skills",
   "contract_version": "1.0",
   "name": "Skills",
-  "version": "0.2.0",
-  "description": "Workspace app for creating, editing, validating, and deleting workspace-owned runtime skills.",
+  "version": "0.3.0",
+  "description": "Workspace app for managing local runtime skills and installing reviewed public Agent Skills from prompts.chat.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -71,7 +71,6 @@
       "maverick-app-creator",
       "maverick-app-design",
       "maverick-code-skill",
-      "prompt-library",
       "skills-ops"
     ],
     "views": [

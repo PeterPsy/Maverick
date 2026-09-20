@@ -46,26 +46,6 @@ class FakeMcpTransport:
 
 def remote_payloads() -> dict[str, dict]:
     return {
-        "search_prompts": {
-            "prompts": [
-                {
-                    "id": "prompt-1",
-                    "slug": "review-code",
-                    "title": "Review Code",
-                    "description": "Review one change.",
-                    "content": "Review ${language:Python} code.",
-                    "author": {"username": "author"},
-                }
-            ]
-        },
-        "get_prompt": {
-            "id": "prompt-1",
-            "slug": "review-code",
-            "title": "Review Code",
-            "description": "Review one change.",
-            "content": "Review ${language:Python} code.",
-            "author": {"username": "author"},
-        },
         "search_skills": {
             "skills": [
                 {
@@ -100,30 +80,22 @@ def remote_payloads() -> dict[str, dict]:
 
 
 class PromptsChatTestCase(unittest.TestCase):
-    def test_client_exposes_only_bounded_public_results(self) -> None:
+    def test_client_exposes_only_bounded_public_skill_results(self) -> None:
         prompts_chat, _service = load_modules()
         transport = FakeMcpTransport(remote_payloads())
         client = prompts_chat.PromptsChatClient(transport)
 
-        prompts = client.search_prompts("code review", 5)
-        prompt = client.get_prompt("prompt-1")
         skills = client.search_skills("review", 5)
         skill = client.get_skill("remote-skill-1")
 
-        self.assertEqual(prompts["prompts"][0]["preview"], "Review ${language:Python} code.")
-        self.assertNotIn("content", prompts["prompts"][0])
-        self.assertEqual(prompt["content"], "Review ${language:Python} code.")
-        self.assertEqual(prompt["content_trust"], "untrusted_external")
         self.assertEqual(skills["skills"][0]["files"], ["SKILL.md", "references/checklist.md"])
         self.assertEqual(len(skill["content_sha256"]), 64)
         self.assertEqual([name for name, _arguments in transport.calls], [
-            "search_prompts",
-            "get_prompt",
             "search_skills",
             "get_skill",
         ])
         with self.assertRaisesRegex(prompts_chat.PromptsChatError, "limit must be between"):
-            client.search_prompts("code review", 0)
+            client.search_skills("code review", 0)
 
     def test_transport_refuses_remote_mutation_tools(self) -> None:
         prompts_chat, _service = load_modules()
@@ -174,6 +146,10 @@ class PromptsChatTestCase(unittest.TestCase):
             self.assertEqual(stale["error"], "prompts_chat_confirmation_stale")
             self.assertEqual(status, 200)
             self.assertEqual(payload["skill"]["id"], "review-helper")
+            self.assertEqual(payload["skill"]["origin"], "prompts.chat")
+            self.assertEqual(payload["skill"]["remote_id"], "remote-skill-1")
+            self.assertEqual(payload["skill"]["source_url"], remote_skill["link"])
+            self.assertEqual(payload["skill"]["source_content_sha256"], remote_skill["content_sha256"])
             self.assertEqual(payload["installed_files"], ["SKILL.md", "references/checklist.md"])
             self.assertEqual(
                 (data_root / "skills" / "review-helper" / "references" / "checklist.md").read_text(encoding="utf-8"),
@@ -183,6 +159,14 @@ class PromptsChatTestCase(unittest.TestCase):
                 service.app_events_for_action("prompts_chat.install_skill"),
                 [{"type": "maverick.app.data-changed", "resource": "skills"}],
             )
+
+            delete_status, delete_payload = service.handle_action(
+                data_root,
+                {"action": "delete_skill", "skill_id": "review-helper"},
+            )
+            self.assertEqual(delete_status, 200)
+            self.assertEqual(delete_payload, {"deleted": True})
+            self.assertFalse((data_root / "skills" / "review-helper").exists())
 
     def test_remote_skill_rejects_unsafe_paths_before_install(self) -> None:
         prompts_chat, _service = load_modules()

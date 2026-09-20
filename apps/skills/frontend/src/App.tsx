@@ -3,6 +3,7 @@ import { callBackend } from './api';
 import { DeleteSkillDialog } from './components/DeleteSkillDialog';
 import { SkillsDetail } from './components/SkillsDetail';
 import { SkillsDetailSkeleton } from './components/SkillsDetailSkeleton';
+import { SkillsExplore } from './components/SkillsExplore';
 import { notifyActiveSkillSelection } from './lib/activeSkillSelection';
 import { scalarString, shouldCreateNewSkill, skillIdFromParams } from './lib/skillNavigationParams';
 import type { Catalog, SkillDetail, SkillEdits } from './types';
@@ -29,6 +30,7 @@ function initialSkillId() {
 }
 
 export function App() {
+  const [view, setView] = useState<'installed' | 'explore'>('installed');
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog);
   const [selectedSkillId, setSelectedSkillId] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillDetail | null>(null);
@@ -78,6 +80,7 @@ export function App() {
     setCreatingSkill(true);
     setError('');
     try {
+      setView('installed');
       await callBackend({
         action: 'create_skill',
         id,
@@ -96,6 +99,7 @@ export function App() {
   async function handleNavigationParams(params: Record<string, string | boolean | null>) {
     const requestedSkillId = skillIdFromParams(params);
     if (requestedSkillId) {
+      setView('installed');
       if (catalog.skills.some((item) => item.id === requestedSkillId)) {
         setSelectedSkillId(requestedSkillId);
       } else {
@@ -226,6 +230,11 @@ export function App() {
     }
   }
 
+  async function handleRemoteInstalled(skillId: string) {
+    await refresh(skillId);
+    setView('installed');
+  }
+
   const shouldShowDetailSkeleton =
     (isCatalogLoading && !hasLoadedCatalog && !catalog.skills.length && !error) ||
     Boolean(selectedSkillId && detailLoadingSkillId === selectedSkillId && !selectedSkill);
@@ -233,19 +242,30 @@ export function App() {
   return (
     <main className="skills-shell">
       <section className="skills-detail">
+        <nav className="skills-view-switcher" aria-label="Skills sections">
+          <button className={view === 'installed' ? 'is-active' : ''} onClick={() => setView('installed')} type="button">
+            Installed
+          </button>
+          <button className={view === 'explore' ? 'is-active' : ''} onClick={() => setView('explore')} type="button">
+            Explore
+          </button>
+        </nav>
         {error ? <div className="skills-error">{error}</div> : null}
-        {shouldShowDetailSkeleton || creatingSkill ? (
-          <SkillsDetailSkeleton />
-        ) : (
-          <SkillsDetail
-            catalog={catalog}
-            selectedSkill={selectedSkill}
-            savingSkill={savingSkill}
-            onDeleteSkill={deleteSkill}
-            onDirtyChange={handleDirtyChange}
-            onSaveSkill={saveSkill}
-          />
-        )}
+        <div hidden={view !== 'installed'}>
+          {shouldShowDetailSkeleton || creatingSkill ? (
+            <SkillsDetailSkeleton />
+          ) : (
+            <SkillsDetail
+              catalog={catalog}
+              selectedSkill={selectedSkill}
+              savingSkill={savingSkill}
+              onDeleteSkill={deleteSkill}
+              onDirtyChange={handleDirtyChange}
+              onSaveSkill={saveSkill}
+            />
+          )}
+        </div>
+        {view === 'explore' ? <SkillsExplore onInstalled={handleRemoteInstalled} /> : null}
       </section>
       {skillPendingDelete ? (
         <DeleteSkillDialog

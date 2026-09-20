@@ -13,6 +13,9 @@ const skill: SkillDetail = {
   created_at: '2026-05-01T00:00:00+00:00',
   updated_at: '2026-05-01T00:00:00+00:00',
   origin: 'workspace',
+  remote_id: '',
+  source_url: '',
+  source_content_sha256: '',
   source_path: '',
   editable: true,
   deletable: true

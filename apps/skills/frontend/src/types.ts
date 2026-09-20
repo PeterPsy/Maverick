@@ -7,6 +7,9 @@ export type SkillSummary = {
   created_at: string;
   updated_at: string;
   origin: string;
+  remote_id: string;
+  source_url: string;
+  source_content_sha256: string;
   source_path: string;
   editable: boolean;
   deletable: boolean;
@@ -26,6 +29,28 @@ export type SkillEdits = {
   description: string;
   content: string;
   enabled: boolean;
+};
+
+export type RemoteSkillSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  author: string;
+  files: string[];
+  link: string;
+};
+
+export type RemoteSkillFile = {
+  filename: string;
+  content: string;
+};
+
+export type RemoteSkillDetail = Omit<RemoteSkillSummary, 'files'> & {
+  files: RemoteSkillFile[];
+  updated_at: string;
+  content_sha256: string;
+  content_trust: 'untrusted_external' | string;
 };
 
 export type ViewFilter = {

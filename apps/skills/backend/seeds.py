@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import shutil
 
-from store import ensure_data_root, skill_dir
+from store import ensure_data_root, set_skill_source, skill_dir
 
 
 def source_skill_roots(repository_root: Path) -> list[Path]:
@@ -26,9 +26,11 @@ def seed_default_skills(data_root: Path, *, repository_root: Path) -> list[str]:
         target_root = skill_dir(data_root, source_root.name)
         if (target_root / "SKILL.md").is_file():
             _copy_missing_template_files(source_root, target_root)
+            set_skill_source(data_root, source_root.name, origin="maverick")
             continue
         target_root.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source_root, target_root)
+        set_skill_source(data_root, source_root.name, origin="maverick")
         seeded.append(source_root.name)
     return seeded
 

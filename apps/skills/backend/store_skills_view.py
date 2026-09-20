@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 from core.app_sdk.storage import update_json_state
 from models import SCHEMA_VERSION
@@ -53,6 +54,9 @@ def clear_custom_view_payload(data_root: Path) -> dict:
 
 def skill_summary(item: dict) -> dict:
     skill_id = validate_skill_id(str(item.get("id") or ""))
+    origin = str(item.get("origin") or "workspace").strip()
+    if origin not in {"maverick", "prompts.chat", "workspace"}:
+        origin = "workspace"
     return {
         "id": skill_id,
         "local_id": skill_id,
@@ -61,7 +65,10 @@ def skill_summary(item: dict) -> dict:
         "enabled": bool(item.get("enabled", True)),
         "created_at": str(item.get("created_at") or now_timestamp()),
         "updated_at": str(item.get("updated_at") or now_timestamp()),
-        "origin": "workspace",
+        "origin": origin,
+        "remote_id": str(item.get("remote_id") or ""),
+        "source_url": str(item.get("source_url") or ""),
+        "source_content_sha256": str(item.get("source_content_sha256") or ""),
         "source_path": str(item.get("source_path") or ""),
         "editable": True,
         "deletable": True,
@@ -132,15 +139,47 @@ def save_skill(data_root: Path, payload: dict) -> dict:
 
 
 
+def set_skill_source(
+    data_root: Path,
+    skill_id: str,
+    *,
+    origin: str,
+    remote_id: str = "",
+    source_url: str = "",
+    source_content_sha256: str = "",
+) -> dict:
+    """Persist bounded source attribution without rewriting skill content."""
+    normalized = validate_skill_id(skill_id)
+    skills = list_skills(data_root)
+    existing = next((item for item in skills if item["id"] == normalized), None)
+    if existing is None:
+        raise SkillsValidationError(f"Skill `{normalized}` does not exist.")
+    attributed = skill_summary(
+        {
+            **existing,
+            "origin": origin,
+            "remote_id": remote_id,
+            "source_url": source_url,
+            "source_content_sha256": source_content_sha256,
+        }
+    )
+    write_state(
+        data_root,
+        sorted(
+            [attributed if item["id"] == normalized else item for item in skills],
+            key=lambda item: item["name"].casefold(),
+        ),
+    )
+    return attributed
+
+
+
 def delete_skill(data_root: Path, skill_id: str) -> bool:
     normalized = validate_skill_id(skill_id)
-    path = skill_file(data_root, normalized)
+    directory = skill_dir(data_root, normalized)
+    path = directory / "SKILL.md"
     existed = path.is_file()
     if existed:
-        path.unlink()
-        try:
-            path.parent.rmdir()
-        except OSError:
-            pass
+        shutil.rmtree(directory)
     write_state(data_root, [item for item in list_skills(data_root) if item["id"] != normalized])
     return existed

@@ -100,6 +100,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["skills", "sync"])
         self.assertEqual(parsed.contract.permissions.network.outbound, ["prompts.chat"])
         self.assertIn("skills-ops", parsed.contract.capabilities.skills)
+        self.assertNotIn("prompt-library", parsed.contract.capabilities.skills)
         self.assertIn("skill", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "skills")
         self.assertEqual(
@@ -141,19 +142,20 @@ class SkillsAppTestCase(unittest.TestCase):
                 self.assertNotIn("app_contract_architecture", content)
                 self.assertNotIn("app_sdk_architecture", content)
 
-    def test_prompt_library_is_one_on_demand_read_only_template(self) -> None:
+    def test_skills_ops_owns_confirmed_prompts_chat_discovery(self) -> None:
         content = (
             Path(__file__).resolve().parents[1]
             / "skills"
-            / "prompt-library"
+            / "skills-ops"
             / "SKILL.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("prompts_chat.search_prompts", content)
         self.assertIn("prompts_chat.search_skills", content)
+        self.assertIn("prompts_chat.get_skill", content)
         self.assertIn("prompts_chat.install_skill", content)
         self.assertIn("Never import or cache the full", content)
         self.assertIn("explicit confirmation", content)
+        self.assertFalse((Path(__file__).resolve().parents[1] / "skills" / "prompt-library").exists())
 
         cli_schema = json.loads((Path(__file__).resolve().parents[1] / "cli" / "command_schemas.json").read_text())
         mcp_schema = json.loads((Path(__file__).resolve().parents[1] / "mcp" / "tool_schemas.json").read_text())
@@ -164,6 +166,7 @@ class SkillsAppTestCase(unittest.TestCase):
             effects = schema["effect_class_by_argument"]["value_effect_classes"]
             self.assertEqual(effects["prompts_chat.search_skills"], "read")
             self.assertEqual(effects["prompts_chat.install_skill"], "mutating")
+            self.assertNotIn("prompts_chat.search_prompts", effects)
 
     def test_app_creator_requires_an_app_owned_compact_icon(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -271,6 +274,23 @@ class SkillsAppTestCase(unittest.TestCase):
             detail_status, detail_payload = service.handle_action(data_root, {"action": "get_skill", "skill_id": "external-agent-helper"})
             self.assertEqual(detail_status, 404)
             self.assertEqual(detail_payload["error"], "skill_not_found")
+
+    def test_seeded_skills_are_identified_as_maverick_templates(self) -> None:
+        service, store = load_skills_backend_modules()
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "skills"
+            repository_root = Path(__file__).resolve().parents[3]
+
+            status, payload = service.handle_action(
+                data_root,
+                {"action": "sync_bundled_skills"},
+                repository_root=repository_root,
+            )
+
+            self.assertEqual(status, 200)
+            skills_by_id = {item["id"]: item for item in payload["skills"]}
+            self.assertEqual(skills_by_id["skills-ops"]["origin"], "maverick")
+            self.assertEqual(store.get_skill(data_root, "skills-ops")["origin"], "maverick")
 
     def test_catalog_drops_stale_state_entries_without_skill_files(self) -> None:
         service, store = load_skills_backend_modules()

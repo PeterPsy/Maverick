@@ -34,8 +34,11 @@ class SecretApiTestSupport(unittest.TestCase):
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": "",
+            "HTTP_HOST": "maverick.test",
             "wsgi.input": BytesIO(payload),
         }
+        if method not in {"GET", "HEAD", "OPTIONS"}:
+            environ["HTTP_ORIGIN"] = "http://maverick.test"
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
         headers: dict[str, str] = {}

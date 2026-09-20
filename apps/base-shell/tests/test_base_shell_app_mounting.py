@@ -86,7 +86,8 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("activeWorkspaceId: string", widget_source)
         self.assertIn("message_id: `${activeWorkspaceId}:${hostAppId}:${contentKind}`", widget_source)
         self.assertIn("workspace_id: activeWorkspaceId", widget_source)
-        self.assertIn("const widgetFrameKey = `${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`", widget_source)
+        self.assertIn("const widgetFrameKey = widget && contextToken", widget_source)
+        self.assertIn("`${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`", widget_source)
         self.assertIn("key={widgetFrameKey}", widget_source)
         self.assertIn("url.hash = `context=${encodeURIComponent(contextToken)}`", widget_source)
         self.assertIn("maverick.widget.resize", widget_source)
@@ -221,13 +222,14 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertNotIn("clearRuntimeSessions", shell_source)
         self.assertNotIn("clearRuntimeSessions", api_source)
 
-    def test_workspace_create_button_is_admin_only_in_shell(self) -> None:
+    def test_workspace_switcher_leaves_creation_to_settings(self) -> None:
         sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
         switcher_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WorkspaceSwitcher.tsx").read_text()
 
-        self.assertIn('canCreateWorkspace={user?.platform_role === "admin"}', sidebar_source)
-        self.assertIn("canCreateWorkspace: boolean", switcher_source)
-        self.assertIn("canCreateWorkspace ? (", switcher_source)
+        self.assertIn("onWorkspaceChange={onWorkspaceChange}", sidebar_source)
+        self.assertNotIn("canCreateWorkspace", sidebar_source)
+        self.assertNotIn("canCreateWorkspace", switcher_source)
+        self.assertNotIn("Create workspace", switcher_source)
 
     def test_chat_sidebar_does_not_render_duplicate_new_chat_button(self) -> None:
         widget_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()

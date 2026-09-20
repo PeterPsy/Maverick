@@ -59,6 +59,8 @@ class ChatProjectDeleteTests(unittest.TestCase):
                     "CONTENT_LENGTH": str(len(payload)),
                     "CONTENT_TYPE": "application/json",
                     "QUERY_STRING": "",
+                    "HTTP_HOST": "maverick.test",
+                    **({"HTTP_ORIGIN": "http://maverick.test"} if method.upper() not in {"GET", "HEAD", "OPTIONS"} else {}),
                     "wsgi.input": BytesIO(payload),
                     **({"HTTP_COOKIE": cookie} if cookie else {}),
                 },

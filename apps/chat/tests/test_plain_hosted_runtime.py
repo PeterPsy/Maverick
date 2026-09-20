@@ -51,8 +51,11 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": "",
+            "HTTP_HOST": "maverick.test",
             "wsgi.input": BytesIO(payload),
         }
+        if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            environ["HTTP_ORIGIN"] = "http://maverick.test"
         if cookie:
             environ["HTTP_COOKIE"] = cookie
 

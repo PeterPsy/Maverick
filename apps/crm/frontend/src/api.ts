@@ -269,11 +269,12 @@ export type RecordsTablePayload = {
   has_more: boolean;
 };
 
-export async function callBackend<T = Record<string, unknown>>(body: Record<string, unknown>): Promise<T> {
+export async function callBackend<T = Record<string, unknown>>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api/apps/crm/backend', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal,
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {

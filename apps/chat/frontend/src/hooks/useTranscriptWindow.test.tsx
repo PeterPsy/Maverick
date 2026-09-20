@@ -1,5 +1,5 @@
 /** @vitest-environment happy-dom */
-import { act, useRef } from 'react';
+import { act, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { ChatMessage } from '../api/client';
@@ -10,12 +10,15 @@ it('keeps 5000 accessible messages in a bounded DOM window while scrolling both 
   const messages: ChatMessage[] = Array.from({ length: 5000 }, (_, index) => ({
     id: String(index), role: 'system', content: `Message ${index}`, createdAt: '', status: 'complete',
   }));
+  let setSpeaking: (id: string | null) => void = () => {};
   function Harness() {
     const viewport = useRef<HTMLDivElement | null>(null);
-    const view = useTranscriptWindow(messages, viewport);
+    const [speaking, updateSpeaking] = useState<string | null>(null);
+    setSpeaking = updateSpeaking;
+    const view = useTranscriptWindow(messages, viewport, speaking);
     return <div ref={viewport} data-viewport><div ref={view.container} data-window>
       <div style={{ height: view.before }} />
-      {view.rows.map(message => <div data-row key={message.id}>{message.content}</div>)}
+      {view.rows.map(message => <div data-row={message.id} key={message.id} hidden={view.hiddenRowId === message.id}>{message.content}</div>)}
       <div style={{ height: view.after }} />
     </div></div>;
   }
@@ -32,6 +35,14 @@ it('keeps 5000 accessible messages in a bounded DOM window while scrolling both 
     const viewport = container.querySelector('[data-viewport]') as HTMLElement;
     expect(container.querySelectorAll('[data-row]').length).toBeLessThan(30);
     expect(container.textContent).toContain('Message 0');
+    const speakingRow = container.querySelector('[data-row="0"]')!;
+    await act(async () => { setSpeaking('0'); });
+    await act(async () => { viewport.scrollTop = 450000; viewport.dispatchEvent(new Event('scroll')); vi.advanceTimersByTime(20); });
+    expect(container.querySelector('[data-row="0"]')).toBe(speakingRow);
+    expect((speakingRow as HTMLElement).hidden).toBe(true);
+    expect(container.querySelectorAll('[data-row]').length).toBeLessThan(31);
+    await act(async () => { setSpeaking(null); });
+    expect(container.querySelector('[data-row="0"]')).toBeNull();
     await act(async () => { viewport.scrollTop = 450000; viewport.dispatchEvent(new Event('scroll')); vi.advanceTimersByTime(20); });
     expect(container.textContent).toContain('Message 2500');
     expect(container.textContent).not.toContain('Message 0');

@@ -175,6 +175,9 @@ Long visible transcripts use measured variable-height rows with overscan and
 spacers. Historical data stays available in memory and through normal paging;
 viewport rendering does not truncate the server catalog. Scroll/ResizeObserver
 integration requires browser and physical Safari checks before release.
+An offscreen message currently being read aloud keeps its existing component
+mounted outside the layout window, adding at most one hidden row. Scrolling
+therefore preserves its Audio/AudioContext without mounting intervening history.
 
 The opt-in `transcript.performance.test.ts` probe reports 500 live updates after
 five warmups for 100/1k/5k messages. Set `MAVERICK_PERFORMANCE_PROBE` to an output
@@ -416,3 +419,13 @@ Browser pagination under continuous uploads, twenty-app resource bounds,
 useful-content latency, hidden idle CPU and physical installed Safari/iOS remain
 release gates. The older PWA technical closeout does not satisfy these newer
 performance-plan gates. Live private persistent-cache flags stay off.
+
+The live runtime upgrade and Storage cutover subsequently passed health, identity,
+hash, catalog count and post-cutover write checks. A standalone inventory backup
+was verified through Storage's owner surface. Storage's contract now opts into
+the JSON worker and excludes the unused backend workspace catalog; its mixed
+storage declaration covers SQLite inventory, bounded JSON settings and file
+content. Usage remains on its independent document adapter until a drained
+maintenance window. Certified frontend contract opt-ins still require the
+dedicated browser snapshot/restore probe; the existing cache smoke is not that
+certification.

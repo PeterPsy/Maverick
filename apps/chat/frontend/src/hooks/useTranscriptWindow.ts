@@ -17,7 +17,7 @@ function rowAt(offsets: number[], value: number): number {
 }
 
 /** Variable-height rows, one observer, no transcript truncation or new dependency. */
-export function useTranscriptWindow(messages: ChatMessage[], viewport: RefObject<HTMLDivElement | null> | undefined) {
+export function useTranscriptWindow(messages: ChatMessage[], viewport: RefObject<HTMLDivElement | null> | undefined, speakingMessageId: string | null = null) {
   const container = useRef<HTMLDivElement | null>(null);
   const heights = useRef(new Map<string, number>());
   const pendingScroll = useRef<{ bottom: boolean; delta: number } | null>(null);
@@ -32,7 +32,13 @@ export function useTranscriptWindow(messages: ChatMessage[], viewport: RefObject
   const total = offsets.at(-1)!;
   const start = enabled ? Math.max(0, rowAt(offsets, scroll?.top ?? Math.max(0, total - 1000)) - OVERSCAN) : 0;
   const end = enabled ? Math.min(messages.length, rowAt(offsets, (scroll?.top ?? Math.max(0, total - 1000)) + (scroll?.height ?? 1000)) + OVERSCAN + 1) : messages.length;
-  const rowIdentity = messages.slice(start, end).map(message => message.id).join('\0');
+  const rows = messages.slice(start, end);
+  const offscreenSpeech = enabled && speakingMessageId && !rows.some(message => message.id === speakingMessageId)
+    ? messages.find(message => message.id === speakingMessageId) : undefined;
+  // Speech owns an Audio/AudioContext outside the DOM. Keep only its component
+  // mounted when it leaves the window; its layout space is already in a spacer.
+  if (offscreenSpeech) rows.push(offscreenSpeech);
+  const rowIdentity = rows.map(message => message.id).join('\0');
 
   useLayoutEffect(() => {
     if (!enabled || !viewport?.current || !container.current) return;
@@ -99,5 +105,5 @@ export function useTranscriptWindow(messages: ChatMessage[], viewport: RefObject
     for (const id of heights.current.keys()) if (!ids.has(id)) heights.current.delete(id);
   }, [messages]);
 
-  return { container, enabled, rows: messages.slice(start, end), before: offsets[start] || 0, after: enabled ? total - offsets[end] : 0 };
+  return { container, enabled, rows, hiddenRowId: offscreenSpeech?.id, before: offsets[start] || 0, after: enabled ? total - offsets[end] : 0 };
 }

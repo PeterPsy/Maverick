@@ -331,7 +331,7 @@
     }
   },
   "storage": {
-    "storage_kind": "sqlite+files",
+    "storage_kind": "mixed",
     "data_schema_version": "2",
     "primary_paths": [
       "data/storage/state.json",

@@ -45,7 +45,7 @@ export function MessageList({
   speechProviderStreamingSupported: boolean;
   viewportRef?: RefObject<HTMLDivElement | null>;
 }) {
-  const windowed = useTranscriptWindow(messages, viewportRef);
+  const windowed = useTranscriptWindow(messages, viewportRef, speakingMessageId);
   const latestMessage = messages.at(-1);
   const recoverableFailureMessageId =
     latestMessage?.role === "system" &&
@@ -57,7 +57,7 @@ export function MessageList({
     <div className="chatapp-message-list" ref={windowed.container} style={windowed.enabled ? { overflowAnchor: 'none' } : undefined}>
       {windowed.before > 0 ? <div aria-hidden="true" style={{ height: windowed.before }} /> : null}
       {windowed.rows.map((message) => (
-        <div key={message.id} data-transcript-row={message.id}>
+        <div key={message.id} data-transcript-row={message.id} hidden={windowed.hiddenRowId === message.id}>
         <StableMessageBubble
           expanded={expandedMessages.has(message.id)}
           interAgentBoardLink={interAgentBoardLinksByMessageId[message.id]}

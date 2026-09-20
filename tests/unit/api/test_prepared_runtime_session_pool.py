@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from threading import Event, Lock, Thread
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from core.api.background_hooks import start_background_hook_scheduler
 from core.api.platform_host import PlatformHost
@@ -29,7 +29,7 @@ PENDING_PREWARM = RuntimeSessionPrewarmResult(
 class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.TestCase):
     def test_backend_background_scheduler_starts_periodic_prepared_cleanup(self) -> None:
         state = object()
-        shutdown_controller = object()
+        shutdown_controller = Mock()
         with patch(
             "core.api.background_hooks.start_prepared_session_cleanup_scheduler"
         ) as start_cleanup, patch(

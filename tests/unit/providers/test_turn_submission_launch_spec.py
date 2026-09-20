@@ -79,7 +79,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         adapter = _FakeRuntimeAdapter()
         provider = build_codex_definition()
         launch_spec = _launch_spec(session)
-        scheduled_timers: list[_CapturingTimer] = []
+        idle_deadlines = Mock()
         prewarm = Mock()
         state = SimpleNamespace(
             provider_store=SimpleNamespace(),
@@ -93,7 +93,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             submit_runtime_turn_async.__globals__,
             {
                 "Thread": _ImmediateThread,
-                "Timer": lambda delay, target: _CapturingTimer(delay, target, scheduled_timers),
+                "runtime_idle_deadlines": idle_deadlines,
                 "resolve_runtime_engine_for_session": Mock(return_value=(provider, None, adapter, adapter)),
                 "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
                 "execute_runtime_turn": Mock(return_value=RuntimeExecutionResult("done", 0)),
@@ -104,9 +104,11 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             turn, _events = submit_runtime_turn_async(state, session=session, input_text="hello")
 
             self.assertEqual(runtime_store.get_turn(turn.turn_id).status, "completed")
-            self.assertEqual(len(scheduled_timers), 1)
-            self.assertGreaterEqual(scheduled_timers[0].delay, 0)
-            scheduled_timers[0].target()
+            idle_deadlines.schedule.assert_called_once()
+            scheduled = idle_deadlines.schedule.call_args.args
+            self.assertEqual(scheduled[:3], (state, session.session_id, 'prewarm'))
+            self.assertGreaterEqual(scheduled[3], 0)
+            scheduled[4]()
 
         prewarm.assert_called_once()
         self.assertEqual(prewarm.call_args.kwargs["session"].session_id, session.session_id)
@@ -195,7 +197,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             submit_runtime_turn_async.__globals__,
             {
                 "Thread": _ImmediateThread,
-                "Timer": lambda delay, target: _CapturingTimer(delay, target, []),
+                "runtime_idle_deadlines": Mock(),
                 "_wait_for_session_prewarm": wait_for_prewarm,
                 "resolve_runtime_engine_for_session": Mock(return_value=(provider, None, adapter, adapter)),
                 "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
@@ -529,17 +531,6 @@ class _ImmediateThread:
 
     def start(self) -> None:
         self.target()
-
-
-class _CapturingTimer:
-    def __init__(self, delay: float, target, sink: list["_CapturingTimer"]) -> None:
-        self.delay = delay
-        self.target = target
-        self.daemon = False
-        sink.append(self)
-
-    def start(self) -> None:
-        return None
 
 
 def _launch_spec(session) -> RuntimeBackendLaunchSpec:

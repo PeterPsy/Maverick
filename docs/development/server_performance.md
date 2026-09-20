@@ -130,6 +130,44 @@ zero-write. Mounted HTTP, concurrent workloads, freshness at 100k entries,
 operator backup integration and physical-device release gates still require
 their dedicated validation.
 
+## Chat projection and memory
+
+Live event appends reuse the event index and sort only the arriving batch. Duplicate
+replay keeps the existing array; corrections and late events use the deterministic
+merge path. Transcript projections retain unchanged turn/message objects and rebuild
+affected turns; goal updates that amend earlier turns share a dependency group.
+There is no strong 80-transcript projection cache. Cold navigation history has an
+8-session / 32 MiB estimated-retained-memory LRU, separate from the active thread;
+the estimate includes UTF-16 and a conservative allowance for projections/indexes.
+No live delta serializes that cache. Frame batching flushes control and terminal
+events immediately, and ephemeral Usage snapshots never become replay cursors.
+
+Long visible transcripts use measured variable-height rows with overscan and
+spacers. Historical data stays available in memory and through normal paging;
+viewport rendering does not truncate the server catalog. Scroll/ResizeObserver
+integration requires browser and physical Safari checks before release.
+
+The opt-in `transcript.performance.test.ts` probe reports 500 live updates after
+five warmups for 100/1k/5k messages. Set `MAVERICK_PERFORMANCE_PROBE` to an output
+path and run that file alone with one Vitest worker. This measures isolated
+merge/projection CPU, not browser rendering, startup or server-side batching.
+
+## Background scheduling and idle providers
+
+The backend retains each app hook's bounded `next_due_in_seconds` hint and checks
+it before resolving the app surface or launching Python. Failure uses the normal
+interval; app revision changes invalidate its deadline, and disabled apps or
+workspaces are removed from the schedule. The scheduler waits on shutdown
+notification instead of an uninterruptible sleep. Explicit lifecycle hooks keep
+their existing immediate semantics.
+
+Delayed prewarm and provider retirement share one in-process idle owner, replacing
+per-session Timer threads. Only the latest pending action for an owner/session is
+retained. Idle retirement keeps the 180-second TTL and checks pending turns inside
+the same persisted lifecycle fence used by queue admission/provider start. Fresh
+completion deadlines supersede an expired callback waiting for that fence. A
+successful prewarm also schedules retirement when no first turn follows it.
+
 ## Usage transaction and operator workflow
 
 The Usage SQLite adapter atomically records deduplication, normalized observations,

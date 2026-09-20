@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from threading import Lock, Timer
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -20,6 +19,7 @@ from core.runtime.resolved_runtime_engine import ResolvedRuntimeEngine
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.service import record_runtime_event
 from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
+from core.runtime.runtime_idle_deadlines import runtime_idle_deadlines
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -27,8 +27,6 @@ if TYPE_CHECKING:
 
 ACTIVE_TURN_STATUSES = frozenset({"queued", "active", "waiting_for_tool_confirmation"})
 IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
-_IDLE_REAP_TIMERS: dict[str, Timer] = {}
-_IDLE_REAP_TIMERS_LOCK = Lock()
 
 
 def release_idle_runtime_processes(
@@ -40,18 +38,22 @@ def release_idle_runtime_processes(
     idle_ttl_seconds: float | None = IDLE_RUNTIME_REAP_TTL_SECONDS,
 ) -> int:
     """Close engine resources after an idle TTL when a session has no pending work."""
-    if any(turn.status in ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id)):
-        return 0
     ttl_seconds = IDLE_RUNTIME_REAP_TTL_SECONDS if idle_ttl_seconds is None else idle_ttl_seconds
-    if ttl_seconds > 0:
-        return _schedule_idle_runtime_process_reap(
-            state,
-            session_id=session_id,
-            provider_id=provider_id,
-            reason=reason,
-            idle_ttl_seconds=ttl_seconds,
-        )
-    _cancel_scheduled_idle_runtime_process_reap(session_id)
+    session = state.runtime_store.get_session(session_id)
+    # The same persisted lifecycle fence guards queue admission/provider start.
+    # Recheck inside it so a newly queued/active turn cannot be reaped.
+    with state.runtime_store.session_lifecycle_handoff(workspace_id=session.workspace_id, session_id=session_id):
+        if any(turn.status in ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id)):
+            return 0
+        if ttl_seconds > 0:
+            return _schedule_idle_runtime_process_reap(state, session_id=session_id, provider_id=provider_id,
+                reason=reason, idle_ttl_seconds=ttl_seconds)
+        runtime_idle_deadlines.cancel(state, session_id, 'reap')
+        runtime_idle_deadlines.cancel(state, session_id, 'prewarm')
+        return _release_idle_runtime_processes_now(state, session_id=session_id, provider_id=provider_id, reason=reason)
+
+
+def _release_idle_runtime_processes_now(state, *, session_id: str, provider_id: str, reason: str) -> int:
     clear_cached_runtime_launch_context(session_id)
     terminated = 0
     with suppress(Exception):
@@ -88,43 +90,18 @@ def release_idle_runtime_processes(
     return terminated
 
 
-def _schedule_idle_runtime_process_reap(
-    state: PlatformState,
-    *,
-    session_id: str,
-    provider_id: str,
-    reason: str,
-    idle_ttl_seconds: float,
-) -> int:
-    def run_reap() -> None:
-        with _IDLE_REAP_TIMERS_LOCK:
-            if _IDLE_REAP_TIMERS.get(session_id) is not timer:
+def _schedule_idle_runtime_process_reap(state, *, session_id: str, provider_id: str, reason: str, idle_ttl_seconds: float) -> int:
+    def expire():
+        session = state.runtime_store.get_session(session_id)
+        with state.runtime_store.session_lifecycle_handoff(workspace_id=session.workspace_id, session_id=session_id):
+            # A newer completion/prewarm can supersede a deadline already dequeued
+            # by the idle owner while it was waiting for this lifecycle fence.
+            if runtime_idle_deadlines.pending(state, session_id, 'reap'):
                 return
-            _IDLE_REAP_TIMERS.pop(session_id, None)
-        release_idle_runtime_processes(
-            state,
-            session_id=session_id,
-            provider_id=provider_id,
-            reason=reason,
-            idle_ttl_seconds=0,
-        )
-
-    timer = Timer(idle_ttl_seconds, run_reap)
-    timer.daemon = True
-    with _IDLE_REAP_TIMERS_LOCK:
-        previous = _IDLE_REAP_TIMERS.get(session_id)
-        _IDLE_REAP_TIMERS[session_id] = timer
-    if previous is not None:
-        previous.cancel()
-    timer.start()
+            release_idle_runtime_processes(state, session_id=session_id, provider_id=provider_id,
+                reason=reason, idle_ttl_seconds=0)
+    runtime_idle_deadlines.schedule(state, session_id, 'reap', idle_ttl_seconds, expire)
     return 0
-
-
-def _cancel_scheduled_idle_runtime_process_reap(session_id: str) -> None:
-    with _IDLE_REAP_TIMERS_LOCK:
-        timer = _IDLE_REAP_TIMERS.pop(session_id, None)
-    if timer is not None:
-        timer.cancel()
 
 
 def interrupt_runtime_provider_turn(

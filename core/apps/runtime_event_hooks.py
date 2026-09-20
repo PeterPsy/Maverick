@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.apps.dependencies import resolve_app_dependencies
+from core.apps.background_schedule import BackgroundHookSchedule
 from core.apps.errors import AppHostingError
 from core.apps.surfaces import (
     WorkspaceAppSurfaceCache,
@@ -186,6 +187,7 @@ def dispatch_workspace_app_background_hooks(
     action: str,
     body: dict[str, Any] | None = None,
     start_path: Path | None = None,
+    due_schedule: BackgroundHookSchedule | None = None,
 ) -> list[dict[str, Any]]:
     """Invoke one generic background hook on enabled workspace apps that declare it."""
     results: list[dict[str, Any]] = []
@@ -194,9 +196,18 @@ def dispatch_workspace_app_background_hooks(
         workspace_id=workspace_id,
     )
     surface_cache: WorkspaceAppSurfaceCache = {}
+    if due_schedule is not None:
+        due_schedule.prune_apps(workspace_id, {binding.app_id for binding in bindings if binding.status == 'enabled'})
     for binding in bindings:
         if binding.status != "enabled":
             continue
+        key = (workspace_id, binding.app_id, hook_name)
+        revision = str(getattr(binding, 'updated_at', ''))
+        if due_schedule is not None:
+            if not due_schedule.due(key, revision):
+                continue
+            # Failures also back off, including missing source/invalid contracts.
+            due_schedule.complete(key, revision, None)
         try:
             source_root, parsed = resolve_workspace_app_surface(
                 state.app_store,
@@ -228,6 +239,8 @@ def dispatch_workspace_app_background_hooks(
             continue
         if result is None:
             continue
+        if due_schedule is not None:
+            due_schedule.complete(key, revision, result)
         results.append({"app_id": binding.app_id, "status": "completed", "result": result})
     return results
 

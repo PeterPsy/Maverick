@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import suppress
 from dataclasses import dataclass
-from threading import Event, Lock, Thread, Timer
+from threading import Event, Lock, Thread
 import time
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
@@ -64,6 +64,7 @@ from core.runtime.provider_start_handoff import (
     provider_thread_recorder,
     runtime_provider_start_handoff,
 )
+from core.runtime.runtime_idle_deadlines import runtime_idle_deadlines
 from core.runtime.runtime_process_lifecycle import (
     IDLE_RUNTIME_REAP_TTL_SECONDS,
     interrupt_runtime_provider_turn,
@@ -263,6 +264,9 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                 runtime_ready=runtime_ready,
                 elapsed_ms=elapsed_ms,
             )
+            if runtime_ready:
+                release_idle_runtime_processes(state, session_id=session.session_id,
+                    provider_id=provider_id, reason='prewarm_idle')
             if status != "failed":
                 _record_session_prewarm_completed(
                     state,
@@ -313,9 +317,7 @@ def schedule_runtime_session_prewarm(
             current_session = state.runtime_store.get_session(session.session_id)
             prewarm_runtime_session_async(state, session=current_session)
 
-    timer = Timer(max(0.0, delay_seconds), run)
-    timer.daemon = True
-    timer.start()
+    runtime_idle_deadlines.schedule(state, session.session_id, 'prewarm', delay_seconds, run)
 
 
 def _session_has_executing_turn(state: PlatformState, session_id: str) -> bool:

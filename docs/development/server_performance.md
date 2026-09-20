@@ -129,16 +129,20 @@ stable directory enumeration; permission and I/O failures cause retries rather
 than tombstones. The signature includes size, nanosecond mtime/ctime, device and
 inode. Unchanged observations preserve record timestamps, hashes and revision.
 
-Use SQLite's backup API for the authoritative index, including committed WAL
-pages. Read connections use `mode=ro`; short-lived connections can still cause
+The administrative Storage `inventory.migration` action with `phase=backup`
+uses SQLite's backup API for the authoritative index, including committed WAL
+pages. It drains mutations, rejects unfinished intents, validates integrity and
+identity/metadata digests, and atomically publishes a standalone database plus
+manifest under the app-owned `backups/` directory. It backs up inventory metadata;
+uploaded/generated file bytes need their separate workspace content backup.
+Read connections use `mode=ro`; short-lived connections can still cause
 SQLite shared-memory filesystem traffic. Report that physical I/O separately
 from application metadata mutations instead of calling all catalog reads
 zero-write. The isolated real-scheduler probe on 100k flat files completed a full
 cycle in 37.51 seconds, with a maximum pass of 483.60 ms and both same-size,
 restored-mtime external edits discovered. Run `scripts/storage_reconciliation_probe.py`
-under the verified SQLite runtime to reproduce. Mounted HTTP, concurrent workloads,
-operator backup integration and physical-device release gates still require
-their dedicated validation.
+under the verified SQLite runtime to reproduce. Mounted HTTP, concurrent workloads
+and physical-device release gates still require their dedicated validation.
 
 ## Chat projection and memory
 
@@ -286,3 +290,13 @@ Collection reads also avoid redundant directory creation and lock-file chmods;
 permissions are still applied when needed. Parsed collection caches compare
 device, inode, size, mtime and ctime, including same-size external replacements
 whose mtime was restored.
+
+Storage's activation also opts out of the optional backend workspace-app catalog;
+it never consumes that payload. The trusted app contract controls this choice,
+and other apps keep their existing context by default. The mounted probe supports
+`--extra-apps N` and `--workspace-catalog` to compare discovery scaling. Empty
+dependency declarations avoid loading unused selections. Storage mutations keep
+one SQLite connection open until their durable intent, metadata and cleanup
+commits finish, then close it before releasing the mutation fence. This avoids
+repeated last-connection checkpoints without changing synchronous durability or
+retaining connections across requests, migration or rollback boundaries.

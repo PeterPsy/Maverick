@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 from uuid import uuid4
 
@@ -200,6 +201,57 @@ def export_inventory(index: InventoryIndex) -> dict:
             'files': [json.loads(row[0]) for row in connection.execute('SELECT document FROM files ORDER BY file_id')],
             'directories': [json.loads(row[0]) for row in connection.execute('SELECT document FROM directories ORDER BY directory_id')],
             'updated_at': str(index.revision(connection))}
+
+
+def backup_inventory(data_root: Path) -> dict:
+    """Publish a verified standalone metadata snapshot, including committed WAL."""
+    from inventory import uses_sqlite
+    from inventory_queries import require_ready
+
+    with storage_mutation_lock(data_root):
+        if not uses_sqlite(data_root):
+            raise ValueError('Storage inventory backup requires the selected SQLite adapter.')
+        index = InventoryIndex(data_root)
+        with index.transaction() as connection:
+            require_ready(connection)
+        backup_id = 'inventory-' + uuid4().hex
+        backups = data_root / 'backups'
+        backups.mkdir(parents=True, exist_ok=True)
+        staging = backups / f'.{backup_id}.pending'
+        staging.mkdir(mode=0o770)
+        destination = backups / backup_id
+        try:
+            index.backup(staging / INDEX_FILE)
+            # This standalone artifact never depends on sibling WAL/SHM files.
+            connection = sqlite3.connect(staging / INDEX_FILE)
+            try:
+                if connection.execute('PRAGMA journal_mode=DELETE').fetchone()[0] != 'delete':
+                    raise RuntimeError('Storage backup could not finalize a standalone database.')
+            finally:
+                connection.close()
+            payload = export_inventory(InventoryIndex(staging))
+            manifest = {'owner': 'storage', 'backup_id': backup_id, 'schema_version': SCHEMA_VERSION,
+                'sqlite_runtime': sqlite3.sqlite_version, 'revision': payload['updated_at'],
+                'file_count': len(payload['files']), 'directory_count': len(payload['directories']),
+                'files_digest': _records_digest(payload['files'], 'file_id'),
+                'directories_digest': _records_digest(payload['directories'], 'id'),
+                'content_included': False}
+            _validate_index(InventoryIndex(staging), manifest)
+            with (staging / INDEX_FILE).open('rb') as handle:
+                manifest['database_sha256'] = hashlib.file_digest(handle, 'sha256').hexdigest()
+                os.fsync(handle.fileno())
+            _write_json(staging / 'manifest.json', manifest)
+            staging.replace(destination)
+            for directory in (backups, data_root):
+                descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+        return {'status': 'backed_up', 'path': str(destination.relative_to(data_root)), **manifest}
 
 
 def rollback_inventory(data_root: Path) -> dict:

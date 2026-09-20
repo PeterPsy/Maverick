@@ -74,6 +74,7 @@ class AppCapabilities:
     data_events: list["AppDataEventDeclaration"]
     view_surfaces: list["AppViewSurfaceDeclaration"]
     reference_entities: list["AppReferenceEntityDeclaration"]
+    backend_workspace_apps: bool = True
 
 
 @dataclass(frozen=True)

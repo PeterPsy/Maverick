@@ -126,57 +126,68 @@ def mutate(*, data_root: Path, role: str, root: Path, target: Path, kind: str,
         if not uses_sqlite(data_root):
             return _legacy_mutate(data_root=data_root, role=role, root=root, target=target,
                 kind=kind, source=source, payload=payload, staged_file=staged_file, sha256=sha256)
-        root = root.resolve()
-        target = _path(root, target.relative_to(root).as_posix())
-        recover_operations(data_root, {role: root})
         index = InventoryIndex(data_root)
-        with index.transaction() as connection:
-            if connection.execute('SELECT 1 FROM operations LIMIT 1').fetchone():
-                raise StorageConflictError('Storage is recovering an interrupted operation.', conflict='inventory_recovery_required')
-            previous = index.by_path(connection, role, target.relative_to(root).as_posix())
-        operation = {'id': uuid4().hex, 'kind': kind, 'role': role,
-            'target': target.relative_to(root).as_posix(), 'before': _signature(target),
-            'file_id': previous['file_id'] if previous else 'file_' + uuid4().hex,
-            'sha256': sha256, 'source': source.relative_to(root).as_posix() if source else '',
-            'source_signature': _signature(source) if source else None}
-        stage = None
-        if kind in ('write', 'create_directory', 'delete_directory'):
-            stage = target.parent / ('.maverick-storage-write-' + operation['id'])
-            operation['staged'] = stage.relative_to(root).as_posix()
-            if kind == 'write':
-                if staged_file is not None:
-                    # The durable intent must precede moving a resumable upload's bytes.
-                    operation['sha256'] = sha256 or _hash(staged_file)
-                else:
-                    with stage.open('xb') as handle:
-                        handle.write(payload)
-                        handle.flush()
-                        os.fsync(handle.fileno())
-                    operation['sha256'] = sha256 or _hash(stage)
-            elif kind == 'create_directory':
-                stage.mkdir()
-            operation['staged_signature'] = _signature(stage)
-            _flush_directory(target.parent)
-        with index.transaction(write=True) as connection:
-            connection.execute('INSERT INTO operations VALUES (?,?)', (operation['id'], json.dumps(operation)))
-        if kind in ('write', 'create_directory'):
-            if kind == 'write' and staged_file is not None:
-                staged_file.replace(stage)
-                _flush_directory(staged_file.parent)
-            stage.replace(target)
-        elif kind.startswith('move_'):
-            source.rename(target)
-            _flush_directory(source.parent)
-        elif kind == 'delete_directory':
-            target.rename(stage)
-        elif kind == 'delete_file':
-            target.unlink()
-        else:
-            raise ValueError('Unsupported Storage mutation.')
+        # Keep the database open across the durable intent/finalization commits.
+        # The default last-connection checkpoint then runs once, inside the fence.
+        with index.connect(write=True):
+            return _mutate_indexed(index=index, data_root=data_root, role=role, root=root,
+                target=target, kind=kind, source=source, payload=payload,
+                staged_file=staged_file, sha256=sha256)
+
+
+def _mutate_indexed(*, index: InventoryIndex, data_root: Path, role: str, root: Path,
+                    target: Path, kind: str, source: Path | None, payload: bytes | None,
+                    staged_file: Path | None, sha256: str):
+    root = root.resolve()
+    target = _path(root, target.relative_to(root).as_posix())
+    recover_operations(data_root, {role: root})
+    with index.transaction() as connection:
+        if connection.execute('SELECT 1 FROM operations LIMIT 1').fetchone():
+            raise StorageConflictError('Storage is recovering an interrupted operation.', conflict='inventory_recovery_required')
+        previous = index.by_path(connection, role, target.relative_to(root).as_posix())
+    operation = {'id': uuid4().hex, 'kind': kind, 'role': role,
+        'target': target.relative_to(root).as_posix(), 'before': _signature(target),
+        'file_id': previous['file_id'] if previous else 'file_' + uuid4().hex,
+        'sha256': sha256, 'source': source.relative_to(root).as_posix() if source else '',
+        'source_signature': _signature(source) if source else None}
+    stage = None
+    if kind in ('write', 'create_directory', 'delete_directory'):
+        stage = target.parent / ('.maverick-storage-write-' + operation['id'])
+        operation['staged'] = stage.relative_to(root).as_posix()
+        if kind == 'write':
+            if staged_file is not None:
+                # The durable intent must precede moving a resumable upload's bytes.
+                operation['sha256'] = sha256 or _hash(staged_file)
+            else:
+                with stage.open('xb') as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                operation['sha256'] = sha256 or _hash(stage)
+        elif kind == 'create_directory':
+            stage.mkdir()
+        operation['staged_signature'] = _signature(stage)
         _flush_directory(target.parent)
-        result = _finalize(data_root, root, operation)
-        _cleanup(index, root, operation)
-        return result
+    with index.transaction(write=True) as connection:
+        connection.execute('INSERT INTO operations VALUES (?,?)', (operation['id'], json.dumps(operation)))
+    if kind in ('write', 'create_directory'):
+        if kind == 'write' and staged_file is not None:
+            staged_file.replace(stage)
+            _flush_directory(staged_file.parent)
+        stage.replace(target)
+    elif kind.startswith('move_'):
+        source.rename(target)
+        _flush_directory(source.parent)
+    elif kind == 'delete_directory':
+        target.rename(stage)
+    elif kind == 'delete_file':
+        target.unlink()
+    else:
+        raise ValueError('Unsupported Storage mutation.')
+    _flush_directory(target.parent)
+    result = _finalize(data_root, root, operation)
+    _cleanup(index, root, operation)
+    return result
 
 
 def _legacy_mutate(*, data_root, role, root, target, kind, source, payload, staged_file, sha256):

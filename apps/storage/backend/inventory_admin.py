@@ -7,7 +7,7 @@ import sqlite3
 
 from errors import StorageAuthorizationError, StorageValidationError
 from inventory import catalog_inventory_payload, list_inventory_folders, uses_sqlite
-from inventory_migration import cutover_inventory, prepare_inventory, rollback_inventory, validate_inventory
+from inventory_migration import backup_inventory, cutover_inventory, prepare_inventory, rollback_inventory, validate_inventory
 from inventory_queries import directory_page, require_ready, summary_payload
 from inventory_records import _public_folder_record
 from inventory_sqlite import InventoryIndex
@@ -31,11 +31,13 @@ def migration_action(data_root: Path, uploaded_root: Path, generated_root: Path,
         return cutover_inventory(data_root, migration_id, **roots)
     if phase == 'rollback':
         return rollback_inventory(data_root)
+    if phase == 'backup':
+        return backup_inventory(data_root)
     if phase == 'recover':
         from inventory_operations import recover_operations
         return recover_operations(data_root, {'uploaded': uploaded_root, 'generated': generated_root})
     raise StorageValidationError('Unknown inventory migration phase.', allowed_values={
-        'phase': ['status', 'prepare', 'validate', 'cutover', 'rollback', 'recover']})
+        'phase': ['status', 'prepare', 'validate', 'cutover', 'rollback', 'recover', 'backup']})
 
 
 def catalog_summary(data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:

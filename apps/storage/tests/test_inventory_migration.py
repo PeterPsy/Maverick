@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
-from inventory_migration import cutover_inventory, prepare_inventory, rollback_inventory
+from inventory_migration import backup_inventory, cutover_inventory, prepare_inventory, rollback_inventory
 from inventory_sqlite import InventoryIndex
 
 
@@ -115,6 +115,41 @@ class InventoryMigrationTests(unittest.TestCase):
         rollback_inventory(self.data)
         self.assertFalse((self.data / 'inventory.sqlite').exists())
         self.assertEqual(json.loads(self.source.read_text()), newer)
+
+    def test_owner_backup_includes_committed_wal_and_remains_a_standalone_snapshot(self):
+        prepared = prepare_inventory(self.data, **self.roots)
+        cutover_inventory(self.data, prepared['migration_id'], **self.roots)
+        index = InventoryIndex(self.data)
+        with index.connect(write=True) as writer:
+            writer.execute('PRAGMA wal_autocheckpoint=0')
+            writer.execute('BEGIN IMMEDIATE')
+            index.put_file(writer, {**self.record, 'memory_node_id': 'committed-in-wal'})
+            writer.commit()
+            self.assertGreater((self.data / 'inventory.sqlite-wal').stat().st_size, 0)
+            result = backup_inventory(self.data)
+            writer.execute('BEGIN IMMEDIATE')
+            index.put_file(writer, {**self.record, 'memory_node_id': 'after-backup'})
+            writer.commit()
+        destination = self.data / result['path']
+        backup = InventoryIndex(destination)
+        with backup.connect() as connection:
+            self.assertEqual(connection.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+            self.assertEqual(connection.execute('PRAGMA journal_mode').fetchone()[0], 'delete')
+            self.assertEqual(backup.get(connection, self.record['file_id'])['memory_node_id'], 'committed-in-wal')
+        self.assertFalse((destination / 'inventory.sqlite-wal').exists())
+        self.assertEqual(result['file_count'], 1)
+        self.assertFalse(result['content_included'])
+        self.assertEqual(hashlib.sha256((destination / 'inventory.sqlite').read_bytes()).hexdigest(), result['database_sha256'])
+        self.assertEqual(json.loads((destination / 'manifest.json').read_text())['backup_id'], result['backup_id'])
+
+    def test_failed_backup_never_publishes_an_incomplete_snapshot(self):
+        prepared = prepare_inventory(self.data, **self.roots)
+        cutover_inventory(self.data, prepared['migration_id'], **self.roots)
+        with patch.object(InventoryIndex, 'backup', side_effect=OSError('disk full')):
+            with self.assertRaisesRegex(OSError, 'disk full'):
+                backup_inventory(self.data)
+        self.assertEqual(list((self.data / 'backups').iterdir()), [])
+        self.assertEqual(backup_inventory(self.data)['status'], 'backed_up')
 
     def test_cutover_retry_preserves_writes_after_selected_marker(self):
         prepared = prepare_inventory(self.data, **self.roots)

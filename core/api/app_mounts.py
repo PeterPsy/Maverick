@@ -695,7 +695,7 @@ def handle_app_backend(
                     workspace_id=workspace_id,
                     start_path=start_path,
                     user=user,
-                )
+                ) if parsed.contract.capabilities.backend_workspace_apps else []
             },
             "runtime_session_id": "",
             "turn_id": "",

@@ -13,6 +13,7 @@ import shutil
 from socketserver import ThreadingMixIn
 import sqlite3
 import statistics
+import subprocess
 import sys
 import tempfile
 from threading import Thread
@@ -26,6 +27,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'apps/storage/backend')]
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.apps.contracts import build_app_contract, build_parsed_app_contract, write_app_contract_file
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.support.performance_fixtures import storage_files
 from inventory_migration import prepare_inventory, cutover_inventory
@@ -42,7 +44,8 @@ class QuietHandler(WSGIRequestHandler):
 
 
 @contextmanager
-def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False, workers: bool = False):
+def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False, workers: bool = False,
+                    extra_apps: int = 0, workspace_catalog: bool = False):
     for name in ('core', 'apps', 'workspaces', 'scripts', 'docs'):
         (root / name).mkdir(parents=True, exist_ok=True)
     (root / 'AGENTS.md').write_text('Disposable mounted performance fixture.\n')
@@ -55,6 +58,7 @@ def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False
         contract_path = source_root / 'app_contract.json'
         contract = json.loads(contract_path.read_text())
         contract['entrypoints']['json_worker'] = 'backend/json_worker.py'
+        contract['capabilities']['backend_workspace_apps'] = workspace_catalog
         contract_path.write_text(json.dumps(contract))
     uploaded, generated, data = storage_files(root / 'workspaces/default', count, shape=shape)
     inventory_legacy.sync_inventory(data, uploaded_root=uploaded, generated_root=generated)
@@ -66,6 +70,15 @@ def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False
         state = bootstrap_platform_state(start_path=root)
         source = register_app_source_from_contract(state.app_store, source_kind='platform', source_path=str(source_root))
         install_store_app(state.app_store, source_id=source.source_id, workspace_id='default', start_path=root)
+        for number in range(extra_apps):
+            app_id = f'fixture-extra-{number}'
+            app_root = root / 'apps' / app_id
+            app_root.mkdir()
+            write_app_contract_file(app_root, build_parsed_app_contract(app_id=app_id,
+                name=f'Fixture {number}', version='1.0.0', description='Disposable discovery fixture.',
+                publisher='maverick', contract=build_app_contract()))
+            extra = register_app_source_from_contract(state.app_store, source_kind='platform', source_path=str(app_root))
+            install_store_app(state.app_store, source_id=extra.source_id, workspace_id='default', start_path=root)
         shutdown = EntrypointShutdownController()
         host = PlatformHost(state, start_path=root, shutdown_controller=shutdown)
         import cProfile
@@ -176,15 +189,25 @@ def main():
     parser.add_argument('--concurrent', action='store_true')
     parser.add_argument('--profile', action='store_true')
     parser.add_argument('--workers', action='store_true', help='Enable the optional worker only in the disposable fixture contract')
+    parser.add_argument('--extra-apps', type=int, default=0, help='Install additional minimal apps to measure discovery scaling')
+    parser.add_argument('--workspace-catalog', action='store_true', help='Keep workspace catalog injection enabled for the worker fixture')
     args = parser.parse_args()
+    if args.count < 100 or args.requests < 1 or args.warmup < 0 or args.extra_apps < 0:
+        parser.error('count must be at least 100; requests positive; warmup and extra-apps nonnegative')
     if args.profile and args.concurrent:
         parser.error('--profile requires sequential requests')
     with tempfile.TemporaryDirectory(prefix='maverick-mounted-probe-') as scratch:
-        with mounted_storage(Path(scratch), args.count, args.shape, profile=args.profile, workers=args.workers) as client:
+        with mounted_storage(Path(scratch), args.count, args.shape, profile=args.profile, workers=args.workers,
+                             extra_apps=args.extra_apps, workspace_catalog=args.workspace_catalog) as client:
             results = run(client, args.requests, args.warmup, concurrent=args.concurrent)
-    print(json.dumps({'boundary': 'authenticated-mounted-loopback-http', 'python': platform.python_version(),
+    git = ['git', '-c', f'safe.directory={ROOT}']
+    print(json.dumps({'schema': 1, 'boundary': 'authenticated-mounted-loopback-http', 'python': platform.python_version(),
+        'source_commit': subprocess.check_output([*git, 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+        'source_dirty': bool(subprocess.check_output([*git, 'status', '--porcelain'], cwd=ROOT, text=True).strip()),
+        'cpu_count': os.cpu_count(), 'system': platform.system(), 'machine': platform.machine(),
         'sqlite': sqlite3.sqlite_version, 'fixture_count': args.count, 'shape': args.shape,
         'warmup': args.warmup, 'json_workers': args.workers, 'readers': 4 if args.concurrent else 1,
+        'extra_apps': args.extra_apps, 'workspace_catalog': args.workspace_catalog or not args.workers,
         'writers': 2 if args.concurrent else 0, 'results': results}, indent=2))
 
 

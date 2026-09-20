@@ -156,6 +156,15 @@ Storage also provides `backend/json_worker.py`, which reuses the same backend an
 MCP request handlers in a bounded core-owned process. Authenticated media streams
 keep their ordinary entrypoint. After deploying a core that supports the worker
 contract, enable it with `entrypoints.json_worker: "backend/json_worker.py"`.
+Storage also declares `capabilities.backend_workspace_apps: false` at activation:
+its backend does not consume that optional workspace-wide catalog.
 The field stays absent during the compatibility rollout; the performance probe's
 `--workers` flag enables it only in a disposable fixture. Backend code changes
 require an app version/reinstall or host restart to refresh resident imports.
+
+The administrative `inventory.migration` action supports `phase=backup` after
+SQLite cutover. It publishes a verified standalone metadata database and manifest
+under `data/storage/backups/`, including committed WAL changes and Memory links.
+Unfinished mutations must be recovered first. Uploaded/generated content stays
+under the separate workspace file-backup policy; the inventory snapshot does not
+duplicate document bytes.

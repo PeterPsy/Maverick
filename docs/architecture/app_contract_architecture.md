@@ -605,6 +605,8 @@ Rules:
 - direct `/apps/<mount_app_id>/` asset serving remains available for declared frontends even when the role is `supporting`
 - `frontend_resumable` is an optional boolean, default false, valid only for workspace frontends. It certifies the app-owned RAM snapshot/restore protocol; it never authorizes private persistent caching. The Shell keeps the active and previous views warm and asks older certified views to capture state. It removes a frame only after an exact-origin/source acknowledgement within one second. Busy apps may decline. Snapshots are capped at 64 KiB per app and 2 MiB per authenticated workspace scope; exceeding a bound leaves the app mounted. State survives navigation through the app launcher and is discarded on logout/workspace change. Sidebar widgets have independent lifecycles.
 
+- Snapshot restoration preserves app navigation, drafts and scroll through app-owned hooks. An explicit new deep link takes precedence; Chat keeps a restored draft attached to its original conversation. Non-serializable work (attachments, queued sends, dictation, device use, Storage editing or active requests) keeps the app mounted until safe to capture. The protocol uses exact registered iframe origins/sources, and a resumed acknowledgement releases the Shell copy only after the app accepts ownership.
+
 ### Optional reusable JSON entrypoint
 
 `entrypoints.json_worker` may name an existing Python file alongside a declared
@@ -629,7 +631,12 @@ the process; mutations are never automatically retried. Worker stderr is drained
 without retaining or returning its contents. Updating imported worker code
 requires an app version/reinstall or host restart, as for other resident app
 processes. Deploy the supporting core before enabling this contract field.
-- Snapshot restoration preserves app navigation, drafts and scroll through app-owned hooks. An explicit new deep link takes precedence; Chat keeps a restored draft attached to its original conversation. Non-serializable work (attachments, queued sends, dictation, device use, Storage editing or active requests) keeps the app mounted until safe to capture. The protocol uses exact registered iframe origins/sources, and a resumed acknowledgement releases the Shell copy only after the app accepts ownership.
+
+`capabilities.backend_workspace_apps` is an optional boolean, default true for
+compatibility. An app that does not consume the backend payload's
+`workspace_apps.items` can declare false to skip workspace-wide discovery and
+receive an empty list. This is an app-owned contract choice, never a caller
+request hint. It does not change app visibility, dependencies or authorization.
 
 
 The recommended mental model is:

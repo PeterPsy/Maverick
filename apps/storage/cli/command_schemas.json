@@ -170,7 +170,7 @@
             "default": "operations.manifest"
           },
           "dataset_revision": {"type": "integer", "minimum": 0},
-          "phase": {"type": "string", "enum": ["status", "prepare", "validate", "cutover", "rollback", "recover"]},
+          "phase": {"type": "string", "enum": ["status", "prepare", "validate", "cutover", "rollback", "recover", "backup"]},
           "migration_id": {"type": "string"},
           "query": {"type": "string"},
           "role": {"type": "string", "enum": ["all", "uploaded", "generated"]},

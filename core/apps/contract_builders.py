@@ -107,6 +107,7 @@ def build_app_capabilities(
     data_events: list[AppDataEventDeclaration] | None = None,
     view_surfaces: list[AppViewSurfaceDeclaration] | None = None,
     reference_entities: list[AppReferenceEntityDeclaration] | None = None,
+    backend_workspace_apps: bool = True,
 ) -> AppCapabilities:
     """Build one capability declaration."""
     return AppCapabilities(
@@ -117,6 +118,7 @@ def build_app_capabilities(
         data_events=data_events or [],
         view_surfaces=view_surfaces or [],
         reference_entities=reference_entities or [],
+        backend_workspace_apps=backend_workspace_apps,
     )
 
 def build_view_surface_declaration(

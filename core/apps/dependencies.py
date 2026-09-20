@@ -205,10 +205,10 @@ def resolve_app_dependencies(
     )
     selections = {
         selection.alias: selection
-        for selection in store.list_workspace_app_dependency_selections(
+        for selection in (store.list_workspace_app_dependency_selections(
             workspace_id=workspace_id,
             consumer_app_id=consumer_app_id,
-        )
+        ) if parsed.contract.requires else [])
     }
     resolutions: list[DependencyResolution] = []
     for requirement in parsed.contract.requires:

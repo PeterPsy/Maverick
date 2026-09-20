@@ -99,10 +99,15 @@ Indexed catalog and stable-ID resolution never scan document paths or rewrite
 the inventory. Filters and deterministic natural sorting precede the SQL limit.
 Continuations carry `dataset_revision`; a mismatch returns `catalog_changed`
 without an appendable page. `catalog.summary` supplies local root totals, and
-`directory.children` provides bounded child pages. Exact counts and byte totals
+`directory.children` provides bounded child/search pages across the selected roots,
+with independent folder pagination and exact totals. Upload UUID containers stay
+hidden while their files remain discoverable. Exact counts and byte totals
 are maintained with file and directory mutations. Custom reference order applies
 until an explicit sort is requested. `state.json` remains the small UI-state
 store; remote locators, tombstones and Memory links remain in authoritative rows.
+Cutover retries preserve writes already accepted by the selected adapter. Reverse
+cutover records database retirement in its durable marker, so recovery after that
+marker cannot replace subsequent JSON writes with an older export.
 
 Filesystem mutations use durable intents, reserved IDs and atomic replacement
 or rename. Success follows metadata commit. Recovery can finish prepared writes,

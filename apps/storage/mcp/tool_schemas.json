@@ -8,6 +8,8 @@
         "value_effect_classes": {
           "operations.manifest": "read",
           "catalog": "read",
+          "catalog.summary": "read",
+          "directory.children": "read",
           "file.catalog.list": "read",
           "file_info": "read",
           "read_file": "read",
@@ -88,6 +90,8 @@
             "enum": [
               "operations.manifest",
               "catalog",
+              "catalog.summary",
+              "directory.children",
               "file.catalog.list",
               "file_info",
               "read_file",
@@ -160,6 +164,10 @@
             ],
             "default": "operations.manifest"
           },
+          "dataset_revision": {"type": "integer", "minimum": 0},
+          "page_token": {"type": "string"},
+          "sort_by": {"type": "string", "enum": ["created_at", "modified_at", "relative_path", "name", "size_bytes", "preview_kind"]},
+          "sort_direction": {"type": "string", "enum": ["asc", "desc"]},
           "query": {"type": "string"},
           "role": {"type": "string", "enum": ["all", "uploaded", "generated"]},
           "kind": {
@@ -361,6 +369,7 @@
       "input_schema": {
         "type": "object",
         "properties": {
+          "dataset_revision": {"type": "integer", "minimum": 0},
           "query": {"type": "string"},
           "role": {"type": "string", "enum": ["all", "uploaded", "generated"], "default": "all"},
           "kind": {
@@ -373,7 +382,7 @@
           "workspace_relative_paths": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
           "offset": {"type": "integer", "minimum": 0, "default": 0},
           "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
-          "sort_by": {"type": "string", "enum": ["modified_at", "relative_path", "name", "size_bytes", "preview_kind"], "default": "modified_at"},
+          "sort_by": {"type": "string", "enum": ["created_at", "modified_at", "relative_path", "name", "size_bytes", "preview_kind"]},
           "sort_direction": {"type": "string", "enum": ["asc", "desc"], "default": "desc"}
         },
         "additionalProperties": false

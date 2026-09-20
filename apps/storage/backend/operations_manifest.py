@@ -210,7 +210,7 @@ def operations_manifest_payload() -> dict[str, Any]:
         "operations": [
             {'action': 'catalog.summary', 'description': 'Read exact local root counts and byte totals without loading file pages.'},
             {'action': 'directory.children', 'description': 'Read a bounded page of direct child directories.',
-                'required': ['role'], 'optional': ['folder_path', 'offset', 'limit', 'dataset_revision']},
+                'required': ['role'], 'optional': ['folder_path', 'query', 'offset', 'limit', 'dataset_revision']},
             {'action': 'inventory.migration', 'description': 'Administrative CLI: explicitly prepare, validate, cut over or reverse-export Storage metadata.',
                 'optional': ['phase', 'migration_id']},
             {

@@ -16,7 +16,7 @@ from storage_provider_model import FILE_ROLES, LOCAL_PROVIDER
 INVENTORY_FILE = "files.json"
 INVENTORY_SCHEMA_VERSION = "1"
 FILE_ID_PATTERN = re.compile(r"^file_[0-9a-f]{32}$")
-CATALOG_SORT_FIELDS = {"modified_at", "relative_path", "name", "size_bytes", "preview_kind"}
+CATALOG_SORT_FIELDS = {"created_at", "modified_at", "relative_path", "name", "size_bytes", "preview_kind"}
 PREVIEW_KIND_ORDER = ("image", "video", "audio", "pdf", "document", "presentation", "spreadsheet", "markdown", "text", "file")
 STORAGE_TEMP_PREFIX = ".maverick-storage-write-"
 UPLOAD_BUCKET_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
@@ -1012,6 +1012,5 @@ def _sort_records(records: list[dict[str, Any]], *, sort_by: str, sort_direction
     field = sort_by if sort_by in CATALOG_SORT_FIELDS else "modified_at"
     reverse = sort_direction.lower() != "asc"
     records = sorted(records, key=lambda item: (item["role"], item["relative_path"].casefold()))
-    return sorted(records, key=lambda item: item.get(field) or "", reverse=reverse)
-
+    return sorted(records, key=lambda item: item.get(field) or (item.get('modified_at') if field == 'created_at' else '') or "", reverse=reverse)
 

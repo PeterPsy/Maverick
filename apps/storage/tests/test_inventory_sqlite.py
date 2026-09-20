@@ -15,7 +15,8 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
-from inventory_queries import catalog_page, summary_payload
+from inventory_queries import catalog_page, directory_page, reference_records, summary_payload
+from errors import StorageConflictError
 from inventory_sqlite import InventoryIndex, natural_key
 
 
@@ -150,6 +151,35 @@ class InventoryIndexTests(unittest.TestCase):
             connection.execute('PRAGMA user_version=999')
         with self.assertRaisesRegex(RuntimeError, 'explicit migration'):
             catalog_page(self.index)
+
+    def test_directories_search_page_exact_totals_and_hidden_upload_buckets(self):
+        with self.index.transaction(write=True) as connection:
+            for number in range(250):
+                self.index.put_directory(connection, {'id': f'generated:folder{number}/',
+                    'role': 'generated', 'relative_path': f'folder{number}', 'name': f'folder{number}', 'status': 'active'})
+            bucket = '12345678-1234-1234-1234-123456789abc'
+            self.index.put_directory(connection, {'id': f'uploaded:{bucket}/',
+                'role': 'uploaded', 'relative_path': bucket, 'name': bucket, 'status': 'active'})
+        page = catalog_page(self.index, role='generated', folder_path='', limit=100)
+        self.assertEqual(page['folders_pagination']['total'], 250)
+        self.assertEqual(page['folders'][-1]['name'], 'folder99')
+        with self.index.transaction() as connection:
+            next_page = directory_page(connection, role='generated', parent='', offset=100, limit=100)
+            self.assertEqual(next_page['folders'][0]['name'], 'folder100')
+            search = directory_page(connection, role='all', parent='', query='ＦＯＬＤＥＲ２４')
+            self.assertEqual(search['pagination']['total'], 11)
+            self.assertEqual(directory_page(connection, role='uploaded', parent='')['pagination']['total'], 0)
+        self.assertEqual(summary_payload(self.index)['containers'][0]['total_folders'], 0)
+
+    def test_pending_mutation_fences_all_indexed_read_models(self):
+        with self.index.transaction(write=True) as connection:
+            connection.execute("INSERT INTO operations VALUES ('pending','{}')")
+        for read in (lambda: catalog_page(self.index), lambda: summary_payload(self.index),
+                     lambda: reference_records(self.index, query='', folder=True, limit=10)):
+            with self.assertRaises(StorageConflictError):
+                read()
+        with self.index.transaction() as connection, self.assertRaises(StorageConflictError):
+            directory_page(connection, role='all', parent='')
 
 
 class NaturalOrderTests(unittest.TestCase):

@@ -102,3 +102,26 @@ class InventoryMigrationTests(unittest.TestCase):
         self.file.write_text('changed')
         with self.assertRaisesRegex(ValueError, 'content hash is stale'):
             prepare_inventory(self.data, **self.roots)
+
+    def test_reverse_cutover_crash_retires_database_without_overwriting_new_json(self):
+        prepared = prepare_inventory(self.data, **self.roots)
+        cutover_inventory(self.data, prepared['migration_id'], **self.roots)
+        with patch('inventory_migration._finish_retirement', side_effect=OSError('crash after marker')):
+            with self.assertRaises(OSError):
+                rollback_inventory(self.data)
+        newer = json.loads(self.source.read_text())
+        newer['updated_at'] = 'accepted-json-write'
+        self.source.write_text(json.dumps(newer))
+        rollback_inventory(self.data)
+        self.assertFalse((self.data / 'inventory.sqlite').exists())
+        self.assertEqual(json.loads(self.source.read_text()), newer)
+
+    def test_cutover_retry_preserves_writes_after_selected_marker(self):
+        prepared = prepare_inventory(self.data, **self.roots)
+        cutover_inventory(self.data, prepared['migration_id'], **self.roots)
+        index = InventoryIndex(self.data)
+        with index.transaction(write=True) as connection:
+            index.put_file(connection, {**self.record, 'memory_node_id': 'new-memory'})
+        self.assertEqual(cutover_inventory(self.data, prepared['migration_id'], **self.roots)['status'], 'active')
+        with index.transaction() as connection:
+            self.assertEqual(index.get(connection, self.record['file_id'])['memory_node_id'], 'new-memory')

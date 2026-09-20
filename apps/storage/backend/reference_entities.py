@@ -385,8 +385,10 @@ def _resolve_folder_record(
         import json
         from inventory_records import _public_folder_record
         from inventory_sqlite import InventoryIndex
+        from inventory_queries import require_ready
         from storage_mutation_lock import storage_mutation_lock
         with storage_mutation_lock(data_root, shared=True), InventoryIndex(data_root).transaction() as connection:
+            require_ready(connection)
             row = connection.execute("SELECT document FROM directories WHERE role=? AND path=? AND status='active'", (role, relative_path)).fetchone()
         return _public_folder_record(json.loads(row[0])) if row else None
     catalog_files_payload(

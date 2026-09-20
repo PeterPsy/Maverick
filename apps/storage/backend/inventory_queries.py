@@ -9,6 +9,8 @@ import unicodedata
 from inventory_sqlite import InventoryIndex, natural_key
 from errors import StorageConflictError
 
+UPLOAD_BUCKET_GLOB = '-'.join('[0-9a-fA-F]' * length for length in (8, 4, 4, 4, 12))
+
 SORT_COLUMNS = {
     'created_at': 'date_sort', 'modified_at': 'modified_sort', 'date': 'date_sort',
     'name': 'name_sort', 'relative_path': 'path', 'size_bytes': 'size_bytes',
@@ -61,8 +63,7 @@ def catalog_page(index: InventoryIndex, *, query: str = '', role: str = 'all', k
     page_limit = min(2000, max(1, limit if limit is not None else 100))
     page_offset = max(0, offset)
     with index.transaction() as connection:
-        if connection.execute('SELECT 1 FROM operations LIMIT 1').fetchone():
-            raise StorageConflictError('Storage is recovering an interrupted mutation.', conflict='inventory_recovery_required')
+        require_ready(connection)
         revision = index.revision(connection)
         if dataset_revision is not None and revision != dataset_revision:
             return {'status': 'catalog_changed', 'dataset_revision': revision}
@@ -70,10 +71,11 @@ def catalog_page(index: InventoryIndex, *, query: str = '', role: str = 'all', k
         files = [json.loads(row[0]) for row in connection.execute(
             f'SELECT document FROM files WHERE {clause} ORDER BY {order_sql} LIMIT ? OFFSET ?',
             [*values, *order_values, page_limit, page_offset])]
-        folders = directory_children(connection, role=role, parent=folder_path or '') if role != 'all' and not needle and not custom else []
+        folder_page = directory_page(connection, role=role, parent=folder_path or '', query=query, limit=page_limit) if not custom and (role != 'all' or needle) else {'folders': [], 'pagination': {'offset': 0, 'limit': page_limit, 'total': 0, 'has_more': False}}
+        folders = folder_page['folders']
         summary = root_summary(connection)
         kinds = [row[0] for row in connection.execute("SELECT DISTINCT kind FROM files WHERE status='active' ORDER BY kind")]
-        return {'status': 'ok', 'files': files, 'folders': folders, 'dataset_revision': revision,
+        return {'status': 'ok', 'files': files, 'folders': folders, 'folders_pagination': folder_page['pagination'], 'dataset_revision': revision,
             'pagination': {'offset': page_offset, 'limit': page_limit, 'total': totals[0],
                 'has_more': page_offset + len(files) < totals[0], 'dataset_revision': revision},
             'totals': {'scope': 'filtered', 'total_files': totals[0], 'total_bytes': totals[1]},
@@ -82,25 +84,52 @@ def catalog_page(index: InventoryIndex, *, query: str = '', role: str = 'all', k
 
 def root_summary(connection: sqlite3.Connection) -> dict:
     rows = {row['role']: dict(row) for row in connection.execute("SELECT role,total_files,total_bytes,total_folders FROM folder_totals WHERE path=''")}
+    hidden_uploads = connection.execute("SELECT COUNT(*) FROM directories WHERE role='uploaded' AND status='active' AND parent='' AND path GLOB ?", (UPLOAD_BUCKET_GLOB,)).fetchone()[0]
     return {'scope': 'local-roots', 'containers': [
         {'role': role, 'total_files': rows.get(role, {}).get('total_files', 0),
             'total_bytes': rows.get(role, {}).get('total_bytes', 0),
-            'total_folders': rows.get(role, {}).get('total_folders', 0)}
+            'total_folders': rows.get(role, {}).get('total_folders', 0) - (hidden_uploads if role == 'uploaded' else 0)}
         for role in ('uploaded', 'generated')
     ]}
 
 
+def require_ready(connection: sqlite3.Connection) -> None:
+    if connection.execute('SELECT 1 FROM operations LIMIT 1').fetchone():
+        raise StorageConflictError('Storage is recovering an interrupted mutation.', conflict='inventory_recovery_required')
+
+
+def directory_page(connection: sqlite3.Connection, *, role: str, parent: str, query: str = '',
+                   offset: int = 0, limit: int = 100) -> dict:
+    require_ready(connection)
+    conditions = ["d.status='active'", "d.path!=''", "NOT (d.role='uploaded' AND d.path GLOB ?)"]
+    values: list = [UPLOAD_BUCKET_GLOB]
+    if role != 'all':
+        conditions.append('d.role=?')
+        values.append(role)
+    needle = unicodedata.normalize('NFKC', ' '.join(query.split())).casefold()
+    if needle:
+        conditions.append("d.search_text LIKE ? ESCAPE '\\'")
+        values.append('%' + _like(needle) + '%')
+    else:
+        conditions.append('d.parent=?')
+        values.append(parent)
+    clause = ' AND '.join(conditions)
+    total = connection.execute(f'SELECT COUNT(*) FROM directories d WHERE {clause}', values).fetchone()[0]
+    rows = connection.execute(f"""SELECT d.document, COALESCE(t.total_files,0), COALESCE(t.total_bytes,0), COALESCE(t.total_folders,0)
+        FROM directories d LEFT JOIN folder_totals t ON t.role=d.role AND t.path=d.path WHERE {clause}
+        ORDER BY d.name_sort,d.directory_id LIMIT ? OFFSET ?""", [*values, limit, offset])
+    folders = [{**json.loads(row[0]), 'total_files': row[1], 'total_bytes': row[2], 'total_folders': row[3], 'count_scope': 'subtree'} for row in rows]
+    return {'folders': folders, 'pagination': {'offset': offset, 'limit': limit, 'total': total, 'has_more': offset + len(folders) < total}}
+
+
 def directory_children(connection: sqlite3.Connection, *, role: str, parent: str,
                        offset: int = 0, limit: int = 200) -> list[dict]:
-    rows = connection.execute('''SELECT d.document, COALESCE(t.total_files,0), COALESCE(t.total_bytes,0), COALESCE(t.total_folders,0)
-        FROM directories d LEFT JOIN folder_totals t ON t.role=d.role AND t.path=d.path
-        WHERE d.role=? AND d.status='active' AND d.parent=? AND d.path!=''
-        ORDER BY d.name_sort,d.directory_id LIMIT ? OFFSET ?''', (role, parent, limit, offset))
-    return [{**json.loads(row[0]), 'total_files': row[1], 'total_bytes': row[2], 'total_folders': row[3], 'count_scope': 'subtree'} for row in rows]
+    return directory_page(connection, role=role, parent=parent, offset=offset, limit=limit)['folders']
 
 
 def summary_payload(index: InventoryIndex) -> dict:
     with index.transaction() as connection:
+        require_ready(connection)
         return {**root_summary(connection), 'dataset_revision': index.revision(connection),
             'available_kinds': [row[0] for row in connection.execute("SELECT DISTINCT kind FROM files WHERE status='active' ORDER BY kind")]}
 
@@ -117,6 +146,7 @@ def reference_records(index: InventoryIndex, *, query: str, folder: bool, limit:
         values.append('%' + _like(token) + '%')
     order = f'(name_sort=?) DESC, name_sort, {identity}' if needle else ('name_sort,directory_id' if folder else 'date_sort DESC,name_sort,file_id')
     with index.transaction() as connection:
+        require_ready(connection)
         return [json.loads(row[0]) for row in connection.execute(
             f'SELECT document FROM {table} WHERE {" AND ".join(conditions)} ORDER BY {order} LIMIT ?',
             [*values, *([natural_key(needle)] if needle else []), limit])]

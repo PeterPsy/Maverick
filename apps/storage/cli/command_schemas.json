@@ -8,6 +8,9 @@
         "value_effect_classes": {
           "operations.manifest": "read",
           "catalog": "read",
+          "catalog.summary": "read",
+          "directory.children": "read",
+          "inventory.migration": "mutating",
           "file.catalog.list": "read",
           "view_filter": "read",
           "set_view_filter": "mutating",
@@ -90,6 +93,9 @@
             "enum": [
               "operations.manifest",
               "catalog",
+              "catalog.summary",
+              "directory.children",
+              "inventory.migration",
               "file.catalog.list",
               "view_filter",
               "set_view_filter",
@@ -163,6 +169,9 @@
             ],
             "default": "operations.manifest"
           },
+          "dataset_revision": {"type": "integer", "minimum": 0},
+          "phase": {"type": "string", "enum": ["status", "prepare", "validate", "cutover", "rollback", "recover"]},
+          "migration_id": {"type": "string"},
           "query": {"type": "string"},
           "role": {"type": "string", "enum": ["all", "uploaded", "generated"]},
           "kind": {
@@ -180,7 +189,7 @@
           "relative_path": {"type": "string"},
           "offset": {"type": "integer", "minimum": 0},
           "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
-          "sort_by": {"type": "string", "enum": ["modified_at", "relative_path", "name", "size_bytes", "preview_kind"]},
+          "sort_by": {"type": "string", "enum": ["created_at", "modified_at", "relative_path", "name", "size_bytes", "preview_kind"]},
           "sort_direction": {"type": "string", "enum": ["asc", "desc"]},
           "sync": {"type": "boolean", "default": false},
           "max_bytes": {"type": "integer", "minimum": 1},

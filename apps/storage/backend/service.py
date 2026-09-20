@@ -352,7 +352,8 @@ def handle_action(
     if action == 'directory.children':
         from inventory_admin import catalog_directories
         return 200, catalog_directories(data_root, uploaded_root, generated_root,
-            role=_catalog_filter_value(body, 'role', {'uploaded', 'generated'}, 'generated'),
+            role=_catalog_filter_value(body, 'role', {'uploaded', 'generated', 'all'}, 'generated'),
+            query=str(body.get('query') or ''),
             parent=str(body.get('folder_path') or '').strip('/'),
             offset=_optional_nonnegative_int(body, 'offset') or 0,
             limit=_optional_positive_int(body, 'limit', maximum=2000) or 100,
@@ -880,7 +881,7 @@ def handle_action(
             "pagination": catalog["pagination"],
             "inventory": catalog["inventory"],
             "available_kinds": catalog["available_kinds"],
-            **{key: catalog[key] for key in ('dataset_revision', 'summary', 'totals') if key in catalog},
+            **{key: catalog[key] for key in ('dataset_revision', 'summary', 'totals', 'folders_pagination') if key in catalog},
         }
         revision_payload = {
             **response,

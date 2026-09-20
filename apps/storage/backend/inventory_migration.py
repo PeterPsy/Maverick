@@ -92,6 +92,9 @@ def prepare_inventory(data_root: Path, *, uploaded_root: Path, generated_root: P
         from inventory import uses_sqlite
         if uses_sqlite(data_root):
             raise ValueError('Storage already uses SQLite; refuse a stale JSON migration.')
+        marker_path = data_root / 'inventory-store.json'
+        if marker_path.exists():
+            _finish_retirement(data_root, json.loads(marker_path.read_text()))
         source = (data_root / 'files.json').read_bytes()
         payload = json.loads(source)
         if str(payload.get('schema_version')) != '1':
@@ -162,6 +165,13 @@ def _validate_index(index: InventoryIndex, manifest: dict) -> None:
 
 def cutover_inventory(data_root: Path, migration_id: str, *, uploaded_root: Path, generated_root: Path) -> dict:
     with storage_mutation_lock(data_root):
+        marker_path = data_root / 'inventory-store.json'
+        if marker_path.exists():
+            marker = json.loads(marker_path.read_text())
+            if marker.get('adapter') == 'sqlite':
+                if marker.get('migration_id') != migration_id:
+                    raise ValueError('Another Storage migration is already active.')
+                return {'status': 'active', **marker}
         manifest = validate_inventory(data_root, migration_id)
         source = (data_root / 'files.json').read_bytes()
         roots = {'uploaded': uploaded_root, 'generated': generated_root}
@@ -198,6 +208,7 @@ def rollback_inventory(data_root: Path) -> dict:
         marker = json.loads((data_root / 'inventory-store.json').read_text())
         if marker.get('adapter') == 'json':
             # A retry must never overwrite JSON writes accepted after reverse cutover.
+            _finish_retirement(data_root, marker)
             return {'status': 'rolled_back', **marker}
         index = InventoryIndex(data_root)
         with index.transaction() as connection:
@@ -213,13 +224,27 @@ def rollback_inventory(data_root: Path) -> dict:
         if _digest(json.loads((backup_root / 'export.json').read_text())) != digest:
             raise ValueError('Storage rollback export validation failed.')
         _write_json(data_root / 'files.json', payload)
-        _write_json(data_root / 'inventory-store.json', {'adapter': 'json', 'schema_version': '1',
-            'migration_id': backup_id, 'export_digest': digest})
+        marker = {'adapter': 'json', 'schema_version': '1',
+            'migration_id': backup_id, 'export_digest': digest, 'retire_to': backup_id}
+        _write_json(data_root / 'inventory-store.json', marker)
         # All app readers/writers hold this fence. Retire a checkpointed database
         # with no live WAL sidecars before a subsequent forward migration.
-        with index.connect(write=True) as connection:
-            connection.execute('PRAGMA wal_checkpoint(TRUNCATE)')
-            connection.execute('PRAGMA journal_mode=DELETE')
-        (data_root / INDEX_FILE).replace(backup_root / 'retired.sqlite')
+        _finish_retirement(data_root, marker)
         return {'status': 'rolled_back', 'adapter': 'json', 'migration_id': backup_id,
             'file_count': len(payload['files']), 'directory_count': len(payload['directories']), 'export_digest': digest}
+
+
+def _finish_retirement(data_root: Path, marker: dict) -> None:
+    """Retry a crash after the reverse marker without re-exporting stale metadata."""
+    if marker.get('adapter') != 'json' or not marker.get('retire_to'):
+        return
+    source = data_root / INDEX_FILE
+    if not source.exists():
+        return
+    destination = _candidate(data_root, marker['retire_to']) / 'retired.sqlite'
+    with InventoryIndex(data_root).connect(write=True) as connection:
+        if connection.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0]:
+            raise RuntimeError('Storage retirement still has active database readers.')
+        if connection.execute('PRAGMA journal_mode=DELETE').fetchone()[0] != 'delete':
+            raise RuntimeError('Storage retirement could not checkpoint the database.')
+    source.replace(destination)

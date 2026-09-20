@@ -71,7 +71,7 @@ def persistence_tool_specs(*, start_path: Path | None = None) -> list[tuple[McpT
             description="Inspect Usage's independent persistence owner and runtime.", invocation_policy=WORKSPACE_SAFE),
             lambda arguments, context: usage_status(_repository_root())),
         (core_mcp_tool(tool_name="core.persistence.usage.migration", owner_id="usage",
-            description="Prepare, validate, back up, cut over, or reverse Usage storage during drained maintenance.",
+            description="Prepare, validate, back up, repair, cut over, or reverse Usage storage during drained maintenance.",
             invocation_policy=OPERATOR_ONLY, input_schema=MIGRATION_SCHEMA),
             lambda arguments, context: usage_migration(_repository_root(), arguments)),
         (

@@ -6,7 +6,7 @@ from core.api.control_store import ControlStoreSettings, build_control_plane_col
 from core.usage import migration
 
 MIGRATION_SCHEMA = {'type': 'object', 'properties': {
-    'phase': {'type': 'string', 'enum': ['prepare', 'validate', 'cutover', 'rollback', 'backup']},
+    'phase': {'type': 'string', 'enum': ['prepare', 'validate', 'cutover', 'rollback', 'backup', 'repair']},
     'migration_id': {'type': 'string'},
 }, 'required': ['phase'], 'additionalProperties': False}
 
@@ -18,6 +18,8 @@ def usage_migration(repository_root: Path, arguments: dict) -> dict:
         return migration.validate(repository_root, str(arguments.get('migration_id') or ''))
     if phase == 'backup':
         return migration.backup(repository_root)
+    if phase == 'repair':
+        return migration.repair(repository_root)
     if phase not in {'prepare', 'cutover', 'rollback'}:
         raise ValueError('Unknown Usage migration phase.')
     settings = ControlStoreSettings.from_environment(repository_root=repository_root)

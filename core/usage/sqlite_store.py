@@ -140,6 +140,19 @@ class UsageSqliteStore:
                 if sample.semantics == 'cumulative':
                     self._advance_stream(connection, sample)
 
+    def rebuild_projections(self) -> None:
+        """Explicit maintenance only; preserve samples, raw observations and quotas."""
+        from core.usage.sqlite_validation import validate_projection_tables
+        with self.transaction(write=True) as connection:
+            for table in ('streams', 'session_totals', 'buckets'):
+                connection.execute(f'DELETE FROM {table}')
+            for row in connection.execute('SELECT document FROM samples ORDER BY observed_at,sample_id'):
+                sample = decode_sample(row[0])
+                adjust_projections(connection, sample, 1)
+                if sample.semantics == 'cumulative':
+                    self._advance_stream(connection, sample)
+            validate_projection_tables(connection)
+
     def list_samples(self, *, workspace_id: str | None = None, root_session_id: str | None = None,
                      session_id: str | None = None) -> list[UsageSampleRecord]:
         where = {key: value for key, value in (('workspace_id', workspace_id), ('root_session_id', root_session_id),

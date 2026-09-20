@@ -29,7 +29,14 @@ Python/SQLite, CPU count, fixture size and boundary. Report median, p95,
 maximum, process physical write bytes, and a separately instrumented Storage
 read's `stat`/`scandir` calls. Instrumentation is outside latency timing. Usage
 persists every measured distinct observation; its dataset grows by the warmup
-and measured count. Repeat at 1k/100k for scaling. These are isolated service
+and measured count. A separate diagnostic observation follows the timed Usage
+run. The `sqlite_transactions` entries report that call's `BEGIN` duration and
+transaction duration through commit, split into reads/writes. `BEGIN IMMEDIATE`
+includes writer-lock acquisition; deferred reads acquire their read lock later.
+These diagnostics include work inside the transaction, not only SQL VM time,
+and deliberately exclude connection close/checkpoint time, which remains in the
+end-to-end latency and physical I/O measurements. Tracing runs only inside the
+probe, never in production. Repeat at 1k/100k for scaling. These are isolated service
 measurements, not mounted HTTP, browser, physical-device or release evidence.
 Run without unrelated builds, tests or other benchmark workloads.
 
@@ -197,7 +204,7 @@ is introduced.
 
 Inspect the declared core command `core.persistence.usage-status`. The operator
 command `core.persistence.usage-migration` accepts `phase=prepare`, `validate`,
-`cutover`, `backup`, or `rollback`; validate/cutover require the returned
+`cutover`, `backup`, `repair`, or `rollback`; validate/cutover require the returned
 `migration_id`. Equivalent MCP tools are `core.persistence.usage.status` and
 `core.persistence.usage.migration`. Complete prepare/validate/cutover with Usage
 producers drained, then restart with the returned `MAVERICK_USAGE_STORE` setting.
@@ -275,7 +282,9 @@ ordinary backend lifecycle. Enable the field only after deploying its core
 support. The mounted probe's `--workers` option changes only its disposable
 fixture contract. With workers, 10k sequential reads measured p95 47.29 ms for
 catalog and 17.77 ms for resolver. Four-reader/two-writer load still measured
-333.46 ms and 194.91 ms respectively, so concurrent acceptance is not complete.
+333.46 ms and 194.91 ms respectively. Saturation is reported separately from
+the ordinary-read latency gate; browser navigation under continuous writes needs
+its own correctness and usability check.
 The follow-up removes repeated provider catalog discovery from backend metadata
 and shares parsed app surfaces only within each HTTP request, retaining fresh
 authorization and contract resolution at every new request boundary.
@@ -305,7 +314,9 @@ The follow-up 500-request Storage probe at `a23ddf54`, with 10k files and 25
 additional installed apps, measured sequential p95 23.72 ms for catalog and
 10.84 ms for resolver. Both sequential targets pass in this disposable HTTP
 fixture. Four-reader/two-writer saturation measured p95 146.30 ms and 219.06 ms;
-those concurrent targets remain unmet. Exact totals were verified after both
+the plan sets the catalog latency target for the ordinary profile. Concurrent
+requests completed without hidden failures or lock timeouts; browser navigation
+and pagination under continuous writes still need their dedicated check. Exact totals were verified after both
 write phases (10,250 and 10,500 files). These results do not certify browser or
 physical-device performance.
 
@@ -323,8 +334,8 @@ The Usage endpoint reuses the context already authenticated by `PlatformHost`
 within that request, while retaining its admin-only authorization and standalone
 authentication path. With 10k samples, 500 HTTP reads and 250 concurrent runtime
 observations, the follow-up measured p95 36.10 ms for reads and 42.86 ms for
-observations. Saturated Usage acceptance remains open; isolated-service gains
-must not be presented as concurrent HTTP gains.
+observations. The plan's Usage latency target applies to isolated ingestion. These concurrent
+HTTP results remain separate and must not replace that measurement.
 
 At `f81bdc92`, 500 sequential Usage HTTP reads measured p95 3.82 ms and 500
 internal observations p95 11.68 ms with a 10k fixture. At 100k, four readers and
@@ -344,3 +355,11 @@ the root destination from its last committed observation, so delivery does not
 need to look up a session again during teardown. Chat's variable-height window
 preserves the bottom position when content grows and adjusts the reading anchor
 only after updated spacer heights commit.
+
+The explicit Usage `repair` phase takes the same exclusive owner fence, saves a
+pre-repair SQLite backup, and rebuilds only stream cursors, session totals and
+hour/day buckets. Samples, retained numeric provider observations and quotas stay
+unchanged. Projection validation runs before the rebuilding transaction commits;
+an exception rolls the derived tables back as one unit. Repair never runs from a
+chart GET and never migrates the document adapter implicitly. The backup manifest
+records whether the repair completed, and an interrupted invocation can be retried.

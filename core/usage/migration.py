@@ -107,6 +107,27 @@ def backup(repository_root: Path) -> dict:
         return {'status': 'backed_up', 'owner': 'usage', 'path': str(folder.relative_to(repository_root)), **verification}
 
 
+def repair(repository_root: Path) -> dict:
+    """Back up and rebuild derived tables atomically under the owner's drain fence."""
+    root = repository_root / USAGE_ROOT
+    with usage_fence(root, expected='sqlite', exclusive=True):
+        store = UsageSqliteStore(root / 'usage.sqlite')
+        with store.connection() as connection:
+            if connection.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+                raise RuntimeError('Usage source integrity validation failed.')
+        source_digest = canonical_digest(sqlite_snapshot(store))
+        folder = _backup_folder(root)
+        store.backup(folder / 'usage.sqlite')
+        manifest = {'schema': 1, 'owner': 'usage', 'operation': 'repair',
+            'status': 'prepared', 'source_digest': source_digest}
+        atomic_json(folder / 'manifest.json', manifest)
+        store.rebuild_projections()
+        verification = validate_database(store, expected_digest=source_digest)
+        atomic_json(folder / 'manifest.json', {**manifest, 'status': 'repaired', **verification})
+        return {'status': 'repaired', 'owner': 'usage',
+            'backup': str(folder.relative_to(repository_root)), **verification}
+
+
 def rollback(repository_root: Path, collections) -> dict:
     root = repository_root / USAGE_ROOT
     with usage_fence(root, exclusive=True):

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import contextmanager
 from datetime import timedelta
 import json
 import math
@@ -26,6 +27,38 @@ sys.path.insert(0, str(ROOT / 'apps/storage/backend'))
 from tests.support.performance_fixtures import EPOCH, storage_files, usage_document_state
 from core.usage.service import ingest_runtime_usage
 import inventory
+
+
+@contextmanager
+def sqlite_transaction_timings():
+    """One diagnostic call, outside the latency sample; no production tracing."""
+    records = []
+    connect = sqlite3.connect
+
+    class TimedConnection(sqlite3.Connection):
+        def execute(self, statement, *args, **kwargs):
+            if not statement.upper().startswith('BEGIN'):
+                return super().execute(statement, *args, **kwargs)
+            started = time.perf_counter()
+            result = super().execute(statement, *args, **kwargs)
+            self.acquired_at = time.perf_counter()
+            self.begin_ms = (self.acquired_at - started) * 1000
+            self.mode = 'write' if 'IMMEDIATE' in statement.upper() else 'read'
+            return result
+
+        def commit(self):
+            result = super().commit()
+            if getattr(self, 'acquired_at', None) is not None:
+                records.append({'mode': self.mode, 'begin_ms': self.begin_ms,
+                    'transaction_ms': (time.perf_counter() - self.acquired_at) * 1000})
+                self.acquired_at = None
+            return result
+
+    def traced_connect(*args, **kwargs):
+        return connect(*args, **{**kwargs, 'factory': TimedConnection})
+
+    with patch('sqlite3.connect', traced_connect):
+        yield records
 
 
 def disk_bytes() -> int:
@@ -76,9 +109,10 @@ def storage_probe(root: Path, count: int, shape: str, requests: int, warmup: int
         counts['scandir_calls'] += 1
         return original_scan(*args, **kwargs)
 
-    with patch.object(Path, 'stat', stat), patch('os.scandir', scan):
+    with patch.object(Path, 'stat', stat), patch('os.scandir', scan), sqlite_transaction_timings() as transactions:
         call()
-    return {**result, 'one_instrumented_read': dict(counts), 'shape': shape, 'adapter': adapter}
+    return {**result, 'one_instrumented_read': dict(counts), 'sqlite_transactions': transactions,
+        'shape': shape, 'adapter': adapter}
 
 
 def usage_probe(root: Path, count: int, requests: int, warmup: int, *, adapter: str = 'document') -> dict:
@@ -101,7 +135,11 @@ def usage_probe(root: Path, count: int, requests: int, warmup: int, *, adapter: 
                 'output_tokens': 55, 'reasoning_output_tokens': 5, 'total_tokens': 175,
             })
         assert result is not None and result.inserted
-    return {**measure(call, requests, warmup), 'adapter': adapter}
+    result = measure(call, requests, warmup)
+    with sqlite_transaction_timings() as transactions:
+        call()
+    return {**result, 'adapter': adapter, 'sqlite_transactions': transactions,
+        'extra_diagnostic_observations': 1}
 
 
 def main() -> None:

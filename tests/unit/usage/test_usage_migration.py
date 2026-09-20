@@ -16,11 +16,13 @@ from core.api.persistence_admin import _copy_collections
 from core.api.persistence_cleanup_worker import _clear_source_storage
 from core.shared.json_file_collection import JsonFileCollection
 from core.usage.bootstrap import build_usage_store
+from core.usage.administration import MIGRATION_SCHEMA, usage_migration
 from core.usage.handoff import USAGE_ROOT, active_adapter, usage_fence
 from core.usage import migration
 from core.usage.service import ingest_runtime_usage
 from core.usage.sqlite_store import UsageSqliteStore
 from core.usage.store import UsageCollections
+from core.usage.transfer import validate_database
 from tests.unit.usage.test_usage_service import _RuntimeStore, _session
 
 
@@ -88,6 +90,54 @@ class UsageMigrationTests(unittest.TestCase):
             connection.execute('UPDATE session_totals SET total_tokens=0')
         with self.assertRaisesRegex(RuntimeError, 'projection'):
             migration.validate(self.root, prepared['migration_id'])
+        self.assertEqual(active_adapter(self.root / USAGE_ROOT), 'document')
+
+    def test_explicit_repair_preserves_observations_and_rebuilds_all_derived_tables(self):
+        self.cutover()
+        self.ingest('two', 200)
+        ingest_runtime_usage(self.state, session_id='root', turn_id='turn',
+            observed_at=datetime(2026, 9, 20, 12, tzinfo=UTC), payload={
+                'usage_id': 'cumulative', 'semantics': 'cumulative', 'input_tokens': 500, 'total_tokens': 500})
+        store = self.state.usage_store
+        with store.transaction() as connection:
+            before = [tuple(row) for row in connection.execute('SELECT * FROM samples ORDER BY sample_id')]
+        with store.transaction(write=True) as connection:
+            connection.execute("UPDATE streams SET source='mismatched-source'")
+        with self.assertRaisesRegex(RuntimeError, 'stream cursor'):
+            validate_database(store)
+        with store.transaction(write=True) as connection:
+            connection.execute('UPDATE session_totals SET total_tokens=999')
+            connection.execute('DELETE FROM buckets')
+            connection.execute('DELETE FROM streams')
+        self.assertIn('repair', MIGRATION_SCHEMA['properties']['phase']['enum'])
+        result = usage_migration(self.root, {'phase': 'repair'})
+        self.assertEqual(result['status'], 'repaired')
+        with store.transaction() as connection:
+            self.assertEqual([tuple(row) for row in connection.execute('SELECT * FROM samples ORDER BY sample_id')], before)
+            self.assertEqual(connection.execute('SELECT SUM(total_tokens) FROM session_totals').fetchone()[0], 800)
+            self.assertEqual(connection.execute('SELECT COUNT(*) FROM streams').fetchone()[0], 1)
+        backup = UsageSqliteStore(self.root / result['backup'] / 'usage.sqlite')
+        with backup.transaction() as connection:
+            self.assertEqual(connection.execute('SELECT SUM(total_tokens) FROM session_totals').fetchone()[0], 999)
+            self.assertEqual([tuple(row) for row in connection.execute('SELECT * FROM samples ORDER BY sample_id')], before)
+
+    def test_failed_repair_validation_rolls_back_derived_tables_and_can_retry(self):
+        self.cutover()
+        store = self.state.usage_store
+        with store.transaction(write=True) as connection:
+            connection.execute('UPDATE session_totals SET total_tokens=17')
+        with patch('core.usage.sqlite_validation.validate_projection_tables', side_effect=RuntimeError('repair validation failed')):
+            with self.assertRaisesRegex(RuntimeError, 'repair validation failed'):
+                migration.repair(self.root)
+        with store.transaction() as connection:
+            self.assertEqual(connection.execute('SELECT total_tokens FROM session_totals').fetchone()[0], 17)
+        self.assertEqual(migration.repair(self.root)['status'], 'repaired')
+        with store.transaction() as connection:
+            self.assertEqual(connection.execute('SELECT total_tokens FROM session_totals').fetchone()[0], 100)
+
+    def test_repair_never_implicitly_migrates_the_document_adapter(self):
+        with self.assertRaisesRegex(RuntimeError, 'adapter changed'):
+            migration.repair(self.root)
         self.assertEqual(active_adapter(self.root / USAGE_ROOT), 'document')
 
     def test_cutover_retry_after_promotion_and_rollback_retry_after_marker(self):

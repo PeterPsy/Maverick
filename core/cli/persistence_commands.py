@@ -66,7 +66,7 @@ def persistence_command_specs(*, start_path: Path | None = None) -> list[tuple[C
             lambda arguments, context: usage_status(_repository_root())),
         (core_cli_command(command_id="core.persistence.usage-migration",
             path_segments=["core", "persistence", "usage-migration"], owner_id="usage",
-            description="Prepare, validate, back up, cut over, or reverse Usage storage during drained maintenance.",
+            description="Prepare, validate, back up, repair, cut over, or reverse Usage storage during drained maintenance.",
             invocation_policy=PLATFORM_ADMIN, argument_schema=MIGRATION_SCHEMA),
             lambda arguments, context: usage_migration(_repository_root(), arguments)),
         (

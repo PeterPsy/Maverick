@@ -47,7 +47,7 @@ class RuntimeIdleDeadlines:
                 key, (deadline, callback) = min(self._pending.items(), key=lambda item: item[1][0])
                 remaining = deadline - time.monotonic()
                 if remaining > 0:
-                    self._condition.wait(min(15.0, remaining))
+                    self._condition.wait(remaining)
                     continue
                 del self._pending[key]
             try:

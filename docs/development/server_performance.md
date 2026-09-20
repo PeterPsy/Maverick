@@ -363,3 +363,11 @@ unchanged. Projection validation runs before the rebuilding transaction commits;
 an exception rolls the derived tables back as one unit. Repair never runs from a
 chart GET and never migrates the document adapter implicitly. The backup manifest
 records whether the repair completed, and an interrupted invocation can be retried.
+
+The shared runtime deadline owner waits until its next deadline or an explicit
+schedule/cancellation notification. It has no periodic 15-second wakeup. Run
+`scripts/runtime_idle_deadline_probe.py` for a real 180-second observation of 64
+resources: the measured run used one owner thread, dispatched every callback
+within 0.23 ms of its deadline and consumed 1.77 ms of process CPU. This is a
+scheduler probe without provider execution; active-turn exclusion remains covered
+by the provider lifecycle tests, and physical-client idle CPU is a separate gate.

@@ -53,7 +53,6 @@ def main() -> int:
         chat_fixture = seed_chat_history(repository)
         env = _local_environment(root, 'fixture-admin', 'fixture-only-password')
         env['MAVERICK_PERFORMANCE_BROWSER_FIXTURE'] = '1'
-        env['MAVERICK_USAGE_STORE'] = 'document'
         port = _free_port()
         with (root / 'host.log').open('wb') as log:
             server = subprocess.Popen([sys.executable, str(ROOT / 'scripts/pwa_smoke_host.py'),

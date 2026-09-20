@@ -63,6 +63,8 @@ def _local_environment(root: Path, username: str, password: str) -> dict[str, st
         "MAVERICK_ADMIN_PASSWORD": password,
         "MAVERICK_ADMIN_USERNAME": username,
         "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+        "MAVERICK_CONTROL_STORE": "json",
+        "MAVERICK_USAGE_STORE": "document",
         "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": str(root / "bootstrap-secrets"),
         "MAVERICK_JSON_CONTROL_STORE_ROOT": str(root / "control-plane"),
         "MAVERICK_SECRET_STORE_KEY": "maverick-local-secret-store",

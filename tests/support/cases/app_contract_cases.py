@@ -235,6 +235,15 @@ class AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.presentation.frontend_role, "supporting")
             self.assertEqual(app_contract_payload(loaded)["presentation"], {"frontend_role": "supporting"})
 
+    def test_resumable_frontends_require_explicit_workspace_contract(self) -> None:
+        from core.apps.contract_parser_metadata import parse_presentation_section
+        self.assertFalse(parse_presentation_section({"frontend_role": "workspace"}, has_frontend_entrypoint=True).frontend_resumable)
+        self.assertTrue(parse_presentation_section({"frontend_role": "workspace", "frontend_resumable": True}, has_frontend_entrypoint=True).frontend_resumable)
+        for payload in ({"frontend_role": "supporting", "frontend_resumable": True},
+                        {"frontend_role": "workspace", "frontend_resumable": "true"}):
+            with self.assertRaises(AppContractValidationError):
+                parse_presentation_section(payload, has_frontend_entrypoint=True)
+
     def test_parse_contract_rejects_frontend_role_without_matching_entrypoint(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = Path(temp_dir) / "apps" / "bad-presentation"

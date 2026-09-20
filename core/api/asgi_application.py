@@ -384,6 +384,8 @@ def _app_backend_worker_count() -> int:
 def _is_app_backend_request(scope: dict[str, Any]) -> bool:
     path = str(scope.get("path") or "")
     method = str(scope.get("method") or "GET").upper()
+    if method == "POST" and path in {"/api/app-references/search", "/api/app-references/resolve", "/api/app-references/summarize"}:
+        return True
     if method == "POST" and path.startswith("/api/apps/") and path.endswith("/backend"):
         return True
     return method in {"GET", "HEAD"} and _is_app_backend_media_request_path(path)

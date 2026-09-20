@@ -198,6 +198,7 @@ def _workspace_app_tool_definitions(
                     actor_user_id=context.user_id,
                     runtime_session_id=context.runtime_session_id,
                     observability_store=_observability_store,
+                    shutdown_controller=context.shutdown_controller,
                 )
                 publish_declared_app_events(
                     _app_event_bus,

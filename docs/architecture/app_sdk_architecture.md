@@ -237,3 +237,11 @@ docs/app-sdk/getting_started.md
 ```
 
 It includes contract-first app generation, React/Vite and SQLite entity templates, packaging metadata, a workspace runtime CLI wrapper, a workspace-visible Developer Kit app, and an authenticated SDK API while preserving the core/app boundary.
+
+Apps with measured JSON entrypoint startup costs can declare the optional
+`entrypoints.json_worker` and use `core.app_sdk.json_worker.serve_json_requests`.
+The helper invokes a handler with each fresh payload and emits a correlated JSON
+response. Keep per-request identity, grants and secrets out of module state;
+media streams and hooks retain their ordinary lifecycle. The core owns capacity,
+timeouts, cancellation and idle retirement. See the reusable JSON entrypoint
+section of [the app contract architecture](app_contract_architecture.md).

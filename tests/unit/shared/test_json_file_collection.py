@@ -23,6 +23,23 @@ def _write_json_collection_records(path_text: str, start: int, count: int) -> No
 
 
 class JsonFileCollectionTestCase(unittest.TestCase):
+    def test_reads_do_not_rewrite_lock_metadata_and_full_signature_detects_external_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "records.json"
+            collection = JsonFileCollection(path)
+            collection.update_one({"id": "one"}, {"$set": {"id": "one", "value": "first"}}, upsert=True)
+            lock_path = path.with_name(".records.json.lock")
+            stamp = lock_path.stat().st_ctime_ns
+            with patch("os.fchmod", wraps=os.fchmod) as chmod:
+                for _ in range(10):
+                    self.assertEqual(collection.find_one({"id": "one"})["value"], "first")
+                chmod.assert_not_called()
+            self.assertEqual(lock_path.stat().st_ctime_ns, stamp)
+            original = path.stat()
+            path.write_text(path.read_text().replace("first", "other"))
+            os.utime(path, ns=(original.st_atime_ns, original.st_mtime_ns))
+            self.assertEqual(collection.find_one({"id": "one"})["value"], "other")
+
     def test_update_one_unsets_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = JsonFileCollection(Path(temp_dir) / "records.json")

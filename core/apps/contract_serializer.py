@@ -49,6 +49,7 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         "visibility": _visibility_payload(parsed),
         "presentation": {
             "frontend_role": parsed.contract.presentation.frontend_role,
+            **({"frontend_resumable": True} if parsed.contract.presentation.frontend_resumable else {}),
         },
         "permissions": {
             "secrets": {
@@ -121,6 +122,7 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "frontend": parsed.contract.entrypoints.frontend,
             "skills_root": parsed.contract.entrypoints.skills_root,
             "hooks": parsed.contract.entrypoints.hooks,
+            **({"json_worker": parsed.contract.entrypoints.json_worker} if parsed.contract.entrypoints.json_worker else {}),
         },
         "storage": {
             "storage_kind": parsed.contract.storage.storage_kind,

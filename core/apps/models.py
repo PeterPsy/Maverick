@@ -140,6 +140,7 @@ class AppPresentationDeclaration:
     """Describe app presentation semantics for user-facing shell surfaces."""
 
     frontend_role: AppFrontendRole
+    frontend_resumable: bool = False
 
 
 @dataclass(frozen=True)
@@ -218,6 +219,7 @@ class AppEntrypoints:
     frontend: str | None
     skills_root: str | None
     hooks: dict[str, str]
+    json_worker: str | None = None
 
 
 @dataclass(frozen=True)

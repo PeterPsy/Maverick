@@ -104,6 +104,7 @@ def enabled_app_items(
                 ),
                 "frontend_mount": frontend_mount,
                 "frontend_role": parsed.contract.presentation.frontend_role,
+                "frontend_resumable": parsed.contract.presentation.frontend_resumable,
                 "frontend_launchable": app_frontend_is_launchable(parsed.contract),
                 "backend_mount": f"/api/apps/{mount_app_id}/backend" if parsed.contract.entrypoints.backend else "",
                 "data_cache_enabled": app_data_cache_enabled(

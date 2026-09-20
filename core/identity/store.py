@@ -55,6 +55,9 @@ class IdentityStore(Protocol):
     def save_auth_session(self, record: AuthSessionRecord) -> AuthSessionRecord:
         ...
 
+    def update_auth_session_activity(self, session: AuthSessionRecord, *, now) -> None:
+        ...
+
     def get_auth_session(self, session_id: str) -> AuthSessionRecord:
         ...
 
@@ -121,6 +124,14 @@ class IdentityDocumentStore:
         payload = asdict(record)
         self.collections.auth_sessions.update_one({"session_id": record.session_id}, {"$set": payload}, upsert=True)
         return record
+
+    def update_auth_session_activity(self, session: AuthSessionRecord, *, now) -> None:
+        """Touch activity conditionally, preserving concurrent revocation/deletion."""
+        self.collections.auth_sessions.update_one(
+            {"session_id": session.session_id, "status": "active", "last_seen_at": session.last_seen_at},
+            {"$set": {"last_seen_at": now, "updated_at": now}},
+            upsert=False,
+        )
 
     def get_auth_session(self, session_id: str) -> AuthSessionRecord:
         document = self.collections.auth_sessions.find_one({"session_id": session_id})

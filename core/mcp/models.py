@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from core.execution_policy.models import ExecutionMode
 from core.shared.tool_effects import ToolArgumentEffectMap
+from core.shared.entrypoints import EntrypointShutdownController
 
 
 McpOwnerKind = Literal["core", "app"]
@@ -41,6 +42,7 @@ class McpInvocationContext:
     app_mcp_timeout_seconds: float | None = None
     entrypoint_surface: Literal["mcp", "reference"] = "mcp"
     idempotency_key: str | None = None
+    shutdown_controller: EntrypointShutdownController | None = None
 
 
 @dataclass(frozen=True)

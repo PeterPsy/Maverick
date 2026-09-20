@@ -320,10 +320,13 @@ def touch_auth_session(
     session: AuthSessionRecord,
     now: datetime | None = None,
 ) -> AuthSessionRecord:
-    """Update session activity without changing its identity."""
+    """Persist activity at most every 30 seconds without changing authorization."""
     timestamp = now or utcnow()
+    if session.status != "active" or (session.last_seen_at is not None and (timestamp - session.last_seen_at).total_seconds() < 30):
+        return session
     updated = replace(session, last_seen_at=timestamp, updated_at=timestamp)
-    return identity_store.save_auth_session(updated)
+    identity_store.update_auth_session_activity(session, now=timestamp)
+    return updated
 
 
 def revoke_auth_session(

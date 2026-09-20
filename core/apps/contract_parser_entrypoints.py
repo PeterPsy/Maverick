@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.apps.contract_validation import _expect_mapping, _expect_relative_contract_path, _reject_unexpected_fields
 from core.apps.models import AppEntrypoints
+from core.apps.errors import AppContractValidationError
 
 
 def parse_entrypoints_section(source_root: Path, payload: dict[str, object]) -> AppEntrypoints:
@@ -14,7 +15,12 @@ def parse_entrypoints_section(source_root: Path, payload: dict[str, object]) -> 
     backend_entrypoint = payload.get("backend")
     frontend_entrypoint = payload.get("frontend")
     skills_root = payload.get("skills_root")
-    _reject_unexpected_fields(payload, {"mcp", "cli", "backend", "frontend", "skills_root", "hooks"}, label="entrypoints")
+    json_worker = payload.get("json_worker")
+    _reject_unexpected_fields(payload, {"mcp", "cli", "backend", "frontend", "skills_root", "hooks", "json_worker"}, label="entrypoints")
+    if json_worker is not None and mcp_entrypoint is None and backend_entrypoint is None:
+        raise AppContractValidationError("`entrypoints.json_worker` requires a backend or MCP entrypoint.")
+    if json_worker is not None and (not isinstance(json_worker, str) or not json_worker.strip()):
+        raise AppContractValidationError("`entrypoints.json_worker` must be a non-empty relative path.")
     hooks_payload = _expect_mapping(payload.get("hooks", {}), label="entrypoints.hooks")
     hooks = {
         hook_name: _expect_relative_contract_path(source_root, hook_path, label=f"entrypoints.hooks.{hook_name}")
@@ -52,4 +58,8 @@ def parse_entrypoints_section(source_root: Path, payload: dict[str, object]) -> 
             else None
         ),
         hooks=hooks,
+        json_worker=(
+            _expect_relative_contract_path(source_root, json_worker, label="entrypoints.json_worker")
+            if json_worker is not None else None
+        ),
     )

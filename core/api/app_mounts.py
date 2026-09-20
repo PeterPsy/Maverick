@@ -621,7 +621,7 @@ def handle_app_backend(
         provider, _selection = resolve_provider_for_workspace(
             state.provider_store,
             workspace_id=workspace_id,
-            registry=getattr(state, "provider_registry", None),
+            effective_registry=getattr(state, "provider_registry", None),
             workspace_store=getattr(state, "workspace_store", None),
         )
         provider_id = provider.provider_id

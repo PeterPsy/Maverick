@@ -965,6 +965,7 @@ def resolve_provider_for_workspace(
     registry: ProviderRegistry | None = None,
     codex_command: str | None = None,
     workspace_store: object | None = None,
+    effective_registry: ProviderRegistry | None = None,
 ) -> tuple[ProviderDefinition, ProviderSelection | None]:
     """Resolve the default agentic binding as a compatibility projection."""
     status = resolve_workspace_provider_status(
@@ -973,6 +974,7 @@ def resolve_provider_for_workspace(
         registry=registry,
         codex_command=codex_command,
         workspace_store=workspace_store,
+        effective_registry=effective_registry,
     )
     if status.active_provider is None or status.selection is None:
         raise ProviderSelectionError(status.blocked_reason or "no_provider_configured")

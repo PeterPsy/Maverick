@@ -26,6 +26,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'apps/storage/backend')]
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.shared.entrypoints import EntrypointShutdownController
 from tests.support.performance_fixtures import storage_files
 from inventory_migration import prepare_inventory, cutover_inventory
 import inventory_legacy
@@ -41,7 +42,7 @@ class QuietHandler(WSGIRequestHandler):
 
 
 @contextmanager
-def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False):
+def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False, workers: bool = False):
     for name in ('core', 'apps', 'workspaces', 'scripts', 'docs'):
         (root / name).mkdir(parents=True, exist_ok=True)
     (root / 'AGENTS.md').write_text('Disposable mounted performance fixture.\n')
@@ -50,6 +51,11 @@ def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False
         ignore=shutil.ignore_patterns('node_modules', 'frontend', '__pycache__', 'tests'))
     # Contract validation includes widget mounts. Assets are copied, never rebuilt or served by the probe.
     shutil.copytree(ROOT / 'apps/storage/frontend/dist', source_root / 'frontend/dist')
+    if workers:
+        contract_path = source_root / 'app_contract.json'
+        contract = json.loads(contract_path.read_text())
+        contract['entrypoints']['json_worker'] = 'backend/json_worker.py'
+        contract_path.write_text(json.dumps(contract))
     uploaded, generated, data = storage_files(root / 'workspaces/default', count, shape=shape)
     inventory_legacy.sync_inventory(data, uploaded_root=uploaded, generated_root=generated)
     migration = prepare_inventory(data, uploaded_root=uploaded, generated_root=generated)
@@ -60,7 +66,8 @@ def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False
         state = bootstrap_platform_state(start_path=root)
         source = register_app_source_from_contract(state.app_store, source_kind='platform', source_path=str(source_root))
         install_store_app(state.app_store, source_id=source.source_id, workspace_id='default', start_path=root)
-        host = PlatformHost(state, start_path=root)
+        shutdown = EntrypointShutdownController()
+        host = PlatformHost(state, start_path=root, shutdown_controller=shutdown)
         import cProfile
         import pstats
         profiler = cProfile.Profile() if profile else None
@@ -74,6 +81,7 @@ def mounted_storage(root: Path, count: int, shape: str, *, profile: bool = False
                 client.login()
                 yield client
             finally:
+                shutdown.begin_shutdown()
                 server.shutdown()
                 thread.join(timeout=10)
                 if profiler:
@@ -118,6 +126,7 @@ def run(client: Client, requests: int, warmup: int, *, concurrent: bool) -> dict
     body = {'action': 'catalog', 'role': 'generated', 'limit': 100, 'sort_by': 'created_at'}
     page = client.request(route, body)
     file_id = page['files'][0]['id']
+    expected_total = page['pagination']['total']
     actions = {
         'catalog': lambda _: client.request(route, body),
         'resolver': lambda _: client.request('/api/app-references/resolve', {'app_id': 'storage', 'entity_type': 'file', 'entity_id': file_id}),
@@ -147,9 +156,13 @@ def run(client: Client, requests: int, warmup: int, *, concurrent: bool) -> dict
                 writers = [pool.submit(worker, index, max(1, requests // 4), True) for index in (4, 5)]
                 read_times = [sample for task in readers for sample in task.result()]
                 write_times = [sample for task in writers for sample in task.result()]
+            expected_total += 2 * max(1, requests // 4)
             results[name] = {'reads': stats(read_times), 'writes': stats(write_times)}
         else:
             results[name] = {'reads': stats(worker(0, requests))}
+        observed = client.request(route, body)['pagination']['total']
+        assert observed == expected_total, (name, observed, expected_total)
+        results[name]['verified_total'] = observed
     return results
 
 
@@ -162,15 +175,16 @@ def main():
     parser.add_argument('--warmup', type=int, default=5)
     parser.add_argument('--concurrent', action='store_true')
     parser.add_argument('--profile', action='store_true')
+    parser.add_argument('--workers', action='store_true', help='Enable the optional worker only in the disposable fixture contract')
     args = parser.parse_args()
     if args.profile and args.concurrent:
         parser.error('--profile requires sequential requests')
     with tempfile.TemporaryDirectory(prefix='maverick-mounted-probe-') as scratch:
-        with mounted_storage(Path(scratch), args.count, args.shape, profile=args.profile) as client:
+        with mounted_storage(Path(scratch), args.count, args.shape, profile=args.profile, workers=args.workers) as client:
             results = run(client, args.requests, args.warmup, concurrent=args.concurrent)
     print(json.dumps({'boundary': 'authenticated-mounted-loopback-http', 'python': platform.python_version(),
         'sqlite': sqlite3.sqlite_version, 'fixture_count': args.count, 'shape': args.shape,
-        'warmup': args.warmup, 'readers': 4 if args.concurrent else 1,
+        'warmup': args.warmup, 'json_workers': args.workers, 'readers': 4 if args.concurrent else 1,
         'writers': 2 if args.concurrent else 0, 'results': results}, indent=2))
 
 

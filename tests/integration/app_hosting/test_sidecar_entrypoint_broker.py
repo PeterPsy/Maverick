@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 import tempfile
 from pathlib import Path
 import unittest
@@ -17,6 +18,7 @@ from core.api.sidecar_proxy import AuthorizedSidecarTarget, BufferedSidecarRespo
 from core.app_sdk.app_sidecar import AppSidecarRequestError, AppSidecarUnavailableError, app_sidecar
 from core.apps.contracts import (
     build_app_contract,
+    build_app_entrypoints,
     build_app_services,
     build_http_sidecar_entrypoint_access,
     build_http_sidecar_entrypoint_surface,
@@ -29,9 +31,61 @@ from core.apps.contracts import (
 from core.apps.models import WorkspaceAppBindingRecord
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.shared.in_memory_collection import InMemoryCollection
+from core.shared.entrypoints import EntrypointShutdownController
 
 
 class SidecarEntrypointBrokerIntegrationTests(unittest.TestCase):
+    def test_reused_worker_receives_fresh_capabilities_and_cannot_reuse_previous_ones(self) -> None:
+        target = self._target()
+        parsed = replace(target.parsed, contract=replace(target.parsed.contract,
+            entrypoints=build_app_entrypoints(mcp="worker.py", json_worker="worker.py")))
+        controller = EntrypointShutdownController()
+        self.addCleanup(controller.begin_shutdown)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("core", "apps", "workspaces", "scripts"):
+                (root / name).mkdir()
+            (root / "AGENTS.md").write_text("")
+            app_root = root / "apps" / "sidecar-demo"
+            app_root.mkdir()
+            worker = app_root / "worker.py"
+            worker.write_text('''
+import os
+from core.app_sdk.json_worker import serve_json_requests
+from core.app_sdk.app_sidecar import app_sidecar, AppSidecarError
+previous = None
+def handle(payload):
+    global previous
+    previous_denied = False
+    if previous is not None:
+        try:
+            app_sidecar(previous, 'opendesign').get('/api/projects/od_project_1')
+        except AppSidecarError:
+            previous_denied = True
+    response = app_sidecar(payload, 'opendesign').get('/api/projects/od_project_1')
+    previous = payload  # Intentionally hostile fixture probes revoked capabilities.
+    return {'pid': os.getpid(), 'id': response.json()['id'], 'previous_denied': previous_denied,
+            'invocation': payload['entrypoint_invocation_id']}
+serve_json_requests(handle)
+''')
+            results = []
+            with patch.dict(os.environ, {"PYTHONPATH": str(Path(__file__).resolve().parents[3])}), patch(
+                "core.api.sidecar_entrypoint_broker.request_authorized_sidecar_buffered",
+                return_value=BufferedSidecarResponse(status_code=200, headers={"content-type": "application/json"}, body=b'{"id":"one"}'),
+            ):
+                for actor in ("user-1", "user-1", "user-2"):
+                    results.append(run_json_entrypoint_with_sidecars(worker,
+                        payload={"surface": "mcp", "workspace_id": "workspace-a", "app_id": "sidecar-demo"},
+                        cwd=app_root, binding=target.binding, parsed=parsed, surface="reference", start_path=root,
+                        actor_user_id=actor, runtime_session_id=None, shutdown_controller=controller))
+            controller.begin_shutdown()
+        self.assertEqual(results[0]["pid"], results[1]["pid"])
+        self.assertNotEqual(results[1]["pid"], results[2]["pid"])
+        self.assertTrue(results[1]["previous_denied"])
+        self.assertFalse(results[2]["previous_denied"])
+        self.assertEqual({result["id"] for result in results}, {"one"})
+        self.assertEqual(len({result["invocation"] for result in results}), 3)
+
     def test_entrypoint_wrapper_delivers_sdk_capability_only_for_process_lifetime(self) -> None:
         calls: list[dict] = []
 

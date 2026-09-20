@@ -331,7 +331,7 @@ def reference_tool_runner(state, *, context: McpInvocationContext, start_path: P
     return McpRunner(registry)
 
 
-def mcp_context_for_request(state, context: RequestSession) -> McpInvocationContext:
+def mcp_context_for_request(state, context: RequestSession, *, shutdown_controller=None) -> McpInvocationContext:
     authorization = resolve_workspace_authorization(state.workspace_store, user=context.user, workspace_id=context.workspace_id)
     workspace_role = authorization.membership.role if authorization.membership and authorization.membership.status == "active" else None
     if workspace_role is None and context.user.platform_role == "admin":
@@ -345,6 +345,7 @@ def mcp_context_for_request(state, context: RequestSession) -> McpInvocationCont
         user_id=context.user.user_id,
         workspace_role=workspace_role,
         entrypoint_surface="reference",
+        shutdown_controller=shutdown_controller,
     )
 
 

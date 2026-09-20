@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.api.session_api import SESSION_COOKIE, resolve_request_session
 from core.execution_policy.service import resolve_workspace_execution_profile, resolve_workspace_runtime_boundary
@@ -19,6 +20,7 @@ from core.identity.service import (
     register_user,
     set_user_password,
     update_user,
+    touch_auth_session,
 )
 from core.identity.store import IdentityDocumentStore, IdentityCollections
 from core.workspaces.models import WorkspaceRecord
@@ -69,6 +71,34 @@ class FakeIdentityStore:
 
 
 class IdentityWorkspaceModelTestCase(unittest.TestCase):
+    def test_session_activity_is_coalesced_without_extending_expiry(self) -> None:
+        store = self.make_identity_store()
+        now = datetime(2026, 9, 20, tzinfo=UTC)
+        session = build_auth_session(session_id="activity", user_id="user:alice", expires_at=now + timedelta(hours=1), now=now)
+        store.save_auth_session(session)
+        collection = store.collections.auth_sessions
+        with patch.object(collection, "update_one", wraps=collection.update_one) as write:
+            for seconds in (0, 1, 10, 29):
+                touch_auth_session(store, session=store.get_auth_session("activity"), now=now + timedelta(seconds=seconds))
+            self.assertEqual(write.call_count, 1)
+            touch_auth_session(store, session=store.get_auth_session("activity"), now=now + timedelta(seconds=30))
+            self.assertEqual(write.call_count, 2)
+        stored = store.get_auth_session("activity")
+        self.assertEqual(stored.last_seen_at, now + timedelta(seconds=30))
+        self.assertEqual(stored.expires_at, session.expires_at)
+
+    def test_stale_activity_never_revives_a_revoked_or_deleted_session(self) -> None:
+        store = self.make_identity_store()
+        now = datetime(2026, 9, 20, tzinfo=UTC)
+        stale = build_auth_session(session_id="activity", user_id="user:alice", expires_at=now + timedelta(hours=1), now=now)
+        revoked = replace(stale, status="revoked", updated_at=now + timedelta(seconds=1))
+        store.save_auth_session(revoked)
+        touch_auth_session(store, session=stale, now=now + timedelta(seconds=40))
+        self.assertEqual(store.get_auth_session("activity"), revoked)
+        store.delete_auth_sessions_for_user(stale.user_id)
+        touch_auth_session(store, session=stale, now=now + timedelta(seconds=50))
+        self.assertIsNone(store.collections.auth_sessions.find_one({"session_id": stale.session_id}))
+
     """Verify the initial control-plane records and services."""
 
     def make_workspace_store(self) -> WorkspaceDocumentStore:

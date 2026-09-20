@@ -28,6 +28,7 @@ SENSITIVE_ERROR_MARKERS = (
     "broker_socket",
 )
 STREAMING_ENTRYPOINT_HEADER_MAX_BYTES = 1024 * 1024
+JSON_WORKER_MESSAGE_MAX_BYTES = 256 * 1024 * 1024
 
 
 class EntrypointInterruptedError(RuntimeError):
@@ -55,6 +56,22 @@ class EntrypointShutdownController:
         self._shutdown_waiters: set[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = set()
         self._parent = parent
         self._interruption_reason = interruption_reason
+        self._json_worker_pool = None
+
+    def json_worker_pool(self):
+        """Return the bounded worker pool owned by the root host lifecycle."""
+        if self._parent is not None:
+            return self._parent.json_worker_pool()
+        from core.shared.json_worker_pool import JsonWorkerPool
+
+        with self._lock:
+            created = self._json_worker_pool is None
+            if created:
+                self._json_worker_pool = JsonWorkerPool(self)
+            pool = self._json_worker_pool
+        if created:
+            self.register_cleanup(pool.close)
+        return pool
 
     def begin_shutdown(self) -> None:
         """Mark shutdown started and terminate registered subprocesses."""

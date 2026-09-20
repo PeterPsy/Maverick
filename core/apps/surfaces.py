@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TypeAlias
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from core.apps.lifecycle import load_contract_from_source_record, load_contract_from_workspace_project
 from core.apps.models import ParsedAppContract, WorkspaceAppBindingRecord
@@ -14,6 +16,18 @@ WorkspaceAppSurfaceCache: TypeAlias = dict[
     tuple[str, str],
     tuple[Path, ParsedAppContract],
 ]
+
+_request_surfaces: ContextVar[WorkspaceAppSurfaceCache | None] = ContextVar("workspace_app_surfaces", default=None)
+
+
+@contextmanager
+def workspace_app_surface_snapshot():
+    """Reuse parsed contracts within one request, never across request boundaries."""
+    token = _request_surfaces.set({})
+    try:
+        yield
+    finally:
+        _request_surfaces.reset(token)
 
 
 def enabled_workspace_app_bindings(store: AppStore, *, workspace_id: str) -> list[WorkspaceAppBindingRecord]:
@@ -29,6 +43,8 @@ def resolve_workspace_app_surface(
     surface_cache: WorkspaceAppSurfaceCache | None = None,
 ) -> tuple[Path, ParsedAppContract]:
     """Resolve one binding, optionally reusing a request/tick-local snapshot."""
+    if surface_cache is None:
+        surface_cache = _request_surfaces.get()
     cache_key = (binding.workspace_id, binding.app_id)
     if surface_cache is not None and cache_key in surface_cache:
         return surface_cache[cache_key]

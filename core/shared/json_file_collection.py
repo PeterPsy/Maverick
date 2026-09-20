@@ -27,7 +27,7 @@ class JsonFileCollection:
         self.path = path
         self.append_only_upserts = append_only_upserts
         self._lock = RLock()
-        self._cached_signature: tuple[int, int, int] | None = None
+        self._cached_signature: tuple[int, int, int, int, int] | None = None
         self._cached_documents: list[dict[str, Any]] | None = None
 
     def find_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
@@ -171,12 +171,12 @@ class JsonFileCollection:
         self._cached_documents = payload
         return deepcopy(payload) if mutable else payload
 
-    def _file_signature(self) -> tuple[int, int, int] | None:
+    def _file_signature(self) -> tuple[int, int, int, int, int] | None:
         try:
             metadata = self.path.stat()
         except FileNotFoundError:
             return None
-        return (metadata.st_ino, metadata.st_mtime_ns, metadata.st_size)
+        return (metadata.st_dev, metadata.st_ino, metadata.st_mtime_ns, metadata.st_ctime_ns, metadata.st_size)
 
     def _refresh_cache(self, documents: list[dict[str, Any]]) -> None:
         self._cached_documents = deepcopy(documents)
@@ -321,6 +321,8 @@ def _decode_document_value(value: dict[str, Any]) -> Any:
 
 
 def _ensure_collection_directory(path: Path) -> None:
+    if path.is_dir():
+        return
     missing_directories = _missing_directories(path)
     path.mkdir(parents=True, exist_ok=True)
     for directory in missing_directories:
@@ -346,7 +348,8 @@ def _apply_collection_directory_mode(path: Path) -> None:
 
 def _apply_collection_file_mode(path: Path) -> None:
     try:
-        path.chmod(COLLECTION_FILE_MODE)
+        if stat.S_IMODE(path.stat().st_mode) != COLLECTION_FILE_MODE:
+            path.chmod(COLLECTION_FILE_MODE)
     except OSError:
         return
 
@@ -360,7 +363,8 @@ class _FileLock:
     def __enter__(self):
         _ensure_collection_directory(self.path.parent)
         self._handle = self.path.open("a+b")
-        _apply_collection_file_mode(self.path)
+        if stat.S_IMODE(os.fstat(self._handle.fileno()).st_mode) != COLLECTION_FILE_MODE:
+            os.fchmod(self._handle.fileno(), COLLECTION_FILE_MODE)
         operation = fcntl.LOCK_EX if self.exclusive else fcntl.LOCK_SH
         fcntl.flock(self._handle.fileno(), operation)
         return self

@@ -45,7 +45,7 @@ class ProviderStatusRegistryTest(unittest.TestCase):
         resolve.assert_called_once_with(
             store,
             workspace_id="workspace-one",
-            registry=registry,
+            effective_registry=registry,
             workspace_store=workspace_store,
         )
 

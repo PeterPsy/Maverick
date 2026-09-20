@@ -186,9 +186,10 @@ def build_app_distribution(
 def build_app_presentation(
     *,
     frontend_role: str = "none",
+    frontend_resumable: bool = False,
 ) -> AppPresentationDeclaration:
     """Build one app presentation declaration for shell-facing UI semantics."""
-    return AppPresentationDeclaration(frontend_role=frontend_role)
+    return AppPresentationDeclaration(frontend_role=frontend_role, frontend_resumable=frontend_resumable)
 
 def build_app_permissions(
     *,
@@ -253,6 +254,7 @@ def build_app_entrypoints(
     frontend: str | None = None,
     skills_root: str | None = None,
     hooks: dict[str, str] | None = None,
+    json_worker: str | None = None,
 ) -> AppEntrypoints:
     """Build app executable entrypoints."""
     return AppEntrypoints(
@@ -262,6 +264,7 @@ def build_app_entrypoints(
         frontend=frontend,
         skills_root=skills_root,
         hooks=hooks or {},
+        json_worker=json_worker,
     )
 
 def build_app_hook_timeouts(

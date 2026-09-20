@@ -18,6 +18,7 @@ from core.api.app_mounts import (
     is_public_app_static_asset,
 )
 from core.api.app_references_api import handle_app_references_api
+from core.apps.surfaces import workspace_app_surface_snapshot
 from core.api.app_registry import enabled_app_items
 from core.api.app_frame_browser import handle_app_frame_browser_launch, handle_app_frame_oauth_relay
 from core.api.app_frame_scope import (
@@ -78,6 +79,10 @@ class PlatformHost:
         self.shutdown_controller = shutdown_controller
 
     def __call__(self, environ: dict, start_response: StartResponse) -> Iterable[bytes]:
+        with workspace_app_surface_snapshot():
+            return self._handle_request(environ, start_response)
+
+    def _handle_request(self, environ: dict, start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "/")
         request_shutdown_controller = environ.get("maverick.entrypoint_shutdown_controller")
         if not isinstance(request_shutdown_controller, EntrypointShutdownController):
@@ -191,6 +196,7 @@ class PlatformHost:
                 start_response,
                 context=context,
                 start_path=self.start_path,
+                shutdown_controller=request_shutdown_controller,
             )
             if routed is not None:
                 return routed

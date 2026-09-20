@@ -261,3 +261,28 @@ shared OAuth secret names no longer import network clients into inventory reads.
 All other actions keep the same governed request and event protocol. Backend
 responses without secret writes skip secret-consumer metadata discovery; actual
 secret writes still resolve consumers and enforce their declared resource scope.
+
+The next 500-request run measured p95 128.99 ms for catalog and 102.18 ms for
+resolver. Reusable app JSON workers are therefore available as an explicit
+contract opt-in (`entrypoints.json_worker`), with bounded processes, per-request
+authorization/capabilities, correlated responses, cancellation and idle expiry.
+Storage shares its existing request handlers with its worker; streams keep the
+ordinary backend lifecycle. Enable the field only after deploying its core
+support. The mounted probe's `--workers` option changes only its disposable
+fixture contract. With workers, 10k sequential reads measured p95 47.29 ms for
+catalog and 17.77 ms for resolver. Four-reader/two-writer load still measured
+333.46 ms and 194.91 ms respectively, so concurrent acceptance is not complete.
+The follow-up removes repeated provider catalog discovery from backend metadata
+and shares parsed app surfaces only within each HTTP request, retaining fresh
+authorization and contract resolution at every new request boundary.
+
+Mounted profiling also identified an fsync of the auth-session collection on
+every authenticated read. Activity timestamps now persist at most every 30
+seconds, using a conditional update of activity fields only. Session status,
+expiry, active user and workspace authorization are still read on every request;
+the optimization never extends session expiry or recreates/revives a concurrently
+deleted/revoked session. No in-memory activity queue or timer is introduced.
+Collection reads also avoid redundant directory creation and lock-file chmods;
+permissions are still applied when needed. Parsed collection caches compare
+device, inode, size, mtime and ctime, including same-size external replacements
+whose mtime was restored.

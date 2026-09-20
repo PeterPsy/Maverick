@@ -18,12 +18,18 @@ from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_result, handle_action, prepare_media_response_body, secret_lookup_for_drive_action, stream_prepared_media_response_body
 
 
-def _response(status_code: int, payload: dict) -> None:
-    print(json.dumps({"status_code": status_code, "json": payload}, ensure_ascii=False))
+def _response(status_code: int, payload: dict) -> dict:
+    return {"status_code": status_code, "json": payload}
 
 
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
+    response = handle_payload(payload)
+    if response is not None:
+        print(json.dumps(response, ensure_ascii=False))
+
+
+def handle_payload(payload: dict) -> dict | None:
     body, media_route = _body_from_payload(payload)
     body = {
         **body,
@@ -42,18 +48,12 @@ def main() -> None:
     action = STORAGE_ACTION_ALIASES.get(requested_action, requested_action)
     body = {**body, "action": action}
     if payload.get("surface") == "secret_selector":
-        print(
-            json.dumps(
-                secret_lookup_for_drive_action(
-                    Path(payload["data_root"]),
-                    Path(payload["uploaded_storage_root"]),
-                    Path(payload["generated_storage_root"]),
-                    body,
-                ),
-                ensure_ascii=False,
-            )
+        return secret_lookup_for_drive_action(
+            Path(payload["data_root"]),
+            Path(payload["uploaded_storage_root"]),
+            Path(payload["generated_storage_root"]),
+            body,
         )
-        return
     try:
         status_code, result = handle_action(
             Path(payload["data_root"]),
@@ -66,21 +66,17 @@ def main() -> None:
             streaming_response_supported=media_route and str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1",
         )
     except StorageConflictError as error:
-        _response(409, conflict_error_payload(error))
-        return
+        return _response(409, conflict_error_payload(error))
     except StorageAuthorizationError as error:
-        _response(403, authorization_error_payload(error))
-        return
+        return _response(403, authorization_error_payload(error))
     except StorageValidationError as error:
-        _response(400, validation_error_payload(error))
-        return
+        return _response(400, validation_error_payload(error))
     app_events = app_events_for_result(action, result) if status_code < 400 else []
     stream_plan = result.pop("drive_stream", None)
     if isinstance(stream_plan, dict) and media_route and str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1":
         stream_response = result.pop("stream_response", None)
         if not isinstance(stream_response, dict):
-            _response(500, {"error": "stream_response_missing"})
-            return
+            return _response(500, {"error": "stream_response_missing"})
         try:
             prepared_stream = prepare_media_response_body(
                 data_root=Path(payload["data_root"]),
@@ -90,8 +86,7 @@ def main() -> None:
                 stream_plan=stream_plan,
             )
         except StorageValidationError as error:
-            _response(400, validation_error_payload(error))
-            return
+            return _response(400, validation_error_payload(error))
         sys.stdout.buffer.write(json.dumps({"status_code": status_code, "stream_response": stream_response}, ensure_ascii=False).encode("utf-8") + b"\n")
         sys.stdout.buffer.flush()
         stream_prepared_media_response_body(
@@ -118,7 +113,7 @@ def main() -> None:
         response["platform_secret_writes"] = platform_secret_writes
     if status_code < 400:
         response["app_events"] = app_events
-    print(json.dumps(response, ensure_ascii=False))
+    return response
 
 
 def _body_from_payload(payload: dict) -> tuple[dict, bool]:

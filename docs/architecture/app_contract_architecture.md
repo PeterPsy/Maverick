@@ -603,6 +603,34 @@ Rules:
 - Remote catalog entries are normalized by the core before they reach the App Store UI so `presentation`, `frontend_role`, `frontend_launchable`, and `surfaces` have the same meaning as server, local, and installation payloads.
 - user-facing grouping and icon styling must be derived from the contract role, not from hardcoded app ids
 - direct `/apps/<mount_app_id>/` asset serving remains available for declared frontends even when the role is `supporting`
+- `frontend_resumable` is an optional boolean, default false, valid only for workspace frontends. It certifies the app-owned RAM snapshot/restore protocol; it never authorizes private persistent caching. The Shell keeps the active and previous views warm and asks older certified views to capture state. It removes a frame only after an exact-origin/source acknowledgement within one second. Busy apps may decline. Snapshots are capped at 64 KiB per app and 2 MiB per authenticated workspace scope; exceeding a bound leaves the app mounted. State survives navigation through the app launcher and is discarded on logout/workspace change. Sidebar widgets have independent lifecycles.
+
+### Optional reusable JSON entrypoint
+
+`entrypoints.json_worker` may name an existing Python file alongside a declared
+backend or MCP entrypoint. It implements `core.app_sdk.json_worker.serve_json_requests`:
+one correlated JSON envelope per line, processed sequentially, with a 256 MiB
+message limit. The handler receives the same current invocation payload and
+returns the same response object as its ordinary entrypoint. Stdout is reserved
+for the protocol. Handlers must not retain identity, grants, secrets or other
+request state between invocations. Media streams, hooks and CLI entrypoints
+continue using their ordinary process lifecycle.
+
+The core authorizes every invocation before worker dispatch and issues/revokes
+sidecar capabilities per invocation. Reuse requires a host shutdown controller;
+otherwise the ordinary entrypoint runs. The host pool holds at most eight
+processes, with four for any matching identity/revision. Keys include workspace,
+app, principal, runtime session, surface, roles/mode, binding revision, app version
+and the worker's full filesystem signature. An idle process expires after 180
+seconds; one condition-driven owner handles all idle deadlines. Active work is
+never retired for idleness. Capacity waits share the request deadline and wake
+on cancellation. Shutdown, timeout, malformed output and cancellation discard
+the process; mutations are never automatically retried. Worker stderr is drained
+without retaining or returning its contents. Updating imported worker code
+requires an app version/reinstall or host restart, as for other resident app
+processes. Deploy the supporting core before enabling this contract field.
+- Snapshot restoration preserves app navigation, drafts and scroll through app-owned hooks. An explicit new deep link takes precedence; Chat keeps a restored draft attached to its original conversation. Non-serializable work (attachments, queued sends, dictation, device use, Storage editing or active requests) keeps the app mounted until safe to capture. The protocol uses exact registered iframe origins/sources, and a resumed acknowledgement releases the Shell copy only after the app accepts ownership.
+
 
 The recommended mental model is:
 

@@ -36,7 +36,7 @@ class AsgiApplicationTests(unittest.TestCase):
         self.assertIn("_run_wsgi_http", source)
         self.assertIn("self.http_host", source)
 
-    def test_app_backend_request_detection_is_limited_to_backend_posts(self) -> None:
+    def test_app_entrypoint_requests_receive_disconnect_cancellation(self) -> None:
         self.assertTrue(_is_app_backend_request({"path": "/api/apps/example/backend", "method": "POST"}))
         self.assertTrue(_is_app_backend_request({"path": "/api/apps/example-fork/backend", "method": "post"}))
         self.assertTrue(_is_app_backend_request({"path": "/api/apps/example/media", "method": "GET"}))
@@ -44,6 +44,9 @@ class AsgiApplicationTests(unittest.TestCase):
         self.assertFalse(_is_app_backend_request({"path": "/api/apps/example/backend", "method": "GET"}))
         self.assertFalse(_is_app_backend_request({"path": "/api/apps/example/frontend/", "method": "POST"}))
         self.assertFalse(_is_app_backend_request({"path": "/api/session", "method": "POST"}))
+        for action in ("search", "resolve", "summarize"):
+            self.assertTrue(_is_app_backend_request({"path": f"/api/app-references/{action}", "method": "POST"}))
+        self.assertFalse(_is_app_backend_request({"path": "/api/app-references/manifest", "method": "GET"}))
 
     def test_lifespan_shutdown_marks_entrypoint_shutdown_controller(self) -> None:
         controller = EntrypointShutdownController()

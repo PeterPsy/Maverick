@@ -35,6 +35,7 @@ def handle_app_references_api(
     *,
     context: RequestSession | None,
     start_path: Path,
+    shutdown_controller=None,
 ) -> list[bytes] | None:
     """Handle generic reference discovery/search/resolve routes."""
     path = str(environ.get("PATH_INFO") or "/")
@@ -56,21 +57,21 @@ def handle_app_references_api(
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     body = read_json_body(environ)
     if path == "/api/app-references/search":
-        return json_response(start_response, _search_references(state, context=context, body=body, start_path=start_path))
+        return json_response(start_response, _search_references(state, context=context, body=body, start_path=start_path, shutdown_controller=shutdown_controller))
     if path == "/api/app-references/resolve":
-        payload, status = _lookup_reference(state, context=context, body=body, action="resolve", start_path=start_path)
+        payload, status = _lookup_reference(state, context=context, body=body, action="resolve", start_path=start_path, shutdown_controller=shutdown_controller)
         return json_response(start_response, payload, status=status)
-    payload, status = _lookup_reference(state, context=context, body=body, action="summarize", start_path=start_path)
+    payload, status = _lookup_reference(state, context=context, body=body, action="summarize", start_path=start_path, shutdown_controller=shutdown_controller)
     return json_response(start_response, payload, status=status)
 
 
-def _search_references(state, *, context: RequestSession, body: dict[str, Any], start_path: Path) -> dict[str, Any]:
+def _search_references(state, *, context: RequestSession, body: dict[str, Any], start_path: Path, shutdown_controller=None) -> dict[str, Any]:
     query = _bounded_text(body.get("query"), max_length=240)
     limit = _positive_int(body.get("limit"), default=8, maximum=25)
     selected_app_ids = set(_string_list(body.get("app_ids")))
     selected_entity_types = set(_string_list(body.get("entity_types")))
     mcp_context = replace(
-        mcp_context_for_request(state, context),
+        mcp_context_for_request(state, context, shutdown_controller=shutdown_controller),
         app_mcp_timeout_seconds=REFERENCE_SEARCH_REQUEST_BUDGET_SECONDS,
     )
     search_specs: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
@@ -238,6 +239,7 @@ def _lookup_reference(
     body: dict[str, Any],
     action: str,
     start_path: Path,
+    shutdown_controller=None,
 ) -> tuple[dict[str, Any], str]:
     app_id = _bounded_text(body.get("app_id"), max_length=120)
     entity_type = _bounded_text(body.get("entity_type"), max_length=120)
@@ -262,7 +264,7 @@ def _lookup_reference(
             state,
             provider,
             action,
-            context=mcp_context_for_request(state, context),
+            context=mcp_context_for_request(state, context, shutdown_controller=shutdown_controller),
             arguments={"entity_type": entity_type, "entity_id": entity_id},
             start_path=start_path,
         )

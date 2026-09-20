@@ -151,3 +151,11 @@ Drive; `loaded_items` describes only that response. The UI labels loaded counts,
 leaves unavailable subtree sizes/counts unknown, and surfaces `incomplete_search`.
 It does not filter provider full-text matches by local filename after retrieval.
 See the [Drive files.list contract](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list).
+
+Storage also provides `backend/json_worker.py`, which reuses the same backend and
+MCP request handlers in a bounded core-owned process. Authenticated media streams
+keep their ordinary entrypoint. After deploying a core that supports the worker
+contract, enable it with `entrypoints.json_worker: "backend/json_worker.py"`.
+The field stays absent during the compatibility rollout; the performance probe's
+`--workers` flag enables it only in a disposable fixture. Backend code changes
+require an app version/reinstall or host restart to refresh resident imports.

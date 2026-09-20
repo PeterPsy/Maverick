@@ -78,6 +78,20 @@ def run_json_entrypoint_with_sidecars(
         if descriptor is not None:
             entrypoint_payload["app_sidecar"] = descriptor
             entrypoint_payload["entrypoint_invocation_id"] = broker.invocation_id
+        worker_path = parsed.contract.entrypoints.json_worker
+        if worker_path and shutdown_controller is not None and surface in {"backend", "mcp", "reference"}:
+            pool = shutdown_controller.json_worker_pool()
+            return pool.invoke(
+                Path(cwd) / worker_path,
+                cwd=Path(cwd),
+                identity=(binding.workspace_id, binding.app_id, binding.updated_at, parsed.version,
+                    actor_user_id, runtime_session_id, surface, payload.get("effective_mode"),
+                    payload.get("platform_role"), payload.get("workspace_role"), payload.get("agent_id"),
+                    payload.get("consumer_app_id"), payload.get("dependency_alias")),
+                payload=entrypoint_payload,
+                timeout_seconds=timeout_seconds,
+                controller=shutdown_controller,
+            )
         return entrypoint_runner(
             entrypoint_path,
             payload=entrypoint_payload,

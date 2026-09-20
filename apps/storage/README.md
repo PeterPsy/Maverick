@@ -125,6 +125,15 @@ prepare/validate/cutover phases. A reverse export includes post-cutover writes.
 The catalog accepts `sort_by`, `sort_direction` and `dataset_revision`.
 `catalog_changed` means the caller must reload the first page. `catalog.summary`
 and `directory.children` provide metadata without loading invisible file pages.
+Continuation revisions are scoped to the selected local folder, or to the role
+for searches and custom selections; cross-role views use the global revision.
+Revisions are opaque integers maintained in the same transaction as mutations.
+Ancestor revisions also change when subtree counts change. Existing schema-2
+scopes without a revision start at zero and advance on their first mutation;
+reads perform no backfill. Restart app writers together when deploying this
+change so every writer maintains these keys. Local file create/write/delete events
+include opaque hashes of complete affected scopes; the UI keeps unrelated folder pages intact.
+Unknown, move/rename and provider-wide events remain conservative invalidations.
 Filesystem discovery runs in the app's bounded `background_tick`; ordinary
 indexed reads do not trigger discovery. All local mutation surfaces share the
 same durable-intent boundary and recovery fence.

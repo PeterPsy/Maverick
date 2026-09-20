@@ -55,6 +55,16 @@ describe("base-shell api normalization", () => {
     });
   });
 
+  it("preserves explicit app hibernation certification and rejects truthy substitutes", () => {
+    const payload = normalizeAppRegistryPayload({ items: [
+      { app_id: "certified", frontend_resumable: true },
+      { app_id: "ordinary" },
+      { app_id: "invalid", frontend_resumable: "true" },
+    ] });
+
+    expect(payload.items.map(item => item.frontend_resumable)).toEqual([true, false, false]);
+  });
+
   it("reads app registry through the platform endpoint", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ items: [{ app_id: "chat", name: "Chat", frontend_mount: "/apps/chat/" }] }), {

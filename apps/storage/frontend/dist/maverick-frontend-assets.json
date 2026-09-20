@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "4fc757292601ffed2ad995b5e8200e0abef87e122e9cc6758ac248b36ce8f4e6",
+  "build_id": "c80556baeefe0517e680cf522867f477e513937cb2385b7caf14cd4dfa786f4c",
   "entrypoints": [
     "index.html",
     "widgets/file-preview/index.html",
@@ -14,9 +14,9 @@
       "size_bytes": 43048
     },
     {
-      "path": "assets/app-kKcnm0Af.js",
-      "sha256": "3fe0762f5e53e167b701eb6d3fbadda8d78c47afa68f50abb7fc13fc92c73682",
-      "size_bytes": 103612
+      "path": "assets/app-UcL5IV66.js",
+      "sha256": "e892d77c0d9e3118567c1e6454d271672be8e595ae36265616d6eda3453d1e0a",
+      "size_bytes": 107074
     },
     {
       "path": "assets/docx-preview-nAgXyGNr.js",
@@ -92,7 +92,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "eeee627013ae41bbc5ebcb920d3b2df4091b77b5144925c2bc69a0777466e67f",
+      "sha256": "2efcb3856f1709fb4980549bee5990a510295e010eccd24224f4ce9d2ab358ca",
       "size_bytes": 1060
     },
     {

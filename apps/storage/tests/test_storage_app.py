@@ -1820,7 +1820,9 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(first_chunk["app_events"], [])
             self.assertEqual(completed["status_code"], 200)
             self.assertEqual(completed["json"]["status"], "uploaded")
-            self.assertEqual(completed["app_events"], [{"type": "maverick.app.data-changed", "resource": "files"}])
+            self.assertEqual(completed["app_events"], [{"type": "maverick.app.data-changed", "resource": "files",
+                "scope_keys": ["e228942194760b52874ad8f644716abd22e4818411398f9e99956f9a685e1604",
+                    "b9fa0aa5020dd433a6cb95e054bc9aa6b3b778f2b25fd7f3a816ca7321d48557"]}])
             self.assertEqual(completed["json"]["file"]["workspace_relative_path"], "storage/generated/large.txt")
             self.assertEqual((generated_root / "large.txt").read_bytes(), first + second)
             self.assertEqual(catalog["json"]["files"][0]["file_id"], completed["json"]["file"]["file_id"])
@@ -1868,7 +1870,10 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(result["bytes_uploaded"], len(payload))
             self.assertEqual(result["file"]["workspace_relative_path"], "storage/generated/pdf-edits/output.pdf")
             self.assertEqual((generated_root / "pdf-edits" / "output.pdf").read_bytes(), payload)
-            self.assertEqual(result["app_events"], [{"type": "maverick.app.data-changed", "resource": "files"}])
+            self.assertEqual(result["app_events"], [{"type": "maverick.app.data-changed", "resource": "files",
+                "scope_keys": ["e228942194760b52874ad8f644716abd22e4818411398f9e99956f9a685e1604",
+                    "b9fa0aa5020dd433a6cb95e054bc9aa6b3b778f2b25fd7f3a816ca7321d48557",
+                    "078abd12ee9570383b3a7fa94437975840f75b8e1a9855ef3e08c335f2f8ed55"]}])
             self.assertEqual(duplicate["status_code"], 400)
 
     def test_cli_upload_local_file_rejects_sandbox_source_outside_workspace(self) -> None:

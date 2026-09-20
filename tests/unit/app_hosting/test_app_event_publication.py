@@ -89,6 +89,21 @@ class AppEventPublicationTestCase(unittest.TestCase):
         self.assertNotIn("app_events", result)
         self.assertEqual(bus.events[0]["owner_app_id"], "sample-app")
 
+    def test_publisher_preserves_only_bounded_opaque_scope_hints(self) -> None:
+        for hint in [['a' * 64, 'a' * 64], [], ['not-a-digest'], ['a' * 64] * 129, {'key': 'a' * 64}]:
+            with self.subTest(hint=hint):
+                bus = FakeAppEventBus()
+                publish_declared_app_events(bus, {'app_events': [{'resource': 'records', 'scope_keys': hint,
+                    'detail': {'private_content': 'must not propagate'}, 'owner_app_id': 'spoof'}]},
+                    workspace_id='workspace', app_id='records', declared_resources=['records'])
+                event = bus.events[0]
+                self.assertEqual(event['owner_app_id'], 'records')
+                self.assertNotIn('detail', event)
+                if hint == ['a' * 64, 'a' * 64]:
+                    self.assertEqual(event['scope_keys'], ['a' * 64])
+                else:
+                    self.assertNotIn('scope_keys', event)
+
 
 if __name__ == "__main__":
     unittest.main()

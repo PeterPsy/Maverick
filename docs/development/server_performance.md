@@ -84,6 +84,19 @@ Private PWA cache rollout still requires the existing resource privacy and
 physical Safari/macOS/iOS gates. A server or Chromium result cannot satisfy
 those gates.
 
+The Shell preserves the registry's explicit `frontend_resumable: true` when
+normalizing app records. Missing or non-boolean values cannot opt an app into
+hibernation. `scripts/performance_browser_probe.py` exercises the built Shell
+and real isolated app frames in an authenticated, disposable tenant, enabling
+the contract only in copied fixture apps. It requires Playwright/Chromium and Python `psutil` for joining the disposable
+host descendants. Run under the verified SQLite library. It does not change
+live rollout flags.
+The authenticated Chromium 138 fixture verifies Chat's unsent draft and
+Storage's folder, sort, selection, two loaded pages and scroll across frame
+removal/restoration. Interleaved writes in another folder preserve the loaded
+pages and allow all 350 records to be reached without a visible error. This is
+a correctness probe, not a device, latency, idle CPU or continuous-load gate.
+
 ## Storage index and migration
 
 New Storage installations explicitly initialize schema 2. Existing installations
@@ -104,7 +117,8 @@ ordinary reads nor writes implicitly migrate a workspace.
 
 Indexed catalog and stable-ID resolution never scan document paths or rewrite
 the inventory. Filters and deterministic natural sorting precede the SQL limit.
-Continuations carry `dataset_revision`; a mismatch returns `catalog_changed`
+Continuations carry an opaque `dataset_revision` scoped to the local folder
+or role (global for cross-role views); a mismatch returns `catalog_changed`
 without an appendable page. `catalog.summary` supplies local root totals, and
 `directory.children` provides bounded child/search pages across the selected roots,
 with independent folder pagination and exact totals. Upload UUID containers stay
@@ -115,6 +129,19 @@ store; remote locators, tombstones and Memory links remain in authoritative rows
 Cutover retries preserve writes already accepted by the selected adapter. Reverse
 cutover records database retirement in its durable marker, so recovery after that
 marker cannot replace subsequent JSON writes with an older export.
+
+Repeated writes in another folder reproduced first-page starvation with the
+original global revision. Folder/role revision keys now live in the existing
+metadata table and advance atomically with both old and new record scopes and
+their ancestors. Untracked scopes in an existing schema-2 inventory start at
+zero; no catalog read initializes or repairs metadata. The global revision
+still drives summaries and reconciliation. Deploy all app writers together.
+Complete local file changes publish opaque role/folder scope hashes through
+the existing app event. Core bounds these hints and drops arbitrary detail;
+the browser can ignore unrelated folder writes; unknown/move/provider events retain conservative invalidation.
+Storage restores the view, each page and scroll across committed React state
+transitions. Animation frames alone do not guarantee that React committed the
+preceding page and could make restoration stop after the first page.
 
 Filesystem mutations use durable intents, reserved IDs and atomic replacement
 or rename. Success follows metadata commit. Recovery can finish prepared writes,

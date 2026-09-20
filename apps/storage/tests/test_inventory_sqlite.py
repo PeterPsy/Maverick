@@ -78,6 +78,43 @@ class InventoryIndexTests(unittest.TestCase):
         self.assertEqual(next_page['status'], 'catalog_changed')
         self.assertNotIn('files', next_page)
 
+    def test_other_folder_writes_do_not_starve_a_stable_catalog_page(self):
+        with self.index.transaction(write=True) as connection:
+            for number in range(300, 303):
+                self.index.put_file(connection, record(number, name=f'reading/file{number}.md'))
+        first = catalog_page(self.index, role='generated', folder_path='reading', limit=1,
+            sort_by='name', sort_direction='asc')
+        for number in range(400, 404):
+            with self.index.transaction(write=True) as connection:
+                self.index.put_file(connection, record(number, name=f'uploads/file{number}.md'))
+            following = catalog_page(self.index, role='generated', folder_path='reading', limit=1,
+                offset=1, sort_by='name', sort_direction='asc', dataset_revision=first['dataset_revision'])
+            self.assertEqual(following['status'], 'ok')
+            self.assertEqual(following['files'][0]['file_id'], record(301)['file_id'])
+        with self.index.transaction(write=True) as connection:
+            self.index.put_file(connection, {**record(301, name='reading/file301.md'), 'status': 'deleted'})
+        self.assertEqual(catalog_page(self.index, role='generated', folder_path='reading', limit=1,
+            offset=1, dataset_revision=first['dataset_revision'])['status'], 'catalog_changed')
+
+    def test_existing_untracked_scopes_remain_read_only_and_moves_invalidate_both_folders(self):
+        with self.index.transaction(write=True) as connection:
+            self.index.put_file(connection, record(300, name='reading/file300.md'))
+            connection.execute("DELETE FROM metadata WHERE key LIKE 'view_revision:%'")
+        first = catalog_page(self.index, role='generated', folder_path='reading')
+        other = catalog_page(self.index, role='generated', folder_path='archive')
+        self.assertEqual(first['dataset_revision'], 0)
+        with self.index.transaction() as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM metadata WHERE key LIKE 'view_revision:%'").fetchone()[0], 0)
+        with self.index.transaction(write=True) as connection:
+            self.index.put_file(connection, record(300, name='archive/file300.md'))
+        for folder, page in [('reading', first), ('archive', other)]:
+            self.assertEqual(catalog_page(self.index, role='generated', folder_path=folder,
+                dataset_revision=page['dataset_revision'])['status'], 'catalog_changed')
+        with self.index.transaction() as connection:
+            from inventory_revisions import view_revision
+            self.assertEqual(view_revision(connection, role='generated', parent=''), self.index.revision(connection))
+            self.assertEqual(view_revision(connection, role='uploaded'), 0)
+
     def test_unchanged_write_does_not_change_revision_or_totals(self):
         before = summary_payload(self.index)
         with self.index.transaction(write=True) as connection:

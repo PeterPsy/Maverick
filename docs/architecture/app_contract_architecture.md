@@ -761,6 +761,14 @@ Rules:
 - direct writes into `data/<app_id>` are repair operations, not normal product behavior, because they bypass live events
 - write actions that mutate a declared resource may return `maverick.app.data-changed` with `resource`; the core stamps the current app as `owner_app_id`
 - the core must ignore app-returned events whose type is not allowed for that surface or whose `resource` is not declared in `capabilities.data_events`
+- Events may include `scope_keys`, a nonempty list of at most 128 lowercase
+  SHA-256 strings whose meaning belongs to the app. Core copies only these
+  opaque invalidation hints, never arbitrary event `detail`, and still stamps
+  owner/workspace identity. Invalid or oversized hints are omitted so consumers
+  perform a conservative full-resource refresh. Hints confer no access or cache
+  authority; resource invalidation and authorization remain unchanged. Storage
+  uses role/folder hashes for complete local file changes; moves and directory
+  removals retain broad invalidation when their affected scopes are incomplete.
 - mounted app frontends should listen on the core app-event WebSocket and refresh only the affected app/resource
 - frontends must not use periodic polling as their default live-update mechanism
 - mounted widget read activity follows the intersection of document visibility,

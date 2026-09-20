@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from errors import StorageConflictError, StorageValidationError, conflict_error_payload, validation_error_payload
 from limits import LOCAL_UPLOAD_SESSION_CHUNK_BYTES
 from operations_manifest import STORAGE_ACTION_ALIASES
-from service import app_events_for_action, handle_action, secret_lookup_for_drive_action
+from service import app_events_for_result, handle_action, secret_lookup_for_drive_action
 from storage_mime import normalize_content_type
 from store_files_paths import normalize_write_mode, reference_from_payload
 
@@ -226,5 +226,5 @@ except StorageValidationError as error:
 
 response = {"status_code": status_code, "workspace_id": payload.get("workspace_id"), **result}
 if status_code < 400:
-    response["app_events"] = app_events_for_action(str(body.get("action") or "catalog"))
+    response["app_events"] = app_events_for_result(str(body.get("action") or "catalog"), result)
 print(json.dumps(response, ensure_ascii=False))

@@ -22,6 +22,7 @@ export function useStorageHibernation<T>(options: {
   const [pending, setPending] = useState<{
     state: Snapshot<T>; navigation: MaverickResumeParams;
     resolve: () => void; reject: (error: unknown) => void;
+    stage: 'view' | 'files' | 'folders' | 'scroll'; previousCount?: number;
   } | null>(null);
   const pendingRef = useRef(pending);
   pendingRef.current = pending;
@@ -44,7 +45,7 @@ export function useStorageHibernation<T>(options: {
         files: value.fileCount, folders: value.folderCount } satisfies Snapshot<T> };
     },
     restore: (snapshot, navigation) => new Promise<void>((resolve, reject) => {
-      setPending({ state: snapshot.state as Snapshot<T>, navigation, resolve, reject });
+      setPending({ state: snapshot.state as Snapshot<T>, navigation, resolve, reject, stage: 'view' });
     }),
   }), [options.appId]);
 
@@ -53,39 +54,60 @@ export function useStorageHibernation<T>(options: {
     running.current = true;
     const generation = visibility.current.generation;
     const interrupted = () => !visibility.current.mounted || generation !== visibility.current.generation;
-    const nextPaint = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    let next: { stage: typeof pending.stage; previousCount?: number } | null = null;
+    const advance = (stage: typeof pending.stage, previousCount?: number) => {
+      next = { stage, previousCount };
+    };
     const restore = async () => {
-      await current.current.restore(pending.state.view, pending.navigation);
-      await nextPaint();
-      if (interrupted()) return false;
       const explicit = Object.entries(pending.navigation).some(([key, value]) => key !== 'workspace_id' && value !== null && value !== '');
-      if (!explicit) {
-        for (const kind of ['files', 'folders'] as const) {
-          while (true) {
-            const value = current.current;
-            const count = kind === 'files' ? value.fileCount : value.folderCount;
-            const more = kind === 'files' ? value.hasMoreFiles : value.hasMoreFolders;
-            if (count >= pending.state[kind] || !more) break;
-            await (kind === 'files' ? value.loadMoreFiles() : value.loadMoreFolders());
-            await nextPaint();
-            if (interrupted()) return false;
-            if ((kind === 'files' ? current.current.fileCount : current.current.folderCount) <= count) break;
-          }
+      if (pending.stage === 'view') {
+        await current.current.restore(pending.state.view, pending.navigation);
+        if (interrupted()) return false;
+        advance(explicit ? 'scroll' : 'files');
+        return true;
+      }
+      if (pending.stage === 'files' || pending.stage === 'folders') {
+        const kind = pending.stage;
+        const value = current.current;
+        const count = kind === 'files' ? value.fileCount : value.folderCount;
+        const more = kind === 'files' ? value.hasMoreFiles : value.hasMoreFolders;
+        if (count >= pending.state[kind] || !more || count === pending.previousCount) {
+          advance(kind === 'files' ? 'folders' : 'scroll');
+        } else {
+          await (kind === 'files' ? value.loadMoreFiles() : value.loadMoreFolders());
+          if (interrupted()) return false;
+          advance(kind, count);
         }
+        return true;
+      }
+      if (!explicit) {
         const viewport = document.querySelector<HTMLElement>('.storage-browser');
         if (viewport) viewport.scrollTop = Math.max(0, pending.state.scroll || 0);
       }
+      pending.resolve();
+      setPending(null);
       return true;
     };
     const retry = () => { if (visibility.current.mounted) setAttempt((value) => value + 1); };
     void restore().then((complete) => {
       running.current = false;
-      if (!complete) { retry(); return; }
-      pending.resolve();
-      setPending(null);
+      if (!visibility.current.mounted) return;
+      if (!complete) {
+        setPending(value => value === pending ? { ...value, stage: 'view', previousCount: undefined } : value);
+        retry();
+      } else if (next) {
+        // A stage transition commits the preceding page before reading its count.
+        // A single RAF is not a React commit barrier and can observe stale props.
+        const progress = next;
+        setPending(value => value === pending ? { ...value, ...progress } : value);
+      }
     }, (error) => {
       running.current = false;
-      if (interrupted()) { retry(); return; }
+      if (!visibility.current.mounted) return;
+      if (interrupted()) {
+        setPending(value => value === pending ? { ...value, stage: 'view', previousCount: undefined } : value);
+        retry(); return;
+      }
       pending.reject(error);
       setPending(null);
     });

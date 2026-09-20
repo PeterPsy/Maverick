@@ -21,11 +21,11 @@ it('restores the folder, loaded pages and scroll before acknowledging, and pins 
   let editing = false;
   let folder = '';
   function Harness() {
-    const [files, setFiles] = useState(100);
+    const [files, setFiles] = useState(0);
     useStorageHibernation({ appId: 'storage', ready: true, visible: true, fileCount: files, folderCount: 0,
-      hasMoreFiles: files < 300, hasMoreFolders: false,
+      hasMoreFiles: files > 0 && files < 300, hasMoreFolders: false,
       capture: () => editing ? null : { folder },
-      restore: async (state) => { folder = state.folder; },
+      restore: async (state) => { folder = state.folder; await Promise.resolve(); setFiles(100); },
       loadMoreFiles: async () => { load(); setFiles((count) => count + 100); }, loadMoreFolders: async () => {},
     });
     return <div className="storage-browser" />;

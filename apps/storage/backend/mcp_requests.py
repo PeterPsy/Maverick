@@ -4,7 +4,7 @@ from pathlib import Path
 
 from errors import StorageConflictError, StorageValidationError, conflict_error_payload, validation_error_payload
 from operations_manifest import STORAGE_ACTION_ALIASES
-from service import app_events_for_action, handle_action, secret_lookup_for_drive_action
+from service import app_events_for_result, handle_action, secret_lookup_for_drive_action
 
 
 TOOL_ACTIONS = {
@@ -82,5 +82,5 @@ def handle_payload(payload: dict) -> dict:
 
     response = {"status_code": status_code, **result}
     if status_code < 400:
-        response["app_events"] = app_events_for_action(str(body.get("action") or "catalog"))
+        response["app_events"] = app_events_for_result(str(body.get("action") or "catalog"), result)
     return response

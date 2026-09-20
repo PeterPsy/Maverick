@@ -38,6 +38,7 @@ mongo = [
 ]
 dev = [
     "pip-audit>=2.7",
+    "psutil>=5.9,<8",
 ]
 
 [project.scripts]

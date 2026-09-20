@@ -7,6 +7,7 @@ import sqlite3
 import unicodedata
 
 from inventory_sqlite import InventoryIndex, natural_key
+from inventory_revisions import view_revision
 from errors import StorageConflictError
 
 UPLOAD_BUCKET_GLOB = '-'.join('[0-9a-fA-F]' * length for length in (8, 4, 4, 4, 12))
@@ -64,7 +65,7 @@ def catalog_page(index: InventoryIndex, *, query: str = '', role: str = 'all', k
     page_offset = max(0, offset)
     with index.transaction() as connection:
         require_ready(connection)
-        revision = index.revision(connection)
+        revision = view_revision(connection, role=role, parent=folder_path.strip('/') if folder_path is not None and not needle and not custom else None)
         if dataset_revision is not None and revision != dataset_revision:
             return {'status': 'catalog_changed', 'dataset_revision': revision}
         totals = connection.execute(f'SELECT COUNT(*), COALESCE(SUM(size_bytes),0) FROM files WHERE {clause}', values).fetchone()

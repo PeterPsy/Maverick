@@ -1,5 +1,7 @@
 """Storage action arguments and event declarations shared by read/write handlers."""
 from __future__ import annotations
+from hashlib import sha256
+import json
 from pathlib import Path
 from typing import Any
 from errors import StorageValidationError
@@ -90,13 +92,29 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     resources = resource if isinstance(resource, list) else [resource]
     return [{"type": "maverick.app.data-changed", "resource": item} for item in resources]
 
-def app_events_for_result(action: str, result: dict[str, Any]) -> list[dict[str, str]]:
+def app_events_for_result(action: str, result: dict[str, Any]) -> list[dict[str, Any]]:
     if action == "local_upload_session.chunk":
         session = result.get("upload_session") if isinstance(result.get("upload_session"), dict) else {}
         completed = str(result.get("status") or "").strip() in {"uploaded", "complete"} or str(session.get("status") or "").strip() == "complete"
         if not completed:
             return []
-    return app_events_for_action(action)
+    events = app_events_for_action(action)
+    # These operations affect only their returned local file. Moves/renames and
+    # provider-wide actions remain broad until both old and new scopes are known.
+    scoped_actions = {'write_file', 'file.content.write', 'update_markdown_file',
+        'upload_file', 'upload_local_file', 'local_upload_session.chunk',
+        'delete_file'}
+    record = result.get('file')
+    if action in scoped_actions and isinstance(record, dict) and record.get('provider', 'local') == 'local' \
+            and record.get('role') in {'uploaded', 'generated'} and isinstance(record.get('relative_path'), str):
+        for event in events:
+            if event['resource'] == 'files':
+                parts = record['relative_path'].split('/')
+                scopes = [None, *('/'.join(parts[:length]) for length in range(len(parts)))]
+                if len(scopes) <= 128:
+                    event['scope_keys'] = [sha256(json.dumps([record['role'], parent], ensure_ascii=False,
+                        separators=(',', ':')).encode()).hexdigest() for parent in scopes]
+    return events
 
 def _optional_int(body: dict[str, Any], key: str) -> int | None:
     raw_value = body.get(key)

@@ -11,6 +11,7 @@ import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageM
 import { Icon } from './Icon';
 import { useStorageHibernation } from './hooks/useStorageHibernation';
 import { useLongPressSelection } from './hooks/useLongPressSelection';
+import { storageEventAffectsView } from './lib/storageEventScope';
 import { notifyActiveStorageFolderSelection, notifyActiveStorageSelection } from './lib/activeStorageSelection';
 import { breadcrumbRefreshPlan, catalogBrowserDisplayState, catalogLoadedCountAfterPage, catalogLoadedCountAfterRefresh, folderOpenRefreshPlan, missingNavigationTargetPlan, resolvedFileNavigationPlan } from './lib/storageCatalogFlow';
 import { applyStorageFilesDelta, applyStorageFoldersDelta, type StorageCatalogDelta } from './lib/storageCatalogDelta';
@@ -1112,10 +1113,14 @@ function App() {
         handleNavigationParams(payload.params || {});
       }
     }
-    type StorageEvent = { type?: string; owner_app_id?: string; resource?: string; detail?: Record<string, unknown> };
+    type StorageEvent = { type?: string; owner_app_id?: string; resource?: string; detail?: Record<string, unknown>; scope_keys?: string[] };
     const stop = connectAppEventSocket<StorageEvent>((payload) => {
       if (payload.type !== 'maverick.app.data-changed' || payload.owner_app_id !== storageAppId) return;
       if (payload.resource === 'files' || payload.resource === 'drive-connections') {
+        if (payload.resource === 'files' && !storageEventAffectsView(payload.scope_keys, {
+          role: activeRoleRef.current, folder: currentFolderPathRef.current, query: queryRef.current,
+          custom: viewModeRef.current === 'custom', drive: Boolean(driveTargetRef.current),
+        })) return;
         refresh().catch((err: Error) => setError(err.message));
       } else if (payload.resource === 'view-state') {
         const detailedFilter = storageViewFilterFromMessage(payload, storageAppId);

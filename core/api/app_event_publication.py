@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Iterable
 
 
@@ -46,8 +47,18 @@ def publish_declared_app_events(
                 "workspace_id": workspace_id,
                 "owner_app_id": app_id,
                 "resource": resource,
+                **_scope_hint(event.get('scope_keys')),
             }
         )
+
+
+def _scope_hint(value: Any) -> dict[str, list[str]]:
+    """Optional opaque invalidation hints; malformed hints retain broad refresh."""
+    if not isinstance(value, list) or not 0 < len(value) <= 128:
+        return {}
+    if any(not isinstance(key, str) or not re.fullmatch(r'[0-9a-f]{64}', key) for key in value):
+        return {}
+    return {'scope_keys': list(dict.fromkeys(value))}
 
 
 def declared_data_event_resources(data_events: Iterable[Any]) -> list[str]:

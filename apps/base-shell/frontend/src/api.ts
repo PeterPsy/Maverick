@@ -488,6 +488,7 @@ export function normalizeAppRegistryItem(value: unknown): AppRegistryItem {
     frontend_mount: stringField(item.frontend_mount),
     frontend_role: stringField(item.frontend_role, "none"),
     frontend_launchable: item.frontend_launchable === true,
+    frontend_resumable: item.frontend_resumable === true,
     backend_mount: stringField(item.backend_mount),
   };
 }

@@ -14,6 +14,7 @@ import unicodedata
 from typing import Any, Iterator
 
 from core.shared.sqlite_runtime import require_safe_wal_runtime
+from inventory_revisions import mark_views_changed
 
 SCHEMA_VERSION = 2
 INDEX_FILE = 'inventory.sqlite'
@@ -228,6 +229,7 @@ class InventoryIndex:
                     total_bytes=total_bytes+excluded.total_bytes''',
                     (entry['role'], parent, direction, direction * int(entry.get('size_bytes') or 0)))
         self.changed(connection)
+        mark_views_changed(connection, previous, record)
         return True
 
     def put_directory(self, connection: sqlite3.Connection, record: dict) -> bool:
@@ -247,6 +249,7 @@ class InventoryIndex:
                 connection.execute('''INSERT INTO folder_totals VALUES (?,?,0,0,?) ON CONFLICT(role,path)
                     DO UPDATE SET total_folders=total_folders+excluded.total_folders''', (entry['role'], parent, direction))
         self.changed(connection)
+        mark_views_changed(connection, json.loads(previous[0]) if previous else None, record, directory=True)
         if record.get('provider', 'local') == 'local' and record['status'] == 'active':
             connection.execute('INSERT OR IGNORE INTO scan_queue(role,path) VALUES (?,?)', (record['role'], path))
         return True

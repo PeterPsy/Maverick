@@ -10,6 +10,7 @@ from inventory import catalog_inventory_payload, list_inventory_folders, uses_sq
 from inventory_migration import backup_inventory, cutover_inventory, prepare_inventory, rollback_inventory, validate_inventory
 from inventory_queries import directory_page, require_ready, summary_payload
 from inventory_records import _public_folder_record
+from inventory_revisions import view_revision
 from inventory_sqlite import InventoryIndex
 from storage_mutation_lock import storage_mutation_lock
 
@@ -59,7 +60,7 @@ def catalog_directories(data_root: Path, uploaded_root: Path, generated_root: Pa
             index = InventoryIndex(data_root)
             with index.transaction() as connection:
                 require_ready(connection)
-                revision = index.revision(connection)
+                revision = view_revision(connection, role=role, parent=None if query.strip() else parent)
                 if dataset_revision is not None and revision != dataset_revision:
                     return {'status': 'catalog_changed', 'dataset_revision': revision}
                 page = directory_page(connection, role=role, parent=parent, query=query, offset=offset, limit=limit)

@@ -13,32 +13,26 @@ import {
 import { PendingMessage } from "../lib/messageState";
 import { runtimeFrameBatch } from '../lib/runtimeFrameBatch';
 import { socketReconnectDelay } from '../lib/socketReconnectDelay';
+import { useRuntimeHistoryWindow, type RuntimeHistoryArgs } from './useRuntimeHistoryWindow';
 import { useChatVisibility } from './useChatVisibility';
 import {
-  firstPersistedRuntimeEventId,
-  firstRuntimeEventId,
   hydrateMissingTurnAnchors,
   inferActiveRuntimeTurn,
   isSyntheticRuntimeEvent,
   lastRuntimeEventId,
-  mergeRuntimeEvents,
+  liveRuntimeTurnAfterEvents,
   runtimeTurnStatusFromEvent,
 } from "../lib/runtimeEvents";
 
-type RuntimeEventsArgs = {
-  runtimeSessionId: string | null;
+type RuntimeEventsArgs = RuntimeHistoryArgs & {
   activeTurn: RuntimeTurn | null;
-  hasMoreHistory?: boolean;
   onRuntimeSessionUnavailable?: ((runtimeSessionId: string) => void) | null;
   onRuntimeSnapshot?: (() => void) | null;
   onUsageSnapshot?: ((usage: ChatUsageSummary | null) => void) | null;
-  olderHistoryRequestId?: number;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
-  setHasMoreHistory?: Dispatch<SetStateAction<boolean>>;
-  setIsOlderHistoryLoading?: Dispatch<SetStateAction<boolean>>;
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
 };
 
@@ -65,6 +59,9 @@ export function applyRuntimeEventEffects(
     return;
   }
   const status = terminalStatus(terminalEvent);
+  if (activeTurn.client_message_id) {
+    setPendingUserMessages(current => current.filter(item => item.clientMessageId !== activeTurn.client_message_id));
+  }
   setActiveTurn((current) => (current?.turn_id === activeTurn.turn_id && status ? { ...current, status } : current));
 }
 
@@ -89,34 +86,30 @@ function completedClientMessageIdsForEvents(events: RuntimeEvent[]): Set<string>
 
 export function useRuntimeEvents({
   activeTurn,
-  hasMoreHistory = false,
   onRuntimeSessionUnavailable,
   onRuntimeSnapshot,
   onUsageSnapshot,
-  olderHistoryRequestId = 0,
   runtimeSessionId,
   setActiveSession,
   setActiveTurn,
   setError,
   setEvents,
   setHasMoreHistory,
-  setIsOlderHistoryLoading,
   setPendingUserMessages,
+  ...historyArgs
 }: RuntimeEventsArgs) {
   const visible = useChatVisibility();
   const activeTurnRef = useRef<RuntimeTurn | null>(activeTurn);
-  const hasMoreHistoryRef = useRef(hasMoreHistory);
-  const oldestEventIdRef = useRef<string | null>(null);
   const onRuntimeSnapshotRef = useRef<typeof onRuntimeSnapshot>(onRuntimeSnapshot);
   const onUsageSnapshotRef = useRef<typeof onUsageSnapshot>(onUsageSnapshot);
   const onRuntimeSessionUnavailableRef = useRef<typeof onRuntimeSessionUnavailable>(onRuntimeSessionUnavailable);
   const socketRef = useRef<WebSocket | null>(null);
+  const { apply: applyWindow, receive: receiveHistoryPage, resetRequest: resetHistoryRequest } = useRuntimeHistoryWindow({
+    ...historyArgs, runtimeSessionId, setHasMoreHistory, setEvents, activeTurnRef, socketRef,
+  });
   useEffect(() => {
     activeTurnRef.current = activeTurn;
   }, [activeTurn]);
-  useEffect(() => {
-    hasMoreHistoryRef.current = hasMoreHistory;
-  }, [hasMoreHistory]);
   useEffect(() => {
     onRuntimeSnapshotRef.current = onRuntimeSnapshot;
   }, [onRuntimeSnapshot]);
@@ -143,10 +136,13 @@ export function useRuntimeEvents({
     let paintedDisplay = false;
     const paintDisplay = (data: { messages: CompletedDisplayMessage[] }) => {
       if (cancelled || receivedInitialSnapshot) return;
-      paintedDisplay = true;
-      setEvents(displayMessageEvents(currentSessionId, data.messages));
-      setHasMoreHistory?.(data.messages.length > 0);
-      onRuntimeSnapshotRef.current?.();
+      setEvents(current => {
+        if (current.some(event => event.session_id === currentSessionId)) return current;
+        paintedDisplay = true;
+        setHasMoreHistory?.(data.messages.length > 0);
+        onRuntimeSnapshotRef.current?.();
+        return displayMessageEvents(currentSessionId, data.messages);
+      });
     };
     void readChatDisplay<{ messages: CompletedDisplayMessage[] }>({ kind: 'messages', session_id: currentSessionId }, {
       signal: displayController.signal, onRevalidated: paintDisplay,
@@ -169,10 +165,6 @@ export function useRuntimeEvents({
       onRuntimeSessionUnavailableRef.current?.(currentSessionId);
     }
 
-    function setOldestEventCursor(events: RuntimeEvent[], oldestEventId?: string | null) {
-      oldestEventIdRef.current = oldestEventId || firstPersistedRuntimeEventId(events) || firstRuntimeEventId(events);
-    }
-
     function socketIsCurrent(candidate: WebSocket | null): candidate is WebSocket {
       return Boolean(candidate && !cancelled && socketRef.current === candidate);
     }
@@ -182,7 +174,7 @@ export function useRuntimeEvents({
         : incoming.filter((event) => event.session_id === currentSessionId);
     }
 
-    function applyIncomingEvents(incoming: RuntimeEvent[], oldestEventId?: string | null) {
+    function applyIncomingEvents(incoming: RuntimeEvent[], source: "live" | "snapshot" = "live", page?: { has_more_before?: boolean }) {
       let scopedIncoming = eventsForCurrentSession(incoming);
       if (!scopedIncoming.length) {
         return;
@@ -199,27 +191,17 @@ export function useRuntimeEvents({
       if (!scopedIncoming.length) return;
       const persistedIncoming = scopedIncoming.filter((event) => !isSyntheticRuntimeEvent(event));
       lastEventId = (persistedIncoming.at(-1) || scopedIncoming[scopedIncoming.length - 1]).event_id;
-      setEvents((current) => {
-        const merged = mergeRuntimeEvents(eventsForCurrentSession(current), scopedIncoming);
-        setOldestEventCursor(merged, oldestEventId);
-        const currentTurn = activeTurnRef.current;
-        applyRuntimeEventEffects(merged, currentTurn?.session_id === currentSessionId ? currentTurn : null, setActiveTurn, setPendingUserMessages);
-        setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
-        return merged;
-      });
+      const previousTurn = activeTurnRef.current;
+      const currentTurn = previousTurn?.session_id === currentSessionId ? previousTurn : null;
+      applyRuntimeEventEffects(scopedIncoming, currentTurn, setActiveTurn, setPendingUserMessages);
+      const nextTurn = source === 'snapshot' ? inferActiveRuntimeTurn(scopedIncoming, currentSessionId)
+        : liveRuntimeTurnAfterEvents(scopedIncoming, currentTurn, currentSessionId);
+      activeTurnRef.current = nextTurn;
+      setActiveTurn(nextTurn);
+      applyWindow(scopedIncoming, source, page);
     }
 
     const frameBatch = runtimeFrameBatch(applyIncomingEvents);
-
-    function applyHistoryPage(incoming: RuntimeEvent[], oldestEventId?: string | null) {
-      const scopedIncoming = eventsForCurrentSession(incoming);
-      setEvents((current) => {
-        const merged = mergeRuntimeEvents(eventsForCurrentSession(current), scopedIncoming);
-        setOldestEventCursor(merged, oldestEventId);
-        setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
-        return merged;
-      });
-    }
 
     if (typeof WebSocket === "undefined") {
       setError("Runtime WebSocket is unavailable.");
@@ -229,10 +211,6 @@ export function useRuntimeEvents({
     setEvents((current) => {
       const scopedCurrent = eventsForCurrentSession(current);
       lastEventId = lastRuntimeEventId(scopedCurrent);
-      setOldestEventCursor(scopedCurrent);
-      const currentTurn = activeTurnRef.current;
-      applyRuntimeEventEffects(scopedCurrent, currentTurn?.session_id === currentSessionId ? currentTurn : null, setActiveTurn, setPendingUserMessages);
-      setActiveTurn(inferActiveRuntimeTurn(scopedCurrent, currentSessionId));
       return scopedCurrent;
     });
 
@@ -285,19 +263,18 @@ export function useRuntimeEvents({
             reconnectAttempt = 0;
             if (receivedInitialSnapshot) invalidateChatDisplay('messages');
             receivedInitialSnapshot = true;
-            if (paintedDisplay) { setEvents([]); oldestEventIdRef.current = null; }
+            if (paintedDisplay) { setEvents([]); paintedDisplay = false; }
 
             setActiveSession({
               ...frame.session,
               runtime_admission: frame.runtime_admission ?? frame.session.runtime_admission ?? null,
             });
             lastEventId = frame.last_event_id || lastEventId;
-            if (typeof frame.has_more_before === "boolean") {
-              setHasMoreHistory?.(frame.has_more_before === true);
-            }
-            applyIncomingEvents(hydrateMissingTurnAnchors(frame.events || [], frame.turns), frame.oldest_event_id);
+            applyIncomingEvents(hydrateMissingTurnAnchors(frame.events || [], frame.turns), 'snapshot', frame);
             if (!frame.events?.length) {
-              oldestEventIdRef.current = frame.oldest_event_id || oldestEventIdRef.current;
+              activeTurnRef.current = null;
+              setActiveTurn(null);
+              applyWindow([], 'snapshot', frame);
             }
             onUsageSnapshotRef.current?.(chatUsageSummaryFromPayload(frame.usage));
             onRuntimeSnapshotRef.current?.();
@@ -305,9 +282,7 @@ export function useRuntimeEvents({
           }
           if (frame.type === "runtime.history.page") {
             frameBatch.flush();
-            setHasMoreHistory?.(frame.has_more_before === true);
-            applyHistoryPage(hydrateMissingTurnAnchors(frame.events || [], frame.turns), frame.oldest_event_id);
-            setIsOlderHistoryLoading?.(false);
+            receiveHistoryPage(frame);
             return;
           }
           const runtimeEvent = runtimeEventFromWebSocketFrame(frame);
@@ -340,6 +315,7 @@ export function useRuntimeEvents({
           return;
         }
         stopHeartbeatWatchdog();
+        resetHistoryRequest();
         frameBatch.flush();
         socketRef.current = null;
         socket = null;
@@ -374,6 +350,7 @@ export function useRuntimeEvents({
 
     return () => {
       cancelled = true;
+      resetHistoryRequest();
       frameBatch.dispose();
       displayController.abort();
       if (reconnectTimer !== null) {
@@ -385,30 +362,7 @@ export function useRuntimeEvents({
         socketRef.current = null;
       }
     };
-  }, [runtimeSessionId, visible, setActiveSession, setActiveTurn, setError, setEvents, setHasMoreHistory, setIsOlderHistoryLoading, setPendingUserMessages]);
-
-  useEffect(() => {
-    if (!runtimeSessionId || olderHistoryRequestId <= 0) {
-      return;
-    }
-    if (!hasMoreHistoryRef.current) {
-      setIsOlderHistoryLoading?.(false);
-      return;
-    }
-    const beforeEventId = oldestEventIdRef.current;
-    const socket = socketRef.current;
-    if (!beforeEventId || !socket || socket.readyState !== WebSocket.OPEN) {
-      setIsOlderHistoryLoading?.(false);
-      return;
-    }
-    socket.send(
-      JSON.stringify({
-        type: "runtime.history.before",
-        before_event_id: beforeEventId,
-        limit: 250,
-      }),
-    );
-  }, [olderHistoryRequestId, runtimeSessionId, setIsOlderHistoryLoading]);
+  }, [runtimeSessionId, visible, setActiveSession, setActiveTurn, setError, setEvents, setHasMoreHistory, setPendingUserMessages, applyWindow, receiveHistoryPage, resetHistoryRequest]);
 }
 
 export function chatUsageSummaryFromPayload(value: unknown): ChatUsageSummary | null {

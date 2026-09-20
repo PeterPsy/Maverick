@@ -113,6 +113,8 @@ class RuntimeEventPage:
     before_event_id: str | None
     oldest_event_id: str | None
     newest_event_id: str | None
+    after_event_id: str | None = None
+    has_more_after: bool = False
 
 
 @dataclass(frozen=True)
@@ -395,6 +397,7 @@ class RuntimeStore(Protocol):
         session_id: str,
         *,
         before_event_id: str | None = None,
+        after_event_id: str | None = None,
         limit: int = 200,
     ) -> RuntimeEventPage:
         ...
@@ -2479,13 +2482,18 @@ class RuntimeDocumentStore:
         session_id: str,
         *,
         before_event_id: str | None = None,
+        after_event_id: str | None = None,
         limit: int = 200,
     ) -> RuntimeEventPage:
         bounded_limit = max(1, min(int(limit), MAX_RUNTIME_EVENTS_PER_SESSION))
+        if before_event_id and after_event_id:
+            raise ValueError("Runtime history cannot combine before and after cursors.")
         query = self._session_query(session_id)
         find_event_page = getattr(self.collections.events, "find_event_page", None)
         if callable(find_event_page):
-            page = find_event_page(query, before_event_id=before_event_id, limit=bounded_limit)
+            page = find_event_page(
+                query, before_event_id=before_event_id, after_event_id=after_event_id, limit=bounded_limit,
+            )
             events = [RuntimeEventRecord(**document) for document in page["documents"]]
             return RuntimeEventPage(
                 events=events,
@@ -2493,20 +2501,23 @@ class RuntimeDocumentStore:
                 before_event_id=before_event_id,
                 oldest_event_id=events[0].event_id if events else None,
                 newest_event_id=events[-1].event_id if events else None,
+                after_event_id=after_event_id,
+                has_more_after=bool(page.get("has_more_after")),
             )
         documents = self.collections.events.find(query)
         documents.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("event_id") or "")))
-        if before_event_id:
+        if before_event_id or after_event_id:
             cursor_found = False
             for index, document in enumerate(documents):
-                if document.get("event_id") == before_event_id:
-                    documents = documents[:index]
+                if document.get("event_id") == (before_event_id or after_event_id):
+                    documents = documents[:index] if before_event_id else documents[index + 1:]
                     cursor_found = True
                     break
             if not cursor_found:
                 documents = []
-        has_more_before = len(documents) > bounded_limit
-        documents = documents[-bounded_limit:]
+        has_more_before = len(documents) > bounded_limit if not after_event_id else cursor_found
+        has_more_after = bool(after_event_id and len(documents) > bounded_limit)
+        documents = documents[:bounded_limit] if after_event_id else documents[-bounded_limit:]
         events = [RuntimeEventRecord(**document) for document in documents]
         return RuntimeEventPage(
             events=events,
@@ -2514,6 +2525,8 @@ class RuntimeDocumentStore:
             before_event_id=before_event_id,
             oldest_event_id=events[0].event_id if events else None,
             newest_event_id=events[-1].event_id if events else None,
+            after_event_id=after_event_id,
+            has_more_after=has_more_after,
         )
 
     def list_event_archive_page(

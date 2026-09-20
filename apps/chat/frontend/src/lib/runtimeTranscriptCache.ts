@@ -6,6 +6,7 @@ export type RuntimeTranscriptCacheEntry = {
   events: RuntimeEvent[];
   hasLoadedHistory: boolean;
   hasMoreHistory?: boolean;
+  hasNewerHistory?: boolean;
 };
 
 /** Cold sessions only. The active transcript belongs to the mounted controller. */

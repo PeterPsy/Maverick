@@ -723,6 +723,10 @@ export type RuntimeWebSocketFrame =
     }
   | {
       type: "runtime.history.page";
+      direction?: "before" | "after" | "latest";
+      request_id?: string | null;
+      after_event_id?: string | null;
+      has_more_after?: boolean;
       events: RuntimeEvent[];
       turns?: RuntimeTurn[];
       before_event_id: string | null;

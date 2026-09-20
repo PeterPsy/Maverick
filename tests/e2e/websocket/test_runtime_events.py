@@ -7,6 +7,7 @@ from io import BytesIO
 from pathlib import Path
 import asyncio, json, os, tempfile, unittest
 from uuid import uuid4
+from unittest.mock import patch
 
 from core.api.app_events import APP_EVENTS_WS_PATH, AppEventBus, stream_app_events
 from core.api.platform_host import PlatformHost
@@ -21,6 +22,7 @@ from core.api.runtime_websocket import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
+from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session
 from core.runtime.store import RuntimeEventPage
@@ -51,6 +53,9 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
             "QUERY_STRING": "",
+            "HTTP_HOST": "maverick.localhost",
+            "HTTP_ORIGIN": "http://maverick.localhost",
+            "wsgi.url_scheme": "http",
             "wsgi.input": BytesIO(payload),
         }
         if cookie:
@@ -375,7 +380,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.event_id for item in page.events], ["event-2"])
         self.assertTrue(page.has_more_before)
 
-    async def test_runtime_websocket_serves_older_history_page(self) -> None:
+    async def test_runtime_websocket_serves_both_history_directions_and_latest(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
         cookie = self.login_cookie(state)
         session_id, _event_ids = self.create_session_with_events(state)
@@ -386,6 +391,9 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
                 "type": "websocket.receive",
                 "text": json.dumps({"type": "runtime.history.before", "before_event_id": "event-2", "limit": 2}),
             },
+            {"type": "websocket.receive", "text": json.dumps({"type": "runtime.history.after",
+                "after_event_id": "event-1", "limit": 1, "request_id": "next", "session_id": "other-session"})},
+            {"type": "websocket.receive", "text": json.dumps({"type": "runtime.history.latest", "limit": 2, "request_id": "latest"})},
             {"type": "websocket.disconnect"},
         ]
 
@@ -409,9 +417,17 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         history_frames = [frame for frame in frames if frame["type"] == "runtime.history.page"]
-        self.assertEqual(len(history_frames), 1)
+        self.assertEqual(len(history_frames), 3)
         self.assertEqual([event["event_id"] for event in history_frames[0]["events"]], ["event-1"])
         self.assertFalse(history_frames[0]["has_more_before"])
+
+        self.assertEqual([event["event_id"] for event in history_frames[1]["events"]], ["event-2"])
+        self.assertTrue(history_frames[1]["has_more_after"])
+        self.assertEqual(history_frames[1]["request_id"], "next")
+        self.assertEqual(history_frames[1]["events"][0]["session_id"], session_id)
+        self.assertEqual(history_frames[2]["direction"], "latest")
+        self.assertEqual(history_frames[2]["events"][-1]["event_id"], "event-3")
+        self.assertFalse(history_frames[2]["has_more_after"])
 
     async def test_runtime_websocket_history_page_with_unknown_cursor_is_empty(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
@@ -620,6 +636,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             platform_allows_full_access=True,
             start_path=state.repository_root,
         )
+        create_runtime_thread(state.runtime_store, workspace_id="default", runtime_session_id=session.session_id, title="User chat")
         sent: list[dict] = []
         received = [{"type": "websocket.connect"}, {"type": "websocket.disconnect"}]
 
@@ -645,7 +662,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frames[0]["type"], "runtime.thread.snapshot")
         self.assertEqual([thread["runtime_session_id"] for thread in frames[0]["threads"]], [session.session_id])
 
-    async def test_runtime_thread_websocket_snapshot_reconciles_stale_thread_availability(self) -> None:
+    async def test_runtime_thread_websocket_snapshot_reads_projection_without_repairing_history(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
         session = create_runtime_session(
             state.runtime_store,
@@ -692,12 +709,13 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
+        with patch.object(state.runtime_store, "list_turns", side_effect=AssertionError("catalog reads must not scan turn history")):
+            frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
 
         thread = next(item for item in frame["threads"] if item["runtime_session_id"] == session.session_id)
-        self.assertEqual(thread["availability"], "free")
-        self.assertEqual(thread["last_completed_turn_id"], "turn-completed")
-        self.assertEqual(state.runtime_store.get_thread("thread-stale").availability, "free")
+        self.assertEqual(thread["availability"], "active")
+        self.assertIsNone(thread.get("last_completed_turn_id"))
+        self.assertEqual(state.runtime_store.get_thread("thread-stale").availability, "active")
 
     async def test_runtime_thread_websocket_pushes_live_thread_changes(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

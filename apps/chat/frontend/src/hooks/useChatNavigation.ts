@@ -56,6 +56,7 @@ type UseChatNavigationParams = {
   hasExternalRuntimeThreads: boolean;
   hasLoadedHistory: boolean;
   hasMoreHistory: boolean;
+  hasNewerHistory?: boolean;
   isBootstrapping: boolean;
   navigationScope: string;
   newChatProjectId: string | null;
@@ -76,6 +77,7 @@ type UseChatNavigationParams = {
   setFailedUserMessagesForConversation: (conversationKey: string, action: SetStateAction<PendingMessage[]>) => void;
   setHasLoadedHistory: Dispatch<SetStateAction<boolean>>;
   setHasMoreHistory: Dispatch<SetStateAction<boolean>>;
+  setHasNewerHistory?: Dispatch<SetStateAction<boolean>>;
   setIsOlderHistoryLoading: Dispatch<SetStateAction<boolean>>;
   setIsBootstrapping: Dispatch<SetStateAction<boolean>>;
   setIsHistoryLoading: Dispatch<SetStateAction<boolean>>;
@@ -141,6 +143,7 @@ export function useChatNavigation({
   hasExternalRuntimeThreads,
   hasLoadedHistory,
   hasMoreHistory,
+  hasNewerHistory,
   isBootstrapping,
   navigationScope,
   newChatProjectId,
@@ -161,6 +164,7 @@ export function useChatNavigation({
   setFailedUserMessagesForConversation,
   setHasLoadedHistory,
   setHasMoreHistory,
+  setHasNewerHistory,
   setIsBootstrapping,
   setIsHistoryLoading,
   setIsOlderHistoryLoading,
@@ -200,6 +204,7 @@ export function useChatNavigation({
       events,
       hasLoadedHistory,
       hasMoreHistory,
+      hasNewerHistory,
       setActiveSession,
       setActiveThread,
       setActiveTurn,
@@ -208,6 +213,7 @@ export function useChatNavigation({
       setFailedUserMessages,
       setHasLoadedHistory,
       setHasMoreHistory,
+      setHasNewerHistory,
       setPendingUserMessages,
       setQueuedMessages,
       setThreads,
@@ -357,6 +363,7 @@ export function useChatNavigation({
     setEvents([]);
     setHasLoadedHistory(false);
     setHasMoreHistory(false);
+    setHasNewerHistory?.(false);
     setIsHistoryLoading(false);
     setIsOlderHistoryLoading(false);
     setActiveTurn(null);
@@ -391,6 +398,7 @@ export function useChatNavigation({
     setEvents([]);
     setHasLoadedHistory(false);
     setHasMoreHistory(false);
+    setHasNewerHistory?.(false);
     setIsHistoryLoading(false);
     setIsOlderHistoryLoading(false);
     setActiveTurn(null);
@@ -413,6 +421,7 @@ export function useChatNavigation({
     setEvents(cachedTranscript?.events ?? []);
     setHasLoadedHistory(cachedHistoryLoaded);
     setHasMoreHistory(cachedTranscript?.hasMoreHistory === true);
+    setHasNewerHistory?.(cachedTranscript?.hasNewerHistory === true);
     setIsOlderHistoryLoading(false);
     if (thread) {
       const conversationKey = conversationKeyFor(thread, null);
@@ -536,6 +545,7 @@ export function useChatNavigation({
       setEvents([]);
       setHasLoadedHistory(false);
       setHasMoreHistory(false);
+      setHasNewerHistory?.(false);
       setIsOlderHistoryLoading(false);
       setPendingUserMessagesForConversation(conversationKeyFor(payload.thread, null), []);
       setFailedUserMessagesForConversation(conversationKeyFor(payload.thread, null), []);

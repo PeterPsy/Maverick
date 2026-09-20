@@ -62,6 +62,7 @@ type RuntimeEventsHarnessState = {
   events: RuntimeEvent[];
   pendingUserMessages: PendingMessage[];
   usage: ChatUsageSummary | null;
+  hasNewerHistory: boolean;
 };
 
 function event(eventId: string): RuntimeEvent {
@@ -79,12 +80,18 @@ function RuntimeEventsHarness({
   initialEvents,
   initialPendingUserMessages = [],
   olderHistoryRequestId = 0,
+  newerHistoryRequestId = 0,
+  latestHistoryRequestId = 0,
+  followLatestRef,
   onState,
   runtimeSessionId = "session-1",
 }: {
   initialEvents: RuntimeEvent[];
   initialPendingUserMessages?: PendingMessage[];
   olderHistoryRequestId?: number;
+  newerHistoryRequestId?: number;
+  latestHistoryRequestId?: number;
+  followLatestRef?: { current: boolean };
   onState?: (state: RuntimeEventsHarnessState) => void;
   runtimeSessionId?: string;
 }) {
@@ -92,19 +99,25 @@ function RuntimeEventsHarness({
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>(initialEvents);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [hasNewerHistory, setHasNewerHistory] = useState(false);
   const [, setIsOlderHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingUserMessages, setPendingUserMessages] = useState<PendingMessage[]>(initialPendingUserMessages);
   const [usage, setUsage] = useState<ChatUsageSummary | null>(null);
 
   useEffect(() => {
-    onState?.({ activeSession, activeTurn, error, events, pendingUserMessages, usage });
-  }, [activeSession, activeTurn, error, events, onState, pendingUserMessages, usage]);
+    onState?.({ activeSession, activeTurn, error, events, pendingUserMessages, usage, hasNewerHistory });
+  }, [activeSession, activeTurn, error, events, onState, pendingUserMessages, usage, hasNewerHistory]);
 
   useRuntimeEvents({
     activeTurn,
     hasMoreHistory,
     olderHistoryRequestId,
+    newerHistoryRequestId,
+    latestHistoryRequestId,
+    followLatestRef,
+    hasNewerHistory,
+    setHasNewerHistory,
     onUsageSnapshot: setUsage,
     runtimeSessionId,
     setActiveSession,
@@ -134,6 +147,52 @@ describe("useRuntimeEvents", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+  });
+
+  it('bounds cold data while reading history, tracks live control, and rejects superseded pages', async () => {
+    const onState = vi.fn();
+    const followLatestRef = { current: false };
+    const props = { initialEvents: [], onState, followLatestRef };
+    const historic = (index: number): RuntimeEvent => ({ ...event(`history-${index}`), turn_id: null,
+      created_at: new Date(Date.UTC(2026, 0, 1) + index * 1000).toISOString() });
+    const emit = (frame: unknown) => MockWebSocket.instances.at(-1)!.onmessage?.({ data: JSON.stringify(frame) } as MessageEvent);
+    const state = () => onState.mock.calls.at(-1)![0] as RuntimeEventsHarnessState;
+    await act(async () => { root?.render(<RuntimeEventsHarness {...props} />); });
+    await act(async () => emit({ type: 'runtime.snapshot', session,
+      events: Array.from({ length: 5900 }, (_, index) => historic(index)), has_more_before: true }));
+    await act(async () => {
+      for (let index = 5900; index < 6200; index++) emit({ type: 'runtime.event', event: historic(index) });
+      vi.advanceTimersByTime(20);
+    });
+    expect(state().events.length).toBeLessThanOrEqual(6000);
+    expect(state().hasNewerHistory).toBe(true);
+    const retained = state().events;
+    const live = { ...event('live-start'), turn_id: 'live-turn', event_type: 'runtime.turn.started' };
+    await act(async () => { emit({ type: 'runtime.event', event: live }); vi.advanceTimersByTime(20); });
+    expect(state().events).toBe(retained);
+    expect(state().activeTurn?.turn_id).toBe('live-turn');
+    await act(async () => { root?.render(<RuntimeEventsHarness {...props} olderHistoryRequestId={1} />); });
+    const before = JSON.parse(MockWebSocket.instances.at(-1)!.sent.at(-1)!);
+    await act(async () => emit({ type: 'runtime.history.page', direction: 'before', request_id: before.request_id,
+      events: [historic(-1)], has_more_before: false }));
+    expect(state().events[0].event_id).toBe('history--1');
+    expect(state().activeTurn?.turn_id).toBe('live-turn');
+    await act(async () => { root?.render(<RuntimeEventsHarness {...props} olderHistoryRequestId={1} newerHistoryRequestId={1} />); });
+    const after = JSON.parse(MockWebSocket.instances.at(-1)!.sent.at(-1)!);
+    expect(after.type).toBe('runtime.history.after');
+    expect(after.after_event_id).toBe(retained.at(-1)!.event_id);
+    await act(async () => { root?.render(<RuntimeEventsHarness {...props} olderHistoryRequestId={1} newerHistoryRequestId={1} latestHistoryRequestId={1} />); });
+    const latest = JSON.parse(MockWebSocket.instances.at(-1)!.sent.at(-1)!);
+    const beforeStale = state().events;
+    await act(async () => emit({ type: 'runtime.history.page', direction: 'after', request_id: after.request_id,
+      events: [historic(4800)], has_more_after: true }));
+    expect(state().events).toBe(beforeStale);
+    await act(async () => emit({ type: 'runtime.history.page', direction: 'latest', request_id: latest.request_id,
+      events: [historic(6200)], has_more_before: true, has_more_after: false }));
+    expect(state().events.map(item => item.event_id)).toEqual(['history-6200']);
+    expect(state().hasNewerHistory).toBe(false);
+    await act(async () => emit({ type: 'runtime.event', event: { ...live, event_id: 'live-end', event_type: 'runtime.turn.completed' } }));
+    expect(state().activeTurn).toBeNull();
   });
 
   it('closes hidden/offline streams and reconnects once with an authoritative snapshot', async () => {
@@ -346,6 +405,7 @@ describe("useRuntimeEvents", () => {
     expect(JSON.parse(MockWebSocket.instances[0].sent[0])).toEqual({
       type: "runtime.history.before",
       before_event_id: "event-2",
+      request_id: "session-1:1",
       limit: 250,
     });
   });

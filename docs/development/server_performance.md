@@ -199,11 +199,22 @@ failures use the same retry path, and unavailable/unauthorized close codes retai
 their terminal behavior.
 
 Long visible transcripts use measured variable-height rows with overscan and
-spacers. Historical data stays available in memory and through normal paging;
-viewport rendering does not truncate the server catalog. Scroll/ResizeObserver
+spacers. A separate contiguous data window bounds the mounted transcript to
+6,000 events / 32 MiB of estimated retained event/index/projection memory. Size
+estimates are cached per immutable event and appends reuse prior accounting;
+eviction leaves 20% headroom. Whole turn boundaries are preferred. An oversized
+historical turn is pageable in parts; the current live turn and one indivisible
+event may exceed the budget. This is an accounting allowance, not a measured heap
+ceiling. Before/after pages and an explicit latest-page action reload evicted
+data through the existing authenticated WebSocket. While a historical window is
+away from live, event data cannot join disconnected ranges; control/usage remain
+live and the UI exposes newer history. Correlated requests reject late pages,
+and reading old turn metadata cannot change the active turn. Cold navigation
+entries retain the newer-history flag. The server archive is not truncated. Scroll/ResizeObserver
 integration requires browser and physical Safari checks before release.
 An offscreen message currently being read aloud keeps its existing component
-mounted outside the layout window, adding at most one hidden row. Scrolling
+mounted outside the layout and data windows, adding at most one hidden row and
+retaining just that projected message until speech ends. Scrolling
 therefore preserves its Audio/AudioContext without mounting intervening history.
 
 The opt-in `transcript.performance.test.ts` probe reports 500 live updates after

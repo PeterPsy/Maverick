@@ -14,6 +14,7 @@ type UseRuntimeTranscriptCacheParams = {
   events: RuntimeEvent[];
   hasLoadedHistory: boolean;
   hasMoreHistory: boolean;
+  hasNewerHistory?: boolean;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveThread: Dispatch<SetStateAction<ChatThread | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
@@ -22,6 +23,7 @@ type UseRuntimeTranscriptCacheParams = {
   setFailedUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
   setHasLoadedHistory: Dispatch<SetStateAction<boolean>>;
   setHasMoreHistory: Dispatch<SetStateAction<boolean>>;
+  setHasNewerHistory?: Dispatch<SetStateAction<boolean>>;
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
   setQueuedMessages: Dispatch<SetStateAction<QueuedMessage[]>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
@@ -49,6 +51,7 @@ export function useRuntimeTranscriptCache({
   events,
   hasLoadedHistory,
   hasMoreHistory,
+  hasNewerHistory,
   setActiveSession,
   setActiveThread,
   setActiveTurn,
@@ -57,6 +60,7 @@ export function useRuntimeTranscriptCache({
   setFailedUserMessages,
   setHasLoadedHistory,
   setHasMoreHistory,
+  setHasNewerHistory,
   setPendingUserMessages,
   setQueuedMessages,
   setThreads,
@@ -97,10 +101,11 @@ export function useRuntimeTranscriptCache({
       events,
       hasLoadedHistory,
       hasMoreHistory,
+      hasNewerHistory,
     };
     runtimeTranscriptCacheRef.current.delete(runtimeSessionId);
     activeEntryRef.current = { id: runtimeSessionId, entry: cacheEntry };
-  }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory, hasMoreHistory]);
+  }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory, hasMoreHistory, hasNewerHistory]);
 
   function cachedTranscriptForThread(thread: ChatThread | null) {
     if (!thread?.runtime_session_id) {
@@ -134,6 +139,7 @@ export function useRuntimeTranscriptCache({
       setEvents([]);
       setHasLoadedHistory(false);
       setHasMoreHistory(false);
+      setHasNewerHistory?.(false);
       setPendingUserMessages([]);
       setFailedUserMessages([]);
       setQueuedMessages([]);

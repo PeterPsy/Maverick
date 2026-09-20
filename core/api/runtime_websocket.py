@@ -48,9 +48,14 @@ def runtime_websocket_manifest() -> dict[str, object]:
             "last_event_id": "optional last persisted runtime event id for replay after reconnect",
             "initial_event_limit": "optional bounded tail event count; replay may include earlier same-turn anchor events",
         },
+        "client_frames": {
+            "runtime.history.before": "exclusive before_event_id, bounded limit, optional request_id",
+            "runtime.history.after": "exclusive after_event_id, bounded limit, optional request_id",
+            "runtime.history.latest": "bounded latest page, optional request_id",
+        },
         "frames": {
             "runtime.snapshot": "runtime session metadata, authoritative token usage, and persisted event replay after the requested cursor",
-            "runtime.history.page": "older persisted runtime event page requested by the client, anchored to avoid starting mid-turn when possible",
+            "runtime.history.page": "bounded persisted events and turn metadata, paging direction, availability and request identity",
             "runtime.event": "persisted runtime event record",
             "runtime.heartbeat": "transport keepalive frame, never persisted as a runtime event",
         },
@@ -142,17 +147,52 @@ def runtime_snapshot_frame(
     }
 
 
-def runtime_history_page_frame(page: RuntimeEventPage, *, turns: list[RuntimeTurnRecord] | None = None) -> dict[str, Any]:
-    """Wrap one older runtime history page in a transport frame."""
+def runtime_history_page_frame(
+    page: RuntimeEventPage, *, turns: list[RuntimeTurnRecord] | None = None,
+    direction: str = "before", request_id: str | None = None,
+) -> dict[str, Any]:
+    """Wrap a bounded history window; correlation never changes the live cursor."""
     return {
         "type": "runtime.history.page",
         "events": [replay_runtime_event_payload(event) for event in page.events],
         "turns": [asdict(turn) for turn in turns or []],
         "before_event_id": page.before_event_id,
+        "after_event_id": page.after_event_id,
+        "direction": direction,
+        "request_id": request_id,
         "oldest_event_id": page.oldest_event_id,
         "newest_event_id": page.newest_event_id,
         "has_more_before": page.has_more_before,
+        "has_more_after": page.has_more_after,
     }
+
+
+def requested_runtime_history_frame(state: PlatformState, session_id: str, frame: dict[str, Any]) -> dict[str, Any] | None:
+    direction = str(frame.get("type", "")).removeprefix("runtime.history.")
+    if direction not in {"before", "after", "latest"}:
+        return None
+    limit = _bounded_positive_int(
+        str(frame.get("limit") or "") or None,
+        default=DEFAULT_INITIAL_EVENT_LIMIT, maximum=MAX_HISTORY_EVENT_LIMIT,
+    )
+    request_id = frame.get("request_id")
+    if request_id is not None and (not isinstance(request_id, str) or not 1 <= len(request_id) <= 128):
+        return None
+    cursor = frame.get(f"{direction}_event_id")
+    if direction != "latest" and (not isinstance(cursor, str) or not cursor or len(cursor) > 256):
+        return None
+    if direction == "after":
+        # Forward windows start strictly after the retained tail. The existing
+        # canonical turn records supply missing anchors without replaying it.
+        page = state.runtime_store.list_event_page(session_id, after_event_id=cursor, limit=limit)
+    else:
+        page = turn_anchored_runtime_event_page(
+            state, session_id, before_event_id=cursor if direction == "before" else None, limit=limit,
+        )
+    return runtime_history_page_frame(
+        page, turns=runtime_turns_for_events(state, session_id, page.events),
+        direction=direction, request_id=request_id,
+    )
 
 
 def ordered_events_after(events: list[RuntimeEventRecord], last_event_id: str | None) -> list[RuntimeEventRecord]:
@@ -434,31 +474,9 @@ async def stream_runtime_session_events(
                         ack_event_id = _ack_event_id(client_frame)
                         if ack_event_id:
                             last_event_id = ack_event_id
-                        if client_frame.get("type") == "runtime.history.before":
-                            before_event_id = client_frame.get("before_event_id")
-                            page_limit = _bounded_positive_int(
-                                str(client_frame.get("limit") or "") or None,
-                                default=DEFAULT_INITIAL_EVENT_LIMIT,
-                                maximum=MAX_HISTORY_EVENT_LIMIT,
-                            )
-                            if isinstance(before_event_id, str) and before_event_id:
-                                page = turn_anchored_runtime_event_page(
-                                    state,
-                                    session_id,
-                                    before_event_id=before_event_id,
-                                    limit=page_limit,
-                                )
-                                await _send_json(
-                                    send,
-                                    runtime_history_page_frame(
-                                        page,
-                                        turns=runtime_turns_for_events(
-                                            state,
-                                            session_id,
-                                            page.events,
-                                        ),
-                                    ),
-                                )
+                        history_frame = requested_runtime_history_frame(state, session_id, client_frame)
+                        if history_frame is not None:
+                            await _send_json(send, history_frame)
 
             if event_task in done:
                 event = event_task.result()

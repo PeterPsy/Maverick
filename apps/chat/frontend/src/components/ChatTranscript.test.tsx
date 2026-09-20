@@ -20,6 +20,25 @@ afterEach(() => {
 });
 
 describe("ChatTranscript inter-agent board entry", () => {
+  it('offers newer history and an explicit return to the latest message', async () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    const onLoadNewerHistory = vi.fn();
+    const onLoadLatestHistory = vi.fn();
+    const props = { error: null, isLoading: false, loadingLabel: '', mentionItems: [], messages: [agentMessage()],
+      hasNewerHistory: true, onLoadNewerHistory, onLoadLatestHistory };
+    await act(async () => root?.render(<ChatTranscript {...props} />));
+    const newer = [...container.querySelectorAll('button')].find(button => button.textContent === 'Load newer messages')!;
+    await act(async () => newer.click());
+    expect(onLoadNewerHistory).toHaveBeenCalledOnce();
+    const latest = container.querySelector<HTMLButtonElement>('[aria-label="Jump to latest message"]')!;
+    await act(async () => latest.click());
+    expect(onLoadLatestHistory).toHaveBeenCalledOnce();
+    await act(async () => root?.render(<ChatTranscript {...props} isNewerHistoryLoading />));
+    expect(latest.disabled).toBe(true);
+  });
+
   it("shows the live board opener beside thinking without top inter-agent badges", async () => {
     container = document.createElement("div");
     document.body.append(container);

@@ -7,6 +7,7 @@ import unittest
 
 from core.api.runtime_websocket import (
     initial_runtime_event_page,
+    requested_runtime_history_frame,
     turn_anchored_runtime_event_page,
 )
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -18,6 +19,33 @@ BASE_TIME = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
 
 
 class RuntimeWebSocketReplayPagingTestCase(unittest.TestCase):
+    def test_forward_page_and_latest_keep_cursor_direction_and_request_identity(self) -> None:
+        state = _state_with_events([_event(f"event-{i}", i, "runtime.output.delta", turn_id=None) for i in range(8)])
+        frame = requested_runtime_history_frame(state, "session-1", {
+            "type": "runtime.history.after", "after_event_id": "event-2", "limit": 2, "request_id": "request-1",
+        })
+        self.assertEqual([event["event_id"] for event in frame["events"]], ["event-3", "event-4"])
+        self.assertEqual(frame["direction"], "after")
+        self.assertEqual(frame["after_event_id"], "event-2")
+        self.assertEqual(frame["request_id"], "request-1")
+        self.assertTrue(frame["has_more_after"])
+        latest = requested_runtime_history_frame(state, "session-1", {"type": "runtime.history.latest", "limit": 2})
+        self.assertEqual([event["event_id"] for event in latest["events"]], ["event-6", "event-7"])
+        self.assertFalse(latest["has_more_after"])
+        self.assertTrue(latest["has_more_before"])
+
+    def test_history_requests_reject_invalid_cursor_and_correlation(self) -> None:
+        state = _state_with_events([])
+        for frame in [
+            {"type": "runtime.history.after"},
+            {"type": "runtime.history.before", "before_event_id": ["event"]},
+            {"type": "runtime.history.latest", "request_id": "x" * 129},
+            {"type": "runtime.history.latest", "request_id": {"session_id": "other"}},
+            {"type": "unknown"},
+        ]:
+            self.assertIsNone(requested_runtime_history_frame(state, "session-1", frame))
+        self.assertEqual(state.runtime_store.page_calls, [])
+
     def test_initial_snapshot_extends_cut_tail_to_queued_turn_anchor(self) -> None:
         state = _state_with_events(
             [
@@ -96,18 +124,24 @@ class _RuntimeStore:
     def get_session(self, session_id: str):
         return self.sessions[session_id]
 
-    def list_event_page(self, session_id: str, *, before_event_id: str | None = None, limit: int = 200) -> RuntimeEventPage:
+    def list_event_page(self, session_id: str, *, before_event_id: str | None = None, after_event_id: str | None = None, limit: int = 200) -> RuntimeEventPage:
         self.page_calls.append((session_id, before_event_id, limit))
         events = [event for event in self.events if event.session_id == session_id]
         if before_event_id:
             cursor_index = next((index for index, event in enumerate(events) if event.event_id == before_event_id), None)
             events = events[:cursor_index] if cursor_index is not None else []
-        has_more_before = len(events) > limit
-        events = events[-limit:]
+        if after_event_id:
+            cursor_index = next((index for index, event in enumerate(events) if event.event_id == after_event_id), None)
+            events = events[cursor_index + 1:] if cursor_index is not None else []
+        has_more_before = bool(after_event_id) or len(events) > limit
+        has_more_after = bool(after_event_id) and len(events) > limit
+        events = events[:limit] if after_event_id else events[-limit:]
         return RuntimeEventPage(
             events=events,
             has_more_before=has_more_before,
             before_event_id=before_event_id,
+            after_event_id=after_event_id,
+            has_more_after=has_more_after,
             oldest_event_id=events[0].event_id if events else None,
             newest_event_id=events[-1].event_id if events else None,
         )

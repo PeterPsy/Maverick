@@ -183,6 +183,7 @@ describe("useRuntimeThreads", () => {
   });
 
   it("backs off reconnect attempts after transient closes", async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
     await act(async () => {
       root.render(<RuntimeThreadsProbe onError={() => undefined} />);
     });
@@ -210,6 +211,7 @@ describe("useRuntimeThreads", () => {
       vi.advanceTimersByTime(1);
     });
     expect(MockWebSocket.instances).toHaveLength(3);
+    random.mockRestore();
   });
 
   it("applies delta thread changes without a full catalog replacement", async () => {

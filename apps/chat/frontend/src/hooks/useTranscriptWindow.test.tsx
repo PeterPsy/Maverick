@@ -5,6 +5,43 @@ import { expect, it, vi } from 'vitest';
 import type { ChatMessage } from '../api/client';
 import { useTranscriptWindow } from './useTranscriptWindow';
 
+it('keeps speech mounted when its data page is evicted and releases it when playback ends', async () => {
+  const initial: ChatMessage[] = Array.from({ length: 130 }, (_, index) => ({
+    id: String(index), role: 'system', content: `Message ${index}`, createdAt: '', status: 'complete',
+  }));
+  let replaceMessages: (messages: ChatMessage[]) => void = () => {};
+  let stopSpeech: () => void = () => {};
+  function Harness() {
+    const viewport = useRef<HTMLDivElement | null>(null);
+    const [messages, setMessages] = useState(initial);
+    const [speaking, setSpeaking] = useState<string | null>('0');
+    replaceMessages = setMessages;
+    stopSpeech = () => setSpeaking(null);
+    const view = useTranscriptWindow(messages, viewport, speaking);
+    return <div ref={viewport}><div ref={view.container}>
+      {view.rows.map(message => <div key={message.id} data-row={message.id} hidden={view.hiddenRowId === message.id}>{message.content}</div>)}
+    </div></div>;
+  }
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => { root.render(<Harness />); });
+    const speechRow = container.querySelector('[data-row="0"]');
+    expect(speechRow).not.toBeNull();
+    await act(async () => { replaceMessages(initial.slice(-2)); });
+    expect(container.querySelector('[data-row="0"]')).toBe(speechRow);
+    expect((speechRow as HTMLElement).hidden).toBe(true);
+    expect(container.querySelectorAll('[data-row]')).toHaveLength(3);
+    await act(async () => { stopSpeech(); });
+    expect(container.querySelector('[data-row="0"]')).toBeNull();
+    expect(container.querySelectorAll('[data-row]')).toHaveLength(2);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
 it('keeps 5000 accessible messages in a bounded DOM window while scrolling both directions', async () => {
   vi.useFakeTimers();
   const messages: ChatMessage[] = Array.from({ length: 5000 }, (_, index) => ({

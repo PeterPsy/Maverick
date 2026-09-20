@@ -101,6 +101,11 @@ type UseChatControllerPresentationParams = {
   queuedMessages: QueuedMessage[];
   removeAttachment: (attachmentId: string) => void;
   hasMoreHistory: boolean;
+  hasNewerHistory?: boolean;
+  isNewerHistoryLoading?: boolean;
+  onLoadNewerHistory?: () => void;
+  onLoadLatestHistory?: () => void;
+  onFollowLatestChange?: (follow: boolean) => void;
   onLoadOlderHistory: () => void;
   onRevealOlderMessages: () => void;
   selectedAgentTypeId: string;
@@ -188,6 +193,11 @@ export function useChatControllerPresentation({
   queuedMessages,
   removeAttachment,
   hasMoreHistory,
+  hasNewerHistory,
+  isNewerHistoryLoading,
+  onLoadNewerHistory,
+  onLoadLatestHistory,
+  onFollowLatestChange,
   onLoadOlderHistory,
   onRevealOlderMessages,
   selectedAgentTypeId,
@@ -327,6 +337,11 @@ export function useChatControllerPresentation({
     transcriptProps: {
       error,
       hasMoreOlderMessages: hasHiddenMessages || hasMoreHistory,
+      hasNewerHistory,
+      isNewerHistoryLoading,
+      onLoadNewerHistory,
+      onLoadLatestHistory,
+      onFollowLatestChange,
       activeInterAgentGraphRunId,
       composerOverlayHeight: dockedComposerHeight,
       conversationKey: activeConversationKey,

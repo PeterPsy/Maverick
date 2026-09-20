@@ -19,6 +19,11 @@ function rowAt(offsets: number[], value: number): number {
 /** Variable-height rows, one observer, no transcript truncation or new dependency. */
 export function useTranscriptWindow(messages: ChatMessage[], viewport: RefObject<HTMLDivElement | null> | undefined, speakingMessageId: string | null = null) {
   const container = useRef<HTMLDivElement | null>(null);
+  const speakingMessage = useRef<ChatMessage | null>(null);
+  if (speakingMessage.current?.id !== speakingMessageId) speakingMessage.current = null;
+  if (speakingMessageId) {
+    speakingMessage.current = messages.find(message => message.id === speakingMessageId) ?? speakingMessage.current;
+  }
   const heights = useRef(new Map<string, number>());
   const pendingScroll = useRef<{ bottom: boolean; delta: number } | null>(null);
   const [measurement, setMeasurement] = useState(0);
@@ -33,8 +38,8 @@ export function useTranscriptWindow(messages: ChatMessage[], viewport: RefObject
   const start = enabled ? Math.max(0, rowAt(offsets, scroll?.top ?? Math.max(0, total - 1000)) - OVERSCAN) : 0;
   const end = enabled ? Math.min(messages.length, rowAt(offsets, (scroll?.top ?? Math.max(0, total - 1000)) + (scroll?.height ?? 1000)) + OVERSCAN + 1) : messages.length;
   const rows = messages.slice(start, end);
-  const offscreenSpeech = enabled && speakingMessageId && !rows.some(message => message.id === speakingMessageId)
-    ? messages.find(message => message.id === speakingMessageId) : undefined;
+  const offscreenSpeech = speakingMessageId && !rows.some(message => message.id === speakingMessageId)
+    ? speakingMessage.current : null;
   // Speech owns an Audio/AudioContext outside the DOM. Keep only its component
   // mounted when it leaves the window; its layout space is already in a spacer.
   if (offscreenSpeech) rows.push(offscreenSpeech);

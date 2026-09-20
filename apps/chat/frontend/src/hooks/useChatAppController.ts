@@ -296,6 +296,21 @@ export function useChatAppController({
   const [isOlderHistoryLoading, setIsOlderHistoryLoading] = useState(false);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [hasNewerHistory, setHasNewerHistory] = useState(false);
+  const [isNewerHistoryLoading, setIsNewerHistoryLoading] = useState(false);
+  const [newerHistoryRequestId, setNewerHistoryRequestId] = useState(0);
+  const [latestHistoryRequestId, setLatestHistoryRequestId] = useState(0);
+  const followLatestRef = useRef(true);
+  const handleFollowLatestChange = useCallback((follow: boolean) => { followLatestRef.current = follow; }, []);
+  const handleLoadNewerHistory = useCallback(() => {
+    setIsNewerHistoryLoading(true);
+    setNewerHistoryRequestId(current => current + 1);
+  }, []);
+  const handleLoadLatestHistory = useCallback(() => {
+    followLatestRef.current = true;
+    setIsNewerHistoryLoading(true);
+    setLatestHistoryRequestId(current => current + 1);
+  }, []);
   const [olderHistoryRequestId, setOlderHistoryRequestId] = useState(0);
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(50);
   const [error, setError] = useState<string | null>(null);
@@ -583,6 +598,7 @@ export function useChatAppController({
     hasExternalRuntimeThreads,
     hasLoadedHistory,
     hasMoreHistory,
+    hasNewerHistory,
     isBootstrapping,
     navigationScope,
     newChatProjectId,
@@ -603,6 +619,7 @@ export function useChatAppController({
     setFailedUserMessagesForConversation,
     setHasLoadedHistory,
     setHasMoreHistory,
+    setHasNewerHistory,
     setIsBootstrapping,
     setIsHistoryLoading,
     setIsOlderHistoryLoading,
@@ -664,6 +681,7 @@ export function useChatAppController({
       return;
     }
     setIsOlderHistoryLoading(true);
+    setVisibleMessageLimit(current => Math.min(6000, current + 250));
     setOlderHistoryRequestId((current) => current + 1);
   }, [activeThread?.runtime_session_id, hasMoreHistory, isOlderHistoryLoading]);
 
@@ -767,7 +785,12 @@ export function useChatAppController({
     onCloseInterAgentGraph: handleCloseInterAgentGraph,
     multiAgentMode,
     hasMoreHistory,
+    hasNewerHistory,
     onLoadOlderHistory: handleLoadOlderHistory,
+    isNewerHistoryLoading,
+    onLoadNewerHistory: handleLoadNewerHistory,
+    onLoadLatestHistory: handleLoadLatestHistory,
+    onFollowLatestChange: handleFollowLatestChange,
     onRevealOlderMessages: handleRevealOlderMessages,
     pendingUserMessages,
     providers: composerProviders,
@@ -800,16 +823,22 @@ export function useChatAppController({
     runtimeEvents: {
       activeTurn,
       hasMoreHistory,
+      hasNewerHistory,
       onRuntimeSessionUnavailable: handleUnavailableRuntimeSession,
       onRuntimeSnapshot: handleRuntimeSnapshot,
       onUsageSnapshot: setChatUsage,
       olderHistoryRequestId,
+      newerHistoryRequestId,
+      latestHistoryRequestId,
+      followLatestRef,
+      setIsNewerHistoryLoading,
       runtimeSessionId: activeThread?.runtime_session_id || null,
       setActiveSession,
       setActiveTurn,
       setError,
       setEvents,
       setHasMoreHistory,
+      setHasNewerHistory,
       setIsOlderHistoryLoading,
       setPendingUserMessages,
     },

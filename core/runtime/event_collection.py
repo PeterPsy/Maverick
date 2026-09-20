@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime.event_archive_collection import RuntimeEventArchivePaginationMixin
+from core.runtime.event_forward_page import forward_event_page
 from core.runtime.session_collection import RuntimeSessionJsonCollection, _locked_collection_path
 from core.shared.json_file_collection import _matches
 
@@ -100,8 +101,15 @@ class RuntimeEventJsonCollection(RuntimeEventArchivePaginationMixin, RuntimeSess
                             return document
         return None
 
-    def find_event_page(self, query: dict[str, Any], *, before_event_id: str | None, limit: int) -> dict[str, Any]:
+    def find_event_page(
+        self, query: dict[str, Any], *, before_event_id: str | None, limit: int,
+        after_event_id: str | None = None,
+    ) -> dict[str, Any]:
         """Return a bounded page from history without scanning the whole archive."""
+        if before_event_id and after_event_id:
+            raise ValueError("Runtime history cannot combine before and after cursors.")
+        if after_event_id:
+            return forward_event_page(self, query, after_event_id=after_event_id, limit=limit)
         if limit < 1:
             return {"documents": [], "has_more_before": False}
         for history_root in self._candidate_history_roots(query):

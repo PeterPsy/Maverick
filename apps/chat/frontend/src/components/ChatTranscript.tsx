@@ -27,6 +27,11 @@ export type ChatTranscriptProps = {
   mentionItems: MentionItem[];
   messages: ChatMessage[];
   hasMoreOlderMessages?: boolean;
+  hasNewerHistory?: boolean;
+  isNewerHistoryLoading?: boolean;
+  onLoadNewerHistory?: () => void;
+  onLoadLatestHistory?: () => void;
+  onFollowLatestChange?: (follow: boolean) => void;
   onCloseInterAgentGraph?: () => void;
   onContinueFromProviderOverload?: () => void;
   onLoadOlderMessages?: () => void;
@@ -52,6 +57,11 @@ export function ChatTranscript({
   mentionItems,
   messages,
   hasMoreOlderMessages = false,
+  hasNewerHistory = false,
+  isNewerHistoryLoading = false,
+  onLoadNewerHistory,
+  onLoadLatestHistory,
+  onFollowLatestChange,
   onLoadOlderMessages,
   onContinueFromProviderOverload,
   onOpenInterAgentGraph = () => undefined,
@@ -63,7 +73,7 @@ export function ChatTranscript({
   speechProviderStreamingSupported = false,
 }: ChatTranscriptProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const scrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const scrollAnchorRef = useRef<{ height: number; top: number; row?: string; offset?: number } | null>(null);
   const loadOlderPendingRef = useRef(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [showScrollJump, setShowScrollJump] = useState(false);
@@ -74,6 +84,12 @@ export function ChatTranscript({
   );
 
   function scrollToBottom() {
+    onFollowLatestChange?.(true);
+    setIsNearBottom(true);
+    if (hasNewerHistory) {
+      onLoadLatestHistory?.();
+      return;
+    }
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
@@ -126,12 +142,17 @@ export function ChatTranscript({
     }
     if (viewport.scrollTop < 80 && hasMoreOlderMessages && !isLoadingOlderHistory && !loadOlderPendingRef.current) {
       loadOlderPendingRef.current = true;
-      scrollAnchorRef.current = { height: viewport.scrollHeight, top: viewport.scrollTop };
+      const top = viewport.getBoundingClientRect().top;
+      const row = [...viewport.querySelectorAll<HTMLElement>('[data-transcript-row]')]
+        .find(element => !element.hidden && element.getBoundingClientRect().bottom > top);
+      scrollAnchorRef.current = { height: viewport.scrollHeight, top: viewport.scrollTop,
+        row: row?.dataset.transcriptRow, offset: row ? row.getBoundingClientRect().top - top : undefined };
       onLoadOlderMessages?.();
     }
     const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     const nextIsNearBottom = distanceFromBottom < 96;
     setIsNearBottom(nextIsNearBottom);
+    onFollowLatestChange?.(nextIsNearBottom && !hasNewerHistory);
     if (nextIsNearBottom) {
       setShowScrollJump(false);
     }
@@ -155,6 +176,7 @@ export function ChatTranscript({
     scrollAnchorRef.current = null;
     loadOlderPendingRef.current = false;
     setIsNearBottom(true);
+    onFollowLatestChange?.(true);
     setShowScrollJump(false);
     setExpandedMessages(new Set());
     setSpeakingMessageId(null);
@@ -166,10 +188,16 @@ export function ChatTranscript({
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     const anchor = scrollAnchorRef.current;
-    if (!viewport || !anchor) {
+    if (!viewport || !anchor || isLoadingOlderHistory) {
       return;
     }
-    viewport.scrollTop = viewport.scrollHeight - anchor.height + anchor.top;
+    // The data window may also drop rows below the viewport while prepending.
+    // Preserve the visible row itself instead of using total height alone.
+    const row = anchor.row ? [...viewport.querySelectorAll<HTMLElement>('[data-transcript-row]')]
+      .find(element => element.dataset.transcriptRow === anchor.row) : null;
+    viewport.scrollTop = row && anchor.offset !== undefined
+      ? viewport.scrollTop + row.getBoundingClientRect().top - viewport.getBoundingClientRect().top - anchor.offset
+      : viewport.scrollHeight - anchor.height + anchor.top;
     scrollAnchorRef.current = null;
     loadOlderPendingRef.current = false;
   }, [messages.length, isLoadingOlderHistory]);
@@ -256,6 +284,13 @@ export function ChatTranscript({
           speechProviderQualityProfile={speechProviderQualityProfile}
           speechProviderStreamingSupported={speechProviderStreamingSupported}
         />
+        {hasNewerHistory ? (
+          <div className="chatapp-history-loader">
+            <button type="button" disabled={isNewerHistoryLoading} onClick={onLoadNewerHistory}>
+              {isNewerHistoryLoading ? 'Loading newer messages' : 'Load newer messages'}
+            </button>
+          </div>
+        ) : null}
         {isLoading ? (
           <article className="chatapp-bubble is-agent">
             <div className="chatapp-pending-turn" aria-live="polite">
@@ -281,8 +316,8 @@ export function ChatTranscript({
           </div>
         ) : null}
       </div>
-      {showScrollJump ? (
-        <button className="chatapp-chat-scroll-jump" onClick={scrollToBottom} type="button" aria-label="Jump to latest message">
+      {showScrollJump || hasNewerHistory ? (
+        <button className="chatapp-chat-scroll-jump" disabled={isNewerHistoryLoading} onClick={scrollToBottom} type="button" aria-label="Jump to latest message">
           <span aria-hidden="true" className="material-symbols-rounded">
             arrow_downward
           </span>

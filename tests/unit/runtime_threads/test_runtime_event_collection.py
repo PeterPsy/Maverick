@@ -9,6 +9,46 @@ from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeEventCollectionTest(unittest.TestCase):
+    def test_forward_history_pages_cross_chunks_without_materializing_other_sessions(self) -> None:
+        root = make_temp_repo_root(self)
+        collection = RuntimeEventJsonCollection(start_path=root)
+        history = root / 'workspaces/default/runtime/sessions/session-1/events-history'
+        history.mkdir(parents=True)
+        for chunk in range(4):
+            documents = [{'event_id': f'event-{index:03}', 'workspace_id': 'default', 'session_id': 'session-1',
+                'created_at': f'2026-09-20T00:00:{index:02}+00:00'} for index in range(chunk * 5, (chunk + 1) * 5)]
+            (history / f'{chunk:06}.json').write_text(json.dumps(documents))
+        other = root / 'workspaces/default/runtime/sessions/session-2/events-history'
+        other.mkdir(parents=True)
+        (other / '000000.json').write_text('Must never decode another session')
+        query = {'workspace_id': 'default', 'session_id': 'session-1'}
+        with patch.object(collection, '_matching_sorted_documents', wraps=collection._matching_sorted_documents) as read:
+            page = collection.find_event_page(query, before_event_id=None, after_event_id='event-014', limit=3)
+        self.assertEqual([item['event_id'] for item in page['documents']], ['event-015', 'event-016', 'event-017'])
+        self.assertTrue(page['has_more_after'])
+        self.assertLessEqual(read.call_count, 3)
+        final = collection.find_event_page(query, before_event_id=None, after_event_id='event-017', limit=3)
+        self.assertEqual([item['event_id'] for item in final['documents']], ['event-018', 'event-019'])
+        self.assertFalse(final['has_more_after'])
+        missing = collection.find_event_page(query, before_event_id=None, after_event_id='missing', limit=3)
+        self.assertEqual(missing['documents'], [])
+        self.assertFalse(missing['cursor_found'])
+
+    def test_forward_hot_tail_and_exclusive_directions(self) -> None:
+        collection = RuntimeEventJsonCollection(start_path=make_temp_repo_root(self))
+        for index in range(4):
+            self._append_event(collection, index=index, max_documents=10)
+        query = {'workspace_id': 'default', 'session_id': 'session-1'}
+        page = collection.find_event_page(query, before_event_id=None, after_event_id='event-1', limit=1)
+        self.assertEqual([item['event_id'] for item in page['documents']], ['event-2'])
+        self.assertTrue(page['has_more_after'])
+        tail = collection.find_event_page(query, before_event_id=None, after_event_id='event-3', limit=1)
+        self.assertTrue(tail['cursor_found'])
+        self.assertTrue(tail['has_more_before'])
+        self.assertFalse(tail['has_more_after'])
+        with self.assertRaises(ValueError):
+            collection.find_event_page(query, before_event_id='event-1', after_event_id='event-2', limit=1)
+
     def test_full_hot_tail_appends_between_bounded_compactions(self) -> None:
         repo_root = make_temp_repo_root(self)
         collection = RuntimeEventJsonCollection(start_path=repo_root)

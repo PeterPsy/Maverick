@@ -132,6 +132,12 @@ function latestRuntimeTimestamp(timestamps: string[]): string {
   return timestamps.filter(Boolean).sort().at(-1) || "";
 }
 
+export function liveRuntimeTurnAfterEvents(events: RuntimeEvent[], current: RuntimeTurn | null, sessionId: string): RuntimeTurn | null {
+  const anchor = current ? { ...syntheticTurnAnchor(current),
+    event_type: current.status === 'queued' ? 'runtime.turn.queued' : 'runtime.turn.started' } : null;
+  return inferActiveRuntimeTurn(anchor ? [anchor, ...events] : events, sessionId);
+}
+
 export function inferActiveRuntimeTurn(events: RuntimeEvent[], sessionId: string | null): RuntimeTurn | null {
   if (!sessionId) {
     return null;
@@ -161,6 +167,7 @@ export function inferActiveRuntimeTurn(events: RuntimeEvent[], sessionId: string
       session_id: sessionId,
       workspace_id: typeof event.payload.workspace_id === "string" ? event.payload.workspace_id : "",
       status,
+      client_message_id: typeof event.payload.client_message_id === "string" ? event.payload.client_message_id : previous?.client_message_id,
       input_text: typeof event.payload.input_text === "string" ? event.payload.input_text : previous?.input_text || null,
       failure_reason: typeof event.payload.error === "string" ? event.payload.error : previous?.failure_reason || null,
       created_at: previous?.created_at || event.created_at,

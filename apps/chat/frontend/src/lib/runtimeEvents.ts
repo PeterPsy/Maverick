@@ -1,20 +1,36 @@
 import type { RuntimeEvent, RuntimeTurn } from "../api/client";
+import { equivalentEvent } from "./transcriptProjection";
 
 const SYNTHETIC_TURN_ANCHOR_PREFIX = "synthetic-turn-anchor:";
 const SYNTHETIC_TURN_STATUS_PREFIX = "synthetic-turn-status:";
 
+type EventIndex = { owner: RuntimeEvent[]; byId: Map<string, RuntimeEvent> };
+const eventIndexes = new WeakMap<RuntimeEvent[], EventIndex>();
+
+function compareEvents(left: RuntimeEvent, right: RuntimeEvent): number {
+  return left.created_at.localeCompare(right.created_at) || left.event_id.localeCompare(right.event_id);
+}
+
 export function mergeRuntimeEvents(current: RuntimeEvent[], incoming: RuntimeEvent[]): RuntimeEvent[] {
-  const byId = new Map<string, RuntimeEvent>();
-  for (const event of current) {
-    byId.set(event.event_id, event);
-  }
+  if (!incoming.length) return current;
+  let index = eventIndexes.get(current);
+  if (!index || index.owner !== current) index = { owner: current, byId: new Map(current.map(event => [event.event_id, event])) };
+  const changed = new Map<string, RuntimeEvent>();
   for (const event of incoming) {
-    byId.set(event.event_id, event);
+    const previous = changed.get(event.event_id) || index.byId.get(event.event_id);
+    if (!previous || !equivalentEvent(previous, event)) changed.set(event.event_id, event);
   }
-  return Array.from(byId.values()).sort((left, right) => {
-    const byCreatedAt = left.created_at.localeCompare(right.created_at);
-    return byCreatedAt || left.event_id.localeCompare(right.event_id);
-  });
+  if (!changed.size) return current;
+  const appended = [...changed.values()];
+  const tail = current.at(-1);
+  const isAppend = appended.every(event => !index.byId.has(event.event_id) && (!tail || compareEvents(tail, event) < 0));
+  for (const event of appended) index.byId.set(event.event_id, event);
+  // The live path sorts only this frame's new events. Replayed/corrected events
+  // still use a deterministic full merge; duplicate replay preserves identity.
+  const result = isAppend ? current.concat(appended.sort(compareEvents)) : [...index.byId.values()].sort(compareEvents);
+  index.owner = result;
+  eventIndexes.set(result, index);
+  return result;
 }
 
 export function lastRuntimeEventId(events: RuntimeEvent[]): string | null {

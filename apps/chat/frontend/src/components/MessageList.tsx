@@ -1,9 +1,12 @@
-import type { Dispatch, SetStateAction } from "react";
+import { memo, type Dispatch, type SetStateAction, type RefObject } from "react";
 import type { ChatMessage } from "../api/client";
 import type { InterAgentBoardLink } from "../lib/interAgentTranscript";
 import type { MentionItem } from "../lib/mentions";
 import type { CopyMessageHandler } from "./MessageCopyButton";
 import { MessageBubble } from "./MessageBubble";
+import { useTranscriptWindow } from '../hooks/useTranscriptWindow';
+
+const StableMessageBubble = memo(MessageBubble);
 
 export function MessageList({
   expandedMessages,
@@ -22,6 +25,7 @@ export function MessageList({
   speechProviderAvailable,
   speechProviderQualityProfile,
   speechProviderStreamingSupported,
+  viewportRef,
 }: {
   expandedMessages: Set<string>;
   interAgentBoardLinksByMessageId?: Record<string, InterAgentBoardLink>;
@@ -39,7 +43,9 @@ export function MessageList({
   speechProviderAvailable: boolean;
   speechProviderQualityProfile: string;
   speechProviderStreamingSupported: boolean;
+  viewportRef?: RefObject<HTMLDivElement | null>;
 }) {
+  const windowed = useTranscriptWindow(messages, viewportRef);
   const latestMessage = messages.at(-1);
   const recoverableFailureMessageId =
     latestMessage?.role === "system" &&
@@ -48,9 +54,11 @@ export function MessageList({
       : null;
 
   return (
-    <>
-      {messages.map((message) => (
-        <MessageBubble
+    <div className="chatapp-message-list" ref={windowed.container} style={windowed.enabled ? { overflowAnchor: 'none' } : undefined}>
+      {windowed.before > 0 ? <div aria-hidden="true" style={{ height: windowed.before }} /> : null}
+      {windowed.rows.map((message) => (
+        <div key={message.id} data-transcript-row={message.id}>
+        <StableMessageBubble
           expanded={expandedMessages.has(message.id)}
           interAgentBoardLink={interAgentBoardLinksByMessageId[message.id]}
           key={message.id}
@@ -73,7 +81,9 @@ export function MessageList({
           speechProviderQualityProfile={speechProviderQualityProfile}
           speechProviderStreamingSupported={speechProviderStreamingSupported}
         />
+        </div>
       ))}
-    </>
+      {windowed.after > 0 ? <div aria-hidden="true" style={{ height: windowed.after }} /> : null}
+    </div>
   );
 }

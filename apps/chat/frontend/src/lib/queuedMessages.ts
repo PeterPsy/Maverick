@@ -34,3 +34,5 @@ function dedupe<T extends QueuedMessage>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((item) => { if (seen.has(item.clientMessageId)) return false; seen.add(item.clientMessageId); return true; });
 }
+
+export function hasQueuedMessageMemory(): boolean { return states.size > 0; }

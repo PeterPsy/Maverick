@@ -11,6 +11,9 @@ import {
   runtimeWebSocketUrl,
 } from "../api/client";
 import { PendingMessage } from "../lib/messageState";
+import { runtimeFrameBatch } from '../lib/runtimeFrameBatch';
+import { socketReconnectDelay } from '../lib/socketReconnectDelay';
+import { useChatVisibility } from './useChatVisibility';
 import {
   firstPersistedRuntimeEventId,
   firstRuntimeEventId,
@@ -100,6 +103,7 @@ export function useRuntimeEvents({
   setIsOlderHistoryLoading,
   setPendingUserMessages,
 }: RuntimeEventsArgs) {
+  const visible = useChatVisibility();
   const activeTurnRef = useRef<RuntimeTurn | null>(activeTurn);
   const hasMoreHistoryRef = useRef(hasMoreHistory);
   const oldestEventIdRef = useRef<string | null>(null);
@@ -124,13 +128,14 @@ export function useRuntimeEvents({
   }, [onRuntimeSessionUnavailable]);
 
   useEffect(() => {
-    if (!runtimeSessionId) {
+    if (!runtimeSessionId || !visible) {
       return;
     }
     const currentSessionId = runtimeSessionId;
     let cancelled = false;
     let socket: WebSocket | null = null;
     let reconnectTimer: number | null = null;
+    let reconnectAttempt = 0;
     let heartbeatTimer: number | null = null;
     let lastEventId: string | null = null;
     let receivedInitialSnapshot = false;
@@ -173,11 +178,12 @@ export function useRuntimeEvents({
     }
 
     function eventsForCurrentSession(incoming: RuntimeEvent[]): RuntimeEvent[] {
-      return incoming.filter((event) => event.session_id === currentSessionId);
+      return incoming.every((event) => event.session_id === currentSessionId) ? incoming
+        : incoming.filter((event) => event.session_id === currentSessionId);
     }
 
     function applyIncomingEvents(incoming: RuntimeEvent[], oldestEventId?: string | null) {
-      const scopedIncoming = eventsForCurrentSession(incoming);
+      let scopedIncoming = eventsForCurrentSession(incoming);
       if (!scopedIncoming.length) {
         return;
       }
@@ -188,6 +194,9 @@ export function useRuntimeEvents({
           onUsageSnapshotRef.current?.(usage);
         }
       }
+      // Coalesced usage snapshots have no durable replay cursor.
+      scopedIncoming = scopedIncoming.filter((event) => event.event_type !== 'runtime.usage.updated');
+      if (!scopedIncoming.length) return;
       const persistedIncoming = scopedIncoming.filter((event) => !isSyntheticRuntimeEvent(event));
       lastEventId = (persistedIncoming.at(-1) || scopedIncoming[scopedIncoming.length - 1]).event_id;
       setEvents((current) => {
@@ -199,6 +208,8 @@ export function useRuntimeEvents({
         return merged;
       });
     }
+
+    const frameBatch = runtimeFrameBatch(applyIncomingEvents);
 
     function applyHistoryPage(incoming: RuntimeEvent[], oldestEventId?: string | null) {
       const scopedIncoming = eventsForCurrentSession(incoming);
@@ -225,13 +236,30 @@ export function useRuntimeEvents({
       return scopedCurrent;
     });
 
+    function scheduleReconnect() {
+      if (cancelled || unavailableReported || reconnectTimer !== null) return;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectWebSocket();
+      }, socketReconnectDelay(reconnectAttempt++));
+    }
+
     function connectWebSocket() {
+      if (cancelled || unavailableReported) return;
       let socketOpened = false;
       const replayCursor = receivedInitialSnapshot ? lastEventId : null;
-      socket = new WebSocket(runtimeWebSocketUrl(currentSessionId, replayCursor));
-      socketRef.current = socket;
-      socket.onopen = () => {
-        if (!socketIsCurrent(socket)) {
+      let current: WebSocket;
+      try {
+        current = new WebSocket(runtimeWebSocketUrl(currentSessionId, replayCursor));
+      } catch {
+        setError("Runtime WebSocket is unavailable.");
+        scheduleReconnect();
+        return;
+      }
+      socket = current;
+      socketRef.current = current;
+      current.onopen = () => {
+        if (!socketIsCurrent(current)) {
           return;
         }
         socketOpened = true;
@@ -239,8 +267,8 @@ export function useRuntimeEvents({
         startHeartbeatWatchdog();
         setError(null);
       };
-      socket.onmessage = (event) => {
-        if (!socketIsCurrent(socket)) {
+      current.onmessage = (event) => {
+        if (!socketIsCurrent(current)) {
           return;
         }
         try {
@@ -250,9 +278,11 @@ export function useRuntimeEvents({
           }
           lastFrameAt = Date.now();
           if (frame.type === "runtime.snapshot") {
+            frameBatch.flush();
             if (frame.session.session_id !== currentSessionId) {
               return;
             }
+            reconnectAttempt = 0;
             if (receivedInitialSnapshot) invalidateChatDisplay('messages');
             receivedInitialSnapshot = true;
             if (paintedDisplay) { setEvents([]); oldestEventIdRef.current = null; }
@@ -274,6 +304,7 @@ export function useRuntimeEvents({
             return;
           }
           if (frame.type === "runtime.history.page") {
+            frameBatch.flush();
             setHasMoreHistory?.(frame.has_more_before === true);
             applyHistoryPage(hydrateMissingTurnAnchors(frame.events || [], frame.turns), frame.oldest_event_id);
             setIsOlderHistoryLoading?.(false);
@@ -287,31 +318,31 @@ export function useRuntimeEvents({
               // WebSocket loader or persist its operational payload.
               void readChatDisplay({ kind: 'messages', session_id: currentSessionId }, { signal: displayController.signal }).catch(() => undefined);
             }
-            applyIncomingEvents([runtimeEvent]);
+            frameBatch.push(runtimeEvent);
           }
         } catch (parseError) {
-          if (!socketIsCurrent(socket)) {
+          if (!socketIsCurrent(current)) {
             return;
           }
           setError(parseError instanceof Error ? parseError.message : "Unable to parse runtime WebSocket frame.");
         }
       };
-      socket.onerror = () => {
-        if (!socketIsCurrent(socket)) {
+      current.onerror = () => {
+        if (!socketIsCurrent(current)) {
           return;
         }
         if (!socketOpened) {
           setError("Runtime WebSocket is unavailable.");
         }
       };
-      socket.onclose = (event) => {
-        if (!socketIsCurrent(socket)) {
+      current.onclose = (event) => {
+        if (!socketIsCurrent(current)) {
           return;
         }
         stopHeartbeatWatchdog();
-        if (socketRef.current === socket) {
-          socketRef.current = null;
-        }
+        frameBatch.flush();
+        socketRef.current = null;
+        socket = null;
         if (cancelled || unavailableReported) {
           return;
         }
@@ -319,7 +350,7 @@ export function useRuntimeEvents({
           reportUnavailableSession();
           return;
         }
-        reconnectTimer = window.setTimeout(connectWebSocket, 500);
+        scheduleReconnect();
       };
     }
 
@@ -343,6 +374,7 @@ export function useRuntimeEvents({
 
     return () => {
       cancelled = true;
+      frameBatch.dispose();
       displayController.abort();
       if (reconnectTimer !== null) {
         window.clearTimeout(reconnectTimer);
@@ -353,7 +385,7 @@ export function useRuntimeEvents({
         socketRef.current = null;
       }
     };
-  }, [runtimeSessionId, setActiveSession, setActiveTurn, setError, setEvents, setHasMoreHistory, setIsOlderHistoryLoading, setPendingUserMessages]);
+  }, [runtimeSessionId, visible, setActiveSession, setActiveTurn, setError, setEvents, setHasMoreHistory, setIsOlderHistoryLoading, setPendingUserMessages]);
 
   useEffect(() => {
     if (!runtimeSessionId || olderHistoryRequestId <= 0) {

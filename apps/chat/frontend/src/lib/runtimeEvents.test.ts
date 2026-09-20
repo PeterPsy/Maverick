@@ -36,6 +36,18 @@ function turn(status: string, overrides: Partial<RuntimeTurn> = {}): RuntimeTurn
 }
 
 describe("runtime websocket helpers", () => {
+  it('keeps duplicate replay arrays and existing events stable and accepts corrections and late events', () => {
+    const first = [event('a', '2026-01-01T00:00:01Z')];
+    const appended = mergeRuntimeEvents(first, [event('b', '2026-01-01T00:00:02Z')]);
+    expect(appended[0]).toBe(first[0]);
+    expect(mergeRuntimeEvents(appended, [{ ...appended[0] }])).toBe(appended);
+    const late = event('late', '2026-01-01T00:00:00Z');
+    expect(mergeRuntimeEvents(appended, [late]).map(item => item.event_id)).toEqual(['late', 'a', 'b']);
+    // An older list must never inherit later mutations of its cached index.
+    expect(mergeRuntimeEvents(first, [event('c', '2026-01-01T00:00:03Z')]).map(item => item.event_id)).toEqual(['a', 'c']);
+    const correction = { ...appended[0], payload: { text: 'corrected' } };
+    expect(mergeRuntimeEvents(appended, [correction])[0]).toBe(correction);
+  });
   it("builds a same-origin websocket URL with replay cursor", () => {
     vi.stubGlobal("window", { location: { protocol: "https:", host: "example.localhost" } });
 

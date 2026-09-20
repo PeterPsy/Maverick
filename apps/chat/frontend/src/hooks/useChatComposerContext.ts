@@ -154,6 +154,7 @@ export function useChatComposerContext({
     handleReferenceRemove,
     handleSearchReferences,
     mentionItems,
+    selectedReferences,
     setSelectedReferences,
   };
 }

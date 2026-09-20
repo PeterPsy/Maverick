@@ -10,9 +10,16 @@ import type { PendingMessage } from "../lib/messageState";
 import { eventsToMessages } from "../lib/transcript";
 import { useRuntimeEvents } from "./useRuntimeEvents";
 
+vi.mock('../pwaCache', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../pwaCache')>(),
+  readChatDisplay: vi.fn().mockRejectedValue(new Error('No persisted display in this test')),
+  invalidateChatDisplay: vi.fn(),
+}));
+
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   static OPEN = 1;
+  static failNext = false;
 
   onclose: ((event: CloseEvent) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -23,6 +30,10 @@ class MockWebSocket {
   url: string;
 
   constructor(url: string) {
+    if (MockWebSocket.failNext) {
+      MockWebSocket.failNext = false;
+      throw new Error('connection unavailable');
+    }
     this.url = url;
     MockWebSocket.instances.push(this);
   }
@@ -115,12 +126,35 @@ describe("useRuntimeEvents", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
     MockWebSocket.instances = [];
+    MockWebSocket.failNext = false;
     originalWebSocket = globalThis.WebSocket;
     globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
+  });
+
+  it('closes hidden/offline streams and reconnects once with an authoritative snapshot', async () => {
+    await act(async () => { root?.render(<RuntimeEventsHarness initialEvents={[]} />); });
+    const first = MockWebSocket.instances[0];
+    await act(async () => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(first.readyState).toBe(3);
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    expect(MockWebSocket.instances).toHaveLength(1);
+    await act(async () => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(MockWebSocket.instances[1].url).not.toContain('last_event_id');
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(MockWebSocket.instances).toHaveLength(2);
+    delete (document as unknown as Record<string, unknown>).hidden;
   });
 
   afterEach(() => {
@@ -129,7 +163,66 @@ describe("useRuntimeEvents", () => {
     root = null;
     container = null;
     globalThis.WebSocket = originalWebSocket as typeof WebSocket;
+    vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('backs off flapping connections, caps retries, and resets only after a snapshot', async () => {
+    await act(async () => { root?.render(<RuntimeEventsHarness initialEvents={[]} />); });
+    for (const delay of [500, 1000, 2000, 4000, 8000, 16000, 30000, 30000]) {
+      const current = MockWebSocket.instances.at(-1)!;
+      const count = MockWebSocket.instances.length;
+      await act(async () => {
+        current.onopen?.();
+        current.onclose?.({ code: 1006 } as CloseEvent);
+        vi.advanceTimersByTime(delay - 1);
+      });
+      expect(MockWebSocket.instances).toHaveLength(count);
+      await act(async () => { vi.advanceTimersByTime(1); });
+      expect(MockWebSocket.instances).toHaveLength(count + 1);
+    }
+    const count = MockWebSocket.instances.length;
+    await act(async () => {
+      const current = MockWebSocket.instances.at(-1)!;
+      current.onmessage?.({ data: JSON.stringify({ type: 'runtime.snapshot', session, events: [] }) } as MessageEvent);
+      current.onclose?.({ code: 1006 } as CloseEvent);
+      vi.advanceTimersByTime(500);
+    });
+    expect(MockWebSocket.instances).toHaveLength(count + 1);
+  });
+
+  it('ignores callbacks from replaced sockets without corrupting state or reconnecting again', async () => {
+    const onState = vi.fn();
+    await act(async () => { root?.render(<RuntimeEventsHarness initialEvents={[]} onState={onState} />); });
+    const first = MockWebSocket.instances[0];
+    await act(async () => {
+      first.onclose?.({ code: 1006 } as CloseEvent);
+      vi.advanceTimersByTime(500);
+    });
+    const current = MockWebSocket.instances[1];
+    await act(async () => {
+      current.onmessage?.({ data: JSON.stringify({ type: 'runtime.snapshot', session, events: [event('current')] }) } as MessageEvent);
+      first.onmessage?.({ data: JSON.stringify({ type: 'runtime.snapshot', session, events: [event('stale')] }) } as MessageEvent);
+      first.onerror?.();
+      first.onopen?.();
+      first.onclose?.({ code: 1006 } as CloseEvent);
+      vi.advanceTimersByTime(1000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(onState.mock.lastCall?.[0].events.map((item: RuntimeEvent) => item.event_id)).toEqual(['current']);
+    expect(onState.mock.lastCall?.[0].error).toBeNull();
+  });
+
+  it('recovers a constructor failure with a jittered retry', async () => {
+    MockWebSocket.failNext = true;
+    vi.mocked(Math.random).mockReturnValue(0);
+    const onState = vi.fn();
+    await act(async () => { root?.render(<RuntimeEventsHarness initialEvents={[]} onState={onState} />); });
+    expect(onState.mock.lastCall?.[0].error).toBe('Runtime WebSocket is unavailable.');
+    await act(async () => { vi.advanceTimersByTime(399); });
+    expect(MockWebSocket.instances).toHaveLength(0);
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(MockWebSocket.instances).toHaveLength(1);
   });
 
   it("refreshes the bounded tail before using cached event cursors for reconnects", async () => {

@@ -335,9 +335,43 @@ afterEach(() => {
   getBoundingClientRectSpy = null;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("InterAgentGraphView", () => {
+  it('backs off disconnected graph streams and ignores callbacks from old connections', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const element = await renderGraph();
+    const first = FakeWebSocket.instances[0];
+    await act(async () => {
+      first.onclose?.({ code: 1006 });
+      vi.advanceTimersByTime(800);
+    });
+    const second = FakeWebSocket.instances[1];
+    await act(async () => {
+      first.onerror?.();
+      first.onopen?.();
+      first.onmessage?.({ data: JSON.stringify({ type: 'inter_agent.event', event: artifactEvent() }) });
+      first.onclose?.({ code: 4404 });
+      second.onclose?.({ code: 1006 });
+      vi.advanceTimersByTime(1599);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(element.textContent).not.toContain('Graph stream is not available');
+    expect(element.textContent).not.toContain('Research report');
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(FakeWebSocket.instances).toHaveLength(3);
+    await act(async () => {
+      const current = FakeWebSocket.instances[2];
+      current.onmessage?.({ data: JSON.stringify({ type: 'inter_agent.snapshot', run_detail: runDetail(), events: [] }) });
+      current.onclose?.({ code: 1006 });
+      vi.advanceTimersByTime(800);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(4);
+  });
+
   it("renders loading and empty Agent nodes states", async () => {
     vi.mocked(getInterAgentRun).mockReturnValue(new Promise(() => undefined));
     const element = await renderGraph({ initialRunDetail: null });

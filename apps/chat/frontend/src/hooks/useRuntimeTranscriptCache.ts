@@ -1,7 +1,9 @@
 import { Dispatch, SetStateAction, useEffect, useRef } from "react";
 import type { ChatThread, RuntimeEvent, RuntimeSession, RuntimeTurn } from "../api/client";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
+import { clearTranscriptProjectionCache } from '../lib/transcript';
 import {
+  RuntimeTranscriptCache,
   type RuntimeTranscriptCacheEntry,
 } from "../lib/runtimeTranscriptCache";
 
@@ -60,7 +62,18 @@ export function useRuntimeTranscriptCache({
   setThreads,
 }: UseRuntimeTranscriptCacheParams) {
   const activeRuntimeSessionIdRef = useRef<string | null>(null);
-  const runtimeTranscriptCacheRef = useRef<Map<string, RuntimeTranscriptCacheEntry>>(new Map());
+  const runtimeTranscriptCacheRef = useRef(new RuntimeTranscriptCache());
+  const activeEntryRef = useRef<{ id: string; entry: RuntimeTranscriptCacheEntry } | null>(null);
+
+  useEffect(() => {
+    const clear = () => {
+      runtimeTranscriptCacheRef.current.clear();
+      activeEntryRef.current = null;
+      clearTranscriptProjectionCache();
+    };
+    window.addEventListener('pagehide', clear);
+    return () => { window.removeEventListener('pagehide', clear); clear(); };
+  }, []);
 
   useEffect(() => {
     const runtimeSessionId = activeThread?.runtime_session_id;
@@ -69,10 +82,15 @@ export function useRuntimeTranscriptCache({
 
   useEffect(() => {
     const runtimeSessionId = activeThread?.runtime_session_id;
+    const previous = activeEntryRef.current;
+    if (previous && previous.id !== runtimeSessionId) {
+      runtimeTranscriptCacheRef.current.set(previous.id, previous.entry);
+      activeEntryRef.current = null;
+    }
     if (!runtimeSessionId) {
       return;
     }
-    const previousEntry = runtimeTranscriptCacheRef.current.get(runtimeSessionId);
+    const previousEntry = activeEntryRef.current?.entry ?? runtimeTranscriptCacheRef.current.get(runtimeSessionId);
     const cacheEntry = {
       activeSession: activeSession ?? previousEntry?.activeSession ?? null,
       activeTurn,
@@ -80,13 +98,15 @@ export function useRuntimeTranscriptCache({
       hasLoadedHistory,
       hasMoreHistory,
     };
-    runtimeTranscriptCacheRef.current.set(runtimeSessionId, cacheEntry);
+    runtimeTranscriptCacheRef.current.delete(runtimeSessionId);
+    activeEntryRef.current = { id: runtimeSessionId, entry: cacheEntry };
   }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory, hasMoreHistory]);
 
   function cachedTranscriptForThread(thread: ChatThread | null) {
     if (!thread?.runtime_session_id) {
       return null;
     }
+    if (activeEntryRef.current?.id === thread.runtime_session_id) return activeEntryRef.current.entry;
     const cachedTranscript = runtimeTranscriptCacheRef.current.get(thread.runtime_session_id);
     if (cachedTranscript) {
       return cachedTranscript;
@@ -107,6 +127,7 @@ export function useRuntimeTranscriptCache({
       return;
     }
     runtimeTranscriptCacheRef.current.delete(runtimeSessionId);
+    if (activeEntryRef.current?.id === runtimeSessionId) activeEntryRef.current = null;
     if (activeRuntimeSessionIdRef.current === runtimeSessionId) {
       activeRuntimeSessionIdRef.current = null;
       setActiveSession(null);

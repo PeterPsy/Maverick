@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../api/client";
 import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
 import { copyTextToClipboard } from "../lib/clipboard";
@@ -82,7 +82,7 @@ export function ChatTranscript({
     setShowScrollJump(false);
   }
 
-  function toggleExpanded(messageId: string) {
+  const toggleExpanded = useCallback((messageId: string) => {
     setExpandedMessages((current) => {
       const next = new Set(current);
       if (next.has(messageId)) {
@@ -92,13 +92,13 @@ export function ChatTranscript({
       }
       return next;
     });
-  }
+  }, []);
 
-  function copyMessage(content: string) {
+  const copyMessage = useCallback((content: string) => {
     return copyTextToClipboard(content);
-  }
+  }, []);
 
-  function markInterAgentBoardOpened(runId: string) {
+  const markInterAgentBoardOpened = useCallback((runId: string) => {
     const normalizedRunId = runId.trim();
     if (!normalizedRunId) {
       return;
@@ -112,12 +112,12 @@ export function ChatTranscript({
       writeOpenedInterAgentBoardRunIds(next);
       return next;
     });
-  }
+  }, []);
 
-  function openInterAgentGraph(runId: string) {
+  const openInterAgentGraph = useCallback((runId: string) => {
     markInterAgentBoardOpened(runId);
     onOpenInterAgentGraph(runId);
-  }
+  }, [markInterAgentBoardOpened, onOpenInterAgentGraph]);
 
   function updateScrollState() {
     const viewport = viewportRef.current;
@@ -181,7 +181,7 @@ export function ChatTranscript({
     }
     viewport.scrollTop = viewport.scrollHeight;
     setShowScrollJump(false);
-  }, [composerOverlayHeight, isNearBottom]);
+  }, [composerOverlayHeight, isNearBottom, messages]);
 
   const latestToolMessageId =
     [...messages]
@@ -238,6 +238,7 @@ export function ChatTranscript({
           runs={interAgentRuns}
         />
         <MessageList
+          viewportRef={viewportRef}
           expandedMessages={expandedMessages}
           interAgentBoardLinksByMessageId={boardLinksByMessageId}
           latestToolMessageId={latestToolMessageId}

@@ -25,6 +25,8 @@ import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
 import { useChatControllerPresentation } from "./useChatControllerPresentation";
 import { useChatDependencies } from "./useChatDependencies";
+import { useChatHibernation } from "./useChatHibernation";
+import { useChatVisibility } from "./useChatVisibility";
 import { useChatNavigation } from "./useChatNavigation";
 import { useChatReadReceipts } from "./useChatReadReceipts";
 import { useChatRuntimeControls } from "./useChatRuntimeControls";
@@ -337,6 +339,7 @@ export function useChatAppController({
     handleReferenceRemove,
     handleSearchReferences,
     mentionItems,
+    selectedReferences,
     setSelectedReferences,
   } = useChatComposerContext({
     activeAppContext,
@@ -617,20 +620,21 @@ export function useChatAppController({
     setVisibleMessageLimit(50);
   }, [activeConversationKey]);
 
+  const chatVisible = useChatVisibility();
   useEffect(() => {
-    void refreshInterAgentRuns();
-  }, [refreshInterAgentRuns]);
+    if (chatVisible) void refreshInterAgentRuns();
+  }, [chatVisible, refreshInterAgentRuns]);
 
   useEffect(() => {
     const hasActiveRun = interAgentRuns.some((detail) => !["completed", "failed", "cancelled"].includes(detail.run.status));
-    if (!hasActiveRun) {
+    if (!hasActiveRun || !chatVisible) {
       return;
     }
     const intervalId = window.setInterval(() => {
       void refreshInterAgentRuns();
     }, 3000);
     return () => window.clearInterval(intervalId);
-  }, [interAgentRuns, refreshInterAgentRuns]);
+  }, [chatVisible, interAgentRuns, refreshInterAgentRuns]);
 
   const loadInitialState = useCallback(async () => {
     setIsBootstrapping(true);
@@ -675,6 +679,30 @@ export function useChatAppController({
     navigationScope,
     pendingUserMessages,
     queuedMessages,
+  });
+
+  useChatHibernation({
+    ready: composerReady && !isBootstrapping,
+    historyReady: !activeThread || hasLoadedHistory,
+    canHibernate: !isSending && !attachments.length && !pendingUserMessages.length
+      && !queuedMessages.length && !failedUserMessages.length && !deviceUse.enabled && !deviceUse.busy,
+    conversationKey: activeConversationKey, composer, references: selectedReferences,
+    params: activeThread ? { thread_id: activeThread.thread_id,
+      ...(activeInterAgentGraphRunId ? { view: "graph", inter_agent_run_id: activeInterAgentGraphRunId } : {}) }
+      : { new_chat: "1", project_id: draftChat?.projectId || null },
+    settings: { provider: activeProviderId, agent: selectedAgentTypeId, mode: multiAgentMode, effort: runtimeControls.reasoningEffort },
+    visibleMessages: visibleMessageLimit, navigate: handleNavigationParams,
+    setVisibleMessages: setVisibleMessageLimit,
+    restoreDraft: (draft) => {
+      setComposer(draft.text);
+      setSelectedReferences(draft.references);
+      if (!activeThread) {
+        setActiveProviderId(draft.settings.provider);
+        setSelectedAgentTypeId(draft.settings.agent);
+        setMultiAgentMode(draft.settings.mode as MultiAgentComposerMode);
+        runtimeControls.setReasoningEffort(draft.settings.effort);
+      }
+    },
   });
 
   const runtimeAdmissionError = runtimeAdmissionBlockMessage(activeSession);

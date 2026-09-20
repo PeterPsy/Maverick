@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useChatVisibility } from './useChatVisibility';
+import { socketReconnectDelay } from '../lib/socketReconnectDelay';
 import {
   closeInterAgentRun,
   getInterAgentRun,
@@ -43,6 +45,7 @@ export function useInterAgentGraph({
   runId,
   visibilityPlane,
 }: UseInterAgentGraphArgs) {
+  const visible = useChatVisibility();
   const seededInitialEvents = eventsForVisibility(initialEvents, visibilityPlane);
   const [actionPending, setActionPending] = useState<InterAgentRunAction>(null);
   const [approvals, setApprovals] = useState<InterAgentApprovalRecord[]>(initialApprovals);
@@ -118,10 +121,11 @@ export function useInterAgentGraph({
   }, [applyEvents, runId, visibilityPlane]);
 
   useEffect(() => {
-    void refreshRecords();
-  }, [refreshRecords]);
+    if (visible) void refreshRecords();
+  }, [refreshRecords, visible]);
 
   useEffect(() => {
+    if (!visible) return;
     if (typeof WebSocket === "undefined") {
       setConnectionState("unavailable");
       setError("Inter-agent WebSocket is unavailable.");
@@ -129,10 +133,19 @@ export function useInterAgentGraph({
     }
     let cancelled = false;
     let reconnectTimer: number | null = null;
+    let reconnectAttempt = 0;
     let heartbeatTimer: number | null = null;
     let receivedInitialSnapshot = false;
     let lastFrameAt = Date.now();
     let lastEventId = lastInterAgentEventId(eventsRef.current);
+
+    function scheduleReconnect() {
+      if (cancelled || reconnectTimer !== null) return;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectWebSocket();
+      }, socketReconnectDelay(reconnectAttempt++, 800));
+    }
 
     function connectWebSocket() {
       if (cancelled) {
@@ -140,18 +153,29 @@ export function useInterAgentGraph({
       }
       setConnectionState(receivedInitialSnapshot ? "reconnecting" : "connecting");
       const replayCursor = receivedInitialSnapshot ? lastEventId : null;
-      const socket = new WebSocket(interAgentWebSocketUrl(runId, { lastEventId: replayCursor, visibilityPlane, initialEventLimit: 240 }));
+      let socket: WebSocket;
+      try {
+        socket = new WebSocket(interAgentWebSocketUrl(runId, { lastEventId: replayCursor, visibilityPlane, initialEventLimit: 240 }));
+      } catch {
+        setError("Inter-agent WebSocket is unavailable.");
+        scheduleReconnect();
+        return;
+      }
       socketRef.current = socket;
+      const isCurrent = () => !cancelled && socketRef.current === socket;
       socket.onopen = () => {
+        if (!isCurrent()) return;
         lastFrameAt = Date.now();
         setError(null);
         startHeartbeatWatchdog();
       };
       socket.onmessage = (event) => {
+        if (!isCurrent()) return;
         lastFrameAt = Date.now();
         try {
           const frame = JSON.parse(event.data) as InterAgentWebSocketFrame;
           if (frame.type === "inter_agent.snapshot") {
+            reconnectAttempt = 0;
             receivedInitialSnapshot = true;
             setConnectionState("live");
             setRunDetail(frame.run_detail);
@@ -182,11 +206,13 @@ export function useInterAgentGraph({
         }
       };
       socket.onerror = () => {
+        if (!isCurrent()) return;
         if (!receivedInitialSnapshot) {
           setError("Inter-agent WebSocket is unavailable.");
         }
       };
       socket.onclose = (event) => {
+        if (!isCurrent()) return;
         stopHeartbeatWatchdog();
         if (socketRef.current === socket) {
           socketRef.current = null;
@@ -200,7 +226,7 @@ export function useInterAgentGraph({
           return;
         }
         setConnectionState("reconnecting");
-        reconnectTimer = window.setTimeout(connectWebSocket, 800);
+        scheduleReconnect();
       };
     }
 
@@ -232,7 +258,7 @@ export function useInterAgentGraph({
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [applyEvents, clearHistoryRequestTimer, runId, visibilityPlane]);
+  }, [applyEvents, clearHistoryRequestTimer, runId, visibilityPlane, visible]);
 
   const requestOlderHistory = useCallback(() => {
     if (!hasMoreHistory || isHistoryLoading) {

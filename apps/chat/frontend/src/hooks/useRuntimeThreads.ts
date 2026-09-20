@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { orderChatThreads } from "../api/client";
 import type { ChatThread, RuntimeThreadWebSocketFrame } from "../api/client";
 import { getRuntimeThreadSource } from "./runtimeThreadSource";
+import { useChatVisibility } from './useChatVisibility';
 
 type RuntimeThreadSnapshotFrame = Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.snapshot" }>;
 
@@ -20,6 +21,7 @@ function isRuntimeThreadStreamError(message: string): boolean {
 }
 
 export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, setError, setThreads }: RuntimeThreadsArgs) {
+  const visible = useChatVisibility();
   const onDisplayReadyRef = useRef(onDisplayReady);
   onDisplayReadyRef.current = onDisplayReady;
   const onSnapshotRef = useRef<typeof onSnapshot>(onSnapshot);
@@ -28,7 +30,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, 
   }, [onSnapshot]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !visible) {
       return;
     }
     function applyThreads(threads: ChatThread[]) {
@@ -99,5 +101,5 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, 
       displayController.abort();
       unsubscribe();
     };
-  }, [enabled, setError, setThreads]);
+  }, [enabled, visible, setError, setThreads]);
 }

@@ -9,14 +9,16 @@ import {
 import { structuredContentFromAgentLinks } from "./linkPreviews";
 import { isNoisyRuntimeLabel, isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
 
-const transcriptProjectionCache = new WeakMap<RuntimeEvent[], ChatMessage[]>();
-const transcriptProjectionCacheByLastEvent = new Map<string, ChatMessage[]>();
-const TRANSCRIPT_PROJECTION_CACHE_LIMIT = 80;
+import { TranscriptProjection, type OrderedMessage } from './transcriptProjection';
+
+let transcriptProjections = new WeakMap<RuntimeEvent, TranscriptProjection>();
+let latestProjection: { session: string; projection: TranscriptProjection } | null = null;
 const PROVIDER_OVERLOADED_MESSAGE =
   "The model provider is temporarily overloaded. This chat and completed actions are preserved; continue shortly.";
 
 export function clearTranscriptProjectionCache(): void {
-  transcriptProjectionCacheByLastEvent.clear();
+  transcriptProjections = new WeakMap();
+  latestProjection = null;
 }
 
 function textPayload(event: RuntimeEvent): string {
@@ -268,43 +270,24 @@ function appReferencePayload(item: Record<string, unknown>): AppReference {
 }
 
 export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
-  const cached = transcriptProjectionCache.get(events);
-  if (cached) {
-    return cached;
-  }
-  const cacheKey = transcriptProjectionCacheKey(events);
-  const cachedByLastEvent = transcriptProjectionCacheByLastEvent.get(cacheKey);
-  if (cachedByLastEvent) {
-    transcriptProjectionCache.set(events, cachedByLastEvent);
-    transcriptProjectionCacheByLastEvent.delete(cacheKey);
-    transcriptProjectionCacheByLastEvent.set(cacheKey, cachedByLastEvent);
-    return cachedByLastEvent;
-  }
-  const messages = projectEventsToMessages(events);
-  transcriptProjectionCache.set(events, messages);
-  transcriptProjectionCacheByLastEvent.set(cacheKey, messages);
-  while (transcriptProjectionCacheByLastEvent.size > TRANSCRIPT_PROJECTION_CACHE_LIMIT) {
-    const oldestKey = transcriptProjectionCacheByLastEvent.keys().next().value;
-    if (!oldestKey) {
-      break;
-    }
-    transcriptProjectionCacheByLastEvent.delete(oldestKey);
-  }
-  return messages;
-}
-
-function transcriptProjectionCacheKey(events: RuntimeEvent[]): string {
-  if (!events.length) {
-    return "empty";
-  }
+  if (!events.length) { latestProjection = null; return []; }
   const first = events[0];
-  const last = events[events.length - 1];
-  return [first.session_id, first.event_id, events.length, last.session_id, last.event_id, last.created_at].join(":");
+  let projection = transcriptProjections.get(first);
+  if (!projection) projection = latestProjection?.session === first.session_id ? latestProjection.projection : new TranscriptProjection();
+  transcriptProjections.set(first, projection);
+  latestProjection = { session: first.session_id, projection };
+  const goalScopes = new Map<string, string>();
+  for (const event of events) {
+    if (event.event_type === 'runtime.step.updated' && goalTranscriptStep(event)) goalScopes.set(messageTurnId(event), goalTranscriptScope(event));
+  }
+  return projection.project(events, (event) => {
+    const turn = messageTurnId(event);
+    const goal = goalScopes.get(turn);
+    return goal ? `goal:${goal}` : `turn:${event.session_id}:${turn}`;
+  }, projectEventsToMessages);
 }
 
-function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
-  type OrderedMessage = { order: number; sequence: number; message: ChatMessage };
-
+function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
   const orderedMessages: OrderedMessage[] = [];
   let messageSequence = 0;
   const seenUserMessages = new Set<string>();
@@ -662,7 +645,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     flushToolSegment(turnId);
   }
   orderedMessages.sort((left, right) => left.order - right.order || left.sequence - right.sequence);
-  return orderedMessages.map((entry) => entry.message);
+  return orderedMessages;
 }
 
 function finalOutputProjection(event: RuntimeEvent, renderedText: string): { text: string; previewText: string; replaceRenderedOutput: boolean } {

@@ -15,6 +15,9 @@
     margin-top: 0.72rem;
   }
 
+  .chatapp-message-list [data-transcript-row] { padding-top: 0.72rem; }
+  .chatapp-message-list [data-transcript-row]:first-child { padding-top: 0; }
+
   .chatapp-bubble.is-human,
   .chatapp-bubble.is-inter-agent {
     width: fit-content;

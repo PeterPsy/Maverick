@@ -1,5 +1,6 @@
 import type { ChatThread, RuntimeThreadWebSocketFrame, RuntimeThreadsPage, RuntimeThreadsPayload } from "../api/client";
 import { listRuntimeThreads, orderChatThreads, runtimeThreadWebSocketUrl } from "../api/client";
+import { socketReconnectDelay } from '../lib/socketReconnectDelay';
 
 type RuntimeThreadSourceMessage =
   | { kind: "hello"; client_id: string; tab_id: string }
@@ -67,7 +68,7 @@ export class RuntimeThreadSource {
   private lastFrameAt = Date.now();
   private leaderElectionTimer: number | null = null;
   private nextSubscriberId = 1;
-  private reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
+  private reconnectAttempt = 0;
   private reconnectTimer: number | null = null;
   private restFallbackController: AbortController | null = null;
   private restFallbackTimer: number | null = null;
@@ -105,6 +106,7 @@ export class RuntimeThreadSource {
     this.stopped = false;
     this.isLeader = false;
     this.sourceClientId = null;
+    this.reconnectAttempt = 0;
     this.knownClientIds = new Set([this.clientId]);
     this.tabId = runtimeThreadTabId();
     if (this.tabId && hasBroadcastChannel()) {
@@ -251,7 +253,14 @@ export class RuntimeThreadSource {
       return;
     }
     let socketOpened = false;
-    const socket = new WebSocket(runtimeThreadWebSocketUrl());
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(runtimeThreadWebSocketUrl());
+    } catch {
+      this.notifyError("Runtime thread WebSocket is unavailable.");
+      this.scheduleReconnect();
+      return;
+    }
     this.socket = socket;
     socket.onopen = () => {
       if (this.socket !== socket || !this.isLeader) {
@@ -259,7 +268,6 @@ export class RuntimeThreadSource {
       }
       socketOpened = true;
       this.lastFrameAt = Date.now();
-      this.reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
       this.startHeartbeatWatchdog();
       this.notifyError(null);
       this.post({ kind: "source-ready" });
@@ -271,6 +279,7 @@ export class RuntimeThreadSource {
       this.lastFrameAt = Date.now();
       try {
         const frame = JSON.parse(event.data) as RuntimeThreadWebSocketFrame;
+        if (frame.type === "runtime.thread.snapshot") this.reconnectAttempt = 0;
         this.cacheFrame(frame);
         this.notifyFrame(frame);
         this.post({ kind: "frame", frame });
@@ -279,6 +288,7 @@ export class RuntimeThreadSource {
       }
     };
     socket.onerror = () => {
+      if (this.socket !== socket || !this.isLeader) return;
       if (!socketOpened) {
         this.notifyError("Runtime thread WebSocket is unavailable.");
       }
@@ -299,9 +309,16 @@ export class RuntimeThreadSource {
         this.clearRestFallback();
         return;
       }
-      this.reconnectTimer = window.setTimeout(() => this.connect(), this.reconnectDelayMs);
-      this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+      this.scheduleReconnect();
     };
+  }
+
+  private scheduleReconnect() {
+    if (this.stopped || !this.isLeader || this.reconnectTimer !== null) return;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, socketReconnectDelay(this.reconnectAttempt++, INITIAL_RECONNECT_DELAY_MS, MAX_RECONNECT_DELAY_MS));
   }
 
   private startHeartbeatWatchdog() {

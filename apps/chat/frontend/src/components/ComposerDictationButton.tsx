@@ -1,3 +1,4 @@
+import { preventMaverickAppHibernation } from "@maverick/pwa-cache";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, transcribeSpeech, transcribeSpeechBlob, type SpeechTranscribePayload } from "../api/client";
 import { VoiceInput } from "./ui/voice-input";
@@ -61,6 +62,7 @@ export function ComposerDictationButton({
   const providerDisabled = !providerAppId || providerAvailable === false;
   const effectiveMaxAudioBytes = Number.isFinite(maxAudioBytes) && maxAudioBytes > 0 ? maxAudioBytes : DEFAULT_MAX_DICTATION_AUDIO_BYTES;
   const effectiveMaxDurationSeconds = Number.isFinite(maxDurationSeconds) && maxDurationSeconds > 0 ? maxDurationSeconds : DEFAULT_MAX_DICTATION_MS / 1000;
+  useEffect(() => status !== "idle" ? preventMaverickAppHibernation() : undefined, [status]);
   const isRecording = status === "recording";
   const isTranscribing = status === "transcribing";
   const title = isRecording ? "Stop dictation" : isTranscribing ? "Transcribing" : "Dictate";

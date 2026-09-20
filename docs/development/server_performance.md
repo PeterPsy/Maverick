@@ -163,6 +163,14 @@ the estimate includes UTF-16 and a conservative allowance for projections/indexe
 No live delta serializes that cache. Frame batching flushes control and terminal
 events immediately, and ephemeral Usage snapshots never become replay cursors.
 
+The transcript, thread catalog and inter-agent streams use bounded exponential
+reconnect delays with jitter. Only an authoritative snapshot resets backoff, so
+connections that open and immediately fail do not loop at the minimum delay.
+Callbacks retain their owning socket and ignore late frames/errors after it has
+been replaced. Hidden/offline cleanup cancels reconnect timers; constructor
+failures use the same retry path, and unavailable/unauthorized close codes retain
+their terminal behavior.
+
 Long visible transcripts use measured variable-height rows with overscan and
 spacers. Historical data stays available in memory and through normal paging;
 viewport rendering does not truncate the server catalog. Scroll/ResizeObserver

@@ -72,6 +72,7 @@ describe("RuntimeThreadSource", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
     window.sessionStorage.clear();
     MockBroadcastChannel.channels.clear();
     MockWebSocket.instances = [];
@@ -85,7 +86,39 @@ describe("RuntimeThreadSource", () => {
     globalThis.BroadcastChannel = originalBroadcastChannel as typeof BroadcastChannel;
     globalThis.WebSocket = originalWebSocket as typeof WebSocket;
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('backs off failed streams and ignores callbacks from a replaced socket', () => {
+    const source = new RuntimeThreadSource({ leaderElectionDelayMs: 5, restFallbackDelayMs: 60_000 });
+    const onError = vi.fn();
+    const onFrame = vi.fn();
+    const unsubscribe = source.subscribe({ onError, onFrame });
+    vi.advanceTimersByTime(5);
+    const first = MockWebSocket.instances[0];
+    first.onclose?.({ code: 1006 } as CloseEvent);
+    vi.advanceTimersByTime(500);
+    const second = MockWebSocket.instances[1];
+    second.onopen?.();
+    first.onerror?.();
+    first.onmessage?.({ data: JSON.stringify({ type: 'runtime.thread.snapshot', threads: [] }) } as MessageEvent);
+    first.onclose?.({ code: 1006 } as CloseEvent);
+    expect(onError.mock.lastCall).toEqual([null]);
+    expect(onFrame).not.toHaveBeenCalled();
+    second.onclose?.({ code: 1006 } as CloseEvent);
+    vi.advanceTimersByTime(999);
+    expect(MockWebSocket.instances).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(MockWebSocket.instances).toHaveLength(3);
+    const third = MockWebSocket.instances[2];
+    third.onmessage?.({ data: JSON.stringify({ type: 'runtime.thread.snapshot', workspace_id: 'default', threads: [] }) } as MessageEvent);
+    third.onclose?.({ code: 1006 } as CloseEvent);
+    vi.advanceTimersByTime(500);
+    expect(MockWebSocket.instances).toHaveLength(4);
+    unsubscribe();
+    vi.advanceTimersByTime(60_000);
+    expect(MockWebSocket.instances).toHaveLength(4);
   });
 
   it("elects one WebSocket source for separate same-tab subscribers", async () => {

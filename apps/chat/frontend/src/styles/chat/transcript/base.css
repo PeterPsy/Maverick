@@ -18,6 +18,13 @@
   max-width: 100%;
 }
 
+.chatapp-message-list [data-transcript-row] {
+  display: flow-root;
+  padding-top: 0.85rem;
+}
+
+.chatapp-message-list [data-transcript-row]:first-child { padding-top: 0; }
+
 .chatapp-agent-trace,
 .chatapp-agent-block,
 .chatapp-agent-block__body {

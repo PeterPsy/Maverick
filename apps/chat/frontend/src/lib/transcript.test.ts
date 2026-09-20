@@ -57,6 +57,37 @@ describe("runtime event transcript projection", () => {
     expect(secondProjection).toBe(firstProjection);
   });
 
+  it('updates only affected turns and preserves unchanged historical message objects', () => {
+    const events = [
+      event({ event_id: 'a', turn_id: 'old', event_type: 'runtime.output.final', payload: { text: 'Past answer' } }),
+      event({ event_id: 'b', turn_id: 'live', event_type: 'runtime.output.delta', payload: { text: 'Live ' } }),
+    ];
+    const first = eventsToMessages(events);
+    const next = eventsToMessages([...events, event({ event_id: 'c', turn_id: 'live', event_type: 'runtime.output.delta', payload: { text: 'answer' } })]);
+    expect(next[0]).toBe(first[0]);
+    expect(next[1].content).toBe('Live answer');
+    expect(first[1].content).toBe('Live ');
+    const corrected = eventsToMessages([{ ...events[0], payload: { text: 'Corrected past' } }, events[1]]);
+    expect(corrected[0].content).toBe('Corrected past');
+    expect(corrected[1].content).toBe('Live ');
+  });
+
+  it('handles prepended history, interleaved turns and cross-turn goal amendments', () => {
+    const goal = (event_id: string, turn_id: string, status: string) => event({ event_id, turn_id,
+      event_type: 'runtime.step.updated', payload: { provider_event_type: 'thread.goal.updated', goal: { status, objective: 'Finish' } } });
+    const events = [goal('g1', 'one', 'active'),
+      event({ event_id: 'other', turn_id: 'unrelated', event_type: 'runtime.output.final', payload: { text: 'Unrelated' } })];
+    const first = eventsToMessages(events);
+    const next = eventsToMessages([...events, goal('g2', 'two', 'complete')]);
+    expect(next.filter(item => item.role === 'step')).toHaveLength(1);
+    expect(next.at(-1)).toBe(first.at(-1));
+    expect(first[0].step?.detail).toMatchObject({ goal: { status: 'active' } });
+    expect(next[0].step?.detail).toMatchObject({ goal: { status: 'complete' } });
+    const prepended = eventsToMessages([event({ event_id: 'before', turn_id: 'before', payload: { input_text: 'Older history' } }), ...events]);
+    expect(prepended[0].content).toBe('Older history');
+    expect(prepended.at(-1)).toBe(first.at(-1));
+  });
+
   it("projects one human message from a queued runtime turn", () => {
     const messages = eventsToMessages([
       event({

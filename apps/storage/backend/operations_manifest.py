@@ -373,7 +373,7 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "action": "drive_search",
                 "description": "Run a bounded Google Drive search through Storage and return stable Storage file ids.",
                 "required": ["connection_id"],
-                "optional": ["query", "parent_drive_file_id", "limit"],
+                "optional": ["query", "parent_drive_file_id", "limit", "page_token"],
                 "payload_profile": "remote_provider_metadata",
             },
             {

@@ -275,6 +275,30 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(result["pagination"]["next_page_token"], "token-2")
         self.assertEqual(result["files"][0]["name"], "Contract.pdf")
 
+    def test_search_continuations_keep_parent_scope_and_report_unknown_totals_and_incomplete_results(self):
+        transport = FakeDriveTransport({
+            ('GET', '/drive/v3/files/folder-1'): {'id': 'folder-1', 'name': 'Acme',
+                'mimeType': 'application/vnd.google-apps.folder', 'parents': ['root']},
+            ('GET', '/drive/v3/files'): [
+                {'files': [], 'nextPageToken': 'next', 'incompleteSearch': True},
+                {'files': [{'id': 'match', 'name': 'Result', 'mimeType': 'text/plain'}]},
+            ],
+        })
+        provider = GoogleDriveProvider(connection=CONNECTION, app_secrets=SECRETS, transport=transport)
+        first = provider.search(query='contract', parent_drive_file_id='folder-1', limit=25)
+        second = provider.search(query='contract', parent_drive_file_id='folder-1', limit=25, page_token=first['pagination']['next_page_token'])
+        calls = [parse_qs(urlparse(url).query) for method, url, _request in transport.calls if urlparse(url).path == '/drive/v3/files']
+        self.assertEqual(calls[0]['q'], calls[1]['q'])
+        self.assertIn("'folder-1' in parents", calls[1]['q'][0])
+        self.assertIn("fullText contains 'contract'", calls[1]['q'][0])
+        self.assertEqual(calls[1]['pageToken'], ['next'])
+        self.assertIn('incompleteSearch', calls[0]['fields'][0])
+        self.assertTrue(first['incomplete_search'])
+        self.assertIsNone(first['pagination']['total'])
+        self.assertIsNone(second['pagination']['total'])
+        self.assertFalse(second['pagination']['has_more'])
+        self.assertEqual(second['files'][0]['drive_file_id'], 'match')
+
     def test_drive_access_token_cache_is_reused_across_provider_instances(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             cache_root = Path(temp_dir) / "drive_temp_cache"

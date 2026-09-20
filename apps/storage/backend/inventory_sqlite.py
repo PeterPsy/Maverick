@@ -137,10 +137,6 @@ class InventoryIndex:
         connection = sqlite3.connect(self.path.as_uri() + ('?mode=rw' if write else '?mode=ro'), uri=True, timeout=1.0, isolation_level=None)
         try:
             connection.row_factory = sqlite3.Row
-            # Entrypoints are short lived. Keep the WAL instead of checkpointing,
-            # deleting and recreating it for every request; writers still autocheckpoint.
-            if hasattr(connection, 'setconfig'):
-                connection.setconfig(sqlite3.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, True)
             connection.execute('PRAGMA foreign_keys=ON')
             connection.execute('PRAGMA synchronous=FULL')
             if check_schema and connection.execute('PRAGMA user_version').fetchone()[0] != SCHEMA_VERSION:

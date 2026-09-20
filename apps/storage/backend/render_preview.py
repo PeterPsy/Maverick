@@ -10,6 +10,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from time import monotonic, sleep
+from urllib.parse import urlencode
+from uuid import uuid4
 
 from errors import StorageValidationError
 from store import file_record
@@ -38,13 +41,38 @@ def _cache_lock(cache_path: Path):
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+@contextmanager
+def _conversion_slot(cache_root: Path):
+    """Bound expensive conversion processes across all Storage frames and workers."""
+    deadline = monotonic() + RENDER_TIMEOUT_SECONDS
+    while True:
+        for index in range(2):
+            handle = (cache_root / f'.converter-{index}.lock').open('a+')
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                handle.close()
+                continue
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                handle.close()
+            return
+        if monotonic() >= deadline:
+            raise StorageValidationError('Preview conversion is busy; retry shortly.')
+        sleep(.05)
+
+
 def _preview_cache_key(path: Path, record: dict) -> str:
+    stat = path.stat()
     payload = "|".join(
         [
             str(path.resolve()),
             record["modified_at"],
             str(record["size_bytes"]),
             record["preview_kind"],
+            str((stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_dev, stat.st_ino)),
         ]
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -106,10 +134,20 @@ def _ensure_cached_conversion(source: Path, cache_path: Path, *, output_extensio
     with _cache_lock(cache_path):
         if cache_path.is_file():
             return True
-        if output_extension == "pdf":
-            _convert_to_pdf(source, cache_path)
-        else:
-            _convert_to_png(source, cache_path)
+        temporary = cache_path.with_name(f'.{cache_path.stem}-{uuid4().hex}.{output_extension}')
+        before = source.stat()
+        signature = lambda value: (value.st_size, value.st_mtime_ns, value.st_ctime_ns, value.st_dev, value.st_ino)
+        try:
+            with _conversion_slot(cache_path.parent):
+                if output_extension == "pdf":
+                    _convert_to_pdf(source, temporary)
+                else:
+                    _convert_to_png(source, temporary)
+            if signature(source.stat()) != signature(before):
+                raise StorageValidationError("File changed during conversion; retry the preview.")
+            temporary.replace(cache_path)
+        finally:
+            temporary.unlink(missing_ok=True)
         _evict_render_cache(cache_path.parent)
         return False
 
@@ -126,49 +164,50 @@ def _evict_render_cache(cache_root: Path) -> None:
         path.unlink(missing_ok=True)
 
 
-def rendered_preview_payload(*, path: Path, root: Path, role: str, data_root: Path) -> dict:
-    """Return a PDF preview for a PDF or Office-style document."""
+def rendered_preview_path(*, path: Path, root: Path, role: str, data_root: Path, thumbnail: bool = False) -> tuple[Path, dict]:
+    """Prepare the local derivative without loading it into a JSON response."""
     record = file_record(role=role, root=root, path=path.resolve())
-    if record["size_bytes"] > MAX_RENDER_SOURCE_BYTES:
-        raise StorageValidationError("File is too large to render in Storage.")
-    if record["preview_kind"] == "pdf":
-        return {
-            "file": record,
-            "content_base64": b64encode(path.read_bytes()).decode("ascii"),
-            "content_type": "application/pdf",
-            "preview_kind": "pdf",
-            "renderer": "native",
-            "cache_hit": False,
-        }
-    if record["preview_kind"] not in RENDERABLE_PREVIEW_KINDS:
-        raise StorageValidationError("Rendered preview is only available for PDF, DOCX, PPTX, and XLSX-style files.")
-
-    cache_path = _preview_cache_root(data_root) / f"{_preview_cache_key(path, record)}.pdf"
-    cache_hit = _ensure_cached_conversion(path, cache_path, output_extension="pdf")
-    return {
-        "file": record,
-        "content_base64": b64encode(cache_path.read_bytes()).decode("ascii"),
-        "content_type": "application/pdf",
-        "preview_kind": "pdf",
-        "renderer": "libreoffice",
-        "cache_hit": cache_hit,
-    }
+    if record['size_bytes'] > MAX_RENDER_SOURCE_BYTES:
+        raise StorageValidationError('File is too large to render in Storage.')
+    if record['preview_kind'] == 'pdf' and not thumbnail:
+        return path, {'file': record, 'content_type': 'application/pdf', 'preview_kind': 'pdf',
+            'renderer': 'native', 'cache_hit': False}
+    if record['preview_kind'] not in RENDERABLE_PREVIEW_KINDS:
+        raise StorageValidationError('Rendered previews are only available for PDF and Office-style files.')
+    extension = 'png' if thumbnail else 'pdf'
+    cache_path = _preview_cache_root(data_root) / f'{_preview_cache_key(path, record)}.{extension}'
+    cache_hit = _ensure_cached_conversion(path, cache_path, output_extension=extension)
+    return cache_path, {'file': record, 'content_type': 'image/png' if thumbnail else 'application/pdf',
+        'preview_kind': 'image' if thumbnail else 'pdf', 'renderer': 'libreoffice', 'cache_hit': cache_hit}
 
 
-def rendered_thumbnail_payload(*, path: Path, root: Path, role: str, data_root: Path) -> dict:
-    """Return a static image thumbnail for card previews."""
+def rendered_preview_payload(*, path: Path, root: Path, role: str, data_root: Path,
+                             stream: bool = False, app_id: str = 'storage', thumbnail: bool = False) -> dict:
+    """Browser callers receive an authenticated media URL; CLI callers retain bounded inline data."""
+    preview_path, payload = rendered_preview_path(path=path, root=root, role=role, data_root=data_root, thumbnail=thumbnail)
+    if stream:
+        params = urlencode({'role': role, 'relative_path': payload['file']['relative_path'],
+            'preview': 'thumbnail' if thumbnail else 'rendered',
+            'preview_version': _preview_cache_key(path, payload['file'])})
+        return {**payload, 'stream_url': f'/api/apps/{app_id}/media?{params}'}
+    if preview_path.stat().st_size > MAX_RENDER_SOURCE_BYTES:
+        raise StorageValidationError('Rendered preview is too large for an inline response.')
+    return {**payload, 'content_base64': b64encode(preview_path.read_bytes()).decode('ascii')}
+
+
+def rendered_thumbnail_payload(*, path: Path, root: Path, role: str, data_root: Path,
+                               stream: bool = False, app_id: str = 'storage') -> dict:
+    return rendered_preview_payload(path=path, root=root, role=role, data_root=data_root,
+        stream=stream, app_id=app_id, thumbnail=True)
+
+
+def rendered_media_payload(*, path: Path, root: Path, role: str, data_root: Path, body: dict) -> dict:
     record = file_record(role=role, root=root, path=path.resolve())
-    if record["size_bytes"] > MAX_RENDER_SOURCE_BYTES:
-        raise StorageValidationError("File is too large to render in Storage.")
-    if record["preview_kind"] not in RENDERABLE_PREVIEW_KINDS:
-        raise StorageValidationError("Rendered thumbnails are only available for DOCX, PPTX, and XLSX-style files.")
-    cache_path = _preview_cache_root(data_root) / f"{_preview_cache_key(path, record)}.png"
-    cache_hit = _ensure_cached_conversion(path, cache_path, output_extension="png")
-    return {
-        "file": record,
-        "content_base64": b64encode(cache_path.read_bytes()).decode("ascii"),
-        "content_type": "image/png",
-        "preview_kind": "image",
-        "renderer": "libreoffice",
-        "cache_hit": cache_hit,
-    }
+    version = _preview_cache_key(path, record)
+    if body.get('preview_version') and body['preview_version'] != version:
+        raise StorageValidationError('The preview source changed; refresh the preview.')
+    thumbnail = body['preview'] == 'thumbnail'
+    preview_path, payload = rendered_preview_path(path=path, root=root, role=role, data_root=data_root, thumbnail=thumbnail)
+    return {'file': record, 'file_response': {'path': str(preview_path), 'content_type': payload['content_type'],
+        'file_name': path.stem + ('.png' if thumbnail else '.pdf'), 'etag': version,
+        'download': False, 'cache_control': 'private, no-store'}}

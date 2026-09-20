@@ -162,3 +162,25 @@ measurements on SQLite 3.51.3, not mounted-HTTP or physical-device acceptance.
 Keeping a WAL open across every short-lived connection was rejected after it
 caused repeated large checkpoint writes in this workload. Default checkpoint
 lifecycle is retained; durability is not weakened to improve the benchmark.
+
+
+## Preview and Drive work bounds
+
+Preview consumers own their abort signals; only completed results are reusable.
+Memory uses a 32 MiB LRU budget, an 8 MiB entry limit, and leases for displayed
+blob URLs. Cancellation of one reader cannot poison another reader's result.
+Converted PDF/PNG content uses authenticated media streams and atomic server-side
+derivatives instead of browser base64 payloads. Two conversion slots bound work;
+card thumbnails remain disabled. Full local text is read through a bounded stream
+and remains complete for guarded Markdown editing.
+
+Drive search waits 200 ms, invalidates the previous request immediately, and
+keeps the same connection/direct-parent scope across continuation tokens. Both
+main view and sidebar expose further pages. Unknown remote totals remain unknown;
+partial provider searches remain visible. These changes still require mounted
+browser and physical Safari validation before a PWA release gate is satisfied.
+
+The 100k Usage isolated-service probe at commit `c1848478` measured median 8.69 ms,
+p95 9.94 ms and 102,645,760 physical write bytes over 500 distinct observations
+plus five warmups. It confirms the measured hot path is independent of the total
+sample count in this fixture; it does not substitute for HTTP concurrency tests.

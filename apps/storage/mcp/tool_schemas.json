@@ -836,14 +836,15 @@
     },
     "storage_drive_search": {
       "effect_class": "read",
-      "description": "Search Google Drive through Storage and return stable Storage file ids plus Drive locators.",
+      "description": "Search one Drive connection, optionally within one direct parent. Continue with page_token; totals can be unknown and incomplete_search must be respected.",
       "input_schema": {
         "type": "object",
         "properties": {
           "connection_id": {"type": "string"},
           "query": {"type": "string"},
           "parent_drive_file_id": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+          "page_token": {"type": "string"}
         },
         "required": ["connection_id"],
         "additionalProperties": false

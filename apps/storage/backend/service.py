@@ -62,7 +62,7 @@ from reference_entities import (
     reference_search_payload,
     reference_summarize_payload,
 )
-from render_preview import rendered_preview_payload, rendered_thumbnail_payload
+from render_preview import rendered_media_payload, rendered_preview_payload, rendered_thumbnail_payload
 from store import (
     MAX_PREVIEW_BYTES,
     MAX_READ_BYTES,
@@ -389,6 +389,7 @@ def handle_action(
         provider = _google_drive_provider(data_root, body, transport=drive_transport)
         result = provider.search(
             query=str(body.get("query") or ""),
+            page_token=str(body.get("page_token") or ""),
             parent_drive_file_id=str(body.get("parent_drive_file_id") or ""),
             limit=_optional_positive_int(body, "limit", maximum=2000),
         )
@@ -1048,6 +1049,8 @@ def handle_action(
             root=root,
             role=role,
             data_root=data_root,
+            stream=str(body.get("response_mode") or "") == "stream",
+            app_id=str(body.get("_app_id") or "storage"),
         ) | {"file": file_payload["file"]}
     if action == "render_thumbnail":
         role, relative_path = reference_from_payload(
@@ -1071,6 +1074,8 @@ def handle_action(
             root=root,
             role=role,
             data_root=data_root,
+            stream=str(body.get("response_mode") or "") == "stream",
+            app_id=str(body.get("_app_id") or "storage"),
         ) | {"file": file_payload["file"]}
     if action == "file_info":
         file_id = _file_id_from_body(body)
@@ -1496,6 +1501,11 @@ def _media_stream_payload(
                 operation="file.media_stream",
                 expected_fields=["stable_storage_file_id", "source_version"],
             )
+    preview = str(body.get("preview") or "")
+    if preview:
+        if preview not in {"rendered", "thumbnail"}:
+            raise StorageValidationError("Unknown preview format.", operation="file.media_stream")
+        return rendered_media_payload(path=path, root=root, role=role, data_root=data_root, body=body)
     return {
         "file": record,
         "file_response": {

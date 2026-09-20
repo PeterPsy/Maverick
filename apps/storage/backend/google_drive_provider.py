@@ -33,7 +33,7 @@ DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
 DRIVE_UPLOAD_API_BASE = "https://www.googleapis.com/upload/drive/v3"
 DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 SHARED_WITH_ME_ROOT_ID = "sharedWithMe"
-MAX_DRIVE_PAGE_SIZE = 2000
+MAX_DRIVE_PAGE_SIZE = 1000
 MAX_DRIVE_QUERY_CHARS = 500
 GOOGLE_EXPORT_LIMIT_BYTES = 10 * 1024 * 1024
 DRIVE_TEMP_CACHE_TTL_SECONDS = 15 * 60
@@ -203,7 +203,7 @@ class GoogleDriveProvider:
             "provider": GOOGLE_DRIVE_PROVIDER,
             "connection_id": self.connection_id,
             "folders": folders,
-            "pagination": {"limit": page_size, "total": len(folders), "has_more": bool(next_page_token), "next_page_token": next_page_token},
+            "pagination": {"limit": page_size, "total": None, "loaded_items": len(folders), "has_more": bool(next_page_token), "next_page_token": next_page_token},
         }
 
     def list_children(self, *, parent_drive_file_id: str, limit: int | None = None, page_token: str | None = None) -> dict[str, Any]:
@@ -214,8 +214,9 @@ class GoogleDriveProvider:
             query = "sharedWithMe = true and trashed = false"
         else:
             query = f"'{_drive_query_literal(parent_id)}' in parents and trashed = false"
-        items, next_page_token = self._list_files(query=query, limit=page_size, page_token=page_token, list_scope=list_scope)
+        items, next_page_token, incomplete = self._list_files(query=query, limit=page_size, page_token=page_token, list_scope=list_scope)
         payload = self._split_items(items, parent_display_path=parent_display_path, limit=page_size, next_page_token=next_page_token)
+        payload["incomplete_search"] = incomplete
         payload["breadcrumbs"] = breadcrumbs
         return payload
 
@@ -225,6 +226,7 @@ class GoogleDriveProvider:
         query: str = "",
         parent_drive_file_id: str = "",
         limit: int | None = None,
+        page_token: str | None = None,
     ) -> dict[str, Any]:
         page_size = _bounded_limit(limit)
         drive_query = _search_query(query)
@@ -237,8 +239,8 @@ class GoogleDriveProvider:
                 drive_query = f"({drive_query}) and sharedWithMe = true"
             else:
                 drive_query = f"({drive_query}) and '{_drive_query_literal(parent_id)}' in parents"
-        items, next_page_token = self._list_files(query=drive_query, limit=page_size, page_token=None, list_scope=list_scope)
-        return self._split_items(items, parent_display_path=parent_display_path, limit=page_size, next_page_token=next_page_token)
+        items, next_page_token, incomplete = self._list_files(query=drive_query, limit=page_size, page_token=page_token, list_scope=list_scope)
+        return {"incomplete_search": incomplete, **self._split_items(items, parent_display_path=parent_display_path, limit=page_size, next_page_token=next_page_token)}
 
     def start_page_token(self) -> str:
         payload = self._drive_request("GET", "/changes/startPageToken", params={"supportsAllDrives": "true"})
@@ -930,7 +932,7 @@ class GoogleDriveProvider:
             "connection_id": self.connection_id,
             "files": files,
             "folders": folders,
-            "pagination": {"limit": limit, "total": len(files) + len(folders), "has_more": bool(next_page_token), "next_page_token": next_page_token},
+            "pagination": {"limit": limit, "total": None, "loaded_items": len(files) + len(folders), "has_more": bool(next_page_token), "next_page_token": next_page_token},
         }
 
     def _list_files(
@@ -940,11 +942,11 @@ class GoogleDriveProvider:
         limit: int,
         page_token: str | None,
         list_scope: dict[str, Any],
-    ) -> tuple[list[dict[str, Any]], str]:
+    ) -> tuple[list[dict[str, Any]], str, bool]:
         params: dict[str, Any] = {
             "q": query,
             "pageSize": min(limit, MAX_DRIVE_PAGE_SIZE),
-            "fields": f"nextPageToken,files({DRIVE_FILE_FIELDS})",
+            "fields": f"nextPageToken,incompleteSearch,files({DRIVE_FILE_FIELDS})",
             "supportsAllDrives": "true",
             **list_scope,
         }
@@ -953,7 +955,7 @@ class GoogleDriveProvider:
             params["pageToken"] = current_token
         payload = self._drive_request("GET", "/files", params=params)
         items = [item for item in payload.get("files") if isinstance(item, dict)] if isinstance(payload.get("files"), list) else []
-        return items[:limit], str(payload.get("nextPageToken") or "")
+        return items[:limit], str(payload.get("nextPageToken") or ""), bool(payload.get("incompleteSearch"))
 
     def _parent_list_context(self, parent_id: str) -> tuple[str, dict[str, Any], list[dict[str, str]]]:
         if parent_id == "root":

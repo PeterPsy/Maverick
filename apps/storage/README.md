@@ -127,3 +127,27 @@ and `directory.children` provide metadata without loading invisible file pages.
 Filesystem discovery runs in the app's bounded `background_tick`; ordinary
 indexed reads do not trigger discovery. All local mutation surfaces share the
 same durable-intent boundary and recovery fence.
+
+
+Preview requests carry the viewing surface's cancellation signal through text,
+table, document rendering, Drive and device-cache reads. The in-memory preview
+cache contains completed values only, with a 32 MiB byte budget and an 8 MiB
+entry ceiling. Displayed blob URLs are leased and cannot be revoked by ordinary
+LRU eviction; cancellation releases only that consumer. Uncached and late
+cancelled blobs are disposed, and page teardown clears the frame-scoped cache.
+Card thumbnails remain disabled. Two conversion slots bound frontend work and
+app-owned interprocess locks bound actual converters across frames.
+
+Browser render requests use `response_mode=stream`. They receive an authenticated
+Storage media URL for the derivative; the existing media route supplies range
+and HEAD handling without copying the PDF/PNG into base64 JSON. CLI callers retain
+bounded inline responses. Derivatives are published by atomic rename and keyed
+by the full source stat signature; a changed source invalidates the URL.
+
+Drive search is debounced by 200 ms and runs on the provider, scoped to the current
+connection and, when selected, direct parent. Search, root lists and sidebar child
+lists carry `page_token` throughout pagination. `pagination.total` is null for
+Drive; `loaded_items` describes only that response. The UI labels loaded counts,
+leaves unavailable subtree sizes/counts unknown, and surfaces `incomplete_search`.
+It does not filter provider full-text matches by local filename after retrieval.
+See the [Drive files.list contract](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list).

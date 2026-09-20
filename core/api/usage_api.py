@@ -15,12 +15,14 @@ def handle_usage_api(
     state: PlatformState,
     environ: dict,
     start_response: StartResponse,
+    *,
+    request_session: RequestSession | None = None,
 ) -> list[bytes] | None:
     """Serve workspace-local hourly and daily token usage to platform admins."""
     path = str(environ.get("PATH_INFO") or "/")
     if path != "/api/usage/timeseries":
         return None
-    context_or_response = require_session(state, environ, start_response)
+    context_or_response = request_session or require_session(state, environ, start_response)
     if not isinstance(context_or_response, RequestSession):
         return context_or_response
     context = context_or_response

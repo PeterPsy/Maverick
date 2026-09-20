@@ -300,3 +300,28 @@ one SQLite connection open until their durable intent, metadata and cleanup
 commits finish, then close it before releasing the mutation fence. This avoids
 repeated last-connection checkpoints without changing synchronous durability or
 retaining connections across requests, migration or rollback boundaries.
+
+The follow-up 500-request Storage probe at `a23ddf54`, with 10k files and 25
+additional installed apps, measured sequential p95 23.72 ms for catalog and
+10.84 ms for resolver. Both sequential targets pass in this disposable HTTP
+fixture. Four-reader/two-writer saturation measured p95 146.30 ms and 219.06 ms;
+those concurrent targets remain unmet. Exact totals were verified after both
+write phases (10,250 and 10,500 files). These results do not certify browser or
+physical-device performance.
+
+`scripts/usage_mounted_performance_probe.py` adds authenticated chart HTTP reads
+against a temporary tenant after the real Usage prepare/cutover/bootstrap flow.
+It measures `ingest_runtime_usage` separately; observations are internal runtime
+calls with synthetic session context, not an invented HTTP write endpoint or a
+provider benchmark. `--concurrent` runs four HTTP readers and two producers;
+the default runs the two measurements sequentially. Both verify the exact sample
+and token totals afterward. Fixture dates stay inside the endpoint's real
+30-day window. Use `--count 10000 --requests 500 --warmup 5` under the verified
+SQLite runtime, adding `--concurrent` for saturation.
+
+The Usage endpoint reuses the context already authenticated by `PlatformHost`
+within that request, while retaining its admin-only authorization and standalone
+authentication path. With 10k samples, 500 HTTP reads and 250 concurrent runtime
+observations, the follow-up measured p95 36.10 ms for reads and 42.86 ms for
+observations. Saturated Usage acceptance remains open; isolated-service gains
+must not be presented as concurrent HTTP gains.

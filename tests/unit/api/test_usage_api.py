@@ -82,7 +82,13 @@ class UsageApiTest(unittest.TestCase):
         self.assertEqual(status, "400 Bad Request")
         self.assertEqual(payload["error"], "usage_resolution_invalid")
 
-    def invoke(self, *, platform_role: str, query: str = "") -> tuple[str, dict]:
+    def test_host_authenticated_context_preserves_admin_only_access(self) -> None:
+        for role, expected in (("admin", "200 OK"), ("member", "403 Forbidden")):
+            with self.subTest(role=role):
+                status, _payload = self.invoke(platform_role=role, host_authenticated=True)
+                self.assertEqual(status, expected)
+
+    def invoke(self, *, platform_role: str, query: str = "", host_authenticated: bool = False) -> tuple[str, dict]:
         context = RequestSession(
             user=SimpleNamespace(user_id="user-1", platform_role=platform_role),
             session=SimpleNamespace(session_id="session-1"),
@@ -102,8 +108,10 @@ class UsageApiTest(unittest.TestCase):
             captured["status"] = status
             captured["headers"] = headers
 
-        with patch("core.api.usage_api.require_session", return_value=context):
-            body = handle_usage_api(SimpleNamespace(usage_store=self.store), environ, start_response)
+        with patch("core.api.usage_api.require_session", return_value=context) as authenticate:
+            body = handle_usage_api(SimpleNamespace(usage_store=self.store), environ, start_response,
+                request_session=context if host_authenticated else None)
+            self.assertEqual(authenticate.call_count, 0 if host_authenticated else 1)
 
         assert body is not None
         return str(captured["status"]), json.loads(b"".join(body).decode("utf-8"))

@@ -172,7 +172,7 @@ class PlatformHost:
             routed = handle_runtime_api(self.state, environ, start_response, start_path=self.start_path)
             if routed is not None:
                 return routed
-            routed = handle_usage_api(self.state, environ, start_response)
+            routed = handle_usage_api(self.state, environ, start_response, request_session=context)
             if routed is not None:
                 return routed
             routed = handle_job_api(self.state, environ, start_response)

@@ -333,6 +333,11 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         )
 
     def test_slow_result_persistence_cannot_commit_success_after_deadline(self) -> None:
+        clock = _Clock()
+
+        def budget_factory(policy, finalization_policy, **kwargs):
+            return HostedAgenticBudget(policy, finalization_policy, monotonic=clock, **kwargs)
+
         self.harness.policy = replace(
             self.harness.policy,
             max_wall_time_seconds=0.2,
@@ -355,10 +360,15 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
 
         def delayed_result_put(**kwargs):
             if kwargs.get("private_ref") is None:
-                time.sleep(0.15)
+                # Cross the tool's 0.15s fence without exhausting the 0.2s turn.
+                # Scheduler/SQLite latency must not decide this regression.
+                clock.value = 0.16
             return original_put(**kwargs)
 
-        with patch.object(private_store, "put", side_effect=delayed_result_put):
+        with (
+            patch("core.runtime.hosted_agentic_loop.HostedAgenticBudget", side_effect=budget_factory),
+            patch.object(private_store, "put", side_effect=delayed_result_put),
+        ):
             result, events = self.execute(client, adapter=adapter)
 
         self.assertEqual(result.exit_code, 0)

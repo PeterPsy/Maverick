@@ -140,6 +140,7 @@
     }
   },
   "capabilities": {
+    "backend_workspace_apps": false,
     "mcp_tools": [
       "maverick_storage",
       "storage_list_files",
@@ -316,6 +317,7 @@
     }
   ],
   "entrypoints": {
+    "json_worker": "backend/json_worker.py",
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",
     "backend": "backend/app_backend.py",

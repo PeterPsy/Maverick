@@ -1,6 +1,7 @@
 import { expect, Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { productNavigation } from '../../frontend/src/domain/navigation';
 
 const root = resolve(process.cwd(), '../..');
 export function backend(dataRoot: string, body: Record<string, unknown>, providers: Record<string, string> = {}) {
@@ -21,11 +22,10 @@ export async function mount(page: Page, dataRoot: string, providers = { mail: 't
   await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
 }
 
+// Main-canvas tests exercise the shell's navigation protocol; crm-sidebar.spec.ts
+// mounts the real widget and canvas in separate origins to cover the full bridge.
 export async function navigate(page: Page, name: string) {
-  const mobile = page.getByRole('button', { name: 'Open navigation', exact: true });
-  if (await mobile.isVisible()) await mobile.click();
-  const nav = page.getByRole('navigation', { name: 'CRM workspace' });
-  const button = nav.getByRole('button', { name, exact: true });
-  if (!await button.isVisible()) await nav.getByText('Workspace tools', { exact: true }).click();
-  await button.click();
+  const item = productNavigation.find((entry) => entry.label === name);
+  if (!item) throw new Error(`Unknown CRM navigation label: ${name}`);
+  await page.evaluate((app_page) => window.postMessage({ type: 'maverick.app.navigate', app_id: 'crm', params: { app_page } }, window.location.origin), item.page);
 }

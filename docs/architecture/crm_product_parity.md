@@ -1,6 +1,6 @@
 # CRM product and visual alignment
 
-Date: 2026-09-19
+Date: 2026-09-20
 
 ## Product decision
 
@@ -15,8 +15,9 @@ required. Existing Maverick records, IDs, links and integrations remain intact.
 
 1. Compare the reference shell and each generic view using source and a local,
    read-only fixture render; never connect the reference renderer to production.
-2. Replace the horizontal navigation with the reference's persistent sidebar,
-   compact search/action bar and mobile navigation. Dashboard is the landing page;
+2. Place the reference's compact sidebar in the existing shell-hosted CRM widget,
+   not in a second workspace column. Keep the search/action bar in the full-width
+   canvas; Base-shell owns mobile navigation. Dashboard is the landing page;
    established record deep links and the advanced record table remain available.
 3. Align dashboard, tasks, threads, people, companies, deals, expenses, calendar,
    intelligence, brief/transcript review, proposals and data-quality surfaces.
@@ -49,7 +50,7 @@ Implementation and verification results are recorded below with the release.
 
 | Reference surface | Native implementation | Intentional boundary |
 | --- | --- | --- |
-| 224px sidebar, search/action bar | Persistent sidebar, shared shell-widget navigation, mobile drawer, Ctrl/Cmd-K search, refresh/create | Maverick branding/theme, no source workspace/identity or theme switch |
+| Compact sidebar, search/action bar | One shell-hosted sidebar, expandable Workspace tools, full-width CRM canvas, Ctrl/Cmd-K search, refresh/create | Maverick branding/theme; shell owns sidebar width and mobile drawer |
 | Dashboard | Brief selector, joined KPIs, full-width value/margin stage chart, next tasks, recent people/threads and active deals | Separate currencies; existing configured stages; no invented brief or score |
 | Task periods and category accordions | Today (including overdue), 1–7 / 8–30 days, undated/all, open/completed, category/priority groups, complete/reopen | Explicit record metadata, not language-specific keyword inference |
 | Thread queues | Reply/waiting/completed, state changes, record inspector with participants, links and connected work | Canonical Mail/provider identities remain external |
@@ -108,3 +109,45 @@ was never created by the new tests; browser tests use temporary isolated stores.
   Calendar, Storage (catalog/preview/write), Speech and Checklist dependencies
   remain resolved. Previously unresolved imported references remain preserved;
   they are not relabelled as verified provider records.
+
+## Single sidebar correction (0.7.1, schema 8 unchanged)
+
+The screenshot-approved compact sidebar now lives exclusively in the existing
+`crm-sidebar` iframe (`shell.sidebar.primary`). Its Maverick header, simple icons,
+9px active rows, counters and expandable Workspace tools replace the old pill
+navigation. The canvas no longer renders `WorkspaceSidebar`, reserves a sidebar
+column or exposes its own mobile drawer/menu button. Record inspectors use the
+available canvas width. Base-shell source and other apps are unchanged.
+
+The widget uses `crm.workspace_view` with `view=sidebar` for six active-record
+counts only: contacts, accounts, deals, threads, expenses and intelligence. This
+read-only helper returns no business records, performs no provider calls and
+adds no persistent cache/schema or public CLI/MCP surface. Failed counts are
+hidden with an explicit retry instead of displaying fabricated zeros. Trusted
+`maverick.widget.data-changed` CRM events reload the counts.
+
+Shell context supplies active navigation and mobile layout; the narrow iframe
+width is not interpreted as the shell viewport. Both widget and canvas use the
+same legacy/deep-link route resolver. Incoming messages require the exact shell
+parent and injected platform origin; outgoing navigation targets that exact
+origin. A ready handshake supplies current context, and late token reads cannot
+overwrite newer context messages. Top/bottom scroll insets remain reserved for
+shell-owned controls.
+
+In-canvas navigation mirrors its route through `maverick.app.open-app`, so the
+sole sidebar also tracks dashboard/search/report actions. An app-owned scalar
+`crm_navigation_id` identifies each reflected navigation once, preserving local
+filters, forms and inspectors on the echo without suppressing later URL revisits.
+This is UI navigation only; no campaign delivery, data migration, credentials or
+provider connections are changed.
+
+Verification: 120 Python tests passed (including active-only, read-only sidebar
+counts and single-sidebar ownership). All 25 browser scenarios passed across the
+full suite and focused rerun: the first Calendar integration timed out during a
+concurrent build, then both provider flows and all five isolated-origin sidebar
+scenarios passed together with one worker. Sidebar coverage includes desktop and
+mobile screenshots, legacy/deep links, internal navigation/inspector preservation,
+late context responses, parent-origin/source validation, live counts and retry.
+TypeScript, unused imports, whitespace and SDK validation passed. The official
+frontend build publishes both CRM and widget artifacts and emits the app refresh
+event. Tests use temporary stores; no production business data is modified.

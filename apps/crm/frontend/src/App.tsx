@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { WorkspaceSidebar } from './views/workspace/WorkspaceSidebar';
 import { TasksWorkspace } from './views/workspace/TasksWorkspace';
 import { RelationshipsWorkspace } from './views/workspace/RelationshipsWorkspace';
 import { ContextWorkspace } from './views/workspace/ContextWorkspace';
@@ -28,7 +26,6 @@ import { useCrmDataController } from './domain/useCrmDataController';
 
 export function App() {
   const crm = useCrmDataController();
-  const [menuOpen, setMenuOpen] = useState(false);
   const actions = useCrmActions(crm);
   const {
     actionDialog,
@@ -93,16 +90,14 @@ export function App() {
     setSelected({ entity: 'deal', record: fullRecord as typeof viewModel.deals[number] });
   }
 
-  function navigate(page: ViewId) { setSelected(null); setView(page); setMenuOpen(false); }
+  function navigate(page: ViewId) { setSelected(null); setView(page); }
   function refreshWorkspace() { void crm.refresh(); }
   function closeInspector() { setSelected(null); window.dispatchEvent(new Event('crm-workspace-refresh')); }
 
   return (
     <main className={`crm-app product-shell ${selected ? 'is-showing-detail' : ''}`}>
-      <WorkspaceSidebar counts={data.counts} view={view} navigate={navigate} open={menuOpen} close={() => setMenuOpen(false)} />
       <section className="crm-workspace product-main">
         <WorkspaceTopbar
-          onMenu={() => setMenuOpen(!menuOpen)}
           onRefresh={refreshWorkspace}
           onCreate={() => setIsCreateChooserOpen(true)}
           query={query}

@@ -4,6 +4,20 @@ from errors import ValidationError
 
 
 class WorkspaceViewTests(IntegrationFixture):
+    def test_sidebar_counts_are_active_only_and_do_not_expose_or_mutate_records(self):
+        thread = self.call('create_extension_record', entity_type='conversation_thread', title='Private thread')['record']
+        expense = self.call('create_extension_record', entity_type='expense', title='Receipt')['record']
+        self.call('archive_record', entity_type='conversation_thread', id=thread['id'])
+        self.call('delete_record', entity_type='expense', id=expense['id'])
+        before = self.business_export()
+        result = self.call('workspace_view', view='sidebar')
+        self.assertEqual(set(result), {'ok', 'counts'})
+        self.assertEqual(set(result['counts']), {'contacts', 'accounts', 'deals', 'conversation_threads', 'expenses', 'intelligence_profiles'})
+        self.assertEqual(result['counts']['contacts'], 1)
+        self.assertEqual(result['counts']['conversation_threads'], 0)
+        self.assertEqual(result['counts']['expenses'], 0)
+        self.assertEqual(before, self.business_export())
+
     def business_export(self):
         result = self.call('export')['export']
         result.pop('exported_at')

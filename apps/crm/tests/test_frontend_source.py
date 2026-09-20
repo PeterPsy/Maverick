@@ -26,6 +26,17 @@ SIDEBAR_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "widget
 
 
 class CrmFrontendSourceTest(unittest.TestCase):
+    def test_sidebar_belongs_only_to_shell_widget(self) -> None:
+        app = APP_TSX.read_text(encoding='utf-8')
+        widget = SIDEBAR_TSX.read_text(encoding='utf-8')
+        self.assertNotIn('WorkspaceSidebar', app)
+        self.assertNotIn('menuOpen', app)
+        self.assertNotIn('Open navigation', VIEWS_TSX.read_text(encoding='utf-8'))
+        self.assertIn('WorkspaceSidebar', widget)
+        self.assertIn('isExactMaverickParentMessage', widget)
+        self.assertIn("view: 'sidebar'", widget)
+        self.assertNotIn('window.parent.matchMedia', widget)
+
     def test_search_view_filter_is_rendered(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")
         controller_source = DATA_CONTROLLER_TS.read_text(encoding="utf-8")

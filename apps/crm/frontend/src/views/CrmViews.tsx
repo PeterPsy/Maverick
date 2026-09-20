@@ -1,15 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { Menu, MoreHorizontal, Plus, RefreshCw, Search } from 'lucide-react';
+import { MoreHorizontal, Plus, RefreshCw, Search } from 'lucide-react';
 
 export function WorkspaceTopbar({
-  onMenu, onRefresh, onCreate,
+  onRefresh, onCreate,
   query,
   selectedCount,
   onBulkArchive,
   onBulkTag,
   onQueryChange
 }: {
-  onMenu: () => void; onRefresh: () => void; onCreate: () => void;
+  onRefresh: () => void; onCreate: () => void;
   query: string;
   selectedCount: number;
   onBulkArchive: () => void;
@@ -24,7 +24,6 @@ export function WorkspaceTopbar({
   }, []);
   return (
     <header className="crm-topbar">
-      <button className="product-menu-toggle" aria-label="Open navigation" onClick={onMenu}><Menu size={20} /></button>
       <label className="crm-search">
         <Search size={17} aria-hidden="true" />
         <input ref={search} aria-label="Search CRM" onChange={(event) => onQueryChange(event.target.value)} placeholder="Search CRM" value={query} />

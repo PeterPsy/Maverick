@@ -2,7 +2,7 @@
 from datetime import datetime, timezone, timedelta
 
 from errors import ValidationError
-from store import require_text, row_to_dict
+from store import count_tables, require_text, row_to_dict
 
 ACTIVE = 'deleted_at IS NULL AND archived_at IS NULL'
 SPECS = {
@@ -23,6 +23,10 @@ def pagination(payload):
 
 def workspace_view(db, payload):
     view = require_text(payload, 'view', required=True)
+    if view == 'sidebar':
+        return {'ok': True, 'counts': count_tables(db, (
+            'contacts', 'accounts', 'deals', 'conversation_threads', 'expenses', 'intelligence_profiles',
+        ))}
     if view in {'calendar', 'transcripts', 'quality'}:
         from .workspace_evidence import evidence_view
         return evidence_view(db, payload)

@@ -4,11 +4,13 @@ import { readCrmDisplay } from '../pwaCache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BootstrapPayload, CrmRecord, PipelineBoardPayload, RecordsTablePayload, callBackend } from '../api';
 import { buildCrmViewModel } from './viewModel';
-import { ActionDialogState, ComposerState, ImportPreview, PendingSelection, RecordEntityFilter, SalesReportsPayload, ViewId, emptyPayload } from './types';
+import { ActionDialogState, ComposerState, ImportPreview, PendingSelection, RecordEntityFilter, SalesReportsPayload, emptyPayload } from './types';
 import { entityFilterForEntity, isCreatableEntity, viewForEntity, viewFromAppPage } from './routing';
+import { useCrmNavigation } from './useCrmNavigation';
+import { postToShell } from './shellMessaging';
 
 export function useCrmDataController() {
-  const [view, setView] = useState<ViewId>('overview');
+  const { view, setView, applyShellView, consumeNavigationEcho } = useCrmNavigation();
   const [recordEntityFilter, setRecordEntityFilter] = useState<RecordEntityFilter>('all');
   const [recordsCursor, setRecordsCursor] = useState('');
   const [recordsCursorHistory, setRecordsCursorHistory] = useState<string[]>([]);
@@ -114,6 +116,7 @@ export function useCrmDataController() {
       }
       if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.navigate') {
         const params = event.data.params && typeof event.data.params === 'object' ? event.data.params : {};
+        if (consumeNavigationEcho(params)) return;
         const appPage = typeof params.app_page === 'string' ? params.app_page : typeof event.data.app_page === 'string' ? event.data.app_page : '';
         const intent = typeof params.intent === 'string' ? params.intent : '';
         if (intent === 'create-menu') {
@@ -125,19 +128,20 @@ export function useCrmDataController() {
         if (intent === 'create' && isCreatableEntity(params.entity_type)) {
           setSelected(null);
           setIsCreateChooserOpen(false);
-          setView(viewForEntity(params.entity_type));
+          applyShellView(viewForEntity(params.entity_type));
           setRecordEntityFilter(entityFilterForEntity(params.entity_type));
           setComposer({ mode: 'create', entity: params.entity_type });
           return;
         }
         const navigation = viewFromAppPage(appPage);
         setSelected(null);
-        setView(navigation.view);
+        applyShellView(navigation.view);
         setRecordEntityFilter(navigation.entityFilter);
         setPendingSelection(navigation.selection);
       }
     }
     window.addEventListener('message', handleMessage);
+    postToShell({ type: 'maverick.app.ready', app_id: 'crm' });
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 

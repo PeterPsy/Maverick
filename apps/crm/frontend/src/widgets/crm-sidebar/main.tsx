@@ -1,155 +1,66 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { productNavigation } from '../../domain/navigation';
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { viewFromAppPage } from '../../domain/routing';
+import { postToShell } from '../../domain/shellMessaging';
+import { ViewId } from '../../domain/types';
+import { useLiveCrm } from '../../domain/vnext';
+import { WorkspaceSidebar } from './WorkspaceSidebar';
 import './styles.css';
 
-const nav = productNavigation;
-
-const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';
-
 type WidgetContext = {
-  content?: {
-    payload?: {
-      active_app_params?: Record<string, unknown>;
-      is_mobile_layout?: boolean;
-    };
-  };
+  content?: { payload?: { active_app_params?: Record<string, unknown>; is_mobile_layout?: boolean } };
 };
 
-function contextToken() {
-  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
-  return new URLSearchParams(hash).get('context') || new URLSearchParams(window.location.search).get('context') || '';
-}
-
-async function loadWidgetContext(): Promise<WidgetContext> {
-  const token = contextToken();
-  if (!token) {
-    return {};
-  }
+async function loadWidgetContext(signal: AbortSignal): Promise<WidgetContext> {
+  const token = new URLSearchParams(window.location.hash.slice(1)).get('context')
+    || new URLSearchParams(window.location.search).get('context');
+  if (!token) return {};
   const response = await fetch(`/api/apps/widgets/context/${encodeURIComponent(token)}`, {
-    credentials: 'same-origin',
-    headers: { Accept: 'application/json' }
+    signal, credentials: 'same-origin', headers: { Accept: 'application/json' },
   });
-  if (!response.ok) {
-    return {};
-  }
-  return (await response.json()).context as WidgetContext;
-}
-
-function activePageFromContext(context: WidgetContext) {
-  const appPage = context.content?.payload?.active_app_params?.app_page;
-  return activePageFromAppPage(typeof appPage === 'string' ? appPage : '');
-}
-
-function activePageFromAppPage(appPage: string) {
-  const [segment] = appPage.split('/').filter(Boolean);
-  const route = segment || 'overview';
-  if (nav.some((item) => item.page === route)) return route;
-  if (route.startsWith('campaign_')) return 'campaigns';
-  if (route.startsWith('custom_object')) return 'objects';
-  if (route === 'conversation_threads') return 'conversations';
-  if (route === 'intelligence_profiles') return 'intelligence';
-  if (route === 'tasks') return 'today';
-  if (route === 'pipeline' || route === 'operations' || route === 'notes' || route === 'activities') return 'pipeline';
-  return 'records';
-}
-
-function isMobileLayoutViewport() {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  try {
-    const shellWindow = window.parent && window.parent !== window ? window.parent : window;
-    return typeof shellWindow.matchMedia === 'function' && shellWindow.matchMedia(MOBILE_LAYOUT_QUERY).matches;
-  } catch {
-    return typeof window.matchMedia === 'function' && window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
-  }
-}
-
-function useShellMobileLayout() {
-  const [isShellMobileLayout, setIsShellMobileLayout] = useState(isMobileLayoutViewport);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return;
-    }
-    let mediaQuery: MediaQueryList;
-    try {
-      const shellWindow = window.parent && window.parent !== window ? window.parent : window;
-      mediaQuery = shellWindow.matchMedia(MOBILE_LAYOUT_QUERY);
-    } catch {
-      mediaQuery = window.matchMedia(MOBILE_LAYOUT_QUERY);
-    }
-    const update = () => setIsShellMobileLayout(mediaQuery.matches);
-    update();
-    mediaQuery.addEventListener('change', update);
-    return () => mediaQuery.removeEventListener('change', update);
-  }, []);
-
-  return isShellMobileLayout;
-}
-
-function openCrm(page = '') {
-  window.parent?.postMessage(
-    {
-      type: 'maverick.widget.open-app',
-      app_id: 'crm',
-      params: page ? { app_page: page } : {}
-    },
-    "*"
-  );
+  if (!response.ok) throw new Error('Widget context unavailable.');
+  return (await response.json()).context;
 }
 
 function CrmSidebar() {
-  const isShellMobileLayout = useShellMobileLayout();
-  const [activePage, setActivePage] = useState('overview');
+  const [activePage, setActivePage] = useState<ViewId>('overview');
+  const [isShellMobile, setIsShellMobile] = useState(false);
+  const counts = useLiveCrm<{ counts: Record<string, number> }>({ action: 'crm.workspace_view', view: 'sidebar' });
 
   useEffect(() => {
-    loadWidgetContext().then((context) => {
-      setActivePage(activePageFromContext(context));
-    });
-  }, []);
-
-  useEffect(() => {
+    const controller = new AbortController();
+    let receivedContext = false;
+    function applyContext(context: WidgetContext) {
+      const payload = context.content?.payload;
+      const appPage = payload?.active_app_params?.app_page;
+      setActivePage(viewFromAppPage(typeof appPage === 'string' ? appPage : '').view);
+      // The iframe width is not the shell viewport, especially on isolated origins.
+      setIsShellMobile(payload?.is_mobile_layout === true);
+    }
     function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
-        return;
-      }
-      const payload = event.data as { context?: WidgetContext; type?: string };
-      if (payload.type === 'maverick.widget.context-changed' && payload.context) {
-        setActivePage(activePageFromContext(payload.context));
+      if (!isExactMaverickParentMessage(event)) return;
+      if (event.data?.type === 'maverick.widget.context-changed' && event.data.context) {
+        receivedContext = true;
+        applyContext(event.data.context);
       }
     }
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    void loadWidgetContext(controller.signal).then((context) => {
+      // A slow initial token response must not undo a newer navigation/context.
+      if (!controller.signal.aborted && !receivedContext) applyContext(context);
+    }).catch(() => undefined); // Ready handshake also supplies the current context.
+    postToShell({ type: 'maverick.widget.ready', owner_app_id: 'crm', widget_id: 'crm-sidebar' });
+    return () => { controller.abort(); window.removeEventListener('message', handleMessage); };
   }, []);
 
-  return (
-    <main className={`crm-sidebar-widget ${isShellMobileLayout ? 'is-shell-mobile' : ''}`}>
-      <div className="crm-sidebar-list">
-        <nav>
-          {nav.map((item) => {
-            const Icon = item.icon;
-            const isActive = activePage === item.page;
-            return (
-              <button
-                className={`crm-sidebar-row ${isActive ? 'is-active' : ''}`}
-                key={item.label}
-                onClick={() => {
-                  setActivePage(item.page);
-                  openCrm(item.page);
-                }}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                <Icon size={15} aria-hidden="true" />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-    </main>
-  );
+  function navigate(page: ViewId) {
+    postToShell({ type: 'maverick.widget.open-app', app_id: 'crm', params: { app_page: page } });
+  }
+
+  return <main className={`crm-sidebar-widget ${isShellMobile ? 'is-shell-mobile' : ''}`}>
+    <WorkspaceSidebar view={activePage} navigate={navigate} counts={counts.error ? {} : counts.data?.counts || {}} countsError={Boolean(counts.error)} retry={counts.refresh} />
+  </main>;
 }
 
 createRoot(document.getElementById('crm-sidebar-root')!).render(<CrmSidebar />);

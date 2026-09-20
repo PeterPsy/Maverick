@@ -3,151 +3,59 @@
   --maverick-bg: rgba(7, 7, 8, 1);
   --maverick-text: #ececec;
   --maverick-text-muted: rgba(236, 236, 236, 0.64);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
+  --maverick-text-on-accent: #09090b;
   --maverick-border: rgba(255, 255, 255, 0.08);
   --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-surface: rgba(255, 255, 255, 0.055);
   --maverick-surface-hover: rgba(255, 255, 255, 0.105);
   --maverick-surface-active: rgba(255, 255, 255, 0.14);
   --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --crm-sidebar-icon-color: rgba(236, 236, 236, 0.72);
-  --crm-sidebar-cell-radius: 22px;
-  --crm-sidebar-control-radius: 18px;
-  --crm-sidebar-glass-highlight:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
-    linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
   font-family: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#crm-sidebar-root {
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
-  margin: 0;
-  overflow: hidden;
-}
-
-body {
-  background: transparent;
-  color: var(--maverick-text);
-}
-
-button {
-  border: 0;
-  color: inherit;
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
+* { box-sizing: border-box; }
+html, body, #crm-sidebar-root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { background: transparent; color: var(--maverick-text); }
+button { color: inherit; font: inherit; cursor: pointer; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--maverick-accent); outline-offset: 3px; }
 
 .crm-sidebar-widget {
-  --crm-sidebar-scroll-under-bottom: 7.15rem;
+  /* Keep content reachable below the shell-owned workspace selector and footer. */
   --crm-sidebar-scroll-under-top: 3.12rem;
-  position: relative;
-  display: block;
+  --crm-sidebar-scroll-under-bottom: 7.15rem;
   width: 100%;
   height: 100%;
-  min-height: 0;
   overflow: hidden;
 }
-
-.crm-sidebar-list {
+.crm-sidebar-widget.is-shell-mobile {
+  --crm-sidebar-scroll-under-top: 5.86rem;
+  --crm-sidebar-scroll-under-bottom: 5.1rem;
+}
+.product-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 0.72rem;
-  width: 100%;
+  gap: 20px;
   height: 100%;
-  min-height: 0;
+  padding: calc(var(--crm-sidebar-scroll-under-top) + 12px) 14px var(--crm-sidebar-scroll-under-bottom);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  padding: var(--crm-sidebar-scroll-under-top) 0 var(--crm-sidebar-scroll-under-bottom);
   scrollbar-width: none;
+  scroll-padding-block: var(--crm-sidebar-scroll-under-top) var(--crm-sidebar-scroll-under-bottom);
 }
-
-.crm-sidebar-list::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-.crm-sidebar-widget nav {
-  display: flex;
-  flex-direction: column;
-  gap: 0.46rem;
-  min-height: 0;
-}
-
-.crm-sidebar-row {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  min-height: 3rem;
-  padding: 0.58rem 0.7rem;
-  border: 1px solid transparent;
-  border-radius: var(--crm-sidebar-cell-radius);
-  background: transparent;
-  box-shadow: var(--maverick-inner-edge);
-  text-align: left;
-  transition:
-    background 150ms ease,
-    border-color 150ms ease,
-    transform 150ms ease;
-}
-
-.crm-sidebar-row svg {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid transparent;
-  border-radius: 15px;
-  background: var(--maverick-surface);
-  color: var(--crm-sidebar-icon-color);
-  box-shadow: var(--maverick-inner-edge);
-  padding: 0.46rem;
-  stroke: currentColor;
-}
-
-.crm-sidebar-row span {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.crm-sidebar-row:hover,
-.crm-sidebar-row:focus-visible {
-  border-color: var(--maverick-border);
-  background: var(--maverick-surface-hover);
-  outline: none;
-}
-
-.crm-sidebar-row.is-active svg {
-  border-color: var(--maverick-accent);
-}
-
-.crm-sidebar-row:active {
-  transform: scale(0.985);
-}
-
-.crm-sidebar-widget.is-shell-mobile {
-  --crm-sidebar-scroll-under-bottom: 5.1rem;
-  --crm-sidebar-scroll-under-top: 5.86rem;
-}
+.product-sidebar::-webkit-scrollbar { display: none; }
+.product-sidebar > header { display: flex; flex-shrink: 0; align-items: center; gap: 10px; min-height: 48px; padding: 0 6px; }
+.product-sidebar strong { font-size: 15px; font-weight: 650; }
+.product-sidebar small { display: block; font-size: 10px; color: var(--maverick-text-muted); margin-top: 4px; }
+.product-mark { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; color: var(--maverick-text-on-accent); background: var(--maverick-accent); }
+.product-sidebar nav { display: flex; flex-direction: column; gap: 4px; flex: 1 0 auto; }
+.product-sidebar nav button { display: flex; gap: 11px; align-items: center; width: 100%; background: transparent; padding: 11px 13px; border: 1px solid transparent; border-radius: 9px; text-align: left; color: var(--maverick-text-muted); font-size: 13px; }
+.product-sidebar nav button svg { flex-shrink: 0; }
+.product-sidebar nav button:hover { background: var(--maverick-surface-hover); color: var(--maverick-text); }
+.product-sidebar nav button[aria-current="page"] { background: var(--maverick-surface-active); color: var(--maverick-text); border-color: var(--maverick-border-strong); font-weight: 600; }
+.product-sidebar nav details { margin-top: 16px; }
+.product-sidebar nav summary { padding: 8px 13px; font-size: 11px; color: var(--maverick-text-muted); cursor: pointer; text-transform: uppercase; letter-spacing: .07em; }
+.product-sidebar footer { display: flex; flex-shrink: 0; align-items: center; gap: 9px; padding: 18px 7px 0; border-top: 1px solid var(--maverick-border); }
+.product-avatar { display: inline-grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid var(--maverick-border); background: var(--maverick-surface-active); border-radius: 50%; font-size: 11px; font-weight: 650; }
+.product-sidebar .product-nav-count { display: inline-grid; place-items: center; min-width: 23px; height: 18px; margin: 0 0 0 auto; padding-inline: 4px; border-radius: 10px; background: var(--maverick-surface-active); font-size: 9px; }
+.sidebar-count-error { font-size: 11px; color: var(--maverick-text-muted); }
+.sidebar-count-error button { background: transparent; border: 0; padding: 4px; text-decoration: underline; }

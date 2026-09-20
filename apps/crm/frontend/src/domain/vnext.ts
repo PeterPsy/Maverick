@@ -37,7 +37,7 @@ export function useLiveCrm<T>(request: Record<string, unknown>) {
   }, [key, revision]);
   useEffect(() => {
     const changed = (event: MessageEvent) => {
-      if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.data-changed' && event.data?.owner_app_id === 'crm') refresh();
+      if (isExactMaverickParentMessage(event) && ['maverick.app.data-changed', 'maverick.widget.data-changed'].includes(event.data?.type) && event.data?.owner_app_id === 'crm') refresh();
     };
     window.addEventListener('message', changed);
     window.addEventListener('crm-workspace-refresh', refresh);

@@ -40,6 +40,19 @@ class JsonFileCollectionTestCase(unittest.TestCase):
             os.utime(path, ns=(original.st_atime_ns, original.st_mtime_ns))
             self.assertEqual(collection.find_one({"id": "one"})["value"], "other")
 
+    def test_lock_mode_normalization_failure_does_not_block_reads(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "records.json"
+            path.write_text("[]\n", encoding="utf-8")
+            lock_path = path.with_name(".records.json.lock")
+            lock_path.touch()
+            lock_path.chmod(0o666)
+
+            with patch("os.fchmod", side_effect=PermissionError("not the lock owner")) as chmod:
+                self.assertEqual(JsonFileCollection(path).find({}), [])
+
+            chmod.assert_called_once()
+
     def test_update_one_unsets_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = JsonFileCollection(Path(temp_dir) / "records.json")

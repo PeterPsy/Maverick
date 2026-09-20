@@ -364,7 +364,10 @@ class _FileLock:
         _ensure_collection_directory(self.path.parent)
         self._handle = self.path.open("a+b")
         if stat.S_IMODE(os.fstat(self._handle.fileno()).st_mode) != COLLECTION_FILE_MODE:
-            os.fchmod(self._handle.fileno(), COLLECTION_FILE_MODE)
+            try:
+                os.fchmod(self._handle.fileno(), COLLECTION_FILE_MODE)
+            except OSError:
+                pass
         operation = fcntl.LOCK_EX if self.exclusive else fcntl.LOCK_SH
         fcntl.flock(self._handle.fileno(), operation)
         return self

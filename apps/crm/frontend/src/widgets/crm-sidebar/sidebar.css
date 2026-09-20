@@ -22,8 +22,6 @@
 .product-sidebar nav button[aria-current="page"] { background: var(--maverick-surface-active); color: var(--maverick-text); border-color: var(--maverick-border-strong); font-weight: 600; }
 .product-sidebar nav details { margin-top: 16px; }
 .product-sidebar nav summary { padding: 8px 13px; font-size: 11px; color: var(--maverick-text-muted); cursor: pointer; text-transform: uppercase; letter-spacing: .07em; }
-.product-sidebar footer { display: flex; flex-shrink: 0; align-items: center; gap: 9px; padding: 18px 7px 0; border-top: 1px solid var(--maverick-border); }
-.product-avatar { display: inline-grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid var(--maverick-border); background: var(--maverick-surface-active); border-radius: 50%; font-size: 11px; font-weight: 650; }
 .product-sidebar .product-nav-count { display: inline-grid; place-items: center; min-width: 23px; height: 18px; margin: 0 0 0 auto; padding-inline: 4px; border-radius: 10px; background: var(--maverick-surface-active); font-size: 9px; }
 .sidebar-count-error { font-size: 11px; color: var(--maverick-text-muted); }
 .sidebar-count-error button { background: transparent; border: 0; padding: 4px; text-decoration: underline; }

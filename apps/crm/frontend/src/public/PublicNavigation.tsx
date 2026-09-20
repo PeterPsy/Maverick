@@ -12,6 +12,6 @@ export function PublicNavigation({ view, navigate }: { view: ViewId; navigate: (
   return <div className={`crm-public-navigation ${open ? 'is-open' : ''}`}>
     <button className="crm-public-menu" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
     <WorkspaceSidebar view={view} navigate={page => { navigate(page); setOpen(false); }} counts={counts.data?.counts || {}}
-      countsError={Boolean(counts.error)} retry={counts.refresh} publicSurface />
+      countsError={Boolean(counts.error)} retry={counts.refresh} />
   </div>;
 }

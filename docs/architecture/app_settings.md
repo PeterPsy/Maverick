@@ -35,6 +35,9 @@ relax the static publisher or grant public callers access to Core.
 Dialog state is memory-only. App/workspace/session transitions discard the old
 scope, and widget frames are separately authenticated origins. Native dialog
 focus handling, Escape, loading/error/empty states and mobile layout are required.
+The external widget fills the dialog body and owns its scroll area and action bar;
+the shell must not add a second scrolling/padded container around it. General
+settings keep the ordinary padded layout.
 No new settings database or generic configuration-schema framework is introduced.
 Public URL and TLS policy remain in `external_apps_v1.md`.
 

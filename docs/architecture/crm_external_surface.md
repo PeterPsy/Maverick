@@ -23,6 +23,21 @@ not change.
 - Public navigation/search does not change private workspace view preferences.
   No private PWA cache bridge, platform cookies, session tokens or Core proxy.
 
+## Settings interaction
+
+The private widget separates saved service status/link from an unsaved draft.
+It offers copy/open actions, one enable switch and explicit read-only/read-write
+choices. Access warnings include anonymous exports and, when selected, deletion.
+Confirmation appears only for changes and is invalidated by every subsequent edit
+or failed save. Saving requires that confirmation and the saved revision; no
+background mutation or retry is introduced. Cancel restores the saved state.
+Refresh is disabled while editing or saving so it cannot discard a draft.
+
+The widget owns one scroll area and a persistent action bar, including on small
+screens; state/error feedback and manual refresh replace indefinite loading.
+It follows the exact shell parent's light/dark theme. The shared private/public
+CRM sidebar has no redundant branding footer; shell-owned controls are unchanged.
+
 ## Deployment and revocation
 
 An operator-managed foreground supervisor selects one installation workspace and

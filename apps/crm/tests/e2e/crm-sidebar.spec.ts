@@ -13,6 +13,7 @@ test('compact sidebar lives only in the shell widget and navigates the full-widt
   const { widget, canvas } = await mountSidebarHost(page, dataRoot);
   const dashboard = widget.getByRole('button', { name: 'Dashboard', exact: true });
   await expect(widget.getByText('Relationship workspace', { exact: true })).toBeVisible();
+  await expect(widget.locator('.product-sidebar footer')).toHaveCount(0);
   await expect(dashboard).toHaveAttribute('aria-current', 'page');
   await expect(widget.getByRole('button', { name: 'People', exact: true }).locator('small')).toHaveText('1');
   await expect(canvas.getByRole('navigation', { name: 'CRM workspace' })).toHaveCount(0);

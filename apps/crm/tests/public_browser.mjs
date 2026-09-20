@@ -17,6 +17,7 @@ try {
   await page.goto(url);
   await page.getByRole('heading', { name: 'Dashboard', exact: true }).waitFor();
   assert.match(await page.locator('.crm-public-notice').innerText(), /Sola lettura/);
+  assert.equal(await page.locator('.product-sidebar footer').count(), 0, 'No redundant CRM branding footer');
   const sidebar = page.getByRole('navigation', { name: 'CRM workspace' });
   await sidebar.getByRole('button', { name: 'People', exact: true }).click();
   await page.getByRole('button', { name: 'Public Browser Contact', exact: true }).waitFor();

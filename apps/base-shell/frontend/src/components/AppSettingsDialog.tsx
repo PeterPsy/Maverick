@@ -68,7 +68,7 @@ export function AppSettingsDialog({ app, apps, frameScope, isPinned, isLastPinne
       <button type="button" aria-pressed={section === "general"} onClick={() => setSection("general")}>Generali</button>
       <button type="button" aria-pressed={section === "external"} onClick={() => setSection("external")}>Superfici esterne</button>
     </nav>
-    <div className="bs-app-settings__body" key={section}>
+    <div className={`bs-app-settings__body${section === "external" ? " bs-app-settings__body--external" : ""}`} key={section}>
       {section === "general" ? <>
         <div className="bs-app-settings__summary"><p>{app.description}</p><small>Versione {app.version} · {app.publisher}</small></div>
         {app.frontend_role === "workspace" && ![APP_STORE_APP_ID, SETTINGS_APP_ID].includes(app.app_id) && <div>

@@ -49,7 +49,9 @@ describe("Per-app settings", () => {
     await render();
     expect(container.querySelector("dialog")?.open).toBe(true);
     expect(widget).toHaveBeenLastCalledWith(expect.objectContaining({ contentKind: "shell.app.settings", preferredOwnerAppId: app.app_id, activeWorkspaceId: "tenant-a", frameScope }));
+    expect(container.querySelector(".bs-app-settings__body--external")).toBeNull();
     await external();
+    expect(container.querySelector(".bs-app-settings__body--external")).not.toBeNull();
     expect(widget).toHaveBeenLastCalledWith(expect.objectContaining({ contentKind: "shell.app.external.surfaces", preferredOwnerAppId: provider.app_id, content: { app_id: app.app_id, app_name: app.name } }));
     await act(async () => container.querySelector("dialog")!.dispatchEvent(new Event("cancel", { cancelable: true })));
     expect(close).toHaveBeenCalledOnce();

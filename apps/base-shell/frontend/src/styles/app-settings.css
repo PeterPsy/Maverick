@@ -34,3 +34,8 @@
   .bs-app-settings__header, .bs-app-settings__body { padding: 16px; }
   .bs-app-settings__tabs { padding: 0 16px 14px; }
 }
+
+/* External widgets own their scrolling and action bar: avoid nested scroll areas. */
+.bs-app-settings__body.bs-app-settings__body--external { padding: 0; gap: 0; overflow: hidden; }
+.bs-app-settings__body--external .bs-widget-slot { min-height: 0; }
+.bs-app-settings__body--external :is(.bs-widget-slot__fallback, .bs-app-settings__empty) { padding: 20px 24px; overflow: auto; }

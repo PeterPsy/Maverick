@@ -163,4 +163,70 @@ describe("ComposerRuntimeBadges contained profile governance", () => {
     expect(container.querySelector('[aria-label="Policy-limited runtime"]')).not.toBeNull();
     expect(container.querySelector(".chatapp-agentic-profile-chip")).toBeNull();
   });
+
+  it("shows full access for an active native CLI authority", async () => {
+    const provider: ProviderItem = {
+      provider_id: "session:binding-antigravity",
+      label: "Gemini 3.8 Flash",
+      description: "Antigravity CLI",
+      status: "available",
+      default_model_family: "gemini-3.8-flash-high",
+      workspace_profile_binding_id: "binding-antigravity",
+      agentic_containment_status: "GO",
+      agentic_effective_capabilities: {
+        status: "active",
+        reason_code: null,
+        snapshot_digest: "antigravity-effective-snapshot",
+        execution_mode: "full-access",
+        capabilities: {
+          streaming: true,
+          tool_orchestration: true,
+          cli: true,
+          mcp: true,
+          skill_catalog: true,
+          filesystem_list: true,
+          filesystem_read: true,
+          filesystem_write: true,
+          shell: true,
+          interrupt: true,
+          same_turn_steering: true,
+          recovery: true,
+          confirmation_resume: true,
+          provider_private_state: true,
+          attachment_modalities: ["text", "image"],
+          app_references: true,
+          confirmations: true,
+        },
+        provider: {
+          provider_id: "google",
+          effective_upstream_ids: ["google"],
+          health_status: "healthy",
+        },
+        data_policy: {
+          allowed_remote_data_classes: ["public"],
+          collection: "deny",
+          require_zdr: false,
+        },
+      },
+    };
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <ComposerRuntimeBadges
+          activeProviderId={provider.provider_id}
+          disabled={false}
+          executionMode="full-access"
+          onReasoningEffortChange={() => undefined}
+          onSelectProvider={() => undefined}
+          providers={[provider]}
+        />,
+      );
+    });
+
+    expect(container.querySelector('[aria-label="Full access runtime"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Policy-limited runtime"]')).toBeNull();
+  });
 });

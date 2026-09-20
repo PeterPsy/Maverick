@@ -69,6 +69,7 @@ function renderHumanMessageContent(content: string, appReferences: AppReference[
       label: token.item.label,
       appId: token.item.reference?.type === "entity" ? token.item.reference.app_id : undefined,
       deepLink: token.item.reference?.type === "entity" ? token.item.reference.deep_link : undefined,
+      entityId: token.item.reference?.type === "entity" ? token.item.reference.entity_id : undefined,
       entityType: token.item.reference?.type === "entity" ? token.item.reference.entity_type : undefined,
       exists: token.item.reference?.type === "entity" ? token.item.reference.exists : undefined,
       summary: token.item.reference?.type === "entity" ? token.item.reference.summary : undefined,
@@ -102,6 +103,7 @@ function fallbackMatchesForEntityReferenceMarkers(content: string): MessageMenti
     kind: "entity",
     id: `entity:${marker.appId}:${marker.entityType}:${marker.entityId}`,
     appId: marker.appId,
+    entityId: marker.entityId,
     entityType: marker.entityType,
     label: marker.label || marker.entityId,
     start: marker.mentionStart ?? marker.markerStart,
@@ -110,12 +112,29 @@ function fallbackMatchesForEntityReferenceMarkers(content: string): MessageMenti
 }
 
 function MentionReferenceChip({ match }: { match: MessageMentionMatch }) {
-  const className = `chatapp-message-reference-chip is-${match.kind} ${match.exists === false ? "is-missing" : ""}`;
-  const title = match.kind === "entity" ? `reference: ${match.id}` : `${match.kind === "app" ? "app_id" : "skill_id"}: ${match.id}`;
-  const content = (
+  const isChatThread = match.kind === "entity" && match.appId === "chat" && match.entityType === "thread";
+  const displayLabel = isChatThread ? chatThreadDisplayLabel(match) : match.label;
+  const className = `chatapp-message-reference-chip is-${match.kind} ${isChatThread ? "is-chat-thread" : ""} ${
+    match.exists === false ? "is-missing" : ""
+  }`;
+  const title = isChatThread
+    ? `Referenced chat: ${displayLabel}`
+    : match.kind === "entity"
+      ? `reference: ${match.id}`
+      : `${match.kind === "app" ? "app_id" : "skill_id"}: ${match.id}`;
+  const content = isChatThread ? (
+    <>
+      <span aria-hidden="true" className="material-symbols-rounded chatapp-message-reference-chip__icon">
+        chat_bubble
+      </span>
+      <span className="chatapp-message-reference-chip__label">
+        {match.exists === false ? `${displayLabel} (missing)` : displayLabel}
+      </span>
+    </>
+  ) : (
     <>
       <span className="chatapp-message-reference-chip__kind">{referenceKindLabel(match)}</span>
-      <span className="chatapp-message-reference-chip__label">{match.exists === false ? `${match.label} (missing)` : match.label}</span>
+      <span className="chatapp-message-reference-chip__label">{match.exists === false ? `${displayLabel} (missing)` : displayLabel}</span>
     </>
   );
   if (match.kind === "entity" && match.appId && match.deepLink) {
@@ -136,6 +155,11 @@ function MentionReferenceChip({ match }: { match: MessageMentionMatch }) {
       {content}
     </span>
   );
+}
+
+function chatThreadDisplayLabel(match: MessageMentionMatch): string {
+  const label = match.label.trim();
+  return !label || label === match.entityId ? "Chat conversation" : label;
 }
 
 function openEntityReference(appId: string, deepLink: string): void {

@@ -26,7 +26,7 @@
     },
     "chat_reference_manifest": {
       "effect_class": "read",
-      "description": "Describe Chat project reference entities exposed by the Chat app.",
+      "description": "Describe Chat project and runtime-thread reference entities exposed by the Chat app.",
       "input_schema": {
         "type": "object",
         "properties": {},
@@ -45,7 +45,7 @@
     },
     "chat_reference_search": {
       "effect_class": "read",
-      "description": "Search Chat project references compactly. Results never include runtime transcripts or message content.",
+      "description": "Search Chat app-owned project references compactly. Core-owned runtime threads are searched through the Chat composer and never include transcript content.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -69,20 +69,22 @@
     },
     "chat_reference_resolve": {
       "effect_class": "read",
-      "description": "Resolve one Chat project reference by explicit id.",
+      "description": "Resolve one Chat project or runtime-thread reference by explicit id.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project"]},
-          "type": {"type": "string", "enum": ["project"], "description": "Alias for entity_type."},
+          "entity_type": {"type": "string", "enum": ["project", "thread"]},
+          "type": {"type": "string", "enum": ["project", "thread"], "description": "Alias for entity_type."},
           "entity_id": {"type": "string"},
           "project_id": {"type": "string", "description": "Alias for entity_id."},
+          "thread_id": {"type": "string", "description": "Alias for entity_id for runtime-thread references."},
           "id": {"type": "string", "description": "Alias for entity_id."}
         },
         "required": ["entity_type"],
         "anyOf": [
           {"required": ["entity_id"]},
           {"required": ["project_id"]},
+          {"required": ["thread_id"]},
           {"required": ["id"]}
         ],
         "additionalProperties": false
@@ -96,26 +98,29 @@
           "entity_type": {"type": "string"},
           "entity_id": {"type": "string"},
           "title": {"type": "string"},
+          "summary": {"type": "string"},
           "deep_link": {"type": "string"}
         }
       }
     },
     "chat_reference_summarize": {
       "effect_class": "read",
-      "description": "Return a token-efficient summary for one Chat project reference.",
+      "description": "Return a token-efficient summary for one Chat project or runtime-thread reference.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "entity_type": {"type": "string", "enum": ["project"]},
-          "type": {"type": "string", "enum": ["project"], "description": "Alias for entity_type."},
+          "entity_type": {"type": "string", "enum": ["project", "thread"]},
+          "type": {"type": "string", "enum": ["project", "thread"], "description": "Alias for entity_type."},
           "entity_id": {"type": "string"},
           "project_id": {"type": "string", "description": "Alias for entity_id."},
+          "thread_id": {"type": "string", "description": "Alias for entity_id for runtime-thread references."},
           "id": {"type": "string", "description": "Alias for entity_id."}
         },
         "required": ["entity_type"],
         "anyOf": [
           {"required": ["entity_id"]},
           {"required": ["project_id"]},
+          {"required": ["thread_id"]},
           {"required": ["id"]}
         ],
         "additionalProperties": false
@@ -124,6 +129,12 @@
         "type": "object",
         "properties": {
           "status_code": {"type": "integer"},
+          "exists": {"type": "boolean"},
+          "app_id": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string"},
+          "title": {"type": "string"},
+          "deep_link": {"type": "string"},
           "summary": {"type": "string"},
           "safe_fields": {"type": "object"},
           "source_updated_at": {"type": "string"}

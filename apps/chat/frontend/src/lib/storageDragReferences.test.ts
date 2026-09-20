@@ -254,6 +254,27 @@ describe("Storage drag reference parsing", () => {
     ]);
   });
 
+  it("accepts Chat thread payloads through the shared app-reference drop path", () => {
+    const dataTransfer = new FakeDataTransfer();
+    dataTransfer.setData(
+      "application/x-maverick-chat-thread",
+      JSON.stringify({
+        owner_app_id: "chat",
+        thread_id: "thread-1",
+        title: "Budget review",
+      }),
+    );
+
+    expect(hasAppReferenceDragData(dataTransfer)).toBe(true);
+    expect(appReferenceMentionItemsFromDataTransfer(dataTransfer)[0]?.reference).toMatchObject({
+      type: "entity",
+      app_id: "chat",
+      entity_type: "thread",
+      entity_id: "thread-1",
+      label: "Budget review",
+    });
+  });
+
   it("rejects malformed Storage drag payloads", () => {
     const malformed = new FakeDataTransfer();
     malformed.setData(

@@ -1,10 +1,29 @@
 import { describe, expect, it } from "vitest";
-import type { ProviderPayload } from "../api/client";
+import type { AgenticProfileItem, ProviderPayload } from "../api/client";
 import {
-  hostedProviderRuntimeConfig,
   initialProviderSelectionId,
   providerItemsFromPayload,
 } from "./providerRuntimeOptions";
+
+const capabilities = {
+  streaming: true,
+  tool_orchestration: true,
+  cli: true,
+  mcp: true,
+  skill_catalog: true,
+  filesystem_list: true,
+  filesystem_read: true,
+  filesystem_write: true,
+  shell: true,
+  interrupt: true,
+  same_turn_steering: false,
+  recovery: true,
+  confirmation_resume: true,
+  provider_private_state: true,
+  attachment_modalities: ["file"],
+  app_references: true,
+  confirmations: true,
+};
 
 const payload: ProviderPayload = {
   workspace_id: "default",
@@ -15,19 +34,43 @@ const payload: ProviderPayload = {
     kind: "runtime_backend",
     provider_role: "runtime_engine",
     status: "active",
-    default_model_family: "gpt-5.5",
+    default_model_family: "gpt-5.6-sol",
+    model_options: [{
+      model_id: "gpt-5.6-sol",
+      label: "GPT-5.6-Sol",
+      description: null,
+      default_reasoning_effort: "xhigh",
+      supported_reasoning_efforts: [
+        { effort: "high", label: "High", description: null },
+        { effort: "xhigh", label: "Extra high", description: null },
+      ],
+      input_modalities: ["text", "file"],
+      output_modalities: ["text"],
+    }],
   },
   hosted_text: {
     profile: "fast_model",
     active_provider: {
       provider_id: "openrouter",
       label: "OpenRouter",
-      description: "Hosted text",
+      description: "Hosted API",
       kind: "hosted_api",
       provider_role: "model_provider",
       status: "active",
       default_model_family: "google/gemma-4-31b-it:free",
       model_options: [
+        {
+          model_id: "z-ai/glm-5.3-flash",
+          label: "GLM 5.3 Flash",
+          description: null,
+          default_reasoning_effort: "max",
+          supported_reasoning_efforts: [
+            { effort: "max", label: "Maximum", description: null },
+            { effort: "high", label: "High", description: null },
+          ],
+          input_modalities: ["text"],
+          output_modalities: ["text"],
+        },
         {
           model_id: "google/gemma-4-31b-it:free",
           label: "Gemma 4 31B (free)",
@@ -35,15 +78,6 @@ const payload: ProviderPayload = {
           default_reasoning_effort: null,
           supported_reasoning_efforts: [],
           input_modalities: ["text", "image"],
-          output_modalities: ["text"],
-        },
-        {
-          model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-          label: "Nemotron 3 Ultra (free)",
-          description: null,
-          default_reasoning_effort: null,
-          supported_reasoning_efforts: [],
-          input_modalities: ["text"],
           output_modalities: ["text"],
         },
         {
@@ -58,263 +92,100 @@ const payload: ProviderPayload = {
       ],
     },
     selection: null,
-    model_settings: {
-      selected_model_id: "google/gemma-4-31b-it:free",
-      selected_reasoning_effort: null,
-      available_models: [
-        {
-          model_id: "google/gemma-4-31b-it:free",
-          label: "Gemma 4 31B (free)",
-          description: null,
-          default_reasoning_effort: null,
-          supported_reasoning_efforts: [],
-          input_modalities: ["text", "image"],
-          output_modalities: ["text"],
-        },
-        {
-          model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-          label: "Nemotron 3 Ultra (free)",
-          description: null,
-          default_reasoning_effort: null,
-          supported_reasoning_efforts: [],
-          input_modalities: ["text"],
-          output_modalities: ["text"],
-        },
-        {
-          model_id: "hexgrad/kokoro-82m",
-          label: "Kokoro 82M",
-          description: null,
-          default_reasoning_effort: null,
-          supported_reasoning_efforts: [],
-          input_modalities: ["text"],
-          output_modalities: ["speech"],
-        },
-      ],
-    },
+    model_settings: null,
     available_providers: [],
   },
 };
 
-const googleProvider = {
-  provider_id: "google-ai-studio",
-  label: "Google AI Studio",
-  description: "Hosted Gemini text generation provider metadata.",
-  kind: "hosted_api",
-  provider_role: "model_provider",
-  status: "active",
-  default_model_family: "gemini-3.5-flash",
-  model_options: [
-    {
-      model_id: "gemini-3.5-flash",
-      label: "Gemini 3.5 Flash",
-      description: null,
-      default_reasoning_effort: null,
-      supported_reasoning_efforts: [],
-      input_modalities: ["text", "image"],
-      output_modalities: ["text"],
+function profile(overrides: Partial<AgenticProfileItem>): AgenticProfileItem {
+  return {
+    workspace_profile_binding_id: "binding-codex",
+    definition_id: "profile-codex",
+    display_name: "Codex profile",
+    runtime_engine_id: "codex",
+    model_provider_id: "codex",
+    model_id: "gpt-5.6-sol",
+    default_reasoning_effort: "xhigh",
+    supported_reasoning_efforts: [
+      { effort: "high", label: "High", description: null },
+      { effort: "xhigh", label: "Extra high", description: null },
+    ],
+    enabled: true,
+    is_default: true,
+    selectable: true,
+    execution_family: "native_agent",
+    runtime_status: "complete",
+    containment_status: "GO",
+    effective_capabilities: {
+      status: "active",
+      reason_code: null,
+      snapshot_digest: "fixture-capability-snapshot",
+      capabilities,
     },
-    {
-      model_id: "gemini-3.1-flash-lite",
-      label: "Gemini 3.1 Flash-Lite",
-      description: null,
-      default_reasoning_effort: null,
-      supported_reasoning_efforts: [],
-      input_modalities: ["text", "image"],
-      output_modalities: ["text"],
-    },
-  ],
-};
+    ...overrides,
+  } as AgenticProfileItem;
+}
 
 describe("provider runtime options", () => {
-  it("maps agentic profiles to per-session choices without changing the runtime engine id", () => {
+  it("maps direct agentic profiles to model choices", () => {
     const providers = providerItemsFromPayload({
       ...payload,
       agentic_profiles: {
         default_binding_id: "binding-codex",
-        items: [
-          {
-            workspace_profile_binding_id: "binding-codex",
-            definition_id: "profile-codex",
-            display_name: "Codex profile display label",
-            runtime_engine_id: "codex",
-            model_provider_id: "codex",
-            model_id: "gpt-5.6-sol",
-            default_reasoning_effort: "xhigh",
-            supported_reasoning_efforts: [
-              { effort: "high", label: "High", description: null },
-              { effort: "xhigh", label: "Extra high", description: null },
-            ],
-            enabled: true,
-            is_default: true,
-            selectable: true,
-            execution_family: "native_agent",
-            runtime_status: "complete",
-            containment_status: "GO",
-            effective_capabilities: {
-              status: "active",
-              reason_code: null,
-              snapshot_digest: "fixture-capability-snapshot",
-              capabilities: {
-                streaming: true,
-                tool_orchestration: true,
-                cli: true,
-                mcp: true,
-                skill_catalog: true,
-                filesystem_list: false,
-                filesystem_read: true,
-                filesystem_write: true,
-                shell: true,
-                interrupt: true,
-                same_turn_steering: true,
-                recovery: true,
-                confirmation_resume: false,
-                provider_private_state: false,
-                attachment_modalities: ["file"],
-                app_references: true,
-                confirmations: false,
-              },
-            },
-            egress_policy_id: "remote-agentic-contained",
-            allowed_tool_handles: ["mcp:storage_read"],
-            max_estimated_cost_microusd: 250_000,
-          },
-        ],
+        items: [profile({})],
       },
     });
 
+    expect(providers).toHaveLength(1);
     expect(providers[0]).toMatchObject({
       provider_id: "codex",
       workspace_profile_binding_id: "binding-codex",
       default_model_family: "gpt-5.6-sol",
-      label: "gpt-5.6-sol",
-      description: "Codex",
-      agentic_egress_policy_id: "remote-agentic-contained",
-      agentic_allowed_tool_handles: ["mcp:storage_read"],
-      agentic_max_estimated_cost_microusd: 250_000,
-      agentic_containment_status: "GO",
+      label: "GPT-5.6-Sol",
+      execution_family: "native_agent",
       default_reasoning_effort: "xhigh",
-      supported_reasoning_efforts: [
-        { effort: "high", label: "High", description: null },
-        { effort: "xhigh", label: "Extra high", description: null },
-      ],
     });
   });
 
-  it("uses the model as title and provider as subtitle", () => {
-    expect(providerItemsFromPayload(payload).map((provider) => ({
-      title: provider.label,
-      subtitle: provider.description,
-    }))).toEqual([
-      { title: "Codex", subtitle: "Agentic runtime" },
-      { title: "Gemma 4 31B (free)", subtitle: "OpenRouter" },
-      { title: "Nemotron 3 Ultra (free)", subtitle: "OpenRouter" },
-    ]);
-  });
-
-  it("does not expose speech-only OpenRouter models as plain hosted chat choices", () => {
-    expect(providerItemsFromPayload(payload).map((provider) => provider.hosted_model_id)).not.toContain("hexgrad/kokoro-82m");
-  });
-
-  it("maps hosted text provider choices to plain hosted chat runtime config", () => {
-    const openRouter = providerItemsFromPayload(payload).find((provider) => provider.hosted_model_id === "google/gemma-4-31b-it:free");
-
-    expect(hostedProviderRuntimeConfig(openRouter)).toMatchObject({
-      agent_id: "chat",
-      runtime_mode: "plain_hosted_chat",
-      routing_profile: "fast_model",
-      hosted_provider_id: "openrouter",
-      hosted_model_id: "google/gemma-4-31b-it:free",
-      skill_ids: [],
-      source_app_id: "chat",
-    });
-  });
-
-  it("keeps the selected hosted model id for non-default hosted choices", () => {
-    const nemotron = providerItemsFromPayload(payload).find((provider) => provider.hosted_model_id === "nvidia/nemotron-3-ultra-550b-a55b:free");
-
-    expect(hostedProviderRuntimeConfig(nemotron)).toMatchObject({
-      hosted_provider_id: "openrouter",
-      hosted_model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-      runtime_mode: "plain_hosted_chat",
-    });
-  });
-
-  it("exposes active hosted models from available hosted providers", () => {
+  it("uses the model label rather than API provider routing", () => {
     const providers = providerItemsFromPayload({
       ...payload,
-      hosted_text: {
-        ...payload.hosted_text!,
-        available_providers: [payload.hosted_text!.active_provider!, googleProvider],
+      agentic_profiles: {
+        default_binding_id: "binding-openrouter",
+        items: [profile({
+          workspace_profile_binding_id: "binding-openrouter",
+          definition_id: "profile-openrouter",
+          display_name: "OpenRouter GLM 5.3 Flash · Relace",
+          runtime_engine_id: "maverick-tool-loop",
+          model_provider_id: "openrouter",
+          model_id: "z-ai/glm-5.3-flash",
+          default_reasoning_effort: "max",
+          supported_reasoning_efforts: [
+            { effort: "max", label: "Maximum", description: null },
+            { effort: "high", label: "High", description: null },
+          ],
+          execution_family: "maverick_agent",
+        })],
       },
     });
 
-    expect(providers.map((provider) => provider.label)).toContain("Gemini 3.5 Flash");
-    expect(providers.map((provider) => provider.label)).toContain("Gemini 3.1 Flash-Lite");
-    expect(providers.find((provider) => provider.hosted_model_id === "gemini-3.5-flash")?.description).toBe("Google AI Studio");
-    expect(hostedProviderRuntimeConfig(providers.find((provider) => provider.hosted_model_id === "gemini-3.5-flash"))).toMatchObject({
-      hosted_provider_id: "google-ai-studio",
-      hosted_model_id: "gemini-3.5-flash",
-      runtime_mode: "plain_hosted_chat",
-    });
+    expect(providers).toHaveLength(1);
+    expect(providers[0].label).toBe("GLM 5.3 Flash");
+    expect(providers[0].label).not.toContain("Relace");
   });
 
-  it("never falls across execution families when a persisted selection is unavailable", () => {
-    const textOnly = providerItemsFromPayload(payload).find(
-      (provider) => provider.execution_family === "hosted_text",
-    );
-    expect(textOnly).toBeDefined();
+  it("does not expose text-only or speech models as composer choices", () => {
+    const providers = providerItemsFromPayload(payload);
 
-    expect(initialProviderSelectionId("codex", [textOnly!])).toBe("");
-    expect(initialProviderSelectionId("codex", [{
-      ...payload.active_provider!,
-      selectable: false,
-    }, textOnly!])).toBe("");
-    expect(initialProviderSelectionId(null, [textOnly!])).toBe(textOnly!.provider_id);
+    expect(providers.map((provider) => provider.label)).toEqual(["Codex"]);
+    expect(providers.some((provider) => provider.execution_family === "hosted_text")).toBe(false);
+    expect(providers.some((provider) => provider.hosted_model_id === "hexgrad/kokoro-82m")).toBe(false);
   });
 
-  it("fails closed when a published text-only profile is missing", () => {
-    const providers = providerItemsFromPayload({
-      ...payload,
-      hosted_text: {
-        ...payload.hosted_text!,
-        profiles: [],
-      },
-    }).filter((provider) => provider.execution_family === "hosted_text");
+  it("never accepts a plain hosted provider as a new model selection", () => {
+    const hosted = payload.hosted_text!.active_provider!;
 
-    expect(providers).not.toHaveLength(0);
-    expect(providers.every((provider) => provider.selectable === false)).toBe(true);
-    expect(providers.every((provider) => provider.unavailable_reason === "hosted_text_profile_missing")).toBe(true);
-  });
-
-  it("does not apply active Google model settings to an OpenRouter persisted selection", () => {
-    const providers = providerItemsFromPayload({
-      ...payload,
-      hosted_text: {
-        ...payload.hosted_text!,
-        active_provider: googleProvider,
-        selection: {
-          workspace_id: "default",
-          profile: "fast_model",
-          provider_id: "openrouter",
-          selection_reason: "configured by hosted model settings",
-          updated_at: "2026-06-26T00:00:00Z",
-          model_id: "hexgrad/kokoro-82m",
-        },
-        model_settings: {
-          selected_model_id: "gemini-3.5-flash",
-          selected_reasoning_effort: null,
-          available_models: googleProvider.model_options!,
-        },
-        available_providers: [payload.hosted_text!.active_provider!, googleProvider],
-      },
-    });
-
-    const labels = providers.map((provider) => provider.label);
-    expect(labels).toContain("Gemini 3.5 Flash");
-    expect(labels).toContain("Gemini 3.1 Flash-Lite");
-    expect(labels).toContain("Gemma 4 31B (free)");
-    expect(labels).toContain("Nemotron 3 Ultra (free)");
-    expect(providers.find((provider) => provider.hosted_model_id === "gemini-3.5-flash")?.description).toBe("Google AI Studio");
-    expect(providers.find((provider) => provider.hosted_model_id === "google/gemma-4-31b-it:free")?.description).toBe("OpenRouter");
+    expect(initialProviderSelectionId(null, [hosted])).toBe("");
+    expect(initialProviderSelectionId(hosted.provider_id, [hosted])).toBe("");
   });
 });

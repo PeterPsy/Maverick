@@ -9,6 +9,8 @@ import type { ChatThread } from "../../api/client";
 import { ThreadRow } from "./ThreadRow";
 import { formatThreadLastMessageTimestamp } from "./threadTimestamps";
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
     agent_label: "",
@@ -150,5 +152,39 @@ describe("ThreadRow", () => {
     await renderThreadRow(thread({ source_app_id: "chat" }));
 
     expect(container?.querySelector(".bs-chat-list__source-badge")).toBeNull();
+  });
+
+  it("publishes a copy-only Chat reference when a sidebar row is dragged", async () => {
+    await renderThreadRow(thread());
+    const row = container?.querySelector<HTMLDivElement>(".bs-chat-list__item");
+    const payloads = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "uninitialized",
+      getData: (type: string) => payloads.get(type) || "",
+      setData: (type: string, value: string) => payloads.set(type, value),
+      setDragImage: vi.fn(),
+      types: [],
+    };
+    const dragStart = new Event("dragstart", { bubbles: true });
+    Object.defineProperty(dragStart, "dataTransfer", { value: dataTransfer });
+
+    await act(async () => {
+      row?.dispatchEvent(dragStart);
+    });
+
+    expect(row?.getAttribute("draggable")).toBe("true");
+    expect(dataTransfer.effectAllowed).toBe("copy");
+    expect(JSON.parse(payloads.get("application/x-maverick-chat-thread") || "{}")).toMatchObject({
+      owner_app_id: "chat",
+      thread_id: "thread-1",
+      title: "Budget notes",
+    });
+    expect(dataTransfer.setDragImage).toHaveBeenCalledOnce();
+    expect(row?.classList.contains("is-dragging")).toBe(true);
+
+    await act(async () => {
+      row?.dispatchEvent(new Event("dragend", { bubbles: true }));
+    });
+    expect(row?.classList.contains("is-dragging")).toBe(false);
   });
 });

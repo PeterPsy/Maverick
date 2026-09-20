@@ -12,4 +12,8 @@ describe("reference kind labels", () => {
   it("keeps generic record labels for non-Storage entities", () => {
     expect(referenceKindLabel({ appId: "checklist", entityType: "checklist_item", kind: "entity" })).toBe("Record");
   });
+
+  it("labels Chat conversation references explicitly", () => {
+    expect(referenceKindLabel({ appId: "chat", entityType: "thread", kind: "entity" })).toBe("Chat");
+  });
 });

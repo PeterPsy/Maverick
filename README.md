@@ -93,7 +93,7 @@ For local service installs, hosted evaluation, MongoDB, nginx, certbot, systemd,
 - **Apps:** product behavior packaged under `apps/<app_id>/` with an `app_contract.json`.
 - **Widgets:** small app-owned surfaces that can render inside other apps without source imports.
 - **Runtime agents and skills:** provider-backed agent sessions that use workspace-owned skills and runtime roots.
-- **Provider abstraction:** Codex supplies the native agent loop. OpenRouter GLM can run as a Maverick Agent through the Core-owned hosted tool loop, while plain hosted chat remains a separate text-only path.
+- **Provider abstraction:** Codex and Antigravity supply native CLI agent loops, while OpenRouter models (including GLM and DeepSeek Flash Latest) run as Maverick Agents through the Core-owned hosted tool loop. Google agent models are exposed through Antigravity. Chat and Settings offer no separate text-only model family; speech transcription and synthesis remain independent provider surfaces.
 - **Agentic provider governance:** Current model configurations declare capabilities, reasoning, routing and policy. Workspace bindings select those configurations, and Core intersects them with live credentials, health, actor, egress and tool authority before every provider request or effect.
 - **Persistence abstraction:** JSON is the default local control-plane adapter; MongoDB is optional for hosted evaluation.
 

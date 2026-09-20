@@ -1,5 +1,10 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useState, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
+import {
+  attachChatThreadDragImage,
+  chatThreadDragPayload,
+  writeChatThreadDragData,
+} from "../../lib/chatThreadDragReferences";
 import { BusyChatGlow } from "../BusyChatGlow";
 import { isThreadBusy, isThreadTitlePending, isThreadUnread, threadSourceBadges } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
@@ -52,6 +57,7 @@ export function ThreadRow({
   sectionTitle: string;
   thread: ChatThread;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
   const isBusy = isThreadBusy(thread);
   const isUnread = isThreadUnread(thread);
   const isExpanded = expandedThreadId === thread.thread_id;
@@ -61,11 +67,24 @@ export function ThreadRow({
   const lastMessageIso = threadLastMessageIso(thread);
   const sourceBadges = threadSourceBadges(thread, multiAgentThreadIds);
 
+  function handleDragStart(event: DragEvent<HTMLDivElement>) {
+    if (isExpanded) {
+      event.preventDefault();
+      return;
+    }
+    writeChatThreadDragData(event.dataTransfer, chatThreadDragPayload(thread));
+    attachChatThreadDragImage(event, threadLabel);
+    setIsDragging(true);
+  }
+
   return (
     <div
       className={`bs-chat-list__item ${activeThreadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""} ${
         isUnread ? "is-unread" : ""
-      } ${isExpanded ? "is-expanded" : ""} ${isSelected ? "is-selected" : ""}`}
+      } ${isExpanded ? "is-expanded" : ""} ${isSelected ? "is-selected" : ""} ${isDragging ? "is-dragging" : ""}`}
+      draggable={!isExpanded}
+      onDragEnd={() => setIsDragging(false)}
+      onDragStart={handleDragStart}
     >
       {isBusy ? <BusyChatGlow /> : null}
       <div className="bs-chat-list__select">
@@ -93,6 +112,7 @@ export function ThreadRow({
             onPointerDown={(event) => onTrackThreadTouchStart(event, thread)}
             onPointerMove={(event) => onTrackThreadTouchMove(event, thread)}
             onPointerUp={(event) => onSelectThreadPointer(event, thread)}
+            title={`Open ${threadLabel}. Drag to a composer to reference this chat.`}
             type="button"
           >
             <div className="bs-chat-list__row">

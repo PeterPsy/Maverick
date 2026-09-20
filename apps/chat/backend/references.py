@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
+from urllib.parse import quote
+
 from chat_state import list_projects
 from errors import ChatValidationError
 
-REFERENCE_ENTITY_TYPES = {"project"}
+REFERENCE_ENTITY_TYPES = {"project", "thread"}
 
 REFERENCE_MANIFEST = {
     "app_id": "chat",
@@ -16,6 +19,15 @@ REFERENCE_MANIFEST = {
             "display_name": "Chat Project",
             "id_stability": "stable",
             "searchable": True,
+            "resolvable": True,
+            "summarizable": True,
+            "deep_link_supported": True,
+        },
+        {
+            "entity_type": "thread",
+            "display_name": "Chat Conversation",
+            "id_stability": "stable",
+            "searchable": False,
             "resolvable": True,
             "summarizable": True,
             "deep_link_supported": True,
@@ -43,6 +55,9 @@ def reference_search(state: dict, body: dict) -> dict:
 def reference_resolve(state: dict, body: dict) -> dict:
     entity_type = _reference_entity_type(body)
     entity_id = _reference_entity_id(body)
+    if entity_type == "thread":
+        _require_valid_thread_reference_id(entity_id)
+        return _thread_reference_item(entity_id)
     item = next((candidate for candidate in _reference_items(state, entity_type) if candidate["entity_id"] == entity_id), None)
     if item is None:
         return {"exists": False, "app_id": "chat", "entity_type": entity_type, "entity_id": entity_id}
@@ -51,9 +66,22 @@ def reference_resolve(state: dict, body: dict) -> dict:
 
 def reference_summarize(state: dict, body: dict) -> dict:
     resolved = reference_resolve(state, body)
-    if not resolved.get("exists"):
-        return {"summary": "", "safe_fields": {}, "source_updated_at": ""}
+    if resolved.get("exists") is False:
+        return {
+            "app_id": "chat",
+            "entity_type": resolved["entity_type"],
+            "entity_id": resolved["entity_id"],
+            "exists": False,
+            "summary": "",
+            "safe_fields": {},
+            "source_updated_at": "",
+        }
     return {
+        "app_id": "chat",
+        "entity_type": resolved["entity_type"],
+        "entity_id": resolved["entity_id"],
+        "title": resolved.get("title") or resolved.get("label") or resolved["entity_id"],
+        "deep_link": resolved.get("deep_link") or "",
         "summary": resolved.get("summary") or resolved.get("title") or "",
         "safe_fields": {"title": resolved.get("title"), "entity_type": resolved.get("entity_type")},
         "source_updated_at": "",
@@ -61,6 +89,10 @@ def reference_summarize(state: dict, body: dict) -> dict:
 
 
 def _reference_items(state: dict, entity_type: str) -> list[dict]:
+    if entity_type == "thread":
+        # Runtime threads are Core-owned and are searched through the authorized
+        # runtime catalog by Chat's composer, never by reading app-private state.
+        return []
     if entity_type != "project":
         raise _entity_type_error(entity_type)
     return [
@@ -77,6 +109,33 @@ def _reference_items(state: dict, entity_type: str) -> list[dict]:
         }
         for item in list_projects(state)
     ]
+
+
+def _thread_reference_item(entity_id: str) -> dict:
+    return {
+        "app_id": "chat",
+        "entity_type": "thread",
+        "entity_id": entity_id,
+        "title": "Chat conversation",
+        "subtitle": "Authorized runtime transcript",
+        "summary": (
+            "Authorized Chat conversation. Read its messages with the Core tool "
+            f"core.runtime.transcript.read using thread_id `{entity_id}`; continue with before_cursor "
+            "when the response reports more history."
+        ),
+        "deep_link": f"/app/chat/threads/{quote(entity_id, safe='')}",
+    }
+
+
+def _require_valid_thread_reference_id(entity_id: str) -> None:
+    if len(entity_id) <= 240 and re.fullmatch(r"[A-Za-z0-9._:-]+", entity_id):
+        return
+    raise ChatValidationError(
+        "Invalid Chat runtime thread reference id.",
+        expected_fields=["entity_id"],
+        allowed_values={"entity_id": ["1..240 characters: letters, numbers, dot, underscore, colon, or hyphen"]},
+        example={"action": "references.resolve", "entity_type": "thread", "entity_id": "thread-uuid"},
+    )
 
 
 def _reference_entity_type(body: dict) -> str:
@@ -97,12 +156,12 @@ def _entity_type_error(entity_type: str) -> ChatValidationError:
 
 
 def _reference_entity_id(body: dict) -> str:
-    entity_id = str(body.get("entity_id") or body.get("project_id") or body.get("id") or "").strip()
+    entity_id = str(body.get("entity_id") or body.get("project_id") or body.get("thread_id") or body.get("id") or "").strip()
     if not entity_id:
         raise ChatValidationError(
             "Missing required field: entity_id.",
             expected_fields=["entity_id"],
-            accepted_aliases={"entity_id": ["project_id", "id"]},
+            accepted_aliases={"entity_id": ["project_id", "thread_id", "id"]},
             example={"action": "references.resolve", "entity_type": "project", "entity_id": "project-uuid"},
         )
     return entity_id

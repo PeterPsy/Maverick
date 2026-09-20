@@ -1,4 +1,10 @@
-import { type AppReference, searchAppReferences, type SearchAppReferencesOptions } from "../api/client";
+import {
+  type AppReference,
+  listRuntimeThreads,
+  searchAppReferences,
+  type SearchAppReferencesOptions,
+} from "../api/client";
+import { chatThreadReference } from "./chatThreadDragReferences";
 import { referenceKey } from "./mentions";
 
 export const APP_REFERENCE_SEARCH_LIMIT = 16;
@@ -47,6 +53,25 @@ async function searchComposerReferencesUncached(
   appId: string,
   trimmedQuery: string,
 ): Promise<AppReference[]> {
+  const results = await Promise.allSettled([
+    searchAppProviderReferences(query, signal, appId, trimmedQuery),
+    searchChatThreadReferences(trimmedQuery, signal),
+  ]);
+  const fulfilled = results
+    .filter((result): result is PromiseFulfilledResult<AppReference[]> => result.status === "fulfilled")
+    .map((result) => result.value);
+  if (!fulfilled.length) {
+    throw (results[0] as PromiseRejectedResult).reason;
+  }
+  return mergeReferenceResults(query, ...fulfilled);
+}
+
+async function searchAppProviderReferences(
+  query: string,
+  signal: AbortSignal,
+  appId: string,
+  trimmedQuery: string,
+): Promise<AppReference[]> {
   const targetedSearches = targetedSearchSpecs(trimmedQuery, appId);
   if (trimmedQuery && targetedSearches.length) {
     const targeted = await runReferenceSearches(query, signal, targetedSearches);
@@ -61,6 +86,24 @@ async function searchComposerReferencesUncached(
 
   const searches = fallbackSearchSpecs(trimmedQuery, appId);
   return runReferenceSearches(query, signal, searches);
+}
+
+async function searchChatThreadReferences(query: string, signal: AbortSignal): Promise<AppReference[]> {
+  const payload = await listRuntimeThreads({
+    query: chatThreadSearchQuery(query),
+    limit: APP_REFERENCE_SEARCH_LIMIT,
+    signal,
+  });
+  return (payload.threads || []).map(chatThreadReference);
+}
+
+function chatThreadSearchQuery(query: string): string {
+  const tokens = query
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const withoutCategory = tokens.filter((token) => !["chat", "chats", "conversation", "conversations"].includes(token.toLowerCase()));
+  return withoutCategory.length === tokens.length ? query : withoutCategory.join(" ");
 }
 
 function shouldFillFromGlobalFallback(query: string, appId: string, targeted: AppReference[]): boolean {
@@ -188,6 +231,9 @@ function referenceSearchScore(reference: AppReference, normalizedQuery: string):
   }
   if (reference.type === "entity" && reference.app_id === STORAGE_APP_ID && FILE_REFERENCE_ENTITY_TYPES.includes(reference.entity_type)) {
     score += 8;
+  }
+  if (reference.type === "entity" && reference.app_id === "chat" && reference.entity_type === "thread") {
+    score += 6;
   }
   return score;
 }

@@ -14,6 +14,7 @@ const providerOptions: ProviderItem[] = [
     label: "GPT-5.6-Sol",
     description: "Codex",
     status: "active",
+    provider_role: "runtime_engine",
     execution_family: "native_agent",
     selectable: true,
     default_model_family: null,
@@ -25,34 +26,11 @@ const providerOptions: ProviderItem[] = [
     ],
   },
   {
-    provider_id: "hosted:openrouter:google%2Fgemma-4-31b-it%3Afree",
-    label: "Gemma 4 31B (free)",
-    description: "OpenRouter",
-    status: "active",
-    default_model_family: "google/gemma-4-31b-it:free",
-    hosted_provider_id: "openrouter",
-    hosted_model_id: "google/gemma-4-31b-it:free",
-    execution_family: "hosted_text",
-    selectable: true,
-    profile_detail: "No workspace tools or actions.",
-  },
-  {
-    provider_id: "hosted:openrouter:nvidia%2Fnemotron-3-ultra-550b-a55b%3Afree",
-    label: "Nemotron 3 Ultra (free)",
-    description: "OpenRouter",
-    status: "active",
-    default_model_family: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    hosted_provider_id: "openrouter",
-    hosted_model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    execution_family: "hosted_text",
-    selectable: true,
-    profile_detail: "No workspace tools or actions.",
-  },
-  {
     provider_id: "agentic:binding-google",
     label: "Gemini 3.6 Flash",
     description: "Google AI Studio",
     status: "active",
+    provider_role: "runtime_engine",
     default_model_family: "gemini-3.6-flash",
     workspace_profile_binding_id: "binding-google",
     execution_family: "maverick_agent",
@@ -69,15 +47,16 @@ const providerOptions: ProviderItem[] = [
     label: "GLM 5.3 Flash",
     description: "OpenRouter",
     status: "active",
+    provider_role: "runtime_engine",
     default_model_family: "z-ai/glm-5.3-flash",
     workspace_profile_binding_id: "binding-openrouter",
     execution_family: "maverick_agent",
     selectable: true,
-    provider_detail: "Provider: OpenRouter · Destination: OpenRouter via Relace FP4",
+    provider_detail: "Provider: OpenRouter · Destination: OpenRouter via Relace",
     profile_detail: "Runtime: maverick-tool-loop · openrouter/z-ai/glm-5.3-flash",
     default_reasoning_effort: "high",
     supported_reasoning_efforts: [
-      { effort: "xhigh", label: "Extra high", description: null },
+      { effort: "max", label: "Maximum", description: null },
       { effort: "high", label: "High", description: null },
     ],
   },
@@ -98,12 +77,14 @@ async function renderSelector({
   locked = false,
   onSelect = () => undefined,
   onReasoningEffortChange = () => undefined,
+  providers = providerOptions,
   reasoningEffort = "",
 }: {
   activeProviderId?: string;
   locked?: boolean;
   onSelect?: (providerId: string, reasoningEffort?: string) => void;
   onReasoningEffortChange?: (effort: string) => void;
+  providers?: ProviderItem[];
   reasoningEffort?: string;
 } = {}) {
   container = document.createElement("div");
@@ -112,7 +93,15 @@ async function renderSelector({
 
   await act(async () => {
     root?.render(
-      <ProviderSelector activeProviderId={activeProviderId} disabled={false} locked={locked} onReasoningEffortChange={onReasoningEffortChange} onSelect={onSelect} providers={providerOptions} reasoningEffort={reasoningEffort} />,
+      <ProviderSelector
+        activeProviderId={activeProviderId}
+        disabled={false}
+        locked={locked}
+        onReasoningEffortChange={onReasoningEffortChange}
+        onSelect={onSelect}
+        providers={providers}
+        reasoningEffort={reasoningEffort}
+      />,
     );
   });
 
@@ -120,13 +109,6 @@ async function renderSelector({
     throw new Error("Provider selector test container was not created");
   }
   return container;
-}
-
-function changeInputValue(input: HTMLInputElement, value: string) {
-  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  valueSetter?.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function optionByText(element: Element, text: string): HTMLButtonElement {
@@ -137,174 +119,121 @@ function optionByText(element: Element, text: string): HTMLButtonElement {
   return option as HTMLButtonElement;
 }
 
+async function openMenu(element: Element) {
+  await act(async () => {
+    element.querySelector<HTMLButtonElement>('[aria-label^="Model:"]')?.click();
+  });
+}
+
 describe("ProviderSelector", () => {
-  it("keeps the selected model reasoning control inside the model menu", async () => {
+  it("keeps the selected model and reasoning in the composer trigger", async () => {
+    const element = await renderSelector();
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
+
+    expect(trigger).toBeInstanceOf(HTMLButtonElement);
+    expect(trigger?.textContent).toContain("GPT-5.6-Sol");
+    expect(trigger?.textContent).toContain("Max");
+  });
+
+  it("renders compact CLI and API sections with only model and reasoning", async () => {
+    const element = await renderSelector();
+    await openMenu(element);
+
+    expect(element.querySelector('[aria-label="Search models"]')).toBeNull();
+    expect(
+      Array.from(element.querySelectorAll(".chatapp-provider-menu__family-heading span"))
+        .map((node) => node.textContent),
+    ).toEqual(["CLI models", "API models"]);
+    expect(element.querySelectorAll('[role="option"]')).toHaveLength(3);
+    expect(element.querySelectorAll(".chatapp-provider-menu__description")).toHaveLength(0);
+    expect(element.querySelectorAll(".chatapp-provider-menu__meta")).toHaveLength(0);
+    expect(element.textContent).not.toContain("Relace");
+    expect(element.textContent).not.toContain("Google AI Studio");
+    expect(element.textContent).not.toContain("maverick-tool-loop");
+    expect(element.textContent).not.toContain("Text-only");
+  });
+
+  it("changes reasoning for the selected model", async () => {
     const onReasoningEffortChange = vi.fn();
     const element = await renderSelector({ onReasoningEffortChange });
-
-    await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]')?.click();
-    });
+    await openMenu(element);
     const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for GPT-5.6-Sol"]');
-    expect(reasoning).toBeInstanceOf(HTMLSelectElement);
-    expect(element.querySelector(".chatapp-reasoning-selector")).toBeNull();
 
     await act(async () => {
       if (!reasoning) return;
       reasoning.value = "xhigh";
       reasoning.dispatchEvent(new Event("change", { bubbles: true }));
     });
+
     expect(onReasoningEffortChange).toHaveBeenCalledWith("xhigh");
   });
 
-  it("shows reasoning controls for Google and OpenRouter agentic models", async () => {
+  it("selects an API model together with its reasoning", async () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });
+    await openMenu(element);
+    const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for GLM 5.3 Flash"]');
 
     await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]')?.click();
+      if (!reasoning) return;
+      reasoning.value = "max";
+      reasoning.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(element.querySelector('[aria-label="Reasoning for Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
-    const openRouterReasoning = element.querySelector<HTMLSelectElement>(
-      '[aria-label="Reasoning for GLM 5.3 Flash"]',
-    );
-    expect(openRouterReasoning).toBeInstanceOf(HTMLSelectElement);
-
-    await act(async () => {
-      if (!openRouterReasoning) return;
-      openRouterReasoning.value = "high";
-      openRouterReasoning.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    expect(onSelect).toHaveBeenCalledWith("agentic:binding-openrouter", "high");
+    expect(onSelect).toHaveBeenCalledWith("agentic:binding-openrouter", "max");
   });
 
-  it("opens a searchable model dropdown and keeps the selected model name visible", async () => {
+  it("supports compact listbox keyboard selection without a search field", async () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });
-
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
-    expect(trigger).toBeInstanceOf(HTMLButtonElement);
-    expect(trigger?.textContent).toContain("GPT-5.6-Sol");
-    expect(trigger?.textContent).toContain("Max");
-    expect(trigger?.textContent).not.toContain("expand_more");
+    await openMenu(element);
+    const menu = element.querySelector<HTMLDivElement>('[role="listbox"]');
 
     await act(async () => {
-      trigger?.click();
+      menu?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+      menu?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
     });
 
-    const searchInput = element.querySelector<HTMLInputElement>('[aria-label="Search models"]');
-    expect(searchInput).toBeInstanceOf(HTMLInputElement);
-    expect(element.querySelector('[role="listbox"]')).toBeInstanceOf(HTMLDivElement);
-    expect(element.querySelector(".chatapp-provider-menu__header")).toBeNull();
-    expect(element.querySelector(".chatapp-provider-menu__search-label")).toBeNull();
-
-    await act(async () => {
-      changeInputValue(searchInput as HTMLInputElement, "nemotron");
-    });
-
-    expect(element.textContent).toContain("Nemotron 3 Ultra (free)");
-    expect(element.textContent).not.toContain("Gemma 4 31B (free)");
-
-    await act(async () => {
-      optionByText(element, "Nemotron").click();
-    });
-
-    expect(onSelect).toHaveBeenCalledWith("hosted:openrouter:nvidia%2Fnemotron-3-ultra-550b-a55b%3Afree");
-    expect(element.querySelector('[aria-label="Search models"]')).toBeNull();
+    expect(onSelect).toHaveBeenCalledWith("agentic:binding-google");
   });
 
-  it("selects the active filtered model with Enter", async () => {
+  it("selects a model by clicking its row", async () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
+    await openMenu(element);
 
     await act(async () => {
-      trigger?.click();
+      optionByText(element, "GLM 5.3 Flash").click();
     });
 
-    const searchInput = element.querySelector<HTMLInputElement>('[aria-label="Search models"]');
-    expect(searchInput).toBeInstanceOf(HTMLInputElement);
-
-    await act(async () => {
-      changeInputValue(searchInput as HTMLInputElement, "gemma");
-      searchInput?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
-    });
-
-    expect(onSelect).toHaveBeenCalledWith("hosted:openrouter:google%2Fgemma-4-31b-it%3Afree");
+    expect(onSelect).toHaveBeenCalledWith("agentic:binding-openrouter");
+    expect(element.querySelector('[role="listbox"]')).toBeNull();
   });
 
-  it("does not open or select while locked to an existing runtime session", async () => {
-    const onSelect = vi.fn();
-    const element = await renderSelector({ locked: true, onSelect });
+  it("does not show unavailable models", async () => {
+    const element = await renderSelector({
+      providers: [
+        ...providerOptions,
+        {
+          ...providerOptions[1],
+          provider_id: "agentic:incomplete",
+          label: "Incomplete agent",
+          selectable: false,
+        },
+      ],
+    });
+    await openMenu(element);
 
+    expect(element.textContent).not.toContain("Incomplete agent");
+  });
+
+  it("does not open while locked to an existing runtime session", async () => {
+    const element = await renderSelector({ locked: true });
     const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
-    expect(trigger).toBeInstanceOf(HTMLButtonElement);
+
     expect(trigger?.disabled).toBe(true);
     expect(trigger?.title).toBe("GPT-5.6-Sol · Max. Start a new chat to change model or reasoning.");
-
-    await act(async () => {
-      trigger?.click();
-    });
-
+    await act(async () => trigger?.click());
     expect(element.querySelector('[role="listbox"]')).toBeNull();
-    expect(onSelect).not.toHaveBeenCalled();
-  });
-
-  it("shows the normative families and pinned provider/profile details", async () => {
-    const element = await renderSelector();
-
-    await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]')?.click();
-    });
-
-    const googleOption = optionByText(element, "Gemini 3.6 Flash");
-    const row = googleOption.closest(".chatapp-provider-menu__option-block");
-    expect(row?.querySelector(".chatapp-provider-menu__name")?.textContent).toBe("Gemini 3.6 Flash");
-    expect(row?.querySelector(".chatapp-provider-menu__description")?.textContent).toBe("Google AI Studio");
-    expect(row?.querySelector('[aria-label="Reasoning for Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
-    const familyLabels = Array.from(element.querySelectorAll(".chatapp-provider-menu__family-heading strong"))
-      .map((node) => node.textContent);
-    expect(familyLabels).toEqual([
-      "Native Agents (CLI)",
-      "Maverick Agents (API)",
-      "Text-only Models (API)",
-    ]);
-    const familyDescriptions = Array.from(element.querySelectorAll(".chatapp-provider-menu__family-heading span"))
-      .map((node) => node.textContent);
-    expect(familyDescriptions).toEqual([
-      "External coding-agent runtimes such as Codex, Claude Code, and Antigravity CLI. They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.",
-      "API models made agentic by Maverick. Maverick provides workspace context, tools, the execution loop, approvals, finalization, and recovery.",
-      "API models without workspace tools or an action loop. They generate text from the context provided by Maverick but cannot perform workspace actions.",
-    ]);
-    expect(googleOption.textContent).toContain("Destination: Google AI Studio API");
-    expect(googleOption.textContent).toContain("google-ai-studio/gemini-3.6-flash");
-    expect(element.textContent).toContain("No workspace tools or actions.");
-  });
-
-  it("does not select an unavailable incomplete agent", async () => {
-    const onSelect = vi.fn();
-    const unavailable = {
-      ...providerOptions[3],
-      provider_id: "agentic:incomplete",
-      label: "Incomplete agent",
-      selectable: false,
-      unavailable_reason: "full_workspace_policy_incomplete",
-    };
-    const element = await renderSelector({ onSelect });
-
-    await act(async () => {
-      root?.render(
-        <ProviderSelector activeProviderId="codex" disabled={false} onSelect={onSelect} providers={[...providerOptions, unavailable]} />,
-      );
-    });
-    await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label^="Model:"]')?.click();
-    });
-    const option = optionByText(element, "Incomplete agent");
-    expect(option.disabled).toBe(true);
-    await act(async () => option.click());
-    expect(onSelect).not.toHaveBeenCalledWith("agentic:incomplete");
   });
 });

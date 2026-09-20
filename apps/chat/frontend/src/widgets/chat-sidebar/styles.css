@@ -729,6 +729,54 @@ input {
   isolation: isolate;
 }
 
+.bs-chat-list__item[draggable="true"] {
+  cursor: grab;
+}
+
+.bs-chat-list__item.is-dragging {
+  opacity: 0.48;
+}
+
+.bs-chat-list__item.is-dragging,
+.bs-chat-list__item.is-dragging * {
+  cursor: grabbing;
+}
+
+.bs-chat-thread-drag-image {
+  position: fixed;
+  left: -1000px;
+  top: -1000px;
+  z-index: 9999;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  width: min(260px, 72vw);
+  min-height: 44px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: 16px;
+  background: var(--chat-sidebar-solid-surface);
+  box-shadow: var(--chat-sidebar-composer-shadow);
+  color: var(--maverick-text);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bs-chat-thread-drag-image .material-symbols-rounded {
+  color: var(--maverick-text-muted);
+  font-size: 1.2rem;
+}
+
+.bs-chat-thread-drag-image__label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .bs-chat-list__item> :not(.bs-chat-list__glow) {
   position: relative;
   z-index: 2;

@@ -18,7 +18,7 @@
           "clear_custom_view": "mutating"
         }
       },
-      "description": "Inspect and operate Chat app-owned project references and view state. Runtime messages and turns are core runtime operations, not Chat CLI operations.",
+      "description": "Inspect and operate Chat project/runtime-thread references and view state. Runtime messages and turns remain core runtime operations.",
       "argument_schema": {
         "type": "object",
         "properties": {
@@ -41,12 +41,12 @@
           },
           "entity_type": {
             "type": "string",
-            "enum": ["project"],
+            "enum": ["project", "thread"],
             "description": "Reference entity type for reference operations."
           },
           "type": {
             "type": "string",
-            "enum": ["project"],
+            "enum": ["project", "thread"],
             "description": "Alias for entity_type."
           },
           "entity_id": {
@@ -56,6 +56,10 @@
           "project_id": {
             "type": "string",
             "description": "Alias for entity_id when resolving project references."
+          },
+          "thread_id": {
+            "type": "string",
+            "description": "Alias for entity_id when resolving runtime-thread references."
           },
           "id": {
             "type": "string",

@@ -55,6 +55,9 @@ function entityReferenceKindLabel({
       return storageFileKindLabel(summary);
     }
   }
+  if (appId === "chat" && entityType === "thread") {
+    return "Chat";
+  }
   return "Record";
 }
 

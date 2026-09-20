@@ -1,7 +1,7 @@
 # ADR 0010: Direct Agentic Multi-Model Configuration
 
 - Status: Accepted
-- Updated: 2026-09-17
+- Updated: 2026-09-19
 
 ## Context
 
@@ -29,11 +29,15 @@ records returned by Core directly and do not group or hide historical rows.
 
 ## Runtime families
 
-- **Native Agents** own their loop and tools; Maverick launches and supervises
-  the installed structured runtime. Codex is the primary implementation.
-- **Maverick Agents** use a hosted API while Core owns the action loop, tools,
-  bounded context, accounting and recovery.
-- **Text-only Models** use a separate no-tools hosted-text path.
+- **CLI** models own their loop and tools; Maverick launches and supervises the
+  installed structured runtime. Codex is the primary implementation.
+- **API** models use a hosted API while Core owns the action loop, tools, bounded
+  context, accounting and recovery.
+
+These are the only selectable Chat model families. Plain hosted generation is
+not a new-chat model choice; Core retains its lower-level path only for internal
+generation and compatibility with already-persisted sessions. Speech
+transcription and synthesis remain separate provider contracts.
 
 Execution-family labels are derived presentation/routing information. They are
 not persisted release state on an agentic definition or session binding.
@@ -92,6 +96,8 @@ under normal Storage retention.
 
 - Adding or updating a model changes one current config.
 - Composer rows correspond to real current workspace choices.
+- Composer and Settings group choices as `CLI models` or `API models`; compact
+  rows show model and reasoning.
 - Transient discovery failures do not expire Codex.
 - Credentials, health, sandbox/full access, tool permissions and egress remain
   enforced without a parallel certification system.

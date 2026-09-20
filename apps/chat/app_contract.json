@@ -109,7 +109,8 @@
         "view_id": "chat",
         "display_name": "Chat",
         "entity_types": [
-          "project"
+          "project",
+          "thread"
         ],
         "state_actions": [
           {
@@ -142,6 +143,14 @@
         "entity_type": "project",
         "display_name": "Chat Project",
         "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "thread",
+        "display_name": "Chat Conversation",
+        "searchable": false,
         "resolvable": true,
         "summarizable": true,
         "deep_link_supported": true

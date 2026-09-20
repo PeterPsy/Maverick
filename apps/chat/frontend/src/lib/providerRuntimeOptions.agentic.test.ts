@@ -173,7 +173,7 @@ describe("remote agentic provider runtime options", () => {
     );
   });
 
-  it("uses the server selectable projection while excluding unavailable configs", () => {
+  it("uses the server selectable projection and concise model label", () => {
     const modelId = "gemini-3.6-flash";
     const preview = agenticProfile("google-ai-studio", modelId);
     const suspended = agenticProfile("google-ai-studio", modelId, "incomplete");
@@ -193,7 +193,91 @@ describe("remote agentic provider runtime options", () => {
 
     expect(providers.filter((provider) => provider.workspace_profile_binding_id)).toHaveLength(1);
     expect(providers[0]?.workspace_profile_binding_id).toBe(preview.workspace_profile_binding_id);
-    expect(providers[0]?.label).toBe(preview.display_name);
+    expect(providers[0]?.label).toBe("Gemini 3.6 Flash");
+  });
+
+  it("uses the native runtime catalog label for Antigravity models", () => {
+    const modelId = "gemini-3.8-flash-high";
+    const antigravityReasoningOptions: ProviderReasoningOption[] = [
+      { effort: "high", label: "High", description: null },
+      { effort: "medium", label: "Medium", description: null },
+      { effort: "low", label: "Low", description: null },
+    ];
+    const profile = agenticProfile(
+      "google",
+      modelId,
+      "complete",
+      antigravityReasoningOptions,
+      "high",
+    );
+    profile.workspace_profile_binding_id = "binding-antigravity-flash-high";
+    profile.definition_id = "profile-antigravity-flash-high";
+    profile.display_name = `Antigravity · ${modelId}`;
+    profile.runtime_engine_id = "antigravity-cli";
+    profile.execution_family = "native_agent";
+
+    const antigravityRuntime: ProviderItem = {
+      provider_id: "antigravity-cli",
+      label: "Antigravity",
+      description: "Native Antigravity CLI",
+      kind: "runtime_backend",
+      provider_role: "runtime_engine",
+      status: "active",
+      default_model_family: modelId,
+      model_options: [{
+        model_id: modelId,
+        label: "Gemini 3.8 Flash",
+        description: null,
+        default_reasoning_effort: "high",
+        supported_reasoning_efforts: antigravityReasoningOptions,
+      }],
+    };
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [antigravityRuntime],
+      native_agents: {
+        items: [{
+          runtime_engine_id: "antigravity-cli",
+          label: "Antigravity",
+          description: "Native Antigravity CLI",
+          execution_family: "native_agent",
+          provider_status: "active",
+          availability: "installed",
+          installed: true,
+          executable_name: "agy",
+          runtime_version: "1.1.27",
+          health: "healthy",
+          health_reason_codes: [],
+          update: { status: "current", detail: null },
+          adapter: { id: "antigravity-cli", version: "1", trusted_distribution: "maverick_builtin" },
+          protocol: { kind: "structured_cli", id: "antigravity-stream-json", version: "1", event_schema: "1" },
+          authentication_status: "configured",
+          models: [{
+            provider_id: "google",
+            model_id: modelId,
+            model_revision: null,
+            model_revision_policy: "provider_alias",
+          }],
+          effects: {
+            mode: "full_workspace",
+            workspace_confined: false,
+            process_tree_supervised: true,
+            structured_effect_events: true,
+            sandbox_policy_revision: "antigravity-full-workspace-v1",
+            approval_policy: "maverick",
+          },
+          contract_state: "complete",
+          selectable: true,
+          unavailable_reason: null,
+        }],
+      },
+      agentic_profiles: { default_binding_id: null, items: [profile] },
+    });
+
+    expect(providers[0]?.label).toBe("Gemini 3.8 Flash");
+    expect(providers[0]?.default_reasoning_effort).toBe("high");
+    expect(providers[0]?.supported_reasoning_efforts).toEqual(antigravityReasoningOptions);
   });
 
   it("does not offer a contained remote profile even when legacy fields look active", () => {
@@ -303,14 +387,14 @@ describe("remote agentic provider runtime options", () => {
     }))).toEqual([
       {
         model: googleModelId,
-        title: "google-ai-studio · gemini-3.6-flash · fake-data preview",
+        title: "Gemini 3.6 Flash",
         subtitle: "Google AI Studio",
         defaultReasoning: "high",
         reasoning: ["high"],
       },
       {
         model: openRouterModelId,
-        title: "openrouter · z-ai/glm-5.3-flash · fake-data preview",
+        title: "GLM 5.3 Flash",
         subtitle: "OpenRouter",
         defaultReasoning: "max",
         reasoning: ["max", "high", "low"],

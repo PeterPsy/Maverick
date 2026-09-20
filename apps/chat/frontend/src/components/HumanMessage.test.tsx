@@ -86,6 +86,40 @@ describe("HumanMessage", () => {
     expect(container.textContent).not.toContain("[ref:");
   });
 
+  it("presents chat thread references as readable conversation chips", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const threadId = "2dee0871-587a-46cb-a037-348319585eaa";
+    const message: ChatMessage = {
+      id: "msg_chat_reference",
+      role: "human",
+      content: `@${threadId} [ref:chat/thread/${threadId}] questo è un test`,
+      createdAt: "2026-09-20T12:12:12Z",
+      appReferences: [
+        {
+          type: "entity",
+          app_id: "chat",
+          entity_type: "thread",
+          entity_id: threadId,
+          label: threadId,
+          deep_link: `/app/chat/threads/${threadId}`,
+        },
+      ],
+    };
+
+    await act(async () => {
+      root?.render(<HumanMessage mentionItems={[]} message={message} onCopyMessage={async () => true} />);
+    });
+
+    const chip = container.querySelector(".chatapp-message-reference-chip.is-chat-thread");
+    expect(chip).toBeInstanceOf(HTMLButtonElement);
+    expect(chip?.textContent).toContain("Chat conversation");
+    expect(chip?.textContent).not.toContain(threadId);
+    expect(chip?.querySelector(".chatapp-message-reference-chip__icon")?.textContent).toBe("chat_bubble");
+    expect(container.textContent).toContain("questo è un test");
+  });
+
   it("routes Storage Drive folder reference chips through shell params", async () => {
     const messages: Array<{ message: unknown; targetOrigin: string }> = [];
     const originalParent = window.parent;

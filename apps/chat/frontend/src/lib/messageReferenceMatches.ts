@@ -10,6 +10,7 @@ export type MessageMentionMatch = {
   end: number;
   appId?: string;
   deepLink?: string;
+  entityId?: string;
   entityType?: string;
   exists?: boolean;
   summary?: string;
@@ -26,6 +27,7 @@ export function fallbackMatchesForAppReference(content: string, reference: AppRe
       kind: "entity" as const,
       id: referenceKey(reference),
       appId: reference.app_id,
+      entityId: reference.entity_id,
       entityType: reference.entity_type,
       label,
       deepLink: reference.deep_link,

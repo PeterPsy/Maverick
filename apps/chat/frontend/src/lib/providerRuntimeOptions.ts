@@ -1,15 +1,10 @@
 import type {
   AgenticProfileItem,
-  HostedTextProviderStatus,
   ProviderItem,
   ProviderPayload,
   ProviderReasoningOption,
 } from "../api/client";
-import type { AgentRuntimeConfig } from "../hooks/useMessageSubmission";
-import {
-  EXECUTION_FAMILY_CATALOG,
-  NO_WORKSPACE_ACTIONS_MESSAGE,
-} from "./executionFamilies";
+import { EXECUTION_FAMILY_CATALOG } from "./executionFamilies";
 
 export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem[] {
   const options: ProviderItem[] = [];
@@ -36,7 +31,8 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           (provider) => provider?.provider_id === profile.runtime_engine_id,
         );
         const modelProvider = providerForAgenticProfile(payload, profile);
-        const model = modelProvider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
+        const model = engine?.model_options?.find((candidate) => candidate.model_id === profile.model_id)
+          || modelProvider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
         const reasoning = reasoningForAgenticProfile(payload, profile);
         const isDefault = profile.is_default
           || profile.workspace_profile_binding_id === payload.agentic_profiles?.default_binding_id;
@@ -54,9 +50,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           runtime_engine_id: profile.runtime_engine_id,
           workspace_profile_binding_id: profile.workspace_profile_binding_id,
           default_model_family: profile.model_id,
-          label: profile.runtime_engine_id === "codex"
-            ? model?.label || profile.model_id
-            : profile.display_name,
+          label: model?.label || profile.display_name.split(" · ")[0]?.trim() || profile.model_id,
           description: modelProvider?.label || profile.model_provider_id,
           status: "active",
           agentic_egress_policy_id: profile.egress_policy_id || null,
@@ -109,20 +103,10 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
     }
   }
 
-  const hostedProviders = hostedTextProviders(payload.hosted_text);
-  if (hostedProviders.length) {
-    options.push(...hostedProviders.flatMap((provider) =>
-      hostedModelProviderItems(payload.hosted_text, provider).map((item) =>
-        decorateExecutionFamily(item, "hosted_text", familyCatalog),
-      ),
-    ));
-  }
-
   if (
     !options.length
     && !payload.execution_families?.length
     && !payload.agentic_profiles
-    && !payload.hosted_text
   ) {
     options.push(...(payload.items || payload.available_providers || []).filter(providerIsSelectable));
   }
@@ -141,7 +125,7 @@ function nativeProfileRuntimeReady(payload: ProviderPayload, profile: AgenticPro
 
 function decorateExecutionFamily(
   provider: ProviderItem,
-  familyId: "native_agent" | "maverick_agent" | "hosted_text",
+  familyId: "native_agent" | "maverick_agent",
   catalog: Map<string, { label: string; description: string; index: number }>,
 ): ProviderItem {
   const family = catalog.get(familyId);
@@ -192,123 +176,6 @@ export function providerUsesPlainHostedRuntime(provider: ProviderItem | null | u
   return provider?.provider_role === "model_provider" && provider.kind === "hosted_api";
 }
 
-export function hostedProviderRuntimeConfig(provider: ProviderItem | null | undefined): AgentRuntimeConfig | null {
-  if (!providerUsesPlainHostedRuntime(provider)) {
-    return null;
-  }
-  if (!provider) {
-    return null;
-  }
-  return {
-    agent_id: "chat",
-    agent_role_id: "",
-    agent_type_id: "",
-    runtime_mode: "plain_hosted_chat",
-    routing_profile: "fast_model",
-    hosted_provider_id: provider.hosted_provider_id || provider.provider_id,
-    hosted_model_id: provider.hosted_model_id || provider.default_model_family || "",
-    skill_catalog_app_id: "",
-    skill_ids: [],
-    skill_activation_mode: "explicit",
-    source_app_id: "chat",
-    system_prompt: "",
-    title: provider?.label || "Text-only model",
-  };
-}
-
-function hostedTextProviders(status: HostedTextProviderStatus | null | undefined): ProviderItem[] {
-  const providers = [
-    status?.active_provider,
-    ...(status?.available_providers || []),
-  ].filter((provider): provider is ProviderItem => Boolean(provider) && providerIsSelectable(provider as ProviderItem));
-  return dedupeProviders(providers);
-}
-
-function hostedModelProviderItems(status: HostedTextProviderStatus | null | undefined, provider: ProviderItem): ProviderItem[] {
-  const activeProviderId = status?.active_provider?.provider_id || "";
-  const selectedModelId =
-    activeProviderId === provider.provider_id
-      ? status?.model_settings?.selected_model_id || provider.default_model_family || ""
-      : provider.default_model_family || "";
-  const models =
-    activeProviderId === provider.provider_id && status?.model_settings?.available_models?.length
-      ? status.model_settings.available_models
-      : provider.model_options || [];
-  const textModels = models.filter(modelSupportsPlainHostedChat);
-  if (models.length && !textModels.length) {
-    return [];
-  }
-  const sortedModels = [...textModels].sort((left, right) => {
-    if (left.model_id === selectedModelId) {
-      return -1;
-    }
-    if (right.model_id === selectedModelId) {
-      return 1;
-    }
-    return left.label.localeCompare(right.label);
-  });
-  if (!sortedModels.length) {
-    const profile = hostedTextProfile(status, provider.provider_id, selectedModelId || provider.default_model_family || "");
-    const profileMissing = Boolean(status?.profiles && !profile);
-    return [
-      {
-        ...provider,
-        provider_id: hostedRuntimeOptionId(provider.provider_id, selectedModelId || provider.default_model_family || "default"),
-        hosted_provider_id: provider.provider_id,
-        hosted_model_id: selectedModelId || provider.default_model_family || "",
-        label: selectedModelId || "Hosted model",
-        description: provider.label || provider.provider_id,
-        execution_family: "hosted_text",
-        selectable: profile?.selectable ?? !profileMissing,
-        unavailable_reason: profile?.unavailable_reason || (profileMissing ? "hosted_text_profile_missing" : null),
-        hosted_text_profile: profile,
-        provider_detail: `Provider: ${provider.label || provider.provider_id}`,
-        profile_detail: NO_WORKSPACE_ACTIONS_MESSAGE,
-      },
-    ];
-  }
-  return sortedModels.map((model) => {
-    const profile = hostedTextProfile(status, provider.provider_id, model.model_id);
-    const profileMissing = Boolean(status?.profiles && !profile);
-    return {
-      ...provider,
-      provider_id: hostedRuntimeOptionId(provider.provider_id, model.model_id),
-      hosted_provider_id: provider.provider_id,
-      hosted_model_id: model.model_id,
-      default_model_family: model.model_id,
-      label: model.label || model.model_id,
-      description: provider.label || provider.provider_id,
-      input_modalities: model.input_modalities || [],
-      output_modalities: model.output_modalities || [],
-      execution_family: "hosted_text" as const,
-      selectable: profile?.selectable ?? !profileMissing,
-      unavailable_reason: profile?.unavailable_reason || (profileMissing ? "hosted_text_profile_missing" : null),
-      hosted_text_profile: profile,
-      provider_detail: `Provider: ${provider.label || provider.provider_id}`,
-      profile_detail: NO_WORKSPACE_ACTIONS_MESSAGE,
-    };
-  });
-}
-
-function hostedTextProfile(
-  status: HostedTextProviderStatus | null | undefined,
-  providerId: string,
-  modelId: string,
-) {
-  return (status?.profiles || []).find(
-    (item) => item.profile.provider_id === providerId && item.profile.model_id === modelId,
-  ) || null;
-}
-
-function modelSupportsPlainHostedChat(model: { output_modalities?: string[] | null }): boolean {
-  const outputs = model.output_modalities || [];
-  return !outputs.length || outputs.includes("text");
-}
-
-function hostedRuntimeOptionId(providerId: string, modelId: string): string {
-  return `hosted:${providerId}:${encodeURIComponent(modelId)}`;
-}
-
 function providerIsActive(provider: ProviderItem): boolean {
   return provider.status === "active";
 }
@@ -316,7 +183,7 @@ function providerIsActive(provider: ProviderItem): boolean {
 function providerIsSelectable(provider: ProviderItem): boolean {
   return provider.selectable !== false
     && providerIsActive(provider)
-    && (provider.provider_role === "runtime_engine" || providerUsesPlainHostedRuntime(provider));
+    && provider.provider_role === "runtime_engine";
 }
 
 export function initialProviderSelectionId(

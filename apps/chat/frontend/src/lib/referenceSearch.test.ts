@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { searchAppReferences, type AppEntityReference } from "../api/client";
+import { listRuntimeThreads, searchAppReferences, type AppEntityReference } from "../api/client";
 import { searchComposerReferences } from "./referenceSearch";
 
 vi.mock("../api/client", () => ({
+  listRuntimeThreads: vi.fn(),
   searchAppReferences: vi.fn(),
 }));
 
@@ -57,6 +58,7 @@ const clientChecklistReference: AppEntityReference = {
 };
 
 const mockedSearchAppReferences = vi.mocked(searchAppReferences);
+const mockedListRuntimeThreads = vi.mocked(listRuntimeThreads);
 
 function genericChecklistReference(index: number): AppEntityReference {
   return {
@@ -74,6 +76,8 @@ describe("searchComposerReferences", () => {
   beforeEach(() => {
     mockedSearchAppReferences.mockReset();
     mockedSearchAppReferences.mockResolvedValue([]);
+    mockedListRuntimeThreads.mockReset();
+    mockedListRuntimeThreads.mockResolvedValue({ threads: [] });
   });
 
   it("uses generic file and folder references for an empty picker without an active app context", async () => {
@@ -138,6 +142,45 @@ describe("searchComposerReferences", () => {
     });
     expect(mockedSearchAppReferences).toHaveBeenCalledTimes(2);
     expect(references).toEqual([checklistReference]);
+  });
+
+  it("searches Core-owned chats and returns thread references beside app-owned records", async () => {
+    const signal = new AbortController().signal;
+    mockedListRuntimeThreads.mockResolvedValueOnce({
+      threads: [
+        {
+          agent_label: "Maverick",
+          agent_role_id: "",
+          agent_type_id: "",
+          archived: false,
+          availability: "free",
+          created_at: "2026-09-20T08:00:00Z",
+          project_id: null,
+          runtime_session_id: "session-budget",
+          source_app_id: "chat",
+          thread_id: "thread-budget",
+          title: "Budget review",
+          updated_at: "2026-09-20T09:00:00Z",
+        },
+      ],
+    });
+
+    const references = await searchComposerReferences("chat Budget", signal, "", "chat-search-workspace");
+
+    expect(mockedListRuntimeThreads).toHaveBeenCalledWith({
+      query: "Budget",
+      limit: 16,
+      signal,
+    });
+    expect(references[0]).toEqual({
+      type: "entity",
+      app_id: "chat",
+      entity_type: "thread",
+      entity_id: "thread-budget",
+      label: "Budget review",
+      summary: "Chat conversation available through the authorized runtime transcript reader",
+      deep_link: "/app/chat/threads/thread-budget",
+    });
   });
 
   it("falls back to global search when targeted searches do not find references", async () => {

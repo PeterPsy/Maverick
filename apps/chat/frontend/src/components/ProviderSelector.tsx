@@ -13,34 +13,6 @@ import {
   safeProviderExecutionFamily,
 } from "../lib/executionFamilies";
 
-function normalizeProviderQuery(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function providerSearchText(provider: ProviderItem) {
-  return [
-    provider.label,
-    provider.description,
-    provider.provider_id,
-    provider.default_model_family,
-    provider.hosted_provider_id,
-    provider.hosted_model_id,
-    provider.agentic_egress_policy_id,
-    provider.execution_family_label,
-    provider.execution_family_description,
-    provider.provider_detail,
-    provider.profile_detail,
-    provider.unavailable_reason,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function providerMatchesQuery(provider: ProviderItem, normalizedQuery: string) {
-  return !normalizedQuery || providerSearchText(provider).includes(normalizedQuery);
-}
-
 function providerIsSelectable(provider: ProviderItem) {
   return provider.selectable !== false && provider.status === "active";
 }
@@ -64,13 +36,18 @@ export function ProviderSelector({
 }) {
   const menuId = useId();
   const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeIndexRef = useRef(0);
-  const normalizedQuery = normalizeProviderQuery(query);
+  const selectableProviders = useMemo(
+    () => providers.filter(providerIsSelectable),
+    [providers],
+  );
+  const executionFamilies = useMemo(
+    () => orderedExecutionFamilies(selectableProviders),
+    [selectableProviders],
+  );
   const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
   const selectedLabel = selectedProvider?.label || "Select model";
   const selectedReasoningEffort = selectedProvider
@@ -85,28 +62,19 @@ export function ProviderSelector({
   const selectedDisplayLabel = selectedReasoningLabel
     ? `${selectedLabel} · ${selectedReasoningLabel}`
     : selectedLabel;
-  const filteredProviders = useMemo(
-    () => providers.filter((provider) => providerMatchesQuery(provider, normalizedQuery)),
-    [providers, normalizedQuery],
-  );
-  const selectableFilteredProviders = useMemo(
-    () => filteredProviders.filter(providerIsSelectable),
-    [filteredProviders],
-  );
-  const executionFamilies = useMemo(() => orderedExecutionFamilies(providers), [providers]);
-  const activeProvider = selectableFilteredProviders[activeIndex] || selectableFilteredProviders[0];
+  const activeProvider = selectableProviders[activeIndex] || selectableProviders[0];
   const activeProviderOptionId = activeProvider ? `${menuId}-option-${activeProvider.provider_id}` : undefined;
-  const isDisabled = disabled || locked || !providers.some(providerIsSelectable);
+  const isDisabled = disabled || locked || !selectableProviders.length;
 
-  function selectedProviderIndex(options: ProviderItem[]) {
-    const selectableOptions = options.filter(providerIsSelectable);
-    const optionIndex = selectableOptions.findIndex((provider) => provider.provider_id === activeProviderId);
+  function selectedProviderIndex() {
+    const optionIndex = selectableProviders.findIndex(
+      (provider) => provider.provider_id === activeProviderId,
+    );
     return optionIndex >= 0 ? optionIndex : 0;
   }
 
   function openMenu() {
-    setQuery("");
-    const nextActiveIndex = selectedProviderIndex(providers);
+    const nextActiveIndex = selectedProviderIndex();
     activeIndexRef.current = nextActiveIndex;
     setActiveIndex(nextActiveIndex);
     setIsOpen(true);
@@ -114,7 +82,6 @@ export function ProviderSelector({
 
   function closeMenu({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
     setIsOpen(false);
-    setQuery("");
     activeIndexRef.current = 0;
     setActiveIndex(0);
     if (restoreFocus) {
@@ -123,8 +90,10 @@ export function ProviderSelector({
   }
 
   function moveActiveProvider(direction: 1 | -1) {
-    const providerCount = selectableFilteredProviders.length;
-    const nextIndex = providerCount ? (activeIndexRef.current + direction + providerCount) % providerCount : 0;
+    const providerCount = selectableProviders.length;
+    const nextIndex = providerCount
+      ? (activeIndexRef.current + direction + providerCount) % providerCount
+      : 0;
     activeIndexRef.current = nextIndex;
     setActiveIndex(nextIndex);
   }
@@ -140,16 +109,9 @@ export function ProviderSelector({
       }
       closeMenu();
     };
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeMenu({ restoreFocus: true });
-      }
-    };
     document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
 
@@ -158,7 +120,7 @@ export function ProviderSelector({
       return;
     }
     const frame = window.requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
+      panelRef.current?.focus();
     });
     return () => {
       window.cancelAnimationFrame(frame);
@@ -169,14 +131,17 @@ export function ProviderSelector({
     if (!isOpen) {
       return;
     }
-    const nextIndex = Math.min(activeIndexRef.current, Math.max(selectableFilteredProviders.length - 1, 0));
+    const nextIndex = Math.min(
+      activeIndexRef.current,
+      Math.max(selectableProviders.length - 1, 0),
+    );
     activeIndexRef.current = nextIndex;
     setActiveIndex(nextIndex);
-  }, [selectableFilteredProviders.length, isOpen]);
+  }, [selectableProviders.length, isOpen]);
 
   function selectProvider(providerId: string) {
-    const provider = providers.find((candidate) => candidate.provider_id === providerId);
-    if (!provider || !providerIsSelectable(provider)) {
+    const provider = selectableProviders.find((candidate) => candidate.provider_id === providerId);
+    if (!provider) {
       return;
     }
     onSelect(providerId);
@@ -191,27 +156,16 @@ export function ProviderSelector({
     onReasoningEffortChange(effort);
   }
 
-  function handleQueryChange(value: string) {
-    const nextNormalizedQuery = normalizeProviderQuery(value);
-    const nextFilteredProviders = providers.filter((provider) => providerMatchesQuery(provider, nextNormalizedQuery));
-    const nextActiveIndex = selectedProviderIndex(nextFilteredProviders);
-    setQuery(value);
-    activeIndexRef.current = nextActiveIndex;
-    setActiveIndex(nextActiveIndex);
-  }
-
   function selectActiveProvider() {
-    const provider = selectableFilteredProviders[activeIndexRef.current] || selectableFilteredProviders[0];
-    if (!provider) {
-      return;
+    const provider = selectableProviders[activeIndexRef.current] || selectableProviders[0];
+    if (provider) {
+      selectProvider(provider.provider_id);
     }
-    selectProvider(provider.provider_id);
   }
 
-  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+  function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      event.stopPropagation();
       closeMenu({ restoreFocus: true });
       return;
     }
@@ -226,9 +180,6 @@ export function ProviderSelector({
       return;
     }
     if (event.key === "Enter") {
-      if (event.nativeEvent.isComposing) {
-        return;
-      }
       event.preventDefault();
       selectActiveProvider();
     }
@@ -238,16 +189,7 @@ export function ProviderSelector({
     if (event.pointerType === "mouse") {
       return;
     }
-    // Preserve composer focus, but wait for click before replacing this trigger with its menu.
     event.preventDefault();
-  }
-
-  function handleTriggerClick() {
-    if (isOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
   }
 
   return (
@@ -258,7 +200,10 @@ export function ProviderSelector({
         aria-label={`Model: ${selectedDisplayLabel}`}
         className={`chatapp-composer__tool-button chatapp-provider-selector__trigger ${isOpen ? "is-active" : ""}`}
         disabled={isDisabled}
-        onClick={handleTriggerClick}
+        onClick={() => {
+          if (isOpen) closeMenu();
+          else openMenu();
+        }}
         onPointerDown={handleTriggerPointerDown}
         ref={buttonRef}
         title={locked
@@ -277,73 +222,53 @@ export function ProviderSelector({
           aria-label="Choose model"
           className="chatapp-provider-menu"
           id={menuId}
+          onKeyDown={handleMenuKeyDown}
           ref={panelRef}
           role="listbox"
+          tabIndex={-1}
         >
-          <label className="chatapp-provider-menu__search">
-            <input
-              aria-activedescendant={activeProviderOptionId}
-              aria-controls={menuId}
-              aria-label="Search models"
-              className="chatapp-provider-menu__search-input"
-              onChange={(event) => {
-                handleQueryChange(event.currentTarget.value);
-              }}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search models"
-              ref={searchInputRef}
-              type="search"
-              value={query}
-            />
-          </label>
           {executionFamilies.map((family) => {
-            const familyProviders = filteredProviders.filter(
+            const familyProviders = selectableProviders.filter(
               (provider) => safeProviderExecutionFamily(provider) === family.family_id,
             );
+            if (!familyProviders.length) {
+              return null;
+            }
             return (
               <section className="chatapp-provider-menu__family" data-execution-family={family.family_id} key={family.family_id}>
                 <header className="chatapp-provider-menu__family-heading">
-                  <strong>{family.label}</strong>
-                  <span>{family.description}</span>
+                  <span>{family.label}</span>
                 </header>
                 {familyProviders.map((provider) => {
-                  const providerIndex = selectableFilteredProviders.findIndex(
+                  const providerIndex = selectableProviders.findIndex(
                     (candidate) => candidate.provider_id === provider.provider_id,
                   );
-                  const selectable = providerIsSelectable(provider);
                   return (
-                    <div className={`chatapp-provider-menu__option-block ${selectable ? "" : "is-unavailable"}`} key={provider.provider_id}>
+                    <div className="chatapp-provider-menu__option-block" key={provider.provider_id}>
                       <button
-                        aria-disabled={!selectable}
                         aria-selected={provider.provider_id === activeProviderId}
                         className={`chatapp-provider-menu__item ${provider.provider_id === activeProviderId ? "is-active" : ""} ${providerIndex === activeIndex ? "is-highlighted" : ""}`}
-                        disabled={!selectable}
                         id={`${menuId}-option-${provider.provider_id}`}
                         onClick={() => {
                           selectProvider(provider.provider_id);
                         }}
                         onMouseEnter={() => {
-                          if (providerIndex >= 0) {
-                            activeIndexRef.current = providerIndex;
-                            setActiveIndex(providerIndex);
-                          }
+                          activeIndexRef.current = providerIndex;
+                          setActiveIndex(providerIndex);
                         }}
                         role="option"
                         type="button"
                       >
                         <span className="chatapp-provider-menu__name">{provider.label}</span>
-                        {provider.description ? <span className="chatapp-provider-menu__description">{provider.description}</span> : null}
-                        {provider.provider_detail ? <span className="chatapp-provider-menu__meta">{provider.provider_detail}</span> : null}
-                        {provider.profile_detail ? <span className="chatapp-provider-menu__meta">{provider.profile_detail}</span> : null}
-                        {!selectable ? <span className="chatapp-provider-menu__unavailable">Unavailable · {provider.unavailable_reason || "Incomplete profile"}</span> : null}
                       </button>
-                      {selectable && provider.supported_reasoning_efforts?.length ? (
+                      {provider.supported_reasoning_efforts?.length ? (
                         <label className="chatapp-provider-menu__reasoning">
                           <span className="chatapp-provider-menu__reasoning-label">Reasoning</span>
                           <select
                             aria-label={`Reasoning for ${provider.label}`}
                             disabled={disabled || locked}
                             onChange={(event) => selectProviderReasoning(provider, event.currentTarget.value)}
+                            onKeyDown={(event) => event.stopPropagation()}
                             value={provider.provider_id === activeProviderId
                               ? reasoningEffort || provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""
                               : provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""}
@@ -357,15 +282,10 @@ export function ProviderSelector({
                     </div>
                   );
                 })}
-                {!familyProviders.length ? (
-                  <div className="chatapp-provider-menu__family-empty">
-                    {normalizedQuery ? "No matching profiles in this family." : "No available profiles in this family."}
-                  </div>
-                ) : null}
               </section>
             );
           })}
-          {!filteredProviders.length ? <div className="chatapp-provider-menu__empty">No matching models</div> : null}
+          {!selectableProviders.length ? <div className="chatapp-provider-menu__empty">No models available</div> : null}
         </div>
       ) : null}
     </div>

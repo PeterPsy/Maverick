@@ -40,21 +40,21 @@ OPERATIONS_MANIFEST = {
             "payload_profile": "compact",
         },
         "references.search": {
-            "description": "Search Chat project references without loading runtime transcripts.",
+            "description": "Search Chat app-owned project references; runtime threads stay in the Core-owned catalog.",
             "required_fields": ["entity_type"],
             "accepted_aliases": {"entity_type": ["type"], "query": ["q"]},
             "payload_profile": "compact",
         },
         "references.resolve": {
-            "description": "Resolve one Chat project reference by id.",
+            "description": "Resolve one Chat project or runtime-thread reference by id.",
             "required_fields": ["entity_type", "entity_id"],
-            "accepted_aliases": {"entity_type": ["type"], "entity_id": ["project_id", "id"]},
+            "accepted_aliases": {"entity_type": ["type"], "entity_id": ["project_id", "thread_id", "id"]},
             "payload_profile": "full_by_id",
         },
         "references.summarize": {
-            "description": "Return a token-efficient summary for one Chat project reference.",
+            "description": "Return a token-efficient summary for one Chat project or runtime-thread reference.",
             "required_fields": ["entity_type", "entity_id"],
-            "accepted_aliases": {"entity_type": ["type"], "entity_id": ["project_id", "id"]},
+            "accepted_aliases": {"entity_type": ["type"], "entity_id": ["project_id", "thread_id", "id"]},
             "payload_profile": "compact",
         },
         "view_filter": {

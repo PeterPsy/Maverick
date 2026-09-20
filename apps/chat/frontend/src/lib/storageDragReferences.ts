@@ -1,4 +1,8 @@
 import type { AppReference } from "../api/client";
+import {
+  chatThreadMentionItemsFromDataTransfer,
+  hasChatThreadReferenceDragData,
+} from "./chatThreadDragReferences";
 import { referenceKey } from "./mentions";
 import type { MentionItem } from "./mentions";
 
@@ -109,7 +113,8 @@ export function hasAppReferenceDragData(dataTransfer: StorageReferenceTypeDataTr
   return (
     hasStorageReferenceDragData(dataTransfer) ||
     hasChecklistReferenceDragData(dataTransfer) ||
-    hasMailReferenceDragData(dataTransfer)
+    hasMailReferenceDragData(dataTransfer) ||
+    hasChatThreadReferenceDragData(dataTransfer)
   );
 }
 
@@ -130,7 +135,7 @@ export function appReferenceMentionItemsFromDataTransfer(dataTransfer: StorageRe
     ...checklistReferencesFromDataTransfer(dataTransfer),
     ...mailReferencesFromDataTransfer(dataTransfer),
   ];
-  return uniqueMentionItems(references);
+  return uniqueMentionItems(references).concat(chatThreadMentionItemsFromDataTransfer(dataTransfer));
 }
 
 export function storageReferenceMentionItemsFromDataTransfer(dataTransfer: StorageReferenceDataTransfer): MentionItem[] {

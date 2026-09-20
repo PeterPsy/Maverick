@@ -18,6 +18,7 @@ CLI_ARGUMENT_FIELDS = {
     "type",
     "entity_id",
     "project_id",
+    "thread_id",
     "id",
     "query",
     "q",

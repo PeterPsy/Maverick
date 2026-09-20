@@ -11,7 +11,6 @@ import {
 } from "../api/client";
 import { ActiveAppContext, promptWithActiveAppContext } from "../lib/activeAppContext";
 import { mergeRuntimeEvents } from "../lib/runtimeEvents";
-import { hostedProviderRuntimeConfig, providerUsesPlainHostedRuntime } from "../lib/providerRuntimeOptions";
 import type { AgentRuntimeConfig } from "./useMessageSubmission";
 import {
   isResearchRunner,
@@ -212,7 +211,7 @@ export function useChatRuntimeControls({
     pendingReasoningEffortRef.current = selectedReasoningEffort;
     setReasoningEffort(selectedReasoningEffort);
     setActiveProviderId(providerId);
-    if (providerUsesPlainHostedRuntime(provider) || provider?.provider_role === "runtime_engine") {
+    if (provider?.provider_role === "runtime_engine") {
       setError(null);
       return;
     }
@@ -260,10 +259,6 @@ export function useChatRuntimeControls({
         throw new Error("Research is not available with the selected runtime.");
       }
       return config;
-    }
-    const hostedConfig = hostedProviderRuntimeConfig(selectedProvider);
-    if (hostedConfig) {
-      return hostedConfig;
     }
     const genericConfig = genericAgenticRuntimeConfig(selectedProvider, newChatReasoningEffort);
     if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {

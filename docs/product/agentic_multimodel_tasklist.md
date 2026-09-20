@@ -1,6 +1,6 @@
 # Agentic Multi-Model Runtime — Current Delivery Checklist
 
-Updated: 2026-09-17
+Updated: 2026-09-19
 
 ## Objective
 
@@ -22,6 +22,9 @@ system. Codex must remain independently usable during hosted-provider changes.
   harness admission contracts.
 - [x] Direct Chat and Settings projection without revision grouping or legacy
   selection migration.
+- [x] Compact Chat and Settings model selection grouped into `CLI models` and
+  `API models`, with model and reasoning prominent and no new plain-hosted text
+  choices.
 - [x] Explicit `runtime_session_restart_required` for incompatible sessions;
   no continuation forks or lineage admission.
 - [x] No agentic schema migration during backend bootstrap.

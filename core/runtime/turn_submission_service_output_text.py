@@ -11,7 +11,7 @@ from core.runtime.output_compaction import ToolOutputCompactionContext, compact_
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.service import record_runtime_event, record_runtime_turn_event_once
 from core.usage.payloads import chat_usage_summary_payload
-from core.usage.service import ingest_runtime_usage
+from core.usage.service import ingest_runtime_usage, resolve_current_root_session_id
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -45,6 +45,7 @@ class _RuntimeTurnOutputRecorder:
             "runtime.output.final",
             "provider.execution.completed",
         }:
+            self.flush_usage()
             delivery_id = event.payload.get("delivery_id")
             if isinstance(delivery_id, str) and 0 < len(delivery_id) <= 128:
                 event_id = (
@@ -84,7 +85,14 @@ class _RuntimeTurnOutputRecorder:
             )
         return _record_execution_event(self.state, session_id=self.session_id, turn_id=self.turn_id, event=event)
 
+    def flush_usage(self) -> None:
+        if self.state.runtime_event_bus is None:
+            return
+        session = self.state.runtime_store.get_session(self.session_id)
+        self.state.runtime_event_bus.flush_usage(resolve_current_root_session_id(self.state.runtime_store, session))
+
     def final_text(self, output_text: str) -> str:
+        self.flush_usage()
         return _missing_final_suffix(output_text, "".join(self._streamed_text_parts))
 
     def complete_text(self, output_text: str) -> str:
@@ -187,17 +195,20 @@ def _record_usage_summary_event(
         notification_turn_id = (
             turn_id if result.notification_session_id == session_id else None
         )
-        return record_runtime_event(
-            state.runtime_store,
+        event = RuntimeEventRecord(
             event_id=str(uuid4()),
+            workspace_id=result.sample.workspace_id,
             session_id=result.notification_session_id,
             turn_id=notification_turn_id,
+            process_id=None,
             plane="runtime",
             event_type="runtime.usage.updated",
             payload=chat_usage_summary_payload(result.summary),
-            now=result.sample.observed_at,
-            event_bus=state.runtime_event_bus,
+            created_at=result.sample.observed_at,
         )
+        if state.runtime_event_bus is not None:
+            state.runtime_event_bus.publish(event)
+        return event
     except Exception:
         logger.exception("Runtime usage ingestion failed for session_id=%s", session_id)
-        return None
+        raise

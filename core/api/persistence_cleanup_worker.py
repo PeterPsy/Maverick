@@ -12,6 +12,8 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
+from core.usage.handoff import USAGE_ROOT
+
 from core.api.control_store import (
     ControlStoreSettings,
     build_control_plane_collections,
@@ -102,12 +104,14 @@ def _clear_source_storage(plan: dict[str, Any]) -> None:
     if _same_adapter(source, target):
         raise RuntimeError("Refusing to clear source storage because source and target adapters match.")
     collections = build_control_plane_collections(source)
-    for spec in control_plane_collection_specs(collections):
+    include_usage = plan.get("include_document_usage", True)
+    for spec in control_plane_collection_specs(collections, include_usage=include_usage):
         replace_all = getattr(spec.collection, "replace_all", None)
         if replace_all is None:
             raise RuntimeError(f"Source collection `{spec.name}` does not support full replacement.")
         replace_all([])
-    if source.kind == "json":
+    includes_usage_owner = (repository_root / USAGE_ROOT).resolve().is_relative_to(source.json_root.resolve())
+    if source.kind == "json" and include_usage and not includes_usage_owner:
         _delete_json_root(repository_root=repository_root, json_root=source.json_root)
 
 

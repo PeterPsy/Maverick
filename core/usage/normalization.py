@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 import hashlib
 import json
@@ -9,12 +10,12 @@ from typing import Any
 
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.usage.models import UsageAccuracy, UsageSampleRecord, UsageSemantics
-from core.usage.store import UsageDocumentStore
+from core.usage.store import UsageHistory
 
 
 def normalized_usage_sample(
     state: Any,
-    store: UsageDocumentStore,
+    store: UsageHistory,
     *,
     session: RuntimeSessionRecord,
     root_session_id: str,
@@ -43,30 +44,6 @@ def normalized_usage_sample(
     if not any(reported.values()) and context_tokens is None:
         return None
 
-    previous = _previous_cumulative_sample(
-        store,
-        session_id=session.session_id,
-        provider_id=provider_id,
-        model_id=model_id,
-        source=source,
-    ) if semantics == "cumulative" else None
-    if semantics == "cumulative" and previous is None and latest is not None:
-        raw_delta = latest
-    else:
-        raw_delta = {
-            key: _cumulative_delta(value, getattr(previous, f"reported_{key}") if previous else None)
-            if semantics == "cumulative"
-            else value
-            for key, value in reported.items()
-        }
-    cached = raw_delta["cached_input_tokens"]
-    cache_write = raw_delta["cache_write_input_tokens"]
-    reasoning = raw_delta["reasoning_output_tokens"]
-    input_tokens = max(0, raw_delta["input_tokens"] - cached - cache_write)
-    output_tokens = max(0, raw_delta["output_tokens"] - reasoning)
-    total_tokens = raw_delta["total_tokens"] or (
-        input_tokens + cached + cache_write + output_tokens + reasoning
-    )
     sample_identity = {
         "session_id": session.session_id,
         "turn_id": turn_id,
@@ -79,8 +56,14 @@ def normalized_usage_sample(
         "context_tokens": context_tokens,
         "context_window_tokens": context_window_tokens,
     }
+    sample_id = _sample_id(sample_identity)
+    previous = store.previous_cumulative_sample(
+        workspace_id=session.workspace_id, session_id=session.session_id, provider_id=provider_id, model_id=model_id,
+        source=source, before=observed_at, sample_id=sample_id,
+    ) if semantics == "cumulative" else None
+    tokens = normalized_token_delta(reported, previous=previous, latest=latest, semantics=semantics)
     return UsageSampleRecord(
-        sample_id=_sample_id(sample_identity),
+        sample_id=sample_id,
         workspace_id=session.workspace_id,
         root_session_id=root_session_id,
         session_id=session.session_id,
@@ -94,12 +77,7 @@ def normalized_usage_sample(
             payload.get("context_accuracy"),
             "exact" if semantics == "cumulative" else "estimated",
         ),
-        input_tokens=input_tokens,
-        cached_input_tokens=cached,
-        cache_write_input_tokens=cache_write,
-        output_tokens=output_tokens,
-        reasoning_output_tokens=reasoning,
-        total_tokens=total_tokens,
+        **tokens,
         reported_input_tokens=reported["input_tokens"],
         reported_cached_input_tokens=reported["cached_input_tokens"],
         reported_cache_write_input_tokens=reported["cache_write_input_tokens"],
@@ -152,23 +130,50 @@ def _latest_breakdown(payload: dict[str, Any]) -> dict[str, int] | None:
     return _reported_breakdown({key: payload.get(f"latest_{key}") for key in keys})
 
 
-def _previous_cumulative_sample(
-    store: UsageDocumentStore,
-    *,
-    session_id: str,
-    provider_id: str,
-    model_id: str | None,
-    source: str,
-) -> UsageSampleRecord | None:
-    matching = [
-        sample
-        for sample in store.list_samples(session_id=session_id)
-        if sample.semantics == "cumulative"
-        and sample.provider_id == provider_id
-        and sample.model_id == model_id
-        and sample.source == source
-    ]
-    return matching[-1] if matching else None
+def normalized_token_delta(reported: dict[str, int], *, previous: UsageSampleRecord | None,
+                           latest: dict[str, int] | None, semantics: UsageSemantics) -> dict[str, int]:
+    if semantics == "cumulative" and previous is None and latest is not None:
+        raw_delta = latest
+    else:
+        raw_delta = {
+            key: _cumulative_delta(value, getattr(previous, f"reported_{key}") if previous else None)
+            if semantics == "cumulative" else value for key, value in reported.items()
+        }
+    cached = raw_delta["cached_input_tokens"]
+    cache_write = raw_delta["cache_write_input_tokens"]
+    reasoning = raw_delta["reasoning_output_tokens"]
+    input_tokens = max(0, raw_delta["input_tokens"] - cached - cache_write)
+    output_tokens = max(0, raw_delta["output_tokens"] - reasoning)
+    return {
+        "input_tokens": input_tokens, "cached_input_tokens": cached, "cache_write_input_tokens": cache_write,
+        "output_tokens": output_tokens, "reasoning_output_tokens": reasoning,
+        "total_tokens": raw_delta["total_tokens"] or (input_tokens + cached + cache_write + output_tokens + reasoning),
+    }
+
+
+def cumulative_sample_with_previous(sample: UsageSampleRecord, previous: UsageSampleRecord | None,
+                                     payload: dict | None) -> UsageSampleRecord:
+    """Recompute only the affected stream neighbor for a late cumulative observation."""
+    from core.usage.canonical import _zero_legacy_codex_baseline
+    if sample.semantics != "cumulative":
+        return sample
+    if previous is None and payload is None:
+        return _zero_legacy_codex_baseline(sample)
+    reported = {key: getattr(sample, f"reported_{key}") for key in (
+        "input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens",
+        "reasoning_output_tokens", "total_tokens")}
+    result = replace(sample, **normalized_token_delta(reported, previous=previous,
+        latest=_latest_breakdown(payload or {}), semantics="cumulative"))
+    if payload is not None:
+        result = replace(result, estimated_cost_microusd=_optional_nonnegative_int(payload.get('estimated_cost_microusd')))
+    return _zero_legacy_codex_baseline(result) if previous is None else result
+
+
+def stored_usage_observation(payload: dict) -> dict:
+    """Persist only the additional numeric counters required for late compensation."""
+    latest = _latest_breakdown(payload)
+    return {**({f'latest_{key}': value for key, value in latest.items()} if latest else {}),
+        'estimated_cost_microusd': _optional_nonnegative_int(payload.get('estimated_cost_microusd'))}
 
 
 def _cumulative_delta(current: int, previous: int | None) -> int:

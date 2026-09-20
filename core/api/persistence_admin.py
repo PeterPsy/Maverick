@@ -26,6 +26,8 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession
 from core.observability.service import record_platform_audit, record_platform_event
 from core.recovery.backend_service import restart_backend_service
+from core.usage.migration import usage_status
+from core.usage.handoff import selected_adapter
 from core.shared.env_file import quote_env_value, read_env_file
 
 
@@ -148,6 +150,7 @@ def persistence_status_payload(
     """Return operator-visible persistence adapter status."""
     return {
         "active_adapter": _settings_payload(repository_root, active_settings),
+        "usage": usage_status(repository_root),
         "supported_adapters": [
             {
                 "kind": "json",
@@ -414,6 +417,7 @@ def _schedule_source_cleanup_after_restart(
         "service_name": service_name,
         "health_url": health_url,
         "previous_pid": os.getpid(),
+        "include_document_usage": selected_adapter() == "document",
         "timeout_seconds": 120.0,
     }
     plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")

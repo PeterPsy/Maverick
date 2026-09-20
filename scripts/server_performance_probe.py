@@ -81,8 +81,14 @@ def storage_probe(root: Path, count: int, shape: str, requests: int, warmup: int
     return {**result, 'one_instrumented_read': dict(counts), 'shape': shape, 'adapter': adapter}
 
 
-def usage_probe(root: Path, count: int, requests: int, warmup: int) -> dict:
+def usage_probe(root: Path, count: int, requests: int, warmup: int, *, adapter: str = 'document') -> dict:
     state = usage_document_state(root, count)
+    if adapter == 'sqlite':
+        from core.usage.sqlite_store import UsageSqliteStore
+        store = UsageSqliteStore(root / 'usage.sqlite')
+        store.initialize()
+        store.import_samples(state.usage_store.list_samples())
+        state.usage_store = store
     sequence = count
 
     def call():
@@ -95,7 +101,7 @@ def usage_probe(root: Path, count: int, requests: int, warmup: int) -> dict:
                 'output_tokens': 55, 'reasoning_output_tokens': 5, 'total_tokens': 175,
             })
         assert result is not None and result.inserted
-    return measure(call, requests, warmup)
+    return {**measure(call, requests, warmup), 'adapter': adapter}
 
 
 def main() -> None:
@@ -106,12 +112,13 @@ def main() -> None:
     parser.add_argument('--warmup', type=int, default=5)
     parser.add_argument('--shape', choices=('flat', 'tree'), default='flat')
     parser.add_argument('--storage-adapter', choices=('json', 'sqlite'), default='json')
+    parser.add_argument('--usage-adapter', choices=('document', 'sqlite'), default='document')
     args = parser.parse_args()
     if args.count < 1 or args.requests < 1 or args.warmup < 0:
         parser.error('count and requests must be positive; warmup cannot be negative')
     with tempfile.TemporaryDirectory(prefix='maverick-performance-') as scratch:
         root = Path(scratch)
-        result = storage_probe(root, args.count, args.shape, args.requests, args.warmup, adapter=args.storage_adapter) if args.domain == 'storage' else usage_probe(root, args.count, args.requests, args.warmup)
+        result = storage_probe(root, args.count, args.shape, args.requests, args.warmup, adapter=args.storage_adapter) if args.domain == 'storage' else usage_probe(root, args.count, args.requests, args.warmup, adapter=args.usage_adapter)
     revision = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     print(json.dumps({'schema': 1, 'boundary': 'isolated-service', 'domain': args.domain,
         'dataset_count': args.count, 'fixture_revision': 1, 'source_commit': revision,

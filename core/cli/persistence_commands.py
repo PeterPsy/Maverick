@@ -11,6 +11,8 @@ from core.api.persistence_admin import (
     dry_run_persistence_migration,
     persistence_status_payload,
 )
+from core.usage.administration import MIGRATION_SCHEMA, usage_migration
+from core.usage.migration import usage_status
 from core.cli.core_command_helpers import GLOBAL_AGENT_SAFE, core_cli_command
 from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvocationPolicy
 
@@ -58,6 +60,15 @@ def persistence_command_specs(*, start_path: Path | None = None) -> list[tuple[C
         )
 
     return [
+        (core_cli_command(command_id="core.persistence.usage-status",
+            path_segments=["core", "persistence", "usage-status"], owner_id="usage",
+            description="Inspect Usage's independent persistence owner and runtime.", invocation_policy=GLOBAL_AGENT_SAFE),
+            lambda arguments, context: usage_status(_repository_root())),
+        (core_cli_command(command_id="core.persistence.usage-migration",
+            path_segments=["core", "persistence", "usage-migration"], owner_id="usage",
+            description="Prepare, validate, back up, cut over, or reverse Usage storage during drained maintenance.",
+            invocation_policy=PLATFORM_ADMIN, argument_schema=MIGRATION_SCHEMA),
+            lambda arguments, context: usage_migration(_repository_root(), arguments)),
         (
             core_cli_command(
                 command_id="core.persistence.status",

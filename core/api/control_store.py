@@ -18,6 +18,7 @@ from core.secrets.store import SecretCollections
 from core.shared.json_file_collection import JsonFileCollection
 from core.shared.mongo_document_collection import MongoDocumentCollection
 from core.usage.store import UsageCollections
+from core.usage.handoff import selected_adapter
 from core.workspaces.store import WorkspaceCollections
 
 
@@ -148,7 +149,7 @@ def build_control_plane_collections(settings: ControlStoreSettings) -> ControlPl
     return _build_json_collections(settings.json_root)
 
 
-def control_plane_collection_specs(collections: ControlPlaneCollections) -> list[ControlPlaneCollectionSpec]:
+def control_plane_collection_specs(collections: ControlPlaneCollections, *, include_usage: bool | None = None) -> list[ControlPlaneCollectionSpec]:
     """Return every persisted control-plane collection owned by the active adapter."""
     specs = [
         ControlPlaneCollectionSpec("workspaces", collections.workspace.workspaces),
@@ -206,7 +207,9 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ControlPlaneCollectionSpec("usage_buckets", collections.usage.buckets),
         ControlPlaneCollectionSpec("provider_quota_snapshots", collections.usage.quota_snapshots),
     ]
-    return [spec for spec in specs if spec.collection is not None]
+    include_usage = selected_adapter() == 'document' if include_usage is None else include_usage
+    usage_names = {'usage_samples', 'usage_buckets', 'provider_quota_snapshots'}
+    return [spec for spec in specs if spec.collection is not None and (include_usage or spec.name not in usage_names)]
 
 
 def _build_json_collections(json_root: Path) -> ControlPlaneCollections:

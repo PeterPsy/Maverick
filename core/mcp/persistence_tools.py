@@ -11,6 +11,8 @@ from core.api.persistence_admin import (
     dry_run_persistence_migration,
     persistence_status_payload,
 )
+from core.usage.administration import MIGRATION_SCHEMA, usage_migration
+from core.usage.migration import usage_status
 from core.mcp.core_tool_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_mcp_tool
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 
@@ -65,6 +67,13 @@ def persistence_tool_specs(*, start_path: Path | None = None) -> list[tuple[McpT
         "required": ["kind"],
     }
     return [
+        (core_mcp_tool(tool_name="core.persistence.usage.status", owner_id="usage",
+            description="Inspect Usage's independent persistence owner and runtime.", invocation_policy=WORKSPACE_SAFE),
+            lambda arguments, context: usage_status(_repository_root())),
+        (core_mcp_tool(tool_name="core.persistence.usage.migration", owner_id="usage",
+            description="Prepare, validate, back up, cut over, or reverse Usage storage during drained maintenance.",
+            invocation_policy=OPERATOR_ONLY, input_schema=MIGRATION_SCHEMA),
+            lambda arguments, context: usage_migration(_repository_root(), arguments)),
         (
             core_mcp_tool(
                 tool_name="core.persistence.status",

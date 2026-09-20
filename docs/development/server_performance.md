@@ -8,8 +8,9 @@ identities, Memory links, tombstones and usage observations require backup.
 Migration is explicit, validated and fenced; ordinary startup and reads must
 never perform a cutover. Storage selects its adapter through
 `inventory-store.json`; the JSON adapter is retained only for pre-cutover
-workspaces and verified reverse exports. Usage still uses its existing adapter
-until its independent transactional implementation and cutover are verified.
+workspaces and verified reverse exports. Usage defaults to its transitional document adapter until the independent
+SQLite owner is explicitly prepared, validated and selected with
+`MAVERICK_USAGE_STORE=sqlite`.
 
 ## Reproducible baseline
 
@@ -123,3 +124,41 @@ from application metadata mutations instead of calling all catalog reads
 zero-write. Mounted HTTP, concurrent workloads, freshness at 100k entries,
 operator backup integration and physical-device release gates still require
 their dedicated validation.
+
+## Usage transaction and operator workflow
+
+The Usage SQLite adapter atomically records deduplication, normalized observations,
+stream cursors, root/session totals and hour/day buckets. Indexed predecessor and
+successor lookups compensate late cumulative observations without rebuilding a
+stream. Numeric latest-request counters are retained for that compensation;
+arbitrary provider payloads are not stored. Charts and summaries are read-only.
+Deletion subtracts only the selected sessions' contributions in one transaction.
+Notifications reuse the runtime bus and the subscriber's asyncio loop: one leading
+snapshot, a replaceable trailing snapshot within 500 ms, and immediate terminal
+flush. No per-observation durable runtime event or background persistence buffer
+is introduced.
+
+Inspect the declared core command `core.persistence.usage-status`. The operator
+command `core.persistence.usage-migration` accepts `phase=prepare`, `validate`,
+`cutover`, `backup`, or `rollback`; validate/cutover require the returned
+`migration_id`. Equivalent MCP tools are `core.persistence.usage.status` and
+`core.persistence.usage.migration`. Complete prepare/validate/cutover with Usage
+producers drained, then restart with the returned `MAVERICK_USAGE_STORE` setting.
+The command does not modify service credentials or restart the operator's session.
+The fence drains in-flight operations and rejects stale adapter instances.
+
+Preparation archives the document source and preserves canonical sample/quota
+identities. Validation checks SQLite integrity, counters and stream cursors.
+Cutover verifies that the source is unchanged. Backup uses SQLite's backup API;
+reverse export includes all committed post-cutover samples and quotas. Interrupted
+promotion and database retirement are retryable. General control-plane migration
+excludes the independent Usage owner when SQLite is configured.
+
+The 10k isolated-service probe (`--domain usage --usage-adapter sqlite`) measured
+500 observations after five warmups at median 8.54 ms and p95 9.95 ms, with
+99,426,304 physical write bytes. The equivalent document baseline was p95
+1,300.15 ms and 4,864,696,320 bytes (97.96% fewer writes). These are development
+measurements on SQLite 3.51.3, not mounted-HTTP or physical-device acceptance.
+Keeping a WAL open across every short-lived connection was rejected after it
+caused repeated large checkpoint writes in this workload. Default checkpoint
+lifecycle is retained; durability is not weakened to improve the benchmark.

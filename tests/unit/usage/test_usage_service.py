@@ -31,6 +31,9 @@ class _EventBus:
     def __init__(self) -> None:
         self.events = []
 
+    def flush_usage(self, session_id) -> None:
+        pass
+
     def publish(self, event) -> None:
         self.events.append(event)
 
@@ -97,7 +100,7 @@ class UsageServiceTest(unittest.TestCase):
         self.assertEqual(recorded.session_id, self.root.session_id)
         self.assertIsNone(recorded.turn_id)
         self.assertEqual(recorded.payload["tokens"]["total_tokens"], 25)
-        self.assertEqual([event.event_type for event in self.state.runtime_store.events], ["runtime.usage.updated"])
+        self.assertEqual(self.state.runtime_store.events, [])
         self.assertEqual(self.state.runtime_event_bus.events, [recorded])
 
     def test_cumulative_reports_track_context_without_double_counting_chat_tokens(self) -> None:

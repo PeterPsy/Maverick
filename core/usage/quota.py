@@ -7,11 +7,11 @@ from typing import Iterable
 
 from core.providers.models import ProviderSubscriptionUsage
 from core.usage.models import ProviderQuotaSnapshotRecord
-from core.usage.store import UsageDocumentStore
+from core.usage.store import UsageStore
 
 
 def record_provider_quota_snapshots(
-    store: UsageDocumentStore,
+    store: UsageStore,
     *,
     workspace_id: str,
     usages: Iterable[ProviderSubscriptionUsage],

@@ -9,8 +9,7 @@ from typing import Any
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.usage.models import ChatUsageSummary, TokenUsageBreakdown, UsageAccuracy, UsageSampleRecord
 from core.usage.normalization import normalized_usage_sample
-from core.usage.store import UsageDocumentStore
-from core.usage.timeseries import reconcile_sample_buckets
+from core.usage.store import UsageStore
 
 
 @dataclass(frozen=True)
@@ -33,24 +32,22 @@ def ingest_runtime_usage(
 ) -> UsageIngestResult | None:
     """Persist one provider report and return the root-chat authoritative summary."""
     store = getattr(state, "usage_store", None)
-    if not isinstance(store, UsageDocumentStore):
+    if not isinstance(store, UsageStore):
         return None
     session = state.runtime_store.get_session(session_id)
     root_session_id = resolve_root_session_id(state.runtime_store, session)
-    sample = normalized_usage_sample(
+    result = store.ingest_observation(lambda history: normalized_usage_sample(
         state,
-        store,
+        history,
         session=session,
         root_session_id=root_session_id,
         turn_id=turn_id,
         payload=payload,
         observed_at=observed_at or datetime.now(tz=UTC),
-    )
-    if sample is None:
+    ), payload=payload)
+    if result is None:
         return None
-    persisted, inserted = store.save_sample_if_absent(sample)
-    if inserted:
-        reconcile_sample_buckets(store, persisted)
+    persisted, inserted = result
     return UsageIngestResult(
         sample=persisted,
         inserted=inserted,
@@ -94,7 +91,7 @@ def resolve_current_root_session_id(
 
 
 def build_runtime_chat_usage_summary(
-    store: UsageDocumentStore,
+    store: UsageStore,
     *,
     runtime_store: Any,
     session: RuntimeSessionRecord,
@@ -110,14 +107,20 @@ def build_runtime_chat_usage_summary(
 
 
 def build_chat_usage_summary(
-    store: UsageDocumentStore,
+    store: UsageStore,
     *,
     workspace_id: str,
     root_session_id: str,
     direct_session_ids: set[str] | None = None,
 ) -> ChatUsageSummary:
     """Aggregate all direct and delegated samples for one root chat."""
-    samples = store.list_samples(workspace_id=workspace_id, root_session_id=root_session_id)
+    return store.chat_summary(workspace_id=workspace_id, root_session_id=root_session_id,
+        direct_session_ids=direct_session_ids or {root_session_id})
+
+
+def summarize_samples(samples: list[UsageSampleRecord], *, workspace_id: str,
+                      root_session_id: str, direct_session_ids: set[str]) -> ChatUsageSummary:
+    """Document-adapter projection, retained for migration comparison and reverse cutover."""
     direct_ids = direct_session_ids or {root_session_id}
     direct = [sample for sample in samples if sample.session_id in direct_ids]
     delegated = [sample for sample in samples if sample.session_id not in direct_ids]

@@ -7,7 +7,7 @@ import hashlib
 from typing import Iterable
 
 from core.usage.models import UsageBucketRecord, UsageResolution, UsageSampleRecord
-from core.usage.store import UsageDocumentStore
+from core.usage.store import UsageDocumentStore, UsageStore
 
 
 MAX_HOURLY_PERIODS = 24 * 31
@@ -30,6 +30,14 @@ def reconcile_sample_buckets(store: UsageDocumentStore, sample: UsageSampleRecor
 
 
 def usage_timeseries_payload(
+    store: UsageStore,
+    **filters,
+) -> dict[str, object]:
+    """Read the selected usage owner's chart projection."""
+    return store.timeseries(**filters)
+
+
+def document_usage_timeseries_payload(
     store: UsageDocumentStore,
     *,
     workspace_id: str,

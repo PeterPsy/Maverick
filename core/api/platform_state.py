@@ -61,7 +61,8 @@ from core.secrets.key_material import load_secret_store_key, load_secret_store_k
 from core.secrets.store import SecretDocumentStore
 from core.shared.in_memory_collection import InMemoryCollection
 from core.shared.repository import discover_repository_root
-from core.usage.store import UsageDocumentStore
+from core.usage.bootstrap import build_usage_store
+from core.usage.store import UsageStore
 from core.workspaces.store import WorkspaceDocumentStore
 
 if TYPE_CHECKING:
@@ -90,7 +91,7 @@ class PlatformState:
     secret_store: SecretDocumentStore
     recovery_store: RecoveryDocumentStore
     observability_store: ObservabilityDocumentStore
-    usage_store: UsageDocumentStore
+    usage_store: UsageStore
     sidecar_browser_sessions: SidecarBrowserSessionStore
     runtime_root_capabilities: RuntimeRootCapabilityStore
     device_use_service: DeviceUseService
@@ -221,7 +222,7 @@ def bootstrap_platform_state(
             metrics=InMemoryCollection(),
         )
     )
-    usage_store = UsageDocumentStore(control_collections.usage)
+    usage_store = build_usage_store(repository_root, control_collections.usage)
     agentic_egress_evaluator = AgenticEgressEvaluator(
         digest_key=load_secret_store_key(),
         observability_store=observability_store,

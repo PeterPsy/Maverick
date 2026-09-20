@@ -16,6 +16,7 @@ import { FileCard } from '../../components/ui/file-card-collections';
 import { DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, currentStorageAppId, disconnectDriveConnection, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter, syncDriveConnection } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
 import { useStorageReadLifecycle } from '../../hooks/useStorageReadLifecycle';
+import { loadCatalogSummary, loadDirectoryChildren } from '../../storageApi';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta, type StorageCatalogDelta } from '../../lib/storageCatalogDelta';
@@ -84,6 +85,7 @@ type FolderTreeNode = {
   label: string;
   lazy?: boolean;
   loading?: boolean;
+  hasMore?: boolean;
   provider: 'local' | 'google_drive';
   relativePath: string;
   role: StorageTreeRole;
@@ -96,6 +98,9 @@ type DriveChildrenCache = Record<string, {
   error?: string;
   loading?: boolean;
   loaded?: boolean;
+  nextPageToken?: string;
+  hasMore?: boolean;
+  incomplete?: boolean;
 }>;
 
 function isMobileLayoutViewport() {
@@ -385,12 +390,13 @@ function mergeDriveChildren(node: FolderTreeNode, cache: DriveChildrenCache): Fo
   const cached = cache[node.id];
   const children = (cached?.children || node.children).map((child) => mergeDriveChildren(child, cache));
   const lazy = cached?.loaded
-    ? children.length > 0 || Boolean(cached.error)
+    ? children.length > 0 || Boolean(cached.error) || Boolean(cached.hasMore)
     : node.lazy || children.length > 0 || Boolean(cached?.error);
   return {
     ...node,
     children,
-    error: cached?.error,
+    error: cached?.error || (cached?.incomplete ? 'Drive returned partial results.' : undefined),
+    hasMore: cached?.hasMore,
     loading: cached?.loading,
     lazy,
   };
@@ -676,6 +682,7 @@ function StorageSidebarWidget() {
   const [driveConnections, setDriveConnections] = useState<DriveConnection[]>([]);
   const [driveChildrenCache, setDriveChildrenCache] = useState<DriveChildrenCache>({});
   const [folders, setFolders] = useState<StorageFolder[]>([]);
+  const [localPages, setLocalPages] = useState<Record<string, { loaded: boolean; loading?: boolean; offset: number; hasMore: boolean; revision?: number }>>({});
   const [availableKinds, setAvailableKinds] = useState<Set<PreviewKind>>(() => new Set());
   const [query, setQuery] = useState('');
   const [activeKind, setActiveKind] = useState<PreviewKind | 'all'>('all');
@@ -692,9 +699,14 @@ function StorageSidebarWidget() {
 
   const folderTreeNodes = useMemo(() => {
     const storageRoot = buildFolderTree(folders);
+    function decorate(node: FolderTreeNode): FolderTreeNode {
+      const page = localPages[node.id];
+      return { ...node, children: node.children.map(decorate), lazy: node.role !== 'all' && !page?.loaded,
+        loading: page?.loading, hasMore: page?.hasMore };
+    }
     const driveRoots = buildDriveTreeNodes(driveConnections, driveChildrenCache).map((node) => mergeDriveChildren(node, driveChildrenCache));
-    return [storageRoot, ...driveRoots];
-  }, [driveChildrenCache, driveConnections, folders]);
+    return [decorate(storageRoot), ...driveRoots];
+  }, [driveChildrenCache, driveConnections, folders, localPages]);
   const filteredTreeNodes = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return filterFolderForest(folderTreeNodes, needle);
@@ -710,32 +722,36 @@ function StorageSidebarWidget() {
     const read = reads.replace('catalog');
     if (!read) return;
     try {
-      const payload = await loadCatalog({ limit: 1, offset: 0 }, { signal: read.controller.signal });
+      const payload = await loadCatalogSummary({ signal: read.controller.signal });
       if (!read.current()) return;
-      setFolders(payload.folders);
       setAvailableKinds(new Set(payload.available_kinds));
       setActiveKind(normalizeKind(payload.state.view_filter.kind));
       setActiveViewMode(payload.state.view_filter.mode);
       setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
+      await Promise.all(STORAGE_ROLES.map((role) => loadLocalChildren({ id: folderIdentity(role, ''), role, relativePath: '' }, false, true)));
     } catch (error) {
       if (read.current()) setError(error instanceof Error ? error.message : 'Unable to load folders.');
     } finally { read.finish(); }
   }
 
   async function syncStorageRoot() {
+    const read = reads.replace('sync');
+    if (!read) return;
     setActiveOperation('sync:storage');
     try {
-      const payload = await loadCatalog({ limit: 1, offset: 0, sync: true });
-      setFolders(payload.folders);
+      const payload = await loadCatalog({ limit: 1, offset: 0, sync: true }, { signal: read.controller.signal });
+      if (!read.current()) return;
       setAvailableKinds(new Set(payload.available_kinds));
       setActiveKind(normalizeKind(payload.state.view_filter.kind));
       setActiveViewMode(payload.state.view_filter.mode);
       setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
       setError(null);
+      await refreshCatalog();
     } catch (syncError) {
-      setError(syncError instanceof Error ? syncError.message : 'Unable to sync Storage.');
+      if (read.current()) setError(syncError instanceof Error ? syncError.message : 'Unable to sync Storage.');
     } finally {
-      setActiveOperation('');
+      if (read.current()) setActiveOperation('');
+      read.finish();
     }
   }
 
@@ -825,12 +841,12 @@ function StorageSidebarWidget() {
       });
   }
 
-  async function loadDriveChildrenForNode(node: FolderTreeNode, force = false) {
+  async function loadDriveChildrenForNode(node: FolderTreeNode, force = false, more = false) {
     if (node.provider !== 'google_drive' || !node.lazy || !node.connectionId) {
       return;
     }
     const cached = driveChildrenCache[node.id];
-    if (!force && (cached?.loaded || cached?.loading || node.status === 'reconnect_required')) {
+    if (!force && ((cached?.loaded && !more) || cached?.loading || node.status === 'reconnect_required')) {
       return;
     }
     const read = force ? reads.replace(`drive:${node.id}`) : reads.start(`drive:${node.id}`);
@@ -841,13 +857,15 @@ function StorageSidebarWidget() {
     }));
     try {
       const payload = node.driveFileId
-        ? await listDriveChildren(node.connectionId, node.driveFileId, { limit: DRIVE_PAGE_LIMIT, signal: read.controller.signal })
-        : await listDriveRoots(node.connectionId, { limit: DRIVE_PAGE_LIMIT, signal: read.controller.signal });
+        ? await listDriveChildren(node.connectionId, node.driveFileId, { limit: DRIVE_PAGE_LIMIT, pageToken: more ? cached?.nextPageToken : undefined, signal: read.controller.signal })
+        : await listDriveRoots(node.connectionId, { limit: DRIVE_PAGE_LIMIT, pageToken: more ? cached?.nextPageToken : undefined, signal: read.controller.signal });
       if (!read.current()) return;
       const children = (payload.folders || []).map((folder) => driveFolderNode(node.connectionId || payload.connection_id, folder, node.displayPath));
       setDriveChildrenCache((current) => ({
         ...current,
-        [node.id]: { children, loaded: true }
+        [node.id]: { children: more ? [...new Map([...(current[node.id]?.children || []), ...children].map(child => [child.id, child])).values()] : children,
+          loaded: true, hasMore: payload.pagination?.has_more, nextPageToken: payload.pagination?.next_page_token,
+          incomplete: (more && current[node.id]?.incomplete) || payload.incomplete_search }
       }));
       setError(null);
     } catch (loadError) {
@@ -865,8 +883,37 @@ function StorageSidebarWidget() {
     } finally { read.finish(); }
   }
 
-  async function ensureDriveChildren(node: FolderTreeNode) {
-    await loadDriveChildrenForNode(node);
+  async function loadLocalChildren(node: Pick<FolderTreeNode, 'id' | 'role' | 'relativePath'>, more = false, force = false) {
+    if (!isFileRole(node.role)) return;
+    const page = localPages[node.id];
+    if (!force && (page?.loading || (page?.loaded && !more))) return;
+    const read = reads.replace(`local:${node.id}`);
+    if (!read) return;
+    setLocalPages((current) => ({ ...current, [node.id]: { ...current[node.id], loaded: false, loading: true, offset: 0, hasMore: false } }));
+    try {
+      const payload = await loadDirectoryChildren(node.role, node.relativePath, { signal: read.controller.signal,
+        offset: more ? page?.offset : 0, datasetRevision: more ? page?.revision : undefined });
+      if (!read.current()) return;
+      if (payload.status === 'catalog_changed') { await loadLocalChildren(node, false, true); return; }
+      setFolders((current) => {
+        const retained = more ? current : current.filter((folder) => folder.role !== node.role || folder.relative_path.split('/').slice(0, -1).join('/') !== node.relativePath);
+        const byId = new Map(retained.map((folder) => [folder.id, folder]));
+        for (const folder of payload.folders) byId.set(folder.id, folder);
+        return [...byId.values()];
+      });
+      setLocalPages((current) => ({ ...current, [node.id]: { loaded: true, offset: payload.pagination.offset + payload.folders.length,
+        hasMore: payload.pagination.has_more, revision: payload.dataset_revision } }));
+    } catch (error) {
+      if (read.current()) setError(error instanceof Error ? error.message : 'Unable to load folders.');
+    } finally {
+      if (read.current()) setLocalPages((current) => ({ ...current, [node.id]: { ...current[node.id], loading: false } }));
+      read.finish();
+    }
+  }
+
+  async function ensureDriveChildren(node: FolderTreeNode, more = false) {
+    if (node.provider === 'local') await loadLocalChildren(node, more);
+    else await loadDriveChildrenForNode(node, false, more);
   }
 
   async function syncDriveAccount(node: FolderTreeNode) {
@@ -1187,7 +1234,7 @@ function FolderTreeNodeView({ activeOperation, ancestors, dropTarget, node, leve
   onDragStart: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDrop: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDisconnectDriveAccount: (node: FolderTreeNode) => Promise<void>;
-  onEnsureChildren: (node: FolderTreeNode) => void;
+  onEnsureChildren: (node: FolderTreeNode, more?: boolean) => void;
   onSelect: (node: FolderTreeNode, ancestors: FolderTreeNode[]) => void;
   onSyncDriveAccount: (node: FolderTreeNode) => Promise<void>;
   onSyncStorageRoot: () => Promise<void>;
@@ -1288,6 +1335,8 @@ function FolderTreeNodeView({ activeOperation, ancestors, dropTarget, node, leve
             activeOperation={activeOperation}
           />
         ))}
+        {node.hasMore ? <button className="storage-folder-tree-status" disabled={node.loading} type="button"
+          onClick={() => onEnsureChildren(node, true)}>Load more folders</button> : null}
       </TreeNodeContent>
     </TreeNode>
   );

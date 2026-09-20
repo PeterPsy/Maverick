@@ -1,6 +1,11 @@
 import type { StorageFile } from '@/types';
 
-export type FileSortKey = 'date' | 'size' | 'type';
+export type FileSortKey = 'date' | 'size' | 'type' | 'name';
+
+export function catalogSort(sortKey: FileSortKey) {
+  const fields = { date: 'created_at', size: 'size_bytes', type: 'preview_kind', name: 'name' } as const;
+  return { sort_by: fields[sortKey], sort_direction: sortKey === 'name' || sortKey === 'type' ? 'asc' as const : 'desc' as const };
+}
 
 export function sortStorageFiles(files: StorageFile[], sortKey: FileSortKey) {
   return [...files].sort((left, right) => compareStorageFiles(left, right, sortKey));
@@ -13,7 +18,7 @@ function compareStorageFiles(left: StorageFile, right: StorageFile, sortKey: Fil
   } else if (sortKey === 'size') {
     const result = right.size_bytes - left.size_bytes;
     if (result !== 0) return result;
-  } else {
+  } else if (sortKey === 'type') {
     const typeResult = compareText(left.preview_kind, right.preview_kind) || compareText(left.extension, right.extension);
     if (typeResult !== 0) return typeResult;
   }

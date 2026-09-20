@@ -2,13 +2,14 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility, isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
 import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, folderMediaDownloadUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, storageMediaStreamUrl, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
+import { useStorageHibernation } from './hooks/useStorageHibernation';
 import { useLongPressSelection } from './hooks/useLongPressSelection';
 import { notifyActiveStorageFolderSelection, notifyActiveStorageSelection } from './lib/activeStorageSelection';
 import { breadcrumbRefreshPlan, catalogBrowserDisplayState, catalogLoadedCountAfterPage, catalogLoadedCountAfterRefresh, folderOpenRefreshPlan, missingNavigationTargetPlan, resolvedFileNavigationPlan } from './lib/storageCatalogFlow';
@@ -19,7 +20,8 @@ import { attachStorageFolderDragImage } from './lib/storageDragImage';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFile, storageDragPayloadFromFolder, storageDragPayloadFromSelection, storageDriveDragPayloadFromFile, storageDriveDragPayloadFromFolder, storageMoveDropStatus, writeStorageDriveFileDragData, writeStorageDriveFolderDragData, writeStorageFileDragData, writeStorageFolderDragData, writeStorageSelectionDragData, type StorageFileDragPayload, type StorageMoveDropStatus, type StorageSelectionDragPayload } from './lib/storageDragDrop';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from './lib/browserFullscreen';
 import { StorageCatalogRequests } from './lib/storageCatalogRequests';
-import { sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
+import { catalogSort, sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
+import { CatalogChangedError, loadCatalogSummary, loadDirectoryChildren, searchDriveFiles } from './storageApi';
 import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storagePickerAcceptsFile, storagePickerContextFromParams, storagePickerResultForFile, type StoragePickerContext } from './lib/storagePicker';
 import {
@@ -31,6 +33,7 @@ import {
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
 import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
 import { loadFullPreview } from './previewCache';
+import { useStorageVisibility } from './hooks/useStorageVisibility';
 import type { CatalogPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, PreviewKind, PreviewTablePayload } from './types';
 import './styles/main.css';
 
@@ -60,6 +63,7 @@ type CatalogRequestOptions = {
 };
 type CatalogRefreshOptions = CatalogRequestOptions & {
   loading?: CatalogRefreshLoading;
+  forceNetwork?: boolean;
 };
 type DriveFolderTarget = {
   connectionId: string;
@@ -79,6 +83,7 @@ const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio'
 const storageRootRoles: FileRole[] = ['uploaded', 'generated'];
 const emptyIdSet = new Set<string>();
 const fileSortOptions: Array<{ key: FileSortKey; label: string }> = [
+  { key: 'name', label: 'Name' },
   { key: 'date', label: 'Date' },
   { key: 'size', label: 'Size' },
   { key: 'type', label: 'Type' }
@@ -257,7 +262,7 @@ function initialLayoutMode(): CollectionViewMode {
 
 function initialFileSortKey(): FileSortKey {
   const storedKey = window.localStorage.getItem(FILE_SORT_STORAGE_KEY);
-  return storedKey === 'size' || storedKey === 'type' ? storedKey : 'date';
+  return storedKey === 'size' || storedKey === 'type' || storedKey === 'name' ? storedKey : 'date';
 }
 
 function fileFromNavigationTarget(files: StorageFile[], target: StorageNavigationTarget | null) {
@@ -453,7 +458,11 @@ function App() {
   const initialNavigationParams = useMemo<StorageNavigationParams>(() => Object.fromEntries(new URLSearchParams(window.location.search).entries()), []);
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [folders, setFolders] = useState<StorageFolder[]>([]);
-  const [catalogPagination, setCatalogPagination] = useState<CatalogPayload['pagination'] | null>(null);
+  const [catalogPagination, setCatalogPagination] = useState<(Omit<NonNullable<CatalogPayload['pagination']>, 'total'> & { total: number | null; incomplete_search?: boolean }) | null>(null);
+  const [folderPagination, setFolderPagination] = useState<CatalogPayload['folders_pagination']>();
+  const [foldersLoadingMore, setFoldersLoadingMore] = useState(false);
+  const [catalogSummary, setCatalogSummary] = useState<CatalogPayload['summary']>();
+  const [catalogTotals, setCatalogTotals] = useState<CatalogPayload['totals']>();
   const [catalogLoadingMore, setCatalogLoadingMore] = useState(false);
   const [selectedFile, setSelectedFile] = useState<StorageFile | null>(null);
   const [activeRole, setActiveRole] = useState<FileRole | 'all'>('all');
@@ -514,6 +523,9 @@ function App() {
   const filesRef = useRef<StorageFile[]>([]);
   const draggedSelectionRef = useRef<StorageSelectionDragPayload | null>(null);
   const catalogLoadedCountRef = useRef(0);
+  const catalogDatasetRevisionRef = useRef<number | undefined>(undefined);
+  const fileSortKeyRef = useRef(fileSortKey);
+  const customSortRef = useRef(false);
   const currentFolderPathRef = useRef('');
   const customFileIdsRef = useRef<string[]>([]);
   const customWorkspacePathsRef = useRef<string[]>([]);
@@ -525,15 +537,17 @@ function App() {
   const driveBreadcrumbTrailRef = useRef<DriveBreadcrumbTarget[]>([]);
   const driveFolderAbortRef = useRef<AbortController | null>(null);
   const driveLoadMoreAbortRef = useRef<AbortController | null>(null);
+  const driveSearchIdentityRef = useRef('');
   const catalogReadAbortRef = useRef<AbortController | null>(null);
   const catalogRequestsRef = useRef(new StorageCatalogRequests());
   const viewFilterWriteVersionRef = useRef(0);
   const viewFilterWritesRef = useRef(Promise.resolve());
-  const appVisibleRef = useRef(true);
+  const appVisibleRef = useRef(maverickAppIsVisible());
   const catalogRefreshRequestRef = useRef(0);
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
   const catalogTransitionTokenRef = useRef(0);
   const pendingNavigationTargetRef = useRef<StorageNavigationTarget | null>(storageTargetFromParams(initialNavigationParams));
+  const previewSurfaceVisible = useStorageVisibility();
   const previewFullscreenActive = previewFullscreenMode !== 'none';
   const isDriveView = Boolean(driveTarget);
 
@@ -588,6 +602,8 @@ function App() {
       return false;
     }
     viewFilterUpdatedAtRef.current = filter.updated_at;
+    if (filter.mode !== viewModeRef.current || JSON.stringify(filter.file_ids) !== JSON.stringify(customFileIdsRef.current)
+        || JSON.stringify(filter.workspace_relative_paths) !== JSON.stringify(customWorkspacePathsRef.current)) customSortRef.current = false;
     viewModeRef.current = filter.mode;
     customFileIdsRef.current = filter.file_ids;
     customWorkspacePathsRef.current = filter.workspace_relative_paths;
@@ -651,6 +667,14 @@ function App() {
     const requestId = ++catalogRefreshRequestRef.current;
     const transitionToken = loading === 'foreground' ? beginCatalogTransitionLoading(requestId) : null;
     const previousDriveTarget = driveTargetRef.current;
+    setFolderPagination(undefined);
+    setFoldersLoadingMore(false);
+    if (previousDriveTarget?.connectionId !== target.connectionId || previousDriveTarget?.driveFileId !== target.driveFileId) {
+      queryRef.current = '';
+      setQuery('');
+    }
+    const searchQuery = queryRef.current.trim();
+    driveSearchIdentityRef.current = JSON.stringify([target.connectionId, target.driveFileId, searchQuery]);
     catalogRequestsRef.current.transition(JSON.stringify({ target, query: queryRef.current, kind: kindRef.current, pickerContext }));
     setCatalogLoadingMore(false);
     const read = catalogRequestsRef.current.start('catalog');
@@ -659,7 +683,9 @@ function App() {
     driveFolderAbortRef.current = abortController;
     driveTargetRef.current = target;
     try {
-      const payload = target.driveFileId
+      const payload = searchQuery
+        ? await searchDriveFiles(target.connectionId, searchQuery, target.driveFileId, { limit: DRIVE_PAGE_LIMIT, signal: abortController.signal })
+        : target.driveFileId
         ? await listDriveChildren(target.connectionId, target.driveFileId, { limit: DRIVE_PAGE_LIMIT, signal: abortController.signal })
         : await listDriveRoots(target.connectionId, { limit: DRIVE_PAGE_LIMIT, signal: abortController.signal });
       if (!read.current() || requestId !== catalogRefreshRequestRef.current) return;
@@ -669,7 +695,7 @@ function App() {
       catalogLoadedCountRef.current = driveLoadedItemCount(nextFiles, nextFolders);
       setFiles(nextFiles);
       setFolders(nextFolders);
-      setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination, total: driveLoadedItemCount(nextFiles, nextFolders) } : null);
+      setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination, incomplete_search: payload.incomplete_search } : null);
       setSelectedFile(null);
       setSelectedFolder(null);
       closePreviewModal();
@@ -732,6 +758,8 @@ function App() {
       ...(effectiveViewMode === 'custom' && effectiveWorkspacePaths.length ? { workspace_relative_paths: effectiveWorkspacePaths } : {}),
       offset,
       limit: CATALOG_PAGE_LIMIT,
+      ...(effectiveViewMode === 'custom' && !customSortRef.current ? {} : catalogSort(fileSortKeyRef.current)),
+      ...(offset > 0 && catalogDatasetRevisionRef.current !== undefined ? { dataset_revision: catalogDatasetRevisionRef.current } : {}),
     };
   }
 
@@ -753,13 +781,16 @@ function App() {
     const catalogController = read.controller;
     catalogReadAbortRef.current = catalogController;
     const requestId = ++catalogRefreshRequestRef.current;
-    const { loading = 'background', ...requestOptions } = options;
+    const { loading = 'background', forceNetwork, ...requestOptions } = options;
     if (loading === 'foreground') {
       beginCatalogTransitionLoading(requestId);
     }
     try {
       let request = catalogRequest(filter, 0, requestOptions);
-      let payload = await loadCatalog(request, { signal: catalogController.signal });
+      const home = request.role === 'all' && !request.query.trim() && request.kind === 'all'
+        && !(request.file_ids?.length || request.workspace_relative_paths?.length);
+      let payload = home ? await loadCatalogSummary({ signal: catalogController.signal })
+        : await loadCatalog(request, { signal: catalogController.signal, forceNetwork });
       if (!read.current() || requestId !== catalogRefreshRequestRef.current) return;
       let remoteFilter = normalizedViewFilter(payload.state.view_filter);
       if (remoteFilter.mode === 'custom' && !request.file_ids?.length && !request.workspace_relative_paths?.length) {
@@ -773,14 +804,19 @@ function App() {
             workspacePaths: remoteFilter.workspace_relative_paths,
           }
         );
-        payload = await loadCatalog(request, { signal: catalogController.signal });
+        payload = await loadCatalog(request, { signal: catalogController.signal, forceNetwork });
         if (!read.current() || requestId !== catalogRefreshRequestRef.current) return;
         remoteFilter = normalizedViewFilter(payload.state.view_filter);
       }
       filesRef.current = payload.files;
+      setCatalogSummary(payload.summary);
+      setCatalogTotals(payload.totals);
+      catalogDatasetRevisionRef.current = payload.dataset_revision;
       catalogLoadedCountRef.current = catalogLoadedCountAfterRefresh(payload.files.length);
       setFiles(payload.files);
       setFolders(payload.folders || []);
+      setFolderPagination(payload.folders_pagination);
+      setFoldersLoadingMore(false);
       setCatalogPagination(payload.pagination || null);
       applyRemoteViewFilter(remoteFilter);
       const pendingFile = fileFromNavigationTarget(payload.files, pendingNavigationTargetRef.current);
@@ -834,6 +870,31 @@ function App() {
     return payload.files[0] || null;
   }
 
+  async function loadMoreFolders() {
+    if (!previewSurfaceVisible || isDriveView || !folderPagination?.has_more || foldersLoadingMore) return;
+    const read = catalogRequestsRef.current.start('folders');
+    if (!read) return;
+    setFoldersLoadingMore(true);
+    try {
+      const payload = await loadDirectoryChildren(activeRoleRef.current, currentFolderPathRef.current, {
+        offset: folderPagination.offset + folderPagination.limit, query: queryRef.current,
+        datasetRevision: catalogDatasetRevisionRef.current, signal: read.controller.signal,
+      });
+      if (!read.current()) return;
+      if (payload.status === 'catalog_changed') {
+        await refresh(undefined, { forceNetwork: true });
+        return;
+      }
+      setFolders(current => mergeUniqueFolders(current, payload.folders));
+      setFolderPagination(payload.pagination);
+    } catch (error) {
+      if (read.current()) setError(error instanceof Error ? error.message : 'Unable to load folders.');
+    } finally {
+      if (read.current()) setFoldersLoadingMore(false);
+      read.finish();
+    }
+  }
+
   async function loadMoreFiles() {
     if (!appVisibleRef.current || document.hidden || !navigator.onLine || !catalogPagination?.has_more || catalogLoadingMore) return;
     const read = catalogRequestsRef.current.start('page');
@@ -847,7 +908,10 @@ function App() {
         driveLoadMoreAbortRef.current?.abort();
         driveAbortController = read.controller;
         driveLoadMoreAbortRef.current = driveAbortController;
-        const payload = driveTarget.driveFileId
+        const payload = queryRef.current.trim()
+          ? await searchDriveFiles(driveTarget.connectionId, queryRef.current.trim(), driveTarget.driveFileId,
+              { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal })
+          : driveTarget.driveFileId
           ? await listDriveChildren(driveTarget.connectionId, driveTarget.driveFileId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal })
           : await listDriveRoots(driveTarget.connectionId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal });
         if (!read.current()) return;
@@ -857,7 +921,7 @@ function App() {
         filesRef.current = nextFiles;
         setFiles(nextFiles);
         setFolders(nextFolders);
-        setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination, total: driveLoadedItemCount(nextFiles, nextFolders) } : null);
+        setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination, incomplete_search: catalogPagination.incomplete_search || payload.incomplete_search } : null);
         setError('');
         return;
       }
@@ -867,11 +931,14 @@ function App() {
       const nextFiles = mergeUniqueFiles(filesRef.current, payload.files);
       filesRef.current = nextFiles;
       setFiles(nextFiles);
-      setFolders(payload.folders || []);
       setCatalogPagination(payload.pagination || null);
       setError('');
     } catch (loadError) {
       if (read.current()) {
+        if (loadError instanceof CatalogChangedError) {
+          await refresh(undefined, { forceNetwork: true });
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : 'Unable to load more files.');
       }
     } finally {
@@ -953,14 +1020,7 @@ function App() {
         }
         setIsInitialLoading(false);
       });
-    const interval = window.setInterval(() => {
-      if (!appVisibleRef.current || driveFolderAbortRef.current || driveLoadMoreAbortRef.current) {
-        return;
-      }
-      syncViewFilter().catch((err: Error) => setError(err.message));
-    }, VIEW_SYNC_MS);
     return () => {
-      window.clearInterval(interval);
       catalogRequestsRef.current.dispose();
       viewFilterWriteVersionRef.current += 1;
       catalogReadAbortRef.current?.abort();
@@ -970,6 +1030,16 @@ function App() {
       if (dropFeedbackTimerRef.current !== null) window.clearTimeout(dropFeedbackTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!driveTarget || !previewSurfaceVisible) return;
+    const identity = JSON.stringify([driveTarget.connectionId, driveTarget.driveFileId, query.trim()]);
+    if (driveSearchIdentityRef.current === identity) return;
+    const timer = window.setTimeout(() => {
+      void loadDriveFolder(driveTarget, 'foreground');
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [driveTarget?.connectionId, driveTarget?.driveFileId, query, previewSurfaceVisible]);
 
   useEffect(() => {
     filesRef.current = files;
@@ -1011,82 +1081,52 @@ function App() {
     window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'storage' }, "*");
   }, []);
 
+  useEffect(() => observeMaverickVisibility((visible) => {
+    appVisibleRef.current = visible;
+    catalogRequestsRef.current.setVisible(visible);
+    if (!visible) {
+      catalogReadAbortRef.current?.abort();
+      catalogReadAbortRef.current = null;
+      abortDriveRequests();
+      setCatalogLoadingMore(false);
+      clearCatalogTransitionLoading();
+    }
+  }), []);
+
+  useEffect(() => {
+    if (!previewSurfaceVisible) return;
+    const interval = window.setInterval(() => {
+      if (!appVisibleRef.current || driveFolderAbortRef.current || driveLoadMoreAbortRef.current) {
+        return;
+      }
+      syncViewFilter().catch((err: Error) => setError(err.message));
+    }, VIEW_SYNC_MS);
+    return () => window.clearInterval(interval);
+  }, [previewSurfaceVisible]);
+
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
-      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
-        return;
-      }
-      const payload = event.data as {
-        app_id?: string;
-        owner_app_id?: string;
-        params?: StorageNavigationParams;
-        resource?: string;
-        type?: string;
-        visible?: boolean;
-      };
-      if (payload.type === 'maverick.app.visibility-changed' && (!payload.app_id || payload.app_id === storageAppId)) {
-        const isVisible = payload.visible !== false;
-        if (isVisible === appVisibleRef.current) return;
-        appVisibleRef.current = isVisible;
-        if (!isVisible) {
-          catalogRequestsRef.current.invalidate('suspend');
-          catalogReadAbortRef.current?.abort();
-          catalogReadAbortRef.current = null;
-          abortDriveRequests();
-          setCatalogLoadingMore(false);
-          clearCatalogTransitionLoading();
-          return;
-        }
-        refresh(undefined, { loading: 'background' }).catch((err: Error) => setError(err.message));
-        return;
-      }
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
+      const payload = event.data;
       if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === storageAppId)) {
         handleNavigationParams(payload.params || {});
-        return;
-      }
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === storageAppId) {
-        if (!appVisibleRef.current) {
-          return;
-        }
-        if (payload.resource === 'files' || payload.resource === 'drive-connections') {
-          refresh().catch((err: Error) => setError(err.message));
-        }
-        if (payload.resource === 'view-state') {
-          const detailedFilter = storageViewFilterFromMessage(payload, storageAppId);
-          if (detailedFilter) {
-            const remoteFilter = normalizedViewFilter(detailedFilter);
-            if (applyRemoteViewFilter(remoteFilter)) {
-              refreshForViewFilter(remoteFilter).catch((err: Error) => setError(err.message));
-            }
-            return;
-          }
-          syncViewFilter().catch((err: Error) => setError(err.message));
-        }
       }
     }
-
+    type StorageEvent = { type?: string; owner_app_id?: string; resource?: string; detail?: Record<string, unknown> };
+    const stop = connectAppEventSocket<StorageEvent>((payload) => {
+      if (payload.type !== 'maverick.app.data-changed' || payload.owner_app_id !== storageAppId) return;
+      if (payload.resource === 'files' || payload.resource === 'drive-connections') {
+        refresh().catch((err: Error) => setError(err.message));
+      } else if (payload.resource === 'view-state') {
+        const detailedFilter = storageViewFilterFromMessage(payload, storageAppId);
+        if (detailedFilter) {
+          const remoteFilter = normalizedViewFilter(detailedFilter);
+          if (applyRemoteViewFilter(remoteFilter)) refreshForViewFilter(remoteFilter).catch((err: Error) => setError(err.message));
+        } else syncViewFilter().catch((err: Error) => setError(err.message));
+      }
+    }, () => { refresh(undefined, { loading: 'background' }).catch((err: Error) => setError(err.message)); });
     window.addEventListener('message', handleShellMessage);
-    return () => window.removeEventListener('message', handleShellMessage);
-  }, []);
-
-  useEffect(() => {
-    function updateDocumentVisibility() {
-      if (document.hidden || !navigator.onLine) {
-        catalogRequestsRef.current.invalidate('suspend');
-        setCatalogLoadingMore(false);
-        clearCatalogTransitionLoading();
-      } else if (appVisibleRef.current) {
-        void refresh(undefined, { loading: 'background' });
-      }
-    }
-    document.addEventListener('visibilitychange', updateDocumentVisibility);
-    window.addEventListener('online', updateDocumentVisibility);
-    window.addEventListener('offline', updateDocumentVisibility);
-    return () => {
-      document.removeEventListener('visibilitychange', updateDocumentVisibility);
-      window.removeEventListener('online', updateDocumentVisibility);
-      window.removeEventListener('offline', updateDocumentVisibility);
-    };
+    return () => { stop(); window.removeEventListener('message', handleShellMessage); };
   }, []);
 
   useEffect(() => {
@@ -1214,10 +1254,13 @@ function App() {
       const payload = await loadCatalog(catalogRequest(plan.filter, 0, plan.refreshOptions), { signal: read.controller.signal });
       if (!read.current()) return;
       const nextFiles = mergeUniqueFiles(payload.files, [file]);
+      catalogDatasetRevisionRef.current = payload.dataset_revision;
       filesRef.current = nextFiles;
       catalogLoadedCountRef.current = catalogLoadedCountAfterRefresh(payload.files.length);
       setFiles(nextFiles);
       setFolders(payload.folders || []);
+      setFolderPagination(payload.folders_pagination);
+      setFoldersLoadingMore(false);
       setCatalogPagination(payload.pagination || null);
       focusFile(file, { persistFilter: true, preserveCustom: false, query: plan.filter.query });
     } catch (loadError) {
@@ -1268,6 +1311,49 @@ function App() {
         });
     }
   }
+
+  useStorageHibernation({
+    appId: storageAppId, ready: !isInitialLoading && !isCatalogTransitionLoading, visible: previewSurfaceVisible,
+    fileCount: files.length, folderCount: folders.length,
+    hasMoreFiles: Boolean(catalogPagination?.has_more), hasMoreFolders: Boolean(folderPagination?.has_more),
+    loadMoreFiles, loadMoreFolders,
+    capture: () => {
+      if (uploading || deleteBusy || markdownEditing || markdownSaving || markdownCopying
+          || pendingDelete || draggingSelection || pickerContext || viewFilterPendingRef.current
+          || (detailsOpen && selectedFile && renameValue !== selectedFile.name)) return null;
+      return { filter: normalizedViewFilter({ mode: viewMode, title: customTitle, query, role: activeRole, kind: kind as PreviewKind | 'all',
+        file_ids: customFileIds, workspace_relative_paths: customWorkspacePaths }),
+        folder: currentFolderPath, driveTarget, driveBreadcrumbTrail, fileSortKey, layoutMode,
+        customSort: customSortRef.current, selectedFile, previewModalOpen, detailsOpen,
+        selectedFolder, folderDetailsOpen, selectionMode,
+        selectedFiles: [...selectedFileIds], selectedFolders: [...selectedFolderIds] };
+    },
+    restore: async (state, navigation) => {
+      if (storageTargetFromParams(navigation)) { handleNavigationParams(navigation); return; }
+      setFileSortKey(state.fileSortKey);
+      fileSortKeyRef.current = state.fileSortKey;
+      setLayoutMode(state.layoutMode);
+      setCurrentFolderPathScoped(state.folder);
+      viewFilterUpdatedAtRef.current = null;
+      applyRemoteViewFilter(state.filter);
+      customSortRef.current = state.customSort;
+      if (state.driveTarget) {
+        driveTargetRef.current = state.driveTarget;
+        await loadDriveFolder(state.driveTarget, 'foreground', state.driveBreadcrumbTrail);
+      } else {
+        clearDriveNavigation();
+        await refreshForViewFilter(state.filter);
+      }
+      setSelectedFile(state.selectedFile);
+      setPreviewModalOpen(state.previewModalOpen);
+      setDetailsOpen(state.detailsOpen);
+      setSelectedFolder(state.selectedFolder);
+      setFolderDetailsOpen(state.folderDetailsOpen);
+      setSelectionMode(state.selectionMode);
+      setSelectedFileIds(new Set(state.selectedFiles));
+      setSelectedFolderIds(new Set(state.selectedFolders));
+    },
+  });
 
   function handleNavigationParams(params: StorageNavigationParams) {
     setPickerContext(storagePickerContextFromParams(params));
@@ -1359,6 +1445,8 @@ function App() {
     setCatalogLoadingMore(false);
     clearCatalogTransitionLoading();
     setFileSortKey(nextKey);
+    fileSortKeyRef.current = nextKey;
+    customSortRef.current = viewModeRef.current === 'custom';
     window.localStorage.setItem(FILE_SORT_STORAGE_KEY, nextKey);
     setSortMenuOpen(false);
     revalidateCatalog();
@@ -1531,19 +1619,18 @@ function App() {
       return folders;
     }
     const roots = storageRootRoles.map((role) => {
-      return folders.find((folder) => folder.role === role && !folder.relative_path) || storageRootFolder(role);
+      return { ...(folders.find((folder) => folder.role === role && !folder.relative_path) || storageRootFolder(role)),
+        ...catalogSummary?.containers.find((item) => item.role === role) };
     });
     return [
       ...roots,
       ...folders.filter((folder) => folder.relative_path)
     ];
-  }, [folders, isDriveView]);
+  }, [folders, isDriveView, catalogSummary]);
 
   const visibleFolders = useMemo(() => {
-    if (isDriveView) {
-      const needle = query.trim().toLowerCase();
-      return folders.filter((folder) => !needle || `${folder.name} ${folder.display_path || ''}`.toLowerCase().includes(needle));
-    }
+    if (isDriveView) return folders;
+    if (catalogDatasetRevisionRef.current !== undefined && (activeRole !== 'all' || query.trim())) return folders;
     return storageViewVisibleFolders({
       activeRole,
       browsableFolders,
@@ -1556,13 +1643,9 @@ function App() {
 
   const filteredFiles = useMemo(() => {
     if (isDriveView) {
-      const needle = query.trim().toLowerCase();
-      return files.filter((file) => {
-        const kindMatch = kind === 'all' || file.preview_kind === kind;
-        const textMatch = !needle || `${file.name} ${file.display_path || ''} ${file.content_type}`.toLowerCase().includes(needle);
-        return kindMatch && textMatch;
-      });
+      return files.filter((file) => kind === 'all' || file.preview_kind === kind);
     }
+    if (catalogDatasetRevisionRef.current !== undefined) return files;
     return storageViewVisibleFiles({
       activeRole,
       currentFolderPath,
@@ -1572,7 +1655,7 @@ function App() {
       viewMode,
     });
   }, [activeRole, currentFolderPath, customScopedFiles, files, isDriveView, kind, query, viewMode]);
-  const sortedFiles = useMemo(() => sortStorageFiles(filteredFiles, fileSortKey), [fileSortKey, filteredFiles]);
+  const sortedFiles = useMemo(() => isDriveView ? sortStorageFiles(filteredFiles, fileSortKey) : filteredFiles, [fileSortKey, filteredFiles, isDriveView]);
   const selectedFiles = useMemo(() => sortedFiles.filter((file) => selectedFileIds.has(file.id)), [selectedFileIds, sortedFiles]);
   const selectedFolders = useMemo(() => visibleFolders.filter((folder) => selectedFolderIds.has(folder.id) && Boolean(folder.relative_path)), [selectedFolderIds, visibleFolders]);
   const selectedMoveItems = useMemo(() => storageSelectionMovePlan(selectedFiles, selectedFolders), [selectedFiles, selectedFolders]);
@@ -1581,11 +1664,14 @@ function App() {
   const draggingFolderIds = draggingSelection?.folderIds || emptyIdSet;
   const selectedFolderStats = useMemo(() => {
     if (!selectedFolder) return null;
+    if (selectedFolder.total_files !== undefined) return {
+      fileCount: selectedFolder.total_files, folderCount: selectedFolder.total_folders || 0, sizeBytes: selectedFolder.total_bytes || 0,
+    };
     if (isDriveItem(selectedFolder) || !isFileRole(selectedFolder.role)) {
       return {
-        fileCount: 0,
-        folderCount: 0,
-        sizeBytes: 0,
+        fileCount: null,
+        folderCount: null,
+        sizeBytes: null,
       };
     }
     return folderStatsForSelection({ role: selectedFolder.role, relativePath: selectedFolder.relative_path }, files, folders);
@@ -1593,13 +1679,19 @@ function App() {
   const currentFolderStats = useMemo(() => {
     if (isDriveView) {
       return {
-        fileCount: filteredFiles.length,
-        folderCount: visibleFolders.length,
-        sizeBytes: filteredFiles.reduce((total, file) => total + file.size_bytes, 0),
+        fileCount: null,
+        folderCount: null,
+        sizeBytes: null,
       };
     }
+    if (catalogTotals) return { fileCount: catalogTotals.total_files, folderCount: visibleFolders.length, sizeBytes: catalogTotals.total_bytes };
+    if (catalogSummary && activeRole === 'all') return {
+      fileCount: catalogSummary.containers.reduce((sum, item) => sum + item.total_files, 0),
+      folderCount: catalogSummary.containers.reduce((sum, item) => sum + item.total_folders, 0),
+      sizeBytes: catalogSummary.containers.reduce((sum, item) => sum + item.total_bytes, 0),
+    };
     return folderStatsForSelection({ role: activeRole, relativePath: activeRole === 'all' ? '' : currentFolderPath }, files, folders);
-  }, [activeRole, currentFolderPath, files, filteredFiles, folders, isDriveView, visibleFolders]);
+  }, [activeRole, currentFolderPath, files, filteredFiles, folders, isDriveView, visibleFolders, catalogTotals, catalogSummary]);
   const catalogDisplayState = catalogBrowserDisplayState({
     initialLoading: isInitialLoading,
     transitionLoading: isCatalogTransitionLoading,
@@ -1607,9 +1699,9 @@ function App() {
     visibleFolderCount: visibleFolders.length,
   });
   const isCatalogContentLoading = catalogDisplayState === 'loading';
-  const currentFolderSizeLabel = formatMegabytes(currentFolderStats.sizeBytes);
+  const currentFolderSizeLabel = currentFolderStats.sizeBytes === null ? 'Size unavailable' : formatMegabytes(currentFolderStats.sizeBytes);
   const visibleFileTotal = catalogPagination?.total ?? filteredFiles.length;
-  const fileCountLabel = visibleFileTotal > filteredFiles.length
+  const fileCountLabel = isDriveView ? `${filteredFiles.length} files loaded` : visibleFileTotal > filteredFiles.length
     ? `${filteredFiles.length}/${visibleFileTotal} files`
     : `${filteredFiles.length} files`;
   const folderBreadcrumbs = isDriveView ? [] : folderBreadcrumbItems(currentFolderPath);
@@ -1774,6 +1866,7 @@ function App() {
   }, [previewModalOpen, previewUrl, selectedFile?.id, selectedFile?.preview_kind]);
 
   useEffect(() => {
+    if (!previewSurfaceVisible) { setPreviewUrl(''); setPreviewLoading(false); return; }
     if (!selectedFile || (!previewModalOpen && !markdownEditing)) return;
     if (!canInlinePreview(selectedFile) && !canTextPreview(selectedFile)) return;
     let active = true;
@@ -1795,7 +1888,7 @@ function App() {
       active = false;
       controller.abort();
     };
-  }, [markdownEditing, previewModalOpen, selectedFile]);
+  }, [markdownEditing, previewModalOpen, previewSurfaceVisible, selectedFile]);
 
   const previewImageLayout = useMemo(() => {
     if (!previewModalOpen || selectedFile?.preview_kind !== 'image' || !previewImageSize) return null;
@@ -2382,6 +2475,9 @@ function App() {
                 if (isDriveView) {
                   setQuery(event.target.value);
                   queryRef.current = event.target.value;
+                  catalogRequestsRef.current.invalidate('navigation');
+                  setCatalogPagination(null);
+                  setCatalogLoadingMore(false);
                 } else {
                   updateViewFilter({ query: event.target.value });
                 }
@@ -2599,8 +2695,9 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <span>{visibleFolders.length} folders</span>
+                    <span>{visibleFolders.length}{!isDriveView && folderPagination && folderPagination.total > visibleFolders.length ? `/${folderPagination.total}` : ''} folders{isDriveView ? ' loaded' : ''}</span>
                     <span>{fileCountLabel}</span>
+                    {isDriveView && catalogPagination?.incomplete_search ? <span role="status">Drive returned partial results. Open a folder to narrow the search.</span> : null}
                     <span aria-label={`Folder size ${currentFolderSizeLabel}`} title="Folder size">{currentFolderSizeLabel}</span>
                   </>
                 )}
@@ -2672,6 +2769,13 @@ function App() {
             {catalogDisplayState === 'empty' ? (
               <div className="empty-state">{viewMode === 'custom' ? 'No files from this custom view are currently available.' : query.trim() ? 'No matching folders or files.' : 'No folders or files here yet.'}</div>
             ) : null}
+            {!isDriveView && !isCatalogContentLoading && folderPagination?.has_more ? (
+              <div className="catalog-page-actions">
+                <button className="secondary-action" disabled={foldersLoadingMore} onClick={() => void loadMoreFolders()} type="button">
+                  {foldersLoadingMore ? 'Loading' : 'Load more folders'}
+                </button>
+              </div>
+            ) : null}
             {!isCatalogContentLoading && catalogPagination?.has_more ? (
               <div className="catalog-page-actions">
                 <button className="secondary-action" disabled={catalogLoadingMore} onClick={() => loadMoreFiles().catch((err: Error) => setError(err.message))} type="button">
@@ -2699,9 +2803,9 @@ function App() {
               <h3>Details</h3>
               <dl>
                 <div><dt>Path</dt><dd>{isDriveItem(selectedFolder) ? driveItemPath(selectedFolder) : selectedFolder.workspace_relative_path}</dd></div>
-                <div><dt>Files</dt><dd>{selectedFolderStats?.fileCount ?? 0}</dd></div>
-                <div><dt>Folders</dt><dd>{selectedFolderStats?.folderCount ?? 0}</dd></div>
-                <div><dt>Size</dt><dd>{formatBytes(selectedFolderStats?.sizeBytes ?? 0)}</dd></div>
+                <div><dt>Files</dt><dd>{selectedFolderStats?.fileCount ?? 'Unavailable'}</dd></div>
+                <div><dt>Folders</dt><dd>{selectedFolderStats?.folderCount ?? 'Unavailable'}</dd></div>
+                <div><dt>Size</dt><dd>{selectedFolderStats?.sizeBytes == null ? 'Unavailable' : formatBytes(selectedFolderStats.sizeBytes)}</dd></div>
                 <div><dt>Modified</dt><dd>{selectedFolder.modified_at ? new Date(selectedFolder.modified_at).toLocaleString() : 'Storage root'}</dd></div>
               </dl>
             </section>

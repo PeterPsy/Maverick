@@ -53,8 +53,8 @@ describe('storage file preview widget styles', () => {
 
     expect(source).toContain('readPreviewText, renderPreview');
     expect(source).toContain('function canRenderDocumentPreview');
-    expect(source).toContain('? renderPreview(file).catch(() => readFile(file, PREVIEW_BYTES))');
-    expect(source).toContain(': renderPreview(file).catch(() => readPreviewText(file))');
+    expect(source).toContain('schedulePreviewConversion(() => renderPreview(file, { signal }), signal)');
+    expect(source).toContain('return readPreviewText(file, undefined, { signal });');
     expect(source).toContain("['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl");
     expect(source).toContain('<PdfCanvasPreview file={file} previewUrl={previewUrl} downloadUrl={downloadUrl} />');
   });

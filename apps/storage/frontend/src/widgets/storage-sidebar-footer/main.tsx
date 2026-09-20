@@ -3,7 +3,7 @@ import type { CSSProperties, FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Check, FolderPlus, HardDrive, Upload, X } from 'lucide-react';
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
-import { STORAGE_CATALOG_REVALIDATED_EVENT, createFolder, currentStorageAppId, loadCatalog, startDriveOAuth, uploadDriveFile, uploadFile, type UploadProgress } from '../../storageApi';
+import { STORAGE_CATALOG_REVALIDATED_EVENT, createFolder, currentStorageAppId, loadDirectoryChildren, startDriveOAuth, uploadDriveFile, uploadFile, type UploadProgress } from '../../storageApi';
 import { useStorageReadLifecycle } from '../../hooks/useStorageReadLifecycle';
 import { roleLabels } from '../../storageMeta';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
@@ -210,10 +210,11 @@ function StorageSidebarFooterWidget() {
   const reads = useStorageReadLifecycle(() => { void refreshCatalog(); });
 
   async function refreshCatalog() {
+    if (!target || isDriveTarget(target)) return;
     const read = reads.replace('catalog');
     if (!read) return;
     try {
-      const payload = await loadCatalog({ limit: 1, offset: 0 }, { signal: read.controller.signal });
+      const payload = await loadDirectoryChildren(target.role, target.relativePath, { signal: read.controller.signal });
       if (read.current()) setFolders(payload.folders || []);
     } catch (error) {
       if (read.current()) setStatus(error instanceof Error ? error.message : 'Unable to load folders.');
@@ -226,7 +227,7 @@ function StorageSidebarFooterWidget() {
 
   useEffect(() => {
     refreshCatalog().catch((loadError: Error) => setStatus(loadError.message));
-  }, []);
+  }, [target]);
 
   useEffect(() => {
     function handleCatalogRevalidated() {
@@ -274,7 +275,7 @@ function StorageSidebarFooterWidget() {
 
     window.addEventListener('message', handleShellMessage);
     return () => window.removeEventListener('message', handleShellMessage);
-  }, [appId]);
+  }, [appId, target]);
 
   function requireTarget(action: 'create'): LocalFolderActionTarget | null;
   function requireTarget(action: 'upload'): FolderActionTarget | null;

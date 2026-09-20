@@ -1,210 +1,142 @@
-import { decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, readPreviewTable, readPreviewText, renderPreview, renderThumbnail, storageMediaStreamUrl } from './storageApi';
-import { MAX_DEVICE_FILE_CACHE_ENTRY_BYTES, openStorageFileFromDeviceCache } from './storageFileCacheClient';
-import type { StorageFile, PreviewTablePayload } from './types';
+import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
+import { decodeBase64, previewDriveFile, readPreviewTable, readPreviewText, renderPreview, renderThumbnail, storageMediaStreamUrl } from './storageApi';
+import { openStorageFileFromDeviceCache } from './storageFileCacheClient';
+import { PreviewMemoryCache, type PreviewLease, type PreviewValue } from './lib/previewMemoryCache';
+import { schedulePreviewConversion } from './lib/previewConversions';
+import type { StorageFile } from './types';
 
-const MAX_CACHE_ENTRIES = 80;
-const CARD_PREVIEW_CONCURRENCY = 2;
-const CARD_PREVIEW_BYTES = 8 * 1024 * 1024;
-const FULL_PREVIEW_BYTES = 100 * 1024 * 1024;
-const TEXT_CARD_CHARS = 1600;
-const DOCUMENT_CARD_CHARS = 1200;
-const TABLE_CARD_ROWS = 8;
-const TABLE_CARD_COLUMNS = 6;
+const MAX_PREVIEW_ENTRY_BYTES = 8 * 1024 * 1024;
+const FULL_TEXT_BYTES = 100 * 1024 * 1024;
+const cache = new PreviewMemoryCache();
+const pending = new Set<AbortController>();
+let scope = '';
+export type CachedPreview = PreviewLease;
 
-export type CachedPreview = {
-  text: string;
-  url: string;
-  table?: PreviewTablePayload;
-};
-
-type CacheEntry = {
-  promise: Promise<CachedPreview>;
-  url: string;
-  lastUsedAt: number;
-};
-
-const cache = new Map<string, CacheEntry>();
-let activeCardPreviewCount = 0;
-const cardPreviewQueue: Array<() => void> = [];
-
-function canInlinePreview(file: StorageFile) {
-  return ['image', 'video', 'audio', 'text', 'markdown', 'pdf'].includes(file.preview_kind);
+export function clearPreviewCache(): void {
+  for (const controller of pending) controller.abort();
+  pending.clear();
+  cache.clear();
 }
 
-function canRenderedPreview(file: StorageFile) {
-  return ['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
+// Frame identity changes remount the realm; BFCache must not retain private previews either.
+if (typeof window !== 'undefined') window.addEventListener('pagehide', clearPreviewCache);
+
+function previewKey(file: StorageFile, kind: 'card' | 'full') {
+  const currentScope = JSON.stringify(readMaverickAppFrameContext());
+  if (scope !== currentScope) { clearPreviewCache(); scope = currentScope; }
+  return JSON.stringify([scope, kind, file.provider, file.connection_id, file.id, file.modified_at,
+    file.size_bytes, file.preview_kind, file.sha256, file.etag_or_version || file.source_version]);
 }
 
-function canTablePreview(file: StorageFile) {
-  return file.preview_kind === 'spreadsheet' || file.extension.toLowerCase() === '.csv';
-}
-
-function isDriveFile(file: StorageFile) {
-  return file.provider === 'google_drive';
-}
-
-function isDriveStreamable(file: StorageFile) {
-  return isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
-}
-
-function isLocalStreamable(file: StorageFile) {
-  return !isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
-}
-
-function previewKey(file: StorageFile, scope: 'card' | 'full') {
-  return [scope, file.id, file.modified_at, file.size_bytes, file.preview_kind, file.etag_or_version || file.source_version || ''].join(':');
-}
-
-function remember(key: string, promise: Promise<CachedPreview>) {
-  const entry: CacheEntry = { promise, url: '', lastUsedAt: Date.now() };
-  cache.set(key, entry);
-  promise.then((preview) => {
-    entry.url = preview.url;
-  }).catch(() => {
-    if (cache.get(key) === entry) cache.delete(key);
-  });
-  pruneCache();
-  return promise;
-}
-
-function pruneCache() {
-  if (cache.size <= MAX_CACHE_ENTRIES) return;
-  const staleEntries = [...cache.entries()].sort((left, right) => left[1].lastUsedAt - right[1].lastUsedAt);
-  for (const [key, entry] of staleEntries.slice(0, cache.size - MAX_CACHE_ENTRIES)) {
-    if (entry.url.startsWith('blob:')) URL.revokeObjectURL(entry.url);
-    cache.delete(key);
-  }
-}
-
-function getCachedPreview(key: string) {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  entry.lastUsedAt = Date.now();
-  return entry.promise;
-}
-
-function scheduleCardPreview(task: () => Promise<CachedPreview>) {
-  return new Promise<CachedPreview>((resolve, reject) => {
-    const run = () => {
-      activeCardPreviewCount += 1;
-      task()
-        .then(resolve, reject)
-        .finally(() => {
-          activeCardPreviewCount = Math.max(0, activeCardPreviewCount - 1);
-          cardPreviewQueue.shift()?.();
-        });
-    };
-    if (activeCardPreviewCount < CARD_PREVIEW_CONCURRENCY) {
-      run();
-      return;
-    }
-    cardPreviewQueue.push(run);
-  });
-}
-
-async function cachedFilePreview(
-  file: StorageFile,
-  maxBytes: number,
-  textLimit?: number,
-  signal?: AbortSignal,
-): Promise<CachedPreview | null> {
-  if (!['image', 'pdf', 'text', 'markdown'].includes(file.preview_kind)
-      || file.size_bytes > MAX_DEVICE_FILE_CACHE_ENTRY_BYTES) {
-    return null;
-  }
-  const blob = await openStorageFileFromDeviceCache(file, { maxBytes, signal });
+async function cachedFilePreview(file: StorageFile, signal: AbortSignal): Promise<PreviewValue | null> {
+  if (!['image', 'pdf', 'text', 'markdown'].includes(file.preview_kind) || file.size_bytes > MAX_PREVIEW_ENTRY_BYTES) return null;
+  const blob = await openStorageFileFromDeviceCache(file, { maxBytes: MAX_PREVIEW_ENTRY_BYTES, signal });
+  signal.throwIfAborted();
   if (!blob) return null;
   if (['text', 'markdown'].includes(file.preview_kind)) {
     const text = await blob.text();
-    return { text: textLimit === undefined ? text : text.slice(0, textLimit), url: '' };
+    signal.throwIfAborted();
+    return { text, url: '' };
   }
-  return { text: '', url: URL.createObjectURL(blob) };
+  return { text: '', url: URL.createObjectURL(blob), bytes: blob.size };
 }
 
-async function blobPreview(file: StorageFile, maxBytes: number, textLimit?: number, signal?: AbortSignal) {
-  const cached = await cachedFilePreview(file, maxBytes, textLimit, signal);
-  if (cached) return cached;
-  return readFile(file, maxBytes).then((payload) => {
-    const blob = decodeBase64(payload.content_base64, payload.file.content_type);
-    if (['text', 'markdown'].includes(payload.file.preview_kind)) {
-      return blob.text().then((text) => ({ text: textLimit === undefined ? text : text.slice(0, textLimit), url: '' }));
+async function renderedPreview(file: StorageFile, kind: 'card' | 'full', signal: AbortSignal): Promise<PreviewValue> {
+  try {
+    return await schedulePreviewConversion(async () => {
+      signal.throwIfAborted();
+      const payload = await (kind === 'card' ? renderThumbnail : renderPreview)(file, { signal });
+      signal.throwIfAborted();
+      if (!payload.stream_url) throw new Error('The rendered preview stream is unavailable.');
+      return { text: '', url: payload.stream_url };
+    }, signal);
+  } catch (error) {
+    signal.throwIfAborted();
+    const payload = await readPreviewText(file, kind === 'card' ? 1200 : undefined, { signal });
+    return { text: payload.preview_text, url: '' };
+  }
+}
+
+async function localText(file: StorageFile, kind: 'card' | 'full', signal: AbortSignal): Promise<PreviewValue> {
+  if (kind === 'card') {
+    const payload = await readPreviewText(file, 1600, { signal });
+    return { text: payload.preview_text, url: '' };
+  }
+  if (file.size_bytes > FULL_TEXT_BYTES) throw new Error('This file is too large for a text preview.');
+  const response = await fetch(storageMediaStreamUrl(file), { credentials: 'same-origin', signal });
+  if (!response.ok) throw new Error('Unable to read the file preview.');
+  const reader = response.body?.getReader();
+  if (!reader) return { text: '', url: '' };
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > FULL_TEXT_BYTES) {
+        await reader.cancel();
+        throw new Error('This file is too large for a text preview.');
+      }
+      parts.push(decoder.decode(value, { stream: true }));
     }
-    return { text: '', url: URL.createObjectURL(blob) };
-  });
+    parts.push(decoder.decode());
+    return { text: parts.join(''), url: '' };
+  } finally { reader.releaseLock(); }
 }
 
-async function drivePreview(file: StorageFile, maxBytes: number, textLimit?: number, signal?: AbortSignal) {
-  if (isDriveStreamable(file)) {
+async function loadValue(file: StorageFile, kind: 'card' | 'full', signal: AbortSignal): Promise<PreviewValue> {
+  if (['image', 'pdf', 'video', 'audio'].includes(file.preview_kind)) {
     if (!['video', 'audio'].includes(file.preview_kind)) {
-      const cached = await cachedFilePreview(file, maxBytes, textLimit, signal);
+      const cached = await cachedFilePreview(file, signal);
       if (cached) return cached;
     }
-    return Promise.resolve({ text: '', url: driveMediaStreamUrl(file) });
+    return { text: '', url: storageMediaStreamUrl(file) };
   }
-  const cached = await cachedFilePreview(file, maxBytes, textLimit, signal);
-  if (cached) return cached;
-  return previewDriveFile(file, maxBytes, textLimit).then((payload) => {
-    if ('preview_text' in payload) {
-      return { text: payload.preview_text || '', url: '' };
-    }
+  if (file.provider === 'google_drive') {
+    const payload = await previewDriveFile(file, MAX_PREVIEW_ENTRY_BYTES, kind === 'card' ? 1600 : undefined, { signal });
+    signal.throwIfAborted();
+    if ('preview_text' in payload) return { text: payload.preview_text || '', url: '' };
     if (!payload.content_base64) return { text: '', url: '' };
     const blob = decodeBase64(payload.content_base64, payload.content_type || payload.file.content_type);
-    if (['text', 'markdown'].includes(payload.file.preview_kind)) {
-      return blob.text().then((text) => ({ text: textLimit === undefined ? text : text.slice(0, textLimit), url: '' }));
-    }
-    return { text: '', url: URL.createObjectURL(blob) };
-  });
-}
-
-function renderedDocumentPreview(file: StorageFile, scope: 'card' | 'full') {
-  const renderer = scope === 'card' && ['document', 'presentation', 'spreadsheet'].includes(file.preview_kind)
-    ? renderThumbnail
-    : renderPreview;
-  return renderer(file).then((payload) => {
-    const blob = decodeBase64(payload.content_base64, payload.content_type);
-    return { text: '', url: URL.createObjectURL(blob) };
-  }).catch((error) => {
-    if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind)) {
-      return readPreviewText(file, scope === 'card' ? DOCUMENT_CARD_CHARS : undefined).then((payload) => ({ text: payload.preview_text, url: '' }));
-    }
-    throw error;
-  });
-}
-
-function tablePreview(file: StorageFile, scope: 'card' | 'full') {
-  if (scope === 'card') {
-    return readPreviewTable(file, TABLE_CARD_ROWS, TABLE_CARD_COLUMNS).then((table) => ({ text: '', url: '', table }));
+    if (['text', 'markdown'].includes(file.preview_kind)) return { text: await blob.text(), url: '' };
+    return { text: '', url: URL.createObjectURL(blob), bytes: blob.size };
   }
-  return readPreviewTable(file).then((table) => ({ text: '', url: '', table }));
-}
-
-export function loadCardPreview(file: StorageFile) {
-  const key = previewKey(file, 'card');
-  const cached = getCachedPreview(key);
-  if (cached) return cached;
-  return remember(key, scheduleCardPreview(() => {
-    if (file.preview_kind === 'audio') return Promise.resolve({ text: '', url: '' });
-    if (canTablePreview(file)) return tablePreview(file, 'card');
-    if (canRenderedPreview(file)) return renderedDocumentPreview(file, 'card');
-    if (isDriveFile(file) && canInlinePreview(file)) return drivePreview(file, CARD_PREVIEW_BYTES, TEXT_CARD_CHARS);
-    if (canInlinePreview(file)) return blobPreview(file, CARD_PREVIEW_BYTES, TEXT_CARD_CHARS);
-    return readPreviewText(file, DOCUMENT_CARD_CHARS).then((payload) => ({ text: payload.preview_text, url: '' }));
-  }));
-}
-
-export function loadFullPreview(file: StorageFile, signal?: AbortSignal) {
-  const key = previewKey(file, 'full');
-  const cached = getCachedPreview(key);
-  if (cached) return cached;
-  if (isDriveFile(file)) return remember(key, drivePreview(file, FULL_PREVIEW_BYTES, undefined, signal));
-  if (isLocalStreamable(file)) {
-    if (['video', 'audio'].includes(file.preview_kind)) {
-      return remember(key, Promise.resolve({ text: '', url: storageMediaStreamUrl(file) }));
-    }
-    return remember(key, cachedFilePreview(file, FULL_PREVIEW_BYTES, undefined, signal).then((cached) => cached ?? ({ text: '', url: storageMediaStreamUrl(file) })));
+  if (file.preview_kind === 'spreadsheet' || file.extension.toLowerCase() === '.csv') {
+    const table = await readPreviewTable(file, kind === 'card' ? 8 : undefined, kind === 'card' ? 6 : undefined, { signal });
+    return { text: '', url: '', table };
   }
-  if (canTablePreview(file)) return remember(key, tablePreview(file, 'full'));
-  if (canRenderedPreview(file)) return remember(key, renderedDocumentPreview(file, 'full'));
-  if (canInlinePreview(file)) return remember(key, blobPreview(file, FULL_PREVIEW_BYTES, undefined, signal));
-  return remember(key, readPreviewText(file).then((payload) => ({ text: payload.preview_text, url: '' })));
+  if (['document', 'presentation'].includes(file.preview_kind)) return renderedPreview(file, kind, signal);
+  if (['text', 'markdown'].includes(file.preview_kind)) {
+    const cached = await cachedFilePreview(file, signal);
+    return cached ?? localText(file, kind, signal);
+  }
+  const payload = await readPreviewText(file, kind === 'card' ? 1200 : undefined, { signal });
+  return { text: payload.preview_text, url: '' };
 }
+
+async function load(file: StorageFile, kind: 'card' | 'full', signal?: AbortSignal): Promise<PreviewLease> {
+  signal?.throwIfAborted();
+  const key = previewKey(file, kind);
+  const cached = cache.get(key, signal);
+  if (cached) return cached;
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  signal?.addEventListener('abort', abort, { once: true });
+  pending.add(controller);
+  try {
+    const value = await loadValue(file, kind, controller.signal);
+    if (controller.signal.aborted) {
+      if (value.url.startsWith('blob:')) URL.revokeObjectURL(value.url);
+      controller.signal.throwIfAborted();
+    }
+    return cache.remember(key, value, signal);
+  } finally {
+    pending.delete(controller);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
+export function loadCardPreview(file: StorageFile, signal?: AbortSignal) { return load(file, 'card', signal); }
+export function loadFullPreview(file: StorageFile, signal?: AbortSignal) { return load(file, 'full', signal); }

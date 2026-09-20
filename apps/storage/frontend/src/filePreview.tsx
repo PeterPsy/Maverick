@@ -206,7 +206,8 @@ export function FileCardPreview({ file }: { file: StorageFile }) {
     setPreviewLoading(canLoadAssetPreview);
     if (!canLoadAssetPreview) return;
     let active = true;
-    loadCardPreview(file)
+    const controller = new AbortController();
+    loadCardPreview(file, controller.signal)
       .then((payload) => {
         if (!active) return;
         setPreviewUrl(payload.url);
@@ -219,6 +220,7 @@ export function FileCardPreview({ file }: { file: StorageFile }) {
     });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [file]);
 

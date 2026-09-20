@@ -28,7 +28,7 @@ describe('storage Drive navigation stability', () => {
 
     expect(source).toContain("const treeProviderKey = query.trim().toLowerCase() || 'tree';");
     expect(source).toContain('toggleOnTriggerClick={false}');
-    expect(source).toContain('return [storageRoot, ...driveRoots];');
+    expect(source).toContain('return [decorate(storageRoot), ...driveRoots];');
     expect(source).not.toContain("`${query.trim().toLowerCase() || 'tree'}:${folders.length}`");
   });
 
@@ -49,11 +49,12 @@ describe('storage Drive navigation stability', () => {
   it('pauses Drive and view sync work while the app iframe is hidden', () => {
     const source = readSource('main.tsx');
 
-    expect(source).toContain('const appVisibleRef = useRef(true);');
-    expect(source).toContain("payload.type === 'maverick.app.visibility-changed'");
+    expect(source).toContain('const appVisibleRef = useRef(maverickAppIsVisible());');
+    expect(source).toContain('observeMaverickVisibility');
+    expect(source).toContain('connectAppEventSocket');
     expect(source).toContain('abortDriveRequests();');
     expect(source).toContain('!appVisibleRef.current || driveFolderAbortRef.current || driveLoadMoreAbortRef.current');
-    expect(source).toContain('if (!appVisibleRef.current) {');
+    expect(source).toContain('catalogRequestsRef.current.setVisible(visible)');
   });
 
   it('applies changed catalog revalidations in both Storage sidebar surfaces', () => {

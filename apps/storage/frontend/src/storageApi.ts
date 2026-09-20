@@ -1,5 +1,5 @@
 import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveLocalizePayload, DrivePreviewPayload, DriveStartOAuthPayload, DriveWritePayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
-import { createRequestFingerprint, readCacheModelJson, readThroughParentDataCache } from '@maverick/pwa-cache';
+import { preventMaverickAppHibernation, createRequestFingerprint, readCacheModelJson, readThroughParentDataCache } from '@maverick/pwa-cache';
 import { stableStorageFileSourceVersion } from './storageFileCacheClient';
 
 const DEFAULT_APP_ID = 'storage';
@@ -159,38 +159,41 @@ const DRIVE_CLIENT_SECRET_NAMES = ['google-drive-oauth-client-id', 'google-drive
 const DRIVE_REFRESH_TOKEN_SECRET_NAME = 'google-drive-refresh-token';
 
 export async function callBackend<T>(body: Record<string, unknown>, options: StorageApiOptions = {}): Promise<T> {
-  const fetchImpl = options.fetchImpl || fetch;
-  const requestInit: RequestInit = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(withDefaultSecretRequest(body))
-  };
-  if (options.signal) {
-    requestInit.signal = options.signal;
-  }
-  let response: Response;
+  const release = preventMaverickAppHibernation();
   try {
-    response = await fetchImpl(options.endpoint || storageBackendEndpoint(options.appId), requestInit);
-  } catch (error) {
-    if (options.signal?.aborted) throw error;
-    const transport = new Error('Storage backend transport failed.', { cause: error });
-    transport.name = 'MaverickTransportError';
-    throw transport;
-  }
-  let payload: (T & { detail?: string; error?: string }) | null = null;
-  try {
-    payload = await response.json() as T & { detail?: string; error?: string };
-  } catch (error) {
-    if (response.ok) throw new TypeError('Storage returned an invalid JSON response.', { cause: error });
-  }
-  if (!response.ok) {
-    throw new StorageHttpError(
-      payload?.detail || payload?.error || 'Storage request failed',
-      response.status,
-      parseRetryAfter(response.headers.get('retry-after'))
-    );
-  }
-  return payload as T;
+    const fetchImpl = options.fetchImpl || fetch;
+    const requestInit: RequestInit = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(withDefaultSecretRequest(body))
+    };
+    if (options.signal) {
+      requestInit.signal = options.signal;
+    }
+    let response: Response;
+    try {
+      response = await fetchImpl(options.endpoint || storageBackendEndpoint(options.appId), requestInit);
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+      const transport = new Error('Storage backend transport failed.', { cause: error });
+      transport.name = 'MaverickTransportError';
+      throw transport;
+    }
+    let payload: (T & { detail?: string; error?: string }) | null = null;
+    try {
+      payload = await response.json() as T & { detail?: string; error?: string };
+    } catch (error) {
+      if (response.ok) throw new TypeError('Storage returned an invalid JSON response.', { cause: error });
+    }
+    if (!response.ok) {
+      throw new StorageHttpError(
+        payload?.detail || payload?.error || 'Storage request failed',
+        response.status,
+        parseRetryAfter(response.headers.get('retry-after'))
+      );
+    }
+    return payload as T;
+  } finally { release(); }
 }
 
 export class StorageHttpError extends Error {
@@ -228,21 +231,41 @@ export type CatalogRequest = Partial<Pick<StorageViewFilter, 'query' | 'role' | 
   limit?: number;
   sync?: boolean;
   workspace_relative_paths?: string[];
+  dataset_revision?: number;
+  sort_by?: 'created_at' | 'name' | 'size_bytes' | 'preview_kind';
+  sort_direction?: 'asc' | 'desc';
 };
 
-export type CatalogReadOptions = Pick<StorageApiOptions, 'signal'>;
+export type CatalogReadOptions = Pick<StorageApiOptions, 'signal'> & { forceNetwork?: boolean };
+export class CatalogChangedError extends Error {
+  constructor(readonly datasetRevision: number) { super('Storage catalog changed; reload its first page.'); }
+}
 export const STORAGE_CATALOG_REVALIDATED_EVENT = 'maverick.storage.catalog-revalidated.v1';
 
-export const CATALOG_PAGE_LIMIT = 500;
+export const CATALOG_PAGE_LIMIT = 100;
 export const DRIVE_PAGE_LIMIT = 50;
 export const MAX_BASE64_WRITE_BYTES = 25 * 1024 * 1024;
 export const MAX_STORAGE_FILE_TRANSFER_BYTES = 500 * 1024 * 1024;
 export const DRIVE_RESUMABLE_CHUNK_BYTES = 8 * 1024 * 1024;
 export const LOCAL_UPLOAD_SESSION_CHUNK_BYTES = 8 * 1024 * 1024;
 
+export function loadCatalogSummary(options: CatalogReadOptions = {}) {
+  return callBackend<CatalogPayload>({ action: 'catalog.summary' }, options);
+}
+
+export function loadDirectoryChildren(role: FileRole | 'all', folderPath = '', options: CatalogReadOptions & { offset?: number; datasetRevision?: number; query?: string } = {}) {
+  return callBackend<{ status: 'ok' | 'catalog_changed'; dataset_revision?: number; folders: StorageFolder[];
+    pagination: { offset: number; limit: number; total: number; has_more: boolean } }>({
+    action: 'directory.children', role, folder_path: folderPath, query: options.query || '', offset: options.offset || 0,
+    limit: 100, ...(options.datasetRevision === undefined ? {} : { dataset_revision: options.datasetRevision }),
+  }, options);
+}
+
 export async function loadCatalog(params: CatalogRequest = {}, options: CatalogReadOptions = {}) {
-  if (params.sync === true || (params.offset ?? 0) > 0) {
-    return callBackend<CatalogPayload>({ action: 'catalog', ...params }, options);
+  if (options.forceNetwork || params.sync === true || (params.offset ?? 0) > 0) {
+    const payload = await callBackend<CatalogPayload | { status: 'catalog_changed'; dataset_revision: number }>({ action: 'catalog', ...params }, options);
+    if ('status' in payload && payload.status === 'catalog_changed') throw new CatalogChangedError(payload.dataset_revision);
+    return payload as CatalogPayload;
   }
   const canonical = canonicalCatalogRequest(params);
   const appId = currentStorageAppId();
@@ -289,9 +312,10 @@ function canonicalCatalogRequest(params: CatalogRequest): CatalogRequest {
     ...(params.folder_path === undefined ? {} : { folder_path: String(params.folder_path) }),
     offset: 0,
     ...(params.limit === undefined ? {} : { limit: params.limit }),
-    ...(params.file_ids?.length ? { file_ids: [...params.file_ids].map(String).sort() } : {}),
+    ...(params.sort_by ? { sort_by: params.sort_by, sort_direction: params.sort_direction || 'desc' } : {}),
+    ...(params.file_ids?.length ? { file_ids: [...params.file_ids].map(String) } : {}),
     ...(params.workspace_relative_paths?.length
-      ? { workspace_relative_paths: [...params.workspace_relative_paths].map(String).sort() }
+      ? { workspace_relative_paths: [...params.workspace_relative_paths].map(String) }
       : {})
   };
 }
@@ -450,6 +474,17 @@ export function listDriveChildren(connectionId: string, driveFileId: string, opt
     action: 'drive_list_children',
     connection_id: connectionId,
     drive_file_id: driveFileId,
+    ...(limit === undefined ? {} : { limit }),
+    ...(pageToken ? { page_token: pageToken } : {}),
+    _app_secret_request: driveConnectionSecretRequest(connectionId)
+  }, apiOptions);
+}
+
+export function searchDriveFiles(connectionId: string, query: string, parentDriveFileId: string, options: DriveListOptions = {}) {
+  const { limit, pageToken, ...apiOptions } = options;
+  return callBackend<DriveListPayload>({
+    action: 'drive_search', connection_id: connectionId, query,
+    ...(parentDriveFileId ? { parent_drive_file_id: parentDriveFileId } : {}),
     ...(limit === undefined ? {} : { limit }),
     ...(pageToken ? { page_token: pageToken } : {}),
     _app_secret_request: driveConnectionSecretRequest(connectionId)
@@ -888,48 +923,50 @@ export function cancelDriveUploadSession(sessionId: string, options: StorageApiO
   }, apiOptions);
 }
 
-export async function readFile(file: StorageFile, maxBytes: number) {
+export async function readFile(file: StorageFile, maxBytes: number, options: StorageApiOptions = {}) {
   return callBackend<ReadFilePayload>({
     action: 'read_file',
     role: file.role,
     relative_path: file.relative_path,
     max_bytes: maxBytes
-  });
+  }, options);
 }
 
-export async function readPreviewText(file: StorageFile, maxChars?: number) {
+export async function readPreviewText(file: StorageFile, maxChars?: number, options: StorageApiOptions = {}) {
   return callBackend<PreviewTextPayload>({
     action: 'preview_text',
     role: file.role,
     relative_path: file.relative_path,
     ...(maxChars === undefined ? {} : { max_chars: maxChars })
-  });
+  }, options);
 }
 
-export async function readPreviewTable(file: StorageFile, maxRows?: number, maxColumns?: number) {
+export async function readPreviewTable(file: StorageFile, maxRows?: number, maxColumns?: number, options: StorageApiOptions = {}) {
   return callBackend<PreviewTablePayload>({
     action: 'preview_table',
     role: file.role,
     relative_path: file.relative_path,
     ...(maxRows === undefined ? {} : { max_rows: maxRows }),
     ...(maxColumns === undefined ? {} : { max_columns: maxColumns })
-  });
+  }, options);
 }
 
-export async function renderPreview(file: StorageFile) {
+export async function renderPreview(file: StorageFile, options: StorageApiOptions = {}) {
   return callBackend<RenderPreviewPayload>({
     action: 'render_preview',
+    response_mode: 'stream',
     role: file.role,
     relative_path: file.relative_path
-  });
+  }, options);
 }
 
-export async function renderThumbnail(file: StorageFile) {
+export async function renderThumbnail(file: StorageFile, options: StorageApiOptions = {}) {
   return callBackend<RenderPreviewPayload>({
     action: 'render_thumbnail',
+    response_mode: 'stream',
     role: file.role,
     relative_path: file.relative_path
-  });
+  }, options);
 }
 
 export async function renameFile(file: StorageFile, newName: string) {

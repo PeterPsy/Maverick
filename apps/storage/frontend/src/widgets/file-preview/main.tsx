@@ -10,6 +10,8 @@ import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requ
 import { VideoPreview } from '../../videoPreview';
 import type { StorageFile } from '../../types';
 import { DocxPreview, isDocxFile } from './docxPreview';
+import { useStorageVisibility } from '../../hooks/useStorageVisibility';
+import { schedulePreviewConversion } from '../../lib/previewConversions';
 import './styles.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -30,11 +32,12 @@ function contextToken() {
   return new URLSearchParams(hash).get('context') || new URLSearchParams(window.location.search).get('context') || '';
 }
 
-async function loadWidgetContext(): Promise<WidgetContext> {
+async function loadWidgetContext(signal: AbortSignal): Promise<WidgetContext> {
   const token = contextToken();
   if (!token) throw new Error('Missing widget context.');
   const response = await fetch(`/api/apps/widgets/context/${encodeURIComponent(token)}`, {
     credentials: 'same-origin',
+    signal,
     headers: { Accept: 'application/json' }
   });
   if (!response.ok) throw new Error('Unable to load widget context.');
@@ -238,6 +241,7 @@ function FileWidgetSkeleton({ rootRef }: { rootRef: RefObject<HTMLElement | null
 }
 
 function StorageFilePreviewWidget() {
+  const surfaceVisible = useStorageVisibility();
   const rootRef = useRef<HTMLElement | null>(null);
   const documentRef = useRef<HTMLElement | null>(null);
   const scrollIdleTimerRef = useRef<number | null>(null);
@@ -256,27 +260,34 @@ function StorageFilePreviewWidget() {
   }, []);
 
   useEffect(() => {
-    loadWidgetContext()
+    if (!surfaceVisible) return;
+    const controller = new AbortController();
+    loadWidgetContext(controller.signal)
       .then((context) => {
         const payload = context.content?.payload || {};
-        return callBackend<{ file: StorageFile }>({ action: 'file_info', ...fileReference(payload) });
+        controller.signal.throwIfAborted();
+        return callBackend<{ file: StorageFile }>({ action: 'file_info', ...fileReference(payload) }, { signal: controller.signal });
       })
       .then((result) => {
+        if (controller.signal.aborted) return;
         setPreviewText('');
         setPreviewUrl('');
         setDocxBlob(null);
         setPreviewLoading(canInlinePreview(result.file));
         setFile(result.file);
       })
-      .catch((loadError: Error) => setError(loadError.message));
-  }, []);
+      .catch((loadError: Error) => { if (!controller.signal.aborted) setError(loadError.message); });
+    return () => controller.abort();
+  }, [surfaceVisible]);
 
   useEffect(() => {
     setPreviewText('');
     setPreviewUrl('');
     setDocxBlob(null);
     setPreviewLoading(Boolean(file && canInlinePreview(file)));
-    if (!file || !canInlinePreview(file)) return;
+    if (!surfaceVisible || !file || !canInlinePreview(file)) return;
+    const controller = new AbortController();
+    const signal = controller.signal;
     let active = true;
     let objectUrl = '';
     const previewRequest = isBrowserStreamableMedia(file)
@@ -284,16 +295,22 @@ function StorageFilePreviewWidget() {
       : isDriveStreamable(file)
         ? Promise.resolve({ stream_url: driveMediaStreamUrl(file) })
       : isDriveFile(file)
-        ? previewDriveFile(file, PREVIEW_BYTES)
+        ? previewDriveFile(file, PREVIEW_BYTES, undefined, { signal })
       : canRenderDocumentPreview(file)
         ? isDocxFile(file)
-          ? renderPreview(file).catch(() => readFile(file, PREVIEW_BYTES))
-          : renderPreview(file).catch(() => readPreviewText(file))
-        : readFile(file, PREVIEW_BYTES);
+          ? schedulePreviewConversion(() => renderPreview(file, { signal }), signal).catch(() => {
+              signal.throwIfAborted();
+              return readFile(file, PREVIEW_BYTES, { signal });
+            })
+          : schedulePreviewConversion(() => renderPreview(file, { signal }), signal).catch(() => {
+              signal.throwIfAborted();
+              return readPreviewText(file, undefined, { signal });
+            })
+        : readFile(file, PREVIEW_BYTES, { signal });
     previewRequest
       .then(async (payload) => {
         if (!active) return;
-        if ('stream_url' in payload) {
+        if ('stream_url' in payload && payload.stream_url) {
           setPreviewUrl(payload.stream_url);
           return;
         }
@@ -301,7 +318,7 @@ function StorageFilePreviewWidget() {
           setPreviewText(payload.preview_text || '');
           return;
         }
-        if (!payload.content_base64) return;
+        if (!('content_base64' in payload) || !payload.content_base64) return;
         const blob = decodeBase64(payload.content_base64, payload.content_type || payload.file.content_type);
         if (isDocxFile(payload.file)) {
           setDocxBlob(blob);
@@ -321,9 +338,10 @@ function StorageFilePreviewWidget() {
       });
     return () => {
       active = false;
+      controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [file]);
+  }, [file, surfaceVisible]);
 
   useEffect(() => {
     const element = rootRef.current;

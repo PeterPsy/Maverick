@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PWA_DATA_CACHE_BROKER_ACCEPTED, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST, PWA_DATA_CACHE_BROKER_NETWORK_RESULT, PWA_DATA_CACHE_BROKER_RESULT } from '@maverick/pwa-cache';
+import { CatalogChangedError, searchDriveFiles, renderPreview } from './storageApi';
 import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, folderMediaDownloadUrl, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, localizeDriveFile, LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_BASE64_WRITE_BYTES, moveItemsReferences, previewDriveFile, sanitizeCatalogPayload, startDriveOAuth, STORAGE_CATALOG_REVALIDATED_EVENT, storageBackendEndpoint, storageMediaStreamUrl, syncDriveConnection, trashDriveFile, uploadDriveFile, uploadFile } from './storageApi';
 
 class FakeFileReader {
@@ -24,6 +25,15 @@ class FakeFileReader {
 }
 
 describe('storage api client', () => {
+  it('returns a typed revision conflict for a continuation instead of an appendable page', async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ status: 'catalog_changed', dataset_revision: 12 }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchImpl);
+    try {
+      await expect(loadCatalog({ offset: 100, dataset_revision: 11, sort_by: 'name', sort_direction: 'asc' })).rejects.toBeInstanceOf(CatalogChangedError);
+      expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toMatchObject({ dataset_revision: 11, sort_by: 'name', sort_direction: 'asc' });
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('derives the mounted app backend from app and widget routes', () => {
     expect(currentStorageAppId('/apps/storage-fork/')).toBe('storage-fork');
     expect(currentStorageAppId('/api/apps/widgets/storage-fork/storage-sidebar-footer/frontend/')).toBe('storage-fork');
@@ -301,6 +311,28 @@ describe('storage api client', () => {
       redirectUri: 'https://maverick.local/apps/storage/oauth/callback',
       state: 'drive-state',
     }, { fetchImpl })).rejects.toThrow('Google Drive connection failed.');
+  });
+
+  it('carries Drive search scope, continuation and cancellation without inventing a total', async () => {
+    const signal = new AbortController().signal;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      files: [], provider: 'google_drive', connection_id: 'account', incomplete_search: true,
+      pagination: { limit: 50, total: null, has_more: true, next_page_token: 'next' }
+    }), { status: 200 }));
+    const result = await searchDriveFiles('account', 'contract', 'folder', { fetchImpl, limit: 50, pageToken: 'current', signal });
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toMatchObject({ action: 'drive_search',
+      connection_id: 'account', query: 'contract', parent_drive_file_id: 'folder', page_token: 'current' });
+    expect(fetchImpl.mock.calls[0][1]?.signal).toBe(signal);
+    expect(result.pagination?.total).toBeNull();
+    expect(result.incomplete_search).toBe(true);
+  });
+
+  it('requests converted media URLs with a consumer-owned abort signal', async () => {
+    const signal = new AbortController().signal;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ stream_url: '/converted' }), { status: 200 }));
+    await renderPreview({ role: 'generated', relative_path: 'doc.docx' } as Parameters<typeof renderPreview>[0], { fetchImpl, signal });
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toMatchObject({ action: 'render_preview', response_mode: 'stream' });
+    expect(fetchImpl.mock.calls[0][1]?.signal).toBe(signal);
   });
 
   it('uses resource-scoped selectors for connected Drive folder actions', async () => {

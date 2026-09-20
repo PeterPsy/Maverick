@@ -42,6 +42,9 @@ export type StorageFile = {
 };
 
 export type StorageFolder = {
+  total_files?: number;
+  total_bytes?: number;
+  total_folders?: number;
   id: string;
   provider?: StorageProvider;
   connection_id?: string;
@@ -134,12 +137,14 @@ export type DriveBreadcrumbPayload = {
 export type DriveListPayload = {
   provider: 'google_drive';
   connection_id: string;
+  incomplete_search?: boolean;
   breadcrumbs?: DriveBreadcrumbPayload[];
   files?: StorageFile[];
   folders?: StorageFolder[];
   pagination?: {
     limit: number;
-    total: number;
+    total: number | null;
+    loaded_items?: number;
     has_more: boolean;
     next_page_token?: string;
   };
@@ -166,6 +171,10 @@ export type CatalogPayload = {
   schema: 'storage.file-catalog.v1';
   revision: string;
   not_modified?: boolean;
+  folders_pagination?: { offset: number; limit: number; total: number; has_more: boolean };
+  dataset_revision?: number;
+  totals?: { scope: 'filtered'; total_files: number; total_bytes: number };
+  summary?: { scope: 'local-roots'; containers: { role: FileRole; total_files: number; total_bytes: number; total_folders: number }[] };
   state: StorageState;
   files: StorageFile[];
   folders: StorageFolder[];
@@ -176,6 +185,7 @@ export type CatalogPayload = {
     total: number;
     has_more: boolean;
     next_page_token?: string;
+    dataset_revision?: number;
   };
   inventory?: {
     schema_version: string;
@@ -314,7 +324,8 @@ export type PreviewTablePayload = {
 
 export type RenderPreviewPayload = {
   file: StorageFile;
-  content_base64: string;
+  content_base64?: string;
+  stream_url?: string;
   content_type: 'application/pdf' | 'image/png';
   preview_kind: 'pdf' | 'image';
   renderer: 'native' | 'libreoffice';

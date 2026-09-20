@@ -22,24 +22,14 @@ describe('storage Drive file cards', () => {
     expect(body).toContain('return false;');
   });
 
-  it('limits automatic card preview fan-out', () => {
-    const source = readSource('previewCache.ts');
-
-    expect(source).toContain('const CARD_PREVIEW_CONCURRENCY = 2;');
-    expect(source).toContain('function scheduleCardPreview');
-    expect(source).toContain('cardPreviewQueue.push(run);');
-    expect(source).toContain("return remember(key, scheduleCardPreview(() => {");
-  });
-
   it('keeps video and audio streaming while routing eligible previews through the transparent cache', () => {
     const previewCacheSource = readSource('previewCache.ts');
     const widgetSource = readSource('widgets/file-preview/main.tsx');
 
     expect(previewCacheSource).toContain('storageMediaStreamUrl');
-    expect(previewCacheSource).toContain('function isLocalStreamable');
-    expect(previewCacheSource).toContain("if (['video', 'audio'].includes(file.preview_kind))");
-    expect(previewCacheSource).toContain('cachedFilePreview(file, FULL_PREVIEW_BYTES, undefined, signal)');
-    expect(previewCacheSource).toContain("cached ?? ({ text: '', url: storageMediaStreamUrl(file) })");
+    expect(previewCacheSource).toContain("if (!['video', 'audio'].includes(file.preview_kind))");
+    expect(previewCacheSource).toContain('cachedFilePreview(file, signal)');
+    expect(previewCacheSource).toContain("return { text: '', url: storageMediaStreamUrl(file) };");
     expect(widgetSource).toContain('function isBrowserStreamableMedia');
     expect(widgetSource).toContain('? Promise.resolve({ stream_url: storageMediaStreamUrl(file) })');
   });

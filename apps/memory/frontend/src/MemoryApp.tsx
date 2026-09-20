@@ -1,3 +1,4 @@
+import { connectAppEventSocket, isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateNodeModal } from "./components/CreateNodeModal";
 import { GraphCanvas } from "./components/GraphCanvas";
@@ -198,7 +199,7 @@ export function MemoryApp() {
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") return;
+      if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== "object") return;
       const payload = event.data as {
         app_id?: string;
         owner_app_id?: string;
@@ -210,48 +211,14 @@ export function MemoryApp() {
         void handleNavigationParams(payload.params || {});
         return;
       }
-      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === appId) scheduleEventRefresh();
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [appId, scheduleEventRefresh]);
 
-  useEffect(() => {
-    if (!("WebSocket" in window)) return undefined;
-    let closed = false;
-    let retry = 0;
-    let reconnectTimer: number | null = null;
-    let socket: WebSocket | null = null;
-    const connect = () => {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      socket = new WebSocket(`${protocol}//${window.location.host}/api/apps/events/ws`);
-      socket.onopen = () => {
-        retry = 0;
-      };
-      socket.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === appId) scheduleEventRefresh();
-        } catch {
-          // Ignore malformed event frames.
-        }
-      };
-      socket.onerror = () => socket?.close();
-      socket.onclose = () => {
-        if (closed) return;
-        const delay = Math.min(5000, 500 + retry * 750);
-        retry += 1;
-        reconnectTimer = window.setTimeout(connect, delay);
-      };
-    };
-    connect();
-    return () => {
-      closed = true;
-      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
-      if (eventRefreshTimerRef.current !== null) window.clearTimeout(eventRefreshTimerRef.current);
-      socket?.close();
-    };
-  }, [appId, scheduleEventRefresh]);
+  useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string }>((payload) => {
+    if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === appId) scheduleEventRefresh();
+  }, scheduleEventRefresh), [appId, scheduleEventRefresh]);
 
   const relationships = useMemo(() => {
     if (!selectedId) return [];

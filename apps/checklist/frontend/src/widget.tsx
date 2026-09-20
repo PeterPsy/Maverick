@@ -1,3 +1,4 @@
+import { connectAppEventSocket } from '@maverick/pwa-cache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AgentPlan from './components/ui/agent-plan';
@@ -9,7 +10,6 @@ import './styles/main.css';
 
 const APP_ID = 'checklist';
 const WIDGET_ID = 'design-checklist';
-const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
 
 function Widget() {
   const [checklistId, setChecklistId] = useState('');
@@ -101,54 +101,12 @@ function Widget() {
     };
   }, [item, error, refreshScrollbarMetrics]);
 
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
-        return;
-      }
-      const payload = event.data as { type?: string; owner_app_id?: string; resource?: string };
-      if ((payload.type === 'maverick.widget.data-changed' || payload.type === 'maverick.app.data-changed') && payload.owner_app_id === APP_ID) {
-        void load();
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [checklistId]);
 
-  useEffect(() => {
-    if (typeof WebSocket === 'undefined') {
-      return undefined;
+  useEffect(() => connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((payload) => {
+    if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === APP_ID) {
+      void load();
     }
-    let closed = false;
-    let reconnectTimer = 0;
-    let socket: WebSocket | null = null;
-    const connect = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      socket = new WebSocket(`${protocol}//${window.location.host}${APP_EVENTS_WS_PATH}`);
-      socket.onmessage = (message) => {
-        try {
-          const payload = JSON.parse(message.data) as { type?: string; owner_app_id?: string; resource?: string };
-          if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === APP_ID) {
-            void load();
-          }
-        } catch {
-          return;
-        }
-      };
-      socket.onclose = () => {
-        if (!closed) {
-          reconnectTimer = window.setTimeout(connect, 1000);
-        }
-      };
-      socket.onerror = () => socket?.close();
-    };
-    connect();
-    return () => {
-      closed = true;
-      window.clearTimeout(reconnectTimer);
-      socket?.close();
-    };
-  }, [checklistId]);
+  }, () => { void load(); }), [checklistId]);
 
   let content;
   if (error) {

@@ -158,12 +158,7 @@ export function App() {
         }
         return;
       }
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === runtimeAppIdRef.current) {
-        if (payload.resource === CALENDAR_UI_STATE_RESOURCE) {
-          return;
-        }
-        scheduleReload(payload.resource);
-      }
+
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);

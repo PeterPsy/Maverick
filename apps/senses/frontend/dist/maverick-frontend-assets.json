@@ -1,0 +1,46 @@
+{
+  "build_id": "06625aaaf4e92d6a371beba6bc396f064ff25c69240ab4ff1a921b296bd7180c",
+  "entrypoints": [
+    "index.html",
+    "widgets/senses-sidebar/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-DJsAwbUl.css",
+      "sha256": "a911057819e973d6f679ebc53550cba9e07e0e8e207228ea8c8932551da24d7b",
+      "size_bytes": 18390
+    },
+    {
+      "path": "assets/app-DobVIctD.js",
+      "sha256": "792fe6808528dbe8d61db21f8d63913d7699062be57b1d3273206b5792b21cd2",
+      "size_bytes": 3248
+    },
+    {
+      "path": "assets/app-ciOKbOKE.js",
+      "sha256": "ed593125235fe945114028f747d745bd1d26a0df4bfe23cc84364f73235eb0e9",
+      "size_bytes": 56591
+    },
+    {
+      "path": "assets/index-CrtjZ5Xz.js",
+      "sha256": "3d4fde50d37a95524887ec00eab28ab29b72294a14f983689db4f002df92dc64",
+      "size_bytes": 193083
+    },
+    {
+      "path": "assets/index-V9knX7aC.css",
+      "sha256": "cd81c95033b55d3de3140f5f6a0b5237856d0386bb4bab71ede4d2cceb6879f6",
+      "size_bytes": 5829
+    },
+    {
+      "path": "index.html",
+      "sha256": "6b3a938440377434b07db6ecb56efcf65dff6c5dce36618150ece09812aaa4bd",
+      "size_bytes": 519
+    },
+    {
+      "path": "widgets/senses-sidebar/index.html",
+      "sha256": "2ac4c7cac58c3cb5275e51e95fa9ea96d3688b807be14f659f8ed1cc4727aeb0",
+      "size_bytes": 719
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

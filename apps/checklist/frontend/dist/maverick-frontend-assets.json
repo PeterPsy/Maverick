@@ -1,0 +1,83 @@
+{
+  "build_id": "612ff3857d14d70d8b285430103680a8d54ff0e1393e517da0bc7f0b3e5cc7d6",
+  "entrypoints": [
+    "index.html",
+    "widgets/checklist-sidebar/index.html",
+    "widgets/checklist-sidebar-footer/index.html",
+    "widgets/design-checklist/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/activeChecklistSelection-DOby2zXQ.js",
+      "sha256": "f1ab2dd7c17a4b44ad3ddee5a8e3582da98ee0730cbf88069e602c563e6ef059",
+      "size_bytes": 1615
+    },
+    {
+      "path": "assets/api-DNkwnkRX.js",
+      "sha256": "0c9ff3abcb16fa6d15953cb9bcad94aa65747ec2b18150ba5472e02183392b00",
+      "size_bytes": 1017
+    },
+    {
+      "path": "assets/app--XMbeQVF.js",
+      "sha256": "0f25cc6515d69fba8fdb5df7ae66375005b5f978de4e1e67fd031988c6eca37c",
+      "size_bytes": 4107
+    },
+    {
+      "path": "assets/app-BWdowdQy.js",
+      "sha256": "56732856b353aa894d0e84b96f0988179abfaeba45cfa82429ad91d1bc4fe00b",
+      "size_bytes": 1166
+    },
+    {
+      "path": "assets/app-ByBw7ekt.js",
+      "sha256": "b0cc2ade0c001cfb21064559116f1ab4fb406af839aaea5ad0849770ceebd3ef",
+      "size_bytes": 7033
+    },
+    {
+      "path": "assets/app-DURm6QLQ.js",
+      "sha256": "bc5a343493c4fb3786f8a78ed5601e6f7f35768dbb0a32f6dfc496cef9a0154d",
+      "size_bytes": 6023
+    },
+    {
+      "path": "assets/createLucideIcon-BZ1Fd3_Z.js",
+      "sha256": "12e2180f6bd58ea535d64d566896ef68cb9c0973b404c908132b311db3d02150",
+      "size_bytes": 194468
+    },
+    {
+      "path": "assets/main-BtV1o9h_.js",
+      "sha256": "560aae25c352cf26780f49789e5f48af733fa455bb04ed21c5609b4503c7990a",
+      "size_bytes": 149982
+    },
+    {
+      "path": "assets/main-Cey0S0sv.css",
+      "sha256": "4cfb170dde42ce28c1f96adf5c1be7e461778595d95d8373ebc8ae04a3d559c0",
+      "size_bytes": 35030
+    },
+    {
+      "path": "assets/sidebar-widget-m48loYDK.css",
+      "sha256": "af648c11e664dcf334da7a03d1d67c2df783989a9bb8eb12cd0b8ad188a07132",
+      "size_bytes": 7294
+    },
+    {
+      "path": "index.html",
+      "sha256": "848a60ea51b849e87243a32aa2581246c7d704b40c1fae672099ae6a9923af15",
+      "size_bytes": 832
+    },
+    {
+      "path": "widgets/checklist-sidebar/index.html",
+      "sha256": "dcb9d696456a8f3ed0a6de514759b166f3ed73a491433d4d420a0672d2109508",
+      "size_bytes": 778
+    },
+    {
+      "path": "widgets/checklist-sidebar-footer/index.html",
+      "sha256": "79f9e368c66834072f0927d0ee7b498959e7244fcfcee822088bfecc0b45b359",
+      "size_bytes": 593
+    },
+    {
+      "path": "widgets/design-checklist/index.html",
+      "sha256": "71c1b248d5873689b36bb9d22bbb22a678761cae73dda62cfdb8d4531c73cf92",
+      "size_bytes": 759
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

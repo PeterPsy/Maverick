@@ -1,3 +1,4 @@
+import { observeMaverickVisibility } from "@maverick/pwa-cache"
 import { useEffect, useState } from "react"
 import { Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -122,19 +123,17 @@ function useCurrentMinuteDate() {
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
-    let intervalId: number | undefined
-    const nextMinuteDelay = 60000 - (now.getSeconds() * 1000 + now.getMilliseconds())
-    const timeoutId = window.setTimeout(() => {
-      setNow(new Date())
-      intervalId = window.setInterval(() => setNow(new Date()), 60000)
-    }, nextMinuteDelay)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-      if (intervalId !== undefined) {
-        window.clearInterval(intervalId)
+    let timer: number | undefined
+    const stop = observeMaverickVisibility((visible) => {
+      window.clearTimeout(timer)
+      if (!visible) return
+      const tick = () => {
+        setNow(new Date())
+        timer = window.setTimeout(tick, 60000 - Date.now() % 60000)
       }
-    }
+      tick()
+    })
+    return () => { stop(); window.clearTimeout(timer) }
   }, [])
 
   return now

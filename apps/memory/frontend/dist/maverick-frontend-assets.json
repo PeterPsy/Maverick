@@ -1,0 +1,62 @@
+{
+  "build_id": "eba54a4ed21090e8ecaf4c89669f20fd86984c7a2b6e6cdb4bae65126b16319d",
+  "entrypoints": [
+    "index.html",
+    "widgets/memory-sidebar/index.html",
+    "widgets/memory-sidebar-footer/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/activeMemorySelection-Bqm4oYQb.js",
+      "sha256": "c3054bc2567e8c2637076f730aa1a096ee6edd13c2ddd14835fe811201352fbc",
+      "size_bytes": 5507
+    },
+    {
+      "path": "assets/app-BohfJKcN.js",
+      "sha256": "b5b36344342de68bc8c460ca244338caa7b968c558b5db035dab466f460ebc40",
+      "size_bytes": 6887
+    },
+    {
+      "path": "assets/app-CNUIhaxj.css",
+      "sha256": "c630f16227a38e46c1602c319860d4dd5c45050918ae3c06c333bb0e523994c7",
+      "size_bytes": 10050
+    },
+    {
+      "path": "assets/app-CuFj6vv-.js",
+      "sha256": "c836ebbb27a741083f89a397edd22eff319528cb27685aa103937993c0757340",
+      "size_bytes": 2003
+    },
+    {
+      "path": "assets/app-W3rvwKPU.js",
+      "sha256": "aa586bf54ddb026b73c0dab38c5940c799b8d0e2ea4c7517692ee07d63eca49f",
+      "size_bytes": 29356
+    },
+    {
+      "path": "assets/memoryApi-DRux5XP8.js",
+      "sha256": "2a8cb529ac2e360b7e6875bee42fc60979956eec37bf32f51edc3f62ae0093aa",
+      "size_bytes": 196958
+    },
+    {
+      "path": "assets/sidebar-widget-0wdim7J0.css",
+      "sha256": "b28d887dd248fd3a8b76e0edcd5429393d2a29ae702f1aead90b24356977c014",
+      "size_bytes": 7631
+    },
+    {
+      "path": "index.html",
+      "sha256": "d127761bcd6032e0d6c910d2ceff9052aaa609cc86bdb6af042afd153b12fca5",
+      "size_bytes": 636
+    },
+    {
+      "path": "widgets/memory-sidebar/index.html",
+      "sha256": "37822a0c1ef73476609b87846e2634d2f8ae3c0aca31971750f5e0f06c227adc",
+      "size_bytes": 670
+    },
+    {
+      "path": "widgets/memory-sidebar-footer/index.html",
+      "sha256": "3544006e77037584f84eda6d09f2f3ac29e786f0a867f0e9e136944b56f8ea51",
+      "size_bytes": 580
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

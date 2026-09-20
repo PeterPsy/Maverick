@@ -76,6 +76,7 @@ def create_local_upload_session(
         )
         reserved_bytes = _active_session_reserved_bytes(data_root=data_root)
         _enforce_reserved_upload_budget(
+            data_root=data_root,
             uploaded_root=uploaded_root,
             generated_root=generated_root,
             target=target,
@@ -262,6 +263,7 @@ def _complete_upload(
         raise StorageValidationError("Local upload session did not receive the declared number of bytes.", operation="local_upload_session.chunk")
     reserved_bytes = _active_session_reserved_bytes(data_root=data_root, exclude_session_id=str(session.get("id") or ""))
     _enforce_reserved_upload_budget(
+        data_root=data_root,
         uploaded_root=uploaded_root,
         generated_root=generated_root,
         target=target,
@@ -344,6 +346,7 @@ def _active_session_reserved_bytes(*, data_root: Path, exclude_session_id: str =
 
 def _enforce_reserved_upload_budget(
     *,
+    data_root: Path,
     uploaded_root: Path,
     generated_root: Path,
     target: Path,
@@ -353,6 +356,7 @@ def _enforce_reserved_upload_budget(
 ) -> None:
     try:
         enforce_storage_budget(
+            data_root=data_root,
             uploaded_root=uploaded_root,
             generated_root=generated_root,
             target=target,

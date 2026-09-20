@@ -84,7 +84,7 @@ def upload_file_payload(
         )
         previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
         previous_sha256 = hash_file(previous_path) if previous_path else ""
-        enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
+        enforce_storage_budget(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
         new_sha256 = content_hash(payload)
         record = mutate(data_root=data_root, role=role, root=root, target=target,
             kind="write", payload=payload, sha256=new_sha256)
@@ -264,7 +264,7 @@ def update_markdown_file_payload(
         encoded = updated_content.encode("utf-8")
         if len(encoded) > MAX_MARKDOWN_EDIT_BYTES:
             raise StorageValidationError(f"Markdown content must be at most {MAX_MARKDOWN_EDIT_BYTES} bytes.")
-        enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=path, payload_size=len(encoded))
+        enforce_storage_budget(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, target=path, payload_size=len(encoded))
         sha256 = content_hash(encoded)
         record = mutate(data_root=data_root, role=role, root=root, target=path,
             kind="write", payload=encoded, sha256=sha256)

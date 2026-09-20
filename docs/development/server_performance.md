@@ -114,6 +114,9 @@ or rename. Success follows metadata commit. Recovery can finish prepared writes,
 complete metadata after a filesystem commit, or report a conflict with external
 changes. Pending intents block catalog reads and reconciliation until recovered.
 Conversions and network transfer remain outside SQLite write transactions.
+Indexed quota checks read maintained local byte totals instead of walking both
+Storage roots. Image composition runs in app-private scratch outside the mutation
+fence, then verifies the source signatures before committing its output.
 
 The existing `background_tick` hook drives a resumable scan capped at 5,000 stat
 calls and a 500 ms work budget per invocation. It preserves its directory cursor

@@ -54,6 +54,16 @@ class IndexedStorageIntegrationTests(unittest.TestCase):
             self.assertIsNone(inventory.resolve_file_record(data_root=self.data, **self.arguments, entity_id='generated:unseen.md'))
         self.assertEqual((self.data / 'files.json').read_bytes(), source)
 
+    def test_indexed_quota_does_not_scan_the_storage_tree(self):
+        from store_files_paths import enforce_storage_budget
+        from errors import StorageValidationError
+        with patch.dict(os.environ, {'MAVERICK_STORAGE_MAX_BYTES': '10'}), \
+             patch.object(Path, 'rglob', side_effect=AssertionError('quota tree scan')):
+            enforce_storage_budget(data_root=self.data, **self.arguments, target=self.root / 'second.md', payload_size=5)
+            with self.assertRaisesRegex(StorageValidationError, 'quota_exceeded'):
+                enforce_storage_budget(data_root=self.data, **self.arguments, target=self.root / 'second.md', payload_size=6)
+            enforce_storage_budget(data_root=self.data, **self.arguments, target=self.root / 'first.md', payload_size=10)
+
     def test_upsert_unchanged_preserves_revision_hash_and_memory(self):
         file = self.write('first.md', b'first')
         with self.index.transaction(write=True) as connection:

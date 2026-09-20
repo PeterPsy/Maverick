@@ -380,7 +380,7 @@ def write_file_payload(
         previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
         previous_sha256 = hash_file(previous_path) if previous_path else ""
         target.parent.mkdir(parents=True, exist_ok=True)
-        enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
+        enforce_storage_budget(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
         new_sha256 = content_hash(payload)
         record = mutate(data_root=data_root, role=role, root=root, target=target,
             kind="write", payload=payload, sha256=new_sha256)
@@ -427,12 +427,21 @@ def atomic_write_bytes(target: Path, payload: bytes) -> None:
             temporary_path.unlink()
 
 
-def enforce_storage_budget(*, uploaded_root: Path, generated_root: Path, target: Path, payload_size: int) -> None:
+def enforce_storage_budget(*, data_root: Path | None = None, uploaded_root: Path, generated_root: Path, target: Path, payload_size: int) -> None:
     max_storage_bytes = _configured_storage_budget()
     if max_storage_bytes is None:
         return
     existing_size = target.stat().st_size if target.exists() and target.is_file() else 0
-    projected = _stored_storage_bytes(uploaded_root) + _stored_storage_bytes(generated_root) - existing_size + payload_size
+    from inventory import uses_sqlite
+    if data_root is not None and uses_sqlite(data_root):
+        from inventory_sqlite import InventoryIndex
+        from inventory_queries import require_ready
+        with InventoryIndex(data_root).transaction() as connection:
+            require_ready(connection)
+            stored = connection.execute("SELECT COALESCE(SUM(total_bytes),0) FROM folder_totals WHERE path=''").fetchone()[0]
+    else:
+        stored = _stored_storage_bytes(uploaded_root) + _stored_storage_bytes(generated_root)
+    projected = stored - existing_size + payload_size
     if projected > max_storage_bytes:
         raise StorageValidationError("workspace_storage_quota_exceeded")
 

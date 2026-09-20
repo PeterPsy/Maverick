@@ -12,7 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from errors import StorageValidationError
+from errors import StorageConflictError, StorageValidationError
+from inventory_indexed import file_signature
 from inventory import upsert_file_record
 from store_files_paths import enforce_storage_budget, hash_file, normalize_write_mode, prepare_write_target, reference_from_payload, resolve_storage_file, safe_file_name, safe_folder_relative_path, storage_root_for_role, storage_write_lock, write_audit_payload
 
@@ -93,6 +94,16 @@ def image_compose_pair_payload(
     root = storage_root_for_role(role="generated", uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     requested_target = (root / requested_relative_path).resolve()
     mode = normalize_write_mode(body.get("mode") or "create", operation="image.compose_pair")
+    source_paths = [Path(str(item['local_path'])) for item in sources]
+    source_signatures = [item['_source_signature'] for item in sources]
+    data_root.mkdir(parents=True, exist_ok=True)
+    composed_bytes, output_image = _compose_side_by_side(
+        source_paths,
+        target_dir=data_root,
+        output_format=output_format,
+        target_height=target_height,
+        background_color=_background_color(body.get("background_color")),
+    )
     with storage_write_lock(data_root):
         target = prepare_write_target(
             root=root,
@@ -103,14 +114,9 @@ def image_compose_pair_payload(
         )
         target.parent.mkdir(parents=True, exist_ok=True)
         previous_sha256 = hash_file(target) if target.exists() and target.is_file() else ""
-        composed_bytes, output_image = _compose_side_by_side(
-            [Path(str(item["local_path"])) for item in sources],
-            target_dir=target.parent,
-            output_format=output_format,
-            target_height=target_height,
-            background_color=_background_color(body.get("background_color")),
-        )
-        enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(composed_bytes))
+        if [file_signature(path.stat()) for path in source_paths] != source_signatures:
+            raise StorageConflictError('A source image changed during composition.', conflict='source_changed')
+        enforce_storage_budget(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(composed_bytes))
         record = mutate(data_root=data_root, role="generated", root=root, target=target,
             kind="write", payload=composed_bytes)
         sha256 = record["sha256"]
@@ -187,9 +193,13 @@ def _inspect_ref(
         raise StorageValidationError("Only common image files are supported for image operations.", operation="image")
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
+    signature = file_signature(path.stat())
     metadata = _probe_image(path)
+    if file_signature(path.stat()) != signature:
+        raise StorageConflictError('A source image changed during inspection.', conflict='source_changed')
     return {
         **metadata,
+        '_source_signature': signature,
         "label": str(ref.get("label") or "").strip(),
         "role": role,
         "relative_path": relative_path,

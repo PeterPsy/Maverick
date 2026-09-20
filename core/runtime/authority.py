@@ -13,7 +13,6 @@ from core.providers.agentic_models import (
     WorkspaceAgenticProfileBinding,
 )
 from core.providers.errors import AgenticRuntimeError, ProviderNotFoundError
-from core.providers.execution_families import is_exact_codex_identity
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
@@ -161,15 +160,9 @@ def resolve_runtime_authority(
         tool_handles = ()
     else:
         tool_handles = _narrow_handles_to_capabilities(tool_handles, capabilities)
-    exact_codex = is_exact_codex_identity(
-        runtime_engine_id=binding.runtime_engine_id,
-        adapter_id=binding.adapter_id,
-        model_provider_id=binding.model_provider_id,
-        provider_protocol=binding.provider_protocol,
-    )
-    # The exact local Codex app-server contract predates a live catalog API.
-    # Hosted runtimes treat an empty live handle set as no tool authority.
-    if tool_handles or not exact_codex:
+    # Native runtimes own and report their structured CLI tool surface. Hosted
+    # runtimes instead require explicit live Maverick tool handles.
+    if tool_handles or not _runtime_owns_native_tool_surface(adapter):
         capabilities = _narrow_capabilities_to_live_handles(
             capabilities,
             tool_handles,
@@ -556,6 +549,12 @@ def intersect_runtime_capabilities(
         },
         attachment_modalities=modalities,
     )
+
+
+def _runtime_owns_native_tool_surface(adapter: object) -> bool:
+    installation = getattr(adapter, "installation", None)
+    recipe = getattr(installation, "recipe", None)
+    return getattr(recipe, "context_owner", None) == "native_runtime"
 
 
 def _narrow_capabilities(

@@ -8,7 +8,6 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from core.providers.execution_families import (
-    HOSTED_TEXT_EXECUTION_FAMILY,
     MAVERICK_AGENT_EXECUTION_FAMILY,
     NATIVE_AGENT_EXECUTION_FAMILY,
     NO_WORKSPACE_ACTIONS_MESSAGE,
@@ -45,12 +44,10 @@ class NativeAgentFrameworkTest(unittest.TestCase):
             [
                 NATIVE_AGENT_EXECUTION_FAMILY,
                 MAVERICK_AGENT_EXECUTION_FAMILY,
-                HOSTED_TEXT_EXECUTION_FAMILY,
             ],
         )
-        self.assertEqual(catalog[0].label, "Native Agents (CLI)")
-        self.assertEqual(catalog[1].label, "Maverick Agents (API)")
-        self.assertEqual(catalog[2].label, "Text-only Models (API)")
+        self.assertEqual(catalog[0].label, "CLI models")
+        self.assertEqual(catalog[1].label, "API models")
         self.assertEqual(NO_WORKSPACE_ACTIONS_MESSAGE, "No workspace tools or actions.")
 
     def test_execution_family_is_derived_from_runtime_identity(self) -> None:
@@ -102,6 +99,11 @@ class NativeAgentFrameworkTest(unittest.TestCase):
 
         self.assertTrue(installation.contract_configured)
         self.assertEqual(definition.status, "disabled")
+        self.assertEqual(definition.default_model_family, "gemini-3.8-flash-high")
+        self.assertEqual(
+            definition.supported_execution_modes,
+            ["sandbox", "full-access"],
+        )
         self.assertFalse(definition.requires_credentials)
         self.assertFalse(definition.capabilities.supports_api_key_auth)
         self.assertEqual(installation.manifest.adapter_version, "5")

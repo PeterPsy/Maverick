@@ -10,6 +10,7 @@ from unittest.mock import patch
 from core.providers.antigravity_cli_session import AntigravityCliSession
 from core.providers.native_agent_runtime import NativeSteerContext
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
+from core.skills.models import SkillDefinition
 from tests.unit.providers.antigravity_cli_fixture import AntigravityCliFixture
 
 
@@ -21,9 +22,12 @@ class AntigravityCliConcurrencyTest(
         source = self.root / "skill"
         source.mkdir()
         (source / "SKILL.md").write_text("# Fixture skill\n", encoding="utf-8")
-        skill = SimpleNamespace(
+        skill = SkillDefinition(
             skill_id="workspace:fixture",
             source_root=str(source),
+            local_skill_id="fixture", name="Fixture", description="Fixture skill.",
+            owner_kind="workspace", owner_id="default", workspace_id="default",
+            status="available",
         )
         with_skill = SimpleNamespace(
             **vars(self.context),

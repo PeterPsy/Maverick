@@ -30,7 +30,7 @@ from core.providers.native_agent_contract import (
 )
 NATIVE_AGENT_SANDBOX_POLICY_REVISION = "maverick-native-sandbox-v1"
 ANTIGRAVITY_NATIVE_SANDBOX_POLICY_REVISION = (
-    "maverick-antigravity-native-sandbox-v3"
+    "maverick-antigravity-native-sandbox-v4"
 )
 ANTIGRAVITY_CLI_CANDIDATE_PROVIDER_ID = "antigravity-cli"
 _INSPECTION_CACHE_SECONDS = 5.0
@@ -195,13 +195,13 @@ def build_antigravity_cli_candidate_definition(
         ),
         default_model_family=ANTIGRAVITY_DEFAULT_MODEL,
         requires_credentials=False,
-        supported_execution_modes=["sandbox"],
+        supported_execution_modes=["sandbox", "full-access"],
         created_at=timestamp,
         updated_at=timestamp,
         model_options=[
             ProviderModelOption(
                 model_id=ANTIGRAVITY_DEFAULT_MODEL,
-                label="Gemini 3.6 Flash (High)",
+                label="Gemini 3.8 Flash (High)",
                 description=(
                     "Pinned Antigravity model slug; live account availability "
                     "and agentic authority are not inferred."

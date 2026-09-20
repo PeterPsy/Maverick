@@ -114,6 +114,8 @@ for line in sys.stdin:
     message = json.loads(line)
     record(message)
     text = message["message"]["content"]
+    if text.startswith("[Maverick runtime context]\n"):
+        text = text.split("[Maverick user input]\n", 1)[1]
     turns += 1
     previous_input = input_tokens
     input_tokens += 10 + len(text)

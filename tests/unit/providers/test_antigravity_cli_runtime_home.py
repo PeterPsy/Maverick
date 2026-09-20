@@ -11,6 +11,7 @@ from core.providers.antigravity_cli_runtime_home import (
     ANTIGRAVITY_OAUTH_TOKEN_FILENAME,
     ANTIGRAVITY_PROFILE_RELATIVE_PATH,
     ANTIGRAVITY_RUNTIME_SETTINGS,
+    ensure_antigravity_runtime_skills_root,
     prepare_antigravity_runtime_home,
     prepare_antigravity_runtime_skills,
     resolve_antigravity_source_home,
@@ -183,8 +184,7 @@ class AntigravityCliRuntimeHomeTest(unittest.TestCase):
         destination = (
             self.runtime
             / "antigravity-home"
-            / ANTIGRAVITY_PROFILE_RELATIVE_PATH
-            / "skills"
+            / ".gemini/config/skills"
         )
         materialized = next(destination.iterdir())
         self.assertEqual(
@@ -203,6 +203,37 @@ class AntigravityCliRuntimeHomeTest(unittest.TestCase):
         empty_digest = prepare_antigravity_runtime_skills(self.runtime, ())
         self.assertNotEqual(first_digest, empty_digest)
         self.assertEqual(list(destination.iterdir()), [])
+
+    def test_cli_managed_skills_alias_survives_runtime_restart(self) -> None:
+        home = prepare_antigravity_runtime_home(
+            self.runtime,
+            source_home=self.source,
+        )
+        canonical = home / ".gemini/config/skills"
+        canonical.mkdir(parents=True, mode=0o700)
+        alias = home / ANTIGRAVITY_PROFILE_RELATIVE_PATH / "skills"
+        alias.symlink_to(canonical, target_is_directory=True)
+
+        resolved = ensure_antigravity_runtime_skills_root(self.runtime)
+
+        self.assertEqual(resolved, canonical)
+        self.assertTrue(alias.is_symlink())
+
+    def test_unexpected_cli_skills_alias_fails_closed(self) -> None:
+        home = prepare_antigravity_runtime_home(
+            self.runtime,
+            source_home=self.source,
+        )
+        outside = self.root / "outside-skills"
+        outside.mkdir()
+        alias = home / ANTIGRAVITY_PROFILE_RELATIVE_PATH / "skills"
+        alias.symlink_to(outside, target_is_directory=True)
+
+        with self.assertRaisesRegex(
+            NativeStructuredCliError,
+            "antigravity_runtime_home_invalid",
+        ):
+            ensure_antigravity_runtime_skills_root(self.runtime)
 
     def test_skill_symlinks_and_duplicate_identities_fail_closed(self) -> None:
         valid = self.root / "skills" / "valid"

@@ -128,7 +128,7 @@ class OpenRouterChatStreamDecoder:
             if (
                 self.generation_id is None
                 or generation_id != self.generation_id
-                or payload.get("model") != self.request.model_id
+                or payload.get("model") not in self._allowed_model_ids()
                 or self.provider_name is None
                 or payload.get("provider") != self.provider_name
             ):
@@ -161,7 +161,7 @@ class OpenRouterChatStreamDecoder:
     def _identity(self, payload: dict[str, object]) -> list[AgenticModelEvent]:
         generation_id = required_text(payload.get("id"))
         provider_name = required_text(payload.get("provider"))
-        if payload.get("model") != self.request.model_id or (
+        if payload.get("model") not in self._allowed_model_ids() or (
             self.upstream_provider_names
             and provider_name not in self.upstream_provider_names
         ):
@@ -180,6 +180,9 @@ class OpenRouterChatStreamDecoder:
         if generation_id != self.generation_id:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         return []
+
+    def _allowed_model_ids(self) -> set[str]:
+        return {self.request.model_id, *self.resolved_model_ids}
 
     def _choice(self, choice: dict[str, object]) -> list[AgenticModelEvent]:
         if choice.get("index") != 0:

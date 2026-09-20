@@ -11,6 +11,9 @@ from core.providers.provider_google_metadata import build_google_ai_studio_defin
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_DEFAULT_REASONING_EFFORT,
     OPENROUTER_AGENTIC_REASONING_EFFORTS,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_DEFAULT_REASONING_EFFORT,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_ID,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_REASONING_EFFORTS,
 )
 from core.providers.models import (
     ProviderCapabilitySet,
@@ -210,6 +213,33 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                         quantization="unknown",
                         context_length=1048576,
                         max_completion_tokens=131072,
+                    ),
+                ],
+            ),
+            ProviderModelOption(
+                model_id=OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_ID,
+                label="DeepSeek Flash Latest",
+                description="OpenRouter alias for the current DeepSeek Flash agent model.",
+                default_reasoning_effort=(
+                    OPENROUTER_DEEPSEEK_FLASH_LATEST_DEFAULT_REASONING_EFFORT
+                ),
+                supported_reasoning_efforts=[
+                    ProviderReasoningOption(
+                        effort=effort,
+                        label={"max": "Maximum", "high": "High", "low": "Low"}[effort],
+                        description=None,
+                    )
+                    for effort in OPENROUTER_DEEPSEEK_FLASH_LATEST_REASONING_EFFORTS
+                ],
+                input_modalities=["text", "image"],
+                output_modalities=["text"],
+                upstream_provider_options=[
+                    _openrouter_upstream(
+                        "relace",
+                        "Relace",
+                        quantization="fp4",
+                        context_length=1048576,
+                        max_completion_tokens=943718,
                     ),
                 ],
             ),

@@ -17,7 +17,6 @@ redaction-safe metadata.
 | --- | --- | --- |
 | `native_agent` | Native structured runtime | Yes, under Maverick supervision |
 | `maverick_agent` | Maverick Core | Yes, through Core tools |
-| `hosted_text` | No action loop | No |
 
 Family is derived from the runtime implementation. It is not profile rollout
 state and is not stored in `RuntimeExecutionBinding`.
@@ -64,21 +63,64 @@ keeps the last usable snapshot and has no expiry deadline.
 The workspace default is selected by its direct binding. New sessions may pick
 another enabled current model and supported reasoning effort.
 
+## Antigravity
+
+Antigravity is a `native_agent` using its installed structured CLI, an isolated
+runtime home and the operator-managed OAuth connection. Activation requires a
+successful live model discovery; enabled workspace bindings then behave like
+other CLI model choices without exposing OAuth or runtime internals in the UI.
+Catalog aliases that differ only by a `high`, `medium`, or `low` suffix are
+projected as one stable model choice with those values as reasoning efforts.
+At launch the selected effort resolves back to the matching authenticated CLI
+catalog alias.
+
+Native CLI engines share one execution contract. In sandbox mode Maverick
+confines the process and dependencies while leaving the selected workspace
+writable. In full-access mode it launches the reviewed CLI directly with that
+CLI's non-interactive permission bypass. The provider home remains private in
+both modes. Native runtimes own their structured tool surface, so an empty
+Maverick hosted-tool handle list does not erase their declared CLI, filesystem,
+shell, or MCP capabilities.
+Antigravity skills are mounted from its private canonical config tree; the
+CLI-managed compatibility alias is accepted only when it resolves back to that
+exact tree, so process and backend restarts preserve the boundary.
+The launch registers the workspace explicitly as well as setting cwd.
+Antigravity receives the workspace instructions, agent instructions and skill
+catalog that Codex discovers natively. Both use the same enabled,
+session-allowed skill resolver; an implicit session does not require a user
+skill invocation to receive its catalog.
+
 ## Hosted Maverick agents
 
-Google Gemini and OpenRouter GLM are `maverick_agent` configs. Core owns their
-tool loop, context, accounting, provider-private state and recovery. Each config
-declares its exact endpoint, provider/model protocol, route and reasoning.
+OpenRouter GLM and OpenRouter DeepSeek Flash Latest are `maverick_agent`
+configs. Core owns their tool loop, context, accounting, provider-private state
+and recovery. Each config declares its exact endpoint, provider/model protocol,
+route and reasoning. Google AI Studio is not published as an API-agent choice;
+Google agent models are exposed through the Antigravity CLI family instead.
+DeepSeek Flash Latest uses the OpenRouter alias
+`~deepseek/deepseek-flash-latest` so OpenRouter advances the underlying Flash
+model without creating a text-only choice. Streaming identity validation accepts
+only the requested alias or one of that config's explicitly pinned resolved
+model ids; arbitrary revisions and upstreams still fail closed.
 
 The runtime resolves credentials and health immediately before use. It exposes
 only tools allowed by the current workspace, actor, execution mode and policy.
 No Full Workspace contract, harness digest or vendor-catalog digest is required
 to make the model selectable.
+API adapters consume the same Core semantic context before their transport
+codecs render it. Runtime context uses real workspace/workdir paths
+for full-access tools and `workspace://<id>/<relative-workdir>` for sandbox
+tools, preserving nested working directories without exposing sandbox host
+paths. The environment projection is shared with native CLI context; workspace
+instructions, agent instructions, references and invoked skills keep their
+existing classified semantic blocks.
 
-## Hosted text
+## Internal text generation compatibility
 
-Text-only models use `HostedTextExecutionBinding` and the no-tools hosted-text
-path. This is separate from agentic model configuration.
+Plain hosted text is not a selectable Chat model family and cannot create a new
+composer choice. The lower-level hosted-text path remains only for internal
+generation and compatibility with already-persisted sessions. Speech STT and
+TTS are separate provider contracts and are unaffected.
 
 ## Failure behavior
 

@@ -64,6 +64,19 @@ def resolve_runtime_skills(session: RuntimeSessionRecord, *, start_path: Path | 
     )
 
 
+def resolve_available_runtime_skills(
+    session: RuntimeSessionRecord, *, start_path: Path | None = None,
+) -> list[SkillDefinition]:
+    """Resolve the same enabled, session-allowed catalog for every runtime."""
+    if session.skill_ids:
+        return resolve_runtime_skills(session, start_path=start_path)
+    return list_available_workspace_skills(
+        workspace_id=session.workspace_id,
+        start_path=start_path,
+        app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
+    )
+
+
 def resolve_invoked_runtime_skills(
     session: RuntimeSessionRecord,
     invoked_skill_ids: list[str] | None,

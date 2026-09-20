@@ -94,6 +94,7 @@ class AntigravityCliFixture:
             workdir=str(workspace),
             runtime_root=str(self.root / "runtime"),
             effective_mode="sandbox",
+            skill_activation_mode="explicit",
         )
         self.binding = SimpleNamespace(
             model_id="fixture-model",

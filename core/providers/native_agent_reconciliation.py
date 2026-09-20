@@ -78,30 +78,14 @@ def refresh_antigravity_native_catalog(
             registry.register_provider_definition(
                 replace(definition, status="disabled", updated_at=timestamp)
             )
-            if store is not None:
-                try:
-                    persisted = store.get_provider_definition(
-                        "antigravity-cli"
-                    )
-                except ProviderNotFoundError:
-                    pass
-                else:
-                    if persisted.status != "disabled":
-                        store.save_provider_definition(
-                            replace(
-                                persisted,
-                                status="disabled",
-                                updated_at=timestamp,
-                            )
-                        )
             return False
         definition = registry.get_provider_definition("antigravity-cli")
         model_ids = {model.model_id for model in snapshot.models}
         default = definition.default_model_family
         if default not in model_ids:
             default = (
-                "gemini-3.6-flash-high"
-                if "gemini-3.6-flash-high" in model_ids
+                "gemini-3.8-flash-high"
+                if "gemini-3.8-flash-high" in model_ids
                 else snapshot.models[0].model_id
             )
         existing = None
@@ -144,7 +128,12 @@ def refresh_antigravity_native_catalog(
                         controller,
                         snapshot,
                     )
-                store.save_provider_definition(definition)
+                # Discovery may narrow live availability, never the operator's
+                # saved activation. A later healthy refresh can then recover.
+                store.save_provider_definition(replace(
+                    definition,
+                    status=existing.status if existing is not None else "disabled",
+                ))
             except Exception:
                 registry.revoke_native_agent_activation("antigravity-cli")
                 registry.clear_native_agent_catalog(

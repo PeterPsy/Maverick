@@ -137,6 +137,7 @@ def build_transport_probe_context(root: Path):
         workspace_id=PROBE_WORKSPACE_ID,
         workspace_root=str(root),
         workdir=str(root),
+        effective_mode="sandbox",
         system_prompt="",
     )
     return RuntimeTurnContext(

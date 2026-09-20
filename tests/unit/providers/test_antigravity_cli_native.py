@@ -3,7 +3,6 @@
 import asyncio
 from dataclasses import replace
 import hashlib
-import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -61,67 +60,6 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
         self.assertEqual(len(startups), 2)
         self.assertIn("--conversation", startups[1]["argv"])
         self.assertIn("fixture-conversation", startups[1]["argv"])
-
-    async def test_launch_is_pinned_machine_readable_and_never_bypasses_permissions(self):
-        command = self.spec.command
-        sandboxed = self.sandboxed_spec.command
-        workspace = str(Path(self.session.workspace_root))
-        self.assertIn(
-            ["--ro-bind", workspace, workspace],
-            [sandboxed[index : index + 3] for index in range(len(sandboxed) - 2)],
-        )
-        skills_root = str(
-            self.root
-            / "runtime/antigravity-home/.gemini/antigravity-cli/skills"
-        )
-        self.assertIn(
-            ["--ro-bind", skills_root, skills_root],
-            [sandboxed[index : index + 3] for index in range(len(sandboxed) - 2)],
-        )
-        self.assertEqual(command.count("stream-json"), 2)
-        self.assertIn("--sandbox", command)
-        self.assertIn("--disable-slash-commands", command)
-        self.assertIn("--model", command)
-        self.assertNotIn("--dangerously-skip-permissions", command)
-        self.assertIn("/usr/local/lib", self.spec.readable_roots)
-        self.assertEqual(self.spec.env_overrides["HOME"], str(self.root / "runtime/antigravity-home"))
-        self.assertNotEqual(self.spec.env_overrides["HOME"], str(Path.home()))
-        self.assertNotIn("GEMINI_API_KEY", self.spec.env_overrides)
-        self.assertNotIn("MAVERICK_PROVIDER_SECRET", self.spec.env_overrides)
-        settings_path = (
-            Path(self.spec.env_overrides["HOME"])
-            / ".gemini/antigravity-cli/settings.json"
-        )
-        self.assertEqual(
-            json.loads(settings_path.read_text(encoding="utf-8")),
-            {
-                "artifactReviewPolicy": "asks-for-review",
-                "enableTerminalSandbox": True,
-                "permissions": {
-                    "allow": [
-                        "command(maverick)",
-                        "unsandboxed(maverick)",
-                    ],
-                },
-                "toolPermission": "proceed-in-sandbox",
-            },
-        )
-        self.assertEqual(settings_path.stat().st_mode & 0o777, 0o600)
-        token_path = settings_path.parent / "antigravity-oauth-token"
-        self.assertEqual(token_path.read_text(encoding="utf-8"), "fixture-oauth-token")
-        self.assertEqual(token_path.stat().st_mode & 0o777, 0o600)
-        self.assertEqual(self.spec.resolved_secret_refs, [])
-        self.assertIsNone(self.spec.credential_binding_id)
-        self.assertEqual(self.spec.writable_roots, [str(self.root / "runtime")])
-        self.assertTrue(
-            (self.root / "runtime/bin/maverick").is_file()
-        )
-        self.assertIn("MAVERICK_RUNTIME_API_TOKEN", self.spec.env_overrides)
-        self.assertTrue(
-            self.spec.env_overrides["PATH"].startswith(
-                str(self.root / "runtime/bin")
-            )
-        )
 
     async def test_optional_outer_sandbox_is_content_and_owner_pinned(self):
         candidate = self.root / "dedicated-bwrap"

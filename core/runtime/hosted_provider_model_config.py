@@ -14,6 +14,9 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_MODEL_REVISION,
     OPENROUTER_AGENTIC_REASONING_EFFORTS,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_ID,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_REVISION,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_REASONING_EFFORTS,
 )
 HOSTED_CONTEXT_POLICY_REVISION = "p4-context-v4"
 
@@ -148,12 +151,42 @@ OPENROUTER_HOSTED_MODEL_CONFIG = HostedProviderModelConfig(
 )
 
 
+OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_CONFIG = HostedProviderModelConfig(
+    model_provider_id="openrouter",
+    model_id=OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_ID,
+    model_revision=OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_REVISION,
+    model_revision_policy="provider_alias",
+    provider_protocol="openrouter-chat-completions",
+    provider_api_version="v1",
+    endpoint_id="openrouter-chat-completions-v1",
+    upstream_ids=(OPENROUTER_AGENTIC_UPSTREAM_ID,),
+    state_mode="client-managed-history",
+    context_policy=openrouter_full_context_policy(),
+    support_flags=HostedProviderSupportFlags(
+        streaming=True,
+        usage_accounting=True,
+        tool_calling=True,
+        supports_empty_tool_catalog=True,
+        supports_tool_choice_none=False,
+        omits_tools_when_empty=True,
+        parallel_tool_calls=True,
+        cooperative_cancellation=True,
+        continuation_mode="core-managed-chat-history",
+        reasoning_efforts=OPENROUTER_DEEPSEEK_FLASH_LATEST_REASONING_EFFORTS,
+        attachment_modalities=("file",),
+        input_token_limit=1_048_576,
+        output_token_limit=131_072,
+    ),
+)
+
+
 __all__ = [
     "GOOGLE_HOSTED_MODEL_CONFIG",
     "HOSTED_CONTEXT_POLICY_REVISION",
     "HostedProviderModelConfig",
     "HostedProviderSupportFlags",
     "OPENROUTER_HOSTED_MODEL_CONFIG",
+    "OPENROUTER_DEEPSEEK_FLASH_LATEST_MODEL_CONFIG",
     "hosted_full_context_policy",
     "openrouter_full_context_policy",
 ]

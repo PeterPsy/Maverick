@@ -54,28 +54,20 @@ class ProviderExecutionFamilyApiTest(unittest.TestCase):
 
         self.assertEqual(
             [item["family_id"] for item in payload["execution_families"]],
-            ["native_agent", "maverick_agent", "hosted_text"],
+            ["native_agent", "maverick_agent"],
         )
         self.assertEqual(
             [item["label"] for item in payload["execution_families"]],
             [
-                "Native Agents (CLI)",
-                "Maverick Agents (API)",
-                "Text-only Models (API)",
+                "CLI models",
+                "API models",
             ],
         )
         self.assertEqual(
             [item["description"] for item in payload["execution_families"]],
             [
-                "External coding-agent runtimes such as Codex, Claude Code, and "
-                "Antigravity CLI. They use their own agent loop and tools, while "
-                "Maverick launches, connects to, and supervises them.",
-                "API models made agentic by Maverick. Maverick provides workspace "
-                "context, tools, the execution loop, approvals, finalization, and "
-                "recovery.",
-                "API models without workspace tools or an action loop. They "
-                "generate text from the context provided by Maverick but cannot "
-                "perform workspace actions.",
+                "Models running through native command-line agents.",
+                "Models running through Maverick's agentic API loop.",
             ],
         )
         profile = payload["agentic_profiles"]["items"][0]

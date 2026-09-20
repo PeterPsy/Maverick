@@ -35,6 +35,7 @@ from core.runtime.workspace_instructions import (
     read_complete_confined_text,
     resolve_workspace_instruction_chain,
 )
+from core.runtime.runtime_prompt_context import runtime_environment_context
 
 
 MAX_SKILL_INSTRUCTION_BYTES = 1_048_576
@@ -92,7 +93,7 @@ class SemanticContextMaterializer:
             "model_id": binding.model_id,
             "provider_protocol": binding.provider_protocol,
             "provider_api_version": binding.provider_api_version,
-            "workdir": "workspace://" + context.session.workspace_id,
+            **runtime_environment_context(context.session),
         }
         blocks.append(
             make_semantic_block(

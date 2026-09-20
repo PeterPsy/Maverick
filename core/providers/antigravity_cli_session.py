@@ -16,12 +16,16 @@ from core.providers.agentic_adapter import (
     RuntimeProviderEvent,
     RuntimeRecoveryResult,
 )
+from core.providers.antigravity_cli_sandbox import (
+    resolve_antigravity_model_selection,
+)
 from core.providers.antigravity_cli_event_projection import project_antigravity_step
 from core.providers.models import RuntimeSteerResult
 from core.providers.native_structured_cli_transport import (
     NativeJsonlConnection,
     NativeStructuredCliError,
 )
+from core.runtime.runtime_prompt_context import native_runtime_input
 
 
 _TERMINAL_STATUSES = frozenset(
@@ -45,6 +49,7 @@ class AntigravityCliSession:
         self._generation = 0
         self._last_step_index = -1
         self._last_num_turns: int | None = None
+        self.skills: tuple[object, ...] = ()
 
     async def prepare(self, context):
         async with self._prepare_lock:
@@ -122,9 +127,19 @@ class AntigravityCliSession:
             raise NativeStructuredCliError("antigravity_init_invalid")
         if not _REQUIRED_NATIVE_TOOLS.issubset(tools):
             raise NativeStructuredCliError("antigravity_toolset_incomplete")
-        if payload.get("permission_mode") != "proceed-in-sandbox":
+        execution_mode = str(context.session.effective_mode or "").strip()
+        expected_permission_mode = {
+            "sandbox": "proceed-in-sandbox",
+            "full-access": "always-proceed",
+        }.get(execution_mode)
+        if (
+            expected_permission_mode is None
+            or payload.get("permission_mode") != expected_permission_mode
+        ):
             raise NativeStructuredCliError("antigravity_permission_mode_untrusted")
-        expected_model = str(context.binding.model_id or "").strip()
+        expected_model, _reasoning_effort = resolve_antigravity_model_selection(
+            context.binding
+        )
         if payload.get("model") != expected_model:
             raise NativeStructuredCliError("antigravity_model_identity_mismatch")
         return conversation_id
@@ -159,7 +174,16 @@ class AntigravityCliSession:
         if client.has_pending_messages():
             raise NativeStructuredCliError("antigravity_event_sequence_invalid")
         await client.send(
-            {"event": "user", "message": {"content": context.input_text}}
+            {
+                "event": "user",
+                "message": {
+                    "content": native_runtime_input(
+                        session=context.session,
+                        input_text=context.input_text,
+                        skills=self.skills,
+                    ),
+                },
+            }
         )
         ordinal = 1
         accepted = False

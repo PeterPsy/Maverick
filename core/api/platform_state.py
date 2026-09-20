@@ -25,6 +25,7 @@ from core.jobs.events import JobEventBus
 from core.jobs.service import JobService
 from core.jobs.store import JobDocumentStore
 from core.observability.store import ObservabilityDocumentStore, ObservabilityCollections
+from core.providers.maverick_agent_builtins import retire_builtin_maverick_agent_profiles
 from core.providers.provider_codex import refresh_workspace_maverick_wrappers
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import builtin_provider_registry, effective_provider_registry
@@ -309,6 +310,7 @@ def bootstrap_platform_state(
     if register_builtin_provider_definitions:
         onboarding_catalog.validate_runtime_adapter(hosted_adapter)
         onboarding_catalog.publish_profiles(provider_store, now=onboarding_now)
+        retire_builtin_maverick_agent_profiles(provider_store)
     if recover_backend_restart:
         recover_interrupted_runtime_turns_after_backend_restart(state)
         job_service.recover_expired_jobs()

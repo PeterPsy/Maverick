@@ -3,8 +3,10 @@ import unittest
 
 from core.providers.openrouter_agentic_profile import (
     OPENROUTER_AGENTIC_PROFILE_ID,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_PROFILE_ID,
     OPENROUTER_DEFAULT_REASONING_EFFORT,
     OPENROUTER_REASONING_EFFORTS,
+    openrouter_deepseek_flash_latest_publication,
     openrouter_agentic_preview_publication,
 )
 from core.providers.maverick_agent_onboarding import publish_maverick_agent_profile
@@ -37,6 +39,24 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         publish_maverick_agent_profile(store, publication=publication, now=NOW)
 
         self.assertEqual(store.list_agentic_profile_definitions(), [publication.profile])
+
+    def test_deepseek_flash_latest_reuses_the_openrouter_agent_loop(self) -> None:
+        publication = openrouter_deepseek_flash_latest_publication(now=NOW)
+        profile = publication.profile
+
+        self.assertEqual(
+            profile.definition_id,
+            OPENROUTER_DEEPSEEK_FLASH_LATEST_PROFILE_ID,
+        )
+        self.assertEqual(profile.display_name, "DeepSeek Flash Latest")
+        self.assertEqual(profile.model_id, "~deepseek/deepseek-flash-latest")
+        self.assertEqual(profile.runtime_engine_id, "maverick-tool-loop")
+        self.assertEqual(profile.adapter_version_constraint, "==59")
+        self.assertEqual(profile.routing_constraint.allowed_upstream_ids, ("relace",))
+        self.assertEqual(profile.routing_constraint.allowed_quantizations, ("fp4",))
+        self.assertEqual(profile.default_reasoning_effort, "max")
+        self.assertIn("high", profile.reasoning_efforts)
+        self.assertTrue(profile.capabilities.tool_orchestration)
 
 
 if __name__ == "__main__":

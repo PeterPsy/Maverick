@@ -26,11 +26,16 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_PROVIDER_NAME,
     OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
+    OPENROUTER_DEEPSEEK_FLASH_LATEST_RESOLVED_MODEL_IDS,
 )
+from core.providers.store import ProviderStore
 
 
 HOSTED_TOOL_LOOP_ADAPTER_ID = "maverick-hosted-tool-loop"
 HOSTED_TOOL_LOOP_ADAPTER_VERSION = "59"
+RETIRED_MAVERICK_AGENT_PROFILE_IDS = (
+    "agentic-profile-google-gemini-3-6-flash",
+)
 
 GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER = MaverickProtocolAdapterManifest(
     protocol_adapter_id="google-interactions-protocol",
@@ -119,13 +124,40 @@ OPENROUTER_RELACE_GLM_PROVIDER_CONFIG = MaverickProviderConfig(
 )
 
 
+OPENROUTER_RELACE_DEEPSEEK_FLASH_LATEST_PROVIDER_CONFIG = MaverickProviderConfig(
+    config_id="openrouter-relace-deepseek-flash-latest",
+    model_provider_id="openrouter",
+    provider_protocol="openrouter-chat-completions",
+    provider_api_version="v1",
+    routing_constraint=RoutingConstraint(
+        endpoint_id=OPENROUTER_AGENTIC_ENDPOINT_ID,
+        allowed_upstream_ids=(OPENROUTER_AGENTIC_UPSTREAM_ID,),
+        allow_fallbacks=False,
+        require_parameters=True,
+        data_collection_policy="deny",
+        require_zdr=True,
+        allowed_quantizations=("fp4",),
+    ),
+    endpoint_url=OPENROUTER_AGENTIC_ENDPOINT,
+    credential_logical_name="openrouter_api_key",
+    data_destination="OpenRouter API",
+    retention_policy="zdr_required",
+    token_cost_policy=MaverickTokenCostPolicy(
+        policy_id="openrouter-relace-deepseek-flash-latest-public-list-price",
+        input_microusd_per_million_tokens=130_000,
+        output_microusd_per_million_tokens=520_000,
+    ),
+    upstream_provider_names=(OPENROUTER_AGENTIC_PROVIDER_NAME,),
+    resolved_model_ids=OPENROUTER_DEEPSEEK_FLASH_LATEST_RESOLVED_MODEL_IDS,
+)
+
+
 def builtin_maverick_protocol_adapters() -> tuple[
     MaverickProtocolAdapterManifest,
     ...,
 ]:
     """Return trusted protocol records without model-specific branching."""
     return (
-        GOOGLE_INTERACTIONS_PROTOCOL_ADAPTER,
         OPENROUTER_CHAT_PROTOCOL_ADAPTER,
     )
 
@@ -133,8 +165,8 @@ def builtin_maverick_protocol_adapters() -> tuple[
 def builtin_maverick_provider_configs() -> tuple[MaverickProviderConfig, ...]:
     """Return provider endpoint/policy records in deterministic order."""
     return (
-        GOOGLE_INTERACTIONS_PROVIDER_CONFIG,
         OPENROUTER_RELACE_GLM_PROVIDER_CONFIG,
+        OPENROUTER_RELACE_DEEPSEEK_FLASH_LATEST_PROVIDER_CONFIG,
     )
 
 
@@ -143,17 +175,22 @@ def builtin_maverick_agent_publications(
     now: datetime | None = None,
 ) -> tuple[MaverickAgentProfilePublication, ...]:
     """Return model publications consumed by production onboarding."""
-    from core.providers.google_agentic_profile import (
-        google_agentic_preview_publication,
-    )
     from core.providers.openrouter_agentic_profile import (
+        openrouter_deepseek_flash_latest_publication,
         openrouter_agentic_preview_publication,
     )
 
     return (
-        google_agentic_preview_publication(now=now),
         openrouter_agentic_preview_publication(now=now),
+        openrouter_deepseek_flash_latest_publication(now=now),
     )
+
+
+def retire_builtin_maverick_agent_profiles(store: ProviderStore) -> None:
+    """Remove API-agent profiles that are no longer product choices."""
+    for definition_id in RETIRED_MAVERICK_AGENT_PROFILE_IDS:
+        store.delete_workspace_agentic_profile_bindings_for_definition(definition_id)
+        store.delete_agentic_profile_definition(definition_id)
 
 
 __all__ = [
@@ -163,7 +200,10 @@ __all__ = [
     "HOSTED_TOOL_LOOP_ADAPTER_VERSION",
     "OPENROUTER_CHAT_PROTOCOL_ADAPTER",
     "OPENROUTER_RELACE_GLM_PROVIDER_CONFIG",
+    "OPENROUTER_RELACE_DEEPSEEK_FLASH_LATEST_PROVIDER_CONFIG",
+    "RETIRED_MAVERICK_AGENT_PROFILE_IDS",
     "builtin_maverick_agent_publications",
     "builtin_maverick_protocol_adapters",
     "builtin_maverick_provider_configs",
+    "retire_builtin_maverick_agent_profiles",
 ]

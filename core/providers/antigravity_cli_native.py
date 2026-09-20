@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import aclosing
+from dataclasses import replace
 from pathlib import Path
 from threading import Lock
 
@@ -11,12 +12,14 @@ from core.providers.antigravity_cli_sandbox import (
     resolve_antigravity_outer_sandbox,
 )
 from core.providers.antigravity_cli_runtime_home import (
+    antigravity_runtime_skill_root,
     prepare_antigravity_runtime_skills,
 )
 from core.providers.antigravity_cli_session import AntigravityCliSession
 from core.providers.models import RuntimeSteerResult
 from core.providers.native_session_runtime import NativeSessionRuntime
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
+from core.skills.service import resolve_available_runtime_skills
 
 
 class AntigravityCliNativeAdapter:
@@ -111,10 +114,18 @@ class AntigravityCliNativeAdapter:
             return await self._prepare(context)
 
     async def _prepare(self, context):
+        skills = tuple(getattr(context, "invoked_skills", ()) or ())
+        if getattr(context.session, "skill_activation_mode", "implicit") == "implicit":
+            skills = tuple(
+                await asyncio.to_thread(
+                    resolve_available_runtime_skills,
+                    context.session,
+                )
+            )
         skill_digest = await asyncio.to_thread(
             prepare_antigravity_runtime_skills,
             Path(context.session.runtime_root),
-            getattr(context, "invoked_skills", ()),
+            skills,
         )
         session_id = context.session.session_id
         with self._lock:
@@ -125,6 +136,15 @@ class AntigravityCliNativeAdapter:
         with self._lock:
             self._skill_digests[session_id] = skill_digest
         owner = self._owner(context.session.session_id)
+        owner.engine.skills = tuple(
+            replace(
+                skill,
+                source_root=str(antigravity_runtime_skill_root(
+                    Path(context.session.runtime_root), skill.skill_id,
+                )),
+            )
+            for skill in skills
+        )
         try:
             return await owner.call(owner.engine.prepare(context))
         except BaseException:

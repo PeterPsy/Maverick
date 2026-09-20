@@ -14,8 +14,8 @@ from core.providers.agentic_models import (
     UNBOUNDED_PARALLEL_TOOL_CALLS,
 )
 from core.providers.agentic_data_policies import (
-    REMOTE_PREVIEW_EGRESS_POLICY_ID,
-    REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+    REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
 )
 from core.providers.errors import AgenticProfileError
 from core.providers.native_agent_catalog import NativeAgentCatalogModel
@@ -64,7 +64,12 @@ def antigravity_native_policy() -> AgenticRuntimePolicy:
         allow_shell=True,
         require_confirmation_for_mutating=True,
         require_confirmation_for_destructive=True,
-        allowed_remote_data_classes=("public",),
+        allowed_remote_data_classes=(
+            "public",
+            "workspace_internal",
+            "personal_data",
+            "regulated_or_customer_data",
+        ),
     )
 
 
@@ -139,8 +144,8 @@ def antigravity_agentic_profile_definition(
         reasoning_efforts=model.reasoning_efforts,
         default_reasoning_effort=model.default_reasoning_effort,
         created_at=timestamp,
-        egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
-        egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+        egress_policy_id=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_ID,
+        egress_policy_revision=REMOTE_FULL_WORKSPACE_EGRESS_POLICY_REVISION,
         context_policy=ANTIGRAVITY_CONTEXT_POLICY,
     )
 

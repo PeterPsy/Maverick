@@ -37,6 +37,8 @@ REASONING_DETAIL = {
 class OpenRouterAgenticCodecTest(unittest.TestCase):
     def test_accepts_exact_resolved_model_revision(self) -> None:
         stream = _text_stream("generation-resolved-model", "answer")
+        for event in stream:
+            event["model"] = OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
         metadata = stream[-1]["openrouter_metadata"]
         metadata["endpoints"]["available"][0]["model"] = OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
         metadata["attempts"][0]["model"] = OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
@@ -45,6 +47,16 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         events = asyncio.run(_events(client, _request("request-resolved-model")))
 
         self.assertEqual(events[-1].event_type, "completed")
+
+    def test_rejects_unpublished_resolved_model_revision(self) -> None:
+        stream = _text_stream("generation-unknown-model", "answer")
+        for event in stream:
+            event["model"] = "deepseek/unpublished-revision"
+        client = OpenRouterAgenticClient(transport=_ScriptedTransport([stream]))
+
+        events = asyncio.run(_events(client, _request("request-unknown-model")))
+
+        self.assertEqual(events[-1].error_code, "provider_upstream_not_allowed")
 
     def test_accepts_empty_terminal_usage_chunk_repeating_finish_reason(self) -> None:
         stream = _tool_stream("generation-terminal-usage", "maverick_probe_echo")

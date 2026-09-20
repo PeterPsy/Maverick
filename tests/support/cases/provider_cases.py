@@ -200,6 +200,7 @@ class ProvidersTestCase(unittest.TestCase):
             "google/gemma-4-31b-it:free",
             "nvidia/nemotron-3-ultra-550b-a55b:free",
             "z-ai/glm-5.3-flash",
+            "~deepseek/deepseek-flash-latest",
             "hexgrad/kokoro-82m",
         ])
         self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])

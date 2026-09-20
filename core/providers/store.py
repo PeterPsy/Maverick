@@ -52,6 +52,9 @@ class DocumentCollection(Protocol):
     def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
         ...
 
+    def delete_many(self, query: dict[str, Any]) -> int:
+        ...
+
 
 class ProviderStore(Protocol):
     """Persistence contract for provider definitions, bindings, and selection."""
@@ -109,6 +112,9 @@ class ProviderStore(Protocol):
     def list_agentic_profile_definitions(self) -> list[AgenticProfileDefinition]:
         ...
 
+    def delete_agentic_profile_definition(self, definition_id: str) -> int:
+        ...
+
     def save_workspace_agentic_profile_binding(
         self,
         record: WorkspaceAgenticProfileBinding,
@@ -123,6 +129,13 @@ class ProviderStore(Protocol):
 
     def list_all_workspace_agentic_profile_bindings(self) -> list[WorkspaceAgenticProfileBinding]:
         ...
+
+    def delete_workspace_agentic_profile_bindings_for_definition(
+        self,
+        definition_id: str,
+    ) -> int:
+        ...
+
 
 @dataclass(frozen=True)
 class ProviderCollections:
@@ -295,6 +308,11 @@ class ProviderDocumentStore:
     def list_agentic_profile_definitions(self) -> list[AgenticProfileDefinition]:
         return [_agentic_profile_definition(item) for item in self._agentic_profile_definitions.find({})]
 
+    def delete_agentic_profile_definition(self, definition_id: str) -> int:
+        return self._agentic_profile_definitions.delete_many(
+            {"definition_id": definition_id}
+        )
+
     def save_workspace_agentic_profile_binding(
         self,
         record: WorkspaceAgenticProfileBinding,
@@ -324,6 +342,15 @@ class ProviderDocumentStore:
             _workspace_agentic_profile_binding(item)
             for item in self._workspace_agentic_profile_bindings.find({})
         ]
+
+    def delete_workspace_agentic_profile_bindings_for_definition(
+        self,
+        definition_id: str,
+    ) -> int:
+        return self._workspace_agentic_profile_bindings.delete_many(
+            {"definition_id": definition_id}
+        )
+
 
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)

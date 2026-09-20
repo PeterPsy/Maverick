@@ -12,7 +12,7 @@ from core.providers.agentic_models import (
     WorkspaceAgenticProfileBinding,
     default_actor_selection_policy,
 )
-from core.providers.google_agentic_profile import GOOGLE_AGENTIC_PROFILE_ID
+from core.providers.google_agentic_profile import google_agentic_preview_publication
 from core.providers.agentic_profiles import resolve_workspace_agentic_profile
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
@@ -323,8 +323,10 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
 
     @staticmethod
     def _remote_binding(state):
-        definition = state.provider_store.get_agentic_profile_definition(
-            GOOGLE_AGENTIC_PROFILE_ID,
+        # Exercise a contained historical profile without republishing it in
+        # the production catalog, where Google API agents are retired.
+        definition = state.provider_store.save_agentic_profile_definition(
+            google_agentic_preview_publication().profile,
         )
         now = datetime.now(UTC)
         return state.provider_store.save_workspace_agentic_profile_binding(

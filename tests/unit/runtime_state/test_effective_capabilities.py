@@ -200,6 +200,33 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.filesystem_write)
         self.assertFalse(authority.allowed_capabilities.shell)
 
+    def test_native_runtime_owns_its_cli_tool_surface(self) -> None:
+        native_adapter = SimpleNamespace(
+            runtime_engine_id=self.binding.runtime_engine_id,
+            adapter_id=self.binding.adapter_id,
+            adapter_version=self.binding.adapter_version,
+            installation=SimpleNamespace(
+                recipe=SimpleNamespace(context_owner="native_runtime"),
+            ),
+        )
+
+        authority = resolve_runtime_authority(
+            self.store,
+            binding=self.binding,
+            adapter=native_adapter,
+            turn_id="turn-native-tool-surface",
+            currently_authorized_tool_handles=(),
+            now=NOW,
+        )
+
+        self.assertEqual(authority.allowed_tool_handles, ())
+        self.assertTrue(authority.allowed_capabilities.tool_orchestration)
+        self.assertTrue(authority.allowed_capabilities.cli)
+        self.assertTrue(authority.allowed_capabilities.mcp)
+        self.assertTrue(authority.allowed_capabilities.filesystem_read)
+        self.assertTrue(authority.allowed_capabilities.filesystem_write)
+        self.assertTrue(authority.allowed_capabilities.shell)
+
     def test_lightweight_authority_revalidation_fences_workspace_policy(self) -> None:
         health = RuntimeHealth(status="healthy")
         authority = resolve_runtime_authority(

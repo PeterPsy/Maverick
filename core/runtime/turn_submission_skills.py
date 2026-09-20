@@ -6,11 +6,7 @@ import time
 
 from core.providers.service import prepare_runtime_skills
 from core.runtime.research_runtime import runtime_session_is_research
-from core.skills.catalog import DEFAULT_SKILL_CATALOG_APP_ID
-from core.skills.service import (
-    list_available_workspace_skills,
-    resolve_runtime_skills,
-)
+from core.skills.service import resolve_available_runtime_skills
 
 
 def resolve_and_prepare_runtime_skills(
@@ -23,13 +19,9 @@ def resolve_and_prepare_runtime_skills(
     research = runtime_session_is_research(session)
     if research:
         skills = []
-    elif session.skill_ids:
-        skills = resolve_runtime_skills(session, start_path=state.repository_root)
     else:
-        skills = list_available_workspace_skills(
-            workspace_id=session.workspace_id,
-            start_path=state.repository_root,
-            app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
+        skills = resolve_available_runtime_skills(
+            session, start_path=state.repository_root,
         )
     resolve_ms = (time.perf_counter() - resolve_started_at) * 1000
     prepare_ms = 0.0

@@ -538,8 +538,15 @@ Provider definitions separate technical kind from execution role:
 - `model_provider` providers expose inference APIs used by the Core-owned loop;
 - `speech_provider` providers expose speech-specific contracts.
 
-Agentic execution supports native agents and the Core-owned hosted agent loop.
-Text-only API models remain separate and never receive workspace tools.
+The selectable Chat and Settings catalog contains only native CLI agents and the
+Core-owned API agent loop, labeled `CLI models` and `API models`. Codex and the
+reviewed Antigravity structured CLI use the native family. OpenRouter GLM and
+OpenRouter DeepSeek Flash Latest use the Core-owned API loop. Google AI Studio
+is not an API-agent catalog choice; Google agent models are exposed through
+Antigravity.
+Plain hosted text is not a selectable model family; its lower-level path remains
+only for internal generation and compatibility with persisted sessions. Speech
+providers keep their independent STT and TTS contracts.
 
 #### Direct agentic model configuration
 
@@ -587,7 +594,9 @@ configuration/runtime exists, not because a refresh timer elapsed.
 Hosted provider manifests and tool-loop configuration remain implementation
 inputs. They do not have independent rollout, digest, certification, or admission
 lifecycles. OpenRouter requests use the configured Chat Completions route and
-validate actual response identity and transport errors; Maverick does not add a
+validate actual response identity and transport errors. An alias response may
+report either the requested alias or an explicitly pinned resolved model id;
+every other resolved model or upstream fails closed. Maverick does not add a
 second mutable vendor-catalog veto.
 
 The provider status API projects current configurations directly. A row is

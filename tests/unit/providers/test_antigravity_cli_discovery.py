@@ -17,6 +17,8 @@ from core.providers.native_runtime_artifact import (
     ANTIGRAVITY_CLI_RUNTIME_ARTIFACT,
 )
 from core.providers.service import builtin_provider_registry
+from core.providers.store import ProviderCollections, ProviderDocumentStore
+from tests.support.collections import FakeCollection
 
 
 class AntigravityCliDiscoveryTest(unittest.TestCase):
@@ -40,6 +42,8 @@ test -z "${MAVERICK_PROVIDER_SECRET+x}" || exit 94
 grep -q modelProvider "$HOME/.gemini/antigravity-cli/settings.json" && exit 95
 printf 'Fetching available models...\\n'
 printf 'gemini-3.8-flash-high\\tGemini 3.8 Flash (High)\\n'
+printf 'gemini-3.8-flash-medium\\tGemini 3.8 Flash (Medium)\\n'
+printf 'gemini-3.8-flash-low\\tGemini 3.8 Flash (Low)\\n'
 printf 'claude-sonnet-4-6\\tClaude Sonnet 4.6 (Thinking)\\n'
 """,
             encoding="utf-8",
@@ -79,6 +83,19 @@ printf 'claude-sonnet-4-6\\tClaude Sonnet 4.6 (Thinking)\\n'
         self.assertEqual(
             snapshot.model_options[0].metadata["model_revision_policy"],
             "provider_alias",
+        )
+        self.assertEqual(snapshot.model_options[0].label, "Gemini 3.8 Flash")
+        self.assertEqual(
+            snapshot.models[0].reasoning_efforts,
+            ("high", "medium", "low"),
+        )
+        self.assertEqual(snapshot.models[0].default_reasoning_effort, "high")
+        self.assertEqual(
+            [
+                option.effort
+                for option in snapshot.model_options[0].supported_reasoning_efforts
+            ],
+            ["high", "medium", "low"],
         )
 
     def test_wrong_binary_or_malformed_catalog_grants_no_availability(self) -> None:
@@ -140,6 +157,56 @@ printf 'claude-sonnet-4-6\\tClaude Sonnet 4.6 (Thinking)\\n'
         self.assertIsNotNone(
             registry.get_native_agent_catalog("antigravity-cli", "google")
         )
+
+    def test_discovery_failure_preserves_activation_and_recovers_without_reactivation(self):
+        self._assert_activation_survives_failure(catalog_available=False)
+
+    def test_runtime_failure_preserves_activation_and_recovers_without_reactivation(self):
+        self._assert_activation_survives_failure(catalog_available=True)
+
+    def test_explicit_disable_during_outage_is_not_reactivated(self):
+        self._assert_activation_survives_failure(
+            catalog_available=False, disable_before_recovery=True,
+        )
+
+    def _assert_activation_survives_failure(self, *, catalog_available, disable_before_recovery=False):
+        snapshot = self.discover()
+        with patch(
+            "core.providers.native_agent_reconciliation.discover_codex_native_catalog",
+            return_value=None,
+        ), patch(
+            "core.providers.native_agent_reconciliation.discover_antigravity_native_catalog",
+            return_value=None,
+        ):
+            registry = builtin_provider_registry()
+        store = ProviderDocumentStore(ProviderCollections(
+            definitions=FakeCollection(), bindings=FakeCollection(), selections=FakeCollection(),
+        ))
+        configured = replace(registry.get_provider_definition("antigravity-cli"), status="active")
+        store.save_provider_definition(configured)
+        with patch(
+            "core.providers.native_agent_reconciliation.discover_antigravity_native_catalog",
+            return_value=snapshot if catalog_available else None,
+        ), patch(
+            "core.providers.native_agent_reconciliation._antigravity_connection_ready",
+            return_value=False,
+        ):
+            refresh_antigravity_native_catalog(registry, store=store, force=True)
+        self.assertEqual(registry.get_provider_definition("antigravity-cli").status, "disabled")
+        self.assertEqual(store.get_provider_definition("antigravity-cli").status, "active")
+        if disable_before_recovery:
+            store.save_provider_definition(replace(configured, status="disabled"))
+        with patch(
+            "core.providers.native_agent_reconciliation.discover_antigravity_native_catalog",
+            return_value=snapshot,
+        ), patch(
+            "core.providers.native_agent_reconciliation._antigravity_connection_ready",
+            return_value=True,
+        ):
+            refresh_antigravity_native_catalog(registry, store=store, force=True)
+        expected = "disabled" if disable_before_recovery else "active"
+        self.assertEqual(registry.get_provider_definition("antigravity-cli").status, expected)
+        self.assertEqual(store.get_provider_definition("antigravity-cli").status, expected)
 
 
 if __name__ == "__main__":

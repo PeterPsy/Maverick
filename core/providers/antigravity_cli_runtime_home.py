@@ -17,6 +17,7 @@ from core.providers.native_structured_cli_transport import NativeStructuredCliEr
 
 ANTIGRAVITY_OAUTH_TOKEN_FILENAME = "antigravity-oauth-token"
 ANTIGRAVITY_PROFILE_RELATIVE_PATH = Path(".gemini") / "antigravity-cli"
+ANTIGRAVITY_SKILLS_RELATIVE_PATH = Path(".gemini") / "config" / "skills"
 ANTIGRAVITY_OAUTH_TOKEN_MAX_BYTES = 64 * 1024
 ANTIGRAVITY_RUNTIME_SETTINGS = {
     "enableTerminalSandbox": True,
@@ -80,14 +81,25 @@ def validate_antigravity_oauth_source(
     os.close(descriptor)
 
 
+def antigravity_runtime_skill_root(runtime_root: Path, skill_id: str) -> Path:
+    """Return the materialized path used by native discovery and prompt context."""
+    directory = hashlib.sha256(skill_id.encode()).hexdigest()[:24]
+    return (
+        Path(runtime_root) / "antigravity-home"
+        / ANTIGRAVITY_SKILLS_RELATIVE_PATH / directory
+    )
+
+
 def prepare_antigravity_runtime_skills(runtime_root: Path, skills) -> str:
     """Copy the exact selected skill set into the private CLI home."""
     runtime = Path(runtime_root).resolve(strict=False)
     home = runtime / "antigravity-home"
     profile = home / ANTIGRAVITY_PROFILE_RELATIVE_PATH
     _private_directory(profile, runtime)
-    destination = profile / "skills"
-    staged = profile / f".skills-{os.getpid()}-{uuid4().hex}"
+    skills_parent = home / ANTIGRAVITY_SKILLS_RELATIVE_PATH.parent
+    _private_directory(skills_parent, runtime)
+    destination = home / ANTIGRAVITY_SKILLS_RELATIVE_PATH
+    staged = skills_parent / f".skills-{os.getpid()}-{uuid4().hex}"
     _private_directory(staged, runtime)
     total_files = 0
     total_bytes = 0
@@ -113,7 +125,7 @@ def prepare_antigravity_runtime_skills(runtime_root: Path, skills) -> str:
             skill_file = source / "SKILL.md"
             if not skill_file.is_file() or skill_file.is_symlink():
                 raise NativeStructuredCliError("antigravity_skill_source_invalid")
-            target = staged / hashlib.sha256(skill_id.encode()).hexdigest()[:24]
+            target = staged / antigravity_runtime_skill_root(runtime, skill_id).name
             target.mkdir(mode=0o700)
             files = []
             for candidate in sorted(source.rglob("*")):
@@ -148,6 +160,11 @@ def prepare_antigravity_runtime_skills(runtime_root: Path, skills) -> str:
                 raise NativeStructuredCliError("antigravity_runtime_home_invalid")
             shutil.rmtree(destination)
         os.replace(staged, destination)
+        _validate_cli_skills_alias(
+            profile / "skills",
+            destination=destination,
+            runtime=runtime,
+        )
         return hashlib.sha256(
             json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
@@ -159,11 +176,51 @@ def prepare_antigravity_runtime_skills(runtime_root: Path, skills) -> str:
 def ensure_antigravity_runtime_skills_root(runtime_root: Path) -> Path:
     """Create the future read-only mountpoint without replacing skill data."""
     runtime = Path(runtime_root).resolve(strict=False)
-    profile = runtime / "antigravity-home" / ANTIGRAVITY_PROFILE_RELATIVE_PATH
+    home = runtime / "antigravity-home"
+    profile = home / ANTIGRAVITY_PROFILE_RELATIVE_PATH
     _private_directory(profile, runtime)
-    destination = profile / "skills"
+    destination = home / ANTIGRAVITY_SKILLS_RELATIVE_PATH
     _private_directory(destination, runtime)
+    _validate_cli_skills_alias(
+        profile / "skills",
+        destination=destination,
+        runtime=runtime,
+    )
     return destination
+
+
+def _validate_cli_skills_alias(
+    alias: Path,
+    *,
+    destination: Path,
+    runtime: Path,
+) -> None:
+    """Accept only the exact internal alias created by the Antigravity CLI."""
+    try:
+        details = alias.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise NativeStructuredCliError(
+            "antigravity_runtime_home_invalid"
+        ) from error
+    if stat.S_ISLNK(details.st_mode):
+        try:
+            resolved = alias.resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise NativeStructuredCliError(
+                "antigravity_runtime_home_invalid"
+            ) from error
+        if resolved != destination.resolve(strict=True):
+            raise NativeStructuredCliError("antigravity_runtime_home_invalid")
+        return
+    if (
+        not stat.S_ISDIR(details.st_mode)
+        or details.st_uid != os.geteuid()
+        or not alias.resolve(strict=True).is_relative_to(runtime)
+    ):
+        raise NativeStructuredCliError("antigravity_runtime_home_invalid")
+    shutil.rmtree(alias)
 
 
 def _validate_source_home(source: Path, runtime: Path | None) -> None:
@@ -344,8 +401,10 @@ def _private_directory(path: Path, runtime: Path) -> None:
 
 
 __all__ = [
+    "antigravity_runtime_skill_root",
     "ANTIGRAVITY_OAUTH_TOKEN_FILENAME",
     "ANTIGRAVITY_PROFILE_RELATIVE_PATH",
+    "ANTIGRAVITY_SKILLS_RELATIVE_PATH",
     "ANTIGRAVITY_RUNTIME_SETTINGS",
     "ensure_antigravity_runtime_skills_root",
     "prepare_antigravity_runtime_home",

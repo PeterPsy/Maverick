@@ -235,7 +235,7 @@ class CodexResearchRuntimeTest(unittest.TestCase):
                 return_value=spec,
             ), patch(
                 "core.runtime.turn_submission_skills."
-                "list_available_workspace_skills"
+                "resolve_available_runtime_skills"
             ) as list_skills, patch(
                 "core.runtime.turn_submission_skills."
                 "prepare_runtime_skills"

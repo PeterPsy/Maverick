@@ -30,7 +30,7 @@ from core.providers.native_runtime_artifact import (
     inspect_native_runtime_artifact,
 )
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
-from core.providers.models import ProviderModelOption
+from core.providers.models import ProviderModelOption, ProviderReasoningOption
 from core.providers.provider_codex_models import CODEX_MODEL_CATALOG_TTL_SECONDS
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.workspace_sandbox import build_bwrap_command
@@ -44,6 +44,7 @@ _LOCK = RLock()
 _ANTIGRAVITY_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _ANTIGRAVITY_CATALOG_MAX_BYTES = 64 * 1024
 _ANTIGRAVITY_CATALOG_MAX_MODELS = 256
+_ANTIGRAVITY_EFFORTS = ("high", "medium", "low")
 
 
 def discover_codex_native_catalog(
@@ -242,8 +243,7 @@ def _parse_antigravity_catalog(
         lines = lines[1:]
     if not lines or len(lines) > _ANTIGRAVITY_CATALOG_MAX_MODELS:
         raise ValueError("native_agent_catalog_invalid")
-    models: list[NativeAgentCatalogModel] = []
-    options: list[ProviderModelOption] = []
+    records: list[tuple[str, str]] = []
     seen: set[str] = set()
     for line in lines:
         parts = line.split("\t")
@@ -260,11 +260,50 @@ def _parse_antigravity_catalog(
         ):
             raise ValueError("native_agent_catalog_invalid")
         seen.add(model_id)
+        records.append((model_id, label))
+
+    groups: dict[tuple[str, str], list[tuple[str, str, str | None]]] = {}
+    for model_id, label in records:
+        effort = next(
+            (
+                value
+                for value in _ANTIGRAVITY_EFFORTS
+                if model_id.endswith(f"-{value}")
+            ),
+            None,
+        )
+        base_model_id = (
+            model_id[: -(len(effort) + 1)] if effort is not None else model_id
+        )
+        key = ("effort" if effort is not None else "model", base_model_id)
+        groups.setdefault(key, []).append((model_id, label, effort))
+
+    models: list[NativeAgentCatalogModel] = []
+    options: list[ProviderModelOption] = []
+    for (group_kind, _base_model_id), members in groups.items():
+        if group_kind == "effort":
+            by_effort = {
+                effort: (model_id, label)
+                for model_id, label, effort in members
+                if effort is not None
+            }
+            efforts = tuple(
+                effort for effort in _ANTIGRAVITY_EFFORTS if effort in by_effort
+            )
+            default_effort = efforts[0]
+            model_id, label = by_effort[default_effort]
+            label = _antigravity_effort_label(label, default_effort)
+        else:
+            model_id, label, _effort = members[0]
+            efforts = ()
+            default_effort = None
         model = NativeAgentCatalogModel(
             model_provider_id="google",
             model_id=model_id,
             model_revision=None,
             revision_policy="provider_alias",
+            reasoning_efforts=efforts,
+            default_reasoning_effort=default_effort,
         )
         models.append(model)
         options.append(
@@ -275,7 +314,14 @@ def _parse_antigravity_catalog(
                     "Model advertised by the authenticated Antigravity CLI "
                     "connection. Availability does not grant release authority."
                 ),
-                default_reasoning_effort=None,
+                default_reasoning_effort=default_effort,
+                supported_reasoning_efforts=[
+                    ProviderReasoningOption(
+                        effort=effort,
+                        label=effort.title(),
+                    )
+                    for effort in efforts
+                ],
                 metadata={
                     "model_revision": None,
                     "model_revision_policy": "provider_alias",
@@ -283,6 +329,11 @@ def _parse_antigravity_catalog(
             )
         )
     return models, options
+
+
+def _antigravity_effort_label(label: str, effort: str) -> str:
+    suffix = f" ({effort.title()})"
+    return label[: -len(suffix)] if label.endswith(suffix) else label
 
 
 def _antigravity_catalog_environment(home: Path, runtime: Path) -> dict[str, str]:

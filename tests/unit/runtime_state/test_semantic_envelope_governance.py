@@ -19,6 +19,32 @@ from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 
 
 class SemanticEnvelopeGovernanceTest(unittest.TestCase):
+    def test_api_context_uses_the_tool_namespace_and_preserves_nested_workdir(self):
+        for mode in ("sandbox", "full-access"):
+            with self.subTest(mode=mode):
+                harness = HostedAgenticHarness(self, execution_mode=mode)
+                nested = harness.root / "workspaces/default/project"
+                nested.mkdir()
+                session = replace(harness.session, workdir=str(nested))
+                context = RuntimeTurnContext(
+                    session=session, binding=harness.binding,
+                    provider_state=harness.store.get_provider_state("session-hosted"),
+                    input_text="Inspect the repository.", correlation_id="turn-hosted",
+                    effective_authority=harness.authority,
+                )
+                request = self._request(harness, context)
+                environment = json.loads(next(
+                    block.content for block in request.content_blocks
+                    if block.provenance == "runtime_context"
+                ))
+                self.assertEqual(environment["execution_mode"], mode)
+                self.assertEqual(
+                    environment["workdir"],
+                    str(nested) if mode == "full-access" else "workspace://default/project",
+                )
+                if mode == "sandbox":
+                    self.assertNotIn(str(harness.root), json.dumps(environment))
+
     def test_semantic_block_rejects_unknown_provenance_before_projection(self) -> None:
         harness = HostedAgenticHarness(self)
         classification = HostedContentClassification(

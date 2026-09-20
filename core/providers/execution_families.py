@@ -22,33 +22,15 @@ class ExecutionFamilyDefinition:
 EXECUTION_FAMILIES = (
     ExecutionFamilyDefinition(
         family_id=NATIVE_AGENT_EXECUTION_FAMILY,
-        label="Native Agents (CLI)",
-        description=(
-            "External coding-agent runtimes such as Codex, Claude Code, and "
-            "Antigravity CLI. They use their own agent loop and tools, while Maverick "
-            "launches, connects to, and supervises them."
-        ),
+        label="CLI models",
+        description="Models running through native command-line agents.",
         workspace_actions=True,
     ),
     ExecutionFamilyDefinition(
         family_id=MAVERICK_AGENT_EXECUTION_FAMILY,
-        label="Maverick Agents (API)",
-        description=(
-            "API models made agentic by Maverick. Maverick provides workspace "
-            "context, tools, the execution loop, approvals, finalization, and "
-            "recovery."
-        ),
+        label="API models",
+        description="Models running through Maverick's agentic API loop.",
         workspace_actions=True,
-    ),
-    ExecutionFamilyDefinition(
-        family_id=HOSTED_TEXT_EXECUTION_FAMILY,
-        label="Text-only Models (API)",
-        description=(
-            "API models without workspace tools or an action loop. They generate "
-            "text from the context provided by Maverick but cannot perform "
-            "workspace actions."
-        ),
-        workspace_actions=False,
     ),
 )
 

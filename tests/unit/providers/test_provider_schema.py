@@ -160,6 +160,11 @@ class ProviderSchemaTest(unittest.TestCase):
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 23, 12, 0, tzinfo=UTC))
         openrouter = next(definition for definition in definitions if definition.provider_id == "openrouter")
         glm = next(model for model in openrouter.model_options if model.model_id == "z-ai/glm-5.3-flash")
+        deepseek = next(
+            model
+            for model in openrouter.model_options
+            if model.model_id == "~deepseek/deepseek-flash-latest"
+        )
         payload = provider_payload(openrouter)
 
         self.assertEqual(openrouter.label, "OpenRouter")
@@ -170,12 +175,14 @@ class ProviderSchemaTest(unittest.TestCase):
             "google/gemma-4-31b-it:free",
             "nvidia/nemotron-3-ultra-550b-a55b:free",
             "z-ai/glm-5.3-flash",
+            "~deepseek/deepseek-flash-latest",
             "hexgrad/kokoro-82m",
         ])
         self.assertEqual([option.label for option in openrouter.model_options], [
             "Gemma 4 31B (free)",
             "Nemotron 3 Ultra (free)",
             "GLM 5.3 Flash",
+            "DeepSeek Flash Latest",
             "Kokoro 82M",
         ])
         self.assertEqual(openrouter.model_options[0].input_modalities, ["text", "image", "video", "pdf"])
@@ -184,13 +191,15 @@ class ProviderSchemaTest(unittest.TestCase):
             openrouter.model_options[2].input_modalities,
             ["text", "image", "video"],
         )
-        self.assertEqual(openrouter.model_options[3].input_modalities, ["text"])
-        self.assertEqual(openrouter.model_options[3].output_modalities, ["speech"])
+        self.assertEqual(openrouter.model_options[3].input_modalities, ["text", "image"])
+        self.assertEqual(openrouter.model_options[4].input_modalities, ["text"])
+        self.assertEqual(openrouter.model_options[4].output_modalities, ["speech"])
         self.assertEqual(glm.default_reasoning_effort, "max")
         self.assertEqual(
             [option.effort for option in glm.supported_reasoning_efforts],
             ["max", "high", "low"],
         )
+        self.assertEqual(deepseek.default_reasoning_effort, "max")
         self.assertEqual(payload["model_options"][0]["input_modalities"], ["text", "image", "video", "pdf"])
         self.assertEqual(payload["model_options"][0]["upstream_provider_options"][0]["provider_id"], "google-ai-studio")
         self.assertEqual(payload["model_options"][1]["upstream_provider_options"][0]["provider_id"], "nvidia")
@@ -198,7 +207,8 @@ class ProviderSchemaTest(unittest.TestCase):
             payload["model_options"][2]["upstream_provider_options"][0]["provider_id"],
             "relace",
         )
-        self.assertEqual(payload["model_options"][3]["upstream_provider_options"][0]["provider_id"], "deepinfra")
+        self.assertEqual(payload["model_options"][3]["upstream_provider_options"][0]["provider_id"], "relace")
+        self.assertEqual(payload["model_options"][4]["upstream_provider_options"][0]["provider_id"], "deepinfra")
         self.assertEqual(openrouter.credential_requirements[0].secret_alias_or_logical_name, "openrouter_api_key")
         self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])
         self.assertEqual(openrouter.execution_contract.adapter_type if openrouter.execution_contract else None, "hosted_text_generation")
@@ -209,39 +219,33 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertNotIn("platform:secret-alias/openrouter_api_key", str(payload))
         self.assertNotIn("secret_ref", str(payload))
 
-    def test_google_ai_studio_metadata_exposes_gemini_flash_models(self) -> None:
+    def test_google_ai_studio_metadata_is_internal_hosted_text_only(self) -> None:
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 24, 12, 0, tzinfo=UTC))
         google = next(definition for definition in definitions if definition.provider_id == "google-ai-studio")
-        gemini = next(model for model in google.model_options if model.model_id == "gemini-3.6-flash")
-        self.assertEqual(gemini.default_reasoning_effort, "high")
-        self.assertEqual(
-            [option.effort for option in gemini.supported_reasoning_efforts],
-            ["minimal", "low", "medium", "high"],
-        )
         payload = provider_payload(google)
 
         self.assertEqual(google.label, "Google AI Studio")
         self.assertEqual(google.kind, "hosted_api")
         self.assertEqual(google.provider_role, "model_provider")
-        self.assertEqual(google.default_model_family, "gemini-3.6-flash")
+        self.assertFalse(google.capabilities.supports_tools)
+        self.assertFalse(google.capabilities.supports_tool_calling)
+        self.assertEqual(google.default_model_family, "gemini-3.1-flash-lite")
         self.assertEqual(
             [option.model_id for option in google.model_options],
             [
-                "gemini-3.6-flash",
                 "gemini-3.5-flash",
-                "gemini-3.5-flash-lite",
                 "gemini-3.1-flash-lite",
             ],
         )
         self.assertEqual(google.model_options[0].input_modalities, ["text", "image", "audio", "video", "pdf"])
         self.assertEqual(google.model_options[0].output_modalities, ["text"])
         self.assertEqual(google.credential_requirements[0].secret_alias_or_logical_name, "google_ai_studio_api_key")
+        self.assertEqual(google.credential_requirements[0].required_for_modes, ["plain_hosted_chat"])
         self.assertEqual(google.network_requirements[0].allowed_hosts, ["generativelanguage.googleapis.com"])
         self.assertEqual(google.execution_contract.adapter_type if google.execution_contract else None, "hosted_text_generation")
         self.assertEqual(payload["model_options"][0]["metadata"]["context_length"], 1048576)
-        self.assertEqual(payload["model_options"][0]["metadata"]["protocol"], "google-interactions")
         self.assertEqual(
-            payload["model_options"][3]["metadata"]["endpoint"],
+            payload["model_options"][1]["metadata"]["endpoint"],
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
         )
         self.assertNotIn("platform:secret-alias/google_ai_studio_api_key", str(payload))

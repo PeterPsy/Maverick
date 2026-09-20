@@ -7,7 +7,11 @@ from unittest.mock import patch
 
 from core.skills.catalog import list_workspace_skills
 from core.skills.models import SkillDefinition
-from core.skills.service import SkillInvocationError, resolve_invoked_runtime_skills
+from core.skills.service import (
+    SkillInvocationError,
+    resolve_available_runtime_skills,
+    resolve_invoked_runtime_skills,
+)
 from tests.support.repo import make_temp_repo_root
 
 
@@ -78,6 +82,24 @@ class RuntimeSkillInvocationTestCase(unittest.TestCase):
 
         self.assertEqual([item.skill_id for item in skills], ["real-skill"])
         self.assertEqual(skills[0].source_root, str(Path(real).absolute()))
+
+    def test_available_catalog_respects_enabled_state_and_session_allowlist(self):
+        root = make_temp_repo_root(self)
+        data = root / "workspaces/default/data/skills"
+        for skill_id in ("one", "two", "disabled"):
+            skill = data / "skills" / skill_id
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text(f"---\nname: {skill_id}\n---\n")
+        # Resolve through the same catalog contract used by native preparation.
+        with patch("core.skills.catalog._workspace_skill_metadata", return_value={
+            "disabled": {"enabled": False},
+        }):
+            visible = resolve_available_runtime_skills(self.session(), start_path=root)
+            selected = resolve_available_runtime_skills(
+                self.session(skill_ids=["two"]), start_path=root,
+            )
+        self.assertEqual([skill.skill_id for skill in visible], ["one", "two"])
+        self.assertEqual([skill.skill_id for skill in selected], ["two"])
 
 
 if __name__ == "__main__":

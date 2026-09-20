@@ -46,7 +46,7 @@ def release_idle_runtime_processes(
         if any(turn.status in ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id)):
             return 0
         if ttl_seconds > 0:
-            return _schedule_idle_runtime_process_reap(state, session_id=session_id, provider_id=provider_id,
+            return _schedule_idle_runtime_process_reap(state, session=session, provider_id=provider_id,
                 reason=reason, idle_ttl_seconds=ttl_seconds)
         runtime_idle_deadlines.cancel(state, session_id, 'reap')
         runtime_idle_deadlines.cancel(state, session_id, 'prewarm')
@@ -90,7 +90,8 @@ def _release_idle_runtime_processes_now(state, *, session_id: str, provider_id: 
     return terminated
 
 
-def _schedule_idle_runtime_process_reap(state, *, session_id: str, provider_id: str, reason: str, idle_ttl_seconds: float) -> int:
+def _schedule_idle_runtime_process_reap(state, *, session: RuntimeSessionRecord, provider_id: str, reason: str, idle_ttl_seconds: float) -> int:
+    session_id = session.session_id
     def expire():
         session = state.runtime_store.get_session(session_id)
         with state.runtime_store.session_lifecycle_handoff(workspace_id=session.workspace_id, session_id=session_id):
@@ -100,7 +101,10 @@ def _schedule_idle_runtime_process_reap(state, *, session_id: str, provider_id: 
                 return
             release_idle_runtime_processes(state, session_id=session_id, provider_id=provider_id,
                 reason=reason, idle_ttl_seconds=0)
-    runtime_idle_deadlines.schedule(state, session_id, 'reap', idle_ttl_seconds, expire)
+    # The budget spans providers, but never tenants or user owners. Ownerless
+    # system sessions share the workspace's system slot.
+    runtime_idle_deadlines.schedule(state, session_id, 'reap', idle_ttl_seconds, expire,
+        retention_group=(session.workspace_id, session.owner_user_id or ''))
     return 0
 
 

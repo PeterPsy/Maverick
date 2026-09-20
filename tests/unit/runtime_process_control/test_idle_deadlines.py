@@ -45,3 +45,39 @@ class IdleDeadlineTests(unittest.TestCase):
             self.assertEqual(release_idle_runtime_processes(SimpleNamespace(runtime_store=store),
                 session_id='session', provider_id='provider', reason='deadline', idle_ttl_seconds=0), 0)
             reap.assert_not_called()
+
+    def test_retention_budget_is_separate_by_owner_workspace_and_action(self):
+        deadlines = RuntimeIdleDeadlines()
+        state, other_state = object(), object()
+        retired = Event()
+        unexpected = Event()
+        try:
+            deadlines.schedule(state, 'old', 'reap', 180, retired.set, retention_group=('w1', 'alice'))
+            deadlines.schedule(state, 'bob', 'reap', 180, unexpected.set, retention_group=('w1', 'bob'))
+            deadlines.schedule(state, 'elsewhere', 'reap', 180, unexpected.set, retention_group=('w2', 'alice'))
+            deadlines.schedule(state, 'old', 'prewarm', 180, unexpected.set)
+            deadlines.schedule(other_state, 'other', 'reap', 180, unexpected.set, retention_group=('w1', 'alice'))
+            deadlines.schedule(state, 'new', 'reap', 180, unexpected.set, retention_group=('w1', 'alice'))
+            self.assertTrue(retired.wait(1))
+            self.assertFalse(unexpected.is_set())
+            self.assertEqual(len(deadlines._pending), 5)
+        finally:
+            deadlines.cancel_owner(state)
+            deadlines.cancel_owner(other_state)
+            if deadlines._thread:
+                deadlines._thread.join(timeout=1)
+        self.assertFalse(deadlines._pending)
+
+    def test_refresh_of_same_session_preserves_its_full_ttl(self):
+        deadlines = RuntimeIdleDeadlines()
+        owner = object()
+        called = Event()
+        try:
+            deadlines.schedule(owner, 'session', 'reap', 180, called.set, retention_group=('w', 'alice'))
+            deadlines.schedule(owner, 'session', 'reap', 180, called.set, retention_group=('w', 'alice'))
+            self.assertFalse(called.wait(.03))
+            self.assertEqual(len(deadlines._pending), 1)
+        finally:
+            deadlines.cancel_owner(owner)
+            if deadlines._thread:
+                deadlines._thread.join(timeout=1)

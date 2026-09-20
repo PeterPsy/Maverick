@@ -2098,6 +2098,14 @@ The Codex adapter must not use stateless `codex exec` for interactive chat or ag
 
 When a Codex turn is interrupted or a session becomes idle, cleanup must terminate the live app-server process, not only forget its in-memory handle. The primary process registry should be used first, and cleanup may fall back to the runtime session environment marker for Codex app-server processes that survived after the app-server client registry went out of sync.
 
+Idle provider runtimes share a single deadline dispatcher and retain a 180-second
+TTL. Each workspace/user owner keeps at most one idle warm runtime across
+providers, with ownerless system sessions sharing a workspace system slot.
+Successful initial and post-turn prewarm use the same budget. Newer idle work
+advances older retirements; every retirement rechecks queued, active and
+confirmation-waiting turns under the persisted session lifecycle fence before
+closing resources. The budget never interrupts active work or crosses owners.
+
 Before launching the Codex process, the adapter must prepare a runtime-scoped `CODEX_HOME`.
 
 This home is operational provider state owned by one Maverick runtime session.

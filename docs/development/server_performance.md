@@ -247,6 +247,13 @@ retained. Idle retirement keeps the 180-second TTL and checks pending turns insi
 the same persisted lifecycle fence used by queue admission/provider start. Fresh
 completion deadlines supersede an expired callback waiting for that fence. A
 successful prewarm also schedules retirement when no first turn follows it.
+Each workspace/user owner retains only its most recently idle runtime across
+providers; ownerless system sessions share a workspace system slot. A newer
+completion/prewarm brings older retirements forward on the existing deadline
+thread, without holding another session's lifecycle fence. Retirement rechecks
+queued, active and confirmation-waiting turns under their own fence, so an
+active runtime is never displaced by this idle budget. Different owners and
+workspaces keep independent slots. Shutdown cancels both deadlines and slots.
 
 ## Usage transaction and operator workflow
 
@@ -430,6 +437,11 @@ resources: the measured run used one owner thread, dispatched every callback
 within 0.23 ms of its deadline and consumed 1.77 ms of process CPU. This is a
 scheduler probe without provider execution; active-turn exclusion remains covered
 by the provider lifecycle tests, and physical-client idle CPU is a separate gate.
+`scripts/runtime_idle_process_probe.py` exercises actual disposable child-process
+retirement for the full 180-second TTL, displacement of an older idle session,
+independent user slots and preservation of newly active work. Its children use
+simulated provider identity; this verifies production process cleanup without
+external model requests and does not certify native-provider startup latency.
 
 The reconciliation probe also accepts `--shape deep`: the same 10k local files
 sit eleven directory levels below their root. The measured cycle completed in

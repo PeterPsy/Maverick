@@ -1,6 +1,9 @@
 /** Browser-level warm paint with real isolated app frames and host persistence.
  * Only used with disposable test-host flags; captures closed transport metadata. */
 export async function exerciseAppReadModels(context, baseUrl) {
+  if (process.env.MAVERICK_PWA_SMOKE_APP_READ_MODELS !== '1') {
+    throw new Error('App display fixtures require the disposable PWA smoke host.');
+  }
   await context.addInitScript(() => {
     window.__pwaDisplayTrace = [];
     const original = MessagePort.prototype.postMessage;
@@ -24,8 +27,28 @@ export async function exerciseAppReadModels(context, baseUrl) {
   });
   try {
     for (const app of ['calendar', 'chat', 'crm', 'mail', 'fitness-coach']) {
+      const relationshipViews = [
+        ['people', 'PWA display person'], ['companies', 'PWA display company'], ['deals', 'PWA display deal'],
+      ];
       await page.goto(`${baseUrl}/app/${app}`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction((app) => window.__pwaDisplayTrace?.some((item) => item.app === app && item.phase === 'initial' && item.status === 'ok'), app, { timeout: 45000 });
+      if (app === 'crm') {
+        // This function runs only on the disposable host, never on live data.
+        await page.evaluate(async () => {
+          for (const body of [
+            { action: 'crm.create_contact', display_name: 'PWA display person', email: 'pwa@example.test' },
+            { action: 'crm.create_account', name: 'PWA display company', domain: 'example.test' },
+            { action: 'crm.create_deal', name: 'PWA display deal', value: 2000, currency: 'EUR', margin_minor: 50000 },
+          ]) {
+            const response = await fetch('/api/apps/crm/backend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!response.ok) throw new Error(`CRM fixture HTTP ${response.status}`);
+          }
+        });
+        for (const [view, title] of relationshipViews) {
+          await page.goto(`${baseUrl}/app/crm/${view}`, { waitUntil: 'domcontentloaded' });
+          await page.frameLocator('iframe.is-active').getByRole('button', { name: title, exact: view !== 'companies' }).waitFor({ state: 'visible' });
+        }
+      }
       const stored = await page.evaluate(async () => {
         const request = indexedDB.open('maverick-pwa-data-v1');
         const database = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = reject; });
@@ -41,7 +64,8 @@ export async function exerciseAppReadModels(context, baseUrl) {
         const url = new URL(request.url());
         let body = {};
         try { body = request.postDataJSON() || {}; } catch { /* GET */ }
-        const displayRead = url.searchParams.get('projection') === 'display'
+        const displayRead = (app === 'crm' && url.pathname === '/api/apps/crm/backend')
+          || url.searchParams.get('projection') === 'display'
           || (url.pathname === `/api/apps/${app}/backend` && ['pwa.read_model', 'app.bootstrap'].includes(body.action));
         if (displayRead) await route.abort('internetdisconnected');
         else await route.continue();
@@ -52,7 +76,19 @@ export async function exerciseAppReadModels(context, baseUrl) {
         await page.waitForFunction((app) => window.__pwaDisplayTrace?.some((item) => item.app === app && item.phase === 'initial' && item.status === 'ok' && item.source === 'cache'), app, { timeout: 20000 });
         const visible = await page.locator('iframe.is-active').count();
         if (!visible) throw new Error(`${app}: warm display did not mount an active frame`);
+        if (app === 'crm') {
+          for (const [view, title] of relationshipViews) {
+            await page.goto(`${baseUrl}/app/crm/${view}`, { waitUntil: 'domcontentloaded' });
+            const frame = page.frameLocator('iframe.is-active');
+            await frame.getByRole('button', { name: title, exact: view !== 'companies' }).waitFor({ state: 'visible', timeout: 20000 });
+            if (view === 'deals') {
+              const margin = await frame.getByRole('row').filter({ hasText: title }).locator('td').nth(3).innerText();
+              if (!margin.includes('500')) throw new Error('CRM warm deal margin was lost in the display projection');
+            }
+          }
+        }
         results.push({ app, indexeddb_seed_verified: true, scoped_warm_paint_with_display_transport_blocked: 'passed' });
+        if (app === 'crm') results.at(-1).relationship_views_with_all_backend_transport_blocked = relationshipViews.map(([view]) => view);
       } finally {
         await context.unroute('**/api/**', holdRead);
       }

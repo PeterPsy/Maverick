@@ -17,13 +17,13 @@ from core.api.app_frame_launch import (
     app_frame_label,
     app_generation_id,
     authorized_app_surface,
-    clean_app_launch_path,
     content_security_policy,
     ensure_app_frame_tls,
     isolated_origin,
     request_platform_origin,
     valid_exact_host,
 )
+from core.api.app_frame_launch_target import authorized_frame_launch_target
 from core.api.app_frame_scope import (
     APP_FRAME_OWNER_MISMATCH_ERROR,
     app_frame_path_matches_owner,
@@ -80,17 +80,8 @@ def handle_app_frame_browser_launch(
         return json_response(start_response, {"error": "invalid_app_frame_launch_request"}, status="400 Bad Request")
     app_id = str(body.get("app_id") or "").strip()
     try:
-        binding, _source_root, _parsed = authorized_app_surface(
-            state,
-            actor_user_id=context.user.user_id,
-            workspace_id=context.workspace_id,
-            app_id=app_id,
-            start_path=start_path,
-        )
-        clean_path = clean_app_launch_path(
-            body.get("path"),
-            local_app_id=binding.app_id,
-            mount_app_id=binding.mount_app_id or binding.app_id,
+        binding, clean_path, widget = authorized_frame_launch_target(
+            state, context, app_id=app_id, path=body.get("path"), start_path=start_path,
         )
         platform_origin = request_platform_origin(environ)
         origin, host, secure = isolated_origin(
@@ -144,6 +135,8 @@ def handle_app_frame_browser_launch(
         surface_kind=APP_FRAME_SURFACE_KIND,
         platform_session_id=context.session.session_id,
         mount_app_id=binding.mount_app_id or binding.app_id,
+        widget_id=widget.widget_id if widget else "",
+        widget_host=widget.host if widget else "",
     )
     ticket = state.sidecar_browser_sessions.issue_ticket(browser_binding)
     return json_response(

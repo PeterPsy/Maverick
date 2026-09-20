@@ -29,10 +29,28 @@ resolution. Settings do not make authenticated applications anonymously public.
 Dialog state is memory-only. App/workspace/session transitions discard the old
 scope, and widget frames are separately authenticated origins. Native dialog
 focus handling, Escape, loading/error/empty states and mobile layout are required.
-No Core restart, new settings database or generic configuration-schema framework
-is introduced. Public URL and TLS policy remain in `external_apps_v1.md`.
+No new settings database or generic configuration-schema framework is introduced.
+Public URL and TLS policy remain in `external_apps_v1.md`.
 
 Widgets may emit `maverick.widget.ready` with their owner and widget ids after
 installing the context listener. The shell replies only to the exact registered
 iframe/source/origin and sends current context/theme; readiness grants no new
 capability. General widgets use their own backend and existing settings models.
+
+## Shell widget launch and failure handling
+
+A supporting app’s declared widget is not a launchable full-app frontend. Shell
+widget launch uses the existing `/api/app-frames/browser-launch` endpoint, with
+the exact declared widget document and a signed context fragment. Core checks the
+current actor, workspace, owner, widget, host and content kind, and binds the
+existing widget identity fields into the browser ticket/session. Full-app launch
+still requires a launchable frontend; supporting role is not a way around it.
+Current visibility, enablement and widget declaration are checked again during
+bootstrap and requests. Nested widget launch retains its separate exact-parent
+policy. There are no new anonymous routes or control-store schemas.
+
+The shell displays launch errors and a manual retry instead of hiding rejection
+behind an infinite spinner. A frame that never loads times out after 60 seconds;
+retry remounts only that widget and does not replay app mutations. Deploying the
+Core launch-policy fix requires the normal governed backend restart. A frontend
+build alone cannot update policy already loaded by a running Core.

@@ -2227,6 +2227,16 @@ The initial core implementation uses:
 
 Widgets are reusable app-owned surfaces. Any authenticated app frontend may discover a compatible widget and request a context token for the widget's declared host surface and content kind. The signed context token is not proof of the requester app's identity: it must not include or imply `requester_app_id`, and widget owners must treat `host_app_id` as the requested compatible surface, not as an attested caller. The registry endpoint must not mint reusable requester capabilities, and mounted app backend responses must not cause the core to sign widget contexts as a side effect.
 
+Top-level shell widgets use `POST /api/app-frames/browser-launch` with an exact
+widget document path and one signed `#context` token. This path resolves the
+widget declaration even if its owner has `frontend_role: supporting` or no
+standalone frontend. It checks actor, workspace, owner, widget, host and content
+kind and records the widget identity in the existing browser binding. The
+full-app path still requires a launchable frontend. Widget visibility, enablement
+and declaration are revalidated on bootstrap and subsequent requests; context
+is not anonymous authority. The shell surfaces launch failure and a bounded
+loading timeout with explicit retry, rather than leaving a permanent spinner.
+
 The nested browser launch separately records the authenticated parent app and
 exact parent origin from Core-owned scope. That binding authenticates where the
 returned document may be embedded; it does not reinterpret the context token's

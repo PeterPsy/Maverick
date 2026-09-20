@@ -1,4 +1,4 @@
-import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import {
   MAVERICK_IFRAME_SANDBOX,
@@ -128,6 +128,7 @@ export function WidgetSlot({
   const [error, setError] = useState<string | null>(null);
   const [isResolvingWidget, setIsResolvingWidget] = useState(true);
   const [loadedFrameKey, setLoadedFrameKey] = useState("");
+  const [frameError, setFrameError] = useState<string | null>(null);
   const [overlaySize, setOverlaySize] = useState(collapsedOverlaySize());
   const [captureDraft, setCaptureDraft] = useState<CaptureRect | null>(null);
   const [captureStart, setCaptureStart] = useState<{ x: number; y: number } | null>(null);
@@ -145,6 +146,17 @@ export function WidgetSlot({
   const contentSignature = JSON.stringify({ activeWorkspaceId, content });
   const themeSignature = shellThemeSignature(shellTheme);
   const supportsPrimaryActionSlot = contentKind === "shell.sidebar.footer";
+  const widgetFrameKey = widget && contextToken
+    ? `${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`
+    : "";
+  const handleLaunchError = useCallback((cause: Error) => setFrameError(cause.message), []);
+
+  useEffect(() => { setFrameError(null); }, [widgetFrameKey]);
+  useEffect(() => {
+    if (!widgetFrameKey || loadedFrameKey === widgetFrameKey || frameError) return;
+    const timer = window.setTimeout(() => setFrameError("Il caricamento ha superato il tempo disponibile. Riprova."), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [widgetFrameKey, loadedFrameKey, frameError]);
 
   useEffect(() => {
     shellThemeRef.current = shellTheme;
@@ -633,7 +645,12 @@ export function WidgetSlot({
     return error || emptyMessage ? <p className="bs-widget-slot__fallback">{error || emptyMessage}</p> : null;
   }
 
-  const widgetFrameKey = `${frameScope.sessionGeneration}:${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`;
+  if (frameError) {
+    return <div className="bs-widget-slot__fallback" role="alert">
+      <p>Impossibile caricare {label}. {frameError}</p>
+      <button type="button" onClick={() => { setFrameError(null); setFrameRevision(value => value + 1); }}>Riprova</button>
+    </div>;
+  }
   const bootstrapTheme = bootstrapThemeForFrame(widgetFrameBootstrapThemesRef.current, widgetFrameKey, shellTheme);
   const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision, bootstrapTheme);
   const isWidgetFrameLoading = supportsShellPending && loadedFrameKey !== widgetFrameKey;
@@ -655,6 +672,7 @@ export function WidgetSlot({
           className="bs-widget-slot__frame"
           key={widgetFrameKey}
           loadingTheme={shellTheme.effective}
+          onLaunchError={handleLaunchError}
           onLoad={() => {
             setLoadedFrameKey(widgetFrameKey);
             postMaverickShellTheme(widgetFrameRef.current, shellTheme);

@@ -93,6 +93,33 @@ describe("WidgetSlot primary action protocol", () => {
     vi.clearAllMocks();
   });
 
+  it("shows launch rejection instead of spinning and retries only on request", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ error: "app_frame_unavailable" }), {
+      status: 404, headers: { "Content-Type": "application/json" },
+    }));
+    await act(async () => root.render(<PrimaryActionHarness onOpenSidebar={vi.fn()} />));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("app_frame_unavailable");
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(pendingIndicator(container)).toBeNull();
+    expect(fetch).toHaveBeenCalledOnce();
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const iframe = await waitForIframe(container);
+    await act(async () => iframe.dispatchEvent(new Event("load")));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("ends stalled frame loading with a recoverable timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => root.render(<PrimaryActionHarness onOpenSidebar={vi.fn()} />));
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain("tempo disponibile");
+      expect(container.querySelector("iframe")).toBeNull();
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+
   it("replays context only for readiness from the exact mounted widget", async () => {
     await act(async () => root.render(<PrimaryActionHarness onOpenSidebar={vi.fn()} />));
     const iframe = await waitForIframe(container);

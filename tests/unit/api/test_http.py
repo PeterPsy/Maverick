@@ -103,6 +103,7 @@ class HttpRequestBodyTestCase(unittest.TestCase):
                 "REQUEST_METHOD": "POST",
                 "HTTP_HOST": "maverick.example",
                 "HTTP_ORIGIN": "https://maverick.example",
+                "wsgi.url_scheme": "https",
             }
         )
 

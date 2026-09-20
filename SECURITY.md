@@ -31,15 +31,20 @@ Maverick is not production-safe for sensitive data on an internet-connected host
 Known launch blockers currently include:
 
 - plaintext local bootstrap secrets
-- missing CSRF protection for cookie-authenticated unsafe requests
+- end-to-end CSRF and trusted-proxy deployment review
 - runtime bearer token authority gaps
-- unauthenticated app event WebSocket
+- long-lived app event WebSocket session/revocation review
 - residual XSS risk in trusted shell and isolated app frontends
 - app backend and lifecycle hook sandboxing gaps
 - recovery automation full-access risk
 - per-resource privacy approval and current physical-device evidence for any private PWA cache rollout
 
 ## Safe Testing Expectations
+
+Unsafe cookie-authenticated HTTP calls enforce exact origin proof, and app
+event WebSockets authenticate and filter by workspace. See
+`docs/architecture/http_origin_boundary.md` for the implemented boundary and
+the distinction from a complete deployment security audit.
 
 - Use fake data.
 - Use local-only deployments.

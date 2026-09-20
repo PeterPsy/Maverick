@@ -158,23 +158,47 @@ def request_cookies(environ: dict) -> dict[str, str]:
 
 
 def enforce_same_origin_for_unsafe_request(environ: dict) -> None:
-    """Reject unsafe browser requests whose Origin/Referer does not match Host."""
+    """Require exact HTTP origin proof for unsafe cookie-authenticated calls."""
     method = str(environ.get("REQUEST_METHOD") or "GET").upper()
     if method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return
-    host = str(environ.get("HTTP_HOST") or environ.get("SERVER_NAME") or "").lower()
-    if not host:
-        return
-    origin = str(environ.get("HTTP_ORIGIN") or "").strip()
-    referer = str(environ.get("HTTP_REFERER") or "").strip()
-    candidate = origin or referer
+    has_origin = "HTTP_ORIGIN" in environ
+    candidate = str(environ.get("HTTP_ORIGIN" if has_origin else "HTTP_REFERER") or "").strip()
     has_cookie_credentials = bool(str(environ.get("HTTP_COOKIE") or "").strip())
-    if has_cookie_credentials and not candidate:
-        raise HttpRequestError("same_origin_proof_required", "403 Forbidden")
     if not candidate:
+        if has_cookie_credentials or has_origin:
+            raise HttpRequestError("same_origin_proof_required", "403 Forbidden")
         return
-    parsed = urlparse(candidate)
-    if not parsed.netloc:
-        return
-    if parsed.netloc.lower() != host:
+
+    # The HTTP server resolves trusted proxy metadata into the WSGI scheme.
+    # Raw Forwarded/X-Forwarded-* headers cannot supply browser authority here.
+    scheme = str(environ.get("wsgi.url_scheme", "http")).lower()
+    host = str(environ.get("HTTP_HOST") or "")
+    expected = _http_origin(f"{scheme}://{host}")
+    actual = _http_origin(candidate, referer=not has_origin)
+    if expected is None or actual is None or actual != expected:
         raise HttpRequestError("cross_origin_request_forbidden", "403 Forbidden")
+
+
+def _http_origin(value: str, *, referer: bool = False) -> tuple[str, str, int] | None:
+    if "\\" in value or any(
+        character.isspace() or ord(character) < 32 or ord(character) == 127
+        for character in value
+    ):
+        return None
+    try:
+        parsed = urlparse(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.netloc.endswith(":")
+            or (not referer and (parsed.path or parsed.params or "?" in value or "#" in value))
+        ):
+            return None
+        port = parsed.port
+        default_port = 443 if parsed.scheme == "https" else 80
+        return parsed.scheme, parsed.hostname, port if port is not None else default_port
+    except ValueError:
+        return None

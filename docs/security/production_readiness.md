@@ -7,8 +7,8 @@ Do not run an internet-exposed Maverick deployment with real secrets, customer d
 ## Launch Blockers
 
 - production secret backend and external key-management integration
-- CSRF protection for unsafe cookie-authenticated requests
-- authenticated app event WebSocket
+- end-to-end CSRF and trusted-proxy deployment review
+- long-lived app event WebSocket session/revocation review
 - runtime token authority binding, expiration, and revocation
 - app frontend isolation
 - app backend and lifecycle hook sandboxing
@@ -18,6 +18,12 @@ Do not run an internet-exposed Maverick deployment with real secrets, customer d
 - hosted tool-orchestration confirmation/replay and runtime-authority review
 
 ## Experimental Use Only
+
+Exact origin proof for unsafe cookie-authenticated requests and authenticated,
+workspace-filtered app event handshakes are implemented. Their scope and
+remaining review limits are documented in
+`docs/architecture/http_origin_boundary.md`; these controls do not certify a
+production deployment.
 
 Acceptable current uses:
 

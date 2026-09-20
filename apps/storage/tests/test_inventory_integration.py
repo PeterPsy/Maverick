@@ -142,6 +142,35 @@ class IndexedStorageIntegrationTests(unittest.TestCase):
         self.assertEqual(result['status'], 'retrying')
         self.assertEqual(self.catalog()['files'], before['files'])
 
+    def test_one_pass_reuses_directory_handles_and_reschedules_backlog(self):
+        for number in range(600):
+            (self.root / f'external-{number}.md').write_text(str(number))
+        with patch('os.scandir', wraps=os.scandir) as scandir:
+            result = reconcile_inventory(self.data, **self.arguments, max_stats=2000, max_seconds=10)
+        self.assertEqual(self.catalog()['pagination']['total'], 601)
+        self.assertLessEqual(scandir.call_count, 2)
+        self.assertEqual(result['next_due_in_seconds'], 15)
+        with self.index.transaction(write=True) as connection:
+            connection.execute('UPDATE scan_queue SET last_completed=0')
+        result = reconcile_inventory(self.data, **self.arguments, max_stats=12, max_seconds=1)
+        self.assertEqual(result['next_due_in_seconds'], 1)
+
+    def test_external_subtree_deletion_finishes_in_bounded_batches(self):
+        import shutil
+        folder = self.root / 'removed'
+        folder.mkdir()
+        for number in range(180):
+            (folder / f'child-{number}.md').write_text('child')
+        reconcile_inventory(self.data, **self.arguments, max_seconds=10)
+        shutil.rmtree(folder)
+        with self.index.transaction(write=True) as connection:
+            connection.execute('UPDATE scan_queue SET last_completed=0')
+        for _ in range(10):
+            reconcile_inventory(self.data, **self.arguments, max_stats=12, max_seconds=1)
+        self.assertEqual(self.catalog()['pagination']['total'], 1)
+        with self.index.transaction() as connection:
+            self.assertIsNone(connection.execute("SELECT 1 FROM scan_queue WHERE path='removed'").fetchone())
+
 
 if __name__ == '__main__':
     unittest.main()

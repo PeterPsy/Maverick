@@ -120,7 +120,11 @@ fence, then verifies the source signatures before committing its output.
 
 The existing `background_tick` hook drives a resumable scan capped at 5,000 stat
 calls and a 500 ms work budget per invocation. It preserves its directory cursor
-and observed names between processes. Absence is established only after a full,
+and observed names between processes. The normal due interval is 15 seconds; an
+unfinished eligible scan requests another pass after one second. Each pass reuses
+one SQLite connection and one directory iterator at a time, without retaining
+process-local cursors across invocations. Missing subtrees are tombstoned in
+bounded batches. Absence is established only after a full,
 stable directory enumeration; permission and I/O failures cause retries rather
 than tombstones. The signature includes size, nanosecond mtime/ctime, device and
 inode. Unchanged observations preserve record timestamps, hashes and revision.
@@ -129,7 +133,10 @@ Use SQLite's backup API for the authoritative index, including committed WAL
 pages. Read connections use `mode=ro`; short-lived connections can still cause
 SQLite shared-memory filesystem traffic. Report that physical I/O separately
 from application metadata mutations instead of calling all catalog reads
-zero-write. Mounted HTTP, concurrent workloads, freshness at 100k entries,
+zero-write. The isolated real-scheduler probe on 100k flat files completed a full
+cycle in 37.51 seconds, with a maximum pass of 483.60 ms and both same-size,
+restored-mtime external edits discovered. Run `scripts/storage_reconciliation_probe.py`
+under the verified SQLite runtime to reproduce. Mounted HTTP, concurrent workloads,
 operator backup integration and physical-device release gates still require
 their dedicated validation.
 

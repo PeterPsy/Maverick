@@ -16,6 +16,7 @@ export function bindSettingsEvents(context: {
   installWorkspaceApp: (app: WorkspaceApp) => Promise<void>;
   logoutFromSettings: () => Promise<void>;
   onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
+  activateNativeProviderFromPanel: (providerId: string) => Promise<void>;
   saveAgenticBindingFromPanel: (
     definitionId: string,
     options?: { enabled?: boolean }
@@ -80,6 +81,9 @@ export function bindSettingsEvents(context: {
       context.logoutFromSettings().catch(context.showError);
     },
     onHostedProviderRoutingChanged: context.onHostedProviderRoutingChanged,
+    onActivateNativeProvider: (providerId) => {
+      context.activateNativeProviderFromPanel(providerId).catch(context.showError);
+    },
     onSaveAgenticBinding: (definitionId, options) => {
       context.saveAgenticBindingFromPanel(definitionId, options).catch(context.showError);
     },

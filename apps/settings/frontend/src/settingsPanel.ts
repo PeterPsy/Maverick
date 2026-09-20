@@ -8,8 +8,6 @@ import type {
   ProviderModelOption,
   ProviderSubscriptionUsage,
   UsageTimeSeriesPayload,
-  ProviderUsageLimit,
-  ProviderUsageWindow,
   RuntimeSessionItem
 } from './adminApi';
 import {
@@ -17,10 +15,7 @@ import {
   selectedHostedProviderDraft
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
-import {
-  NO_WORKSPACE_ACTIONS_MESSAGE,
-  executionFamily
-} from './executionFamilies';
+import { executionFamily } from './executionFamilies';
 import {
   defaultUsageHistoryFilters,
   usageHistoryTimeRange,
@@ -45,7 +40,16 @@ type HostedProviderModelGroup = {
   models: ProviderModelOption[];
 };
 
+type RuntimeProviderEntry = {
+  html: string;
+  providerId: string;
+  providerLabel: string;
+  canActivate?: boolean;
+};
+
 export type SettingsPanelState = {
+  activatingNativeProviders: Set<string>;
+  nativeProviderErrors: Record<string, string>;
   agenticBindingErrors: Record<string, string>;
   cleanupError: string;
   clearingAllRuntime: boolean;
@@ -70,6 +74,7 @@ export type SettingsPanelState = {
 };
 
 export type SettingsPanelActions = {
+  onActivateNativeProvider: (providerId: string) => void;
   onClearAllRuntimeSessions: () => void;
   onClearRuntimeSession: (sessionId: string) => void;
   onLogout: () => void;
@@ -87,6 +92,8 @@ export type SettingsPanelActions = {
 
 export function createSettingsPanelState(): SettingsPanelState {
   return {
+    activatingNativeProviders: new Set(),
+    nativeProviderErrors: {},
     agenticBindingErrors: {},
     cleanupError: '',
     clearingAllRuntime: false,
@@ -228,7 +235,6 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   const cleanupAllowed = settings.runtime.cleanup_allowed ?? false;
   const cleanupScope = settings.runtime.cleanup_scope || 'none';
   const hostedModelOptions = hostedModelOptionsForSettings(settings);
-  const hostedTextModelOptions = hostedModelOptions.filter(modelSupportsTextOutput);
   const hostedSpeechModelOptions = hostedModelOptions.filter(modelSupportsSpeechOutput);
   const openHostedModel = openHostedModelId(settings, state);
 
@@ -237,14 +243,8 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
       settings.agentic_admin || null,
       state,
       settings.provider.execution_families,
-      settings.provider.native_agents?.items || []
-    )}
-    ${hostedTextModelSettingsCardHtml(
-      openHostedModel,
-      hostedTextModelOptions,
-      hostedProvider,
-      settings,
-      state
+      settings.provider.native_agents?.items || [],
+      settings.user.platform_role === 'admin'
     )}
     ${usageHistoryCardHtml(state)}
     ${speechModelSettingsCardHtml(
@@ -310,30 +310,6 @@ function usageHistoryCardHtml(state: SettingsPanelState) {
   </section>`;
 }
 
-function hostedTextModelSettingsCardHtml(
-  openHostedModel: string,
-  hostedModelOptions: ProviderModelOption[],
-  hostedProvider: PlatformSettings['provider']['active_provider'] | null,
-  settings: PlatformSettings,
-  state: SettingsPanelState
-) {
-  const family = executionFamily('hosted_text', settings.provider.execution_families);
-  return `<section class="settings-card settings-platform settings-hosted-text-model-settings-card">
-    ${modelSettingsHeadingHtml('text_fields', family.label)}
-    <p class="settings-card-copy settings-runtime-family-description">${escapeHtml(family.description)}</p>
-    <p class="settings-agentic-contract-callout"><strong>${NO_WORKSPACE_ACTIONS_MESSAGE}</strong></p>
-    ${hostedProviderSettingsListHtml({
-      modelOptions: hostedModelOptions,
-      openHostedModel,
-      hostedProvider,
-      settings,
-      state,
-      emptyMessage: 'No hosted text models are available from the active hosted providers.',
-      inactiveMessage: 'Activate a text-only provider before selecting a model.'
-    })}
-  </section>`;
-}
-
 function modelSettingsHeadingHtml(icon: string, title: string) {
   return `<div class="settings-heading settings-platform-heading settings-model-card-heading">
     <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">${escapeHtml(icon)}</span>
@@ -370,6 +346,11 @@ function speechModelSettingsCardHtml(
 }
 
 export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
+  document.querySelectorAll<HTMLButtonElement>('[data-native-provider-activate]').forEach((button) => {
+    button.addEventListener('click', () => {
+      actions.onActivateNativeProvider(button.dataset.nativeProviderActivate || '');
+    });
+  });
   document.querySelectorAll<HTMLButtonElement>('[data-agentic-binding-save]').forEach((button) => {
     button.addEventListener('click', () => {
       actions.onSaveAgenticBinding(
@@ -429,7 +410,6 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
       );
     });
   });
-  document.getElementById('settings-refresh-provider-usage')?.addEventListener('click', actions.onRefreshProviderUsage);
   document.getElementById('settings-refresh-usage-history')?.addEventListener('click', actions.onRefreshProviderUsage);
   document.querySelectorAll<HTMLButtonElement>('[data-hosted-provider-save]').forEach((button) => {
     button.addEventListener('click', () => actions.onSaveHostedProviderSettings(button.dataset.hostedProviderSave || ''));
@@ -445,8 +425,13 @@ function agenticRuntimeSettingsCardHtml(
   admin: AgenticAdminPayload | null,
   state: SettingsPanelState,
   projectedFamilies: ExecutionFamilyDefinition[] | undefined,
-  nativeAgents: NativeAgentStatus[]
+  nativeAgents: NativeAgentStatus[],
+  canManageProviders: boolean
 ) {
+  const activatableIds = new Set(nativeAgents.filter((item) =>
+    canManageProviders && item.runtime_engine_id !== 'codex'
+      && item.unavailable_reason === 'native_agent_disabled' && item.models.length > 0
+  ).map((item) => item.runtime_engine_id));
   const allItems = admin?.items || [];
   const visibleItems = allItems;
   const releaseDecision = admin?.release_decision || 'GO';
@@ -464,27 +449,38 @@ function agenticRuntimeSettingsCardHtml(
   const standaloneNativeAgents = nativeAgents.filter(
     (item) => !representedNativeIds.has(item.runtime_engine_id)
   );
+  const nativeEntries: RuntimeProviderEntry[] = [
+    ...collapseAntigravityEffortProfiles(nativeItems).map((item) => ({
+      html: agenticRuntimeBindingHtml(item, state),
+      providerId: item.runtime_engine_id,
+      canActivate: activatableIds.has(item.runtime_engine_id),
+      providerLabel: runtimeProviderLabel(item.runtime_engine_id)
+    })),
+    ...standaloneNativeAgents.map((item) => ({
+      html: nativeAgentInstallationHtml(item),
+      providerId: item.runtime_engine_id,
+      canActivate: activatableIds.has(item.runtime_engine_id),
+      providerLabel: item.label || runtimeProviderLabel(item.runtime_engine_id)
+    }))
+  ];
+  const maverickEntries = maverickItems.map((item) => ({
+    html: agenticRuntimeBindingHtml(item, state),
+    providerId: item.model_provider_id,
+    providerLabel: runtimeProviderLabel(item.model_provider_id)
+  }));
   return `<section class="settings-card settings-platform settings-agentic-runtimes-card">
-    ${modelSettingsHeadingHtml('account_tree', 'Agent runtimes')}
-    <p class="settings-card-copy">Choose the provider and model available to new chats. Runtime health, credentials, permissions, and egress are checked directly.</p>
+    ${modelSettingsHeadingHtml('account_tree', 'Models')}
     ${releaseDecision === 'NO-GO' ? `<p class="settings-platform-error settings-agentic-no-go"><strong>Remote agentic release: NO-GO</strong><br>Remote profiles remain visible for containment review but cannot be enabled or selected.</p>` : ''}
-    ${visibleItems.some((item) => item.runtime_engine_id === 'codex') ? `<div class="settings-models-toolbar">
-      <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
-        <span class="material-symbols-rounded ${state.isLoadingProviderUsage ? 'is-spinning' : ''}" aria-hidden="true">${state.isLoadingProviderUsage ? 'sync' : 'refresh'}</span>
-        Refresh limits
-      </button>
-    </div>` : ''}
     ${runtimeFamilySectionHtml(
       nativeFamily,
-      [
-        ...nativeItems.map((item) => agenticRuntimeBindingHtml(item, state)),
-        ...standaloneNativeAgents.map(nativeAgentInstallationHtml)
-      ],
+      nativeEntries,
+      state,
       'No native-agent runtime is registered by this installation.'
     )}
     ${runtimeFamilySectionHtml(
       maverickFamily,
-      maverickItems.map((item) => agenticRuntimeBindingHtml(item, state)),
+      maverickEntries,
+      state,
       'No complete Maverick Agent profile is currently available.'
     )}
   </section>`;
@@ -492,16 +488,17 @@ function agenticRuntimeSettingsCardHtml(
 
 function runtimeFamilySectionHtml(
   family: ExecutionFamilyDefinition,
-  items: string[],
+  entries: RuntimeProviderEntry[],
+  state: SettingsPanelState,
   emptyMessage: string
 ) {
+  const groups = runtimeProviderGroups(entries);
   return `<section class="settings-runtime-family" data-execution-family="${escapeAttr(family.family_id)}">
     <header class="settings-runtime-family-heading">
       <h3>${escapeHtml(family.label)}</h3>
-      <p>${escapeHtml(family.description)}</p>
     </header>
-    <div class="settings-agentic-runtime-list">
-      ${items.length ? items.join('') : `<div class="settings-provider-usage-unavailable">
+    <div class="settings-runtime-provider-list">
+      ${groups.length ? groups.map((group) => runtimeProviderGroupHtml(group, state)).join('') : `<div class="settings-provider-usage-unavailable">
         <span class="material-symbols-rounded" aria-hidden="true">info</span>
         <span><strong>No available profiles</strong><small>${escapeHtml(emptyMessage)}</small></span>
       </div>`}
@@ -509,52 +506,141 @@ function runtimeFamilySectionHtml(
   </section>`;
 }
 
+function runtimeProviderGroups(entries: RuntimeProviderEntry[]) {
+  const groups = new Map<string, RuntimeProviderEntry[]>();
+  entries.forEach((entry) => {
+    const current = groups.get(entry.providerId) || [];
+    current.push(entry);
+    groups.set(entry.providerId, current);
+  });
+  const order = new Map([
+    ['codex', 0],
+    ['antigravity-cli', 1],
+    ['openrouter', 2],
+    ['google-ai-studio', 3]
+  ]);
+  return Array.from(groups.entries())
+    .map(([providerId, items]) => ({
+      providerId,
+      providerLabel: items[0]?.providerLabel || runtimeProviderLabel(providerId),
+      items
+    }))
+    .sort((left, right) =>
+      (order.get(left.providerId) ?? 100) - (order.get(right.providerId) ?? 100)
+      || left.providerLabel.localeCompare(right.providerLabel)
+    );
+}
+
+function runtimeProviderGroupHtml(
+  group: ReturnType<typeof runtimeProviderGroups>[number],
+  state: SettingsPanelState
+) {
+  const canActivate = group.items.some((item) => item.canActivate);
+  const activating = state.activatingNativeProviders.has(group.providerId);
+  const error = state.nativeProviderErrors[group.providerId];
+  return `<section class="settings-runtime-provider" data-agentic-provider-group="${escapeAttr(group.providerId)}">
+    <header class="settings-runtime-provider-heading">
+      <h4>${escapeHtml(group.providerLabel)}</h4>
+      <p>${escapeHtml(providerUsageSummary(group.providerId, state))}</p>
+    </header>
+    ${canActivate ? `<div class="settings-native-provider-activation">
+      <span>Connection disabled. Enable it for this installation to use the selected models.</span>
+      <button type="button" data-native-provider-activate="${escapeAttr(group.providerId)}" ${activating ? 'disabled' : ''}>
+        ${activating ? 'Enabling…' : `Enable ${escapeHtml(group.providerLabel)}`}
+      </button>
+    </div>` : ''}
+    ${error ? `<p class="settings-platform-error" role="alert">${escapeHtml(error)}</p>` : ''}
+    <div class="settings-agentic-runtime-list">${group.items.map((item) => item.html).join('')}</div>
+  </section>`;
+}
+
+function providerUsageSummary(providerId: string, state: SettingsPanelState): string {
+  const usage = state.providerUsageItems.find((item) => item.provider_id === providerId);
+  if (!usage) {
+    if (providerId === 'codex' && state.isLoadingProviderUsage) {
+      return 'Loading usage…';
+    }
+    if (providerId === 'codex' && state.providerUsageError) {
+      return 'Usage unavailable';
+    }
+    return 'Usage limit not reported';
+  }
+  if (!usage.available) {
+    return 'Usage unavailable';
+  }
+  const windows = usage.limits.flatMap((limit) => [limit.primary_window, limit.secondary_window])
+    .filter((window): window is NonNullable<typeof window> => window !== null);
+  if (!windows.length) {
+    return 'Usage limit not reported';
+  }
+  return windows.map((window) => {
+    const used = Math.min(100, Math.max(0, window.used_percent));
+    const remaining = Math.max(0, 100 - used);
+    const windowLabel = windows.length > 1 ? `${formatUsageWindow(window.limit_window_seconds)}: ` : '';
+    return `${windowLabel}${formatPercentage(used)} used · ${formatPercentage(remaining)} remaining before limit`;
+  }).join(' · ');
+}
+
+function formatPercentage(value: number): string {
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
+}
+
+function formatUsageWindow(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return 'Rolling window';
+  if (seconds % 86400 === 0) return `${seconds / 86400}d`;
+  if (seconds % 3600 === 0) return `${seconds / 3600}h`;
+  return 'Rolling window';
+}
+
+function runtimeProviderLabel(providerId: string): string {
+  const labels: Record<string, string> = {
+    'antigravity-cli': 'Antigravity',
+    'codex': 'Codex',
+    'google-ai-studio': 'Google AI Studio',
+    'openrouter': 'OpenRouter'
+  };
+  return labels[providerId] || humanizeAgenticCode(providerId);
+}
+
+function collapseAntigravityEffortProfiles(items: AgenticAdminItem[]): AgenticAdminItem[] {
+  const selected = new Map<string, AgenticAdminItem>();
+  const order: string[] = [];
+  items.forEach((item) => {
+    const baseModelId = item.runtime_engine_id === 'antigravity-cli'
+      ? item.model_id.replace(/-(high|medium|low)$/i, '')
+      : item.model_id;
+    const key = `${item.runtime_engine_id}\0${baseModelId}`;
+    if (!selected.has(key)) {
+      order.push(key);
+    }
+    const current = selected.get(key);
+    if (!current || antigravityEffortRank(item.model_id) > antigravityEffortRank(current.model_id)) {
+      selected.set(key, item);
+    }
+  });
+  return order.map((key) => selected.get(key)).filter((item): item is AgenticAdminItem => Boolean(item));
+}
+
+function antigravityEffortRank(modelId: string): number {
+  const effort = modelId.match(/-(high|medium|low)$/i)?.[1]?.toLowerCase();
+  return effort === 'high' ? 3 : effort === 'medium' ? 2 : effort === 'low' ? 1 : 0;
+}
+
 function nativeAgentInstallationHtml(item: NativeAgentStatus) {
   const model = item.models[0];
   const reason = item.unavailable_reason || 'native_agent_unavailable';
   const available = item.selectable === true;
-  return `<details class="settings-model-accordion settings-agentic-runtime settings-native-runtime-installation">
-    <summary>
+  return `<article class="settings-agentic-runtime settings-native-runtime-installation settings-agentic-runtime-static">
+    <div class="settings-agentic-runtime-static__content">
       <span class="settings-model-summary-copy">
-        <span class="settings-kicker">${escapeHtml(item.availability === 'installed' ? 'Installed runtime' : 'Runtime not installed')}</span>
-        <strong>${escapeHtml(item.label)}</strong>
-        <small>${escapeHtml(model?.model_id || 'Model unavailable')}</small>
+        <strong>${escapeHtml(model?.model_id || item.label)}</strong>
+        <small>${escapeHtml(reasoningSummary(model?.model_id, null))}</small>
       </span>
       <span class="settings-agentic-summary-badges">
         <span class="settings-pill ${available ? 'is-healthy' : 'is-warning'}">${available ? 'Available' : escapeHtml(humanizeAgenticCode(reason))}</span>
-        <span class="settings-pill">${escapeHtml(item.execution_family === 'native_agent' ? 'Native agent' : 'Agent runtime')}</span>
       </span>
-    </summary>
-    <div class="settings-model-content settings-agentic-runtime-content">
-      ${nativeAgentMetadataHtml(item, model?.model_id)}
-      <p class="settings-platform-note">${available ? 'Runtime available; session selection still requires an enabled workspace profile.' : `Unavailable: ${escapeHtml(humanizeAgenticCode(reason))}`}</p>
     </div>
-  </details>`;
-}
-
-function nativeAgentMetadataHtml(item: NativeAgentStatus, selectedModelId?: string) {
-  const model = item.models.find((candidate) => candidate.model_id === selectedModelId)
-    || item.models[0];
-  const update = [humanizeAgenticCode(item.update.status), item.update.detail]
-    .filter(Boolean)
-    .join(' · ');
-  const health = [humanizeAgenticCode(item.health), ...item.health_reason_codes.map(humanizeAgenticCode)]
-    .join(' · ');
-  return `<dl class="settings-agentic-metadata settings-native-agent-metadata">
-    ${metadataRowHtml('Installed / executable', `${item.installed ? 'yes' : 'no'} · ${item.executable_name || 'unavailable'}`)}
-    ${metadataRowHtml('Runtime / adapter', `${item.runtime_version || 'unavailable'} · ${item.adapter.id}@${item.adapter.version}`)}
-    ${metadataRowHtml('Native model / revision', `${model?.model_id || 'unavailable'} · ${model?.model_revision || model?.model_revision_policy || 'unavailable'}`)}
-    ${metadataRowHtml('Integration protocol', `${item.protocol.kind} · ${item.protocol.id}${item.protocol.version ? `@${item.protocol.version}` : ''}`)}
-    ${metadataRowHtml('Authentication', humanizeAgenticCode(item.authentication_status))}
-    ${metadataRowHtml('Native health / update', `${health || 'unknown'} · ${update || 'unknown'}`)}
-    ${metadataRowHtml('Sandbox / approvals', `${item.effects.sandbox_policy_revision} · ${item.effects.approval_policy}`)}
-    ${metadataRowHtml('Effect observation', `workspace confined ${item.effects.workspace_confined ? 'yes' : 'no'} · process supervised ${item.effects.process_tree_supervised ? 'yes' : 'no'} · structured events ${item.effects.structured_effect_events ? 'yes' : 'no'}`)}
-    ${metadataRowHtml('Runtime contract / rollout', `${item.contract_state} · ${item.provider_status}`)}
-  </dl>`;
-}
-
-function metadataRowHtml(label: string, value: string) {
-  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
+  </article>`;
 }
 
 function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelState) {
@@ -585,17 +671,14 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       ? effectiveCapabilities?.reason_code || 'effective capabilities unavailable'
       : '')
     || 'Unavailable';
-  const usageSummary = agenticModelUsageSummary(item, state);
   return `<details class="settings-model-accordion settings-agentic-runtime" data-settings-model-accordion="agentic-${escapeAttr(key)}">
     <summary>
       <span class="settings-model-summary-copy">
-        <span class="settings-kicker">${escapeHtml(item.model_provider_id)}</span>
-        <strong>${escapeHtml(item.display_name)}</strong>
-        <small>${escapeHtml(item.model_id)}${binding?.is_default ? ' · Default' : ''}${usageSummary ? ` · ${escapeHtml(usageSummary)}` : ''}</small>
+        <strong>${escapeHtml(agenticModelLabel(item))}</strong>
+        <small>${escapeHtml(reasoningSummary(item.model_id, item.default_reasoning_effort))}</small>
       </span>
       <span class="settings-agentic-summary-badges">
         ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}
-        <span class="settings-pill ${item.runtime_status === 'complete' ? 'is-healthy' : 'is-warning'}">Runtime · ${escapeHtml(item.runtime_status || 'unavailable')}</span>
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(unavailableReason))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
@@ -614,19 +697,9 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
         <span class="material-symbols-rounded" aria-hidden="true">block</span>
         <span>
           <strong>NO-GO · ${escapeHtml(humanizeAgenticCode(item.containment_reason || 'remote agentic contained'))}</strong>
-          <small>Provider ${escapeHtml(item.model_provider_id)} · upstream ${escapeHtml(item.upstream_provider_ids.join(', ') || 'none')}</small>
-          <small>Data destination ${escapeHtml(item.data_destination.display_label)}</small>
-          <small>Egress policy ${escapeHtml(item.egress_policy.policy_id)}@${escapeHtml(item.egress_policy.revision)} · Core-classified data ${escapeHtml(item.egress_policy.allowed_remote_data_classes.join(', ') || 'none')}</small>
-          <small>Data policy collection=${escapeHtml(item.data_policy.collection)} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'} · attestation ${escapeHtml(item.data_policy.attestation_state)}</small>
-          <small>Workspace config ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Runtime ${escapeHtml(humanizeAgenticCode(item.runtime_status))}</small>
+          <small>${escapeHtml(item.data_destination.display_label)}</small>
         </span>
       </div>` : ''}
-      ${item.execution_family === 'native_agent' && item.native_runtime
-        ? nativeAgentMetadataHtml(item.native_runtime, item.model_id)
-        : ''}
-      ${agenticContractMetadataHtml(item)}
-      ${agenticCapabilityStateHtml(item)}
-      ${agenticModelUsageHtml(item, state)}
       <div class="settings-agentic-controls">
         ${isRemote ? `<label class="settings-platform-field">
           <span>Credential binding</span>
@@ -660,170 +733,28 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
   </details>`;
 }
 
-function agenticContractMetadataHtml(item: AgenticAdminItem) {
-  const upstream = item.upstream_provider_ids.join(', ') || 'direct';
-  const quantization = item.routing_constraint.allowed_quantizations.join(', ') || 'provider default';
-  const modelRevision = item.model_revision || item.model_revision_policy || 'provider alias';
-  const reasoningModes = (item.supported_reasoning_efforts || [])
-    .map((option) => option.label || option.effort)
-    .join(', ') || 'none declared';
-  return `<dl class="settings-agentic-metadata">
-    ${metadataRowHtml('Provider → model', `${item.model_provider_id} → ${item.model_id} · ${modelRevision}`)}
-    ${metadataRowHtml('Endpoint / upstream', `${item.routing_constraint.endpoint_id} · ${upstream} · ${quantization}`)}
-    ${metadataRowHtml('Adapter / protocol', `${item.adapter_id}${item.adapter_version_constraint} · ${item.provider_protocol}${item.provider_api_version ? `@${item.provider_api_version}` : ''}`)}
-    ${metadataRowHtml('Runtime config', `${item.definition_id} · ${item.runtime_status}`)}
-    ${metadataRowHtml('Reasoning modes / default', `${reasoningModes} · ${item.default_reasoning_effort || 'none'}`)}
-    ${metadataRowHtml('Data policy', `collection ${item.data_policy.collection} · retention ${item.data_policy.retention || 'provider contract'} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'}`)}
-    ${metadataRowHtml('Context / output / cost', `${item.profile_policy_ceiling.max_input_tokens} / ${item.profile_policy_ceiling.max_output_tokens} tokens · ${item.profile_policy_ceiling.max_estimated_cost_microusd === null ? 'no profile cost ceiling' : `${item.profile_policy_ceiling.max_estimated_cost_microusd} µUSD`}`)}
-    ${metadataRowHtml('Health / preflight', `${item.health} · ${item.live_preflight_status || 'unavailable'}${item.blocked_reason ? ` · ${humanizeAgenticCode(item.blocked_reason)}` : ''}`)}
-  </dl>`;
-}
-
-function agenticCapabilityStateHtml(item: AgenticAdminItem): string {
-  const snapshot = item.effective_capabilities;
-  const capabilities = snapshot?.capabilities || {};
-  const unavailableCopy = item.runtime_engine_id === 'codex'
-    ? 'The active backend has not published this snapshot yet.'
-    : 'The active backend has not published this snapshot yet. Remote controls remain disabled.';
-  const snapshotHtml = snapshot
-    ? `<strong>Effective capabilities · ${escapeHtml(snapshot.status)}</strong>
-      <small>Snapshot ${escapeHtml(snapshot.snapshot_digest || 'unavailable')} · execution ${escapeHtml(snapshot.execution_mode || 'unavailable')}</small>
-      ${snapshot.reason_code ? `<small>Reason ${escapeHtml(humanizeAgenticCode(snapshot.reason_code))}</small>` : ''}
-      <small>Filesystem read ${capabilities.filesystem_read === true ? 'yes' : 'no'} · write ${capabilities.filesystem_write === true ? 'yes' : 'no'} · shell ${capabilities.shell === true ? 'yes' : 'no'} · CLI ${capabilities.cli === true ? 'yes' : 'no'} · MCP ${capabilities.mcp === true ? 'yes' : 'no'}</small>
-      <small>Skills ${capabilities.skill_catalog === true ? 'yes' : 'no'} · app references ${capabilities.app_references === true ? 'yes' : 'no'} · attachment modes ${escapeHtml(Array.isArray(capabilities.attachment_modalities) ? capabilities.attachment_modalities.join(', ') || 'none' : 'none')} · confirmations ${capabilities.confirmations === true ? 'yes' : 'no'} · recovery ${capabilities.recovery === true ? 'yes' : 'no'}</small>
-      <small>Provider ${escapeHtml(snapshot.provider?.provider_id || 'unavailable')} · upstream ${escapeHtml(snapshot.provider?.effective_upstream_ids?.join(', ') || 'none')} · health ${escapeHtml(snapshot.provider?.health_status || 'unavailable')}</small>
-      <small>Data classes ${escapeHtml(snapshot.data_policy?.allowed_remote_data_classes?.join(', ') || 'none')} · collection ${escapeHtml(snapshot.data_policy?.collection || 'deny')} · ZDR ${snapshot.data_policy?.require_zdr ? 'required' : 'not required'}</small>`
-    : `<strong>Effective capabilities · unavailable</strong>
-      <small>${escapeHtml(unavailableCopy)}</small>`;
-  return `<div class="settings-provider-usage-unavailable settings-agentic-capability-state">
-    <span class="material-symbols-rounded" aria-hidden="true">verified_user</span>
-    <span>
-      ${snapshotHtml}
-      ${agenticWorkspaceDeclarationHtml(item)}
-    </span>
-  </div>`;
-}
-
-function agenticWorkspaceDeclarationHtml(item: AgenticAdminItem): string {
-  if (item.data_policy.attestation_required === false) {
-    return '<small>Workspace data authority: enabled by the exact administrator binding; fake/public attestation is not required.</small>';
-  }
-  const attestation = item.data_policy.attestation;
-  const state = item.data_policy.attestation_state || attestation?.state || 'unavailable';
-  const revision = attestation?.revision == null ? '' : ` · revision ${attestation.revision}`;
-  const scope = attestation?.scope
-    ? ` · scope ${escapeHtml(attestation.scope.resource_prefixes.join(', ') || 'workspace')}`
-    : '';
-  return `<small>Workspace data declaration (informational): ${escapeHtml(state)}${revision}${scope}</small>`;
-}
-
 function agenticCheckbox(field: string, label: string, checked: boolean, disabled: boolean, forced = false) {
   return bouncyToggleHtml(`<input data-agentic-field="${escapeAttr(field)}" type="checkbox" role="switch" ${checked ? 'checked' : ''} ${disabled || forced ? 'disabled' : ''}>`, escapeHtml(label));
 }
 
-function agenticModelUsageHtml(item: AgenticAdminItem, state: SettingsPanelState) {
-  const usage = state.providerUsageItems.find((candidate) =>
-    candidate.provider_id === item.runtime_engine_id || candidate.provider_id === item.model_provider_id
-  );
-  if (!usage?.available) {
-    if (item.runtime_engine_id !== 'codex') return '';
-    const message = state.isLoadingProviderUsage
-      ? 'Reading package limits…'
-      : state.providerUsageError
-        ? 'Package limits are temporarily unavailable.'
-        : 'Package limits have not been reported yet.';
-    return `<div class="settings-agentic-usage-note"><span class="material-symbols-rounded" aria-hidden="true">speed</span>${escapeHtml(message)}</div>`;
+function agenticModelLabel(item: AgenticAdminItem): string {
+  if (item.runtime_engine_id === 'codex' || item.runtime_engine_id === 'antigravity-cli') {
+    return item.model_id;
   }
-  const limits = agenticUsageLimits(item, usage);
-  if (!limits.length) return '';
-  return `<section class="settings-agentic-model-usage" aria-label="${escapeAttr(item.display_name)} usage limits">
-    <div class="settings-agentic-model-usage-heading">
-      <strong>Package limits</strong>
-      <small>${usage.plan_type ? escapeHtml(usage.plan_type.replace(/[_-]+/g, ' ')) : 'Current subscription'}</small>
-    </div>
-    <div class="settings-provider-usage-limits">${limits.map(providerUsageLimitHtml).join('')}</div>
-  </section>`;
+  return item.display_name
+    .replace(/^OpenRouter\s+/i, '')
+    .replace(/^Google\s+/i, '')
+    .replace(/\s+·\s+Relace$/i, '');
 }
 
-function agenticModelUsageSummary(item: AgenticAdminItem, state: SettingsPanelState) {
-  const usage = state.providerUsageItems.find((candidate) =>
-    candidate.provider_id === item.runtime_engine_id || candidate.provider_id === item.model_provider_id
-  );
-  const limits = usage?.available ? agenticUsageLimits(item, usage) : [];
-  const limit = limits.find((candidate) => !candidate.metered_feature) || limits[0] || null;
-  const window = limit?.primary_window || limit?.secondary_window;
-  if (!window) return '';
-  const used = Math.round(Math.max(0, Math.min(100, window.used_percent)));
-  return [`${used}% used`, formatUsageWindow(window.limit_window_seconds), formatUsageReset(window)].filter(Boolean).join(' · ');
-}
-
-function agenticUsageLimits(item: AgenticAdminItem, usage: ProviderSubscriptionUsage) {
-  const modelKey = item.model_id.toLowerCase().replace(/[^a-z0-9]+/g, '');
-  return usage.limits.filter((limit) => {
-    const feature = (limit.metered_feature || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-    return !feature || feature === 'codex' || feature.includes(modelKey) || modelKey.includes(feature);
-  });
+function reasoningSummary(modelId: string | undefined, defaultEffort: string | null | undefined): string {
+  const inferred = modelId?.match(/-(max|xhigh|high|medium|low)$/i)?.[1] || '';
+  const effort = defaultEffort || inferred;
+  return `Reasoning · ${effort ? humanizeAgenticCode(effort) : 'Preset'}`;
 }
 
 function humanizeAgenticCode(value: string) {
   return value.replace(/[._-]+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function providerUsageLimitHtml(limit: ProviderUsageLimit) {
-  const windows = [
-    { label: limit.secondary_window ? 'Primary window' : '', window: limit.primary_window },
-    { label: 'Secondary window', window: limit.secondary_window }
-  ].filter((item): item is { label: string; window: ProviderUsageWindow } => Boolean(item.window));
-  return windows.map(({ label, window }) => {
-    const value = Math.round(Math.max(0, Math.min(100, window.used_percent)));
-    const detail = [label, formatUsageWindow(window.limit_window_seconds), formatUsageReset(window)].filter(Boolean).join(' · ');
-    return `<article class="settings-provider-usage-limit ${limit.limit_reached ? 'is-reached' : ''}">
-      <div class="settings-provider-usage-gauge" data-provider-usage-gauge="${escapeAttr(String(value))}"></div>
-      <span class="settings-provider-usage-limit-copy">
-        <strong>${escapeHtml(limit.label)}</strong>
-        <small>${escapeHtml(detail)}</small>
-      </span>
-      <span class="settings-provider-usage-value">
-        <strong>${value}%</strong>
-        <small>${limit.limit_reached ? 'limit reached' : 'used'}</small>
-      </span>
-    </article>`;
-  }).join('');
-}
-
-function providerUsageUnavailableHtml(message: string) {
-  return `<div class="settings-provider-usage-unavailable">
-    <span class="material-symbols-rounded" aria-hidden="true">info</span>
-    <span><strong>Usage unavailable</strong><small>${escapeHtml(message)}</small></span>
-  </div>`;
-}
-
-function formatUsageWindow(seconds: number | null) {
-  if (!seconds || seconds <= 0) return '';
-  if (seconds % 86400 === 0) {
-    const days = seconds / 86400;
-    return `${days}-day window`;
-  }
-  if (seconds % 3600 === 0) {
-    const hours = seconds / 3600;
-    return `${hours}-hour window`;
-  }
-  return 'rolling window';
-}
-
-function formatUsageReset(window: ProviderUsageWindow) {
-  const seconds = window.reset_after_seconds;
-  if (seconds !== null && seconds >= 0) {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    if (days > 0) return `resets in ${days}d ${hours}h`;
-    const minutes = Math.max(1, Math.floor((seconds % 3600) / 60));
-    return hours > 0 ? `resets in ${hours}h ${minutes}m` : `resets in ${minutes}m`;
-  }
-  if (window.reset_at_epoch_seconds) {
-    return `resets ${new Date(window.reset_at_epoch_seconds * 1000).toLocaleString()}`;
-  }
-  return '';
 }
 
 function hostedProviderSettingsListHtml({
@@ -903,23 +834,17 @@ function hostedProviderModelAccordionHtml(
       !state.isSavingHostedProvider &&
       (modelProviderId !== selectedHostedProviderId || modelId !== selectedHostedModelId || hostedRoutingChanged(state, settings, modelId))
   );
-  const isTextOutputModel = modelSupportsTextOutput(option);
-  const modelKindLabel = isTextOutputModel ? 'Text-only model' : 'Hosted speech model';
-  const modelRuntimeLabel = isTextOutputModel
-    ? NO_WORKSPACE_ACTIONS_MESSAGE
-    : 'speech synthesis metadata · not used by plain hosted chat';
-  const modelIcon = isTextOutputModel ? 'bolt' : 'record_voice_over';
   const isOpen = modelId === openHostedModel;
   const providerLabel = hostedProviderLabelForModel(option, hostedProvider);
   return `<details class="settings-model-accordion settings-hosted-model-accordion" data-settings-model-accordion="hosted:${escapeAttr(modelId)}" data-hosted-model-accordion="${escapeAttr(modelId)}" ${isOpen ? 'open' : ''}>
     <summary class="settings-model-trigger">
-      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">${modelIcon}</span>
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">record_voice_over</span>
       <span class="settings-model-copy">
         <span class="settings-model-kicker">
-          <span class="settings-kicker">${modelKindLabel}</span>
+          <span class="settings-kicker">Hosted speech model</span>
         </span>
         <strong>${escapeHtml(option.label || modelId)} - ${escapeHtml(providerLabel)}</strong>
-        <small>${escapeHtml(modelId || 'model not selected')} · ${modelRuntimeLabel}</small>
+        <small>${escapeHtml(modelId || 'model not selected')} · speech synthesis metadata</small>
       </span>
       <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
     </summary>
@@ -928,7 +853,6 @@ function hostedProviderModelAccordionHtml(
         <span>Model</span>
         <code class="settings-model-code">${escapeHtml(modelId || 'model not selected')}</code>
       </div>
-    ${isTextOutputModel ? textOnlyProfileMetadataHtml(option, providerLabel, modelProviderStatus) : ''}
     ${
       hasOpenRouterRouting
         ? `
@@ -988,34 +912,11 @@ function hostedProviderModelAccordionHtml(
     }
     <button type="button" data-hosted-provider-save="${escapeAttr(modelId)}" ${canSaveProvider ? '' : 'disabled'}>
       <span class="material-symbols-rounded" aria-hidden="true">${isSavingThisModel ? 'sync' : 'save'}</span>
-      ${isSavingThisModel ? 'Saving' : isTextOutputModel ? 'Save text-only model' : 'Save hosted model'}
+      ${isSavingThisModel ? 'Saving' : 'Save hosted model'}
     </button>
     ${state.hostedProviderError && state.hostedProviderErrorModelId === modelId ? `<p class="settings-platform-error">${escapeHtml(state.hostedProviderError)}</p>` : ''}
     </div>
   </details>`;
-}
-
-function textOnlyProfileMetadataHtml(
-  option: ProviderModelOption,
-  providerLabel: string,
-  providerStatus: string
-) {
-  const item = option.hosted_text_profile;
-  const profile = item?.profile;
-  const cost = item?.cost && Object.keys(item.cost).length
-    ? JSON.stringify(item.cost)
-    : 'provider contract';
-  return `<div class="settings-agentic-contract-callout settings-text-only-callout">
-    <strong>${NO_WORKSPACE_ACTIONS_MESSAGE}</strong>
-    <dl class="settings-agentic-metadata">
-      ${metadataRowHtml('Provider / model', `${providerLabel} → ${option.model_id}`)}
-      ${metadataRowHtml('Profile', profile ? `${profile.profile_id}@${profile.revision}` : 'profile unavailable')}
-      ${metadataRowHtml('Input modalities', (profile?.input_modalities || option.input_modalities || ['text']).join(', ') || 'text')}
-      ${metadataRowHtml('Context / output limit', `${profile?.context_limit_tokens || 'provider limit'} / ${profile?.output_limit_tokens || 'provider limit'} tokens`)}
-      ${metadataRowHtml('Cost / retention', `${cost} · ${profile?.retention_policy || 'provider contract'}`)}
-      ${metadataRowHtml('Status', `${item?.status.status || providerStatus || 'unavailable'}${item?.unavailable_reason ? ` · ${humanizeAgenticCode(item.unavailable_reason)}` : ''}`)}
-    </dl>
-  </div>`;
 }
 
 function hostedProviderModelGroups(
@@ -1046,11 +947,6 @@ function hostedProviderModelGroups(
     }
     return left.providerLabel.localeCompare(right.providerLabel);
   });
-}
-
-function modelSupportsTextOutput(option: ProviderModelOption): boolean {
-  const outputs = option.output_modalities || [];
-  return !outputs.length || outputs.includes('text');
 }
 
 function modelSupportsSpeechOutput(option: ProviderModelOption): boolean {

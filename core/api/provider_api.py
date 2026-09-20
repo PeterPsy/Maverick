@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
 from core.api.http import StartResponse, json_response, query_params
+from core.api.native_provider_api import activate_native_provider
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
@@ -1186,6 +1187,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
     if path not in {
         "/api/providers",
         "/api/providers/active",
+        "/api/providers/native/activate",
         "/api/providers/hosted/active",
         "/api/providers/hosted/selection",
         "/api/providers/speech/active",
@@ -1201,6 +1203,8 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
     if not isinstance(context_or_response, RequestSession):
         return context_or_response
     context = context_or_response
+    if path == "/api/providers/native/activate":
+        return activate_native_provider(state, context, environ, start_response)
     if path == "/api/providers/agentic/workspace-bindings" and method == "POST":
         from core.api.http import read_json_body
 

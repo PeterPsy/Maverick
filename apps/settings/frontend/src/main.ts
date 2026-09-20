@@ -512,6 +512,7 @@ function bindEvents() {
       render();
     },
     saveAgenticBindingFromPanel: agenticBindingController.save,
+    activateNativeProviderFromPanel: agenticBindingController.activateProvider,
     onSpeechAudioModelChanged: (modelId) => {
       updateSpeechAudioModel(settingsPanelState, modelId);
       render();

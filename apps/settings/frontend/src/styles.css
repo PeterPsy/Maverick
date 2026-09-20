@@ -915,13 +915,6 @@ button.settings-adapter-card {
   background: var(--maverick-surface-hover);
 }
 
-.settings-provider-usage-gauge {
-  display: grid;
-  place-items: center;
-  width: 4rem;
-  height: 4rem;
-}
-
 .settings-provider-usage-value {
   justify-items: end;
   text-align: right;
@@ -1401,6 +1394,50 @@ button.settings-adapter-card {
   margin-top: 2px;
 }
 
+.settings-runtime-provider-list {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-runtime-provider {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-runtime-provider-heading {
+  display: grid;
+  gap: 3px;
+  padding: 0 2px;
+}
+
+.settings-native-provider-activation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+}
+
+.settings-runtime-provider-heading h4,
+.settings-runtime-provider-heading p {
+  margin: 0;
+}
+
+.settings-runtime-provider-heading h4 {
+  color: var(--maverick-text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.settings-runtime-provider-heading p {
+  color: var(--maverick-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
 .settings-runtime-family {
   display: grid;
   gap: 10px;
@@ -1408,14 +1445,26 @@ button.settings-adapter-card {
 }
 
 .settings-runtime-family-heading {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .settings-runtime-family-heading h3 {
+  flex: 0 0 auto;
   margin: 0;
-  color: var(--maverick-text);
-  font-size: 1rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.settings-runtime-family-heading::after {
+  width: 100%;
+  height: 1px;
+  background: var(--maverick-border);
+  content: "";
 }
 
 .settings-runtime-family-heading p,
@@ -1468,6 +1517,14 @@ button.settings-adapter-card {
   list-style: none;
   padding: 12px 0;
   cursor: pointer;
+}
+
+.settings-agentic-runtime-static__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
 }
 
 .settings-agentic-runtime > summary::-webkit-details-marker {
@@ -1708,41 +1765,6 @@ button.settings-adapter-card {
   font-size: 0.62rem;
 }
 
-.settings-agentic-metadata {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  margin: 0;
-  border: 1px solid var(--maverick-border);
-  border-radius: var(--maverick-control-radius);
-  background: var(--maverick-border);
-}
-
-.settings-agentic-metadata > div {
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-  background: var(--maverick-surface);
-  padding: 9px 10px;
-}
-
-.settings-agentic-metadata dt {
-  color: var(--maverick-text-muted);
-  font-size: 0.65rem;
-  text-transform: uppercase;
-}
-
-.settings-agentic-metadata dd {
-  overflow: hidden;
-  margin: 0;
-  color: var(--maverick-text);
-  font-family: var(--maverick-mono-font, ui-monospace, monospace);
-  font-size: 0.7rem;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-}
-
 .settings-agentic-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1762,7 +1784,6 @@ button.settings-adapter-card {
 @media (max-width: 760px) {
   .settings-agentic-runtime > summary,
   .settings-agentic-controls,
-  .settings-agentic-metadata,
   .settings-agentic-checks {
     grid-template-columns: 1fr;
   }
@@ -2396,12 +2417,6 @@ button.settings-danger:hover:not(:disabled) {
     grid-template-columns: 3.5rem minmax(0, 1fr) auto;
     gap: 10px;
     padding: 10px;
-  }
-
-  .settings-provider-usage-gauge {
-    width: 3.5rem;
-    height: 3.5rem;
-    transform: scale(0.875);
   }
 
   .settings-toggle {

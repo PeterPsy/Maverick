@@ -258,14 +258,12 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("settingsPanelHtml(platformSettings, settingsPanelState)", main_source)
         self.assertIn("Platform settings", settings_source)
         self.assertIn("settings-user-settings-card", settings_source)
-        self.assertIn("settings-hosted-text-model-settings-card", settings_source)
+        self.assertNotIn("settings-hosted-text-model-settings-card", settings_source)
         self.assertIn("settings-agentic-runtimes-card", settings_source)
         self.assertIn("data-agentic-model-toggle", settings_source)
         self.assertIn("item.enable_eligible === true", settings_source)
         self.assertIn("item.enable_eligible !== true", agentic_binding_source)
-        self.assertIn("Package limits", settings_source)
-        self.assertIn("Refresh limits", settings_source)
-        self.assertIn("Reasoning modes / default", settings_source)
+        self.assertIn("Reasoning ·", settings_source)
         self.assertIn("Token usage history", settings_source)
         self.assertEqual(settings_source.count("data-usage-history-chart"), 1)
         self.assertIn("settings-speech-model-settings-card", settings_source)
@@ -274,25 +272,11 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("/api/providers/hosted/selection", api_source)
         self.assertIn("speech_stt", api_source)
         family_source = (app_root / "frontend" / "src" / "executionFamilies.ts").read_text(encoding="utf-8")
-        self.assertIn("Native Agents (CLI)", family_source)
-        self.assertIn("Maverick Agents (API)", family_source)
-        self.assertIn("Text-only Models (API)", family_source)
-        self.assertIn("No workspace tools or actions.", family_source)
-        self.assertIn(
-            "External coding-agent runtimes such as Codex, Claude Code, and Antigravity CLI. "
-            "They use their own agent loop and tools, while Maverick launches, connects to, and supervises them.",
-            family_source,
-        )
-        self.assertIn(
-            "API models made agentic by Maverick. Maverick provides workspace context, tools, "
-            "the execution loop, approvals, finalization, and recovery.",
-            family_source,
-        )
-        self.assertIn(
-            "API models without workspace tools or an action loop. They generate text from the "
-            "context provided by Maverick but cannot perform workspace actions.",
-            family_source,
-        )
+        self.assertIn("CLI models", family_source)
+        self.assertIn("API models", family_source)
+        self.assertNotIn("Text-only", family_source)
+        self.assertIn("Models running through an installed CLI.", family_source)
+        self.assertIn("Models running through a provider API.", family_source)
         self.assertIn("Speech model settings", settings_source)
         self.assertIn("saveHostedProviderSettingsFromPanel", main_source)
         self.assertIn("data-settings-model-accordion", settings_source)
@@ -641,55 +625,42 @@ const html = settingsPanelHtml(settings, state);
 assert.equal((html.match(/data-usage-history-chart/g) || []).length, 1);
 assert.ok(html.includes('Last 24 hours'));
 assert.ok(html.includes('settings-user-settings-card'));
-assert.ok(html.includes('settings-hosted-text-model-settings-card'));
+assert.ok(!html.includes('settings-hosted-text-model-settings-card'));
 assert.ok(html.includes('settings-agentic-runtimes-card'));
 assert.ok(html.includes('settings-speech-model-settings-card'));
 assert.ok(html.includes('settings-runtime-settings-card'));
-assert.ok(html.includes('Native Agents (CLI)'));
-assert.ok(html.includes('Maverick Agents (API)'));
-assert.ok(html.includes('Text-only Models (API)'));
-assert.ok(html.includes('No workspace tools or actions.'));
-assert.ok(html.includes('Runtime available; session selection still requires an enabled workspace profile.'));
-assert.ok(!html.includes('Unavailable: Native Agent Unavailable'));
-assert.ok(html.includes('Installed / executable'));
-assert.ok(html.includes('Native health / update'));
-assert.ok(html.includes('Effect observation'));
-assert.ok(html.indexOf('Native Agents (CLI)') < html.indexOf('Maverick Agents (API)'));
-assert.ok(html.indexOf('Maverick Agents (API)') < html.indexOf('Text-only Models (API)'));
+assert.ok(html.includes('CLI models'));
+assert.ok(html.includes('API models'));
+assert.ok(html.indexOf('CLI models') < html.indexOf('API models'));
+assert.ok(html.includes('Reasoning ·'));
 assert.ok(html.includes('Speech model settings'));
-assert.ok(html.indexOf('settings-agentic-runtimes-card') < html.indexOf('settings-hosted-text-model-settings-card'));
-assert.ok(html.indexOf('settings-hosted-text-model-settings-card') < html.indexOf('settings-speech-model-settings-card'));
-assert.ok(!html.includes('data-agentic-provider-accordion'));
-assert.ok(html.includes('Text-only model'));
+assert.ok(html.indexOf('settings-agentic-runtimes-card') < html.indexOf('settings-speech-model-settings-card'));
+assert.ok(html.includes('data-agentic-provider-group="codex"'));
+assert.ok(html.includes('Codex'));
+assert.ok(html.includes('11% used · 89% remaining before limit'));
+assert.ok(!html.includes('Text-only model'));
 assert.ok(!html.includes('Hosted text models'));
 assert.ok(!html.includes('Chat only uses text-output fast models'));
 assert.ok(html.includes('data-hosted-provider-group="openrouter"'));
-assert.ok(html.includes('data-hosted-provider-group="google-ai-studio"'));
+assert.ok(!html.includes('data-hosted-provider-group="google-ai-studio"'));
 assert.ok(html.includes('data-speech-provider-group="deepgram"'));
 assert.ok(html.includes('Active provider'));
-assert.ok(html.includes('Inactive provider'));
 assert.ok(html.includes('OpenRouter'));
-assert.ok(html.includes('Gemma 4 31B (free)'));
-assert.ok(html.includes('Nemotron 3 Ultra (free)'));
-assert.ok(html.includes('GLM 5.3 Flash - OpenRouter'));
-assert.ok(html.includes('Gemini 3.5 Flash - Google AI Studio'));
-assert.ok(html.includes('Gemini 3.1 Flash-Lite - Google AI Studio'));
+assert.ok(!html.includes('Gemma 4 31B (free)'));
+assert.ok(!html.includes('Nemotron 3 Ultra (free)'));
+assert.ok(!html.includes('GLM 5.3 Flash - OpenRouter'));
+assert.ok(!html.includes('Gemini 3.5 Flash - Google AI Studio'));
+assert.ok(!html.includes('Gemini 3.1 Flash-Lite - Google AI Studio'));
 assert.ok(!html.includes('<span class="settings-pill">Inactive</span>'));
 assert.ok(html.includes('Kokoro 82M'));
 assert.ok(html.includes('Hosted speech model'));
-assert.ok(html.includes('speech synthesis metadata · not used by plain hosted chat'));
+assert.ok(html.includes('speech synthesis metadata'));
 assert.ok(!html.includes('Hosted speech models'));
 assert.ok(!html.includes('Audio transcription uses Nova-3'));
-const hostedTextSection = html.slice(
-  html.indexOf('settings-hosted-text-model-settings-card'),
-  html.indexOf('settings-speech-model-settings-card')
-);
 const speechSection = html.slice(
   html.indexOf('settings-speech-model-settings-card'),
   html.indexOf('settings-runtime-settings-card')
 );
-assert.ok(hostedTextSection.includes('GLM 5.3 Flash - OpenRouter'));
-assert.ok(!hostedTextSection.includes('Kokoro 82M'));
 assert.ok(speechSection.includes('Kokoro 82M - OpenRouter'));
 assert.ok(speechSection.includes('data-hosted-provider-group="openrouter"'));
 assert.ok(html.includes('Nova-3'));
@@ -699,23 +670,21 @@ assert.ok(html.includes('wss://api.deepgram.com/v2/listen?model=flux-general-mul
 assert.ok(!html.includes('id="settings-speech-save"'));
 assert.equal((html.match(/data-speech-save=/g) || []).length, 2);
 assert.equal((html.match(/Save speech model/g) || []).length, 2);
-assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 6);
-assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 6);
-assert.equal((html.match(/<span class="settings-pill">Active provider<\/span>/g) || []).length, 3);
-assert.equal((html.match(/<span class="settings-pill">Inactive provider<\/span>/g) || []).length, 1);
-assert.ok(html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
-assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
-assert.ok(html.includes('data-hosted-provider-save="z-ai/glm-5.3-flash"'));
+assert.ok((html.match(/data-settings-model-accordion=/g) || []).length > 0);
+assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 1);
+assert.ok((html.match(/<span class="settings-pill">Active provider<\/span>/g) || []).length > 0);
+assert.ok(!html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
+assert.ok(!html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
+assert.ok(!html.includes('data-hosted-provider-save="z-ai/glm-5.3-flash"'));
 assert.ok(html.includes('data-hosted-provider-save="hexgrad/kokoro-82m"'));
-assert.ok(html.includes('data-hosted-provider-save="gemini-3.5-flash"'));
-assert.ok(html.includes('data-hosted-provider-save="gemini-3.1-flash-lite"'));
+assert.ok(!html.includes('data-hosted-provider-save="gemini-3.5-flash"'));
+assert.ok(!html.includes('data-hosted-provider-save="gemini-3.1-flash-lite"'));
 assert.ok(!html.includes('settings-hosted-provider-model'));
 assert.ok(html.includes('OpenRouter upstream'));
 assert.ok(html.includes('data-openrouter-routing="mode"'));
 assert.ok(html.includes('data-openrouter-routing="zdr"'));
 assert.ok(html.includes('Require zero data retention'));
-assert.ok(html.includes('data-hosted-model-id="nvidia/nemotron-3-ultra-550b-a55b:free"'));
-assert.ok(html.includes('Nvidia'));
+assert.ok(html.includes('data-hosted-model-id="hexgrad/kokoro-82m"'));
 assert.ok(!html.includes('runtime engine remains Codex'));
 
 settings.agentic_admin = {
@@ -857,16 +826,12 @@ assert.equal((duplicateHtml.match(/data-agentic-model-toggle/g) || []).length, 2
 settings.agentic_admin.items.pop();
 const containmentHtml = settingsPanelHtml(settings, state);
 assert.equal((containmentHtml.match(/data-agentic-model-toggle/g) || []).length, 1);
+assert.ok(containmentHtml.includes('data-agentic-provider-group="google-ai-studio"'));
 for (const expected of [
   'Remote agentic release: NO-GO',
-  'Provider google-ai-studio · upstream google-ai-studio',
-  'Data destination google-ai-studio → google-ai-studio · google-ai-studio',
-  'Egress policy remote-agentic-contained@2 · Core-classified data none',
-  'Data policy collection=deny · ZDR required · attestation not_attested',
-  'Effective capabilities · blocked',
-  'Workspace data declaration (informational): not_attested',
-  'Workspace config Disabled · Runtime Incomplete',
-  'Google Gemini 3.5 Pro',
+  'google-ai-studio → google-ai-studio · google-ai-studio',
+  'Gemini 3.5 Pro',
+  'Reasoning · Preset',
   'Quarantined: Remote Agentic State Ambiguous',
   'Pinned remote profile contained (NO-GO): Hosted Agent Runtime Disabled'
 ]) {
@@ -879,8 +844,8 @@ delete rollingUpgradeSettings.agentic_admin.items[0].effective_capabilities;
 delete rollingUpgradeSettings.agentic_admin.items[0].data_policy.attestation;
 rollingUpgradeSettings.agentic_admin.items[0].data_policy.attestation_state = 'unavailable';
 const rollingUpgradeHtml = settingsPanelHtml(rollingUpgradeSettings, state);
-assert.ok(rollingUpgradeHtml.includes('Effective capabilities · unavailable'));
-assert.ok(rollingUpgradeHtml.includes('Workspace data declaration (informational): unavailable'));
+assert.ok(rollingUpgradeHtml.includes('Gemini 3.5 Pro'));
+assert.ok(!rollingUpgradeHtml.includes('Effective capabilities'));
 
 const reenableSettings = JSON.parse(JSON.stringify(settings));
 const reenableItem = reenableSettings.agentic_admin.items[0];
@@ -905,8 +870,9 @@ const reenableHtml = settingsPanelHtml(reenableSettings, state);
 const reenableToggle = reenableHtml.match(/<input type="checkbox" role="switch" data-agentic-model-toggle[\s\S]*?>/)?.[0] || '';
 assert.ok(reenableToggle);
 assert.ok(!reenableToggle.includes('disabled'));
-assert.ok(reenableHtml.includes('codex-cli test'));
-assert.ok(reenableHtml.includes('Effect observation'));
+assert.ok(reenableHtml.includes('gpt-5.5'));
+assert.ok(reenableHtml.includes('Reasoning · Preset'));
+assert.ok(!reenableHtml.includes('Effect observation'));
 
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'mode', 'only');
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'provider_id', 'open-inference');
@@ -1174,20 +1140,17 @@ function makeController() {
         self.assertIn('aria-hidden="true"', skeleton_source)
         self.assertIn("@keyframes settings-loading-skeleton-shimmer", skeleton_css)
 
-    def test_platform_settings_renders_themed_subscription_usage_gauges(self) -> None:
+    def test_platform_settings_uses_compact_subscription_usage(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
-        gauge_source = (app_root / "frontend" / "src" / "components" / "ui" / "gauge-1.tsx").read_text(encoding="utf-8")
-        usage_source = (app_root / "frontend" / "src" / "components" / "usageLimitGauges.tsx").read_text(encoding="utf-8")
         panel_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
         styles_source = (app_root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
         components = json.loads((app_root / "components.json").read_text(encoding="utf-8"))
 
-        self.assertIn('export const Gauge', gauge_source)
-        self.assertIn('role="progressbar"', gauge_source)
-        self.assertIn("var(--maverick-accent)", usage_source)
-        self.assertIn("data-provider-usage-gauge", panel_source)
-        self.assertIn("Package limits", panel_source)
-        self.assertIn("settings-refresh-provider-usage", panel_source)
+        self.assertNotIn("data-provider-usage-gauge", panel_source)
+        self.assertIn("data-agentic-provider-group", panel_source)
+        self.assertIn("remaining before limit", panel_source)
+        self.assertNotIn("Package limits", panel_source)
+        self.assertNotIn("settings-refresh-provider-usage", panel_source)
         self.assertIn('@import "tailwindcss"', styles_source)
         self.assertEqual(components["aliases"]["ui"], "@/components/ui")
 

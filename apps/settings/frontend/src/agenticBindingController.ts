@@ -1,4 +1,5 @@
 import {
+  activateNativeProvider,
   configureAgenticWorkspaceBinding,
   getPlatformSettings,
   type PlatformSettings
@@ -14,6 +15,24 @@ type AgenticBindingControllerContext = {
 
 export function createAgenticBindingController(context: AgenticBindingControllerContext) {
   return {
+    activateProvider: async (providerId: string) => {
+      if (context.state.activatingNativeProviders.has(providerId)) return;
+      context.state.activatingNativeProviders.add(providerId);
+      context.state.nativeProviderErrors[providerId] = '';
+      context.render();
+      try {
+        await activateNativeProvider(providerId);
+        const settings = await getPlatformSettings();
+        syncSettingsPanelDraft(context.state, settings);
+        context.setSettings(settings, 'Connection enabled. Selected models are available in Chat.');
+      } catch (error) {
+        context.state.nativeProviderErrors[providerId] = error instanceof Error
+          ? error.message : 'Unable to enable connection.';
+      } finally {
+        context.state.activatingNativeProviders.delete(providerId);
+        context.render();
+      }
+    },
     save: async (
       definitionId: string,
       options: { enabled?: boolean } = {}

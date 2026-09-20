@@ -801,6 +801,13 @@ export function configureAgenticWorkspaceBinding(payload: {
   });
 }
 
+export function activateNativeProvider(providerId: string): Promise<{ provider: ProviderItem; profile_count: number }> {
+  return requestJson('/api/providers/native/activate', {
+    method: 'POST',
+    body: JSON.stringify({ provider_id: providerId, confirmation: 'native-runtime-reviewed' })
+  });
+}
+
 export function clearRuntimeSessions(session_ids?: string[], reason = 'settings_runtime_sessions_cleared'): Promise<RuntimeCleanupPayload> {
   return requestJson<RuntimeCleanupPayload>('/api/settings/runtime-sessions/clear', {
     method: 'POST',

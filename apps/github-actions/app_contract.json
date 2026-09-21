@@ -58,6 +58,7 @@
     "reference_entities": []
   },
   "entrypoints": {
+    "backend": "backend/app_backend.py",
     "hooks": {},
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",

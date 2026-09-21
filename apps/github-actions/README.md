@@ -9,6 +9,10 @@ The app reads these Core Secrets logical names:
 - `github-installation-id`
 - `github-app-private-key`
 
+Authenticated workspace administrators can invoke the same redacted operations
+through the mounted backend. Core still injects Vault grants per request; the
+backend never returns credential material.
+
 Default target:
 
 - repository: `giuntiocram/maverick-glasses-ios`

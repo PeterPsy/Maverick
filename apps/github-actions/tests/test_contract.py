@@ -19,6 +19,7 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertIn("github-app-id", secret_reads)
         self.assertIn("github-installation-id", secret_reads)
         self.assertIn("github-app-private-key", secret_reads)
+        self.assertEqual(contract["entrypoints"]["backend"], "backend/app_backend.py")
 
 
 if __name__ == "__main__":

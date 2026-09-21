@@ -104,7 +104,6 @@
   border: 1px solid rgba(var(--maverick-contrast-rgb), 0.055);
   border-radius: var(--chatapp-cell-radius);
   box-shadow: var(--chatapp-agent-message-shadow);
-  backdrop-filter: blur(22px);
 }
 
 .chatapp-agent-block::before,
@@ -260,7 +259,6 @@
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
   box-shadow: var(--chatapp-structured-message-shadow);
-  backdrop-filter: blur(22px);
 }
 
 .chatapp-structured-card__eyebrow {

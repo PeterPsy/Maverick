@@ -1,6 +1,6 @@
 /** Full React streaming workload; intercept only the disposable session socket. */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { baseUrl, chromium, executablePath } from './performance_browser_support.mjs';
@@ -9,7 +9,12 @@ const history = JSON.parse(readFileSync(process.env.MAVERICK_PERFORMANCE_CHAT_EV
 assert.equal(history.length, 4000);
 const samples = Number(process.env.MAVERICK_PERFORMANCE_STREAM_TRIALS || 5);
 assert(Number.isInteger(samples) && samples >= 1 && samples <= 10);
+const tracePath = process.env.MAVERICK_PERFORMANCE_STREAM_TRACE;
+if (tracePath) assert.equal(samples, 1, 'Tracing is a separate diagnostic, not a comparison trial.');
 const browser = await chromium.launch({ headless: true, executablePath: executablePath() });
+const browserMetrics = await browser.newBrowserCDPSession();
+const processCpu = async () => (await browserMetrics.send('SystemInfo.getProcessInfo')).processInfo;
+const { gpu } = await browserMetrics.send('SystemInfo.getInfo');
 const results = [];
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const metrics = async cdp => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(({ name, value }) => [name, value]));
@@ -99,6 +104,16 @@ try {
       const composer = chat.getByRole('textbox').first();
       await composer.click();
       await sleep(500);
+      const filteredSurfaces = tracePath ? await chat.evaluate(() => [...document.querySelectorAll('*')]
+        .filter(element => getComputedStyle(element).backdropFilter !== 'none')
+        .map(element => ({ class: element.className, filter: getComputedStyle(element).backdropFilter,
+          width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }))) : [];
+      if (tracePath) await page.screenshot({ path: `${tracePath}.png` });
+      const tracer = tracePath ? await context.newCDPSession(page) : null;
+      if (tracer) await tracer.send('Tracing.start', {
+        categories: 'devtools.timeline,blink.user_timing,benchmark,cc,input', transferMode: 'ReturnAsStream',
+      });
+      const processesBefore = await processCpu();
       const before = await metrics(cdp);
       const started = performance.now();
       send('runtime.turn.queued', { input_text: 'Measure streaming with typing and scrolling.' });
@@ -150,6 +165,25 @@ try {
       assert.equal(rendered, expected, 'All 500 chunks must survive tool boundaries and terminal flush.');
       await chat.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const after = await metrics(cdp);
+      const processesAfter = await processCpu();
+      const previousCpu = new Map(processesBefore.map(item => [item.id, item.cpuTime]));
+      const remainingIds = new Set(processesAfter.map(item => item.id));
+      assert(processesBefore.every(item => remainingIds.has(item.id)), 'A browser process exited during measurement.');
+      const processDeltas = processesAfter.map(item => ({ type: item.type,
+        cpu_ms: (item.cpuTime - (previousCpu.get(item.id) ?? 0)) * 1000 }));
+      if (tracer) {
+        const complete = new Promise(resolve => tracer.once('Tracing.tracingComplete', resolve));
+        await tracer.send('Tracing.end');
+        const { stream } = await complete;
+        const chunks = [];
+        while (true) {
+          const chunk = await tracer.send('IO.read', { handle: stream });
+          chunks.push(Buffer.from(chunk.data, chunk.base64Encoded ? 'base64' : 'utf8'));
+          if (chunk.eof) break;
+        }
+        await tracer.send('IO.close', { handle: stream });
+        writeFileSync(tracePath, Buffer.concat(chunks));
+      }
       await sleep(150); // Event Timing is delivered asynchronously after paint.
       const timings = await chat.evaluate(() => window.__streamProbe);
       assert.equal(await composer.innerText(), 'x'.repeat(20));
@@ -158,6 +192,7 @@ try {
       assert.equal(timings.input.length, 20);
       assert.deepEqual(errors, []);
       results.push({ trial, elapsed_ms: performance.now() - started,
+        browser_cpu_ms: processDeltas.reduce((sum, item) => sum + item.cpu_ms, 0), browser_process_cpu: processDeltas,
         main_thread_cpu_ms: (after.TaskDuration - before.TaskDuration) * 1000,
         script_ms: (after.ScriptDuration - before.ScriptDuration) * 1000,
         layout_ms: (after.LayoutDuration - before.LayoutDuration) * 1000,
@@ -166,14 +201,16 @@ try {
         key_event_timing: timings.keyEvents, key_event_reporting_threshold_ms: 16,
         input_action_ms: inputActions, scroll_action_ms: scrollActions,
         emission_delay_ms: emissionDelays,
+        filtered_surfaces: filteredSurfaces,
         output_sha256: createHash('sha256').update(rendered).digest('hex'), output_characters: rendered.length,
         input_preserved: true, errors });
       process.stderr.write(`Streaming trial ${trial + 1}/${samples} finished.\n`);
     } finally { await context.close(); }
   }
-  process.stdout.write(JSON.stringify({ schema: 1, boundary: 'chromium-isolated-frame-main-thread',
-    browser: browser.version(), history_turns: 1000, history_events: 4000,
+  process.stdout.write(JSON.stringify({ schema: 1, boundary: 'chromium-browser-and-isolated-chat-frame',
+    browser: browser.version(), graphics: { devices: gpu.devices, renderer: gpu.auxAttributes?.glRenderer },
+    history_turns: 1000, history_events: 4000,
     warmup_deltas: 5, measured_deltas: 501, interval_ms: 20, tool_completions: 5,
     transport: 'real authenticated host with deterministic session WebSocket interception',
-    physical_device_gate: 'not-tested', results }, null, 2) + '\n');
+    physical_device_gate: 'not-tested', diagnostic_tracing: Boolean(tracePath), results }, null, 2) + '\n');
 } finally { await browser.close(); }

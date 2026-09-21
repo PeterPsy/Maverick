@@ -99,6 +99,8 @@ def main() -> int:
                     for app in ('base-shell', 'chat', 'storage', 'calendar')}
                 evidence['python'] = platform.python_version()
                 evidence['sqlite'] = sqlite3.sqlite_version
+                evidence['host'] = {'platform': platform.platform(), 'logical_cpus': psutil.cpu_count(),
+                    'memory_bytes': psutil.virtual_memory().total}
                 print(json.dumps(evidence, indent=2))
                 return 0
             finally:

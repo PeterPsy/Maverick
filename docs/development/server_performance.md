@@ -236,8 +236,9 @@ merge/projection CPU, not browser rendering, startup or server-side batching.
 production Chat frame with 1,000 completed Markdown/tool turns. After five warmup
 deltas it sends 501 text frames and five tool completions, types 20 characters,
 and scrolls ten times. Five fresh browser contexts repeat the same workload.
-CDP thread-tick metrics report renderer main-thread CPU, script/layout time and
-heap; browser observers record the first text's next animation frame and input
+CDP process counters report total browser CPU, including the compositor/GPU
+process; thread-tick metrics separately report frame main-thread CPU, script/layout
+time and heap. Browser observers record the first text's next animation frame and input
 frame delays, plus Event Timing from keydown through the next paint. Stream frames
 follow a fixed 20 ms cadence independently of keyboard/scroll commands; report
 emission lateness so a slower client cannot quietly reduce the offered load.
@@ -252,6 +253,13 @@ and clears its missing-provider admission warning without submitting a turn.
 Record both Chat build IDs and raw trials. Run comparisons sequentially without
 other tests/builds; `MAVERICK_PERFORMANCE_STREAM_TRIALS=1` is a diagnostic run,
 not the five-trial comparison.
+
+For a separate one-trial diagnostic, `MAVERICK_PERFORMANCE_STREAM_TRACE=<path>`
+writes a Chromium trace and screenshot. Traced runs are marked and are not used
+as comparison trials. Inline agent, structured and tool cards retain their
+surfaces, gradients, borders and shadows without backdrop blur: those cards sit
+in normal transcript flow, where repeatedly filtering the backdrop adds costly
+compositing without useful separation. Floating composer/overlay glass is retained.
 
 The first nonempty text delta of each turn flushes immediately, preserving queued
 event order. Subsequent presentation deltas coalesce in an animation frame;

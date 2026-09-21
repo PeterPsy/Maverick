@@ -13,6 +13,7 @@ from typing import Any
 
 
 EVIDENCE_SCHEMA = "maverick.pwa-cache-device-regression.v1"
+SMOKE_SCHEMA = "maverick.pwa-physical-browser-smoke.v1"
 RELEASE_CANDIDATE_BINDING = "exact_release_id"
 POLICY_PATH = Path("docs/product/pwa_cache_operational_policy.v1.json")
 PASS = "pass"
@@ -44,6 +45,68 @@ def evidence_template(policy: dict[str, Any], release_id: str) -> dict[str, Any]
             for profile in profiles
         ],
     }
+
+
+def merge_smoke_progress(
+    policy: dict[str, Any],
+    release_id: str,
+    smoke_payloads: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Merge truthful smoke outcomes into a still-verifiable matrix draft."""
+    matrix = evidence_template(policy, release_id)
+    runs = {run["profile"]: run for run in matrix["runs"]}
+    observed_profiles: set[str] = set()
+    captured: list[datetime] = []
+    imported = 0
+    for index, payload in enumerate(smoke_payloads):
+        if payload.get("schema") != SMOKE_SCHEMA:
+            continue
+        label = f"smoke[{index}]"
+        if payload.get("release_id") != release_id:
+            raise ValueError(f"{label} release_id does not match the requested candidate")
+        if payload.get("environment") != "physical-device":
+            raise ValueError(f"{label} is not physical-device evidence")
+        if payload.get("redaction_reviewed") is not True:
+            raise ValueError(f"{label} has not passed redaction review")
+        profile = payload.get("profile")
+        if not isinstance(profile, str) or profile not in runs:
+            raise ValueError(f"{label} profile is not in the required matrix")
+        if profile in observed_profiles:
+            raise ValueError(f"{label} duplicates profile {profile}")
+        observed_profiles.add(profile)
+        timestamp = parse_timestamp(payload.get("captured_at"))
+        if timestamp is None:
+            raise ValueError(f"{label} captured_at is invalid")
+        captured.append(timestamp)
+        source_scenarios = payload.get("scenarios")
+        if not isinstance(source_scenarios, dict):
+            raise ValueError(f"{label} scenarios must be an object")
+        target = runs[profile]
+        for field in ("os_version", "browser_version"):
+            value = payload.get(field)
+            if not bounded_text(value, 128):
+                raise ValueError(f"{label} {field} is invalid")
+            target[field] = value
+        for scenario in target["scenarios"]:
+            outcome = source_scenarios.get(scenario, "not-run")
+            if outcome not in {"pass", "fail", "not-run"}:
+                raise ValueError(f"{label} scenario {scenario} has an invalid outcome")
+            target["scenarios"][scenario] = "pending" if outcome == "not-run" else outcome
+            if outcome in {"pass", "fail"}:
+                imported += 1
+    if captured:
+        matrix["captured_at"] = min(captured).astimezone(timezone.utc).isoformat()
+        matrix["redaction_reviewed"] = True
+    outcomes = [outcome for run in matrix["runs"] for outcome in run["scenarios"].values()]
+    summary = {
+        "profiles_imported": len(observed_profiles),
+        "results_imported": imported,
+        "pass": outcomes.count("pass"),
+        "fail": outcomes.count("fail"),
+        "pending": outcomes.count("pending"),
+        "total": len(outcomes),
+    }
+    return matrix, summary
 
 
 def validate_evidence(
@@ -223,6 +286,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     verify = subparsers.add_parser("verify", help="enforce the physical-device release gate")
     verify.add_argument("--input", required=True, type=Path)
     verify.add_argument("--expected-release-id", required=True)
+    progress = subparsers.add_parser("progress", help="merge physical smoke diaries into a matrix draft")
+    progress.add_argument("--smoke-dir", required=True, type=Path)
+    progress.add_argument("--output", required=True, type=Path)
+    progress.add_argument("--release-id", required=True)
     return parser.parse_args(argv)
 
 
@@ -238,6 +305,21 @@ def main(argv: list[str] | None = None) -> int:
                 encoding="utf-8",
             )
             print(f"Wrote physical-device matrix template to {args.output}")
+            return 0
+        if args.command == "progress":
+            smoke_payloads = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in sorted(args.smoke_dir.glob("*.json"))
+            ]
+            payload, summary = merge_smoke_progress(policy, args.release_id, smoke_payloads)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            print(
+                "PWA physical-device progress: "
+                f"{summary['pass']} pass, {summary['fail']} fail, "
+                f"{summary['pending']} pending ({summary['total']} total); "
+                f"wrote {args.output}"
+            )
             return 0
         payload = json.loads(args.input.read_text(encoding="utf-8"))
         errors = validate_evidence(

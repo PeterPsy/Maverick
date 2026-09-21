@@ -124,6 +124,23 @@ OS/browser, profili e pass/fail; `redaction_reviewed: true` solo dopo revisione.
 Tenere il diario operativo separato e redatto: niente URL, nomi file, contenuti,
 identificativi personali, cookie, token, HAR grezzi o screenshot di dati reali.
 
+I diari smoke fisici redatti possono essere importati senza promuovere gli
+scenari non osservati. Il comando `progress` accetta soltanto diari
+`physical-device` con release id esatto, conserva `fail`, traduce `not-run` in
+`pending` e usa il timestamp più vecchio importato per non ringiovanire
+artificialmente l'evidenza:
+
+```sh
+python3 scripts/pwa_device_regression.py progress \
+  --smoke-dir /secure/release-evidence/smoke \
+  --output /secure/release-evidence/pwa-device-regression.json \
+  --release-id 724c93e50c8e55585b88246ab489ca918185be00
+```
+
+La generazione del riepilogo restituisce zero se l'import è valido, anche se la
+matrice è incompleta. Il gate resta esclusivamente il successivo comando
+`verify`, che deve continuare a fallire finché ogni risultato non è `pass`.
+
 ```sh
 python3 scripts/pwa_device_regression.py verify \
   --input /secure/release-evidence/pwa-device-regression.json \

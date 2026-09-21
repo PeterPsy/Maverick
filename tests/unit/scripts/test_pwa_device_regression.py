@@ -4,7 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import unittest
 
-from scripts.pwa_device_regression import evidence_template, validate_evidence
+from scripts.pwa_device_regression import evidence_template, merge_smoke_progress, validate_evidence
 
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
@@ -33,6 +33,55 @@ def valid_evidence() -> dict:
 
 
 class PwaDeviceRegressionTests(unittest.TestCase):
+    def test_merges_only_observed_smoke_results_into_progress(self) -> None:
+        smoke = {
+            "schema": "maverick.pwa-physical-browser-smoke.v1",
+            "captured_at": NOW.isoformat(),
+            "environment": "physical-device",
+            "redaction_reviewed": True,
+            "release_id": "release-2026-09-05",
+            "profile": "safari-macos-browser",
+            "os_version": "physical-os-version",
+            "browser_version": "physical-browser-version",
+            "scenarios": {"warm-launch": "pass", "logout-cleanup": "not-run"},
+        }
+
+        payload, summary = merge_smoke_progress(POLICY, "release-2026-09-05", [smoke])
+
+        safari = next(run for run in payload["runs"] if run["profile"] == "safari-macos-browser")
+        home_screen = next(run for run in payload["runs"] if run["profile"] == "safari-iphone-home-screen")
+        self.assertEqual(safari["scenarios"], {"warm-launch": "pass", "logout-cleanup": "pending"})
+        self.assertEqual(home_screen["scenarios"], {"warm-launch": "pending", "logout-cleanup": "pending"})
+        self.assertEqual(summary, {
+            "profiles_imported": 1,
+            "results_imported": 1,
+            "pass": 1,
+            "fail": 0,
+            "pending": 3,
+            "total": 4,
+        })
+        self.assertTrue(payload["redaction_reviewed"])
+
+    def test_progress_rejects_remote_or_wrong_candidate_smoke(self) -> None:
+        smoke = {
+            "schema": "maverick.pwa-physical-browser-smoke.v1",
+            "captured_at": NOW.isoformat(),
+            "environment": "remote-webdriver",
+            "redaction_reviewed": True,
+            "release_id": "release-2026-09-05",
+            "profile": "safari-macos-browser",
+            "os_version": "physical-os-version",
+            "browser_version": "physical-browser-version",
+            "scenarios": {},
+        }
+
+        with self.assertRaisesRegex(ValueError, "not physical-device"):
+            merge_smoke_progress(POLICY, "release-2026-09-05", [smoke])
+        smoke["environment"] = "physical-device"
+        smoke["release_id"] = "another-release"
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            merge_smoke_progress(POLICY, "release-2026-09-05", [smoke])
+
     def test_accepts_current_complete_physical_matrix(self) -> None:
         self.assertEqual(
             validate_evidence(

@@ -23,7 +23,7 @@ import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requ
 import { StorageCatalogRequests } from './lib/storageCatalogRequests';
 import { catalogSort, sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
 import { CatalogChangedError, loadCatalogSummary, loadDirectoryChildren, searchDriveFiles } from './storageApi';
-import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
+import { folderTargetFromMissingFileTarget, storageFolderTargetMatchesLocalView, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storagePickerAcceptsFile, storagePickerContextFromParams, storagePickerResultForFile, type StoragePickerContext } from './lib/storagePicker';
 import {
   maverickPlatformOrigin,
@@ -515,6 +515,7 @@ function App() {
   const [error, setError] = useState('');
   const viewFilterUpdatedAtRef = useRef<string | null>(null);
   const viewFilterWriteRef = useRef<number | null>(null);
+  const resumeRefreshTimerRef = useRef<number | null>(null);
   const viewFilterPendingRef = useRef(false);
   const markdownCopyTimerRef = useRef<number | null>(null);
   const dropFeedbackTimerRef = useRef<number | null>(null);
@@ -1027,6 +1028,7 @@ function App() {
       catalogReadAbortRef.current?.abort();
       catalogReadAbortRef.current = null;
       if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
+      if (resumeRefreshTimerRef.current !== null) window.clearTimeout(resumeRefreshTimerRef.current);
       if (markdownCopyTimerRef.current !== null) window.clearTimeout(markdownCopyTimerRef.current);
       if (dropFeedbackTimerRef.current !== null) window.clearTimeout(dropFeedbackTimerRef.current);
     };
@@ -1086,6 +1088,10 @@ function App() {
     appVisibleRef.current = visible;
     catalogRequestsRef.current.setVisible(visible);
     if (!visible) {
+      if (resumeRefreshTimerRef.current !== null) {
+        window.clearTimeout(resumeRefreshTimerRef.current);
+        resumeRefreshTimerRef.current = null;
+      }
       catalogReadAbortRef.current?.abort();
       catalogReadAbortRef.current = null;
       abortDriveRequests();
@@ -1129,9 +1135,23 @@ function App() {
           if (applyRemoteViewFilter(remoteFilter)) refreshForViewFilter(remoteFilter).catch((err: Error) => setError(err.message));
         } else syncViewFilter().catch((err: Error) => setError(err.message));
       }
-    }, () => { refresh(undefined, { loading: 'background' }).catch((err: Error) => setError(err.message)); });
+    }, () => {
+      if (resumeRefreshTimerRef.current !== null) window.clearTimeout(resumeRefreshTimerRef.current);
+      resumeRefreshTimerRef.current = window.setTimeout(() => {
+        resumeRefreshTimerRef.current = null;
+        if (!appVisibleRef.current || document.hidden || !navigator.onLine) return;
+        refresh(undefined, { loading: 'background' }).catch((err: Error) => setError(err.message));
+      }, 1_000);
+    });
     window.addEventListener('message', handleShellMessage);
-    return () => { stop(); window.removeEventListener('message', handleShellMessage); };
+    return () => {
+      if (resumeRefreshTimerRef.current !== null) {
+        window.clearTimeout(resumeRefreshTimerRef.current);
+        resumeRefreshTimerRef.current = null;
+      }
+      stop();
+      window.removeEventListener('message', handleShellMessage);
+    };
   }, []);
 
   useEffect(() => {
@@ -1376,6 +1396,17 @@ function App() {
       loadDriveFolder(nextTarget, 'foreground', target.driveBreadcrumbs).catch((err: Error) => setError(err.message));
       return;
     }
+    const localView = {
+      activeRole: activeRoleRef.current,
+      currentFolderPath: currentFolderPathRef.current,
+      driveActive: Boolean(driveTargetRef.current),
+      query: queryRef.current,
+      viewMode: viewModeRef.current,
+    };
+    if (storageFolderTargetMatchesLocalView(target, localView)) {
+      pendingNavigationTargetRef.current = null;
+      return;
+    }
     clearDriveNavigation();
     if (target.targetType === 'folder') {
       const targetFolderPath = target.folderRelativePath || '';
@@ -1409,7 +1440,7 @@ function App() {
     const result = storagePickerResultForFile(selectedFile, driveTargetRef.current);
     window.parent?.postMessage(
       {
-        type: 'maverick.widget.open-app',
+        type: 'maverick.app.open-app',
         app_id: pickerContext.returnAppId,
         params: {
           picker_mode: pickerContext.mode,

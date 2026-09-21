@@ -16,8 +16,15 @@ const browserMetrics = await browser.newBrowserCDPSession();
 const processCpu = async () => (await browserMetrics.send('SystemInfo.getProcessInfo')).processInfo;
 const { gpu } = await browserMetrics.send('SystemInfo.getInfo');
 const results = [];
+const compactEvidence = process.env.MAVERICK_PERFORMANCE_COMPACT === '1';
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const metrics = async cdp => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(({ name, value }) => [name, value]));
+const percentile = (values, fraction) => {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)];
+};
+const statistics = values => ({ min: Math.min(...values), median: percentile(values, 0.5),
+  p95: percentile(values, 0.95), max: Math.max(...values) });
 try {
   for (let trial = 0; trial < samples; trial++) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
@@ -213,10 +220,40 @@ try {
       process.stderr.write(`Streaming trial ${trial + 1}/${samples} finished.\n`);
     } finally { await context.close(); }
   }
+  const scalarMetrics = ['elapsed_ms', 'browser_cpu_ms', 'main_thread_cpu_ms', 'script_ms', 'layout_ms',
+    'heap_used_bytes', 'nodes', 'first_text_frame_ms'];
+  const summary = Object.fromEntries(scalarMetrics.map(key => [key, statistics(results.map(result => result[key]))]));
+  const processTypes = [...new Set(results.flatMap(result => result.browser_process_cpu.map(process => process.type)))];
+  summary.browser_process_cpu_ms = Object.fromEntries(processTypes.map(type => [type, statistics(results.map(result =>
+    result.browser_process_cpu.filter(process => process.type === type).reduce((sum, process) => sum + process.cpu_ms, 0)))]));
+  summary.input_action_ms = statistics(results.flatMap(result => result.input_action_ms));
+  summary.input_next_frame_ms = statistics(results.flatMap(result => result.input_next_frame_ms));
+  summary.scroll_action_ms = statistics(results.flatMap(result => result.scroll_action_ms));
+  const evidenceResults = compactEvidence ? results.map(result => ({
+    trial: result.trial,
+    elapsed_ms: result.elapsed_ms,
+    browser_cpu_ms: result.browser_cpu_ms,
+    browser_process_cpu_ms: Object.fromEntries(processTypes.map(type => [type,
+      result.browser_process_cpu.filter(process => process.type === type).reduce((sum, process) => sum + process.cpu_ms, 0)])),
+    main_thread_cpu_ms: result.main_thread_cpu_ms,
+    script_ms: result.script_ms,
+    layout_ms: result.layout_ms,
+    heap_used_bytes: result.heap_used_bytes,
+    nodes: result.nodes,
+    first_text_frame_ms: result.first_text_frame_ms,
+    input_action_ms: statistics(result.input_action_ms),
+    input_next_frame_ms: statistics(result.input_next_frame_ms),
+    scroll_action_ms: statistics(result.scroll_action_ms),
+    output_sha256: result.output_sha256,
+    output_characters: result.output_characters,
+    input_preserved: result.input_preserved,
+    errors: result.errors,
+  })) : results;
   process.stdout.write(JSON.stringify({ schema: 1, boundary: 'chromium-browser-and-isolated-chat-frame',
     browser: browser.version(), graphics: { devices: gpu.devices, renderer: gpu.auxAttributes?.glRenderer },
     history_turns: 1000, history_events: 4000,
     warmup_deltas: 5, measured_deltas: 501, interval_ms: 20, tool_completions: 5,
     transport: 'real authenticated host with deterministic session WebSocket interception',
-    physical_device_gate: 'not-tested', diagnostic_tracing: Boolean(tracePath), results }, null, 2) + '\n');
+    physical_device_gate: 'not-tested', diagnostic_tracing: Boolean(tracePath), compact_evidence: compactEvidence,
+    summary, results: evidenceResults }, null, 2) + '\n');
 } finally { await browser.close(); }

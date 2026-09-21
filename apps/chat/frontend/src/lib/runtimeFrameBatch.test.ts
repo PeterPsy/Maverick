@@ -19,6 +19,12 @@ it('presents first text immediately, coalesces later deltas and flushes terminal
   expect(consume).toHaveBeenCalledTimes(1);
   expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
   (frame as unknown as FrameRequestCallback)(16);
+  expect(consume).toHaveBeenCalledTimes(1);
+  expect(requestAnimationFrame).toHaveBeenCalledTimes(2);
+  (frame as unknown as FrameRequestCallback)(32);
+  expect(consume).toHaveBeenCalledTimes(1);
+  expect(requestAnimationFrame).toHaveBeenCalledTimes(3);
+  (frame as unknown as FrameRequestCallback)(48);
   expect(consume.mock.calls[1][0]).toHaveLength(100);
   batch.push(event('tail'));
   batch.push(event('final', 'runtime.output.final'));

@@ -5,11 +5,7 @@ import {
   type FloatingDockContext,
 } from "./floatingDockState";
 import { floatingWidgetSize } from "./floatingLayout";
-import {
-  FALLBACK_WIDGET_STATE_STORAGE_KEY,
-  type FloatingChatWindow,
-  widgetStateStorageKey,
-} from "./floatingState";
+import type { FloatingChatWindow } from "./floatingState";
 
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 const FLOATING_STACK_DRAG_IGNORE_SELECTOR =
@@ -23,24 +19,6 @@ export type FloatingWidgetHostContext = {
   threadId: string;
   workspaceId: string | null;
 };
-
-export async function loadWidgetStateStorageKey(): Promise<string> {
-  const token = widgetContextToken();
-  if (!token) {
-    return FALLBACK_WIDGET_STATE_STORAGE_KEY;
-  }
-  try {
-    const payload = await getWidgetContext(token);
-    const content = payload.context.content;
-    if (!content || typeof content !== "object") {
-      return FALLBACK_WIDGET_STATE_STORAGE_KEY;
-    }
-    const workspaceId = (content as { workspace_id?: unknown }).workspace_id;
-    return typeof workspaceId === "string" && workspaceId.trim() ? widgetStateStorageKey(workspaceId.trim()) : FALLBACK_WIDGET_STATE_STORAGE_KEY;
-  } catch {
-    return FALLBACK_WIDGET_STATE_STORAGE_KEY;
-  }
-}
 
 export async function loadFloatingWidgetHostContext(): Promise<FloatingWidgetHostContext> {
   const token = widgetContextToken();

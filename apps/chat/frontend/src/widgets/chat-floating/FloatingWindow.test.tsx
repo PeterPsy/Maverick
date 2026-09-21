@@ -10,9 +10,10 @@ import type { ChatThread } from "../../api/client";
 import { FloatingWindow } from "./FloatingWindow";
 import type { FloatingChatWindow } from "./floatingState";
 
-vi.mock("../../App", () => ({
-  App: vi.fn(() => null),
-}));
+vi.mock("../../App", async () => {
+  const { useChatVisibility } = await import('../../hooks/useChatVisibility');
+  return { App: vi.fn(() => <input aria-label="Fixture draft" data-visible={useChatVisibility()} defaultValue="Saved draft" />) };
+});
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -58,9 +59,11 @@ describe("FloatingWindow", () => {
   });
 
   async function renderFloatingWindow(windowItem: FloatingChatWindow) {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
+    if (!root) {
+      container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+    }
     await act(async () => {
       root?.render(
         <FloatingWindow
@@ -79,6 +82,7 @@ describe("FloatingWindow", () => {
         />,
       );
     });
+    await act(async () => { await vi.dynamicImportSettled(); });
   }
 
   it("does not force a new chat when stale draft state still has a selected thread", async () => {
@@ -91,5 +95,21 @@ describe("FloatingWindow", () => {
       threadId: "thread-1",
     });
     expect(appProps).not.toHaveProperty("enablePageCapture");
+  });
+
+  it('mounts only on first opening and retains the draft while collapsed reads are suspended', async () => {
+    await renderFloatingWindow(floatingWindow({ isCollapsed: true }));
+    expect(App).not.toHaveBeenCalled();
+    await renderFloatingWindow(floatingWindow());
+    const input = container!.querySelector('input')!;
+    expect(input.dataset.visible).toBe('true');
+    input.value = 'Unsent edit';
+    await renderFloatingWindow(floatingWindow({ isCollapsed: true }));
+    expect(container!.querySelector('input')).toBe(input);
+    expect(input.dataset.visible).toBe('false');
+    await renderFloatingWindow(floatingWindow());
+    expect(container!.querySelector('input')).toBe(input);
+    expect(input.value).toBe('Unsent edit');
+    expect(input.dataset.visible).toBe('true');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { folderTargetFromMissingFileTarget, storageTargetFromParams } from './storageNavigationParams';
+import { folderTargetFromMissingFileTarget, storageFolderTargetMatchesLocalView, storageTargetFromParams } from './storageNavigationParams';
 
 describe('storage navigation params', () => {
   it('parses folder deep links from app page params', () => {
@@ -113,5 +113,41 @@ describe('storage navigation params', () => {
       targetType: 'folder',
       workspaceRelativePath: 'storage/generated'
     });
+  });
+
+  it('recognizes an already-open local folder without treating other views as equivalent', () => {
+    const target = storageTargetFromParams({
+      role: 'generated',
+      folder_relative_path: '/reading//',
+    });
+    expect(target).not.toBeNull();
+    expect(storageFolderTargetMatchesLocalView(target!, {
+      activeRole: 'generated',
+      currentFolderPath: 'reading',
+      driveActive: false,
+      query: '',
+      viewMode: 'search',
+    })).toBe(true);
+    expect(storageFolderTargetMatchesLocalView(target!, {
+      activeRole: 'generated',
+      currentFolderPath: 'reading',
+      driveActive: false,
+      query: 'report',
+      viewMode: 'search',
+    })).toBe(false);
+    expect(storageFolderTargetMatchesLocalView(target!, {
+      activeRole: 'generated',
+      currentFolderPath: 'reading',
+      driveActive: false,
+      query: '',
+      viewMode: 'custom',
+    })).toBe(false);
+    expect(storageFolderTargetMatchesLocalView(target!, {
+      activeRole: 'generated',
+      currentFolderPath: 'reading',
+      driveActive: true,
+      query: '',
+      viewMode: 'search',
+    })).toBe(false);
   });
 });

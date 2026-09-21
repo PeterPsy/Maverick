@@ -37,6 +37,9 @@ the native frame ready only after Core confirms that bootstrap produced the
 bound sidecar session; `iframe.onload` alone is intentionally insufficient
 because browsers also emit it for TLS/network error documents. Native HTTP
 routes pass through unchanged; no normal OpenDesign request is handled by Core.
+Bootstrap confirmation reads pause immediately when the host is hidden or
+offline, cancel their pending request, and resume with one read. Pausing never
+reissues the one-shot launch or redemption and preserves the native iframe.
 OpenDesign's native preview surface deliberately uses opaque-origin sandboxed
 iframes. The app contract therefore opts only its plugin-asset tree and exact
 asset-cache route into Core's sandbox-resource response policy, allowing those

@@ -254,6 +254,10 @@ Record both Chat build IDs and raw trials. Run comparisons sequentially without
 other tests/builds; `MAVERICK_PERFORMANCE_STREAM_TRIALS=1` is a diagnostic run,
 not the five-trial comparison.
 
+Set `MAVERICK_PERFORMANCE_COMPACT=1` when persisting evidence. The streaming
+and startup drivers keep scalar per-trial measurements and percentile summaries
+while omitting high-volume event-delay and request-waterfall arrays.
+
 For a separate one-trial diagnostic, `MAVERICK_PERFORMANCE_STREAM_TRACE=<path>`
 writes a Chromium trace, V8 CPU profile and screenshot. Traced runs are marked and are not used
 as comparison trials. Inline agent, structured and tool cards retain their
@@ -265,10 +269,15 @@ filter is also unnecessary. The exact bottom state is separate from the 96 px
 auto-follow threshold: moving into history restores composer glass. Other
 overlays retain their backdrop filters.
 
+The voice control measures layout only when its listening/busy state changes,
+instead of repeating motion layout reads on every transcript update. Pending
+human-message deduplication scans history only while pending messages exist.
+
 The first nonempty text delta of each turn flushes immediately, preserving queued
-event order. Subsequent presentation deltas coalesce in an animation frame;
-terminal/control events still flush immediately. First-text responsiveness must
-not pay the extra frame used to combine sustained streaming updates.
+event order. Subsequent presentation deltas coalesce across three animation-frame
+opportunities; terminal/control events still flush immediately. First-text
+responsiveness does not pay the extra frames used to combine sustained streaming
+updates.
 
 Projection retains group membership and absolute event positions across ordinary
 appends and removal of an unchanged prefix. Only affected groups rebuild their
@@ -512,7 +521,7 @@ sit eleven directory levels below their root. The measured cycle completed in
 edits were found within 4.81 seconds. The flat and three-level tree fixture shapes
 stay unchanged, preserving comparability with earlier latency measurements.
 
-## Frontend checkpoint and remaining release evidence
+## Frontend checkpoint and release evidence
 
 The September 20 frontend checkpoints include official builds for Base Shell,
 Storage, Chat, Calendar, Checklist, Docs Studio, Memory and Senses. Source and
@@ -528,20 +537,60 @@ existing five app display fixtures. Its private-cache flags apply only to the
 temporary host. A governed Browser smoke of the live host reaches sign-in and
 therefore does not certify authenticated Storage navigation.
 
-Static gzip totals for all JavaScript chunks changed from 147,791 to 149,762
-bytes for Shell, 353,017 to 359,752 for Storage, and 347,020 to 350,942 for Chat,
-relative to `3c966580`. These totals include lazy chunks; they are not startup
-transfer or useful-content latency. No startup improvement is inferred from
-them. Raw benchmark artifacts retain their original source/dirty metadata;
-the isolated Chat comparison lacks an immutable build id and is diagnostic.
-
 Live core activation must precede the Storage worker/capability and certified
 frontend contract opt-ins. Storage and Usage have separate operator cutovers;
 Usage producers must be drained for its cutover and coordinated restart.
-Twenty-app resource bounds, useful-content latency, hidden idle CPU and physical
-installed Safari/iOS remain
-release gates. The older PWA technical closeout does not satisfy these newer
-performance-plan gates. Live private persistent-cache flags stay off.
+The older PWA technical closeout does not satisfy the newer performance-plan
+gates. Live private persistent-cache flags stay off.
+
+Additional disposable browser scenarios use the same host wrapper:
+
+- `--scenario storage-media` reads a real 9 MiB text file through authenticated
+  media, verifies its downloaded SHA-256, proves the oversized preview is not
+  retained and fences a cancelled late preview. Deterministic Drive backend
+  responses exercise account changes, folder navigation, page tokens, debounced
+  search and partial-result disclosure. They do not certify a live Google account.
+  A generated one-second video exercises the Fitness Coach picker, and Chat's
+  reference picker resolves a real fixture file. The fixture clears Chat's
+  provider-admission warning only to reach that picker; it does not submit a turn
+  or stand in for provider execution. The video fixture requires ffmpeg.
+- `--scenario app-idle` opens the 18 workspace frontends plus two real supporting
+  frontends promoted only in the fixture: Developer Kit and Document Generator.
+  It records retained frames, errors, API reads, socket attempts and total browser
+  CPU during visible, closed-sidebar, offline, resumed and background-tab phases.
+  This is an audit: missing native installations and unhealthy screens remain
+  explicit limitations. Only fixture Chat/Storage opt into hibernation. A phase
+  counts as background evidence only when its recorded `document_hidden` is true.
+  The probe owns a temporary Chromium profile and attaches over local CDP with
+  `noDefaults: true`, avoiding Playwright's forced focus emulation. It asserts a
+  real hidden/visible transition when switching tabs, then records the resumed
+  foreground phase. Normal Chrome background throttling remains enabled.
+  `MAVERICK_PERFORMANCE_HEADFUL=1 xvfb-run -a ...` allows an actual Linux browser
+  window without claiming Safari or installed-PWA coverage.
+  `--frontend-build-ref <commit>` replaces the five changed frontend builds only
+  inside the disposable fixture for a coherent pre-change comparison. Set
+  `MAVERICK_PERFORMANCE_IDLE_PHASE_MS` to use the same longer phase duration for
+  baseline and candidate.
+- `--scenario startup` separates five authenticated cold Shell contexts from 25
+  warm in-shell returns to an already mounted Storage frame. Useful content means
+  real Storage rows plus two animation frames. Each measured return begins after
+  250 ms of network quiescence, separating warm navigation from initial Shell and
+  floating-Chat prewarm. It records local health round trips and response
+  header/body transfer sizes for requests completed by that point, alongside
+  still-pending requests. The browser-frame paint timestamp is the gate metric;
+  the external CDP driver's later observation remains diagnostic. Login is
+  excluded, cold startup remains a separate diagnostic, and compressed totals of
+  every build chunk are not used as a substitute for initial-transfer measurement.
+
+CRM keeps its visibility subscription while mounted, aborts display and live
+reads on hide, and resumes the current views once. Offline display cache access
+remains available; a completed display read cannot start live bootstrap work
+after cancellation. Design Studio pauses only bootstrap-confirmation reads;
+one-shot redemption and the native iframe remain intact.
+Persisted collapsed Chat floaters defer importing/mounting their Chat content
+until first opening. Subsequent collapse preserves the composer state while
+its local visibility scope suspends runtime event streams and reconnects; the widget
+fetches its initial host context once. Expanded defaults retain their behavior.
 
 The live runtime upgrade and Storage cutover subsequently passed health, identity,
 hash, catalog count and post-cutover write checks. A standalone inventory backup
@@ -559,3 +608,48 @@ The disposable browser lifecycle probe also passed pagination during 22 continuo
 writes in another folder, Chat and Storage snapshot/restore, and Calendar app and
 sidebar suspension/resume. Physical-device and resource certification still
 precedes live frontend contract opt-ins; the cache smoke alone does not certify them.
+
+## September 21 browser performance closeout
+
+Five sequential Chat trials compared the committed baseline `ce726b5a` (build
+`d74dbf8056`) with build `66132b1aa8` under the same 1,000-turn, 501-delta
+workload. Total browser CPU median moved from 16,920 ms to 11,700 ms (**-30.85%**)
+and p95 from 17,100 ms to 11,800 ms (**-30.99%**). Current main-thread CPU median
+was 2,806.906 ms; first-text-frame p95 was 31 ms, input-next-frame p95 35.5 ms,
+and scroll-action p95 3.99756 ms. All trials produced the same output SHA-256 and
+preserved the unsent draft without page errors. This satisfies the 30% streaming
+CPU objective without delaying first text or terminal/control events.
+
+The settled warm-navigation matrix ran 25 authenticated in-shell Checklist to
+Storage returns across five clean browser contexts. All 25 RTT-qualified samples
+had a maximum health RTT of 7.82 ms. Browser paint was 139 ms median, **216 ms
+p95**, and 244 ms maximum. Every sample retained 100 real rows; no catalog bytes
+were transferred and no request remained in flight at useful content. Storage
+coalesces reconnect resync and waits one second before its background catalog
+refresh, cancelling it if the app becomes hidden again. Reopening the already
+current local folder therefore does not clear or reload valid rows. This satisfies
+the 300 ms p95 target at RTT at or below 30 ms.
+
+The media matrix read 9,437,176 authenticated preview bytes, verified the
+download SHA-256, rejected oversized preview retention, ignored a cancelled late
+preview, and passed Drive account fencing, pagination, shared-folder navigation,
+debounced incomplete search, Fitness video selection, and Chat file reference
+selection with zero eager previews and no errors.
+
+The 20-app audit opened every real frontend with no probe errors. A sequential
+10-second comparison used the same host, Shell, data and navigation sequence,
+replacing only the five changed frontend builds with commit `cb03fad0` for the
+baseline. Both runs measured 230 ms total browser CPU while Storage was active;
+with the sidebar closed, baseline idle CPU was 600 ms and the candidate was
+160 ms (**-73.33%**). The candidate's real hidden-tab phase recorded
+`document_hidden: true` with zero requests and zero new connections after the
+grace period. The aggregate browser counter includes all renderers and the
+separate foreground tab, so no per-app CPU attribution is inferred. Baseline
+resume phases each emitted one late request; the candidate emitted none. Design
+Studio's unavailable native package and Website Studio's fixture backend 500
+remain explicit environment limitations, not hidden successes.
+
+These results close the Chromium implementation and measurement gates. The
+installed macOS Safari and physical iOS browser/Home Screen matrix remains a
+separate release gate: emulation or Chromium evidence cannot satisfy it, and no
+physical result is claimed here.

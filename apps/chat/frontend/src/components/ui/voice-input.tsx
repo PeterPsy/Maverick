@@ -80,6 +80,7 @@ export function VoiceInput({
         className="chatapp-voice-input__control"
         disabled={disabled || busy}
         layout
+        layoutDependency={`${listening}:${busy}`}
         onClick={onClickHandler}
         title={title}
         transition={{

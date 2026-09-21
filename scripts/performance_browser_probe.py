@@ -2,6 +2,7 @@
 """Exercise performance lifecycles in authenticated, disposable app frames."""
 
 import argparse
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -26,11 +27,17 @@ import inventory_legacy
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--scenario', choices=('lifecycle', 'chat-stream'), default='lifecycle')
+    parser.add_argument('--scenario', choices=('lifecycle', 'chat-stream', 'storage-media', 'app-idle', 'startup'), default='lifecycle')
     parser.add_argument('--chat-build-ref', help='Use committed Chat assets from this Git revision, only in the disposable root.')
+    parser.add_argument('--frontend-build-ref',
+        help='Use committed performance-checkpoint frontend assets from this Git revision, only in the disposable root.')
     args = parser.parse_args()
     chat_revision = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}',
         'rev-parse', '--verify', f'{args.chat_build_ref}^{{commit}}'], cwd=ROOT, text=True).strip() if args.chat_build_ref else None
+    frontend_revision = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}',
+        'rev-parse', '--verify', f'{args.frontend_build_ref}^{{commit}}'], cwd=ROOT, text=True).strip() if args.frontend_build_ref else None
+    if frontend_revision and args.scenario != 'app-idle':
+        parser.error('--frontend-build-ref is supported only by the app-idle comparison.')
     with tempfile.TemporaryDirectory(prefix='maverick-performance-browser-') as temporary:
         root = Path(temporary)
         repository = root / 'repository'
@@ -43,13 +50,23 @@ def main() -> int:
         reading.mkdir()
         for path in generated.glob('report-*.md'):
             path.rename(reading / path.name)
+        if args.scenario == 'storage-media':
+            previews = generated / 'previews'
+            previews.mkdir()
+            (previews / 'large.txt').write_text('Large preview fixture.\n' * (9 * 1024 * 1024 // 23))
+            (previews / 'small.txt').write_text('Complete small preview.\n')
+            subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
+                'color=c=blue:s=160x90:d=1', '-c:v', 'libvpx-vp9', '-threads', '1',
+                str(previews / 'fixture-video.webm')], check=True, timeout=30)
         inventory_legacy.sync_inventory(data, uploaded_root=uploaded, generated_root=generated)
         migration = prepare_inventory(data, uploaded_root=uploaded, generated_root=generated)
         cutover_inventory(data, migration['migration_id'], uploaded_root=uploaded, generated_root=generated)
         apps = repository / 'apps'
         apps.mkdir()
         for source in (ROOT / 'apps').iterdir():
-            if source.name not in {'chat', 'storage'}:
+            comparison_apps = {'chat', 'crm', 'design-studio', 'fitness-coach', 'storage'} if frontend_revision else set()
+            copied = {'chat', 'storage'} | comparison_apps | ({'developer-kit', 'document-generator'} if args.scenario == 'app-idle' else set())
+            if source.name not in copied:
                 (apps / source.name).symlink_to(source, target_is_directory=source.is_dir())
                 continue
             destination = apps / source.name
@@ -57,12 +74,25 @@ def main() -> int:
                 'node_modules', '__pycache__', '.pytest_cache', 'tests', 'test-results', 'playwright-report'))
             contract_path = destination / 'app_contract.json'
             contract = json.loads(contract_path.read_text())
-            contract['presentation']['frontend_resumable'] = True
+            if source.name in {'chat', 'storage'}:
+                contract['presentation']['frontend_resumable'] = True
+            else:
+                # Exercise two real supporting frontends as workspace frames only in this fixture.
+                contract['presentation']['frontend_role'] = 'workspace'
             contract_path.write_text(json.dumps(contract))
         if chat_revision:
             archive = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}', 'archive',
                 chat_revision, 'apps/chat/frontend/dist'], cwd=ROOT)
             shutil.rmtree(apps / 'chat/frontend/dist')
+            with tarfile.open(fileobj=io.BytesIO(archive)) as assets:
+                assets.extractall(repository, filter='data')
+        if frontend_revision:
+            comparison_apps = ('chat', 'crm', 'design-studio', 'fitness-coach', 'storage')
+            paths = [f'apps/{app}/frontend/dist' for app in comparison_apps]
+            archive = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}', 'archive',
+                frontend_revision, *paths], cwd=ROOT)
+            for app in comparison_apps:
+                shutil.rmtree(apps / app / 'frontend/dist')
             with tarfile.open(fileobj=io.BytesIO(archive)) as assets:
                 assets.extractall(repository, filter='data')
         chat_fixture = seed_chat_history(repository, turns=1000 if args.scenario == 'chat-stream' else 3000)
@@ -81,7 +111,9 @@ def main() -> int:
                     log.flush()
                     sys.stderr.write((root / 'host.log').read_text(errors='replace')[-8000:])
                     raise
-                driver = 'performance_chat_stream.mjs' if args.scenario == 'chat-stream' else 'performance_browser_probe.mjs'
+                driver = {'lifecycle': 'performance_browser_probe.mjs', 'chat-stream': 'performance_chat_stream.mjs',
+                    'storage-media': 'performance_storage_media.mjs', 'app-idle': 'performance_app_idle.mjs',
+                    'startup': 'performance_startup.mjs'}[args.scenario]
                 result = subprocess.run(['node', str(ROOT / 'scripts' / driver),
                     f'http://maverick.localhost:{port}'], cwd=ROOT, env=env, check=False,
                     capture_output=True, text=True, timeout=360)
@@ -95,8 +127,15 @@ def main() -> int:
                 evidence['source_dirty'] = bool(subprocess.check_output(
                     ['git', '-c', f'safe.directory={ROOT}', 'status', '--porcelain'], cwd=ROOT, text=True).strip())
                 evidence['chat_build_revision'] = chat_revision or evidence['source_commit']
-                evidence['builds'] = {app: json.loads((apps / app / 'frontend/dist/maverick-frontend-assets.json').read_text())['build_id']
-                    for app in ('base-shell', 'chat', 'storage', 'calendar')}
+                evidence['frontend_build_revision'] = frontend_revision or evidence['source_commit']
+                measured_apps = {'base-shell', 'chat', 'storage', 'calendar'} | {item['app_id'] for item in evidence.get('opened', [])}
+                evidence['builds'] = {}
+                evidence['entry_sha256'] = {}
+                for app in sorted(measured_apps):
+                    dist = apps / app / 'frontend/dist'
+                    manifest = dist / 'maverick-frontend-assets.json'
+                    evidence['builds'][app] = json.loads(manifest.read_text())['build_id'] if manifest.exists() else None
+                    evidence['entry_sha256'][app] = hashlib.sha256((dist / 'index.html').read_bytes()).hexdigest()
                 evidence['python'] = platform.python_version()
                 evidence['sqlite'] = sqlite3.sqlite_version
                 evidence['host'] = {'platform': platform.platform(), 'logical_cpus': psutil.cpu_count(),

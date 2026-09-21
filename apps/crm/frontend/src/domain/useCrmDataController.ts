@@ -1,5 +1,5 @@
 import { extensionEntities } from './vnext';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { isExactMaverickParentMessage, maverickAppIsVisible } from '@maverick/pwa-cache';
 import { readCrmDisplay } from '../pwaCache';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BootstrapPayload, CrmRecord, PipelineBoardPayload, RecordsTablePayload, callBackend } from '../api';
@@ -9,8 +9,11 @@ import { entityFilterForEntity, isCreatableEntity, viewForEntity, viewFromAppPag
 import { useCrmNavigation } from './useCrmNavigation';
 import { postToShell } from './shellMessaging';
 import { isPublicCrm } from '../public/context';
+import { useCrmVisibility } from './useCrmVisibility';
 
 export function useCrmDataController() {
+  const foreground = useCrmVisibility(false);
+  const connected = useCrmVisibility();
   const { view, setView, applyShellView, consumeNavigationEcho } = useCrmNavigation();
   const [recordEntityFilter, setRecordEntityFilter] = useState<RecordEntityFilter>('all');
   const [recordsCursor, setRecordsCursor] = useState('');
@@ -37,8 +40,10 @@ export function useCrmDataController() {
   const lastPersistedSearchFilter = useRef(JSON.stringify({ query: '', entity_type: 'all' }));
   const hasLoadedSearchFilter = useRef(false);
   const cacheReads = useRef(new Map<string, AbortController>());
+  const bootstrapGeneration = useRef(0);
   const [recordsLoading, setRecordsLoading] = useState(true);
   async function displayRead<T>(slot: string, parameters: Record<string, unknown>, apply: (data: T) => void) {
+    if (!maverickAppIsVisible({ requireOnline: false })) throw new DOMException('App hidden', 'AbortError');
     cacheReads.current.get(slot)?.abort();
     const controller = new AbortController();
     cacheReads.current.set(slot, controller);
@@ -51,23 +56,29 @@ export function useCrmDataController() {
     update(value);
     return controller;
   }
-  useEffect(() => () => { for (const controller of cacheReads.current.values()) controller.abort(); }, []);
+  useEffect(() => {
+    if (foreground) void refresh(false);
+    return () => { for (const controller of cacheReads.current.values()) controller.abort(); };
+  }, [foreground, connected]);
 
-  async function refresh() {
-    window.dispatchEvent(new Event('crm-workspace-refresh'));
+  async function refresh(notifyViews = true) {
+    if (!maverickAppIsVisible({ requireOnline: false })) return;
+    const generation = ++bootstrapGeneration.current;
+    if (notifyViews) window.dispatchEvent(new Event('crm-workspace-refresh'));
     setIsLoading(true);
     setError('');
     try {
       const controller = await displayRead<Partial<BootstrapPayload>>('bootstrap', { kind: 'bootstrap' }, (value) => setData((current) => ({ ...current, ...value })));
       // Workflow proposals, saved filters and other live-only surfaces are not
       // cached and never gate paint of the customer display projection.
-      void callBackend<BootstrapPayload>({ action: 'bootstrap' }).then((value) => {
+      if (controller.signal.aborted || !maverickAppIsVisible()) return;
+      void callBackend<BootstrapPayload>({ action: 'bootstrap' }, controller.signal).then((value) => {
         if (!controller.signal.aborted) setData(value);
       }).catch(() => undefined);
     } catch (loadError) {
       if (!(loadError instanceof Error && loadError.name === 'AbortError')) setError(loadError instanceof Error ? loadError.message : 'Unable to load CRM data.');
     } finally {
-      setIsLoading(false);
+      if (generation === bootstrapGeneration.current) setIsLoading(false);
     }
   }
 
@@ -91,24 +102,28 @@ export function useCrmDataController() {
   refreshRecordsRef.current = refreshRecords;
 
   async function refreshReports() {
+    if (!maverickAppIsVisible()) return;
+    cacheReads.current.get('reports')?.abort();
+    const controller = new AbortController();
+    cacheReads.current.set('reports', controller);
     setError('');
     try {
-      setReports(await callBackend<SalesReportsPayload>({ action: 'crm.sales_reports' }));
+      const value = await callBackend<SalesReportsPayload>({ action: 'crm.sales_reports' }, controller.signal);
+      if (!controller.signal.aborted) setReports(value);
     } catch (reportsError) {
-      setError(reportsError instanceof Error ? reportsError.message : 'Unable to load CRM reports.');
+      if (!controller.signal.aborted) setError(reportsError instanceof Error ? reportsError.message : 'Unable to load CRM reports.');
     }
   }
 
   async function refreshPipelineBoard() {
     try {
       await displayRead<PipelineBoardPayload>('pipeline', { kind: 'pipeline_board' }, setPipelineBoard);
-    } catch {
-      setPipelineBoard(null);
+    } catch (error) {
+      if (!(error instanceof Error && error.name === 'AbortError')) setPipelineBoard(null);
     }
   }
 
   useEffect(() => {
-    void refresh();
     function handleMessage(event: MessageEvent) {
       if (isExactMaverickParentMessage(event) && event.data?.type === 'maverick.app.data-changed' && event.data?.owner_app_id === 'crm') {
         void refresh();
@@ -152,6 +167,7 @@ export function useCrmDataController() {
   }, [recordEntityFilter, query, filters, recordsSort, recordsPageSize]);
 
   useEffect(() => {
+    if (!foreground) return;
     if (view === 'records') {
       void refreshRecords(recordsCursor);
     }
@@ -161,24 +177,26 @@ export function useCrmDataController() {
     if (view === 'pipeline') {
       void refreshPipelineBoard();
     }
-  }, [view, recordEntityFilter, query, filters, recordsSort, recordsCursor, recordsPageSize]);
+  }, [view, recordEntityFilter, query, filters, recordsSort, recordsCursor, recordsPageSize, foreground, connected]);
 
   useEffect(() => {
+    if (!foreground) return;
     const target = pendingSelection ?? (selected ? { entity: selected.entity, id: selected.record.id } : null);
     if (!target) return;
     if (extensionEntities.includes(target.entity) || target.entity === 'deal') {
-      let active = true;
-      void callBackend<{ record: CrmRecord }>({ action: 'crm.get_record', entity_type: target.entity, id: target.id })
-        .then((value) => { if (active) { setSelected({ entity: target.entity, record: value.record }); setPendingSelection(null); } })
-        .catch((failure) => { if (active) setError(failure instanceof Error ? failure.message : 'Unable to load record.'); });
-      return () => { active = false; };
+      if (!connected) return;
+      const controller = new AbortController();
+      void callBackend<{ record: CrmRecord }>({ action: 'crm.get_record', entity_type: target.entity, id: target.id }, controller.signal)
+        .then((value) => { if (!controller.signal.aborted) { setSelected({ entity: target.entity, record: value.record }); setPendingSelection(null); } })
+        .catch((failure) => { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Unable to load record.'); });
+      return () => controller.abort();
     }
     void displayRead<{ record: CrmRecord }>('detail', { kind: 'get', entity_type: target.entity, id: target.id }, (value) => {
       setSelected({ entity: target.entity, record: value.record });
       setPendingSelection(null);
     }).catch((error: unknown) => { if (!(error instanceof Error && error.name === 'AbortError')) setError(error instanceof Error ? error.message : 'CRM detail failed.'); });
     return () => { cacheReads.current.get('detail')?.abort(); };
-  }, [pendingSelection?.id, pendingSelection?.entity, selected?.record.id, selected?.entity]);
+  }, [pendingSelection?.id, pendingSelection?.entity, selected?.record.id, selected?.entity, foreground, connected]);
 
   useEffect(() => {
     if (!pendingSelection) return;

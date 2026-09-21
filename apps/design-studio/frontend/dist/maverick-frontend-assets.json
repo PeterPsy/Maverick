@@ -1,5 +1,5 @@
 {
-  "build_id": "02c41463a349f178de5433099b5b7349550cfbc8aba47589059b8a7278981484",
+  "build_id": "6481a1c5d15becba575a6ecba41f5e4d5eaf8bc2946ea21e4a4aebeebc9922de",
   "entrypoints": [
     "index.html"
   ],
@@ -11,13 +11,13 @@
       "size_bytes": 1104
     },
     {
-      "path": "assets/app-RoQniUGJ.js",
-      "sha256": "8cf15d34a1440043ef685b07220d10e3092a5624fde8829a7532732eca1a08d2",
-      "size_bytes": 200682
+      "path": "assets/app-d7cckL-y.js",
+      "sha256": "9b5ef0f9e3f671d3bd8ba58e35a48fd51fc29020138c7c4228eae88e20213836",
+      "size_bytes": 204727
     },
     {
       "path": "index.html",
-      "sha256": "d93e5dfecc6cabd0b271f606be2df0d4f9425c25d08708b349d52fc47bb33e79",
+      "sha256": "cd23a231fec885b6f31615c31debf51d37e63e66536aa1d794935816d78d2d48",
       "size_bytes": 432
     }
   ],

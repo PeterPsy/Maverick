@@ -100,6 +100,7 @@ export function App() {
   const [savedWorkoutId, setSavedWorkoutId] = useState<string | null>(null);
   const dirtyWorkoutIdsRef = useRef<Set<string>>(new Set());
   const lastSyncedViewStateRef = useRef<Pick<ViewState, 'selected_workout_id' | 'setup_tab'> | null>(null);
+  const navigationRevisionRef = useRef(0);
 
   const selectedWorkout = useMemo(
     () => selectedWorkoutId ? workouts.find((workout) => workout.id === selectedWorkoutId) || null : workouts[0] || null,
@@ -109,7 +110,7 @@ export function App() {
   const validation = useMemo(() => validateWorkoutForStart(syncedSelectedWorkout), [syncedSelectedWorkout]);
   const tags = useMemo(() => Array.from(new Set(exercises.flatMap((exercise) => exercise.tags))).sort(), [exercises]);
 
-  const applyBootstrapPayload = useCallback((payload: AppBootstrapPayload) => {
+  const applyBootstrapPayload = useCallback((payload: AppBootstrapPayload, preserveNavigation = false) => {
     const nextWorkouts = payload.workouts?.length
       ? payload.workouts
       : payload.selected_workout
@@ -122,9 +123,11 @@ export function App() {
     if (payload.runs?.length) {
       setRuns(payload.runs);
     }
-    lastSyncedViewStateRef.current = { selected_workout_id: selectedId, setup_tab: nextSetupTab };
-    setSelectedWorkoutId(selectedId);
-    setSetupTab(nextSetupTab);
+    if (!preserveNavigation) {
+      lastSyncedViewStateRef.current = { selected_workout_id: selectedId, setup_tab: nextSetupTab };
+      setSelectedWorkoutId(selectedId);
+      setSetupTab(nextSetupTab);
+    }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -143,14 +146,17 @@ export function App() {
   useEffect(() => {
     let isCurrent = true;
     const controller = new AbortController();
+    const navigationRevision = navigationRevisionRef.current;
     purgeLegacyBootstrapCache();
     readCachedBootstrap({ includeRuns: false, signal: controller.signal })
       .then((result) => {
         if (!isCurrent) return;
-        applyBootstrapPayload(result.payload);
+        applyBootstrapPayload(result.payload, navigationRevision !== navigationRevisionRef.current);
         if (result.revalidation) {
           void result.revalidation.then((next) => {
-            if (isCurrent && next.changed) applyBootstrapPayload(next.payload);
+            if (isCurrent && next.changed) {
+              applyBootstrapPayload(next.payload, navigationRevision !== navigationRevisionRef.current);
+            }
           }).catch((error: Error) => {
             if (isCurrent && error.name !== 'AbortError') setNotice(error.message);
           });
@@ -212,6 +218,7 @@ export function App() {
         }
       }
       if (payload.type === 'maverick.app.navigate') {
+        navigationRevisionRef.current += 1;
         const params = payload.params || {};
         const appPage = String(params.app_page || payload.app_page || '');
         const workoutId = appPage.startsWith('workouts/') ? appPage.split('/')[1] : String(params.workout_id || '');
@@ -246,6 +253,9 @@ export function App() {
       }
     }
     window.addEventListener('message', handleMessage);
+    // Register the navigation listener before announcing readiness so the
+    // Shell can safely deliver first-mount picker results in its reply.
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'fitness-coach' }, '*');
     return () => window.removeEventListener('message', handleMessage);
   }, [refresh]);
 

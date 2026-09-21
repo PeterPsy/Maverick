@@ -14,6 +14,8 @@ import {
   createWindow,
   persistWindows,
   readPersistedOrDefaultWindows,
+  FALLBACK_WIDGET_STATE_STORAGE_KEY,
+  widgetStateStorageKey,
   reconcileWindowsWithThreads,
   selectSingleFloatingWindowThread,
 } from "./floatingState";
@@ -21,7 +23,6 @@ import {
   debugThreadSync,
   floatingWidgetHostContextFromContent,
   loadFloatingWidgetHostContext,
-  loadWidgetStateStorageKey,
   postDockClose,
   postWidgetSize,
   shouldIgnoreFloatingStackDrag,
@@ -81,10 +82,11 @@ export function useFloatingWindows() {
   useEffect(() => {
     let cancelled = false;
     async function loadScopedWidgetState() {
-      const [nextStorageKey, hostContext] = await Promise.all([loadWidgetStateStorageKey(), loadFloatingWidgetHostContext()]);
+      const hostContext = await loadFloatingWidgetHostContext();
       if (cancelled) {
         return;
       }
+      const nextStorageKey = hostContext.workspaceId ? widgetStateStorageKey(hostContext.workspaceId) : FALLBACK_WIDGET_STATE_STORAGE_KEY;
       const persistedWindows = readPersistedOrDefaultWindows(nextStorageKey);
       setHostMode(hostContext.mode);
       setHostNavigationScope(hostContext.navigationScope);

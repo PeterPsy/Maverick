@@ -18,6 +18,9 @@ Fitness Coach owns only app-domain state under `data/fitness-coach/state.json`.
 
 Storage remains the owner of files, Drive, uploads, previews, media streaming, provider secrets, and Drive localization. Fitness Coach persists stable Storage references such as `file_id`, `stable_storage_file_id`, `connection_id`, `drive_file_id`, display metadata, and source version metadata. It must not persist `stream_url`, raw Drive URLs, tokens, or local filesystem paths.
 
+The main app opens Storage and receives video selections through the Shell's
+`maverick.app.open-app` frame navigation contract, preserving the exercise draft.
+
 ## Runtime Performance Path
 
 The frontend uses backend action `app.bootstrap` for initial app state instead of independently loading workouts, exercises, view state, and runs. The action exposes `state_version` plus `known_revision/not_modified`; the default-off M5 Base Shell broker may reuse the sanitized bootstrap and bounded captured thumbnails under session-only personal-data policy. Old scoped `sessionStorage` values are migration seeds only and never paint before parent confirmation; new reads do not maintain a duplicate local cache. Recent runs are loaded after the initial screen so they do not block the setup editor. See `docs/runbooks/pwa_data_cache_m5.md`.

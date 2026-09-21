@@ -193,7 +193,7 @@ describe('Storage integration API', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'maverick.widget.open-app',
+        type: 'maverick.app.open-app',
         app_id: 'storage',
         params: {
           role: 'uploaded',
@@ -215,7 +215,7 @@ describe('Storage integration API', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'maverick.widget.open-app',
+        type: 'maverick.app.open-app',
         app_id: 'storage',
         params: {
           provider: 'google_drive',
@@ -251,7 +251,7 @@ describe('Storage integration API', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'maverick.widget.open-app',
+        type: 'maverick.app.open-app',
         app_id: 'storage',
         params: {
           provider: 'google_drive',

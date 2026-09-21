@@ -16,6 +16,14 @@ export type StorageNavigationTarget = {
   folderRelativePath?: string;
 };
 
+export type StorageLocalViewIdentity = {
+  activeRole: FileRole | 'all';
+  currentFolderPath: string;
+  driveActive: boolean;
+  query: string;
+  viewMode: 'search' | 'custom';
+};
+
 export type WidgetContextMessage = {
   context?: {
     content?: {
@@ -97,6 +105,19 @@ export function storageTargetFromParams(params: StorageNavigationParams): Storag
     targetType: 'folder',
     workspaceRelativePath: `storage/${folderRole}${folderRelativePath ? `/${folderRelativePath}` : ''}`
   };
+}
+
+export function storageFolderTargetMatchesLocalView(
+  target: StorageNavigationTarget,
+  view: StorageLocalViewIdentity,
+): boolean {
+  return target.targetType === 'folder'
+    && target.provider !== 'google_drive'
+    && !view.driveActive
+    && view.viewMode === 'search'
+    && view.query === ''
+    && target.role === view.activeRole
+    && normalizeRelativePath(target.folderRelativePath) === normalizeRelativePath(view.currentFolderPath);
 }
 
 export function storageTargetFromWidgetContext(message: WidgetContextMessage): StorageNavigationTarget | null {

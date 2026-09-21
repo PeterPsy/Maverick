@@ -4,15 +4,14 @@ import {
   currentDesignStudioAppId,
   nativeOpenDesignPath,
   redeemOpenDesignBootstrap,
-  requestOpenDesignBootstrapStatus,
   requestOpenDesignLaunch,
   SidecarLaunchError,
 } from "./api";
 import type { SidecarHostPhase, SidecarLaunch } from "./types";
+import { observeBootstrapConfirmation } from './bootstrapConfirmation';
 import "./styles/main.css";
 
 const LOADING_DELAY_MS = 300;
-const BOOTSTRAP_STATUS_POLL_MS = 200;
 
 function maverickPlatformOrigin(): string {
   const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
@@ -27,7 +26,6 @@ export function App() {
   const bootstrapLoadedRef = useRef(false);
   const bootstrapConfirmedRef = useRef(false);
   const bootstrapArmTimerRef = useRef<number | null>(null);
-  const bootstrapPollTimerRef = useRef<number | null>(null);
   const [frameName, setFrameName] = useState(() => `opendesign-${crypto.randomUUID()}`);
   const [nativePath, setNativePath] = useState(() => nativeOpenDesignPath(window.location.search));
   const [launchRevision, setLaunchRevision] = useState(0);
@@ -62,12 +60,12 @@ export function App() {
 
   useEffect(() => {
     const abort = new AbortController();
+    let stopConfirmation = () => {};
     submittedFrameRef.current = null;
     bootstrapLoadArmedRef.current = false;
     bootstrapLoadedRef.current = false;
     bootstrapConfirmedRef.current = false;
     if (bootstrapArmTimerRef.current !== null) window.clearTimeout(bootstrapArmTimerRef.current);
-    if (bootstrapPollTimerRef.current !== null) window.clearTimeout(bootstrapPollTimerRef.current);
     setPhase("launching");
     setLoadingVisible(false);
     setErrorCode("");
@@ -95,39 +93,17 @@ export function App() {
           }, 0);
         }
 
-        const confirmationDeadline = Date.now() + launch.expires_in_seconds * 1000;
-        const pollConfirmation = () => {
-          void requestOpenDesignBootstrapStatus(appId, launch, abort.signal)
-            .then((status) => {
-              if (abort.signal.aborted) return;
-              if (status === "ready") {
-                bootstrapConfirmedRef.current = true;
-                if (bootstrapLoadedRef.current) {
-                  setPhase("ready");
-                  setLoadingVisible(false);
-                }
-                return;
-              }
-              if (Date.now() >= confirmationDeadline) {
-                throw new SidecarLaunchError("sidecar_bootstrap_unconfirmed", 408);
-              }
-              bootstrapPollTimerRef.current = window.setTimeout(
-                pollConfirmation,
-                BOOTSTRAP_STATUS_POLL_MS,
-              );
-            })
-            .catch((error: unknown) => {
-              if (abort.signal.aborted) return;
-              setErrorCode(
-                error instanceof SidecarLaunchError
-                  ? error.code
-                  : "sidecar_bootstrap_confirmation_failed",
-              );
-              setPhase("error");
-              setLoadingVisible(false);
-            });
-        };
-        pollConfirmation();
+        stopConfirmation = observeBootstrapConfirmation(appId, launch, abort.signal, () => {
+          bootstrapConfirmedRef.current = true;
+          if (bootstrapLoadedRef.current) {
+            setPhase("ready");
+            setLoadingVisible(false);
+          }
+        }, (error: unknown) => {
+          setErrorCode(error instanceof SidecarLaunchError ? error.code : "sidecar_bootstrap_confirmation_failed");
+          setPhase("error");
+          setLoadingVisible(false);
+        });
       })
       .catch((error: unknown) => {
         if (abort.signal.aborted) return;
@@ -138,12 +114,11 @@ export function App() {
 
     return () => {
       abort.abort();
+      stopConfirmation();
       window.clearTimeout(loadingTimer);
       if (bootstrapArmTimerRef.current !== null) window.clearTimeout(bootstrapArmTimerRef.current);
       bootstrapArmTimerRef.current = null;
       bootstrapLoadArmedRef.current = false;
-      if (bootstrapPollTimerRef.current !== null) window.clearTimeout(bootstrapPollTimerRef.current);
-      bootstrapPollTimerRef.current = null;
       bootstrapLoadedRef.current = false;
       bootstrapConfirmedRef.current = false;
     };

@@ -218,12 +218,12 @@ function parseRetryAfter(value: string | null): number | null {
 
 export function openStorageForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null) {
   const params = storageNavigationParamsForMedia(media, sourceFolder);
-  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'storage', params }, "*");
+  window.parent?.postMessage({ type: 'maverick.app.open-app', app_id: 'storage', params }, "*");
 }
 
 export function openStorageVideoPicker(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null) {
   const params = storageVideoPickerNavigationParamsForMedia(media, sourceFolder);
-  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'storage', params }, "*");
+  window.parent?.postMessage({ type: 'maverick.app.open-app', app_id: 'storage', params }, "*");
 }
 
 export function storageVideoPickerNavigationParamsForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null): Record<string, string> {

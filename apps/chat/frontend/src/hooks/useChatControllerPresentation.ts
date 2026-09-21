@@ -397,7 +397,8 @@ export function visibleChatMessages(
 ): { hasHiddenMessages: boolean; messages: ChatMessage[] } {
   const projectedEvents = visibleProjectionEvents(events, messageHistoryLimit);
   const currentMessages = eventsToMessages(projectedEvents);
-  const confirmedHumanMessageIds = confirmedHumanMessageIdsForEvents(events, currentMessages);
+  const confirmedHumanMessageIds = pendingUserMessages.length
+    ? confirmedHumanMessageIdsForEvents(events, currentMessages) : new Set<string>();
   const visibleMessages = [
     ...currentMessages,
     ...pendingUserMessages

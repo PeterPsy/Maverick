@@ -78,6 +78,11 @@ The `crm.records_table` backend action is intentionally app-owned UI infrastruct
 New MCP/CLI actions include `extension_schema`, `list_extension_records`, `create_extension_record`, `update_extension_record`, `link_records`, `unlink_records`, `record_context`, `overview`, `integration_context`, `link_provider_record`, `import_plan`, `import_apply`, and `import_jobs` (CLI prefix `crm.`, MCP prefix `crm_`). New entities also participate in search, references, custom fields, lifecycle, audit and native export/import. The bounded, read-only `crm.workspace_view` helper supplies task/thread/expense/brief/intelligence/calendar/transcript/quality screens. Like the existing Records and Operations helpers, it is UI infrastructure, not a new public CLI/MCP action. Extension and workflow views use live reads and do not expand the reviewed PWA display allowlist.
 
 People, Companies and Deals reuse the approved `records_table` display cache.
+Hidden app reads are cancelled and deferred until the app becomes visible.
+Live workflow reads also pause offline; approved display projections can still
+paint from cache. Returning to the foreground refreshes each visible read once
+and retains the current rows while refreshing. A late bootstrap response cannot
+start live work after its app has been hidden.
 Schema revision `crm.lists-and-recent-records.v2` includes the displayed numeric
 deal margin; unknown fields and mutation authority are still excluded. Warm rows
 remain visible during refresh, changed queries cancel obsolete reads, and stage

@@ -189,7 +189,7 @@ describe("useRuntimeEvents", () => {
       events: Array.from({ length: 5900 }, (_, index) => historic(index)), has_more_before: true }));
     await act(async () => {
       for (let index = 5900; index < 6200; index++) emit({ type: 'runtime.event', event: historic(index) });
-      vi.advanceTimersByTime(20);
+      vi.advanceTimersByTime(60);
     });
     expect(state().events.length).toBeLessThanOrEqual(6000);
     expect(state().hasNewerHistory).toBe(true);

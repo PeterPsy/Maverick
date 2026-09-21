@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { DragEvent } from "react";
-import { App } from "../../App";
+import { ChatVisibilityContext } from '../../hooks/useChatVisibility';
 import type { ChatThread } from "../../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../../lib/externalInputs";
 import { filesFromDataTransfer, hasFileDropData } from "../../lib/fileDropAttachments";
@@ -10,6 +10,8 @@ import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
 import { FloatingLauncher } from "./FloatingLauncher";
 import { FloatingThreadMenu } from "./FloatingThreadMenu";
 import type { FloatingChatWindow } from "./floatingState";
+
+const App = lazy(() => import('../../App').then(module => ({ default: module.App })));
 
 export function FloatingChatFrame({
   className = "",
@@ -54,6 +56,8 @@ export function FloatingChatFrame({
 }) {
   const [externalFileDrop, setExternalFileDrop] = useState<ExternalFileDrop | null>(null);
   const [externalMentionDrop, setExternalMentionDrop] = useState<ExternalMentionDrop | null>(null);
+  const [hasOpened, setHasOpened] = useState(!windowItem.isCollapsed);
+  useEffect(() => { if (!windowItem.isCollapsed) setHasOpened(true); }, [windowItem.isCollapsed]);
   const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || null;
   const isActiveThreadBusy = Boolean(activeThread && isThreadBusy(activeThread));
   const isActiveThreadUnread = Boolean(activeThread && isThreadUnread(activeThread));
@@ -203,17 +207,23 @@ export function FloatingChatFrame({
         </div>
       </header>
       <div className="chat-floating-widget-shell__body">
-        <App
-          externalFileDrop={externalFileDrop}
-          externalMentionDrop={externalMentionDrop}
-          navigationScope={windowItem.id}
-          newChatProjectId={windowItem.draftProjectId}
-          newChatRequestId={windowItem.isDraft && !windowItem.threadId ? windowItem.id : null}
-          runtimeThreads={threads}
-          runtimeThreadsError={runtimeThreadsError}
-          runtimeThreadsLoaded={runtimeThreadsLoaded}
-          threadId={windowItem.threadId}
-        />
+        {hasOpened ? (
+          <ChatVisibilityContext.Provider value={!windowItem.isCollapsed}>
+            <Suspense fallback={null}>
+              <App
+                externalFileDrop={externalFileDrop}
+                externalMentionDrop={externalMentionDrop}
+                navigationScope={windowItem.id}
+                newChatProjectId={windowItem.draftProjectId}
+                newChatRequestId={windowItem.isDraft && !windowItem.threadId ? windowItem.id : null}
+                runtimeThreads={threads}
+                runtimeThreadsError={runtimeThreadsError}
+                runtimeThreadsLoaded={runtimeThreadsLoaded}
+                threadId={windowItem.threadId}
+              />
+            </Suspense>
+          </ChatVisibilityContext.Provider>
+        ) : null}
       </div>
       </section>
     </>

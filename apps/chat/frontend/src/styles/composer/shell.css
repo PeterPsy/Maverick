@@ -81,6 +81,11 @@
   margin: 0;
 }
 
+/* Bottom padding keeps transcript content clear of the dock at the actual end. */
+.chatapp-chat-main:has(> .chatapp-chat-scroll.is-at-bottom) .chatapp-composer.is-docked {
+  backdrop-filter: none;
+}
+
 .chatapp-composer-dock {
   position: absolute;
   right: 0;

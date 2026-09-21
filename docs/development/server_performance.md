@@ -259,7 +259,11 @@ writes a Chromium trace, V8 CPU profile and screenshot. Traced runs are marked a
 as comparison trials. Inline agent, structured and tool cards retain their
 surfaces, gradients, borders and shadows without backdrop blur: those cards sit
 in normal transcript flow, where repeatedly filtering the backdrop adds costly
-compositing without useful separation. Floating composer/overlay glass is retained.
+compositing without useful separation. At the actual scroll end, existing bottom
+padding separates the docked composer from transcript content, so its backdrop
+filter is also unnecessary. The exact bottom state is separate from the 96 px
+auto-follow threshold: moving into history restores composer glass. Other
+overlays retain their backdrop filters.
 
 The first nonempty text delta of each turn flushes immediately, preserving queued
 event order. Subsequent presentation deltas coalesce in an animation frame;

@@ -76,6 +76,7 @@ export function ChatTranscript({
   const scrollAnchorRef = useRef<{ height: number; top: number; row?: string; offset?: number } | null>(null);
   const loadOlderPendingRef = useRef(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollJump, setShowScrollJump] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
@@ -150,6 +151,7 @@ export function ChatTranscript({
       onLoadOlderMessages?.();
     }
     const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    setIsAtBottom(distanceFromBottom < 1);
     const nextIsNearBottom = distanceFromBottom < 96;
     setIsNearBottom(nextIsNearBottom);
     onFollowLatestChange?.(nextIsNearBottom && !hasNewerHistory);
@@ -176,6 +178,7 @@ export function ChatTranscript({
     scrollAnchorRef.current = null;
     loadOlderPendingRef.current = false;
     setIsNearBottom(true);
+    setIsAtBottom(true);
     onFollowLatestChange?.(true);
     setShowScrollJump(false);
     setExpandedMessages(new Set());
@@ -252,7 +255,7 @@ export function ChatTranscript({
   }
 
   return (
-    <section className="chatapp-chat-scroll" aria-live="polite">
+    <section className={`chatapp-chat-scroll${isAtBottom ? ' is-at-bottom' : ''}`} aria-live="polite">
       <div className="chatapp-chat-scroll__inner" onScroll={updateScrollState} ref={viewportRef}>
         {isLoadingOlderHistory ? (
           <div className="chatapp-history-loader" role="status" aria-live="polite">

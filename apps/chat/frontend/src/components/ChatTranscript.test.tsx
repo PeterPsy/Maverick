@@ -20,6 +20,21 @@ afterEach(() => {
 });
 
 describe("ChatTranscript inter-agent board entry", () => {
+  it('distinguishes the actual bottom from the near-bottom auto-follow threshold', async () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root?.render(<ChatTranscript error={null} isLoading={false}
+      loadingLabel="" mentionItems={[]} messages={[agentMessage()]} />));
+    const viewport = container.querySelector('.chatapp-chat-scroll__inner') as HTMLElement;
+    const section = container.querySelector('.chatapp-chat-scroll')!;
+    Object.defineProperties(viewport, { scrollHeight: { value: 1200 }, clientHeight: { value: 600 } });
+    await act(async () => { viewport.scrollTop = 550; viewport.dispatchEvent(new Event('scroll')); });
+    expect(section.classList.contains('is-at-bottom')).toBe(false);
+    await act(async () => { viewport.scrollTop = 599.75; viewport.dispatchEvent(new Event('scroll')); });
+    expect(section.classList.contains('is-at-bottom')).toBe(true);
+  });
+
   it('offers newer history and an explicit return to the latest message', async () => {
     container = document.createElement('div');
     document.body.append(container);

@@ -132,6 +132,7 @@ try {
   assert.equal(await restoredStorage.locator('.storage-error').count(), 0);
   let historyChat = await openApp('chat', { thread_id: 'performance-chat-thread' });
   await historyChat.getByText('Fixture request 02999', { exact: true }).waitFor({ timeout: 30_000 });
+  await historyChat.waitForFunction(() => getComputedStyle(document.querySelector('.chatapp-composer.is-docked')).backdropFilter === 'none');
   const transcript = historyChat.locator('.chatapp-chat-scroll__inner');
   let iterations = 0;
   let maxRows = 0;
@@ -151,6 +152,8 @@ try {
     return row ? { id: row.dataset.transcriptRow, offset: row.getBoundingClientRect().top - top } : null;
   });
   assert(readingAnchor, 'History must have an actual visible reading anchor.');
+  assert.notEqual(await historyChat.locator('.chatapp-composer.is-docked').evaluate(element => getComputedStyle(element).backdropFilter), 'none',
+    'Reading history must retain backdrop separation under the composer.');
   await openApp('storage');
   await openApp('calendar');
   await page.locator('iframe[title="Chat viewport"]').waitFor({ state: 'detached', timeout: 10_000 });

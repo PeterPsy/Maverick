@@ -27,6 +27,7 @@ SUPPORTED_ACTIONS = (
     "dispatch",
     "dispatch_and_wait",
     "list_runs",
+    "run_jobs",
     "run_status",
     "run_logs",
     "wait",
@@ -68,6 +69,8 @@ def handle_action(arguments: dict[str, Any], *, app_secrets: dict[str, Any], app
         return client.dispatch_and_wait(arguments)
     if action == "list_runs":
         return client.list_runs(arguments)
+    if action == "run_jobs":
+        return client.run_jobs(arguments)
     if action == "run_status":
         return client.run_status(arguments)
     if action == "run_logs":
@@ -135,6 +138,19 @@ class GitHubActionsClient:
         payload = self._request("GET", path)
         runs = payload.get("workflow_runs") if isinstance(payload, dict) else []
         return {"ok": True, "action": "list_runs", "repository": f"{owner}/{repo}", "workflow_id": workflow_id, "runs": [_run_summary(run) for run in runs if isinstance(run, dict)]}
+
+    def run_jobs(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        owner, repo = _repo(arguments)
+        run_id = _required_int(arguments, "run_id")
+        payload = self._request("GET", f"/repos/{owner}/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100")
+        jobs = payload.get("jobs") if isinstance(payload, dict) else []
+        return {
+            "ok": True,
+            "action": "run_jobs",
+            "repository": f"{owner}/{repo}",
+            "run_id": run_id,
+            "jobs": [_job_summary(job) for job in jobs if isinstance(job, dict)],
+        }
 
     def run_status(self, arguments: dict[str, Any]) -> dict[str, Any]:
         owner, repo = _repo(arguments)
@@ -333,6 +349,24 @@ def _run_summary(run: Any) -> dict[str, Any]:
         "created_at": run.get("created_at"),
         "updated_at": run.get("updated_at"),
         "html_url": run.get("html_url"),
+    }
+
+
+def _job_summary(job: Any) -> dict[str, Any]:
+    if not isinstance(job, dict):
+        return {}
+    raw_labels = job.get("labels")
+    labels = [str(label) for label in raw_labels] if isinstance(raw_labels, list) else []
+    return {
+        "id": job.get("id"),
+        "name": job.get("name"),
+        "status": job.get("status"),
+        "conclusion": job.get("conclusion"),
+        "started_at": job.get("started_at"),
+        "completed_at": job.get("completed_at"),
+        "runner_name": job.get("runner_name"),
+        "runner_group_name": job.get("runner_group_name"),
+        "labels": labels,
     }
 
 

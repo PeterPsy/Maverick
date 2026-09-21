@@ -11,7 +11,7 @@
             "github-app-private-key"
           ],
           "when": {
-            "action": ["dispatch", "dispatch_and_wait", "list_runs", "run_status", "run_logs", "wait"]
+            "action": ["dispatch", "dispatch_and_wait", "list_runs", "run_jobs", "run_status", "run_logs", "wait"]
           }
         }
       ],
@@ -20,7 +20,7 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["manifest", "dispatch", "dispatch_and_wait", "list_runs", "run_status", "run_logs", "wait"],
+            "enum": ["manifest", "dispatch", "dispatch_and_wait", "list_runs", "run_jobs", "run_status", "run_logs", "wait"],
             "default": "manifest"
           },
           "repository": {"type": "string", "description": "owner/repo repository name."},

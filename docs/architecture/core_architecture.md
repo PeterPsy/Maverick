@@ -1266,8 +1266,13 @@ release events, by manual dispatch, and as a reusable pre-promotion workflow.
 It requires evidence to name the exact candidate tag/build in addition to being
 redaction-safe and within the 90-day limit. The promotion workflow gates that
 exact existing prerelease before publishing it; event runs detect bypasses
-after the fact. Current physical evidence remains mandatory at the release
-gate; emulation cannot satisfy it.
+after the fact. Complete current physical evidence is the normal release gate;
+emulation cannot satisfy it. An exceptional release-owner waiver may cover only
+literal pending outcomes in a current physical evidence record. It is valid for
+one exact candidate, expires within seven days, records exact pass/fail/pending
+counts, and is rejected when any physical result failed. It never relabels a
+pending result, waives redaction/freshness/structure checks, or broadens cache
+resource and privacy policy.
 
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval

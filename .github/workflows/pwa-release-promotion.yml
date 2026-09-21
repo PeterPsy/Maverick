@@ -11,6 +11,10 @@ on:
         description: Redaction-reviewed physical-device evidence for this exact tag
         required: false
         type: string
+      waiver_json:
+        description: Optional exact-candidate, release-owner physical-coverage waiver
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +29,7 @@ jobs:
     with:
       release_id: ${{ inputs.release_id }}
       evidence_json: ${{ inputs.evidence_json || vars.PWA_DEVICE_EVIDENCE_JSON }}
+      waiver_json: ${{ inputs.waiver_json || vars.PWA_DEVICE_WAIVER_JSON }}
 
   promote-release:
     needs: physical-device-gate

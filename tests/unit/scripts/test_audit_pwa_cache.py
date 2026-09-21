@@ -37,6 +37,15 @@ class PwaCacheAuditTests(unittest.TestCase):
 
         self.assertTrue(any("exact release_id candidate" in error for error in errors), errors)
 
+    def test_device_policy_caps_release_waivers_at_seven_days(self) -> None:
+        policy = json.loads((REPOSITORY_ROOT / POLICY_PATH).read_text(encoding="utf-8"))
+        policy["device_regression"]["max_waiver_age_days"] = 30
+        errors: list[str] = []
+
+        audit_device_regression_policy(policy, errors)
+
+        self.assertTrue(any("between 1 and 7 days" in error for error in errors), errors)
+
     def test_frontend_asset_budget_rejects_an_oversized_new_asset(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

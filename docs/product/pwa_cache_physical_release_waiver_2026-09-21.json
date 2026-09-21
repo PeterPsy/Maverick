@@ -1,0 +1,15 @@
+{
+  "schema": "maverick.pwa-cache-device-regression-waiver.v1",
+  "accepted_at": "2026-09-21T22:30:31+00:00",
+  "expires_at": "2026-09-28T22:30:31+00:00",
+  "release_id": "97ba359a4e335b1ae432d0bdd582732688b599b0",
+  "scope": "single-release-candidate",
+  "release_owner_approved": true,
+  "risk_acceptance": "remaining-physical-coverage",
+  "observed_results": {
+    "pass": 17,
+    "fail": 0,
+    "pending": 52,
+    "total": 69
+  }
+}

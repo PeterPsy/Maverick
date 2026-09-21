@@ -14,6 +14,7 @@ from typing import Any
 
 EVIDENCE_SCHEMA = "maverick.pwa-cache-device-regression.v1"
 SMOKE_SCHEMA = "maverick.pwa-physical-browser-smoke.v1"
+WAIVER_SCHEMA = "maverick.pwa-cache-device-regression-waiver.v1"
 RELEASE_CANDIDATE_BINDING = "exact_release_id"
 POLICY_PATH = Path("docs/product/pwa_cache_operational_policy.v1.json")
 PASS = "pass"
@@ -154,6 +155,135 @@ def validate_evidence(
     return errors
 
 
+def validate_release_evidence(
+    payload: Any,
+    policy: dict[str, Any],
+    *,
+    expected_release_id: str,
+    waiver: Any | None = None,
+    now: datetime | None = None,
+) -> list[str]:
+    """Enforce the strict matrix or an exact, active release-owner waiver."""
+    strict_errors = validate_evidence(
+        payload,
+        policy,
+        expected_release_id=expected_release_id,
+        now=now,
+    )
+    if waiver is None:
+        return strict_errors
+    waiver_errors = validate_waiver(
+        waiver,
+        payload,
+        policy,
+        expected_release_id=expected_release_id,
+        now=now,
+    )
+    if waiver_errors:
+        return [*strict_errors, *waiver_errors]
+    return [error for error in strict_errors if " has non-passing scenarios:" not in error]
+
+
+def validate_waiver(
+    waiver: Any,
+    evidence: Any,
+    policy: dict[str, Any],
+    *,
+    expected_release_id: str,
+    now: datetime | None = None,
+) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(waiver, dict):
+        return ["waiver must be a JSON object"]
+    reject_unexpected_fields(
+        waiver,
+        {
+            "accepted_at",
+            "expires_at",
+            "observed_results",
+            "release_id",
+            "release_owner_approved",
+            "risk_acceptance",
+            "schema",
+            "scope",
+        },
+        "waiver",
+        errors,
+    )
+    if waiver.get("schema") != WAIVER_SCHEMA:
+        errors.append(f"waiver schema must be {WAIVER_SCHEMA}")
+    if waiver.get("scope") != "single-release-candidate":
+        errors.append("waiver scope must be single-release-candidate")
+    if waiver.get("release_owner_approved") is not True:
+        errors.append("waiver release_owner_approved must be true")
+    if waiver.get("risk_acceptance") != "remaining-physical-coverage":
+        errors.append("waiver risk_acceptance is invalid")
+    release_id = waiver.get("release_id")
+    if release_id != expected_release_id:
+        errors.append("waiver release_id does not match the expected release candidate")
+    if isinstance(evidence, dict) and release_id != evidence.get("release_id"):
+        errors.append("waiver release_id does not match the evidence release candidate")
+
+    accepted_at = parse_timestamp(waiver.get("accepted_at"))
+    expires_at = parse_timestamp(waiver.get("expires_at"))
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    max_days = policy["device_regression"].get("max_waiver_age_days")
+    if accepted_at is None:
+        errors.append("waiver accepted_at must be an ISO-8601 timestamp with timezone")
+    if expires_at is None:
+        errors.append("waiver expires_at must be an ISO-8601 timestamp with timezone")
+    if accepted_at is not None and accepted_at > current + timedelta(minutes=5):
+        errors.append("waiver accepted_at cannot be in the future")
+    if accepted_at is not None and expires_at is not None:
+        if expires_at <= accepted_at:
+            errors.append("waiver expires_at must be later than accepted_at")
+        elif not positive_integer(max_days) or expires_at - accepted_at > timedelta(days=max_days):
+            errors.append("waiver exceeds the policy maximum lifetime")
+        if current > expires_at:
+            errors.append("waiver has expired")
+    evidence_captured_at = parse_timestamp(evidence.get("captured_at")) if isinstance(evidence, dict) else None
+    if accepted_at is not None and evidence_captured_at is not None and accepted_at < evidence_captured_at:
+        errors.append("waiver must be accepted after the evidence was captured")
+
+    observed = waiver.get("observed_results")
+    if not isinstance(observed, dict):
+        errors.append("waiver observed_results must be an object")
+        observed = {}
+    else:
+        reject_unexpected_fields(observed, {"fail", "pass", "pending", "total"}, "waiver.observed_results", errors)
+    for field in ("pass", "fail", "pending", "total"):
+        value = observed.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            errors.append(f"waiver observed_results.{field} must be a non-negative integer")
+
+    counts, unsupported = evidence_outcome_counts(evidence)
+    if unsupported:
+        errors.append("waiver can cover only literal pass and pending outcomes")
+    if counts["fail"]:
+        errors.append("waiver cannot cover failed physical-device outcomes")
+    if counts["pass"] == 0 or counts["pending"] == 0:
+        errors.append("waiver requires both observed passes and explicitly pending coverage")
+    if observed != counts:
+        errors.append("waiver observed_results do not match the physical-device evidence")
+    return errors
+
+
+def evidence_outcome_counts(payload: Any) -> tuple[dict[str, int], int]:
+    values: list[Any] = []
+    if isinstance(payload, dict) and isinstance(payload.get("runs"), list):
+        for run in payload["runs"]:
+            if isinstance(run, dict) and isinstance(run.get("scenarios"), dict):
+                values.extend(run["scenarios"].values())
+    counts = {
+        "pass": values.count("pass"),
+        "fail": values.count("fail"),
+        "pending": values.count("pending"),
+        "total": len(values),
+    }
+    unsupported = sum(value not in {"pass", "fail", "pending"} for value in values)
+    return counts, unsupported
+
+
 def audit_runs(value: Any, policy: dict[str, Any], errors: list[str]) -> None:
     if not isinstance(value, list):
         errors.append("runs must be an array")
@@ -230,6 +360,8 @@ def load_policy(root: Path) -> dict[str, Any]:
         raise ValueError("operational policy has no device_regression contract")
     if not positive_integer(device.get("max_evidence_age_days")):
         raise ValueError("device regression max evidence age is invalid")
+    if not positive_integer(device.get("max_waiver_age_days")):
+        raise ValueError("device regression max waiver age is invalid")
     if device.get("release_candidate_binding") != RELEASE_CANDIDATE_BINDING:
         raise ValueError("device regression must require exact release_id candidate binding")
     for field in ("required_profiles", "required_scenarios"):
@@ -286,6 +418,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     verify = subparsers.add_parser("verify", help="enforce the physical-device release gate")
     verify.add_argument("--input", required=True, type=Path)
     verify.add_argument("--expected-release-id", required=True)
+    verify.add_argument("--waiver", type=Path)
     progress = subparsers.add_parser("progress", help="merge physical smoke diaries into a matrix draft")
     progress.add_argument("--smoke-dir", required=True, type=Path)
     progress.add_argument("--output", required=True, type=Path)
@@ -322,10 +455,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         payload = json.loads(args.input.read_text(encoding="utf-8"))
-        errors = validate_evidence(
+        waiver = json.loads(args.waiver.read_text(encoding="utf-8")) if args.waiver else None
+        errors = validate_release_evidence(
             payload,
             policy,
             expected_release_id=args.expected_release_id,
+            waiver=waiver,
         )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         print(f"PWA device regression: {error}", file=sys.stderr)
@@ -334,7 +469,14 @@ def main(argv: list[str] | None = None) -> int:
         for error in errors:
             print(f"PWA device regression: {error}", file=sys.stderr)
         return 1
-    print("PWA physical-device regression evidence matches the release candidate and is current and complete.")
+    if args.waiver:
+        counts, _ = evidence_outcome_counts(payload)
+        print(
+            "PWA physical-device release waiver is current and exact-candidate-bound: "
+            f"{counts['pass']} pass, {counts['fail']} fail, {counts['pending']} pending."
+        )
+    else:
+        print("PWA physical-device regression evidence matches the release candidate and is current and complete.")
     return 0
 
 

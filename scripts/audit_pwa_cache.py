@@ -74,6 +74,13 @@ def audit_device_regression_policy(policy: dict[str, Any], errors: list[str]) ->
     device = object_field(policy, "device_regression", errors)
     if device.get("release_candidate_binding") != "exact_release_id":
         errors.append("device_regression must bind evidence to the exact release_id candidate")
+    max_waiver_days = device.get("max_waiver_age_days")
+    if (
+        not isinstance(max_waiver_days, int)
+        or isinstance(max_waiver_days, bool)
+        or not 1 <= max_waiver_days <= 7
+    ):
+        errors.append("device_regression waiver lifetime must be between 1 and 7 days")
 
 
 def audit_frontend_manifests(root: Path, policy: dict[str, Any], errors: list[str]) -> None:
@@ -309,6 +316,11 @@ def audit_ci_hardening(root: Path, errors: list[str]) -> None:
     if "inputs.evidence_json || vars.PWA_DEVICE_EVIDENCE_JSON" not in physical_source:
         errors.append("physical-device workflow lacks persistent scheduled/release evidence input")
     if (
+        "inputs.waiver_json || vars.PWA_DEVICE_WAIVER_JSON" not in physical_source
+        or "--waiver pwa-device-waiver.json" not in physical_source
+    ):
+        errors.append("physical-device workflow lacks the bounded release-owner waiver path")
+    if (
         "PWA_EXPECTED_RELEASE_ID:" not in physical_source
         or "inputs.release_id || github.event.release.tag_name || vars.PWA_DEVICE_RELEASE_ID"
         not in physical_source
@@ -319,6 +331,7 @@ def audit_ci_hardening(root: Path, errors: list[str]) -> None:
     if (
         "uses: ./.github/workflows/pwa-physical-device-gate.yml" not in promotion_source
         or "release_id: ${{ inputs.release_id }}" not in promotion_source
+        or "waiver_json: ${{ inputs.waiver_json || vars.PWA_DEVICE_WAIVER_JSON }}" not in promotion_source
         or "needs: physical-device-gate" not in promotion_source
         or "PWA_RELEASE_ID: ${{ inputs.release_id }}" not in promotion_source
         or "github.rest.repos.getReleaseByTag({ owner, repo, tag })" not in promotion_source

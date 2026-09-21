@@ -79,6 +79,7 @@
   "device_regression": {
     "release_candidate_binding": "exact_release_id",
     "max_evidence_age_days": 90,
+    "max_waiver_age_days": 7,
     "required_profiles": [
       "safari-macos-minimum-browser",
       "safari-macos-current-browser",

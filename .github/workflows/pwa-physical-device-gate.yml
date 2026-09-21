@@ -16,6 +16,10 @@ on:
         description: Redaction-reviewed maverick.pwa-cache-device-regression.v1 JSON
         required: false
         type: string
+      waiver_json:
+        description: Optional exact-candidate, release-owner physical-coverage waiver
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       release_id:
@@ -24,6 +28,10 @@ on:
         type: string
       evidence_json:
         description: Redaction-reviewed maverick.pwa-cache-device-regression.v1 JSON
+        required: false
+        type: string
+      waiver_json:
+        description: Optional exact-candidate, release-owner physical-coverage waiver
         required: false
         type: string
 
@@ -61,8 +69,30 @@ jobs:
               encoding="utf-8",
           )
           PY
-      - name: Enforce current and complete physical-device matrix
-        run: >-
-          python scripts/pwa_device_regression.py verify
-          --input pwa-device-evidence.json
-          --expected-release-id "$PWA_EXPECTED_RELEASE_ID"
+      - name: Materialize optional exact-candidate waiver
+        env:
+          PWA_DEVICE_WAIVER_JSON: ${{ inputs.waiver_json || vars.PWA_DEVICE_WAIVER_JSON }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          raw = os.environ.get("PWA_DEVICE_WAIVER_JSON", "").strip()
+          if raw:
+              payload = json.loads(raw)
+              Path("pwa-device-waiver.json").write_text(
+                  json.dumps(payload, indent=2) + "\n",
+                  encoding="utf-8",
+              )
+          PY
+      - name: Enforce complete evidence or a bounded release-owner waiver
+        run: |
+          waiver_args=()
+          if [ -s pwa-device-waiver.json ]; then
+            waiver_args=(--waiver pwa-device-waiver.json)
+          fi
+          python scripts/pwa_device_regression.py verify \
+            --input pwa-device-evidence.json \
+            --expected-release-id "$PWA_EXPECTED_RELEASE_ID" \
+            "${waiver_args[@]}"

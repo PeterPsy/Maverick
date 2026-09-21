@@ -256,6 +256,16 @@ content. Evidence for an older or unrelated build cannot unlock a candidate. A
 release stays blocked when the physical lab has not produced a current passing
 record; an emulated run must never be relabeled physical.
 
+An exceptional release-owner waiver can admit an incomplete but current
+physical record without changing any scenario outcome. The waiver must use
+`maverick.pwa-cache-device-regression-waiver.v1`, name the same exact candidate,
+be accepted after the evidence was captured, expire within seven days, record
+the exact pass/fail/pending/total counts, and contain zero failed outcomes. It
+may cover only literal `pending` results. It does not waive malformed, stale,
+unredacted or wrong-candidate evidence, and it does not approve an otherwise
+ineligible cache resource. Pass it with `--waiver` locally or with
+`waiver_json` / `PWA_DEVICE_WAIVER_JSON` in the governed workflows.
+
 Store the current redaction-reviewed JSON in the repository variable
 `PWA_DEVICE_EVIDENCE_JSON` and its exact candidate identity in
 `PWA_DEVICE_RELEASE_ID` for scheduled verification, or pass both explicitly to
@@ -263,7 +273,9 @@ Store the current redaction-reviewed JSON in the repository variable
 identity directly from `github.event.release.tag_name`; reusable and manual
 runs require `release_id`. Every path invokes the same exact-match verifier and
 fails closed when identity or evidence is absent, stale, incomplete, failing,
-or non-redacted.
+or non-redacted, unless the bounded waiver above covers only its pending
+outcomes. Configure an active waiver in `PWA_DEVICE_WAIVER_JSON` or pass
+`waiver_json`; remove it after the admitted release or its expiry.
 
 Promote an existing GitHub prerelease only through **Promote PWA Release
 Candidate**. Its `physical-device-gate` reusable job receives the exact tag,

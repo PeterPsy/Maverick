@@ -232,6 +232,32 @@ five warmups for 100/1k/5k messages. Set `MAVERICK_PERFORMANCE_PROBE` to an outp
 path and run that file alone with one Vitest worker. This measures isolated
 merge/projection CPU, not browser rendering, startup or server-side batching.
 
+`scripts/performance_browser_probe.py --scenario chat-stream` measures the actual
+production Chat frame with 1,000 completed Markdown/tool turns. After five warmup
+deltas it sends 501 text frames and five tool completions, types 20 characters,
+and scrolls ten times. Five fresh browser contexts repeat the same workload.
+CDP thread-tick metrics report renderer main-thread CPU, script/layout time and
+heap; browser observers record the first text's next animation frame and input
+frame delays, plus Event Timing from keydown through the next paint. Stream frames
+follow a fixed 20 ms cadence independently of keyboard/scroll commands; report
+emission lateness so a slower client cannot quietly reduce the offered load.
+These are local Chromium measurements, not physical Safari results
+or provider latency. All text across tool boundaries and the unsent draft must survive.
+
+For an immutable frontend comparison, pass `--chat-build-ref <commit>`; only the
+disposable host's committed Chat assets are replaced. The backend, Shell,
+authentication and workload remain identical. The driver intercepts just the
+fixture session's WebSocket to supply identical history and streaming events,
+and clears its missing-provider admission warning without submitting a turn.
+Record both Chat build IDs and raw trials. Run comparisons sequentially without
+other tests/builds; `MAVERICK_PERFORMANCE_STREAM_TRIALS=1` is a diagnostic run,
+not the five-trial comparison.
+
+The first nonempty text delta of each turn flushes immediately, preserving queued
+event order. Subsequent presentation deltas coalesce in an animation frame;
+terminal/control events still flush immediately. First-text responsiveness must
+not pay the extra frame used to combine sustained streaming updates.
+
 ## Background scheduling and idle providers
 
 Calendar owns separate abortable read lanes for its event window, preferences
@@ -491,8 +517,8 @@ the isolated Chat comparison lacks an immutable build id and is diagnostic.
 Live core activation must precede the Storage worker/capability and certified
 frontend contract opt-ins. Storage and Usage have separate operator cutovers;
 Usage producers must be drained for its cutover and coordinated restart.
-Browser pagination under continuous uploads, twenty-app resource bounds,
-useful-content latency, hidden idle CPU and physical installed Safari/iOS remain
+Twenty-app resource bounds, useful-content latency, hidden idle CPU and physical
+installed Safari/iOS remain
 release gates. The older PWA technical closeout does not satisfy these newer
 performance-plan gates. Live private persistent-cache flags stay off.
 
@@ -501,7 +527,14 @@ hash, catalog count and post-cutover write checks. A standalone inventory backup
 was verified through Storage's owner surface. Storage's contract now opts into
 the JSON worker and excludes the unused backend workspace catalog; its mixed
 storage declaration covers SQLite inventory, bounded JSON settings and file
-content. Usage remains on its independent document adapter until a drained
-maintenance window. Certified frontend contract opt-ins still require the
-dedicated browser snapshot/restore probe; the existing cache smoke is not that
-certification.
+content. Usage completed its separate drained cutover on September 21: 16,335
+canonical samples and 111 quota snapshots passed integrity and digest validation.
+The running backend selected SQLite 3.51.3 and a subsequent verified backup
+contained 16,339 samples, including new observations. The temporary startup hook
+and timeout were removed while retaining the SQLite selection. The owner receipt
+and immutable backups remain available for an explicit reverse export.
+
+The disposable browser lifecycle probe also passed pagination during 22 continuous
+writes in another folder, Chat and Storage snapshot/restore, and Calendar app and
+sidebar suspension/resume. Physical-device and resource certification still
+precedes live frontend contract opt-ins; the cache smoke alone does not certify them.

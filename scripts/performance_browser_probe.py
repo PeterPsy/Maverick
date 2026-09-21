@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Exercise performance lifecycles in authenticated, disposable app frames."""
 
+import argparse
+import io
 import json
 from pathlib import Path
 import platform
@@ -9,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import tarfile
 import psutil
 
 from pwa_shell_cache_smoke import ROOT, _local_environment, _free_port, _stop_server, _wait_for_health
@@ -22,6 +25,12 @@ import inventory_legacy
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--scenario', choices=('lifecycle', 'chat-stream'), default='lifecycle')
+    parser.add_argument('--chat-build-ref', help='Use committed Chat assets from this Git revision, only in the disposable root.')
+    args = parser.parse_args()
+    chat_revision = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}',
+        'rev-parse', '--verify', f'{args.chat_build_ref}^{{commit}}'], cwd=ROOT, text=True).strip() if args.chat_build_ref else None
     with tempfile.TemporaryDirectory(prefix='maverick-performance-browser-') as temporary:
         root = Path(temporary)
         repository = root / 'repository'
@@ -50,9 +59,16 @@ def main() -> int:
             contract = json.loads(contract_path.read_text())
             contract['presentation']['frontend_resumable'] = True
             contract_path.write_text(json.dumps(contract))
-        chat_fixture = seed_chat_history(repository)
+        if chat_revision:
+            archive = subprocess.check_output(['git', '-c', f'safe.directory={ROOT}', 'archive',
+                chat_revision, 'apps/chat/frontend/dist'], cwd=ROOT)
+            shutil.rmtree(apps / 'chat/frontend/dist')
+            with tarfile.open(fileobj=io.BytesIO(archive)) as assets:
+                assets.extractall(repository, filter='data')
+        chat_fixture = seed_chat_history(repository, turns=1000 if args.scenario == 'chat-stream' else 3000)
         env = _local_environment(root, 'fixture-admin', 'fixture-only-password')
         env['MAVERICK_PERFORMANCE_BROWSER_FIXTURE'] = '1'
+        env['MAVERICK_PERFORMANCE_CHAT_EVENTS'] = str(repository / 'workspaces/default/runtime/sessions/performance-chat-history/events.json')
         port = _free_port()
         with (root / 'host.log').open('wb') as log:
             server = subprocess.Popen([sys.executable, str(ROOT / 'scripts/pwa_smoke_host.py'),
@@ -65,7 +81,8 @@ def main() -> int:
                     log.flush()
                     sys.stderr.write((root / 'host.log').read_text(errors='replace')[-8000:])
                     raise
-                result = subprocess.run(['node', str(ROOT / 'scripts/performance_browser_probe.mjs'),
+                driver = 'performance_chat_stream.mjs' if args.scenario == 'chat-stream' else 'performance_browser_probe.mjs'
+                result = subprocess.run(['node', str(ROOT / 'scripts' / driver),
                     f'http://maverick.localhost:{port}'], cwd=ROOT, env=env, check=False,
                     capture_output=True, text=True, timeout=360)
                 sys.stderr.write(result.stderr)
@@ -77,7 +94,8 @@ def main() -> int:
                     ['git', '-c', f'safe.directory={ROOT}', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
                 evidence['source_dirty'] = bool(subprocess.check_output(
                     ['git', '-c', f'safe.directory={ROOT}', 'status', '--porcelain'], cwd=ROOT, text=True).strip())
-                evidence['builds'] = {app: json.loads((ROOT / 'apps' / app / 'frontend/dist/maverick-frontend-assets.json').read_text())['build_id']
+                evidence['chat_build_revision'] = chat_revision or evidence['source_commit']
+                evidence['builds'] = {app: json.loads((apps / app / 'frontend/dist/maverick-frontend-assets.json').read_text())['build_id']
                     for app in ('base-shell', 'chat', 'storage', 'calendar')}
                 evidence['python'] = platform.python_version()
                 evidence['sqlite'] = sqlite3.sqlite_version

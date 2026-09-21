@@ -319,11 +319,14 @@ def _workflow(arguments: dict[str, Any]) -> str:
 def _workflow_inputs(arguments: dict[str, Any]) -> dict[str, str]:
     raw = arguments.get("inputs")
     inputs = {str(key): str(value) for key, value in raw.items()} if isinstance(raw, dict) else {}
-    if "device_id" not in inputs and arguments.get("device_id", DEFAULT_DEVICE_ID) is not None:
-        inputs["device_id"] = str(arguments.get("device_id") or DEFAULT_DEVICE_ID)
-    if "launch_app" not in inputs and arguments.get("launch_app") is not None:
+    default_install_workflow = _workflow(arguments) == DEFAULT_WORKFLOW
+    if "device_id" not in inputs and ("device_id" in arguments or default_install_workflow):
+        if arguments.get("device_id", DEFAULT_DEVICE_ID) is not None:
+            inputs["device_id"] = str(arguments.get("device_id") or DEFAULT_DEVICE_ID)
+    if "launch_app" not in inputs and "launch_app" in arguments and arguments.get("launch_app") is not None:
         inputs["launch_app"] = "true" if arguments.get("launch_app") is True else str(arguments.get("launch_app"))
-    inputs.setdefault("launch_app", "false")
+    if default_install_workflow:
+        inputs.setdefault("launch_app", "false")
     return inputs
 
 

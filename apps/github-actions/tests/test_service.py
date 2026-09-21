@@ -65,6 +65,22 @@ class GitHubActionsServiceTest(unittest.TestCase):
     def test_manifest_declares_run_job_action(self) -> None:
         self.assertIn("run_jobs", SERVICE._manifest()["actions"])
 
+    def test_custom_workflow_does_not_receive_install_defaults(self) -> None:
+        inputs = SERVICE._workflow_inputs({
+            "workflow_id": "pwa-physical-browser-smoke.yml",
+            "inputs": {"browser": "safari"},
+        })
+
+        self.assertEqual(inputs, {"browser": "safari"})
+
+    def test_install_workflow_keeps_device_defaults(self) -> None:
+        inputs = SERVICE._workflow_inputs({"workflow_id": SERVICE.DEFAULT_WORKFLOW})
+
+        self.assertEqual(inputs, {
+            "device_id": SERVICE.DEFAULT_DEVICE_ID,
+            "launch_app": "false",
+        })
+
 
 if __name__ == "__main__":
     unittest.main()

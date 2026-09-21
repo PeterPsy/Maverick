@@ -285,7 +285,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     const turn = messageTurnId(event);
     const goal = goalScopes.get(turn);
     return goal ? `goal:${goal}` : `turn:${event.session_id}:${turn}`;
-  }, projectEventsToMessages);
+  }, projectEventsToMessages, JSON.stringify([...goalScopes]));
 }
 
 function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {

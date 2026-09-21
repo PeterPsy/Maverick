@@ -255,7 +255,7 @@ other tests/builds; `MAVERICK_PERFORMANCE_STREAM_TRIALS=1` is a diagnostic run,
 not the five-trial comparison.
 
 For a separate one-trial diagnostic, `MAVERICK_PERFORMANCE_STREAM_TRACE=<path>`
-writes a Chromium trace and screenshot. Traced runs are marked and are not used
+writes a Chromium trace, V8 CPU profile and screenshot. Traced runs are marked and are not used
 as comparison trials. Inline agent, structured and tool cards retain their
 surfaces, gradients, borders and shadows without backdrop blur: those cards sit
 in normal transcript flow, where repeatedly filtering the backdrop adds costly
@@ -265,6 +265,15 @@ The first nonempty text delta of each turn flushes immediately, preserving queue
 event order. Subsequent presentation deltas coalesce in an animation frame;
 terminal/control events still flush immediately. First-text responsiveness must
 not pay the extra frame used to combine sustained streaming updates.
+
+Projection retains group membership and absolute event positions across ordinary
+appends and removal of an unchanged prefix. Only affected groups rebuild their
+messages/order entries; every retained index is pruned with its data window.
+Corrections, prepends, replacements and changes to cross-turn goal grouping use
+full reconciliation. Differential tests compare these transitions with fresh
+projection, preserving message identity and ordering without rebuilding every
+historical group on each text delta. Message time formatting also reuses its
+fixed-locale formatter.
 
 ## Background scheduling and idle providers
 

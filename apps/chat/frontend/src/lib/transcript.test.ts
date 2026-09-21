@@ -88,6 +88,33 @@ describe("runtime event transcript projection", () => {
     expect(prepended.at(-1)).toBe(first.at(-1));
   });
 
+  it('matches fresh projection through sliding windows, corrections, replay and regrouped goals', () => {
+    let events = Array.from({ length: 40 }, (_, index) => event({
+      event_id: `history-${index}`, turn_id: `past-${Math.floor(index / 2)}`,
+      event_type: index % 2 ? 'runtime.output.final' : 'runtime.turn.queued',
+      payload: index % 2 ? { text: `Answer ${index}` } : { input_text: `Request ${index}` },
+    }));
+    const windows: RuntimeEvent[][] = [events];
+    for (let index = 0; index < 80; index++) {
+      events = [...events, event({ event_id: `live-${index}`, turn_id: 'live',
+        event_type: 'runtime.output.delta', payload: { text: `${index} ` } })].slice(-60);
+      windows.push(events);
+    }
+    events = [events[0], { ...events[1], payload: { text: 'Corrected' } }, ...events.slice(2)];
+    windows.push(events, events.map(item => ({ ...item, payload: { ...item.payload } })));
+    const goal = (id: string, turn: string, status: string) => event({ event_id: id, turn_id: turn,
+      event_type: 'runtime.step.updated', payload: { provider_event_type: 'thread.goal.updated', goal: { status, objective: 'Finish' } } });
+    events = [...events, goal('goal-first', 'live', 'active')];
+    windows.push(events, [...events, goal('goal-second', 'followup', 'complete')]);
+    windows.push(events.slice(0, 10), [event({ event_id: 'older', turn_id: 'older', payload: { input_text: 'Older' } }), ...events]);
+    const expected = windows.map(window => {
+      clearTranscriptProjectionCache();
+      return eventsToMessages(window);
+    });
+    clearTranscriptProjectionCache();
+    windows.forEach((window, index) => expect(eventsToMessages(window), `window ${index}`).toEqual(expected[index]));
+  });
+
   it("projects one human message from a queued runtime turn", () => {
     const messages = eventsToMessages([
       event({

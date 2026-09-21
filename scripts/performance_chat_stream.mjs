@@ -113,6 +113,10 @@ try {
       if (tracer) await tracer.send('Tracing.start', {
         categories: 'devtools.timeline,blink.user_timing,benchmark,cc,input', transferMode: 'ReturnAsStream',
       });
+      if (tracer) {
+        await cdp.send('Profiler.enable');
+        await cdp.send('Profiler.start');
+      }
       const processesBefore = await processCpu();
       const before = await metrics(cdp);
       const started = performance.now();
@@ -172,6 +176,8 @@ try {
       const processDeltas = processesAfter.map(item => ({ type: item.type,
         cpu_ms: (item.cpuTime - (previousCpu.get(item.id) ?? 0)) * 1000 }));
       if (tracer) {
+        const { profile } = await cdp.send('Profiler.stop');
+        writeFileSync(`${tracePath}.cpuprofile`, JSON.stringify(profile));
         const complete = new Promise(resolve => tracer.once('Tracing.tracingComplete', resolve));
         await tracer.send('Tracing.end');
         const { stream } = await complete;

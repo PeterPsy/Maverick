@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
 import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 
+const messageTimeFormat = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+
 export function formatMessageTime(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return "";
   }
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(parsed);
+  return messageTimeFormat.format(parsed);
 }
 
 export function MessageFooter({

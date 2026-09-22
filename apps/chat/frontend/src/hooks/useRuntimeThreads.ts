@@ -22,6 +22,7 @@ function isRuntimeThreadStreamError(message: string): boolean {
 
 export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, setError, setThreads }: RuntimeThreadsArgs) {
   const visible = useChatVisibility();
+  const hasAuthoritativeSnapshotRef = useRef(false);
   const onDisplayReadyRef = useRef(onDisplayReady);
   onDisplayReadyRef.current = onDisplayReady;
   const onSnapshotRef = useRef<typeof onSnapshot>(onSnapshot);
@@ -40,7 +41,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, 
     let hasLoadedSnapshot = false;
     const displayController = new AbortController();
     const paintDisplay = (data: { threads: Record<string, unknown>[] }) => {
-      if (displayController.signal.aborted || hasLoadedSnapshot) return;
+      if (displayController.signal.aborted || hasAuthoritativeSnapshotRef.current) return;
       applyThreads(data.threads.map(displayThread));
       onDisplayReadyRef.current?.();
     };
@@ -52,6 +53,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, onDisplayReady, 
     function applyThreadSnapshot(frame: RuntimeThreadSnapshotFrame) {
       if (hasLoadedSnapshot) invalidateChatDisplay('runtime-threads');
       hasLoadedSnapshot = true;
+      hasAuthoritativeSnapshotRef.current = true;
       applyThreads(frame.threads);
       onSnapshotRef.current?.(frame);
     }

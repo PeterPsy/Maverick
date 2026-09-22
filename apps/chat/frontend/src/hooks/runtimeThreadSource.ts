@@ -146,14 +146,15 @@ export class RuntimeThreadSource {
     const knownPeer = this.knownClientIds.has(message.client_id);
     this.knownClientIds.add(message.client_id);
     if (message.kind === "hello") {
-      if (!knownPeer) {
+      if (!knownPeer && !this.isLeader) {
         this.post({ kind: "hello" });
       }
       if (this.isLeader) {
         this.post({ kind: "source-ready" });
-        if (!knownPeer) {
-          this.postCachedSnapshot(message.client_id);
-        }
+        // A persistent widget can stop and later restart with the same client
+        // id. Every hello therefore needs the current complete catalog; peer
+        // discovery history only controls the reciprocal hello.
+        this.postCachedSnapshot(message.client_id);
       }
       return;
     }

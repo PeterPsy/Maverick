@@ -6,8 +6,20 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatThread, RuntimeThreadWebSocketFrame } from "../api/client";
+import { ChatVisibilityContext } from "./useChatVisibility";
 import { resetRuntimeThreadSourceForTests } from "./runtimeThreadSource";
 import { useRuntimeThreads } from "./useRuntimeThreads";
+
+const pwaMocks = vi.hoisted(() => ({
+  invalidateChatDisplay: vi.fn(),
+  readChatDisplay: vi.fn(),
+}));
+
+vi.mock("../pwaCache", () => ({
+  displayThread: (value: Record<string, unknown>) => value as ChatThread,
+  invalidateChatDisplay: pwaMocks.invalidateChatDisplay,
+  readChatDisplay: pwaMocks.readChatDisplay,
+}));
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -36,15 +48,26 @@ function okJson(payload: unknown): Response {
   } as Response;
 }
 
-function RuntimeThreadsProbe({
-  onError,
-  onSnapshot,
-  onThreads,
-}: {
+type RuntimeThreadsProbeProps = {
   onError: (error: string | null) => void;
   onSnapshot?: (frame: Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.snapshot" }>) => void;
   onThreads?: (threads: ChatThread[]) => void;
-}) {
+  surfaceVisible?: boolean;
+};
+
+function RuntimeThreadsProbe({ surfaceVisible = true, ...props }: RuntimeThreadsProbeProps) {
+  return (
+    <ChatVisibilityContext.Provider value={surfaceVisible}>
+      <RuntimeThreadsConsumer {...props} />
+    </ChatVisibilityContext.Provider>
+  );
+}
+
+function RuntimeThreadsConsumer({
+  onError,
+  onSnapshot,
+  onThreads,
+}: Omit<RuntimeThreadsProbeProps, "surfaceVisible">) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +92,9 @@ describe("useRuntimeThreads", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     resetRuntimeThreadSourceForTests();
+    pwaMocks.invalidateChatDisplay.mockReset();
+    pwaMocks.readChatDisplay.mockReset();
+    pwaMocks.readChatDisplay.mockRejectedValue(new Error("No persisted display in this test."));
     MockWebSocket.instances = [];
     originalBroadcastChannel = globalThis.BroadcastChannel;
     originalWebSocket = globalThis.WebSocket;
@@ -162,6 +188,49 @@ describe("useRuntimeThreads", () => {
 
     expect(vi.mocked(fetch).mock.calls.filter(([url]) => !String(url).includes('projection=display'))).toHaveLength(0);
     expect(onThreads).toHaveBeenLastCalledWith([firstThread]);
+  });
+
+  it("does not replace a retained authoritative catalog with display cache after visibility resumes", async () => {
+    const onThreads = vi.fn();
+    const pendingDisplay = deferred<{ threads: ChatThread[] }>();
+    const liveThread = thread({ thread_id: "thread-live", runtime_session_id: "session-live", title: "Live catalog" });
+    const staleThread = thread({ thread_id: "thread-stale", runtime_session_id: "session-stale", title: "Stale display" });
+    pwaMocks.readChatDisplay
+      .mockImplementationOnce(() => pendingDisplay.promise)
+      .mockResolvedValueOnce({ threads: [staleThread] });
+
+    await act(async () => {
+      root.render(<RuntimeThreadsProbe onError={() => undefined} onThreads={onThreads} />);
+    });
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.thread.snapshot",
+          workspace_id: "default",
+          threads: [liveThread],
+          at: "2026-07-08T12:00:00.000Z",
+        }),
+      } as MessageEvent);
+    });
+    expect(onThreads).toHaveBeenLastCalledWith([liveThread]);
+
+    await act(async () => {
+      root.render(<RuntimeThreadsProbe onError={() => undefined} onThreads={onThreads} surfaceVisible={false} />);
+    });
+    await act(async () => {
+      root.render(<RuntimeThreadsProbe onError={() => undefined} onThreads={onThreads} surfaceVisible={true} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(onThreads).toHaveBeenLastCalledWith([liveThread]);
+
+    await act(async () => {
+      pendingDisplay.resolve({ threads: [staleThread] });
+      await pendingDisplay.promise;
+    });
+    expect(onThreads).toHaveBeenLastCalledWith([liveThread]);
   });
 
   it("does not reconnect after authorization or missing-route close codes", async () => {
@@ -278,6 +347,14 @@ describe("useRuntimeThreads", () => {
     expect(secondThreads).toHaveBeenLastCalledWith([firstThread]);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
 
 function thread(overrides: Partial<ChatThread>): ChatThread {
   return {

@@ -227,6 +227,74 @@ describe("RuntimeThreadSource", () => {
     unsubscribeSecond();
   });
 
+  it("replays the complete current catalog when a known peer resubscribes", async () => {
+    const firstFrames: unknown[] = [];
+    const secondFrames: unknown[] = [];
+    const resumedFrames: unknown[] = [];
+    const firstSource = new RuntimeThreadSource({ followerTimeoutMs: 1000, leaderElectionDelayMs: 5, restFallbackDelayMs: 60_000 });
+    const secondSource = new RuntimeThreadSource({ followerTimeoutMs: 1000, leaderElectionDelayMs: 5, restFallbackDelayMs: 60_000 });
+    const firstThread = thread({ thread_id: "thread-1", runtime_session_id: "session-1", title: "First" });
+    const secondThread = thread({
+      thread_id: "thread-2",
+      runtime_session_id: "session-2",
+      title: "Second",
+      created_at: "2026-07-08T12:00:01.000Z",
+      updated_at: "2026-07-08T12:00:01.000Z",
+    });
+
+    const unsubscribeFirst = firstSource.subscribe({ onError: () => undefined, onFrame: (frame) => firstFrames.push(frame) });
+    const unsubscribeSecond = secondSource.subscribe({ onError: () => undefined, onFrame: (frame) => secondFrames.push(frame) });
+    await flushChannelMessages();
+    vi.advanceTimersByTime(5);
+    await flushChannelMessages();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    MockWebSocket.instances[0].onmessage?.({
+      data: JSON.stringify({
+        type: "runtime.thread.snapshot",
+        workspace_id: "default",
+        threads: [firstThread],
+        at: "2026-07-08T12:00:00.000Z",
+      }),
+    } as MessageEvent);
+    expect([firstFrames.length, secondFrames.length].sort()).toEqual([0, 1]);
+    const firstIsLeader = firstFrames.length === 1;
+    await flushChannelMessages();
+
+    const followerSource = firstIsLeader ? secondSource : firstSource;
+    const unsubscribeLeader = firstIsLeader ? unsubscribeFirst : unsubscribeSecond;
+    const unsubscribeFollower = firstIsLeader ? unsubscribeSecond : unsubscribeFirst;
+    unsubscribeFollower();
+
+    MockWebSocket.instances[0].onmessage?.({
+      data: JSON.stringify({
+        type: "runtime.thread.changed",
+        workspace_id: "default",
+        action: "created",
+        thread: secondThread,
+      }),
+    } as MessageEvent);
+    await flushChannelMessages();
+
+    const unsubscribeResumed = followerSource.subscribe({
+      onError: () => undefined,
+      onFrame: (frame) => resumedFrames.push(frame),
+    });
+    await flushChannelMessages();
+
+    expect(resumedFrames).toEqual([
+      expect.objectContaining({
+        type: "runtime.thread.snapshot",
+        workspace_id: "default",
+        threads: [secondThread, firstThread],
+      }),
+    ]);
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    unsubscribeResumed();
+    unsubscribeLeader();
+  });
+
   it("cancels the REST fallback when the WebSocket snapshot arrives first", async () => {
     const frames: unknown[] = [];
     const source = new RuntimeThreadSource({ followerTimeoutMs: 1000, leaderElectionDelayMs: 5, restFallbackDelayMs: 20 });

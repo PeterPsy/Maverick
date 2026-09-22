@@ -25,7 +25,7 @@ def workspace_view(db, payload):
     view = require_text(payload, 'view', required=True)
     if view == 'sidebar':
         return {'ok': True, 'counts': count_tables(db, (
-            'contacts', 'accounts', 'deals', 'conversation_threads', 'expenses', 'intelligence_profiles',
+            'leads', 'contacts', 'accounts', 'deals', 'conversation_threads', 'expenses', 'intelligence_profiles',
         ))}
     if view in {'calendar', 'transcripts', 'quality'}:
         from .workspace_evidence import evidence_view

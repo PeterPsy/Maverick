@@ -84,7 +84,7 @@ class CrmFrontendSourceTest(unittest.TestCase):
         types_source = TYPES_TS.read_text(encoding="utf-8")
         sidebar_source = SIDEBAR_TSX.read_text(encoding="utf-8") + (TYPES_TS.parent / "navigation.ts").read_text(encoding="utf-8")
 
-        self.assertIn("type ViewId = 'records' | 'pipeline' | 'reports' | 'import'", types_source)
+        self.assertIn("type ViewId = 'leads' | 'records' | 'pipeline' | 'reports' | 'import'", types_source)
         self.assertIn("const recordEntityFilters", routing_source)
         self.assertIn("view === 'records'", app_source)
         self.assertIn("view === 'pipeline'", app_source)
@@ -94,7 +94,7 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertIn("{ page: 'reports', label: 'Reports'", sidebar_source)
         self.assertIn("route === 'operations'", routing_source)
         self.assertIn("return { view: 'pipeline'", routing_source)
-        self.assertNotIn("label: 'Leads'", sidebar_source)
+        self.assertIn("{ page: 'leads', label: 'Leads'", sidebar_source)
         self.assertNotIn("label: 'Accounts'", sidebar_source)
         self.assertNotIn("label: 'Contacts'", sidebar_source)
         self.assertIn("label: 'Import'", sidebar_source)

@@ -2,7 +2,7 @@ import { extensionRoutes } from './vnext';
 import { CrmRecord, CrmViewRef } from '../api';
 import { CreatableEntity, PendingSelection, RecordEntityFilter, ViewId } from './types';
 
-export const viewIds: ViewId[] = ['records', 'pipeline', 'reports', 'import', 'overview', 'today', 'conversations', 'campaigns', 'expenses', 'intelligence', 'objects', 'integrations', 'people', 'companies', 'deals', 'calendar', 'briefs', 'transcripts', 'quality', 'proposals'];
+export const viewIds: ViewId[] = ['leads', 'records', 'pipeline', 'reports', 'import', 'overview', 'today', 'conversations', 'campaigns', 'expenses', 'intelligence', 'objects', 'integrations', 'people', 'companies', 'deals', 'calendar', 'briefs', 'transcripts', 'quality', 'proposals'];
 export const recordEntityFilters: RecordEntityFilter[] = ['all', 'lead', 'account', 'contact', 'deal'];
 export const creatableEntities: CreatableEntity[] = ['lead', 'account', 'contact', 'deal', 'task', 'note'];
 
@@ -44,7 +44,8 @@ export function viewFromAppPage(appPage: string): { view: ViewId; selection: Pen
   };
   if (legacyEntityByRoute[route]) {
     const entityFilter = legacyEntityByRoute[route];
-    return { view: route === 'deals' && !recordId ? 'deals' : 'records', entityFilter, selection: recordId ? { entity: entityFilter, id: recordId } : null };
+    const view: ViewId = route === 'leads' && !recordId ? 'leads' : route === 'deals' && !recordId ? 'deals' : 'records';
+    return { view, entityFilter, selection: recordId ? { entity: entityFilter, id: recordId } : null };
   }
   if (route === 'tasks' || route === 'notes' || route === 'activities') {
     const entity = route === 'activities' ? 'activity' : route.replace(/s$/, '');
@@ -83,7 +84,8 @@ export function entityFilterForEntity(entityType: string): RecordEntityFilter {
 }
 
 export function viewForEntity(entityType: string): ViewId {
-  if (['lead', 'account', 'contact', 'deal'].includes(entityType)) return 'records';
+  if (entityType === 'lead') return 'leads';
+  if (['account', 'contact', 'deal'].includes(entityType)) return 'records';
   if (['task', 'note', 'activity'].includes(entityType)) return 'pipeline';
   return 'records';
 }

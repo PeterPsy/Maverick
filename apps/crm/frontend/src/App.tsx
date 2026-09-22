@@ -131,7 +131,7 @@ export function App() {
             {view === 'proposals' ? <ProposalsWorkspace query={query} select={setSelected} /> : null}
             {view === 'transcripts' ? <TranscriptsWorkspace query={query} select={setSelected} /> : null}
             {view === 'integrations' ? <IntegrationsView /> : null}
-            {view === 'records' ? (
+            {view === 'records' || view === 'leads' ? (
               <RecordsView
                 data={recordsData}
                 entityFilter={recordEntityFilter}

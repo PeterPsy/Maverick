@@ -168,7 +168,7 @@ export function useCrmDataController() {
 
   useEffect(() => {
     if (!foreground) return;
-    if (view === 'records') {
+    if (view === 'records' || view === 'leads') {
       void refreshRecords(recordsCursor);
     }
     if (view === 'reports') {
@@ -254,7 +254,7 @@ export function useCrmDataController() {
 
   useEffect(() => {
     if (isPublicCrm || !hasLoadedSearchFilter.current) return;
-    const entityType = view === 'records' ? recordEntityFilter : 'all';
+    const entityType = view === 'records' || view === 'leads' ? recordEntityFilter : 'all';
     const nextQuery = query.trim();
     const signature = JSON.stringify({ query: nextQuery, entity_type: entityType });
     if (signature === lastPersistedSearchFilter.current) return;

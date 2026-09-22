@@ -3,6 +3,7 @@ import { ViewId } from './types';
 
 export const productNavigation: { page: ViewId; label: string; icon: typeof Users; secondary?: boolean }[] = [
   { page: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+  { page: 'leads', label: 'Leads', icon: Users },
   { page: 'today', label: 'Tasks', icon: ListTodo },
   { page: 'conversations', label: 'Threads', icon: MessageSquare },
   { page: 'calendar', label: 'Calendar', icon: CalendarDays },

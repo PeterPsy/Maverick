@@ -10,12 +10,15 @@ test.afterEach(() => { rmSync(dataRoot, { recursive: true, force: true }); });
 
 test('compact sidebar lives only in the shell widget and navigates the full-width canvas', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
+  backend(dataRoot, { action: 'crm.create_lead', id: 'lead_calogera', display_name: 'Calogera Carlisi', email: 'calogera@example.test' });
+  backend(dataRoot, { action: 'crm.create_lead', id: 'lead_giuseppe', display_name: 'Giuseppe Moriggi', email: 'giuseppe@example.test' });
   const { widget, canvas } = await mountSidebarHost(page, dataRoot);
   const dashboard = widget.getByRole('button', { name: 'Dashboard', exact: true });
   await expect(widget.getByText('Relationship workspace', { exact: true })).toBeVisible();
   await expect(widget.locator('.product-sidebar footer')).toHaveCount(0);
   await expect(dashboard).toHaveAttribute('aria-current', 'page');
   await expect(widget.getByRole('button', { name: 'People', exact: true }).locator('small')).toHaveText('1');
+  await expect(widget.getByRole('button', { name: 'Leads', exact: true }).locator('small')).toHaveText('2');
   await expect(canvas.getByRole('navigation', { name: 'CRM workspace' })).toHaveCount(0);
   await expect(canvas.getByRole('button', { name: 'Open navigation', exact: true })).toHaveCount(0);
   const widths = await canvas.locator('.product-main').evaluate((node) => ({ content: node.getBoundingClientRect().width, frame: innerWidth }));
@@ -23,6 +26,11 @@ test('compact sidebar lives only in the shell widget and navigates the full-widt
   expect(await dashboard.evaluate((node) => getComputedStyle(node).borderRadius)).toBe('9px');
   expect(await dashboard.locator('svg').evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
   await expect(widget.getByRole('button', { name: 'Records', exact: true })).not.toBeVisible();
+  await widget.getByRole('button', { name: 'Leads', exact: true }).click();
+  await expect(widget.getByRole('button', { name: 'Leads', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(canvas.getByRole('heading', { name: 'CRM records' })).toBeVisible();
+  await expect(canvas.getByRole('row').filter({ hasText: 'Calogera Carlisi' })).toBeVisible();
+  await expect(canvas.getByRole('row').filter({ hasText: 'Giuseppe Moriggi' })).toBeVisible();
   await widget.getByRole('button', { name: 'People', exact: true }).click();
   await expect(canvas.getByRole('heading', { name: 'People', exact: true })).toBeVisible();
   await expect(widget.getByRole('button', { name: 'People', exact: true })).toHaveAttribute('aria-current', 'page');

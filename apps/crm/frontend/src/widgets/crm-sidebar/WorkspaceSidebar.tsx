@@ -3,6 +3,7 @@ import { productNavigation } from '../../domain/navigation';
 import { ViewId } from '../../domain/types';
 
 const countTables: Partial<Record<ViewId, string>> = {
+  leads: 'leads',
   people: 'contacts', companies: 'accounts', deals: 'deals',
   conversations: 'conversation_threads', expenses: 'expenses', intelligence: 'intelligence_profiles',
 };

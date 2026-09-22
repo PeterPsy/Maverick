@@ -7,7 +7,9 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP_ROOT / "backend"))
@@ -19,6 +21,49 @@ from store import connect, delete_fts, initialize, utc_now
 
 
 class CrmServiceTest(unittest.TestCase):
+    def test_maverick_mail_adapter_previews_then_uses_approved_send(self) -> None:
+        from domains.website_intake import _send_mail_with_maverick
+
+        calls: list[list[str]] = []
+
+        def fake_run(args, **_options):
+            calls.append(args)
+            if "mail_send_approved" in args:
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout=json.dumps({"result": {"sent": True, "thread_id": "thread_1"}}),
+                    stderr="",
+                )
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "draft": {"id": "draft_1"},
+                        "result": {"confirmation_preview": {"subject": "Hello"}},
+                    }
+                ),
+                stderr="",
+            )
+
+        with patch("domains.website_intake.subprocess.run", side_effect=fake_run):
+            result = _send_mail_with_maverick(
+                "mail",
+                {
+                    "to": [{"email": "ada@example.com"}],
+                    "subject": "Hello",
+                    "body_text": "Body",
+                    "confirm": True,
+                },
+                maverick_command="/opt/maverick",
+            )
+
+        self.assertTrue(result["result"]["sent"])
+        self.assertEqual(len(calls), 2)
+        self.assertIn("mail_send", calls[0])
+        self.assertNotIn("--confirm", calls[0])
+        self.assertIn("mail_send_approved", calls[1])
+        self.assertEqual(calls[1][calls[1].index("--draft-id") + 1], "draft_1")
+
     def test_website_intake_creates_lead_sends_mail_and_is_idempotent(self) -> None:
         sent: list[tuple[str, dict[str, object]]] = []
 

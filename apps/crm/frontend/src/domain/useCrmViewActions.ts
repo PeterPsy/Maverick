@@ -39,7 +39,7 @@ export function useCrmViewActions({
     setIsSaving(true);
     setError('');
     try {
-      const entityType = view === 'records' ? recordEntityFilter : 'all';
+      const entityType = view === 'records' || view === 'leads' ? recordEntityFilter : 'all';
       await callBackend({ action: 'crm.save_view', title: title.trim(), entity_type: entityType, query, filters });
       await refresh();
       return true;

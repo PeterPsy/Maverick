@@ -286,13 +286,38 @@ def _fail_outbox_item(db, outbox: dict[str, Any], message: str, *, increment_att
 
 
 def _send_mail_with_maverick(provider_app_id: str, payload: dict[str, Any], *, maverick_command: str | None = None) -> dict[str, Any]:
+    command = maverick_command or _maverick_command({})
+    preview_payload = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"confirm", "confirmation_token"}
+    }
+    preview = _run_maverick_mail_action(provider_app_id, "mail_send", preview_payload, command)
+    draft = preview.get("draft") if isinstance(preview.get("draft"), dict) else {}
+    preview_result = preview.get("result") if isinstance(preview.get("result"), dict) else {}
+    draft_id = _text(draft.get("id"))
+    if not draft_id or not isinstance(preview_result.get("confirmation_preview"), dict):
+        raise RuntimeError("mail_send did not create a confirmation preview")
+    approved_payload: dict[str, Any] = {"draft_id": draft_id}
+    connection_id = _text(payload.get("connection_id"))
+    if connection_id:
+        approved_payload["connection_id"] = connection_id
+    return _run_maverick_mail_action(provider_app_id, "mail_send_approved", approved_payload, command)
+
+
+def _run_maverick_mail_action(
+    provider_app_id: str,
+    action: str,
+    payload: dict[str, Any],
+    maverick_command: str,
+) -> dict[str, Any]:
     args = [
-        maverick_command or _maverick_command({}),
+        maverick_command,
         "app",
         provider_app_id,
         "mcp",
         "call",
-        "mail_send",
+        action,
         "--json",
     ]
     for key, value in payload.items():
@@ -307,11 +332,11 @@ def _send_mail_with_maverick(provider_app_id: str, payload: dict[str, Any], *, m
             args.extend([flag, str(value)])
     completed = subprocess.run(args, text=True, capture_output=True, timeout=45, check=False)
     if completed.returncode != 0:
-        raise RuntimeError((completed.stderr or completed.stdout or "mail_send failed").strip())
+        raise RuntimeError((completed.stderr or completed.stdout or f"{action} failed").strip())
     result = json.loads(completed.stdout or "{}")
     status_code = int(result.get("status_code") or 200)
     if status_code >= 400 or result.get("error"):
-        raise RuntimeError(str(result.get("detail") or result.get("message") or result.get("error") or "mail_send failed"))
+        raise RuntimeError(str(result.get("detail") or result.get("message") or result.get("error") or f"{action} failed"))
     return result
 
 

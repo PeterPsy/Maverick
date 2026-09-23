@@ -30,7 +30,17 @@
 .bs-app-settings__pin input { width: 18px; height: 18px; accent-color: var(--maverick-accent); }
 .bs-app-settings button:focus-visible, .bs-sidebar__app-settings:focus-visible { outline: 2px solid var(--maverick-focus); outline-offset: 3px; }
 @media (max-width: 600px) {
-  .bs-app-settings { width: calc(100vw - 12px); height: calc(100dvh - 20px); border-radius: 18px; }
+  .bs-app-settings {
+    inset:
+      calc(var(--bs-mobile-shell-status-bar-height, env(safe-area-inset-top, 0px)) + 10px)
+      calc(env(safe-area-inset-right, 0px) + 6px)
+      calc(env(safe-area-inset-bottom, 0px) + 10px)
+      calc(env(safe-area-inset-left, 0px) + 6px);
+    width: auto;
+    height: auto;
+    margin: 0;
+    border-radius: 18px;
+  }
   .bs-app-settings__header, .bs-app-settings__body { padding: 16px; }
   .bs-app-settings__tabs { padding: 0 16px 14px; }
 }

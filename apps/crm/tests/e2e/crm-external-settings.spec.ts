@@ -153,7 +153,7 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
       if (location.origin === appOrigin) (window as any).__MAVERICK_PLATFORM_ORIGIN__ = shellOrigin;
     }, { appOrigin, shellOrigin });
     await page.route('**/__settings_host', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><style>
-      * { box-sizing: border-box; } :root { --maverick-bg:#070708; --maverick-text:#ececec; --maverick-text-muted:#aaa; --maverick-border:#ffffff14; --maverick-border-strong:#ffffff24; --maverick-surface-active:#ffffff24; font:14px system-ui; } body { margin:0; background:#111; } ${shellCss}
+      * { box-sizing: border-box; } :root { --maverick-bg:#070708; --maverick-text:#ececec; --maverick-text-muted:#aaa; --maverick-border:#ffffff14; --maverick-border-strong:#ffffff24; --maverick-surface-active:#ffffff24; --bs-mobile-shell-status-bar-height:${viewport.width === 390 ? '24px' : '0px'}; font:14px system-ui; } body { margin:0; background:#111; } ${shellCss}
       </style></head><body><dialog class="bs-app-settings"><header class="bs-app-settings__header"><div><p>Impostazioni app</p><h2>CRM</h2></div><button class="bs-app-settings__close">×</button></header>
       <nav class="bs-app-settings__tabs"><button>Generali</button><button aria-pressed="true">Superfici esterne</button></nav>
       <div class="bs-app-settings__body bs-app-settings__body--external"><section class="bs-widget-slot bs-widget-slot--fill"><iframe class="bs-widget-slot__frame" title="CRM settings" allow="fullscreen" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" src="${appOrigin}${widgetUrl}"></iframe></section></div></dialog><script>document.querySelector('dialog').showModal();</script></body></html>` }));
@@ -168,6 +168,10 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
     const bounds = await widget.locator('body').evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, height: innerHeight, scrollHeight: document.documentElement.scrollHeight }));
     expect(bounds.scroll).toBe(bounds.width);
     expect(bounds.scrollHeight).toBe(bounds.height);
+    if (viewport.width === 390) {
+      const dialog = await page.locator('.bs-app-settings').boundingBox();
+      expect(dialog).toEqual({ x: 6, y: 34, width: 378, height: 556 });
+    }
     await widget.locator('.crm-external-content').evaluate(node => { node.scrollTop = 0; });
     await expect(save).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath('crm-settings-dark.png') });

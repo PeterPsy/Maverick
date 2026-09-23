@@ -1,23 +1,23 @@
 {
-  "build_id": "724233c9a4bc544177775f3eac38bb7b75db28ed3e17c9c5fbfdca30bc1f7eae",
+  "build_id": "36d32f647bb2cc61960f0d7e0c2ed650dbb83ea77396bab50764daeb402ced1d",
   "entrypoints": [
     "index.html"
   ],
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/index-B-TBKh2T.css",
-      "sha256": "baa0c41987d5c6c1789a277e6cb11e97dea00044c70c270da7d226129227e14a",
-      "size_bytes": 17492
+      "path": "assets/index-CHe4_143.css",
+      "sha256": "89fb641bca3f7f679f89ae77662864204d76aafd19c709e089740f766f06fb0e",
+      "size_bytes": 17999
     },
     {
-      "path": "assets/index-B5dp2P_H.js",
-      "sha256": "88fc7930017dff2b5a6a7538ffcce24404ac7bffc3a4e68f77bbd7c2f52e3d06",
-      "size_bytes": 243241
+      "path": "assets/index-D-J4dVBX.js",
+      "sha256": "6edd313fb9a54df504d7ede18c26ff61dc5ca4463616422f00686e97a41874da",
+      "size_bytes": 245670
     },
     {
       "path": "index.html",
-      "sha256": "b6089b9be52f0e702c7594843e0ad4fdb6ee499c38a3125274ee3c104e2077c0",
+      "sha256": "44e810fa4460682923bdbf71c115036fa67b635aca1210fe347664af897aac5a",
       "size_bytes": 424
     }
   ],

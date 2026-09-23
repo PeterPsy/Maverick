@@ -44,6 +44,8 @@
   .work-panel { width: 100%; }
   .panel-header, .panel-footer { padding: 16px; }
   .work-form { padding: 18px 16px; }
+  .integrations-section { padding: 16px; }
+  .integration-actions { display: grid; grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
   .field.is-wide { grid-column: auto; }
   .deliverables-section { padding: 18px 16px 24px; }

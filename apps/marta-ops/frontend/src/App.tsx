@@ -14,7 +14,7 @@ const NAV: Array<[ViewId, string, 'today' | 'work' | 'ideas']> = [
 ];
 
 export function App() {
-  const { state, loading, saving, error, clearError, mutate } = useMartaOps();
+  const { state, loading, saving, error, clearError, integrate, mutate } = useMartaOps();
   const [view, setView] = useState<ViewId>('today');
   const [query, setQuery] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
@@ -70,6 +70,9 @@ export function App() {
         item={selected}
         onAddDeliverable={async (collaborationId, deliverable) => { await mutate({ action: 'add_deliverable', collaboration_id: collaborationId, deliverable }); }}
         onClose={() => setPanelOpen(false)}
+        onIntegrate={async (id, target) => {
+          await integrate({ action: target === 'mail' ? 'create_mail_draft' : 'create_calendar_event', id });
+        }}
         onSave={saveWork}
         onUpdateDeliverable={async (collaborationId, id, changes) => { await mutate({ action: 'update_deliverable', collaboration_id: collaborationId, id, changes }); }}
         saving={saving}

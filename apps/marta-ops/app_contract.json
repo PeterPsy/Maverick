@@ -2,12 +2,29 @@
   "app_id": "marta-ops",
   "contract_version": "1.0",
   "name": "Marta Ops",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Workspace operativo essenziale per collaborazioni, scadenze, deliverable e idee di Marta Giunti.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
   "provides": [],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "mail",
+      "interface": "mail.workspace",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Provider Mail opzionale usato per preparare bozze email dai lavori, senza invio automatico."
+    },
+    {
+      "alias": "calendar",
+      "interface": "calendar.events",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Provider Calendario opzionale usato per aggiungere le scadenze dei lavori come eventi."
+    }
+  ],
   "distribution": {
     "mode": "workspace_local",
     "source_access": "editable"

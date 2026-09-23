@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-type IconName = 'today' | 'work' | 'ideas' | 'plus' | 'search' | 'close' | 'arrow' | 'check';
+type IconName = 'today' | 'work' | 'ideas' | 'plus' | 'search' | 'close' | 'arrow' | 'check' | 'mail' | 'calendar';
 
 const paths: Record<IconName, ReactNode> = {
   today: <><path d="M7 3v3M17 3v3M4 9h16" /><rect x="4" y="5" width="16" height="16" rx="4" /><path d="m9 15 2 2 4-5" /></>,
@@ -10,7 +10,9 @@ const paths: Record<IconName, ReactNode> = {
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
   close: <path d="m6 6 12 12M18 6 6 18" />,
   arrow: <path d="m9 18 6-6-6-6" />,
-  check: <path d="m5 12 4 4L19 6" />
+  check: <path d="m5 12 4 4L19 6" />,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M8 3v4M16 3v4M3 10h18" /></>
 };
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {

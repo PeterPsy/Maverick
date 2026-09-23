@@ -52,5 +52,28 @@ export function useMartaOps() {
     }
   }, []);
 
-  return { state, loading, saving, error, clearError: () => setError(''), mutate, refresh };
+  const integrate = useCallback(async (body: Record<string, unknown>) => {
+    setSaving(true);
+    try {
+      const payload = await callBackend<BackendPayload>(body);
+      const result = payload.dependency_backend_request_results?.[0];
+      if (!result || result.status !== 'completed' || result.status_code >= 400) {
+        const isMail = body.action === 'create_mail_draft';
+        throw new Error(isMail
+          ? 'Impossibile creare la bozza. Apri Mail, verifica l’account e riprova.'
+          : 'Impossibile creare l’evento. Verifica Calendario e riprova.');
+      }
+      setState(payload.state);
+      setError('');
+      return result;
+    } catch (integrationError) {
+      const message = integrationError instanceof Error ? integrationError.message : 'Integrazione non riuscita.';
+      setError(message);
+      throw integrationError;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  return { state, loading, saving, error, clearError: () => setError(''), integrate, mutate, refresh };
 }

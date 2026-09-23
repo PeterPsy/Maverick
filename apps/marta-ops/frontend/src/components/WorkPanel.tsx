@@ -4,7 +4,7 @@ import { CONTRACT_OPTIONS, DELIVERABLE_OPTIONS, KIND_OPTIONS, PAYMENT_OPTIONS, P
 import type { Collaboration, DeliverableStatus, WorkDraft } from '../types';
 
 const EMPTY_DRAFT: WorkDraft = {
-  title: '', partner: '', kind: 'partnership', phase: 'lead', next_action: '', due_date: '', value_euros: '',
+  title: '', partner: '', partner_email: '', kind: 'partnership', phase: 'lead', next_action: '', due_date: '', value_euros: '',
   payment_status: 'not_due', contract_status: 'not_needed', rights_expiry_date: '', notes: ''
 };
 
@@ -13,6 +13,7 @@ function draftFor(item: Collaboration | null): WorkDraft {
   return {
     title: item.title,
     partner: item.partner,
+    partner_email: item.partner_email || '',
     kind: item.kind,
     phase: item.phase,
     next_action: item.next_action,
@@ -25,19 +26,22 @@ function draftFor(item: Collaboration | null): WorkDraft {
   };
 }
 
-export function WorkPanel({ item, saving, onClose, onSave, onAddDeliverable, onUpdateDeliverable }: {
+export function WorkPanel({ item, saving, onClose, onSave, onIntegrate, onAddDeliverable, onUpdateDeliverable }: {
   item: Collaboration | null;
   saving: boolean;
   onClose: () => void;
   onSave: (id: string | null, changes: Record<string, unknown>) => Promise<void>;
+  onIntegrate: (id: string, target: 'mail' | 'calendar') => Promise<void>;
   onAddDeliverable: (collaborationId: string, deliverable: { title: string; due_date: string }) => Promise<void>;
   onUpdateDeliverable: (collaborationId: string, deliverableId: string, changes: Record<string, unknown>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<WorkDraft>(() => draftFor(item));
   const [deliverableTitle, setDeliverableTitle] = useState('');
   const [deliverableDate, setDeliverableDate] = useState('');
+  const [integrationBusy, setIntegrationBusy] = useState<'mail' | 'calendar' | null>(null);
+  const [integrationMessage, setIntegrationMessage] = useState('');
 
-  useEffect(() => { setDraft(draftFor(item)); }, [item]);
+  useEffect(() => { setDraft(draftFor(item)); setIntegrationMessage(''); }, [item]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -46,15 +50,34 @@ export function WorkPanel({ item, saving, onClose, onSave, onAddDeliverable, onU
 
   const set = <K extends keyof WorkDraft>(key: K, value: WorkDraft[K]) => setDraft((current) => ({ ...current, [key]: value }));
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  function normalizedDraft() {
     const { value_euros, ...fields } = draft;
     const normalized = Number(value_euros.replace(',', '.'));
+    return { ...fields, value_minor: Number.isFinite(normalized) ? Math.round(normalized * 100) : 0 };
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
     try {
-      await onSave(item?.id ?? null, { ...fields, value_minor: Number.isFinite(normalized) ? Math.round(normalized * 100) : 0 });
+      await onSave(item?.id ?? null, normalizedDraft());
       onClose();
     } catch {
       // The app-level error toast owns user feedback.
+    }
+  }
+
+  async function runIntegration(target: 'mail' | 'calendar') {
+    if (!item) return;
+    setIntegrationBusy(target);
+    setIntegrationMessage('');
+    try {
+      await onSave(item.id, normalizedDraft());
+      await onIntegrate(item.id, target);
+      setIntegrationMessage(target === 'mail' ? 'Bozza pronta in Mail. Nessun messaggio è stato inviato.' : 'Scadenza aggiunta al Calendario.');
+    } catch {
+      // The app-level error toast owns error feedback.
+    } finally {
+      setIntegrationBusy(null);
     }
   }
 
@@ -85,6 +108,7 @@ export function WorkPanel({ item, saving, onClose, onSave, onAddDeliverable, onU
           <div className="form-grid">
             <label className="field is-wide"><span>Titolo</span><input autoFocus={!item} maxLength={160} onChange={(event) => set('title', event.target.value)} placeholder="Es. Partnership autunno" required value={draft.title} /></label>
             <label className="field"><span>Partner</span><input maxLength={160} onChange={(event) => set('partner', event.target.value)} placeholder="Brand o progetto" value={draft.partner} /></label>
+            <label className="field"><span>Email partner</span><input maxLength={320} onChange={(event) => set('partner_email', event.target.value)} placeholder="contatto@brand.it" type="email" value={draft.partner_email} /></label>
             <label className="field"><span>Tipo</span><select onChange={(event) => set('kind', event.target.value as WorkDraft['kind'])} value={draft.kind}>{KIND_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="field"><span>Fase</span><select onChange={(event) => set('phase', event.target.value as WorkDraft['phase'])} value={draft.phase}>{PHASE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="field is-wide"><span>Prossima azione</span><input maxLength={240} onChange={(event) => set('next_action', event.target.value)} placeholder="Una frase concreta: chi fa cosa?" value={draft.next_action} /></label>
@@ -96,6 +120,15 @@ export function WorkPanel({ item, saving, onClose, onSave, onAddDeliverable, onU
             <label className="field is-wide"><span>Note</span><textarea maxLength={4000} onChange={(event) => set('notes', event.target.value)} placeholder="Solo informazioni operative utili" rows={3} value={draft.notes} /></label>
           </div>
         </form>
+
+        {item && <section className="integrations-section">
+          <div className="section-heading"><h3>Azioni collegate</h3></div>
+          <div className="integration-actions">
+            <button className="secondary-action" disabled={saving || !draft.partner_email} onClick={() => void runIntegration('mail')} type="button"><Icon name="mail" size={16} />{integrationBusy === 'mail' ? 'Creo la bozza…' : 'Crea bozza Mail'}</button>
+            <button className="secondary-action" disabled={saving || !draft.due_date} onClick={() => void runIntegration('calendar')} type="button"><Icon name="calendar" size={16} />{integrationBusy === 'calendar' ? 'Aggiungo…' : 'Aggiungi al Calendario'}</button>
+          </div>
+          <p aria-live="polite" className={integrationMessage ? 'integration-feedback is-success' : 'integration-feedback'}>{integrationMessage || (!draft.partner_email ? 'Aggiungi l’email del partner per preparare una bozza.' : !draft.due_date ? 'Aggiungi una scadenza per creare l’evento.' : 'Le modifiche vengono salvate prima di eseguire l’azione.')}</p>
+        </section>}
 
         {item && <section className="deliverables-section">
           <div className="section-heading"><h3>Deliverable</h3><span>{item.deliverables.length}</span></div>

@@ -12,6 +12,15 @@ The first release has three views:
 - **Lavori**: the active collaboration list and its deliverables;
 - **Idee**: quick capture and a tiny selection workflow.
 
+## Mail and Calendar
+
+An existing work item exposes two deliberately narrow actions:
+
+- **Crea bozza Mail** saves the current work fields and prepares a draft for the partner email. It never sends the message.
+- **Aggiungi al Calendario** saves the current work fields and creates an idempotent all-day event for the deadline.
+
+Both integrations use declared optional app interfaces (`mail.workspace` and `calendar.events`) through Maverick's governed dependency backend. Marta Ops never reads Mail or Calendar private data.
+
 ## Owned data
 
 Workspace data is stored under `data/marta-ops/state.json` through the Maverick App SDK storage helpers. The app does not read another app's private data.
@@ -19,7 +28,7 @@ Workspace data is stored under `data/marta-ops/state.json` through the Maverick 
 ## Verify and install
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+PYTHONPATH=../../../.. python3 -m unittest discover -s tests -p 'test_*.py'
 maverick app marta-ops frontend build --json
 maverick core cli run core.app-sdk.validate --app-id marta-ops --json
 maverick core cli run core.app-sdk.register-local --app-id marta-ops --json

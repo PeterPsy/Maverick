@@ -92,6 +92,13 @@
 .field input, .field select { height: 42px; padding: 0 12px; }
 .field textarea { resize: vertical; padding: 12px; line-height: 1.45; }
 
+.integrations-section { border-top: 1px solid var(--marta-border); padding: 18px 24px; }
+.integrations-section .section-heading { margin-bottom: 10px; }
+.integration-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.integration-actions .secondary-action { min-height: 38px; }
+.integration-feedback { min-height: 1em; margin: 9px 0 0; color: var(--marta-soft); font-size: 0.68rem; }
+.integration-feedback.is-success { color: var(--maverick-success); }
+
 .deliverables-section { min-height: 0; overflow-y: auto; border-top: 1px solid var(--marta-border); padding: 22px 24px 28px; }
 .deliverable-list { display: grid; margin-bottom: 12px; }
 .deliverable-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 150px; align-items: center; gap: 10px; min-height: 54px; border-bottom: 1px solid var(--marta-border); }

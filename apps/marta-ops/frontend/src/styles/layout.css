@@ -109,7 +109,7 @@ button { cursor: pointer; }
 
 .work-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, auto) minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, auto) auto minmax(0, 1fr) auto;
   width: min(650px, 96vw);
   height: 100%;
   overflow: hidden;

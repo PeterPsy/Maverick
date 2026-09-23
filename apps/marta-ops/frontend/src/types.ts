@@ -19,6 +19,7 @@ export type Collaboration = {
   id: string;
   title: string;
   partner: string;
+  partner_email: string;
   kind: CollaborationKind;
   phase: CollaborationPhase;
   next_action: string;
@@ -56,6 +57,12 @@ export type BackendPayload = {
   collaboration?: Collaboration;
   deliverable?: Deliverable;
   idea?: Idea;
+  dependency_backend_request_results?: Array<{
+    dependency_alias: string;
+    status: string;
+    status_code: number;
+    error?: string;
+  }>;
 };
 
 export type WorkDraft = Omit<Collaboration, 'id' | 'deliverables' | 'created_at' | 'updated_at' | 'value_minor'> & {

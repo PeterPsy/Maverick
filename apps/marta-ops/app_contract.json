@@ -2,7 +2,7 @@
   "app_id": "marta-ops",
   "contract_version": "1.0",
   "name": "Marta Ops",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Workspace operativo essenziale per collaborazioni, scadenze, deliverable e idee di Marta Giunti.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
@@ -109,5 +109,40 @@
     "data": false,
     "repair_only": false
   },
-  "widgets": []
+  "widgets": [
+    {
+      "widget_id": "marta-ops-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/marta-ops-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "marta-ops-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/marta-ops-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ]
 }

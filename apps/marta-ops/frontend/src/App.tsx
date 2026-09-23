@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { IdeasView } from './components/IdeasView';
 import { TodayView } from './components/TodayView';
 import { WorkPanel } from './components/WorkPanel';
 import { WorksView } from './components/WorksView';
+import { isMaverickParentMessage, mountedAppIdFromPath, openApp, postToShell, viewFromAppPage } from './lib/shellNavigation';
 import type { Collaboration, Idea, ViewId } from './types';
 import { useMartaOps } from './useMartaOps';
 
@@ -19,7 +20,48 @@ export function App() {
   const [query, setQuery] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const consumedNewWorkRequests = useRef(new Set<string>());
+  const consumedLegacyNewWorkRequest = useRef(false);
+  const appId = useMemo(() => mountedAppIdFromPath(), []);
   const selected = useMemo(() => state.collaborations.find((item) => item.id === selectedId) ?? null, [selectedId, state.collaborations]);
+
+  const navigate = useCallback((nextView: ViewId) => {
+    setView(nextView);
+    openApp(appId, { app_page: nextView });
+  }, [appId]);
+
+  useEffect(() => {
+    function handleShellMessage(event: MessageEvent) {
+      if (!isMaverickParentMessage(event)) return;
+      const message = event.data as {
+        app_id?: string;
+        params?: Record<string, unknown>;
+        type?: string;
+      };
+      if (message.type !== 'maverick.app.navigate' || (message.app_id && message.app_id !== appId)) return;
+      const params = message.params || {};
+      const nextView = viewFromAppPage(params.app_page);
+      if (nextView) setView(nextView);
+      if (params.new_work !== true) return;
+
+      const requestId = typeof params.new_work_request_id === 'string' ? params.new_work_request_id : '';
+      if (requestId) {
+        if (consumedNewWorkRequests.current.has(requestId)) return;
+        consumedNewWorkRequests.current.add(requestId);
+      } else if (consumedLegacyNewWorkRequest.current) {
+        return;
+      } else {
+        consumedLegacyNewWorkRequest.current = true;
+      }
+      setView('work');
+      setSelectedId(null);
+      setPanelOpen(true);
+    }
+
+    window.addEventListener('message', handleShellMessage);
+    postToShell({ type: 'maverick.app.ready', app_id: appId });
+    return () => window.removeEventListener('message', handleShellMessage);
+  }, [appId]);
 
   function openWork(item: Collaboration | null) {
     setSelectedId(item?.id ?? null);
@@ -44,12 +86,12 @@ export function App() {
   return (
     <div className="marta-shell">
       <header className="app-topbar">
-        <button aria-label="Marta Ops" className="brand" onClick={() => setView('today')} type="button"><span className="brand-mark">M</span><span>Marta Ops</span></button>
+        <button aria-label="Marta Ops" className="brand" onClick={() => navigate('today')} type="button"><span className="brand-mark">M</span><span>Marta Ops</span></button>
         <nav className="desktop-nav" aria-label="Sezioni">
-          {NAV.map(([id, label, icon]) => <button className={view === id ? 'is-active' : ''} key={id} onClick={() => setView(id)} type="button"><Icon name={icon} size={17} />{label}</button>)}
+          {NAV.map(([id, label, icon]) => <button className={view === id ? 'is-active' : ''} key={id} onClick={() => navigate(id)} type="button"><Icon name={icon} size={17} />{label}</button>)}
         </nav>
         <div className="topbar-actions">
-          <label className="app-search"><Icon name="search" size={17} /><input aria-label="Cerca lavori" onChange={(event) => { setQuery(event.target.value); if (event.target.value) setView('work'); }} placeholder="Cerca" value={query} /></label>
+          <label className="app-search"><Icon name="search" size={17} /><input aria-label="Cerca lavori" onChange={(event) => { setQuery(event.target.value); if (event.target.value && view !== 'work') navigate('work'); }} placeholder="Cerca" value={query} /></label>
           <button aria-label="Nuovo lavoro" className="primary-action new-work" onClick={() => openWork(null)} type="button"><Icon name="plus" size={17} /><span>Nuovo lavoro</span></button>
         </div>
       </header>
@@ -63,7 +105,7 @@ export function App() {
       </main>
 
       <nav className="mobile-nav" aria-label="Sezioni">
-        {NAV.map(([id, label, icon]) => <button className={view === id ? 'is-active' : ''} key={id} onClick={() => setView(id)} type="button"><Icon name={icon} size={19} /><span>{label}</span></button>)}
+        {NAV.map(([id, label, icon]) => <button className={view === id ? 'is-active' : ''} key={id} onClick={() => navigate(id)} type="button"><Icon name={icon} size={19} /><span>{label}</span></button>)}
       </nav>
 
       {panelOpen && <WorkPanel

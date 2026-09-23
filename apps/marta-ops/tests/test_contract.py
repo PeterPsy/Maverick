@@ -26,6 +26,15 @@ class MartaOpsContractTest(unittest.TestCase):
         self.assertEqual(requirements["mail"].interface, "mail.workspace")
         self.assertEqual(requirements["calendar"].interface, "calendar.events")
 
+    def test_sidebar_widgets_are_declared(self) -> None:
+        parsed = parse_app_contract_file(APP_ROOT)
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        self.assertEqual(set(widgets), {"marta-ops-sidebar", "marta-ops-sidebar-footer"})
+        self.assertEqual(widgets["marta-ops-sidebar"].content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(widgets["marta-ops-sidebar-footer"].content_kinds, ["shell.sidebar.footer"])
+        for widget in widgets.values():
+            self.assertTrue((APP_ROOT / widget.frontend.mount).is_dir())
+
 
 class MartaOpsServiceTest(unittest.TestCase):
     def setUp(self) -> None:

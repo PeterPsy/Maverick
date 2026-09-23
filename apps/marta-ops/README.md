@@ -12,6 +12,10 @@ The first release has three views:
 - **Lavori**: the active collaboration list and its deliverables;
 - **Idee**: quick capture and a tiny selection workflow.
 
+## Maverick sidebar
+
+Marta Ops owns the sidebar shown by Maverick while the app is active. It keeps only the three core destinations—Oggi, Lavori, and Idee—and one contextual footer action, **Nuovo lavoro**. Sidebar selection and in-app navigation stay synchronized without reloading the app; on mobile, selecting a destination closes the sidebar.
+
 ## Mail and Calendar
 
 An existing work item exposes two deliberately narrow actions:

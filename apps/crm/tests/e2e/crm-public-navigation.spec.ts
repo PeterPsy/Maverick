@@ -23,7 +23,7 @@ async function mountPublicCrm(page: Page) {
   await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
 }
 
-test('public CRM uses Maverick sidebar chrome without an app rail and persists its theme', async ({ page }) => {
+test('public CRM uses Maverick sidebar chrome without an app rail and persists its theme', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await mountPublicCrm(page);
 
@@ -35,6 +35,8 @@ test('public CRM uses Maverick sidebar chrome without an app rail and persists i
   await expect(navigation.getByRole('button', { name: /new/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /applications/i })).toHaveCount(0);
   await expect(navigation.getByRole('button', { name: /workspace/i })).toHaveCount(0);
+  await expect(page.locator('.crm-public-notice')).toHaveCount(0);
+  await expect(page.getByRole('banner', { name: 'Mobile public navigation' })).not.toBeVisible();
   expect(await navigation.locator('.crm-public-sidebar-frame').evaluate((node) => getComputedStyle(node).borderRadius)).toBe('34px');
   const sidebarBounds = await navigation.locator('.crm-public-sidebar-frame').boundingBox();
   const workspaceBounds = await page.locator('.product-main').boundingBox();
@@ -51,12 +53,23 @@ test('public CRM uses Maverick sidebar chrome without an app rail and persists i
   await expect(page.getByRole('button', { name: 'Light mode' })).toHaveAttribute('aria-pressed', 'true');
 
   await page.setViewportSize({ width: 390, height: 844 });
+  const mobileHeader = page.getByRole('banner', { name: 'Mobile public navigation' });
   const menu = page.getByRole('button', { name: 'Open navigation' });
+  await expect(mobileHeader).toBeVisible();
   await expect(menu).toBeVisible();
+  await expect(mobileHeader.getByAltText('Maverick')).toBeVisible();
+  await expect(mobileHeader.getByRole('button', { name: 'App switching unavailable' })).toBeDisabled();
+  await expect(mobileHeader.getByRole('button', { name: 'Create unavailable' })).toBeDisabled();
+  await expect(mobileHeader.getByRole('button', { name: 'Chat unavailable' })).toBeDisabled();
   await expect(navigation).not.toBeVisible();
+  const headerBounds = await mobileHeader.boundingBox();
+  const topbarBounds = await page.locator('.crm-topbar').boundingBox();
+  expect(topbarBounds!.y).toBeGreaterThanOrEqual(headerBounds!.y + headerBounds!.height);
+  await page.screenshot({ path: testInfo.outputPath('crm-public-mobile-header.png'), fullPage: true });
   await menu.click();
   await expect(navigation).toBeVisible();
-  await expect(navigation.locator('.crm-public-sidebar-logo')).toBeVisible();
+  await expect(navigation.locator('.crm-public-sidebar-logo')).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath('crm-public-mobile-navigation.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await navigation.getByRole('button', { name: 'People', exact: true }).click();
   await expect(navigation).not.toBeVisible();

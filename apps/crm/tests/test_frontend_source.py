@@ -46,6 +46,8 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertIn('className="crm-public-sidebar-footer"', source)
         self.assertIn('aria-label="Dark mode"', source)
         self.assertIn('aria-label="Light mode"', source)
+        self.assertIn('aria-label="App switching unavailable"', source)
+        self.assertIn('className="crm-public-mobile-header__logo"', source)
         self.assertIn("maverick:crm-public:theme", source)
         self.assertIn("sidebar-logo.svg", source)
         self.assertIn("sidebar-logo-black.svg", source)
@@ -54,6 +56,8 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertNotIn("New record", source)
         self.assertIn("border-radius: 34px", styles)
         self.assertIn("@media (max-width: 979px)", styles)
+        self.assertIn(".crm-public-mobile-header", styles)
+        self.assertNotIn("crm-public-notice", APP_TSX.read_text(encoding="utf-8"))
 
     def test_search_view_filter_is_rendered(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")

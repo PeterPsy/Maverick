@@ -16,7 +16,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url);
   await page.getByRole('heading', { name: 'Dashboard', exact: true }).waitFor();
-  assert.match(await page.locator('.crm-public-notice').innerText(), /Sola lettura/);
+  assert.equal(await page.locator('.crm-public-notice').count(), 0, 'No redundant public-access notice');
   assert.equal(await page.locator('.product-sidebar footer').count(), 0, 'No redundant CRM branding footer');
   const sidebar = page.getByRole('navigation', { name: 'CRM workspace' });
   await sidebar.getByRole('button', { name: 'People', exact: true }).click();
@@ -39,6 +39,8 @@ try {
   });
   assert.deepEqual(denied, [403, 404]);
   await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.getByRole('banner', { name: 'Mobile public navigation' }).isVisible());
+  assert.ok(await page.getByRole('button', { name: 'App switching unavailable' }).isDisabled());
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
   await sidebar.getByRole('button', { name: 'Dashboard', exact: true }).click();
   await page.getByRole('heading', { name: 'Dashboard', exact: true }).waitFor();

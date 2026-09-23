@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from 'react';
-import { Menu, Moon, Sun, X } from 'lucide-react';
+import { ContactRound, MessageSquare, Moon, Plus, Sun } from 'lucide-react';
 import { ViewId } from '../domain/types';
 import { useLiveCrm } from '../domain/vnext';
 import { WorkspaceSidebar } from '../widgets/crm-sidebar/WorkspaceSidebar';
@@ -35,7 +35,31 @@ export function PublicNavigation({ view, navigate }: { view: ViewId; navigate: (
   }, [theme]);
 
   return <>
-    <button className="crm-public-menu" aria-label={open ? 'Close navigation' : 'Open navigation'} aria-expanded={open} onClick={() => setOpen(!open)}>{open ? <X /> : <Menu />}</button>
+    <header className="crm-public-mobile-header" aria-label="Mobile public navigation" role="banner">
+      <div className="crm-public-mobile-header__leading">
+        <button
+          className={`crm-public-mobile-header__button crm-public-menu ${open ? 'is-open' : ''}`}
+          aria-label={open ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          type="button"
+        >
+          <span aria-hidden="true" className="crm-public-mobile-header__burger"><span /><span /></span>
+        </button>
+        <button className="crm-public-mobile-header__button crm-public-mobile-header__app" aria-label="App switching unavailable" disabled type="button">
+          <ContactRound aria-hidden="true" />
+        </button>
+      </div>
+      <img alt="Maverick" className="crm-public-mobile-header__logo" src={theme === 'light' ? sidebarLogoLight : sidebarLogoDark} />
+      <div className="crm-public-mobile-header__actions">
+        <button className="crm-public-mobile-header__button" aria-label="Create unavailable" disabled type="button">
+          <Plus aria-hidden="true" />
+        </button>
+        <button className="crm-public-mobile-header__button" aria-label="Chat unavailable" disabled type="button">
+          <MessageSquare aria-hidden="true" />
+        </button>
+      </div>
+    </header>
     <aside className={`crm-public-navigation ${open ? 'is-open' : ''}`} aria-label="CRM navigation">
       <div className="crm-public-sidebar-frame">
         <div className="crm-public-sidebar-body">

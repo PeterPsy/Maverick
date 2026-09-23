@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "b4fd37544b415c3de0f10a189627493dbdb970f34642403e70169ed52f513e72",
+  "build_id": "cf989410f60a14bbbedbd185fae1f3aed7f2c5f096f2cdf8cef3267c1557a1da",
   "entrypoints": [
     "index.html",
     "widgets/crm-external-settings/index.html",
@@ -8,19 +8,19 @@
   ],
   "immutable": [
     {
-      "path": "assets/WorkspaceSidebar-CgvBJ8Vd.js",
-      "sha256": "ed7d0363e534cfaedb9b92336a6b84c13a0005da23ea4ba8472e8614dd1f9bb4",
-      "size_bytes": 56997
+      "path": "assets/WorkspaceSidebar-wC8v4J1t.js",
+      "sha256": "c4ce11606d3d677d20372dc99ec0627a9e6866b8cda032fabb54b9860105c7ad",
+      "size_bytes": 56990
     },
     {
-      "path": "assets/app-DA-QRPj1.js",
-      "sha256": "2541ba2b8d555af600f7e09860647ed0874fff5e5f42dd6dd226668439233dd5",
-      "size_bytes": 317069
+      "path": "assets/app-CYsfpVDJ.css",
+      "sha256": "be8d2a649a92f301ccddf2cb7a12095fc95fc85b8a95a786175829093a5f8936",
+      "size_bytes": 59588
     },
     {
-      "path": "assets/app-d65VUtAm.css",
-      "sha256": "f25408e5e13526362bfaba36b989a41059b13f8824cdd766d624780672683dbb",
-      "size_bytes": 58070
+      "path": "assets/app-D5cytM7X.js",
+      "sha256": "e51d6904f4c18ea0c1182cd960d1ee483333b236fe741eb89328ebae3a23a9e3",
+      "size_bytes": 318004
     },
     {
       "path": "assets/index-C6Pe-h2b.css",
@@ -58,9 +58,9 @@
       "size_bytes": 8711
     },
     {
-      "path": "assets/widgets/crm-sidebar/index-DYvCLQ7V.js",
-      "sha256": "7b1a5d60cf310f51cc396c84329858a27861564d34d54047aeece0fcc435ab56",
-      "size_bytes": 1697
+      "path": "assets/widgets/crm-sidebar/index-Cp_HybFo.js",
+      "sha256": "5de52dc4d9356c3ba0d116de58b420419e8dcdf2def7577f8e13e310f453557b",
+      "size_bytes": 1702
     }
   ],
   "revalidated": [
@@ -71,7 +71,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "479650bbe5f2edf181de75744214e27407787b416c9aab8f0ae2a339d7b20f79",
+      "sha256": "a6a73b863e20b459d44665e09701d1079a5d4f533e3dc167602852fbd5c464f8",
       "size_bytes": 762
     },
     {
@@ -81,7 +81,7 @@
     },
     {
       "path": "widgets/crm-sidebar/index.html",
-      "sha256": "b8fd1b6e82c3c7941d5cadc504bcdf77eb7004ae93c0ba707409d4d903ecaad9",
+      "sha256": "f087bd6024218624bec4be707f189e86e5860195bbf2c738b5b6f3f314564915",
       "size_bytes": 636
     }
   ]

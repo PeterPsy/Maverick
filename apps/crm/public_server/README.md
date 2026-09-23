@@ -8,9 +8,12 @@ full backup restore or other apps' APIs. Existing CRM-local integration snapshot
 remain readable. Do not call this anonymous access to Mail or Storage.
 
 The private CRM remains unchanged: its navigation lives in the shell sidebar.
-Only the public document mounts the same navigation component itself. Its hash
-routes work on reload, public search does not persist private view preferences,
-and display reads do not use a private PWA cache/session bridge.
+Only the public document mounts the same navigation component itself, inside a
+Maverick-aligned sidebar frame with the brand and a local light/dark switcher.
+Workspace/settings controls, create footer actions and the app rail are absent:
+they remain private shell capabilities. Its hash routes work on reload, public
+search does not persist private view preferences, and display reads do not use a
+private PWA cache/session bridge.
 
 ## Activation (operator, Linux)
 

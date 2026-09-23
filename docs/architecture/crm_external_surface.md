@@ -35,8 +35,12 @@ Refresh is disabled while editing or saving so it cannot discard a draft.
 
 The widget owns one scroll area and a persistent action bar, including on small
 screens; state/error feedback and manual refresh replace indefinite loading.
-It follows the exact shell parent's light/dark theme. The shared private/public
-CRM sidebar has no redundant branding footer; shell-owned controls are unchanged.
+It follows the exact shell parent's light/dark theme. The standalone document
+wraps the shared CRM navigation in the same glass frame used by Maverick and
+adds only the brand/theme footer. It deliberately omits workspace/settings
+controls, app-specific create actions and the desktop/mobile app rail because
+those surfaces require the private Maverick shell. The private shell-owned
+controls are unchanged.
 
 ## Deployment and revocation
 

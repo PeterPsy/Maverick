@@ -1,12 +1,14 @@
 :root {
   color-scheme: dark;
+  --maverick-color-scheme: dark;
+  --maverick-contrast-rgb: 255, 255, 255;
   --maverick-bg: rgba(7, 7, 8, 1);
   --maverick-bg-strong: #171717;
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
+  --maverick-surface: rgba(var(--maverick-contrast-rgb), 0.055);
+  --maverick-surface-hover: rgba(var(--maverick-contrast-rgb), 0.105);
+  --maverick-surface-active: rgba(var(--maverick-contrast-rgb), 0.14);
+  --maverick-border: rgba(var(--maverick-contrast-rgb), 0.08);
+  --maverick-border-strong: rgba(var(--maverick-contrast-rgb), 0.14);
   --maverick-glass-surface: rgba(12, 12, 14, 0.58);
   --maverick-glass-highlight:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
@@ -19,6 +21,7 @@
   --maverick-accent: #ffffff;
   --maverick-accent-soft: rgba(255, 255, 255, 0.18);
   --maverick-text-on-accent: #0a0a0b;
+  --maverick-shadow-panel: rgba(0, 0, 0, 0.36);
   --maverick-success: #9ff0ca;
   --maverick-danger: #ffb3bf;
   --maverick-card-radius: 22px;
@@ -28,6 +31,36 @@
   background: var(--maverick-bg);
   color: var(--maverick-text);
   font-family: var(--maverick-font);
+}
+
+:root[data-theme="light"],
+:root[data-maverick-theme="light"] {
+  color-scheme: light;
+  --maverick-color-scheme: light;
+  --maverick-contrast-rgb: 15, 23, 42;
+  --maverick-bg: #f7f8fb;
+  --maverick-bg-strong: #ffffff;
+  --maverick-surface: rgba(var(--maverick-contrast-rgb), 0.055);
+  --maverick-surface-hover: rgba(var(--maverick-contrast-rgb), 0.085);
+  --maverick-surface-active: rgba(var(--maverick-contrast-rgb), 0.12);
+  --maverick-border: rgba(var(--maverick-contrast-rgb), 0.1);
+  --maverick-border-strong: rgba(var(--maverick-contrast-rgb), 0.16);
+  --maverick-glass-surface: rgba(255, 255, 255, 0.72);
+  --maverick-glass-highlight:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.74), transparent 38%),
+    linear-gradient(315deg, rgba(var(--maverick-contrast-rgb), 0.035), transparent 44%);
+  --maverick-glass-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  --maverick-inner-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --maverick-text: #111827;
+  --maverick-text-muted: rgba(17, 24, 39, 0.66);
+  --maverick-text-soft: rgba(17, 24, 39, 0.42);
+  --maverick-accent: #111827;
+  --maverick-accent-soft: rgba(var(--maverick-contrast-rgb), 0.1);
+  --maverick-text-on-accent: #ffffff;
+  --maverick-shadow-panel: rgba(15, 23, 42, 0.16);
+  --maverick-success: #176b4b;
+  --maverick-danger: #b4233c;
+  --crm-panel-shadow: var(--maverick-glass-edge), 0 24px 80px rgba(15, 23, 42, 0.12);
 }
 
 * {
@@ -46,6 +79,10 @@ body,
 body {
   background: var(--maverick-bg);
   overflow: hidden;
+}
+
+select {
+  color-scheme: var(--maverick-color-scheme);
 }
 
 html,

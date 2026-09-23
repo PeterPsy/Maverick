@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "fcadaca58c1e96f118e578b2c120226c1f5e714ec4a88c57829f0f591af0e63f",
+  "build_id": "64eeed06f96f00d79d89ff0cf6af66105afbd848bca287684e8470848670f8ee",
   "entrypoints": [
     "index.html",
     "widgets/crm-external-settings/index.html",
@@ -13,14 +13,14 @@
       "size_bytes": 56997
     },
     {
-      "path": "assets/app-5BDrWmOr.css",
-      "sha256": "a1253e7d80a792fd1e900af02aceac8466694cbbb505d8158c00d0ff99cea494",
-      "size_bytes": 55148
+      "path": "assets/app-Cb2YYcpw.js",
+      "sha256": "2541ba2b8d555af600f7e09860647ed0874fff5e5f42dd6dd226668439233dd5",
+      "size_bytes": 317069
     },
     {
-      "path": "assets/app-DCA9Tfls.js",
-      "sha256": "eae3de2a72d77e6c63ea72185612d4ae4a6ba56c736993e50d53ab3e82af9c8f",
-      "size_bytes": 314713
+      "path": "assets/app-DEW1Bx7p.css",
+      "sha256": "26482a72a5026dcf26755ec0e99a7eeb521229feb9e3fa2bc7ec0e38d3e0c0ba",
+      "size_bytes": 57909
     },
     {
       "path": "assets/index-C6Pe-h2b.css",
@@ -38,13 +38,23 @@
       "size_bytes": 207077
     },
     {
-      "path": "assets/styles-Dfkq6zIt.js",
+      "path": "assets/sidebar-logo-ChGjrOzk.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "path": "assets/sidebar-logo-black-Bpsc9PsK.svg",
+      "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f",
+      "size_bytes": 6750
+    },
+    {
+      "path": "assets/styles-Qmg0LR4C.js",
       "sha256": "f7b2e698700a1fa8a4101901c7a9a32e37c87313b292a980b8721d70aa1151da",
       "size_bytes": 1123
     },
     {
-      "path": "assets/widgets/crm-external-settings/index-aY4NZAju.js",
-      "sha256": "7be645a98d312af200f055ec5e3c637a5d5a3120d2942dba5cec479cd63109fc",
+      "path": "assets/widgets/crm-external-settings/index-HlzgeYtG.js",
+      "sha256": "06b4d2c5609a35249149aa5bd879cd1e57cabcc171c7ad574b512c7a60dd3683",
       "size_bytes": 8462
     },
     {
@@ -55,18 +65,18 @@
   ],
   "revalidated": [
     {
-      "path": "assets/styles-Cq7ryGgM.css",
-      "sha256": "70f5c3b433805eda274b8f6c39e0f9515cb68e1eeec87f6f8a354070f4e07145",
-      "size_bytes": 18491
+      "path": "assets/styles-KIAXWDqv.css",
+      "sha256": "434d71d1625a83ddc5d8ab1070e98143031e584d7503c8559b52ae84d108d4e1",
+      "size_bytes": 20133
     },
     {
       "path": "index.html",
-      "sha256": "3af4e5c05cfedb82e7b8b5373bac169e1f73c783236b9ba80d60fe70befbba44",
+      "sha256": "2126efac06873d4f4b998796724f165064fcec5c75e8a64105e561c2aa09fa2a",
       "size_bytes": 762
     },
     {
       "path": "widgets/crm-external-settings/index.html",
-      "sha256": "d5eaf76b9b7ed7ad0f947792aff31eb0c40b0dde1e70e6c195cd84e77bf2a885",
+      "sha256": "8f7061faf0bd98cbc72bec23ab978ff90666f37d78e0d4d3064ade9c4c7186df",
       "size_bytes": 679
     },
     {

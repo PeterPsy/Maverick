@@ -23,6 +23,8 @@ PIPELINE_VIEW_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "
 DETAIL_CSS = Path(__file__).resolve().parents[1] / "frontend" / "src" / "detail.css"
 RECORDS_CSS = Path(__file__).resolve().parents[1] / "frontend" / "src" / "records.css"
 SIDEBAR_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "widgets" / "crm-sidebar" / "main.tsx"
+PUBLIC_NAVIGATION_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "public" / "PublicNavigation.tsx"
+PUBLIC_CSS = PUBLIC_NAVIGATION_TSX.with_name("public.css")
 
 
 class CrmFrontendSourceTest(unittest.TestCase):
@@ -36,6 +38,22 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertIn('isExactMaverickParentMessage', widget)
         self.assertIn("view: 'sidebar'", widget)
         self.assertNotIn('window.parent.matchMedia', widget)
+
+    def test_public_sidebar_keeps_only_external_safe_shell_chrome(self) -> None:
+        source = PUBLIC_NAVIGATION_TSX.read_text(encoding="utf-8")
+        styles = PUBLIC_CSS.read_text(encoding="utf-8")
+
+        self.assertIn('className="crm-public-sidebar-footer"', source)
+        self.assertIn('aria-label="Dark mode"', source)
+        self.assertIn('aria-label="Light mode"', source)
+        self.assertIn("maverick:crm-public:theme", source)
+        self.assertIn("sidebar-logo.svg", source)
+        self.assertIn("sidebar-logo-black.svg", source)
+        self.assertNotIn("SidebarAppRail", source)
+        self.assertNotIn("WorkspaceSwitcher", source)
+        self.assertNotIn("New record", source)
+        self.assertIn("border-radius: 34px", styles)
+        self.assertIn("@media (max-width: 979px)", styles)
 
     def test_search_view_filter_is_rendered(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")

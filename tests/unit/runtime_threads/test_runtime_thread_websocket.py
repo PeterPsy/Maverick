@@ -203,7 +203,7 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
                     workspace_id="default",
                     owner_user_id="user-a",
                     protocol_version="maverick.device-use.v1",
-                    executor_contract="macos-v42",
+                    executor_contract="macos-v43",
                     tool_contract_digest="digest",
                     mode="on",
                     initial_app="com.apple.Safari",

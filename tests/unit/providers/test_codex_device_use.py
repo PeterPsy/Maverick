@@ -39,7 +39,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
-            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v42",
+            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v43",
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="on", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
@@ -64,7 +64,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.assertEqual(params["model"], "gpt-5.6-sol")
         self.assertEqual(params["sandbox"], "read-only")
         self.assertEqual({item["name"] for item in params["dynamicTools"]}, {
-            "mac_computer", "mac_peekaboo", "mac_calendar",
+            "mac_computer", "mac_peekaboo", "mac_calendar", "mac_project",
         })
         self.assertEqual(params["config"], {"mcp_servers": {}, "project_doc_max_bytes": 0})
 
@@ -81,6 +81,8 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.assertIn("Only an explicit Stop or a positively detected screen lock", instructions)
         self.assertIn("inspect the source project/view", instructions)
         self.assertIn("brief intermediate updates", instructions)
+        self.assertIn("opaque project_id", instructions)
+        self.assertIn("not source code or a shell", instructions)
         self.assertNotIn("Never operate credential or security UI", instructions)
 
     def test_scoped_mode_requires_source_app_grounding_and_milestone_updates(self):

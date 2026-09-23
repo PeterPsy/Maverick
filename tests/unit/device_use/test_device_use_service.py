@@ -20,10 +20,10 @@ from core.device_use.service import DeviceUseService, encode_image_frame
 
 
 class DeviceUseServiceTestCase(unittest.TestCase):
-    def test_contract_digest_is_the_frozen_macos_v41_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v43_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "c990c06470cb6252edc762a731525b15b0f1f600070c7bc33ab4f15f6c5ae756",
+            "d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1",
         )
 
     def test_persisted_binding_requires_mode_and_full_does_not_treat_discovery_as_scope(self):
@@ -257,6 +257,33 @@ class DeviceUseServiceTestCase(unittest.TestCase):
             binding.activation_id, owner_user_id="user-1", workspace_id="default",
         )["invocations"][0]
         self.assertEqual(metric["effect_class"], "read")
+
+    def test_project_contact_sheet_may_declare_one_image(self):
+        service, binding, outbound = self.connected()
+        results = []
+        worker = threading.Thread(target=lambda: results.append(service.invoke(
+            binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+            provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+            call_id="sample-frames", tool_name="mac_project",
+            arguments={"action": "sample_frames", "project_id": "project-1", "source": "source.mov"},
+            task_text="sample", timeout_seconds=1,
+        )))
+        worker.start(); frame = outbound.get(timeout=1)
+        jpeg = b"\xff\xd8contact-sheet\xff\xd9"
+        service.accept_invocation(binding.activation_id, frame)
+        service.deliver_result(binding.activation_id, {
+            "invocation_id": frame["invocation_id"], "call_id": "sample-frames",
+            "arguments_digest": frame["arguments_digest"],
+            "result": {"success": True, "contentItems": [{"type": "inputText", "text": "samples"}]},
+            "has_image": True, "image_sha256": hashlib.sha256(jpeg).hexdigest(),
+        })
+        service.deliver_image(binding.activation_id, encode_image_frame(
+            invocation_id=frame["invocation_id"], call_id="sample-frames", jpeg=jpeg,
+        ))
+        worker.join(timeout=1)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(results[0].image_jpeg, jpeg)
+        self.assertEqual(service.journal()[-1].effect_class, "control")
 
     def test_eventkit_result_budget_matches_the_direct_v40_executor(self):
         service, binding, outbound = self.connected()

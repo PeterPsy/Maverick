@@ -508,6 +508,7 @@ class DeviceUseService:
                         ("mac_computer", "observe"),
                         ("mac_peekaboo", "observe"),
                         ("mac_peekaboo", "observe_app"),
+                        ("mac_project", "sample_frames"),
                     }
                     or result.get("success") is not True
                     or not _is_sha256(image_sha256)

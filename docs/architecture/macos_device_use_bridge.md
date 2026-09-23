@@ -8,7 +8,7 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v42`.
+direct path was then removed. The current executor contract is `macos-v43`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
@@ -58,14 +58,15 @@ audit remain in Core. WebKit exposes only `maverickDeviceUse`; arguments,
 results, screenshots and credentials never pass through JavaScript or Storage.
 The retired `maverickLocalRuntime` handler and broker do not exist.
 
-The v42 path deliberately remains one provider/runtime family:
+The v43 path deliberately remains one provider/runtime family:
 
 - source app and agent `chat`;
 - Codex app-server with the active model profile and reasoning effort already
   selected in Chat;
 - one agent, Device Use tools only;
 - no skills, attachments, app references, multi-agent mode, MCP servers, shell
-  or filesystem tools during a Device Use turn.
+  or arbitrary filesystem tools during a Device Use turn;
+- one native `mac_project` capability limited to a user-picked media project.
 
 Every active Codex model exposed by the ordinary Maverick model selector is
 therefore usable without a second Device Use selector. Hosted and generic tool
@@ -130,19 +131,20 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v42`;
+- executor `macos-v43`;
 - tool digest
-  `c990c06470cb6252edc762a731525b15b0f1f600070c7bc33ab4f15f6c5ae756`;
+  `d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1`;
 - mode `on` or `full`;
 - initial app and the running-app discovery/allowlist snapshot.
 
-The tool schemas did not change from v40, so the digest is unchanged. v41 added
-mode to the hello, ready frame, immutable `DeviceUseSessionBinding`, public
-thread projection and provider instructions. v42 removes the executor-level
-model pin: runtime session creation records the selected Codex model and effort
-in the ordinary immutable `RuntimeExecutionBinding`, and both thread/start
-requests read that binding. In On, Core validates the initial app against the
-admitted list and applies the call ceiling. In Full it does neither.
+v41 added mode to the hello, ready frame, immutable `DeviceUseSessionBinding`,
+public thread projection and provider instructions. v42 removed the
+executor-level model pin. v43 adds the governed `mac_project` tool and therefore
+changes the frozen tool digest. Runtime session creation still records the
+selected Codex model and effort in the ordinary immutable
+`RuntimeExecutionBinding`, and both thread/start requests read that binding. In
+On, Core validates the initial app against the admitted list and applies the
+call ceiling. In Full it does neither.
 
 A binding is exact to activation, user, workspace, runtime session and contract.
 Only one activation per login generation and one physical call at a time are
@@ -159,11 +161,49 @@ task text, attempt `1` and a bounded operation deadline. The native side sends
 an explicit accepted frame before executing.
 
 Successful observation returns one bounded text result and, when present, one
-separately framed JPEG under 4 MB. Core validates framing, call identity,
-dimensions and digest, injects the JPEG into the same Codex turn with one
-minimal `turn/steer`, then releases the original text tool result. Image bytes
-are not duplicated, stored or sent through the WebView. EventKit retains the
-512 KB control-frame bound.
+separately framed JPEG under 4 MB. The same binary route carries the single
+timecoded contact sheet produced by `mac_project.sample_frames`. Core validates
+the exact admitted tool/action, framing, call identity, dimensions and digest,
+injects the JPEG into the same Codex turn with one minimal `turn/steer`, then
+releases the original text tool result. Image bytes are not duplicated, stored
+or sent through the WebView. EventKit retains the 512 KB control-frame bound.
+
+## Governed project media
+
+`mac_project` is the sole v43 filesystem exception. `authorize_project` opens a
+native directory picker and persists a security-scoped bookmark behind a random
+opaque `project_id`. Neither Core nor the model receives an absolute path.
+Every later argument is project-relative; absolute paths, traversal, symlinks,
+CapCut application-support/package/database roots and paths outside the selected
+folder fail closed.
+
+Source media is read-only. Native writes are limited to:
+
+```text
+<project>/
+  .maverick/
+    analysis.json
+    transcript.json
+    scenes.json
+    silences.json
+    edit-plan.json
+    verification.json
+    scripts/
+    working/
+  output/
+```
+
+The admitted actions are `authorize_project`, `inspect_media`,
+`transcribe_media`, `sample_frames`, `detect_scenes`, `detect_silence`,
+`prepare_subclip`, `generate_srt`, `verify_media` and `run_project_script`.
+AVFoundation performs inspection, sampling, analysis, non-destructive range
+composition and output verification. Speech transcription is on-device only
+and fails closed when the selected locale has no on-device recognizer.
+`run_project_script` persists and executes a bounded JSON list of the same
+approved operations; it never evaluates source code, invokes a process, opens a
+shell, delivers secrets/environment values or grants network access. Outputs
+carry SHA-256 evidence, and source hashes are rechecked across transforming
+operations.
 
 A disconnect or timeout after dispatch is `device_use_execution_unknown`.
 Neither side retries or replays it. A fresh observation may establish outcome;
@@ -181,7 +221,7 @@ invariants.
 
 Core:
 
-- `core/device_use/contract.py` — v42 identity, tool schemas and On/Full prompts;
+- `core/device_use/contract.py` — v43 identity, tool schemas and On/Full prompts;
 - `core/device_use/models.py` — immutable mode binding;
 - `core/device_use/service.py` — activation, lease, serialization, ledger,
   binary images and On-only quota;
@@ -197,8 +237,10 @@ Core:
 Native:
 
 - `DeviceUseRuntime.swift` — Off/On/Full settings and lifecycle;
-- `DeviceUseBridge.swift` — v42 WSS and binary image transport;
+- `DeviceUseBridge.swift` — v43 WSS and binary image transport;
 - `ComputerTools.swift` / `IntegratedComputerTools.swift` — dispatcher;
+- `ProjectAccess.swift` — native picker, opaque bookmarks and path confinement;
+- `ProjectTools.swift` / `ProjectMedia*.swift` — bounded media operations;
 - `DesktopSessionMonitor.swift` — On invalidation and Full lock-only monitor;
 - `NativeTextFocus.swift` / `NativeTextInput.swift` — exact input admission;
 - `PeekabooTools.swift` / `CalendarTools.swift` — GUI and EventKit motors;
@@ -231,7 +273,7 @@ python3 -m unittest discover -s scripts -p 'test_mac_*.py'
 
 The Apple-silicon workflow must also run Swift tests, release build, real
 Peekaboo catalog smoke and signing/designated-requirement checks. Deploy/restart
-Core before installing a v42 Mac client. With MaverickMac closed, dispatch the
+Core before installing a v43 Mac client. With MaverickMac closed, dispatch the
 existing workflow using `install_and_open=true`; the installer atomically
 replaces `~/Applications/MaverickMac.app`. Never create a second app bundle.
 

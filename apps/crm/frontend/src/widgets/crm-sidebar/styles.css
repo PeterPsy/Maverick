@@ -29,6 +29,6 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--maverick-
   overflow: hidden;
 }
 .crm-sidebar-widget.is-shell-mobile {
-  --crm-sidebar-scroll-under-top: 5.86rem;
+  --crm-sidebar-scroll-under-top: 3.12rem;
   --crm-sidebar-scroll-under-bottom: 5.1rem;
 }

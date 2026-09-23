@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "64eeed06f96f00d79d89ff0cf6af66105afbd848bca287684e8470848670f8ee",
+  "build_id": "9a8bb80c50672b1a1599cd7ee402e1f5a04d9c42a3848b4fc0624a88b5da050b",
   "entrypoints": [
     "index.html",
     "widgets/crm-external-settings/index.html",
@@ -13,14 +13,14 @@
       "size_bytes": 56997
     },
     {
-      "path": "assets/app-Cb2YYcpw.js",
+      "path": "assets/app-DA-QRPj1.js",
       "sha256": "2541ba2b8d555af600f7e09860647ed0874fff5e5f42dd6dd226668439233dd5",
       "size_bytes": 317069
     },
     {
-      "path": "assets/app-DEW1Bx7p.css",
-      "sha256": "26482a72a5026dcf26755ec0e99a7eeb521229feb9e3fa2bc7ec0e38d3e0c0ba",
-      "size_bytes": 57909
+      "path": "assets/app-d65VUtAm.css",
+      "sha256": "f25408e5e13526362bfaba36b989a41059b13f8824cdd766d624780672683dbb",
+      "size_bytes": 58070
     },
     {
       "path": "assets/index-C6Pe-h2b.css",
@@ -28,8 +28,8 @@
       "size_bytes": 5972
     },
     {
-      "path": "assets/index-MCwPIgDu.css",
-      "sha256": "68c1b8c71f17d0d69e36412533d5948fa47eedf113a3586d0e5182ab9548860c",
+      "path": "assets/index-xIFPcZkS.css",
+      "sha256": "616046bea17edeef384fec82a6b9bb929809fd93963c1901345206df1d68f145",
       "size_bytes": 3090
     },
     {
@@ -58,7 +58,7 @@
       "size_bytes": 8462
     },
     {
-      "path": "assets/widgets/crm-sidebar/index-CEGrlSjR.js",
+      "path": "assets/widgets/crm-sidebar/index-DYvCLQ7V.js",
       "sha256": "7b1a5d60cf310f51cc396c84329858a27861564d34d54047aeece0fcc435ab56",
       "size_bytes": 1697
     }
@@ -71,7 +71,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "2126efac06873d4f4b998796724f165064fcec5c75e8a64105e561c2aa09fa2a",
+      "sha256": "479650bbe5f2edf181de75744214e27407787b416c9aab8f0ae2a339d7b20f79",
       "size_bytes": 762
     },
     {
@@ -81,7 +81,7 @@
     },
     {
       "path": "widgets/crm-sidebar/index.html",
-      "sha256": "999297da2293e30f906dad679418f7412675df1efb8c2acc69c3b29de39a32ef",
+      "sha256": "b8fd1b6e82c3c7941d5cadc504bcdf77eb7004ae93c0ba707409d4d903ecaad9",
       "size_bytes": 636
     }
   ]

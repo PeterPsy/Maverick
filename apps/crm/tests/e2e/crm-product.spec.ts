@@ -116,6 +116,41 @@ test('dashboard mirrors brief, metrics and pipeline structure with Maverick colo
   await expect(page.getByRole('complementary', { name: 'Record inspector' })).toHaveCount(0);
 });
 
+test('mobile canvas reserves the Maverick shell header without creating page overflow', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mount(page, dataRoot);
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty('--maverick-shell-mobile-content-top-offset', '68px');
+  });
+
+  const layout = await page.locator('.product-main').evaluate((main) => {
+    const topbar = main.querySelector<HTMLElement>('.crm-topbar');
+    const records = main.querySelector<HTMLElement>('.records-view');
+    if (!topbar || !records) throw new Error('Expected the CRM mobile layout to be mounted');
+    const topbarBox = topbar.getBoundingClientRect();
+    const recordsBox = records.getBoundingClientRect();
+    return {
+      mainBottom: main.getBoundingClientRect().bottom,
+      topbarTop: topbarBox.top,
+      topbarBottom: topbarBox.bottom,
+      recordsTop: recordsBox.top,
+      viewportHeight: innerHeight,
+      viewportWidth: innerWidth,
+      pageWidth: document.documentElement.scrollWidth,
+    };
+  });
+
+  expect(layout.topbarTop).toBe(68);
+  expect(layout.recordsTop).toBeGreaterThanOrEqual(layout.topbarBottom);
+  expect(layout.mainBottom).toBeLessThanOrEqual(layout.viewportHeight);
+  expect(layout.pageWidth).toBe(layout.viewportWidth);
+  await page.screenshot({ path: testInfo.outputPath('crm-shell-mobile-layout.png'), fullPage: true });
+
+  await page.getByRole('row').filter({ hasText: 'Ada Example' }).click();
+  const inspectorTop = await page.getByRole('complementary', { name: 'Record inspector' }).evaluate((node) => node.getBoundingClientRect().top);
+  expect(inspectorTop).toBe(130);
+});
+
 test('deal stages and proposal review are real mutations with separate approval and application', async ({ page }) => {
   await mount(page, dataRoot);
   backend(dataRoot, { action: 'crm.create_deal', name: 'Renewal opportunity', value: 2500 });

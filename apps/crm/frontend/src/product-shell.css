@@ -1,12 +1,12 @@
 /* Source-inspired structure; all product colors belong to Maverick. */
-.crm-app.product-shell { width: 100%; max-width: none; margin: 0; padding: 0; gap: 0; grid-template-columns: minmax(0, 1fr); height: 100dvh; overflow: hidden; position: relative; }
-.product-shell .product-main { min-width: 0; min-height: 0; height: 100dvh; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+.crm-app.product-shell { --crm-shell-top-offset: var(--maverick-shell-mobile-content-top-offset, 0px); width: 100%; max-width: none; margin: 0; padding: 0; gap: 0; grid-template-columns: minmax(0, 1fr); height: 100dvh; overflow: hidden; position: relative; }
+.product-shell .product-main { min-width: 0; min-height: 0; height: 100dvh; display: flex; flex-direction: column; gap: 0; padding: var(--crm-shell-top-offset) 0 0; overflow: hidden; }
 .product-shell .crm-topbar { display: flex; flex-shrink: 0; align-items: center; gap: 12px; min-height: 72px; padding: 15px 32px; border: 0; border-radius: 0; border-bottom: 1px solid var(--maverick-border); background: var(--maverick-bg); box-shadow: none; }
 .product-shell .crm-search { max-width: 520px; min-width: 0; flex: 1; background: var(--maverick-surface); border: 1px solid var(--maverick-border); border-radius: 9px; }
 .product-shell .crm-search input { min-width: 0; width: 100%; background: transparent; font-size: 13px; }
 .product-shell .topbar-actions { display: flex; margin-left: auto; gap: 10px; }
 .product-shell .topbar-actions > button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--maverick-border); padding: 9px 12px; border-radius: 8px; background: var(--maverick-surface); font-size: 12px; }
-.product-shell .product-inspector { position: absolute; z-index: 15; inset: 72px 0 0 auto; width: min(680px, 100%); padding: 0; background: var(--maverick-bg-strong); border-left: 1px solid var(--maverick-border-strong); box-shadow: -16px 0 60px var(--maverick-bg); overflow: auto; }
+.product-shell .product-inspector { position: absolute; z-index: 15; inset: calc(var(--crm-shell-top-offset) + 72px) 0 0 auto; width: min(680px, 100%); padding: 0; background: var(--maverick-bg-strong); border-left: 1px solid var(--maverick-border-strong); box-shadow: -16px 0 60px var(--maverick-bg); overflow: auto; }
 .product-inspector .crm-detail-page { border: 0; border-radius: 0; background: var(--maverick-bg-strong); height: 100%; }
 .product-inspector .vn-extension-detail { padding: 24px; overflow: visible; height: auto; }
 .product-inspector .vn-overview-grid { grid-template-columns: minmax(0, 1fr); }
@@ -21,7 +21,7 @@
   .product-shell .crm-topbar { min-height: 62px; padding: 10px 12px; gap: 8px; }
   .product-shell .topbar-actions > button { padding: 9px; }
   .product-shell .topbar-actions > button span { display: none; }
-  .product-shell .product-inspector { inset: 62px 0 0; width: 100%; }
+  .product-shell .product-inspector { inset: calc(var(--crm-shell-top-offset) + 62px) 0 0; width: 100%; }
 }
 .product-shell .crm-topbar { flex-wrap: nowrap; }
 @media (max-width: 760px) { .product-shell .crm-search { width: auto; flex: 1; min-width: 0; } .product-shell .topbar-actions { flex-shrink: 0; gap: 4px; } }

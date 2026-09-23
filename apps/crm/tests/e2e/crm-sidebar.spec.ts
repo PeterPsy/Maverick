@@ -78,6 +78,8 @@ test('mobile shell owns the drawer; compact tools remain reachable and the canva
   const { widget, canvas } = await mountSidebarHost(page, dataRoot);
   await page.getByRole('button', { name: 'Open shell sidebar' }).click();
   await expect(widget.locator('.crm-sidebar-widget')).toHaveClass(/is-shell-mobile/);
+  const widgetHeaderTop = await widget.locator('.product-sidebar > header').evaluate((node) => node.getBoundingClientRect().top);
+  expect(widgetHeaderTop).toBeLessThan(80);
   await expect(canvas.getByRole('button', { name: 'Open navigation', exact: true })).toHaveCount(0);
   await widget.getByText('Workspace tools', { exact: true }).click();
   const connections = widget.getByRole('button', { name: 'Connections', exact: true });

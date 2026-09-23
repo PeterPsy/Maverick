@@ -447,6 +447,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn('"browser": "language"', icon_js)
         self.assertIn('"design-studio": "design_services"', icon_js)
         self.assertIn('"mail": "mail"', icon_js)
+        self.assertIn('"marta-ops": "view_kanban"', icon_js)
         self.assertIn('"speech": "record_voice_over"', icon_js)
         self.assertIn("mergeCatalogAndServerApps", frontend_js)
         self.assertIn("state.apps = mergeCatalogAndServerApps(state.catalogApps, state.serverApps)", frontend_js)
@@ -576,6 +577,7 @@ assert(installed.role === "supporting", "installed binding role overrides catalo
 assert(icons.glyphName({{ app_id: "browser", frontend_role: "workspace", surfaces: ["frontend"] }}) === "language", "browser app uses material language icon");
 assert(icons.glyphName({{ app_id: "design-studio", frontend_role: "workspace", surfaces: ["frontend"] }}) === "design_services", "Design Studio uses material design services icon");
 assert(icons.glyphName({{ app_id: "mail", frontend_role: "workspace", surfaces: ["frontend"] }}) === "mail", "mail app uses material mail icon");
+assert(icons.glyphName({{ app_id: "marta-ops", frontend_role: "workspace", surfaces: ["frontend"] }}) === "view_kanban", "Marta Ops uses material kanban icon");
 const icon = icons.renderIcon(
   {{ app_id: "reporter", frontend_role: "workspace", frontend_launchable: true, surfaces: ["frontend"] }},
   "test-icon",

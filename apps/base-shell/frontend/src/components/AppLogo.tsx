@@ -32,6 +32,7 @@ function defaultIcon(app: AppRegistryItem): string {
     "dynamic-views": "dashboard_customize",
     "fitness-coach": "fitness_center",
     mail: "mail",
+    "marta-ops": "view_kanban",
     storage: "cloud",
     "gmail-app": "mail",
     "maverick-monitor": "monitor_heart",

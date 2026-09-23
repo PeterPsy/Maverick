@@ -17,6 +17,7 @@
     "fleet": "table_chart",
     "gallery": "photo_library",
     "mail": "mail",
+    "marta-ops": "view_kanban",
     "gmail-app": "mail",
     "maverick-monitor": "monitoring",
     "memory": "neurology",

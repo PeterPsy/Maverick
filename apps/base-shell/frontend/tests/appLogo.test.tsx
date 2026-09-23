@@ -42,6 +42,10 @@ describe("AppLogo", () => {
     expect(renderedLogo("mail")).toContain(">mail<");
   });
 
+  it("uses the kanban glyph for Marta Ops", () => {
+    expect(renderedLogo("marta-ops")).toContain(">view_kanban<");
+  });
+
   it("uses the same material language glyph for the Browser app", () => {
     expect(renderedLogo("browser")).toContain(">language<");
   });

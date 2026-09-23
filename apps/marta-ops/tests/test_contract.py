@@ -1,0 +1,112 @@
+"""Contract and product behavior tests for Marta Ops."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+from core.apps.contracts import parse_app_contract_file
+
+
+APP_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP_ROOT / "backend"))
+
+from errors import MartaOpsError
+from service import handle_action
+
+
+class MartaOpsContractTest(unittest.TestCase):
+    def test_contract_parses(self) -> None:
+        parsed = parse_app_contract_file(APP_ROOT)
+        self.assertEqual(parsed.app_id, "marta-ops")
+        self.assertEqual(parsed.contract.distribution.mode, "workspace_local")
+
+
+class MartaOpsServiceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.data_root = Path(self.temporary_directory.name)
+
+    def tearDown(self) -> None:
+        self.temporary_directory.cleanup()
+
+    def test_collaboration_and_deliverable_round_trip(self) -> None:
+        _, created = handle_action(
+            self.data_root,
+            {
+                "action": "create_collaboration",
+                "collaboration": {
+                    "title": "Campagna outdoor",
+                    "partner": "Brand",
+                    "next_action": "Confermare il brief",
+                    "due_date": "2026-10-01",
+                    "value_minor": 250000,
+                },
+            },
+        )
+        work_id = created["collaboration"]["id"]
+        _, changed = handle_action(
+            self.data_root,
+            {
+                "action": "add_deliverable",
+                "collaboration_id": work_id,
+                "deliverable": {"title": "Reel principale", "due_date": "2026-10-03"},
+            },
+        )
+        deliverable_id = changed["deliverable"]["id"]
+        _, updated = handle_action(
+            self.data_root,
+            {
+                "action": "update_deliverable",
+                "collaboration_id": work_id,
+                "id": deliverable_id,
+                "changes": {"status": "published"},
+            },
+        )
+
+        self.assertEqual(updated["deliverable"]["status"], "published")
+        _, bootstrapped = handle_action(self.data_root, {"action": "bootstrap"})
+        self.assertEqual(bootstrapped["state"]["collaborations"][0]["value_minor"], 250000)
+
+    def test_partial_update_preserves_existing_fields(self) -> None:
+        _, created = handle_action(
+            self.data_root,
+            {
+                "action": "create_collaboration",
+                "collaboration": {"title": "Evento", "partner": "Partner", "phase": "confirmed"},
+            },
+        )
+        _, updated = handle_action(
+            self.data_root,
+            {
+                "action": "update_collaboration",
+                "id": created["collaboration"]["id"],
+                "changes": {"next_action": "Prenotare il viaggio"},
+            },
+        )
+        self.assertEqual(updated["collaboration"]["partner"], "Partner")
+        self.assertEqual(updated["collaboration"]["phase"], "confirmed")
+
+    def test_idea_capture_and_status_update(self) -> None:
+        _, created = handle_action(
+            self.data_root,
+            {"action": "create_idea", "idea": {"title": "Una discesa, tre errori", "pillar": "Sci"}},
+        )
+        _, updated = handle_action(
+            self.data_root,
+            {"action": "update_idea", "id": created["idea"]["id"], "changes": {"status": "selected"}},
+        )
+        self.assertEqual(updated["idea"]["status"], "selected")
+
+    def test_invalid_date_is_rejected(self) -> None:
+        with self.assertRaisesRegex(MartaOpsError, "data valida"):
+            handle_action(
+                self.data_root,
+                {"action": "create_collaboration", "collaboration": {"title": "Test", "due_date": "domani"}},
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

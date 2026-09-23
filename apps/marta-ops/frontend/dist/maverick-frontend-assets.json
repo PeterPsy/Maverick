@@ -1,0 +1,25 @@
+{
+  "build_id": "724233c9a4bc544177775f3eac38bb7b75db28ed3e17c9c5fbfdca30bc1f7eae",
+  "entrypoints": [
+    "index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/index-B-TBKh2T.css",
+      "sha256": "baa0c41987d5c6c1789a277e6cb11e97dea00044c70c270da7d226129227e14a",
+      "size_bytes": 17492
+    },
+    {
+      "path": "assets/index-B5dp2P_H.js",
+      "sha256": "88fc7930017dff2b5a6a7538ffcce24404ac7bffc3a4e68f77bbd7c2f52e3d06",
+      "size_bytes": 243241
+    },
+    {
+      "path": "index.html",
+      "sha256": "b6089b9be52f0e702c7594843e0ad4fdb6ee499c38a3125274ee3c104e2077c0",
+      "size_bytes": 424
+    }
+  ],
+  "schema": "maverick.frontend-assets.v2"
+}

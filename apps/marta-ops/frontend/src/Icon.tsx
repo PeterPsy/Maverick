@@ -1,0 +1,18 @@
+import type { ReactNode } from 'react';
+
+type IconName = 'today' | 'work' | 'ideas' | 'plus' | 'search' | 'close' | 'arrow' | 'check';
+
+const paths: Record<IconName, ReactNode> = {
+  today: <><path d="M7 3v3M17 3v3M4 9h16" /><rect x="4" y="5" width="16" height="16" rx="4" /><path d="m9 15 2 2 4-5" /></>,
+  work: <><rect x="3" y="7" width="18" height="13" rx="3" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2" /></>,
+  ideas: <><path d="M9 18h6M10 22h4M8.5 14.5A7 7 0 1 1 15.5 14.5C14.5 15.3 14 16.2 14 18h-4c0-1.8-.5-2.7-1.5-3.5Z" /></>,
+  plus: <path d="M12 5v14M5 12h14" />,
+  search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
+  close: <path d="m6 6 12 12M18 6 6 18" />,
+  arrow: <path d="m9 18 6-6-6-6" />,
+  check: <path d="m5 12 4 4L19 6" />
+};
+
+export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+  return <svg aria-hidden="true" className="icon" fill="none" height={size} viewBox="0 0 24 24" width={size}>{paths[name]}</svg>;
+}

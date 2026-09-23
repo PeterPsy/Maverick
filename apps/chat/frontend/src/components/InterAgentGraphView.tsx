@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
+import { requestParentExternalUrl } from "@maverick/pwa-cache";
 import {
   applyNodeChanges,
   Background,
@@ -661,6 +662,9 @@ function handleArtifactLinkClick(event: MouseEvent<HTMLAnchorElement>, target: A
     event.preventDefault();
   }
   if (target.kind === "app_page" && openAppRouteInShell(target.appId, target.appPage)) {
+    event.preventDefault();
+  }
+  if (target.kind === "external" && requestParentExternalUrl(target.href)) {
     event.preventDefault();
   }
 }

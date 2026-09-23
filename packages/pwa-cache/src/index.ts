@@ -1,5 +1,10 @@
 export { readCacheModelJson, type ReadModelRequest } from "./readModelRetry";
 export { maverickAppIsVisible, observeMaverickVisibility } from './appVisibility';
+export {
+  isStandaloneWebApp,
+  requestParentExternalUrl,
+  type ExternalUrlDisposition,
+} from './externalUrlBroker';
 export { createReadModelRequestExecutor } from "./safeRequestRetry";
 export {
   DEFAULT_PWA_CACHE_APP_BUDGET_BYTES,

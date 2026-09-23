@@ -1,4 +1,9 @@
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import {
+  isExactMaverickParentMessage,
+  isStandaloneWebApp,
+  requestParentExternalUrl,
+  type ExternalUrlDisposition,
+} from '@maverick/pwa-cache';
 import { readMailDisplay } from './pwaCache';
 import { useMailList } from './useMailList';
 import { DraftReader } from './DraftReader';
@@ -324,7 +329,7 @@ function openBlankAuthorizationWindow() {
   return popup;
 }
 
-function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
+function openAuthorizationUrl(authorizationUrl: string, popup: Window | null, disposition: ExternalUrlDisposition) {
   if (popup && !popup.closed) {
     popup.location.replace(authorizationUrl);
     try {
@@ -335,10 +340,7 @@ function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
     }
     return;
   }
-  if (window.top && window.top !== window) {
-    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, "*");
-    return;
-  }
+  if (requestParentExternalUrl(authorizationUrl, { disposition })) return;
   window.location.assign(authorizationUrl);
 }
 
@@ -1198,7 +1200,8 @@ export function App() {
   }, [selectedThread?.id]);
 
   async function startGmailOAuth() {
-    const authorizationWindow = openBlankAuthorizationWindow();
+    const disposition: ExternalUrlDisposition = isStandaloneWebApp() ? 'same-window' : 'new-window';
+    const authorizationWindow = disposition === 'new-window' ? openBlankAuthorizationWindow() : null;
     setBusy(true);
     try {
       const payload = await callBackend<{ status: string; authorization_url?: string; detail?: string }>({
@@ -1212,7 +1215,7 @@ export function App() {
       });
       if (payload.authorization_url) {
         setAccountModalOpen(false);
-        openAuthorizationUrl(payload.authorization_url, authorizationWindow);
+        openAuthorizationUrl(payload.authorization_url, authorizationWindow, disposition);
         return;
       }
       closeAuthorizationWindow(authorizationWindow);

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "9a8bb80c50672b1a1599cd7ee402e1f5a04d9c42a3848b4fc0624a88b5da050b",
+  "build_id": "b4fd37544b415c3de0f10a189627493dbdb970f34642403e70169ed52f513e72",
   "entrypoints": [
     "index.html",
     "widgets/crm-external-settings/index.html",
@@ -53,9 +53,9 @@
       "size_bytes": 1123
     },
     {
-      "path": "assets/widgets/crm-external-settings/index-HlzgeYtG.js",
-      "sha256": "06b4d2c5609a35249149aa5bd879cd1e57cabcc171c7ad574b512c7a60dd3683",
-      "size_bytes": 8462
+      "path": "assets/widgets/crm-external-settings/index-DhFlSmxj.js",
+      "sha256": "62ce74967dee5fa43ca04b481bc7f3f72face02a6a6d15da5d90bee76bb96814",
+      "size_bytes": 8711
     },
     {
       "path": "assets/widgets/crm-sidebar/index-DYvCLQ7V.js",
@@ -76,7 +76,7 @@
     },
     {
       "path": "widgets/crm-external-settings/index.html",
-      "sha256": "8f7061faf0bd98cbc72bec23ab978ff90666f37d78e0d4d3064ade9c4c7186df",
+      "sha256": "9af4b7eef2c0923e7525546a3e95dad068db5fb8aba1bb10ae3a3d54589f3b18",
       "size_bytes": 679
     },
     {

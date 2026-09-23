@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { requestParentExternalUrl } from '@maverick/pwa-cache';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { copyPublicUrl, date, label, type Detail, type Plan } from './api';
 
 type Props = { detail: Detail; busy: boolean; onApprove: (plan: Plan) => void; onAction: (action: string) => void };
@@ -17,7 +18,7 @@ export function PublicationDetail({ detail, busy, onApprove, onAction }: Props) 
   }, [confirmation]);
   return <article className="detail" aria-label="Dettaglio pubblicazione">
     <header><div><p className="eyebrow">Pubblicazione</p><h2>{app.name}</h2></div><span className={`badge ${app.status}`}>{label(app.status)}</span></header>
-    <a className="public-url" href={app.managed_url} target="_blank" rel="noopener noreferrer">{app.managed_url}</a>
+    <a className="public-url" href={app.managed_url} onClick={(event) => openExternalLink(event, app.managed_url)} target="_blank" rel="noopener noreferrer">{app.managed_url}</a>
     <button className="quiet" onClick={async () => { const ok = await copyPublicUrl(app.managed_url); setCopied(ok); setCopyFailed(!ok); }}>{copied ? 'URL copiato' : 'Copia URL'}</button>
     {copyFailed && <p role="status">Copia non consentita dal browser: seleziona e copia il collegamento.</p>}
     <dl>
@@ -52,4 +53,9 @@ export function PublicationDetail({ detail, busy, onApprove, onAction }: Props) 
       <div className="actions"><button className="secondary" autoFocus onClick={() => setConfirmation('')}>Annulla</button><button onClick={() => { onAction(confirmation); setConfirmation(''); }}>Conferma</button></div>
     </dialog>
   </article>;
+}
+
+function openExternalLink(event: MouseEvent<HTMLAnchorElement>, url: string) {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  if (requestParentExternalUrl(url)) event.preventDefault();
 }

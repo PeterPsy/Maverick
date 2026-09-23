@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
+import { requestParentExternalUrl } from "@maverick/pwa-cache";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
@@ -18,8 +19,15 @@ function MarkdownLink({ children, href, onClick, ...props }: ComponentPropsWitho
   const shellAppTarget = storageTarget ? null : shellAppHrefTarget(href);
   if (!storageTarget) {
     if (isAbsoluteHttpUrl(href)) {
+      function handleExternalClick(event: MouseEvent<HTMLAnchorElement>) {
+        onClick?.(event);
+        if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+          return;
+        }
+        if (requestParentExternalUrl(href)) event.preventDefault();
+      }
       return (
-        <a {...props} href={href} onClick={onClick} rel={externalLinkRel(props.rel)} target="_blank">
+        <a {...props} href={href} onClick={handleExternalClick} rel={externalLinkRel(props.rel)} target="_blank">
           {children}
         </a>
       );

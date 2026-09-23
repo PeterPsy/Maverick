@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Download, ExternalLink, FileText, Search, ShieldAlert, X } from 'lucide-react';
 import { callBackend } from '../api';
+import { openExternalLink } from '../lib/shellExternalUrl';
 import type { RemoteSkillDetail, RemoteSkillSummary, SkillDetail } from '../types';
 
 const SKILL_ID_PATTERN = /^[a-z][a-z0-9-]{1,62}$/;
@@ -159,7 +160,7 @@ export function SkillsExplore({ onInstalled }: { onInstalled: (skillId: string) 
                   <h3>{detail.title || detail.slug}</h3>
                   <p>{detail.description || 'No description provided.'}</p>
                 </div>
-                <a href={detail.link} rel="noreferrer" target="_blank">
+                <a href={detail.link} onClick={(event) => openExternalLink(event, detail.link)} rel="noreferrer" target="_blank">
                   prompts.chat <ExternalLink size={14} aria-hidden="true" />
                 </a>
               </header>

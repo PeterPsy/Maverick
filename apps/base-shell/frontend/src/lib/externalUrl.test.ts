@@ -41,4 +41,14 @@ describe("external URL broker", () => {
     expect(open).toHaveBeenCalledWith("https://example.com", "_blank", "noopener,noreferrer");
     expect(assign).toHaveBeenCalledWith("https://example.com");
   });
+
+  it("uses top-level navigation for links opened from an installed web app", () => {
+    const assign = vi.fn();
+    const open = vi.fn();
+
+    openExternalUrl("https://example.com", "new-window", { assign, open, standalone: true });
+
+    expect(assign).toHaveBeenCalledWith("https://example.com");
+    expect(open).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "3f8e1419d35c52ef022f5aa627702c5a2360df77db600b2d6f7b1d74e6b2c77f",
+  "build_id": "a05e45e251e06d94611a5ac461981ea9325cbad12c5d327f61c8acb2ff5a1b66",
   "entrypoints": [
     "index.html",
     "widgets/mail-sidebar/index.html",
@@ -8,9 +8,9 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-B7KsEq6Z.js",
-      "sha256": "264fd95f90c0d9bfe5340e9808790e187a34e3a82b75f96bc32243b8329b6016",
-      "size_bytes": 38724
+      "path": "assets/app-Bu1-wG1W.js",
+      "sha256": "430eee32e1c98a17d050f2f785450aa8c24c9ab31e961cf0910b1c9b0b93fd91",
+      "size_bytes": 39624
     },
     {
       "path": "assets/app-DsGIIRm0.css",
@@ -51,7 +51,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "0c13a1dd659ca0ff4fc4ed78e6f090587189c5c3d6afd50538eb296e6a2ebd9e",
+      "sha256": "376eca6416681237ee09551b91c3f8d8043fb9840c6c87aae6a5a72bb570d371",
       "size_bytes": 599
     },
     {

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { requestParentExternalUrl } from "@maverick/pwa-cache";
 import {
   decideRuntimeToolConfirmation,
   getRuntimeToolConfirmation,
@@ -228,7 +229,7 @@ function ToolPanelWebResults({ results }: { results: Record<string, unknown>[] }
           return (
             <div className="chatapp-tool-call-panel__list-item" key={`${title}-${index}`}>
               {url ? (
-                <a href={url} rel="noreferrer" target="_blank">
+                <a href={url} onClick={(event) => openExternalLink(event, url)} rel="noreferrer" target="_blank">
                   {title}
                 </a>
               ) : (
@@ -241,6 +242,11 @@ function ToolPanelWebResults({ results }: { results: Record<string, unknown>[] }
       </div>
     </section>
   );
+}
+
+function openExternalLink(event: MouseEvent<HTMLAnchorElement>, url: string) {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  if (requestParentExternalUrl(url)) event.preventDefault();
 }
 
 function ToolPanelFileChanges({ changes }: { changes: Record<string, unknown>[] }) {

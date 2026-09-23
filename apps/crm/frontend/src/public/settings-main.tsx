@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Check, Copy, ExternalLink, Globe2, LockKeyhole, RefreshCw } from 'lucide-react';
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
@@ -78,6 +78,16 @@ function Settings() {
       setCopyFeedback(copied ? 'Link copiato' : 'Copia non disponibile: seleziona il link.');
     }
   }
+  function openPublicUrl(event: MouseEvent<HTMLAnchorElement>) {
+    if (!status?.url || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (postToShell({
+      type: 'maverick.app.external-url',
+      owner_app_id: 'crm',
+      widget_id: 'crm-external-settings',
+      disposition: 'new-window',
+      url: status.url,
+    })) event.preventDefault();
+  }
 
   const stateLabel = !status?.configured ? 'Da configurare' : !status.enabled ? 'Disattivato' : status.ready ? 'Servizio attivo' : 'In attesa del servizio';
   return <main className="crm-external-settings">
@@ -99,7 +109,7 @@ function Settings() {
               <strong>{status.url || 'Dominio non configurato'}</strong>
               {status.url && <div className="crm-external-link-actions">
                 <button type="button" className="crm-external-icon" aria-label="Copia link" title="Copia link" onClick={() => void copyUrl()}><Copy size={17} aria-hidden="true" /></button>
-                {status.enabled && <a className="crm-external-icon" href={status.url} target="_blank" rel="noopener noreferrer" aria-label="Apri CRM" title="Apri CRM in una nuova scheda"><ExternalLink size={17} aria-hidden="true" /></a>}
+                {status.enabled && <a className="crm-external-icon" href={status.url} target="_blank" rel="noopener noreferrer" aria-label="Apri CRM" title="Apri CRM" onClick={openPublicUrl}><ExternalLink size={17} aria-hidden="true" /></a>}
               </div>}
             </div>
             {copyFeedback && <small role="status">{copyFeedback}</small>}

@@ -144,7 +144,8 @@ test('unconfigured hosting is honest and cannot be enabled', async ({ page }) =>
 for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 }]) {
   test(`shell iframe keeps save reachable without horizontal overflow at ${viewport.width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
-    await mockBackend(page, { status: { url: `https://crm.apps.${'long-installation-domain-'.repeat(3)}example.test` } });
+    const shellStatusUrl = `https://crm.apps.${'long-installation-domain-'.repeat(3)}example.test`;
+    await mockBackend(page, { status: { url: shellStatusUrl } });
     const shellCss = ['app-settings.css', 'sidebar.css'].map(name => readFileSync(new URL(`../../../base-shell/frontend/src/styles/${name}`, import.meta.url), 'utf8')).join('\n');
     const appOrigin = `http://127.0.0.1:${process.env.CRM_PLAYWRIGHT_PORT || '5187'}`;
     const shellOrigin = appOrigin.replace('127.0.0.1', 'localhost');
@@ -156,7 +157,16 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
       * { box-sizing: border-box; } :root { --maverick-bg:#070708; --maverick-text:#ececec; --maverick-text-muted:#aaa; --maverick-border:#ffffff14; --maverick-border-strong:#ffffff24; --maverick-surface-active:#ffffff24; --bs-mobile-shell-status-bar-height:${viewport.width === 390 ? '24px' : '0px'}; font:14px system-ui; } body { margin:0; background:#111; } ${shellCss}
       </style></head><body><dialog class="bs-app-settings"><header class="bs-app-settings__header"><div><p>Impostazioni app</p><h2>CRM</h2></div><button class="bs-app-settings__close">×</button></header>
       <nav class="bs-app-settings__tabs"><button>Generali</button><button aria-pressed="true">Superfici esterne</button></nav>
-      <div class="bs-app-settings__body bs-app-settings__body--external"><section class="bs-widget-slot bs-widget-slot--fill"><iframe class="bs-widget-slot__frame" title="CRM settings" allow="fullscreen" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" src="${appOrigin}${widgetUrl}"></iframe></section></div></dialog><script>document.querySelector('dialog').showModal();</script></body></html>` }));
+      <div class="bs-app-settings__body bs-app-settings__body--external"><section class="bs-widget-slot bs-widget-slot--fill"><iframe class="bs-widget-slot__frame" title="CRM settings" allow="fullscreen" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" src="${appOrigin}${widgetUrl}"></iframe></section></div></dialog><script>
+      document.querySelector('dialog').showModal();
+      window.externalUrlRequests = [];
+      const frame = document.querySelector('iframe');
+      window.addEventListener('message', event => {
+        if (event.source === frame.contentWindow && event.origin === ${JSON.stringify(appOrigin)} && event.data.type === 'maverick.app.external-url') {
+          window.externalUrlRequests.push(event.data);
+        }
+      });
+      </script></body></html>` }));
     await page.goto(`${shellOrigin}/__settings_host`);
     const widget = page.frameLocator('iframe');
     const save = widget.getByRole('button', { name: 'Salva modifiche' });
@@ -185,5 +195,13 @@ for (const viewport of [{ width: 1000, height: 650 }, { width: 390, height: 600 
     expect(await widget.locator('body').evaluate(() => (window as any).copyEventSeen)).toBe(true);
     await expect(widget.getByRole('button', { name: 'Copia link' })).toBeFocused();
     await expect(widget.locator('textarea')).toHaveCount(0);
+    await widget.getByRole('link', { name: 'Apri CRM' }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).externalUrlRequests)).toEqual([{
+      type: 'maverick.app.external-url',
+      owner_app_id: 'crm',
+      widget_id: 'crm-external-settings',
+      disposition: 'new-window',
+      url: shellStatusUrl,
+    }]);
   });
 }

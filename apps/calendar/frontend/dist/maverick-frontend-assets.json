@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "a3c7c7c4a94a1fdb95908b6b56b97e0c48b522d5de9f96fe8dae503f7fe44611",
+  "build_id": "2f0fcf78d7de1d2115e1bc0b208dc195512383d65a7fed436e22892799a936d0",
   "entrypoints": [
     "index.html",
     "widgets/calendar-sidebar/index.html",
@@ -8,9 +8,9 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-DOR8Le0j.js",
-      "sha256": "d9189979570231f8e65e6c4bc14d3934e37dcbfa861530e2dd9054c22ed2f1f6",
-      "size_bytes": 2649
+      "path": "assets/app-B1YmtLGr.js",
+      "sha256": "24a72c3fd44093a92ed7bdb901383f4cce6468fbb2f19035ec60aa3b50bf7427",
+      "size_bytes": 3574
     },
     {
       "path": "assets/app-Df63WUQy.js",
@@ -61,7 +61,7 @@
     },
     {
       "path": "widgets/calendar-sidebar-footer/index.html",
-      "sha256": "75b75343212b61236c5aa82469cda0952da13323d7aa2ccc26438bf7d1e7f45f",
+      "sha256": "29156f306c1b89bc215b39be587a96f2036524e2d89e94c826b0ddf0be51e40c",
       "size_bytes": 584
     }
   ]

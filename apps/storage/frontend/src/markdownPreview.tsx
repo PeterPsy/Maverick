@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { requestParentExternalUrl } from '@maverick/pwa-cache';
+import type { MouseEvent, ReactNode } from 'react';
 
 type TableBlock = {
   alignments: Array<'left' | 'center' | 'right'>;
@@ -101,7 +102,7 @@ function renderInline(text: string): ReactNode[] {
       }
       const href = safeHref(text.slice(hrefStart, hrefEnd));
       const label = text.slice(next + 1, labelEnd);
-      nodes.push(href ? <a key={`link-${next}`} href={href} target="_blank" rel="noreferrer">{label}</a> : label);
+      nodes.push(href ? <a key={`link-${next}`} href={href} onClick={(event) => openExternalLink(event, href)} target="_blank" rel="noreferrer">{label}</a> : label);
       cursor = hrefEnd + 1;
       continue;
     }
@@ -129,6 +130,11 @@ function renderInline(text: string): ReactNode[] {
   }
 
   return nodes;
+}
+
+function openExternalLink(event: MouseEvent<HTMLAnchorElement>, href: string) {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  if (requestParentExternalUrl(href)) event.preventDefault();
 }
 
 export function MarkdownPreview({ text, compact = false }: { text: string; compact?: boolean }) {

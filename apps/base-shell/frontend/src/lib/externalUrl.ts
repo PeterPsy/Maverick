@@ -1,8 +1,11 @@
+import { isStandaloneWebApp } from '@maverick/pwa-cache';
+
 export type ExternalUrlDisposition = "new-window" | "same-window";
 
 type ExternalUrlEffects = {
   assign: (url: string) => void;
   open: (url: string, target: string, features: string) => Window | null;
+  standalone?: boolean;
 };
 
 export function externalHttpUrlFromMessage(value: unknown): string | null {
@@ -32,7 +35,7 @@ export function openExternalUrl(
     open: (target, name, features) => window.open(target, name, features),
   },
 ): void {
-  if (disposition === "same-window") {
+  if (disposition === "same-window" || (effects.standalone ?? isStandaloneWebApp())) {
     effects.assign(url);
     return;
   }

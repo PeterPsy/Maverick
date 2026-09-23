@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import {
+  isExactMaverickParentMessage,
+  isStandaloneWebApp,
+  requestParentExternalUrl,
+  type ExternalUrlDisposition,
+} from '@maverick/pwa-cache';
 import { createRoot } from 'react-dom/client';
 import { CalendarPlus, Plus } from 'lucide-react';
 import { startGoogleOAuth } from '../../api';
@@ -78,12 +83,13 @@ function postPrimaryActionState(appId: string) {
 }
 
 async function connectAccount(appId: string, setIsConnecting: (value: boolean) => void, setError: (value: string) => void) {
-  const authorizationWindow = openBlankAuthorizationWindow();
+  const disposition: ExternalUrlDisposition = isStandaloneWebApp() ? 'same-window' : 'new-window';
+  const authorizationWindow = disposition === 'new-window' ? openBlankAuthorizationWindow() : null;
   setIsConnecting(true);
   setError('');
   try {
     const started = await startGoogleOAuth(appId, { redirectUri: calendarOAuthRedirectUri(appId, maverickPlatformOrigin()) });
-    openAuthorizationUrl(started.authorization_url, authorizationWindow);
+    openAuthorizationUrl(started.authorization_url, authorizationWindow, disposition, appId);
   } catch (connectError) {
     closeAuthorizationWindow(authorizationWindow);
     setError(connectError instanceof Error ? connectError.message : 'Google Calendar connection failed.');
@@ -108,7 +114,12 @@ function openBlankAuthorizationWindow() {
   return popup;
 }
 
-function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
+function openAuthorizationUrl(
+  authorizationUrl: string,
+  popup: Window | null,
+  disposition: ExternalUrlDisposition,
+  appId: string,
+) {
   if (popup && !popup.closed) {
     popup.location.replace(authorizationUrl);
     try {
@@ -119,10 +130,11 @@ function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
     }
     return;
   }
-  if (window.top && window.top !== window) {
-    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, "*");
-    return;
-  }
+  if (requestParentExternalUrl(authorizationUrl, {
+    disposition,
+    ownerAppId: appId,
+    widgetId: WIDGET_ID,
+  })) return;
   window.location.assign(authorizationUrl);
 }
 

@@ -1,19 +1,19 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "c4cb2913b5e76d4e71af00f27c7a5f430fafcac5c30ed5923334d9166c09caed",
+  "build_id": "e3905ee49d592f26283152473ece56e5da1f9210c5620c8f3df0301eccd7abb4",
   "entrypoints": [
     "index.html",
     "widgets/external-surfaces-settings/index.html"
   ],
   "immutable": [
     {
-      "path": "assets/app-Cl2MYdLT.js",
-      "sha256": "61caec018d48bf9e7bdf05bf55041db780f0ddffb7f5cbed36f2824b0c61681b",
+      "path": "assets/app-NZE73d18.js",
+      "sha256": "c1d36ac3e7f806de5235660c5e256cd9860a8f0d678574fa43829e05ee07ac95",
       "size_bytes": 155
     },
     {
-      "path": "assets/externalSettings-CRWu_O0i.js",
-      "sha256": "ecd2fae3f7dd256669865b885e414255f21df58f786a469d632be6ab0c3a0ff7",
+      "path": "assets/externalSettings-CuDG2aKs.js",
+      "sha256": "83b1ec642d92b1bec80c088762ba471056f3e19f15c737c4b96a8c5f2625a5a2",
       "size_bytes": 1144
     },
     {
@@ -22,9 +22,9 @@
       "size_bytes": 718
     },
     {
-      "path": "assets/styles-DbaIcpsJ.js",
-      "sha256": "3273d7468f8efadd25672d1958d36f0a7d46d6585e6b747c1db0f4e400f08db2",
-      "size_bytes": 238018
+      "path": "assets/styles-CpjWqrxf.js",
+      "sha256": "ee6db0739053ecea4c916f7ecd6e4ea53a03b1021128f1b6f2bd4f06cfdeee93",
+      "size_bytes": 238943
     }
   ],
   "revalidated": [
@@ -35,12 +35,12 @@
     },
     {
       "path": "index.html",
-      "sha256": "57512dd2095d427c5664d3b4c003c514a22a24826e97c4cee1872938f1f543b9",
+      "sha256": "6a906f1e31e3e9d238f4a37ce6cb67bd72745ff6f09efd80e664d780fd3f3154",
       "size_bytes": 717
     },
     {
       "path": "widgets/external-surfaces-settings/index.html",
-      "sha256": "ddf526e6a47ad8d5e8388049d95632ae3e9d8c9e166f14b540bd788b941f8c7b",
+      "sha256": "571b949a08d71ab1b4411535040ae2f1f595c9a8eeb301c0bb41b8bb6a83796e",
       "size_bytes": 791
     }
   ]

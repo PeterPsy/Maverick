@@ -1,5 +1,5 @@
 {
-  "build_id": "b9f244231adc4ec1612453bca171d4e1a22e5d05a912c463aadf0dac4ab4eb6c",
+  "build_id": "903cf324d83825d68c48af68967821cb196b732496b42016daf8bfb446177624",
   "entrypoints": [
     "index.html",
     "widgets/skills-sidebar/index.html",
@@ -18,9 +18,9 @@
       "size_bytes": 5343
     },
     {
-      "path": "assets/app-DCiPGfOw.js",
-      "sha256": "f3e5c915d51788b8bc60255d8ae64b10754d938a0d3a56e09ca75c1ec2003bb8",
-      "size_bytes": 144455
+      "path": "assets/app-Clrce4Eu.js",
+      "sha256": "f1364d84db0c93046f621e1435d5515ead70e9cd89567b2c670c70d10ef55f1f",
+      "size_bytes": 146998
     },
     {
       "path": "assets/app-SM3RFzpG.js",
@@ -44,7 +44,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "160688e6ce2d9ff6622735276730759f68bcde9f5d80d62b094210c43fb03b0c",
+      "sha256": "eb8194be78d05aa4db1ba77ab500b441bfcf68f94f3ed5c5b18eb385453717a6",
       "size_bytes": 810
     },
     {

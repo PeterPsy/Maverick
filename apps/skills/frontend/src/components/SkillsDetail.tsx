@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { BookOpen, ExternalLink, FileText, Fingerprint, Layers3, Save, ScrollText, Trash2, ToggleLeft } from 'lucide-react';
+import { openExternalLink } from '../lib/shellExternalUrl';
 import type { Catalog, SkillDetail, SkillEdits } from '../types';
 
 type SkillsDetailProps = {
@@ -252,7 +253,7 @@ export function SkillsDetail({ catalog, selectedSkill, savingSkill, onDeleteSkil
             <div>
               <span>Source</span>
               {selectedSkill.source_url ? (
-                <a href={selectedSkill.source_url} rel="noreferrer" target="_blank">
+                <a href={selectedSkill.source_url} onClick={(event) => openExternalLink(event, selectedSkill.source_url!)} rel="noreferrer" target="_blank">
                   prompts.chat <ExternalLink size={13} aria-hidden="true" />
                 </a>
               ) : <strong>{selectedSkill.origin === 'maverick' ? 'Maverick built-in' : 'Workspace catalog'}</strong>}

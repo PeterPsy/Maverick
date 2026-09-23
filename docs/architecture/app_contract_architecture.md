@@ -134,6 +134,13 @@ relay still requires the active platform session before minting the isolated
 callback frame, and a successful top-level standalone callback returns to the
 platform shell.
 
+Ordinary external HTTP(S) links use the same validated broker. In an
+installed/standalone PWA the shell navigates its top-level browsing context so
+iOS can hand an out-of-scope destination to the system browser surface; it must
+not use `window.open`, which iOS keeps inside the installed web app. Normal
+browser sessions retain popup-first behavior with same-window fallback when a
+popup is blocked.
+
 The public app id declared by the app artifact and the local app id used for one workspace binding are separate identities:
 
 - `public_app_id` is the catalog or source identity declared by the app contract and used for distribution, upgrade lineage, compatibility, and publisher ownership.

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
-import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility, isExactMaverickParentMessage } from '@maverick/pwa-cache';
+import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility, isExactMaverickParentMessage, requestParentExternalUrl } from '@maverick/pwa-cache';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
 import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, STORAGE_CATALOG_REVALIDATED_EVENT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, folderMediaDownloadUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, storageMediaStreamUrl, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
@@ -1968,7 +1968,9 @@ function App() {
 
   function openDriveFile(file: StorageFile) {
     if (!file.web_url) return;
-    window.open(file.web_url, '_blank', 'noopener,noreferrer');
+    if (!requestParentExternalUrl(file.web_url)) {
+      window.open(file.web_url, '_blank', 'noopener,noreferrer');
+    }
   }
 
   async function downloadFolderArchive(folder: StorageFolder) {

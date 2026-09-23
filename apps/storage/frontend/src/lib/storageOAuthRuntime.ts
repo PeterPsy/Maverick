@@ -19,10 +19,10 @@ export function maverickPlatformOrigin(): string {
 }
 
 export function storageOAuthNavigationDisposition(
-  displayModeStandalone = window.matchMedia?.('(display-mode: standalone)').matches === true,
-  navigatorStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true,
+  displayModeStandalone?: boolean,
+  navigatorStandalone?: boolean,
 ): StorageOAuthNavigationDisposition {
-  return displayModeStandalone || navigatorStandalone ? 'same-window' : 'new-window';
+  return isStandaloneWebApp(displayModeStandalone, navigatorStandalone) ? 'same-window' : 'new-window';
 }
 
 export function storageOAuthCallbackFromLocation(pathname: string, search: string, origin: string): StorageOAuthCallback | null {
@@ -51,3 +51,4 @@ function safeDecodeURIComponent(value: string) {
     return value;
   }
 }
+import { isStandaloneWebApp } from '@maverick/pwa-cache';

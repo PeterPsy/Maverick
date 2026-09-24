@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from core.device_use.contract import device_use_base_instructions
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.workspace_instructions import (
     resolve_workspace_instruction_chain,
@@ -34,6 +35,19 @@ def runtime_environment_context(session, *, native: bool = False) -> dict[str, s
 
 def native_runtime_input(*, session, input_text: str, skills=()) -> str:
     """Supply context for CLIs without Codex's native instruction discovery."""
+    device_use_binding = getattr(session, "device_use_binding", None)
+    if device_use_binding is not None:
+        instructions = device_use_base_instructions(
+            mode=device_use_binding.mode,
+            approved_apps=device_use_binding.approved_apps,
+            initial_app=device_use_binding.initial_app,
+        )
+        return (
+            "[Device Use Instructions]\n"
+            f"{instructions}\n\n"
+            "[Maverick user input]\n"
+            f"{input_text}"
+        )
     sections = [
         "[Maverick runtime context]\n"
         "An active workspace is available. Use filesystem tools to inspect it "

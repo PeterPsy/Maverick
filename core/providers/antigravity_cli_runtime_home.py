@@ -66,7 +66,26 @@ def prepare_antigravity_runtime_home(
         profile / ANTIGRAVITY_OAUTH_TOKEN_FILENAME,
     )
     _write_private_json(profile / "settings.json", ANTIGRAVITY_RUNTIME_SETTINGS)
+    prepare_antigravity_runtime_mcp_config(runtime_root, device_use=False)
     return home
+
+
+def prepare_antigravity_runtime_mcp_config(
+    runtime_root: Path,
+    *,
+    device_use: bool = False,
+) -> None:
+    """Configure runtime-private MCP servers for the Antigravity CLI."""
+    runtime = Path(runtime_root).resolve(strict=False)
+    home = runtime / "antigravity-home"
+    config_dir = home / ".gemini" / "config"
+    _private_directory(config_dir, runtime)
+    servers = {}
+    if device_use:
+        servers["device_use"] = {
+            "command": "maverick-device-use-mcp",
+        }
+    _write_private_json(config_dir / "mcp_config.json", {"mcpServers": servers})
 
 
 def validate_antigravity_oauth_source(
@@ -408,6 +427,7 @@ __all__ = [
     "ANTIGRAVITY_RUNTIME_SETTINGS",
     "ensure_antigravity_runtime_skills_root",
     "prepare_antigravity_runtime_home",
+    "prepare_antigravity_runtime_mcp_config",
     "prepare_antigravity_runtime_skills",
     "resolve_antigravity_source_home",
     "validate_antigravity_oauth_source",

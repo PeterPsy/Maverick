@@ -13,6 +13,7 @@ from core.providers.antigravity_cli_sandbox import (
 )
 from core.providers.antigravity_cli_runtime_home import (
     antigravity_runtime_skill_root,
+    prepare_antigravity_runtime_mcp_config,
     prepare_antigravity_runtime_skills,
 )
 from core.providers.antigravity_cli_session import AntigravityCliSession
@@ -114,14 +115,25 @@ class AntigravityCliNativeAdapter:
             return await self._prepare(context)
 
     async def _prepare(self, context):
-        skills = tuple(getattr(context, "invoked_skills", ()) or ())
-        if getattr(context.session, "skill_activation_mode", "implicit") == "implicit":
-            skills = tuple(
-                await asyncio.to_thread(
-                    resolve_available_runtime_skills,
-                    context.session,
+        has_device_use = (
+            getattr(context.session, "device_use_binding", None) is not None
+        )
+        if has_device_use:
+            skills = ()
+        else:
+            skills = tuple(getattr(context, "invoked_skills", ()) or ())
+            if getattr(context.session, "skill_activation_mode", "implicit") == "implicit":
+                skills = tuple(
+                    await asyncio.to_thread(
+                        resolve_available_runtime_skills,
+                        context.session,
+                    )
                 )
-            )
+        await asyncio.to_thread(
+            prepare_antigravity_runtime_mcp_config,
+            Path(context.session.runtime_root),
+            device_use=has_device_use,
+        )
         skill_digest = await asyncio.to_thread(
             prepare_antigravity_runtime_skills,
             Path(context.session.runtime_root),

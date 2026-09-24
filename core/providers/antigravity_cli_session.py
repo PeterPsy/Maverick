@@ -7,6 +7,8 @@ from contextlib import aclosing, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
+from core.device_use.errors import DeviceUseError
+from core.device_use.runtime_registry import device_use_service_for_session
 from core.providers.agentic_adapter import (
     LocalLaunchContext,
     RuntimeCancelResult,
@@ -163,6 +165,18 @@ class AntigravityCliSession:
             raise
         finally:
             self._executing = False
+            binding = getattr(context.session, "device_use_binding", None)
+            if binding is not None:
+                service = device_use_service_for_session(context.session.session_id)
+                if service is not None:
+                    try:
+                        service.end_turn(
+                            binding,
+                            runtime_session_id=context.session.session_id,
+                            turn_id=context.correlation_id,
+                        )
+                    except DeviceUseError:
+                        pass
 
     async def _execute_turn(self, context):
         if self.client is None:

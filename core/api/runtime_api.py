@@ -1352,7 +1352,7 @@ def _preflight_runtime_session_creation_before_persistence(
         )
         if (
             device_use_binding is not None
-            and execution_binding.runtime_engine_id != "codex"
+            and execution_binding.runtime_engine_id not in {"codex", "antigravity-cli"}
         ):
             raise ProviderError("device_use_requires_codex_runtime")
     return RuntimeSessionCreationPreflight(

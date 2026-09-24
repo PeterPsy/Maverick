@@ -199,6 +199,7 @@ class AppReferenceApiTestSupport:
         method: str = "GET",
         body: dict | None = None,
         cookie: str | None = None,
+        auth_token: str | None = None,
     ) -> tuple[int, dict, dict[str, str]]:
         payload = json.dumps(body or {}).encode("utf-8") if body is not None else b""
         headers: dict[str, str] = {}
@@ -216,6 +217,8 @@ class AppReferenceApiTestSupport:
             environ["HTTP_ORIGIN"] = "http://maverick.test"
         if cookie:
             environ["HTTP_COOKIE"] = cookie
+        if auth_token:
+            environ["HTTP_AUTHORIZATION"] = f"Bearer {auth_token}"
 
         def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
             headers.update(dict(response_headers))

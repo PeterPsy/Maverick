@@ -342,5 +342,17 @@ class AntigravityCliNativeTest(AntigravityCliFixture, unittest.IsolatedAsyncioTe
             self.fail("Antigravity fixture child process survived cleanup")
 
 
+    async def test_turn_without_timeout_seconds_executes_without_deadline(self):
+        await self.controller.connect(self.context)
+        turn = SimpleNamespace(
+            **vars(self.context),
+            input_text="indefinite",
+            correlation_id="turn",
+            timeout_seconds=None,
+        )
+        events = [event async for event in self.controller.execute(turn)]
+        self.assertEqual(self.final_text(events), "answer:indefinite")
+
+
 if __name__ == "__main__":
     unittest.main()

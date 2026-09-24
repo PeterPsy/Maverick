@@ -79,7 +79,7 @@ def antigravity_stream_launch_spec(
             "accept-edits",
             "--disable-slash-commands",
             "--print-timeout",
-            "5m",
+            "24h",
             "--log-file",
             str(log_path),
         ]

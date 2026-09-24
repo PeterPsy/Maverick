@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import aclosing
+from contextlib import aclosing, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -149,7 +149,12 @@ class AntigravityCliSession:
             raise NativeStructuredCliError("antigravity_turn_already_active")
         self._executing = True
         try:
-            async with asyncio.timeout(context.timeout_seconds or 120):
+            timeout_context = (
+                asyncio.timeout(context.timeout_seconds)
+                if context.timeout_seconds is not None
+                else nullcontext()
+            )
+            async with timeout_context:
                 async with aclosing(self._execute_turn(context)) as events:
                     async for event in events:
                         yield event

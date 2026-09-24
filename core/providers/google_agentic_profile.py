@@ -60,10 +60,10 @@ def google_agentic_capabilities() -> RuntimeCapabilitySet:
 def google_agentic_preview_policy() -> AgenticRuntimePolicy:
     """Return the full-access governed-workspace preview resource ceiling."""
     return AgenticRuntimePolicy(
-        max_steps_per_turn=32,
-        max_tool_calls_per_turn=24,
+        max_steps_per_turn=256,
+        max_tool_calls_per_turn=256,
         max_parallel_tool_calls=UNBOUNDED_PARALLEL_TOOL_CALLS,
-        max_wall_time_seconds=900,
+        max_wall_time_seconds=86_400,
         max_tool_result_bytes=1_500_000,
         max_total_tool_result_bytes=8_000_000,
         max_input_tokens=262_144,

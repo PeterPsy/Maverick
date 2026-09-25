@@ -43,7 +43,13 @@ export function createProviderUsageController(context: {
       context.state.usageHistoryFilters = defaultUsageHistoryFilters();
     }
     loadedWorkspaceId = workspaceId;
-    const supportsProviderUsage = Boolean(settings?.provider.active_provider?.capabilities?.supports_subscription_usage);
+    const providers = [
+      settings?.provider.active_provider,
+      ...(settings?.provider.available_providers || []),
+    ].filter((provider) => provider !== null && provider !== undefined);
+    const supportsProviderUsage = providers.some(
+      (provider) => Boolean(provider.capabilities?.supports_subscription_usage)
+    );
     await Promise.all([
       loadProviderUsage(workspaceId, supportsProviderUsage),
       loadUsageHistory(workspaceId),

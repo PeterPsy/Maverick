@@ -17,9 +17,13 @@ from core.providers.antigravity_cli_runtime_home import (
     prepare_antigravity_runtime_skills,
 )
 from core.providers.antigravity_cli_session import AntigravityCliSession
-from core.providers.models import RuntimeSteerResult
+from core.providers.models import ProviderSubscriptionUsage, RuntimeSteerResult
 from core.providers.native_session_runtime import NativeSessionRuntime
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
+from core.providers.provider_antigravity_usage import (
+    AntigravityUsageRunner,
+    read_antigravity_subscription_usage,
+)
 from core.skills.service import resolve_available_runtime_skills
 
 
@@ -30,9 +34,17 @@ class AntigravityCliNativeAdapter:
     local_process_lifecycle = None
     requires_resolved_launch_spec = True
 
-    def __init__(self, *, command="agy", dependency_roots=None, auth_home=None):
+    def __init__(
+        self,
+        *,
+        command="agy",
+        dependency_roots=None,
+        auth_home=None,
+        subscription_usage_runner: AntigravityUsageRunner | None = None,
+    ):
         self.command = command
         self.auth_home = auth_home
+        self.subscription_usage_runner = subscription_usage_runner
         self.dependency_roots = (
             tuple(dependency_roots)
             if dependency_roots is not None
@@ -52,6 +64,15 @@ class AntigravityCliNativeAdapter:
         self._skill_digests = {}
         self._preparation_locks = {}
         self._lock = Lock()
+
+    def read_subscription_usage(self) -> ProviderSubscriptionUsage:
+        """Read redaction-safe quotas from the authenticated Antigravity CLI."""
+        return read_antigravity_subscription_usage(
+            self.command,
+            dependency_roots=self.dependency_roots,
+            auth_home=self.auth_home,
+            runner=self.subscription_usage_runner,
+        )
 
     async def build_launch_spec(self, context):
         return antigravity_stream_launch_spec(

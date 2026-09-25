@@ -341,6 +341,7 @@ function transpile(relativePath) {
 transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/bouncyToggle.ts');
 transpile('frontend/src/providerModelOptions.ts');
+transpile('frontend/src/providerUsageSummary.ts');
 transpile('frontend/src/executionFamilies.ts');
 transpile('frontend/src/usageHistoryFilters.ts');
 transpile('frontend/src/settingsPanel.ts');
@@ -638,6 +639,8 @@ assert.ok(html.indexOf('settings-agentic-runtimes-card') < html.indexOf('setting
 assert.ok(html.includes('data-agentic-provider-group="codex"'));
 assert.ok(html.includes('Codex'));
 assert.ok(html.includes('11% used · 89% remaining before limit'));
+assert.ok(html.includes('1w window:'));
+assert.ok(html.includes('resets in 1d'));
 assert.ok(!html.includes('Text-only model'));
 assert.ok(!html.includes('Hosted text models'));
 assert.ok(!html.includes('Chat only uses text-output fast models'));
@@ -1143,12 +1146,15 @@ function makeController() {
     def test_platform_settings_uses_compact_subscription_usage(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         panel_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
+        summary_source = (app_root / "frontend" / "src" / "providerUsageSummary.ts").read_text(encoding="utf-8")
         styles_source = (app_root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
         components = json.loads((app_root / "components.json").read_text(encoding="utf-8"))
 
         self.assertNotIn("data-provider-usage-gauge", panel_source)
         self.assertIn("data-agentic-provider-group", panel_source)
-        self.assertIn("remaining before limit", panel_source)
+        self.assertIn("providerUsageSummary", panel_source)
+        self.assertIn("remaining before limit", summary_source)
+        self.assertIn("resets", summary_source)
         self.assertNotIn("Package limits", panel_source)
         self.assertNotIn("settings-refresh-provider-usage", panel_source)
         self.assertIn('@import "tailwindcss"', styles_source)

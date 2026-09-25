@@ -15,6 +15,7 @@ from core.providers.models import (
 )
 from core.providers.payloads import provider_payload
 from core.providers.provider_codex import build_codex_definition
+from core.providers.native_agent_builtins import build_antigravity_cli_candidate_definition
 from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from tests.support.collections import FakeCollection
@@ -40,6 +41,12 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertTrue(definition.capabilities.supports_tool_calling)
         self.assertTrue(definition.capabilities.supports_subscription_usage)
         self.assertIn("chatgpt.com", definition.network_requirements[0].allowed_hosts)
+
+    def test_antigravity_definition_reports_subscription_usage(self) -> None:
+        definition = build_antigravity_cli_candidate_definition()
+
+        self.assertEqual(definition.provider_id, "antigravity-cli")
+        self.assertTrue(definition.capabilities.supports_subscription_usage)
 
     def test_store_hydrates_legacy_provider_definition_with_inferred_role(self) -> None:
         store = self.make_store()

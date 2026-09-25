@@ -16,6 +16,7 @@ import {
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
 import { executionFamily } from './executionFamilies';
+import { providerUsageSummary } from './providerUsageSummary';
 import {
   defaultUsageHistoryFilters,
   usageHistoryTimeRange,
@@ -552,44 +553,6 @@ function runtimeProviderGroupHtml(
     ${error ? `<p class="settings-platform-error" role="alert">${escapeHtml(error)}</p>` : ''}
     <div class="settings-agentic-runtime-list">${group.items.map((item) => item.html).join('')}</div>
   </section>`;
-}
-
-function providerUsageSummary(providerId: string, state: SettingsPanelState): string {
-  const usage = state.providerUsageItems.find((item) => item.provider_id === providerId);
-  if (!usage) {
-    if (providerId === 'codex' && state.isLoadingProviderUsage) {
-      return 'Loading usage…';
-    }
-    if (providerId === 'codex' && state.providerUsageError) {
-      return 'Usage unavailable';
-    }
-    return 'Usage limit not reported';
-  }
-  if (!usage.available) {
-    return 'Usage unavailable';
-  }
-  const windows = usage.limits.flatMap((limit) => [limit.primary_window, limit.secondary_window])
-    .filter((window): window is NonNullable<typeof window> => window !== null);
-  if (!windows.length) {
-    return 'Usage limit not reported';
-  }
-  return windows.map((window) => {
-    const used = Math.min(100, Math.max(0, window.used_percent));
-    const remaining = Math.max(0, 100 - used);
-    const windowLabel = windows.length > 1 ? `${formatUsageWindow(window.limit_window_seconds)}: ` : '';
-    return `${windowLabel}${formatPercentage(used)} used · ${formatPercentage(remaining)} remaining before limit`;
-  }).join(' · ');
-}
-
-function formatPercentage(value: number): string {
-  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
-}
-
-function formatUsageWindow(seconds: number | null): string {
-  if (!seconds || seconds <= 0) return 'Rolling window';
-  if (seconds % 86400 === 0) return `${seconds / 86400}d`;
-  if (seconds % 3600 === 0) return `${seconds / 3600}h`;
-  return 'Rolling window';
 }
 
 function runtimeProviderLabel(providerId: string): string {

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from threading import RLock
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Callable, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Protocol, cast
 
 from core.providers.errors import ProviderNotFoundError
 from core.providers.models import ProviderDefinition, ProviderSubscriptionUsage, RuntimeBackendLaunchSpec, RuntimeSteerResult
@@ -111,6 +111,7 @@ class ProviderRegistry:
         self._definitions: dict[str, ProviderDefinition] = {}
         self._runtime_adapters: dict[str, RuntimeBackendAdapter] = {}
         self._agentic_runtime_adapters: dict[str, AgenticRuntimeEngineAdapter] = {}
+        self._subscription_usage_adapters: dict[str, SubscriptionUsageAdapter] = {}
         self._native_agent_installations: dict[str, NativeAgentInstallation] = {}
         self._native_agent_controllers: dict[str, NativeAgentRuntimeController] = {}
         self.native_catalog_lock = RLock()
@@ -167,6 +168,7 @@ class ProviderRegistry:
         """Register one runtime backend adapter and its canonical definition."""
         definition = self.register_provider_definition(adapter.provider_definition())
         self._runtime_adapters[definition.provider_id] = adapter
+        self._register_subscription_usage_adapter(definition.provider_id, adapter)
         from core.providers.provider_legacy_agentic_bridge import LegacyRuntimeBackendAgenticBridge
 
         self._agentic_runtime_adapters[definition.provider_id] = LegacyRuntimeBackendAgenticBridge(adapter)
@@ -206,6 +208,10 @@ class ProviderRegistry:
             controller = NativeAgentRuntimeController(installation=installation, engine_adapter=engine_adapter)
             self._native_agent_controllers[manifest.runtime_engine_id] = controller
             self._agentic_runtime_adapters[manifest.runtime_engine_id] = controller
+            self._register_subscription_usage_adapter(
+                manifest.runtime_engine_id,
+                engine_adapter,
+            )
             return definition
         if runtime_adapter is not None:
             validate_native_runtime_adapter(installation, runtime_adapter)
@@ -247,7 +253,22 @@ class ProviderRegistry:
             raise ValueError("Agentic adapter identity does not match its provider definition.")
         self._definitions[active_definition.provider_id] = active_definition
         self._agentic_runtime_adapters[active_definition.provider_id] = adapter
+        self._register_subscription_usage_adapter(
+            active_definition.provider_id,
+            adapter,
+        )
         return active_definition
+
+    def _register_subscription_usage_adapter(
+        self,
+        provider_id: str,
+        adapter: object,
+    ) -> None:
+        if callable(getattr(adapter, "read_subscription_usage", None)):
+            self._subscription_usage_adapters[provider_id] = cast(
+                SubscriptionUsageAdapter,
+                adapter,
+            )
 
     def list_provider_definitions(self) -> list[ProviderDefinition]:
         """Return all known provider definitions."""
@@ -310,8 +331,7 @@ class ProviderRegistry:
 
     def get_subscription_usage_adapter(self, provider_id: str) -> SubscriptionUsageAdapter:
         """Return a provider adapter that implements subscription usage reads."""
-        adapter = self.get_runtime_adapter(provider_id)
-        reader = getattr(adapter, "read_subscription_usage", None)
-        if not callable(reader):
+        adapter = self._subscription_usage_adapters.get(provider_id)
+        if adapter is None:
             raise ProviderNotFoundError(f"Subscription usage adapter `{provider_id}` is not registered.")
-        return adapter  # type: ignore[return-value]
+        return adapter

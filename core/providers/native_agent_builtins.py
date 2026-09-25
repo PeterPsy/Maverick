@@ -192,6 +192,7 @@ def build_antigravity_cli_candidate_definition(
             supports_local_binary=True,
             input_modalities=["text"],
             output_modalities=["text", "events"],
+            supports_subscription_usage=True,
         ),
         default_model_family=ANTIGRAVITY_DEFAULT_MODEL,
         requires_credentials=False,

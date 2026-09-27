@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { LogOut, Mail, RefreshCw, Square, SquareCheck, Trash2 } from 'lucide-react';
 import {
   callBackend,
+  MAIL_ACCOUNT_BACKFILL_SYNC_THREADS,
   MAIL_BACKEND_ACTIONS,
   MAIL_INTERACTIVE_SYNC_THREADS,
   type MailConnection,
@@ -56,6 +57,14 @@ type MailboxCount = {
 
 type MailboxCountPayload = {
   counts: Record<string, Record<string, MailboxCount>>;
+};
+
+type SyncPayload = {
+  sync?: {
+    has_more?: boolean;
+    synced_messages?: number;
+    synced_threads?: number;
+  };
 };
 
 type WidgetContext = {
@@ -283,15 +292,30 @@ function MailSidebarWidget() {
     }
     setActiveOperation(`sync:${targetConnection.id}`);
     try {
-      await callBackend({
+      const recent = await callBackend<SyncPayload>({
         action: MAIL_BACKEND_ACTIONS.threadsSync,
         connection_id: targetConnection.id,
         max_threads: MAIL_INTERACTIVE_SYNC_THREADS,
         ...connectionSecretRequest(targetConnection)
       });
+      let synced = recent.sync?.synced_messages ?? recent.sync?.synced_threads ?? 0;
+      let hasMore = Boolean(recent.sync?.has_more);
+      if (targetConnection.provider === 'gmail' && hasMore) {
+        const backfill = await callBackend<SyncPayload>({
+          action: MAIL_BACKEND_ACTIONS.threadsSync,
+          connection_id: targetConnection.id,
+          continue_cursor: true,
+          max_threads: MAIL_ACCOUNT_BACKFILL_SYNC_THREADS,
+          ...connectionSecretRequest(targetConnection)
+        });
+        synced += backfill.sync?.synced_messages ?? backfill.sync?.synced_threads ?? 0;
+        hasMore = Boolean(backfill.sync?.has_more);
+      }
       const refreshed = await refresh({ preserveNotice: true });
       if (refreshed) {
-        setNotice('Sync completed.');
+        setNotice(hasMore
+          ? `Synced ${synced} messages. Sync again to continue loading older mail.`
+          : `Account sync completed (${synced} messages checked).`);
       } else {
         setNotice('Sync completed. Refresh the view if the list is stale.');
       }

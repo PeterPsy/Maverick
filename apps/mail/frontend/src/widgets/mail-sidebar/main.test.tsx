@@ -16,7 +16,14 @@ it('toggles real sidebar checkboxes cumulatively, including rapid clicks, withou
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const accounts = [{ id: 'a', provider: 'gmail', email_address: 'a@example.com', display_name: 'Account A', status: 'connected' }];
   vi.mocked(readMailDisplay).mockResolvedValue({ items: accounts });
-  vi.mocked(callBackend).mockResolvedValue({ items: accounts, counts: {} });
+  vi.mocked(callBackend).mockImplementation(async (params) => {
+    if (params.action === 'threads.sync') {
+      return params.continue_cursor
+        ? { sync: { synced_threads: 15, has_more: false } }
+        : { sync: { synced_threads: 25, has_more: true } };
+    }
+    return { items: accounts, counts: {} };
+  });
   const messages = vi.spyOn(window, 'postMessage').mockImplementation(() => undefined);
   const container = document.createElement('div');
   container.id = 'mail-sidebar-root';
@@ -42,6 +49,15 @@ it('toggles real sidebar checkboxes cumulatively, including rapid clicks, withou
     expect(vi.mocked(callBackend)).toHaveBeenCalledTimes(backendReads);
     expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(displayReads);
     expect(container.querySelector('.mail-sidebar-skeleton')).toBeNull();
+
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Sync Account A"]')!.click());
+    await vi.waitFor(() => expect(container.textContent).toContain('Account sync completed (40 messages checked).'));
+    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'threads.sync', connection_id: 'a', max_threads: 25,
+    }));
+    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'threads.sync', connection_id: 'a', continue_cursor: true, max_threads: 15,
+    }));
   } finally {
     await act(async () => vi.mocked(createRoot).mock.results[0]?.value.unmount());
     container.remove();

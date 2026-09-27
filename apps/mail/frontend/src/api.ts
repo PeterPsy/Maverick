@@ -151,6 +151,7 @@ export const MAIL_BACKEND_ACTIONS = {
 } as const;
 
 export const MAIL_INTERACTIVE_SYNC_THREADS = 25;
+export const MAIL_ACCOUNT_BACKFILL_SYNC_THREADS = 15;
 
 export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/mail/backend', {

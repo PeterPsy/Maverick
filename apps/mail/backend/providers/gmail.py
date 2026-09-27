@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from email.utils import getaddresses, parsedate_to_datetime
@@ -45,6 +46,7 @@ GMAIL_CLIENT_SECRET_SECRET = "gmail-oauth-client-secret"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 GMAIL_THREAD_PAGE_SIZE = 100
+GMAIL_THREAD_FETCH_WORKERS = 8
 GMAIL_DEFAULT_THREAD_LIST_QUERY = "newer_than:30d"
 GMAIL_MAILBOX_QUERIES = {
     "inbox": "in:inbox",
@@ -139,7 +141,13 @@ class GmailProvider:
             access_token=access_token,
             payload={"addLabelIds": _gmail_labels(add), "removeLabelIds": _gmail_labels(remove)},
         )
-        self._fetch_and_cache_thread(data_root, str(thread["connection_id"]), provider_thread_id, secrets)
+        self._fetch_and_cache_thread(
+            data_root,
+            str(thread["connection_id"]),
+            provider_thread_id,
+            secrets,
+            access_token=access_token,
+        )
         audit(data_root, "gmail.labels.modify", "email_thread", resolved_thread_id, {"add": _string_list(add), "remove": _string_list(remove)})
         return get_thread(data_root, resolved_thread_id)
 
@@ -199,13 +207,20 @@ class GmailProvider:
         if draft.get("thread_id"):
             thread = get_thread(data_root, str(draft["thread_id"]), max_body_chars=200)
             payload["threadId"] = thread["provider_thread_id"]
-        sent = self._gmail_json("POST", "messages/send", access_token=self._access_token(secrets), payload=payload)
+        access_token = self._access_token(secrets)
+        sent = self._gmail_json("POST", "messages/send", access_token=access_token, payload=payload)
         provider_thread_id = str(sent.get("threadId") or "")
         now = now_timestamp()
         with connect(data_root) as db:
             db.execute("UPDATE drafts SET status = 'sent', dirty = 0, sent_at = ?, updated_at = ? WHERE id = ?", (now, now, draft_id))
         if provider_thread_id:
-            self._fetch_and_cache_thread(data_root, str(draft["connection_id"]), provider_thread_id, secrets)
+            self._fetch_and_cache_thread(
+                data_root,
+                str(draft["connection_id"]),
+                provider_thread_id,
+                secrets,
+                access_token=access_token,
+            )
         audit(data_root, "gmail.draft.send", "mail_draft", draft_id, {"provider_message_id": str(sent.get("id") or "")})
         local_thread_id = _local_thread_id(str(draft["connection_id"]), provider_thread_id) if provider_thread_id else str(draft.get("thread_id") or "")
         return {"sent": True, "provider_message_id": str(sent.get("id") or ""), "thread_id": local_thread_id, "attachments": attachments}
@@ -231,6 +246,7 @@ class GmailProvider:
         synced = 0
         result_size_estimate: int | None = None
         next_page_token = str(page_token or "").strip()
+        advancing_cursor = bool(next_page_token or continue_cursor)
         if continue_cursor and not next_page_token:
             next_page_token = _sync_cursor(data_root, connection_id, cursor_scope)
         response: dict[str, object] = {}
@@ -245,18 +261,26 @@ class GmailProvider:
             if result_size_estimate is None:
                 result_size_estimate = _optional_non_negative_int(response.get("resultSizeEstimate"))
             thread_refs = response.get("threads") if isinstance(response.get("threads"), list) else []
-            for item in thread_refs:
-                if synced >= max_total:
-                    break
-                if isinstance(item, dict) and item.get("id"):
-                    self._fetch_and_cache_thread(data_root, connection_id, str(item["id"]), secrets)
-                    synced += 1
+            provider_thread_ids = [
+                str(item["id"])
+                for item in thread_refs
+                if isinstance(item, dict) and item.get("id")
+            ][: max_total - synced]
+            for thread in self._fetch_threads(provider_thread_ids, access_token=access_token):
+                _cache_thread(data_root, connection_id, thread)
+                synced += 1
             next_page_token = str(response.get("nextPageToken") or "")
             if not next_page_token:
                 break
         now = now_timestamp()
         cursor_to_store = (
-            _sync_cursor_payload(data_root, connection_id, cursor_scope, next_page_token)
+            _sync_cursor_payload(
+                data_root,
+                connection_id,
+                cursor_scope,
+                next_page_token,
+                preserve_existing=not advancing_cursor,
+            )
             if persist_cursor
             else _sync_cursor_blob(data_root, connection_id)
         )
@@ -406,13 +430,35 @@ class GmailProvider:
         connection_id: str,
         provider_thread_id: str,
         app_secrets: dict[str, object],
+        *,
+        access_token: str | None = None,
     ) -> None:
-        thread = self._gmail_json(
-            "GET",
-            f"threads/{provider_thread_id}?{urlencode({'format': 'full'})}",
-            access_token=self._access_token(app_secrets),
+        thread = self._fetch_thread(
+            provider_thread_id,
+            access_token=access_token or self._access_token(app_secrets),
         )
         _cache_thread(data_root, connection_id, thread)
+
+    def _fetch_threads(self, provider_thread_ids: list[str], *, access_token: str) -> list[dict[str, object]]:
+        if not provider_thread_ids:
+            return []
+        if len(provider_thread_ids) == 1:
+            return [self._fetch_thread(provider_thread_ids[0], access_token=access_token)]
+        worker_count = min(GMAIL_THREAD_FETCH_WORKERS, len(provider_thread_ids))
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="mail-gmail-thread") as executor:
+            return list(
+                executor.map(
+                    lambda thread_id: self._fetch_thread(thread_id, access_token=access_token),
+                    provider_thread_ids,
+                )
+            )
+
+    def _fetch_thread(self, provider_thread_id: str, *, access_token: str) -> dict[str, object]:
+        return self._gmail_json(
+            "GET",
+            f"threads/{provider_thread_id}?{urlencode({'format': 'full'})}",
+            access_token=access_token,
+        )
 
     def _gmail_json(
         self,
@@ -955,12 +1001,22 @@ def _sync_cursor(data_root: Path, connection_id: str, cursor_scope: str) -> str:
     return legacy_cursor.strip() if cursor_scope == "gmail:v1:default" else ""
 
 
-def _sync_cursor_payload(data_root: Path, connection_id: str, cursor_scope: str, next_page_token: str) -> str:
+def _sync_cursor_payload(
+    data_root: Path,
+    connection_id: str,
+    cursor_scope: str,
+    next_page_token: str,
+    *,
+    preserve_existing: bool = False,
+) -> str:
     cursor_map, legacy_cursor = _sync_cursor_state(data_root, connection_id)
     if legacy_cursor:
         cursor_map.setdefault("gmail:v1:default", legacy_cursor)
     if next_page_token:
-        cursor_map[cursor_scope] = next_page_token
+        if preserve_existing:
+            cursor_map.setdefault(cursor_scope, next_page_token)
+        else:
+            cursor_map[cursor_scope] = next_page_token
     else:
         cursor_map.pop(cursor_scope, None)
     return json.dumps({"gmail": cursor_map}, ensure_ascii=True, sort_keys=True)

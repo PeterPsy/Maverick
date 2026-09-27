@@ -2949,6 +2949,88 @@ class MailServiceTest(unittest.TestCase):
                 thread_count = db.execute("SELECT COUNT(*) AS count FROM threads").fetchone()["count"]
             self.assertEqual(thread_count, 3)
             self.assertTrue(any("pageToken=page-2" in url for url in calls))
+            self.assertEqual(calls.count("https://oauth2.googleapis.com/token"), 1)
+
+    def test_gmail_head_refresh_preserves_existing_backfill_cursor(self) -> None:
+        def thread_payload(thread_id: str) -> dict[str, object]:
+            return {
+                "id": thread_id,
+                "snippet": f"Snippet {thread_id}",
+                "messages": [
+                    {
+                        "id": f"msg-{thread_id}",
+                        "threadId": thread_id,
+                        "labelIds": ["SENT"],
+                        "internalDate": "1710000000000",
+                        "payload": {
+                            "mimeType": "text/plain",
+                            "headers": [
+                                {"name": "Subject", "value": f"Thread {thread_id}"},
+                                {"name": "From", "value": "Person <person@example.com>"},
+                                {"name": "To", "value": "Recipient <recipient@example.com>"},
+                            ],
+                            "body": {"data": "U2VudA"},
+                        },
+                    }
+                ],
+            }
+
+        def fake_transport(request) -> dict[str, object]:
+            url = request.full_url
+            if url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads?"):
+                return {"threads": [{"id": "sent-new"}], "nextPageToken": "new-head-cursor"}
+            if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads/sent-new?"):
+                return thread_payload("sent-new")
+            raise AssertionError(f"unexpected request {url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            connection_id = "mail_connection_gmail_person-example.com"
+            historic_cursor = "historic-backfill-cursor"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (connection_id, "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO sync_state(connection_id, last_sync_at, last_error, cursor, last_full_sync_at, last_incremental_sync_at, provider_history_id)
+                    VALUES (?, ?, '', ?, ?, ?, '')
+                    """,
+                    (
+                        connection_id,
+                        now,
+                        json.dumps({"gmail": {"gmail:v1:q:in:sent": historic_cursor}}),
+                        now,
+                        now,
+                    ),
+                )
+
+            GmailProvider(transport=fake_transport).sync_incremental(
+                data_root,
+                connection_id,
+                app_secrets={
+                    "gmail-oauth-client-id": "client-id",
+                    "gmail-oauth-client-secret": "client-secret",
+                    "gmail-refresh-token": "refresh-token",
+                },
+                max_threads=1,
+                query="in:sent",
+            )
+
+            with connect(data_root) as db:
+                cursor_blob = db.execute(
+                    "SELECT cursor FROM sync_state WHERE connection_id = ?",
+                    (connection_id,),
+                ).fetchone()["cursor"]
+            self.assertEqual(json.loads(cursor_blob)["gmail"]["gmail:v1:q:in:sent"], historic_cursor)
 
     def test_gmail_lightweight_sync_does_not_replace_historic_cursor(self) -> None:
         def thread_payload(thread_id: str) -> dict[str, object]:
@@ -3996,7 +4078,7 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("logical_names: GMAIL_OAUTH_START_SECRETS", app_source)
         self.assertIn("action: MAIL_BACKEND_ACTIONS.connectionsPrepareImapSmtp", app_source)
         self.assertIn("openBlankAuthorizationWindow()", app_source)
-        self.assertIn("maverick.app.external-url", app_source)
+        self.assertIn("requestParentExternalUrl(authorizationUrl, { disposition })", app_source)
         self.assertNotIn("window.location.assign(payload.authorization_url)", app_source)
 
     def test_frontend_sidebar_removes_disconnected_accounts_with_trash(self) -> None:

@@ -36,6 +36,27 @@ model has one stable direct config. Reconciliation updates that config in place;
 it does not publish historical revisions. Discovery failure keeps the last
 working catalog instead of turning a short refresh outage into model expiry.
 
+### Codex model upgrade checklist
+
+When the recommended Codex model changes, the change is complete only when all
+of these surfaces agree:
+
+- the installed Codex CLI advertises the model through `codex debug models`;
+- `CODEX_DEFAULT_MODEL` in `provider_codex_reasoning.py` names the new fallback;
+- bootstrap, reconciliation, runtime-home generation, micro-tasks and session
+  launch consume that shared constant instead of repeating a model literal;
+- Chat's provider endpoint and Settings' platform payload refresh the live
+  catalog before rendering model choices;
+- focused Core, Chat and Settings tests cover the new model and its intended
+  reasoning default;
+- architecture documentation names the current fallback, and committed
+  frontend artifacts are rebuilt whenever frontend source changes.
+
+Chat and Settings must render Core's projected catalog. They must not add a
+second hard-coded native model catalog. After upgrading the CLI or changing the
+fallback, verify both surfaces against a fresh backend process and a newly
+created conversation; existing sessions retain their pinned execution binding.
+
 ## Existing sessions
 
 Every turn rechecks only mutable authority that can actually change: the

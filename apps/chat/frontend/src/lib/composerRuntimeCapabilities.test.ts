@@ -9,7 +9,7 @@ function provider(overrides: Partial<ProviderItem> = {}): ProviderItem {
     description: "Local Codex runtime",
     provider_role: "runtime_engine",
     status: "active",
-    default_model_family: "gpt-5.6-sol",
+    default_model_family: "gpt-6.1-sol",
     ...overrides,
   };
 }
@@ -212,7 +212,7 @@ function exactCodexBinding(): NonNullable<RuntimeSession["execution_binding"]> {
     adapter_id: "codex-app-server",
     model_provider_id: "codex",
     provider_protocol: "codex-app-server-stdio",
-    model_id: "gpt-5.6-sol",
+    model_id: "gpt-6.1-sol",
   };
 }
 

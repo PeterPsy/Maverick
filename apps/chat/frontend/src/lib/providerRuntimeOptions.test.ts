@@ -34,10 +34,10 @@ const payload: ProviderPayload = {
     kind: "runtime_backend",
     provider_role: "runtime_engine",
     status: "active",
-    default_model_family: "gpt-5.6-sol",
+    default_model_family: "gpt-6.1-sol",
     model_options: [{
-      model_id: "gpt-5.6-sol",
-      label: "GPT-5.6-Sol",
+      model_id: "gpt-6.1-sol",
+      label: "GPT-6.1-Sol",
       description: null,
       default_reasoning_effort: "xhigh",
       supported_reasoning_efforts: [
@@ -104,7 +104,7 @@ function profile(overrides: Partial<AgenticProfileItem>): AgenticProfileItem {
     display_name: "Codex profile",
     runtime_engine_id: "codex",
     model_provider_id: "codex",
-    model_id: "gpt-5.6-sol",
+    model_id: "gpt-6.1-sol",
     default_reasoning_effort: "xhigh",
     supported_reasoning_efforts: [
       { effort: "high", label: "High", description: null },
@@ -140,8 +140,8 @@ describe("provider runtime options", () => {
     expect(providers[0]).toMatchObject({
       provider_id: "codex",
       workspace_profile_binding_id: "binding-codex",
-      default_model_family: "gpt-5.6-sol",
-      label: "GPT-5.6-Sol",
+      default_model_family: "gpt-6.1-sol",
+      label: "GPT-6.1-Sol",
       execution_family: "native_agent",
       default_reasoning_effort: "xhigh",
     });

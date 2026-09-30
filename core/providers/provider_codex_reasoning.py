@@ -7,6 +7,7 @@ from dataclasses import replace
 from core.providers.models import ProviderModelOption
 
 
+CODEX_DEFAULT_MODEL = "gpt-6.1-sol"
 CODEX_DEFAULT_REASONING_EFFORT = "xhigh"
 CODEX_MULTI_AGENT_EFFORTS = frozenset({"ultra"})
 CODEX_REASONING_PREFERENCE = ("xhigh", "max", "high", "medium", "low", "minimal")

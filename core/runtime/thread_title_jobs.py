@@ -16,6 +16,7 @@ from threading import Thread
 from typing import TYPE_CHECKING, Any
 
 from core.providers.errors import ProviderError
+from core.providers.provider_codex_reasoning import CODEX_DEFAULT_MODEL
 from core.providers.routing import ProviderRoutingContext, primary_routing_failure_reason, select_provider_for_profile
 from core.providers.service import effective_provider_registry, resolve_provider_for_workspace
 from core.providers.text_generation import (
@@ -404,7 +405,7 @@ def _codex_model_settings(state: "PlatformState", *, workspace_id: str) -> tuple
         raise ThreadTitleGenerationError(str(error)) from error
     if definition.provider_id != "codex":
         raise ThreadTitleGenerationError(f"Provider `{definition.provider_id}` does not support title micro-tasks.")
-    model_id = (None if selection is None else selection.model_id) or definition.default_model_family or "gpt-5.6-sol"
+    model_id = (None if selection is None else selection.model_id) or definition.default_model_family or CODEX_DEFAULT_MODEL
     option = next((item for item in definition.model_options if item.model_id == model_id), None)
     supported = {item.effort for item in option.supported_reasoning_efforts} if option is not None else set()
     if "low" in supported:

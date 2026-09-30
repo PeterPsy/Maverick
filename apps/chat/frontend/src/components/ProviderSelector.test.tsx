@@ -11,7 +11,7 @@ import { ProviderSelector } from "./ProviderSelector";
 const providerOptions: ProviderItem[] = [
   {
     provider_id: "codex",
-    label: "GPT-5.6-Sol",
+    label: "GPT-6.1-Sol",
     description: "Codex",
     status: "active",
     provider_role: "runtime_engine",
@@ -128,10 +128,10 @@ async function openMenu(element: Element) {
 describe("ProviderSelector", () => {
   it("keeps the selected model and reasoning in the composer trigger", async () => {
     const element = await renderSelector();
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-6.1-Sol · Max"]');
 
     expect(trigger).toBeInstanceOf(HTMLButtonElement);
-    expect(trigger?.textContent).toContain("GPT-5.6-Sol");
+    expect(trigger?.textContent).toContain("GPT-6.1-Sol");
     expect(trigger?.textContent).toContain("Max");
   });
 
@@ -157,7 +157,7 @@ describe("ProviderSelector", () => {
     const onReasoningEffortChange = vi.fn();
     const element = await renderSelector({ onReasoningEffortChange });
     await openMenu(element);
-    const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for GPT-5.6-Sol"]');
+    const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for GPT-6.1-Sol"]');
 
     await act(async () => {
       if (!reasoning) return;
@@ -229,10 +229,10 @@ describe("ProviderSelector", () => {
 
   it("does not open while locked to an existing runtime session", async () => {
     const element = await renderSelector({ locked: true });
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-6.1-Sol · Max"]');
 
     expect(trigger?.disabled).toBe(true);
-    expect(trigger?.title).toBe("GPT-5.6-Sol · Max. Start a new chat to change model or reasoning.");
+    expect(trigger?.title).toBe("GPT-6.1-Sol · Max. Start a new chat to change model or reasoning.");
     await act(async () => trigger?.click());
     expect(element.querySelector('[role="listbox"]')).toBeNull();
   });

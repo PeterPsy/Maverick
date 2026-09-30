@@ -44,7 +44,10 @@ class SettingsAgenticAdminTest(unittest.TestCase):
             payload["runtime"],
             {"sessions": [], "cleanup_allowed": False, "cleanup_scope": "none"},
         )
-        build_projection_context.assert_called_once_with(self.state)
+        build_projection_context.assert_called_once_with(
+            self.state,
+            refresh_model_catalog=True,
+        )
         provider_status.assert_called_once_with(
             self.state,
             workspace_id="workspace-1",

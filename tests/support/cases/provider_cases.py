@@ -172,7 +172,7 @@ class ProvidersTestCase(unittest.TestCase):
         )
         self.assertEqual(codex.kind, "runtime_backend")
         self.assertEqual(codex.provider_role, "runtime_engine")
-        self.assertEqual(codex.default_model_family, "gpt-5.6-sol")
+        self.assertEqual(codex.default_model_family, "gpt-6.1-sol")
         self.assertTrue(codex.capabilities.supports_interactive_runtime)
 
     def test_builtin_registry_does_not_probe_codex_model_catalog(self) -> None:
@@ -352,8 +352,8 @@ class ProvidersTestCase(unittest.TestCase):
             register_builtin_providers(provider_store)
 
         refreshed = provider_store.get_provider_definition("codex")
-        self.assertEqual(refreshed.default_model_family, "gpt-5.6-sol")
-        self.assertEqual([option.model_id for option in refreshed.model_options], ["gpt-5.6-sol"])
+        self.assertEqual(refreshed.default_model_family, "gpt-6.1-sol")
+        self.assertEqual([option.model_id for option in refreshed.model_options], ["gpt-6.1-sol"])
 
     def test_codex_model_catalog_is_cached_after_first_probe(self) -> None:
         payload = {
@@ -418,7 +418,7 @@ class ProvidersTestCase(unittest.TestCase):
         with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
             second = adapter.model_options()
 
-        self.assertEqual([option.model_id for option in first], ["gpt-5.6-sol"])
+        self.assertEqual([option.model_id for option in first], ["gpt-6.1-sol"])
         self.assertEqual(run.call_count, 1)
         self.assertEqual([option.model_id for option in second], ["gpt-after-error"])
 
@@ -651,7 +651,7 @@ class ProvidersTestCase(unittest.TestCase):
         command.chmod(0o755)
 
         discovery = patch("core.providers.native_agent_reconciliation.discover_codex_native_catalog",
-                          return_value=codex_snapshot("gpt-5.6-sol"))
+                          return_value=codex_snapshot("gpt-6.1-sol"))
         discovery.start()
         self.addCleanup(discovery.stop)
         session, registry = self.make_pinned_codex_session(
@@ -1181,7 +1181,7 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertFalse((runtime_home / "rules").is_symlink())
         self.assertFalse((runtime_home / "skills" / ".system" / "SKILL.md").exists())
         runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
-        self.assertIn('model = "gpt-5.6-sol"', runtime_config)
+        self.assertIn('model = "gpt-6.1-sol"', runtime_config)
         self.assertIn('model_reasoning_effort = "xhigh"', runtime_config)
         self.assertNotIn('model = "gpt-5.4"', runtime_config)
         self.assertNotIn('model_reasoning_effort = "medium"', runtime_config)
@@ -1291,7 +1291,7 @@ class ProvidersTestCase(unittest.TestCase):
             spec = CodexProviderAdapter(codex_command="/bin/echo").build_launch_spec(session)
 
         runtime_config = (Path(spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
-        self.assertIn('model = "gpt-5.6-sol"', runtime_config)
+        self.assertIn('model = "gpt-6.1-sol"', runtime_config)
         self.assertNotIn("gpt-5.4", runtime_config)
 
     def test_disable_binding_preserves_record_but_makes_it_inactive(self) -> None:

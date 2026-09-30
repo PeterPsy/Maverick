@@ -11,6 +11,7 @@ from core.providers.models import ProviderCapabilitySet, ProviderDefinition, Pro
 from core.providers.provider_codex_continuation_home import resolve_codex_runtime_home
 from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME, write_codex_post_tool_use_hook
 from core.providers.provider_codex_reasoning import (
+    CODEX_DEFAULT_MODEL,
     CODEX_DEFAULT_REASONING_EFFORT,
     codex_default_reasoning_effort,
     normalize_codex_model_options,
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
 CODEX_RUNTIME_HOME_FILES = ("auth.json", "version.json", ".personality_migration", "installation_id")
 CODEX_DISABLED_RUNTIME_FEATURES = ("apps", "plugins")
 CODEX_SYSTEM_SKILLS_ROOT = ".system"
-CODEX_DEFAULT_MODEL = "gpt-5.6-sol"
 CODEX_MANAGED_TOP_LEVEL_CONFIG_KEYS = {"model", "model_reasoning_effort"}
 CODEX_MANAGED_RUNTIME_FEATURES = {
     "apps": False,

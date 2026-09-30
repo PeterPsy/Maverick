@@ -2163,8 +2163,12 @@ agents. It discovers the visible model catalog through the configured Codex
 binary, exposes viable models and reasoning efforts, and writes the selected
 `model` and turn/session reasoning effort into each runtime-scoped Codex config
 instead of inheriting them from the operator home. The fallback model is
-`gpt-5.6-sol`. New sessions choose the deepest supported single-agent effort;
+`gpt-6.1-sol`. New sessions choose the deepest supported single-agent effort;
 `ultra` remains a multi-agent mode and is not a reasoning choice.
+
+Chat and Settings both refresh the installed Codex catalog before projecting
+model choices. App frontends consume the Core projection and must not maintain
+their own static Codex model lists.
 
 The Core maintains one current model-bound definition and copies its direct
 reasoning and capability contract into the session execution binding. Newly

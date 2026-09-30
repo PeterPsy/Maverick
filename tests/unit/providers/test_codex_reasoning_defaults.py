@@ -14,8 +14,8 @@ def reasoning(effort: str) -> ProviderReasoningOption:
 class CodexReasoningDefaultsTest(unittest.TestCase):
     def test_codex_prefers_extra_high_and_excludes_multi_agent_ultra(self) -> None:
         option = ProviderModelOption(
-            model_id="gpt-5.6-sol",
-            label="GPT-5.6-Sol",
+            model_id="gpt-6.1-sol",
+            label="GPT-6.1-Sol",
             description=None,
             default_reasoning_effort="low",
             supported_reasoning_efforts=[

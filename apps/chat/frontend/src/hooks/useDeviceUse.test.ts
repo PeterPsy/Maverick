@@ -11,7 +11,7 @@ function provider(overrides: Partial<ProviderItem> = {}): ProviderItem {
     runtime_engine_id: "codex",
     status: "active",
     selectable: true,
-    default_model_family: "gpt-5.6-sol",
+    default_model_family: "gpt-6.1-sol",
     workspace_profile_binding_id: "binding-sol",
     ...overrides,
   };

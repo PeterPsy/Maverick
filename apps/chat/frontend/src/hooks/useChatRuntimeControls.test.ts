@@ -50,7 +50,7 @@ describe("genericAgenticRuntimeConfig", () => {
   it("preserves Codex reasoning without adding a remote-data declaration", () => {
     expect(genericAgenticRuntimeConfig(agenticProvider({
       provider_id: "codex-agentic",
-      label: "Codex · gpt-5.6-sol",
+      label: "Codex · gpt-6.1-sol",
       workspace_profile_binding_id: "binding-codex-sol",
     }), "xhigh")).toMatchObject({
       workspace_profile_binding_id: "binding-codex-sol",

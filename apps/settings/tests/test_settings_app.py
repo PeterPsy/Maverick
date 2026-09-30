@@ -429,18 +429,18 @@ const settings = {
       provider_id: 'codex',
       label: 'Codex',
       capabilities: { supports_subscription_usage: true },
-      default_model_family: 'gpt-5.5',
+      default_model_family: 'gpt-6.1-sol',
       model_options: [{
-        model_id: 'gpt-5.5',
-        label: 'GPT-5.5',
+        model_id: 'gpt-6.1-sol',
+        label: 'GPT-6.1-Sol',
         description: null,
         default_reasoning_effort: 'medium',
         supported_reasoning_efforts: [{ effort: 'medium', label: 'medium', description: null }]
       }]
     },
     model_settings: {
-      selected_model_id: 'gpt-5.5',
-      selected_reasoning_effort: 'medium',
+      selected_model_id: 'gpt-6.1-sol',
+      selected_reasoning_effort: 'xhigh',
       available_models: []
     },
     native_agents: {
@@ -460,7 +460,7 @@ const settings = {
         adapter: { id: 'codex-app-server', version: 'fixture', trusted_distribution: 'maverick_builtin' },
         protocol: { kind: 'app_server', id: 'codex-app-server-stdio', version: null, event_schema: 'fixture' },
         authentication_status: 'runtime_managed',
-        models: [{ provider_id: 'codex', model_id: 'gpt-5.5', model_revision: null, model_revision_policy: 'provider_alias' }],
+        models: [{ provider_id: 'codex', model_id: 'gpt-6.1-sol', model_revision: null, model_revision_policy: 'provider_alias' }],
         effects: { mode: 'mapped_hybrid', workspace_confined: true, process_tree_supervised: true, structured_effect_events: true, sandbox_policy_revision: 'sandbox-v1', approval_policy: 'common' },
         contract_state: 'available',
         selectable: true,
@@ -638,6 +638,7 @@ assert.ok(html.includes('Speech model settings'));
 assert.ok(html.indexOf('settings-agentic-runtimes-card') < html.indexOf('settings-speech-model-settings-card'));
 assert.ok(html.includes('data-agentic-provider-group="codex"'));
 assert.ok(html.includes('Codex'));
+assert.ok(html.includes('gpt-6.1-sol'));
 assert.ok(html.includes('11% used · 89% remaining before limit'));
 assert.ok(html.includes('1w window:'));
 assert.ok(html.includes('resets in 1d'));

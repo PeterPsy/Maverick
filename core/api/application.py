@@ -8,6 +8,7 @@ from pathlib import Path
 from core.apps.builtin_apps import register_and_install_builtin_apps_for_active_workspaces
 from core.apps.store import AppStore
 from core.providers.service import register_builtin_providers
+from core.providers.provider_codex_reasoning import CODEX_DEFAULT_MODEL
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.shared.repository import installation_paths
@@ -67,7 +68,7 @@ def create_application(
                             selection_reason="default bootstrap",
                             created_at=now or datetime.now(tz=UTC),
                             updated_at=now or datetime.now(tz=UTC),
-                            model_id=codex_def.default_model_family or "gpt-5.6-sol",
+                            model_id=codex_def.default_model_family or CODEX_DEFAULT_MODEL,
                         )
                     ensure_codex_workspace_profile(
                         provider_store,

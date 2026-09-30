@@ -12,6 +12,7 @@ from core.providers.native_agent_discovery import (
     discover_antigravity_native_catalog,
     discover_codex_native_catalog,
 )
+from core.providers.provider_codex_reasoning import CODEX_DEFAULT_MODEL
 
 if TYPE_CHECKING:
     from core.providers.models import ProviderDefinition
@@ -37,7 +38,7 @@ def refresh_codex_native_catalog(
         ids = {model.model_id for model in snapshot.models}
         default = definition.default_model_family
         if default not in ids and ids:
-            default = "gpt-5.6-sol" if "gpt-5.6-sol" in ids else snapshot.models[0].model_id
+            default = CODEX_DEFAULT_MODEL if CODEX_DEFAULT_MODEL in ids else snapshot.models[0].model_id
         definition = replace(
             definition, model_options=list(snapshot.model_options), default_model_family=default,
         )

@@ -96,7 +96,7 @@ function agenticProfile(
 
 describe("remote agentic provider runtime options", () => {
   it("maps one current model config directly into the composer", () => {
-    const modelId = "gpt-5.6-sol";
+    const modelId = "gpt-6.1-sol";
     const profile = agenticProfile("codex", modelId);
     profile.workspace_profile_binding_id = "binding-codex-sol";
     profile.definition_id = "profile-codex-sol";
@@ -117,7 +117,7 @@ describe("remote agentic provider runtime options", () => {
 
     expect(providers).toHaveLength(1);
     expect(providers[0]?.workspace_profile_binding_id).toBe("binding-codex-sol");
-    expect(providers[0]?.profile_detail).toBe("Runtime: codex · Model: codex/gpt-5.6-sol");
+    expect(providers[0]?.profile_detail).toBe("Runtime: codex · Model: codex/gpt-6.1-sol");
   });
 
   it("does not hide duplicate workspace configs returned by the server", () => {

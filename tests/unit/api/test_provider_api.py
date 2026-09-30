@@ -27,7 +27,7 @@ class ProviderApiTest(unittest.TestCase):
             SimpleNamespace(
                 model_provider_id="codex",
                 runtime_engine_id="codex",
-                model_id="gpt-5.6-sol",
+                model_id="gpt-6.1-sol",
             ),
         )
 

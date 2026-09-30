@@ -1,0 +1,181 @@
+.kanban-board {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  width: 100%;
+  overflow-x: auto;
+  padding: 0 0 22px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--marta-border-strong) transparent;
+}
+.kanban-column {
+  flex: 0 0 248px;
+  min-width: 0;
+}
+.kanban-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 12px;
+}
+.kanban-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 5px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.kanban-heading h2 span {
+  color: var(--marta-soft);
+  font-size: 0.72rem;
+}
+.kanban-heading h2 i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--marta-soft);
+}
+.kanban-heading h2 i[data-phase="proposal"],
+.kanban-heading h2 i[data-phase="approval"] {
+  background: var(--maverick-warning);
+}
+.kanban-heading h2 i[data-phase="production"],
+.kanban-heading h2 i[data-phase="confirmed"] {
+  background: #a8bdfa;
+}
+.kanban-heading h2 i[data-phase="published"],
+.kanban-heading h2 i[data-phase="completed"] {
+  background: var(--maverick-success);
+}
+.kanban-heading small {
+  color: var(--marta-soft);
+  font-size: 0.68rem;
+}
+.kanban-heading .icon-action {
+  width: 26px;
+  height: 26px;
+}
+.kanban-dropzone {
+  min-height: 330px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.018);
+  padding: 7px;
+  transition: background 120ms;
+}
+.kanban-dropzone.is-over {
+  background: var(--marta-surface-hover);
+  box-shadow: inset 0 0 0 1px var(--marta-border-strong);
+}
+.kanban-card {
+  border: 1px solid var(--marta-border);
+  border-radius: 18px;
+  margin-bottom: 9px;
+  background: #121214;
+  box-shadow: var(--maverick-glass-edge);
+  padding: 12px;
+}
+.kanban-card:hover {
+  border-color: var(--marta-border-strong);
+}
+.kanban-card.is-dragging {
+  background: #202022;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+}
+.kanban-card-top,
+.kanban-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kanban-partner {
+  overflow: hidden;
+  color: var(--marta-soft);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.drag-handle {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--marta-soft);
+  background: transparent;
+  cursor: grab;
+}
+.drag-handle:focus-visible {
+  outline: 1px solid var(--marta-text);
+}
+.kanban-title {
+  width: 100%;
+  border: 0;
+  color: var(--marta-text);
+  background: transparent;
+  padding: 4px 0 8px;
+  font-size: 0.83rem;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.kanban-next {
+  margin: 0 0 14px;
+  color: var(--marta-muted);
+  font-size: 0.71rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.kanban-meta {
+  margin-top: 4px;
+  font-size: 0.7rem;
+}
+.kanban-meta > span:last-child {
+  color: var(--marta-soft);
+  font-size: 0.65rem;
+}
+.kanban-phase {
+  width: 100%;
+  margin-top: 11px;
+  padding: 5px 8px;
+  font-size: 0.65rem;
+}
+.kanban-progress {
+  position: relative;
+  height: 23px;
+  margin-top: 12px;
+  border-top: 3px solid var(--marta-border);
+}
+.kanban-progress > span {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  height: 3px;
+  border-radius: 9px;
+  background: var(--maverick-success);
+}
+.kanban-progress small {
+  color: var(--marta-soft);
+  font-size: 0.6rem;
+}
+.kanban-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 42px;
+  border: 1px dashed var(--marta-border);
+  border-radius: 14px;
+  color: var(--marta-soft);
+  background: transparent;
+  font-size: 0.7rem;
+}
+.kanban-add:hover {
+  color: var(--marta-text);
+  border-color: var(--marta-border-strong);
+}

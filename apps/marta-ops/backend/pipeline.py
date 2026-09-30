@@ -5,9 +5,15 @@ from errors import MartaOpsError
 from validation import _choice, _find, _now, _text
 from work_records import PHASES
 
+PHASE_LABELS = {"lead": "Contatto", "proposal": "Proposta", "confirmed": "Confermato", "production": "Produzione", "approval": "In approvazione", "scheduled": "Programmato", "published": "Pubblicato", "completed": "Chiuso", "paused": "In pausa", "lost": "Non acquisito"}
+
 
 def column_items(state: dict[str, Any], phase: str, exclude_id: str = "") -> list[dict[str, Any]]:
     return sorted((item for item in state["collaborations"] if item["phase"] == phase and item["id"] != exclude_id), key=lambda item: item["pipeline_order"])
+
+
+def next_order(state: dict[str, Any], phase: str) -> int:
+    return max((item["pipeline_order"] for item in column_items(state, phase)), default=-1) + 1
 
 
 def move_work(state: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
@@ -31,5 +37,5 @@ def move_work(state: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
     if old_phase != phase:
         for index, work in enumerate(column_items(state, old_phase)):
             work["pipeline_order"] = index
-        record_activity(state, f"Fase aggiornata: {item['title']}", text=f"{old_phase} → {phase}", contact_id=item.get("contact_id", ""), collaboration_id=item["id"])
+        record_activity(state, f"Fase aggiornata: {item['title']}", text=f"{PHASE_LABELS[old_phase]} → {PHASE_LABELS[phase]}", contact_id=item.get("contact_id", ""), collaboration_id=item["id"])
     return {"collaboration": item}

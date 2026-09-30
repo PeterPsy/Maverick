@@ -1,62 +1,68 @@
 {
-  "build_id": "afa3076d899e79020ddd931b10f2dc3923b1f808aed1244bf8cf757e2a35ab26",
+  "schema": "maverick.frontend-assets.v2",
+  "build_id": "815e682c61334da81d0a2b469b05401a9a76452f81f4620d7771b5a44f60813d",
   "entrypoints": [
     "index.html",
     "widgets/marta-ops-sidebar/index.html",
     "widgets/marta-ops-sidebar-footer/index.html"
   ],
-  "immutable": [],
+  "immutable": [
+    {
+      "path": "assets/app-Bya2nRtE.js",
+      "sha256": "29d5cca5b647560b2d17525d64bc21eff61cac3e8f99d2b60829f2817d28a827",
+      "size_bytes": 1100
+    },
+    {
+      "path": "assets/app-CkZ6Hj8W.js",
+      "sha256": "32e5131cac949f05fd919d2238ed2a8857b9b6ea2f50313f4a0488af149207fa",
+      "size_bytes": 181508
+    },
+    {
+      "path": "assets/app-DNOkZUog.css",
+      "sha256": "651e3d298eca9efdb3f4c1e1d59ad54116809ea7a23efa55411199f457daba4f",
+      "size_bytes": 30756
+    },
+    {
+      "path": "assets/app-f6UtkTHG.js",
+      "sha256": "cadc8ebc8d570c6f7dd3a7d6418cc871e531547c04cb97661592c0fcc1126643",
+      "size_bytes": 1982
+    },
+    {
+      "path": "assets/navigation-Bz58vY1n.js",
+      "sha256": "a226067a09a777f14b79931437c425b2877b0c50b8b93aa26244e476a6c2eb83",
+      "size_bytes": 2469
+    },
+    {
+      "path": "assets/shellNavigation-BglJHMDL.js",
+      "sha256": "6e1f1d3aa6507359a827fccac98fd8abbbe3ae2af866ea5328cc560c1793e1ca",
+      "size_bytes": 226267
+    }
+  ],
   "revalidated": [
-    {
-      "path": "assets/Icon-MH_u4gIz.js",
-      "sha256": "a1fed707690242bad2760c388ef939171564692f89f5497ed1175b14fde9e8aa",
-      "size_bytes": 1274
-    },
-    {
-      "path": "assets/app-B0zc10BQ.js",
-      "sha256": "d0a9752717540323ce12a2e8aae0a82c10b6658351d3a0bc228df28885c9a419",
-      "size_bytes": 22486
-    },
-    {
-      "path": "assets/app-B8XiRR96.js",
-      "sha256": "9bb2276a5f218d78a4b55999a3f609f50e5d6481af1375db3cf9aa629e29d0d8",
-      "size_bytes": 1090
-    },
-    {
-      "path": "assets/app-CHe4_143.css",
-      "sha256": "89fb641bca3f7f679f89ae77662864204d76aafd19c709e089740f766f06fb0e",
-      "size_bytes": 17999
-    },
-    {
-      "path": "assets/app-DjrnjPmD.js",
-      "sha256": "1c31c4b0a28c1d120ccbf02e2cb568998342fb096cf858e4bdc0b7c90b393315",
-      "size_bytes": 2163
-    },
-    {
-      "path": "assets/shellNavigation-Cxj3mi9_.js",
-      "sha256": "3a37d5fffb1b1eab10714750194782b2817150c2bc6f224adf2eea978554e1c0",
-      "size_bytes": 223070
-    },
     {
       "path": "assets/sidebar-widget-B43qGK76.css",
       "sha256": "792e07309a8f517aa2325b0be0ad0faedc08798ed75562591d82e361735b2d27",
       "size_bytes": 5021
     },
     {
+      "path": "atomic-crm-license.txt",
+      "sha256": "1774c14a7b97aa0ce5e866f895ddb421db6dfb4769dee9ab40416681d0390316",
+      "size_bytes": 1105
+    },
+    {
       "path": "index.html",
-      "sha256": "576fca3b81d1e6346158f353e60c02af96629a2ab0b58df0c0908cc541d7b234",
-      "size_bytes": 611
+      "sha256": "dde5197c390f81d1b1aaff6296149d5bee4a64c56c00414c79b784a7a74dd01c",
+      "size_bytes": 617
     },
     {
       "path": "widgets/marta-ops-sidebar/index.html",
-      "sha256": "b16d0e73d25557617e897e1734203482f200d0f21b2142df9db37dcd3b06141d",
-      "size_bytes": 666
+      "sha256": "22adb90c4a3e171e53e1a6910a194289989d255c1feca68c01645e5c1e36f3d0",
+      "size_bytes": 672
     },
     {
       "path": "widgets/marta-ops-sidebar-footer/index.html",
-      "sha256": "58caecb0223ee9b857f26d67d74e27779432e570be7c8c6f1d2573d633d3dda7",
+      "sha256": "89bdd4a0df27ee80f908c8daeee6056afb53e4028b1887bc900bb0da458f77da",
       "size_bytes": 590
     }
-  ],
-  "schema": "maverick.frontend-assets.v2"
+  ]
 }

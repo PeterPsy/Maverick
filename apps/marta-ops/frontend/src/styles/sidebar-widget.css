@@ -1,6 +1,8 @@
-@import './tokens.css';
+@import "./tokens.css";
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 html,
 body,
@@ -20,7 +22,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button { border: 0; color: inherit; font: inherit; cursor: pointer; }
+button {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
 
 .marta-sidebar-widget {
   width: 100%;
@@ -32,7 +39,9 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   scrollbar-width: none;
 }
 
-.marta-sidebar-widget::-webkit-scrollbar { display: none; }
+.marta-sidebar-widget::-webkit-scrollbar {
+  display: none;
+}
 
 .marta-sidebar-heading {
   margin: 0 0 0.58rem;
@@ -44,7 +53,10 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   text-transform: uppercase;
 }
 
-.marta-sidebar-widget nav { display: grid; gap: 0.46rem; }
+.marta-sidebar-widget nav {
+  display: grid;
+  gap: 0.46rem;
+}
 
 .marta-sidebar-row {
   display: grid;
@@ -58,10 +70,15 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   background: transparent;
   padding: 0.45rem 0.7rem;
   text-align: left;
-  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
 }
 
-.marta-sidebar-row:hover { background: var(--marta-surface-hover); }
+.marta-sidebar-row:hover {
+  background: var(--marta-surface-hover);
+}
 
 .marta-sidebar-row.is-active {
   border-color: var(--marta-border-strong);
@@ -74,7 +91,9 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   outline-offset: 2px;
 }
 
-.marta-sidebar-row:active { transform: scale(0.985); }
+.marta-sidebar-row:active {
+  transform: scale(0.985);
+}
 
 .marta-sidebar-row__icon {
   display: grid;
@@ -85,9 +104,15 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   color: var(--marta-muted);
 }
 
-.marta-sidebar-row.is-active .marta-sidebar-row__icon { color: var(--marta-text); }
+.marta-sidebar-row.is-active .marta-sidebar-row__icon {
+  color: var(--marta-text);
+}
 
-.marta-sidebar-row__copy { display: grid; min-width: 0; gap: 0.06rem; }
+.marta-sidebar-row__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.06rem;
+}
 
 .marta-sidebar-row__copy strong,
 .marta-sidebar-row__copy span {
@@ -96,8 +121,14 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   white-space: nowrap;
 }
 
-.marta-sidebar-row__copy strong { font-size: 0.82rem; font-weight: 500; }
-.marta-sidebar-row__copy span { color: var(--marta-muted); font-size: 0.69rem; }
+.marta-sidebar-row__copy strong {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.marta-sidebar-row__copy span {
+  color: var(--marta-muted);
+  font-size: 0.69rem;
+}
 
 .marta-sidebar-footer-widget {
   display: grid;
@@ -125,7 +156,9 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   padding: 0 0.82rem;
   font-size: 0.76rem;
   font-weight: 500;
-  transition: background 140ms ease, transform 140ms ease;
+  transition:
+    background 140ms ease,
+    transform 140ms ease;
 }
 
 .marta-sidebar-footer-button:hover,
@@ -134,13 +167,20 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   outline: none;
 }
 
-.marta-sidebar-footer-button:active { transform: scale(0.99); }
+.marta-sidebar-footer-button:active {
+  transform: scale(0.99);
+}
 
-.marta-sidebar-footer-plus { position: relative; width: 1rem; height: 1rem; flex: none; }
+.marta-sidebar-footer-plus {
+  position: relative;
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
 
 .marta-sidebar-footer-plus::before,
 .marta-sidebar-footer-plus::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -151,7 +191,9 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
   transform: translate(-50%, -50%);
 }
 
-.marta-sidebar-footer-plus::after { transform: translate(-50%, -50%) rotate(90deg); }
+.marta-sidebar-footer-plus::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
 
 .icon {
   flex: 0 0 auto;

@@ -8,7 +8,7 @@ from work_records import _collaboration, _idea, _deliverable
 from integrations import _mail_draft_request, _calendar_event_request
 from activity import add_note, record_activity
 from crm_records import handle_crm_action
-from pipeline import column_items, move_work
+from pipeline import move_work, next_order
 from validation import validate_links
 
 MUTATING_ACTIONS = {
@@ -38,7 +38,7 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         def create(state: dict[str, Any]) -> dict[str, Any]:
             item = _collaboration(incoming)
             validate_links(state, item)
-            item["pipeline_order"] = len(column_items(state, item["phase"]))
+            item["pipeline_order"] = next_order(state, item["phase"])
             state["collaborations"].append(item)
             record_activity(state, f"Lavoro aggiunto: {item['title']}", collaboration_id=item["id"], contact_id=item["contact_id"])
             return {"collaboration": item}
@@ -54,7 +54,7 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
             validate_links(state, updated)
             phase_changed = updated["phase"] != item["phase"]
             if phase_changed:
-                updated["pipeline_order"] = len(column_items(state, updated["phase"]))
+                updated["pipeline_order"] = next_order(state, updated["phase"])
             item.clear()
             item.update(updated)
             record_activity(state, f"{'Fase aggiornata' if phase_changed else 'Lavoro aggiornato'}: {item['title']}", collaboration_id=item["id"], contact_id=item["contact_id"])

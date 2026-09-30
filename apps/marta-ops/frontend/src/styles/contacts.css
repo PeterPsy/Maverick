@@ -1,0 +1,97 @@
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.contact-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid var(--marta-border);
+  border-radius: 22px;
+  color: var(--marta-text);
+  background: var(--marta-surface);
+  box-shadow: var(--maverick-glass-edge);
+  padding: 18px;
+  text-align: left;
+}
+.contact-card:hover {
+  border-color: var(--marta-border-strong);
+  background: var(--marta-surface-hover);
+}
+.contact-card-heading,
+.contact-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.contact-card-heading > div {
+  min-width: 0;
+}
+.contact-card h2 {
+  overflow: hidden;
+  margin: 0 0 4px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contact-card p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--marta-soft);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contact-avatar {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--marta-border-strong);
+  border-radius: 14px;
+  color: var(--marta-text);
+  background: var(--marta-surface-hover);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+.contact-email {
+  overflow: hidden;
+  color: var(--marta-muted);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 21px;
+}
+.tag {
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 7px;
+  color: var(--marta-muted);
+  background: var(--marta-surface-hover);
+  padding: 3px 7px;
+  font-size: 0.62rem;
+  overflow-wrap: anywhere;
+}
+.contact-card-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--marta-border);
+  margin-top: auto;
+  padding-top: 12px;
+  color: var(--marta-soft);
+  font-size: 0.7rem;
+}
+.contact-card-footer span:last-child {
+  color: var(--marta-muted);
+}

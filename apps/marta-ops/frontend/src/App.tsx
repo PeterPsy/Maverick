@@ -1,125 +1,295 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Icon } from './Icon';
-import { IdeasView } from './components/IdeasView';
-import { TodayView } from './components/TodayView';
-import { WorkPanel } from './components/WorkPanel';
-import { WorksView } from './components/WorksView';
-import { isMaverickParentMessage, mountedAppIdFromPath, openApp, postToShell, viewFromAppPage } from './lib/shellNavigation';
-import type { Collaboration, Idea, ViewId } from './types';
-import { useMartaOps } from './useMartaOps';
-
-const NAV: Array<[ViewId, string, 'today' | 'work' | 'ideas']> = [
-  ['today', 'Oggi', 'today'],
-  ['work', 'Lavori', 'work'],
-  ['ideas', 'Idee', 'ideas']
-];
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Icon } from "./Icon";
+import { SECTIONS } from "./navigation";
+import { IdeasView } from "./components/IdeasView";
+import { TodayView } from "./components/TodayView";
+import { WorksView } from "./components/WorksView";
+import { ContactsView } from "./components/ContactsView";
+import { TasksView } from "./components/TasksView";
+import {
+  isMaverickParentMessage,
+  mountedAppIdFromPath,
+  openApp,
+  postToShell,
+  viewFromAppPage,
+} from "./lib/shellNavigation";
+import type { CollaborationPhase, Task, ViewId } from "./types";
+import { useRecordPanels } from "./useRecordPanels";
+import { RecordPanels } from "./components/RecordPanels";
+import { useMartaOps } from "./useMartaOps";
 
 export function App() {
-  const { state, loading, saving, error, clearError, integrate, mutate } = useMartaOps();
-  const [view, setView] = useState<ViewId>('today');
-  const [query, setQuery] = useState('');
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const consumedNewWorkRequests = useRef(new Set<string>());
-  const consumedLegacyNewWorkRequest = useRef(false);
+  const {
+    state,
+    loading,
+    saving,
+    error,
+    clearError,
+    integrate,
+    mutate,
+    refresh,
+  } = useMartaOps();
+  const [view, setView] = useState<ViewId>(
+    () =>
+      viewFromAppPage(
+        new URLSearchParams(window.location.search).get("app_page"),
+      ) || "today",
+  );
+  const [query, setQuery] = useState("");
+  const controller = useRecordPanels();
+  const { openWork, newWork, openContact, openTask } = controller;
+  const requests = useRef(new Set<string>());
   const appId = useMemo(() => mountedAppIdFromPath(), []);
-  const selected = useMemo(() => state.collaborations.find((item) => item.id === selectedId) ?? null, [selectedId, state.collaborations]);
-
-  const navigate = useCallback((nextView: ViewId) => {
-    setView(nextView);
-    openApp(appId, { app_page: nextView });
-  }, [appId]);
-
+  const navigate = useCallback(
+    (next: ViewId) => {
+      setView(next);
+      setQuery("");
+      openApp(appId, { app_page: next });
+    },
+    [appId],
+  );
   useEffect(() => {
-    function handleShellMessage(event: MessageEvent) {
+    function handleMessage(event: MessageEvent) {
       if (!isMaverickParentMessage(event)) return;
       const message = event.data as {
         app_id?: string;
         params?: Record<string, unknown>;
         type?: string;
       };
-      if (message.type !== 'maverick.app.navigate' || (message.app_id && message.app_id !== appId)) return;
-      const params = message.params || {};
-      const nextView = viewFromAppPage(params.app_page);
-      if (nextView) setView(nextView);
-      if (params.new_work !== true) return;
-
-      const requestId = typeof params.new_work_request_id === 'string' ? params.new_work_request_id : '';
-      if (requestId) {
-        if (consumedNewWorkRequests.current.has(requestId)) return;
-        consumedNewWorkRequests.current.add(requestId);
-      } else if (consumedLegacyNewWorkRequest.current) {
+      if (
+        message.type !== "maverick.app.navigate" ||
+        (message.app_id && message.app_id !== appId)
+      )
         return;
-      } else {
-        consumedLegacyNewWorkRequest.current = true;
+      const params = message.params || {};
+      const next = viewFromAppPage(params.app_page);
+      if (next) setView(next);
+      for (const [param, target] of [
+        ["new_work", "work"],
+        ["new_contact", "contacts"],
+        ["new_task", "tasks"],
+      ] as const) {
+        if (params[param] !== true) continue;
+        const request = `${param}:${params[`${param}_request_id`] || "initial"}`;
+        if (requests.current.has(request)) continue;
+        requests.current.add(request);
+        setView(target);
+        if (param === "new_work") newWork();
+        if (param === "new_contact") openContact(null);
+        if (param === "new_task") openTask(null);
       }
-      setView('work');
-      setSelectedId(null);
-      setPanelOpen(true);
     }
+    window.addEventListener("message", handleMessage);
+    postToShell({ type: "maverick.app.ready", app_id: appId });
+    return () => window.removeEventListener("message", handleMessage);
+  }, [appId, newWork, openContact, openTask]);
 
-    window.addEventListener('message', handleShellMessage);
-    postToShell({ type: 'maverick.app.ready', app_id: appId });
-    return () => window.removeEventListener('message', handleShellMessage);
-  }, [appId]);
-
-  function openWork(item: Collaboration | null) {
-    setSelectedId(item?.id ?? null);
-    setPanelOpen(true);
+  async function toggleTask(task: Task) {
+    await mutate({
+      action: "update_task",
+      id: task.id,
+      changes: { done: !task.done },
+    });
   }
-
-  async function saveWork(id: string | null, changes: Record<string, unknown>) {
-    const payload = id
-      ? await mutate({ action: 'update_collaboration', id, changes })
-      : await mutate({ action: 'create_collaboration', collaboration: changes });
-    if (payload.collaboration) setSelectedId(payload.collaboration.id);
+  async function moveWork(
+    id: string,
+    phase: CollaborationPhase,
+    beforeId: string,
+    expectedPhase: CollaborationPhase,
+  ) {
+    try {
+      await mutate({
+        action: "move_collaboration",
+        id,
+        phase,
+        before_id: beforeId,
+        expected_phase: expectedPhase,
+      });
+    } catch (error) {
+      void refresh();
+      throw error;
+    }
   }
-
-  async function createIdea(idea: { title: string; pillar: string; note: string }) {
-    await mutate({ action: 'create_idea', idea });
+  function createCurrent() {
+    if (view === "contacts") openContact(null);
+    else if (view === "tasks") openTask(null);
+    else if (view === "ideas")
+      document
+        .querySelector<HTMLInputElement>('input[aria-label="Titolo idea"]')
+        ?.focus();
+    else newWork();
   }
-
-  async function updateIdea(id: string, changes: Partial<Idea>) {
-    await mutate({ action: 'update_idea', id, changes });
-  }
+  const createLabel =
+    view === "contacts"
+      ? "Nuovo contatto"
+      : view === "tasks"
+        ? "Nuova attività"
+        : view === "ideas"
+          ? "Nuova idea"
+          : "Nuovo lavoro";
+  const searchLabel =
+    view === "contacts"
+      ? "Cerca contatti"
+      : view === "tasks"
+        ? "Cerca attività"
+        : view === "ideas"
+          ? "Cerca idee"
+          : "Cerca lavori";
 
   return (
     <div className="marta-shell">
       <header className="app-topbar">
-        <button aria-label="Marta Ops" className="brand" onClick={() => navigate('today')} type="button"><span className="brand-mark">M</span><span>Marta Ops</span></button>
+        <button
+          aria-label="Marta Ops"
+          className="brand"
+          onClick={() => navigate("today")}
+          type="button"
+        >
+          <span className="brand-mark">
+            <Icon name="board" size={18} />
+          </span>
+          <span>Marta Ops</span>
+        </button>
         <nav className="desktop-nav" aria-label="Sezioni">
-          {NAV.map(([id, label, icon]) => <button className={view === id ? 'is-active' : ''} key={id} onClick={() => navigate(id)} type="button"><Icon name={icon} size={17} />{label}</button>)}
+          {SECTIONS.map(({ id, label, icon }) => (
+            <button
+              aria-current={view === id ? "page" : undefined}
+              className={view === id ? "is-active" : ""}
+              key={id}
+              onClick={() => navigate(id)}
+              type="button"
+            >
+              <Icon name={icon} size={16} />
+              {label}
+            </button>
+          ))}
         </nav>
         <div className="topbar-actions">
-          <label className="app-search"><Icon name="search" size={17} /><input aria-label="Cerca lavori" onChange={(event) => { setQuery(event.target.value); if (event.target.value && view !== 'work') navigate('work'); }} placeholder="Cerca" value={query} /></label>
-          <button aria-label="Nuovo lavoro" className="primary-action new-work" onClick={() => openWork(null)} type="button"><Icon name="plus" size={17} /><span>Nuovo lavoro</span></button>
+          <label className="app-search">
+            <Icon name="search" size={17} />
+            <input
+              aria-label={searchLabel}
+              onChange={(event) => {
+                if (view === "today") navigate("work");
+                setQuery(event.target.value);
+              }}
+              placeholder={searchLabel}
+              value={query}
+            />
+          </label>
+          <button
+            aria-label={createLabel}
+            className="primary-action new-work"
+            disabled={loading || saving}
+            onClick={createCurrent}
+            type="button"
+          >
+            <Icon name="plus" size={17} />
+            <span>{createLabel}</span>
+          </button>
         </div>
       </header>
-
       <main className="app-content">
-        {loading ? <div className="loading-state"><span /><p>Preparo il workspace…</p></div> : <>
-          {view === 'today' && <TodayView items={state.collaborations} onCreate={() => openWork(null)} onOpen={openWork} />}
-          {view === 'work' && <WorksView items={state.collaborations} onCreate={() => openWork(null)} onOpen={openWork} query={query} />}
-          {view === 'ideas' && <IdeasView ideas={state.ideas} onCreate={createIdea} onUpdate={updateIdea} saving={saving} />}
-        </>}
+        {loading ? (
+          <div className="loading-state">
+            <span />
+            <p>Carico Marta Ops…</p>
+          </div>
+        ) : (
+          <>
+            {view === "today" && (
+              <TodayView
+                onCreate={() => newWork()}
+                onEditTask={(task) => openTask(task)}
+                onNewTask={() => openTask(null)}
+                onOpen={(work) => openWork(work)}
+                onTasks={() => navigate("tasks")}
+                onToggleTask={toggleTask}
+                onWorks={() => navigate("work")}
+                saving={saving}
+                state={state}
+              />
+            )}
+            {view === "work" && (
+              <WorksView
+                items={state.collaborations}
+                onCreate={newWork}
+                onMove={moveWork}
+                onOpen={(work) => openWork(work)}
+                query={query}
+                saving={saving}
+              />
+            )}
+            {view === "contacts" && (
+              <ContactsView
+                contacts={state.contacts}
+                onCreate={() => openContact(null)}
+                onOpen={openContact}
+                query={query}
+                works={state.collaborations}
+              />
+            )}
+            {view === "tasks" && (
+              <TasksView
+                contacts={state.contacts}
+                onCreate={() => openTask(null)}
+                onEdit={(task) => openTask(task)}
+                onToggle={toggleTask}
+                query={query}
+                saving={saving}
+                tasks={state.tasks}
+                works={state.collaborations}
+              />
+            )}
+            {view === "ideas" && (
+              <IdeasView
+                ideas={state.ideas}
+                onCreate={async (idea) => {
+                  await mutate({ action: "create_idea", idea });
+                }}
+                onUpdate={async (id, changes) => {
+                  await mutate({ action: "update_idea", id, changes });
+                }}
+                query={query}
+                saving={saving}
+              />
+            )}
+          </>
+        )}
       </main>
-
       <nav className="mobile-nav" aria-label="Sezioni">
-        {NAV.map(([id, label, icon]) => <button className={view === id ? 'is-active' : ''} key={id} onClick={() => navigate(id)} type="button"><Icon name={icon} size={19} /><span>{label}</span></button>)}
+        {SECTIONS.map(({ id, label, icon }) => (
+          <button
+            aria-current={view === id ? "page" : undefined}
+            className={view === id ? "is-active" : ""}
+            key={id}
+            onClick={() => navigate(id)}
+            type="button"
+          >
+            <Icon name={icon} size={18} />
+            <span>{label}</span>
+          </button>
+        ))}
       </nav>
-
-      {panelOpen && <WorkPanel
-        item={selected}
-        onAddDeliverable={async (collaborationId, deliverable) => { await mutate({ action: 'add_deliverable', collaboration_id: collaborationId, deliverable }); }}
-        onClose={() => setPanelOpen(false)}
-        onIntegrate={async (id, target) => {
-          await integrate({ action: target === 'mail' ? 'create_mail_draft' : 'create_calendar_event', id });
-        }}
-        onSave={saveWork}
-        onUpdateDeliverable={async (collaborationId, id, changes) => { await mutate({ action: 'update_deliverable', collaboration_id: collaborationId, id, changes }); }}
+      <RecordPanels
+        controller={controller}
+        state={state}
         saving={saving}
-      />}
-      {error && <div className="toast" role="alert"><span>{error}</span><button aria-label="Chiudi messaggio" onClick={clearError} type="button"><Icon name="close" size={16} /></button></div>}
+        mutate={mutate}
+        integrate={integrate}
+      />
+      {error && (
+        <div className="toast" role="alert">
+          <span>{error}</span>
+          <button
+            aria-label="Chiudi messaggio"
+            onClick={clearError}
+            type="button"
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

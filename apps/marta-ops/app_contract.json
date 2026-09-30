@@ -2,8 +2,8 @@
   "app_id": "marta-ops",
   "contract_version": "1.0",
   "name": "Marta Ops",
-  "version": "0.3.0",
-  "description": "Workspace operativo essenziale per collaborazioni, scadenze, deliverable e idee di Marta Giunti.",
+  "version": "0.4.0",
+  "description": "Collaborazioni, pipeline Kanban, contatti, attività, consegne e idee per Marta Giunti.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
   "provides": [],
@@ -45,7 +45,7 @@
     "data_events": [
       {
         "resource": "state",
-        "description": "Collaborazioni, deliverable o idee sono cambiati."
+        "description": "Lavori, contatti, attività, note, deliverable o idee sono cambiati."
       }
     ],
     "view_surfaces": [],
@@ -58,7 +58,7 @@
   },
   "storage": {
     "storage_kind": "json",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
       "data/marta-ops/state.json"
     ],

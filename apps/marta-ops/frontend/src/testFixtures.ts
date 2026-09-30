@@ -1,0 +1,56 @@
+import type { Collaboration, Contact, MartaOpsState, Task } from "./types";
+
+export const contact: Contact = {
+  id: "c1",
+  name: "Anna Rossi",
+  company: "Outdoor",
+  role: "Marketing",
+  email: "anna@example.test",
+  phone: "",
+  tags: ["Sport"],
+  notes: "",
+  archived: false,
+  created_at: "2026-09-30T08:00:00Z",
+  updated_at: "2026-09-30T08:00:00Z",
+};
+export const work: Collaboration = {
+  id: "w1",
+  title: "Campagna neve",
+  partner: "Outdoor",
+  partner_email: "",
+  contact_id: "c1",
+  pipeline_order: 0,
+  kind: "partnership",
+  phase: "production",
+  next_action: "Confermare il brief",
+  due_date: "",
+  value_minor: 250000,
+  payment_status: "invoiced",
+  contract_status: "signed",
+  rights_expiry_date: "",
+  notes: "",
+  deliverables: [],
+  created_at: "2026-09-30T08:00:00Z",
+  updated_at: "2026-09-30T08:00:00Z",
+};
+export const task: Task = {
+  id: "t1",
+  title: "Richiamare Anna",
+  kind: "call",
+  due_date: "2026-09-30",
+  contact_id: "c1",
+  collaboration_id: "w1",
+  done: false,
+  completed_at: "",
+  notes: "",
+  created_at: "2026-09-30T08:00:00Z",
+  updated_at: "2026-09-30T08:00:00Z",
+};
+export const state: MartaOpsState = {
+  schema_version: "2",
+  collaborations: [work],
+  contacts: [contact],
+  tasks: [task],
+  ideas: [],
+  activity: [],
+};

@@ -1,6 +1,10 @@
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -16,8 +20,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button, input, select, textarea { color: inherit; font: inherit; }
-button { cursor: pointer; }
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
 
 .marta-shell {
   display: grid;
@@ -93,35 +105,12 @@ button { cursor: pointer; }
   text-transform: uppercase;
 }
 
-.mobile-nav { display: none; }
-
-.panel-backdrop {
-  position: fixed;
-  z-index: 100;
-  inset: 0;
-  display: flex;
-  justify-content: flex-end;
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  animation: fade-in 150ms ease-out;
+.mobile-nav {
+  display: none;
 }
 
-.work-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, auto) auto minmax(0, 1fr) auto;
-  width: min(650px, 96vw);
-  height: 100%;
-  overflow: hidden;
-  border-left: 1px solid var(--marta-border-strong);
-  background: #0d0d0f;
-  box-shadow: -24px 0 80px rgba(0, 0, 0, 0.45);
-  animation: panel-in 180ms ease-out;
-}
-
-.work-panel.is-new { grid-template-rows: auto minmax(0, 1fr) auto; }
-
-.panel-header, .panel-footer {
+.panel-header,
+.panel-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -130,10 +119,22 @@ button { cursor: pointer; }
   padding: 20px 24px;
   background: rgba(13, 13, 15, 0.92);
 }
-.panel-header { border-bottom: 1px solid var(--marta-border); }
-.panel-footer { justify-content: flex-end; border-top: 1px solid var(--marta-border); }
-.panel-header h2 { margin: 4px 0 0; font-size: 1.25rem; font-weight: 560; }
-.work-form { overflow-y: auto; padding: 24px; }
+.panel-header {
+  border-bottom: 1px solid var(--marta-border);
+}
+.panel-footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--marta-border);
+}
 
-@keyframes panel-in { from { transform: translateX(24px); opacity: 0; } }
-@keyframes fade-in { from { opacity: 0; } }
+@keyframes panel-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}

@@ -118,6 +118,14 @@ class MartaOpsCRMTest(unittest.TestCase):
         column = sorted(self.call("bootstrap")["state"]["collaborations"], key=lambda w: w["pipeline_order"])
         self.assertEqual([w["id"] for w in column], [first["id"], moved["id"]])
 
+    def test_new_work_appends_after_sparse_old_order(self):
+        original = {"schema_version": "1", "collaborations": [{"id": "a", "title": "A", "phase": "lead"}, {"id": "other", "title": "Other", "phase": "production"}, {"id": "b", "title": "B", "phase": "lead"}], "ideas": []}
+        (self.root / "state.json").write_text(json.dumps(original))
+        self.work("New")
+        items = sorted((w for w in self.call("bootstrap")["state"]["collaborations"] if w["phase"] == "lead"), key=lambda w: w["pipeline_order"])
+        self.assertEqual([w["title"] for w in items], ["A", "B", "New"])
+        self.assertEqual(len(set(w["pipeline_order"] for w in items)), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

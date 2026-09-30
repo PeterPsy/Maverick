@@ -1,0 +1,119 @@
+.app-topbar {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 66px;
+  padding: 10px 20px;
+}
+.desktop-nav {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.desktop-nav button {
+  padding: 0 10px;
+  font-size: 0.75rem;
+}
+.app-search {
+  width: 190px;
+}
+.page {
+  width: min(100%, 1280px);
+  padding: 30px 24px 60px;
+}
+.page-heading {
+  align-items: center;
+  margin-bottom: 24px;
+}
+.page-heading h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.7rem;
+  font-weight: 550;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.eyebrow {
+  letter-spacing: 0.04em;
+  font-size: 0.65rem;
+}
+.heading-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 24px;
+  border-radius: 9px;
+  color: var(--marta-muted);
+  background: var(--marta-surface-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.page-total {
+  display: grid;
+  gap: 3px;
+  text-align: right;
+  font-size: 1.1rem;
+}
+.page-total small {
+  color: var(--marta-soft);
+  font-size: 0.68rem;
+}
+.view-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.view-toolbar .filter-tabs {
+  margin: 0;
+}
+.toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.toolbar-filters select,
+.kanban-phase {
+  border: 1px solid var(--marta-border);
+  border-radius: 12px;
+  color: var(--marta-muted);
+  background: var(--marta-surface-muted);
+  padding: 8px 10px;
+  font-size: 0.72rem;
+}
+option {
+  background: var(--marta-bg-strong);
+  color: var(--marta-text);
+}
+.view-switch {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--marta-border);
+  border-radius: 12px;
+  padding: 3px;
+}
+.view-switch button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 29px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--marta-soft);
+  background: transparent;
+}
+.view-switch button.is-active {
+  color: var(--marta-text);
+  background: var(--marta-surface-active);
+}
+.search-count {
+  color: var(--marta-muted);
+  font-size: 0.75rem;
+}
+.works-page.is-board {
+  max-width: 1440px;
+}

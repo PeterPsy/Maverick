@@ -12,7 +12,7 @@ from errors import MartaOpsError
 
 
 STATE_FILE = "state.json"
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 
 def default_state() -> dict[str, Any]:
@@ -21,21 +21,25 @@ def default_state() -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "collaborations": [],
         "ideas": [],
+        "contacts": [],
+        "tasks": [],
+        "activity": [],
     }
 
 
 def normalize_state(raw: dict[str, Any] | None) -> dict[str, Any]:
     """Validate the small stable storage envelope."""
     state = dict(raw or {})
-    collaborations = state.get("collaborations", [])
-    ideas = state.get("ideas", [])
-    if not isinstance(collaborations, list) or not isinstance(ideas, list):
-        raise MartaOpsError("Lo stato di Marta Ops non è valido.", status_code=500)
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "collaborations": [dict(item) for item in collaborations if isinstance(item, dict)],
-        "ideas": [dict(item) for item in ideas if isinstance(item, dict)],
-    }
+    normalized = {**state, "schema_version": SCHEMA_VERSION}
+    for key in ("collaborations", "ideas", "contacts", "tasks", "activity"):
+        items = state.get(key, [])
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            raise MartaOpsError("Lo stato di Marta Ops non è valido.", status_code=500)
+        normalized[key] = [dict(item) for item in items]
+    for index, item in enumerate(normalized["collaborations"]):
+        item.setdefault("contact_id", "")
+        item.setdefault("pipeline_order", index)
+    return normalized
 
 
 def load_state(data_root: Path) -> dict[str, Any]:

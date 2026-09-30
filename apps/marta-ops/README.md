@@ -29,6 +29,8 @@ Both integrations use declared optional app interfaces (`mail.workspace` and `ca
 
 Workspace data is stored under `data/marta-ops/state.json` through the Maverick App SDK storage helpers. The app does not read another app's private data.
 
+The CRM extension adds contacts, tasks and an activity timeline to the same atomic JSON envelope (schema 2). Schema 1 work and idea records are retained; missing collections and work ordering/contact fields receive additive defaults in memory, and are persisted only with the next explicit mutation. Bootstrap does not rewrite existing data. Kanban moves use an anchor in the complete destination column, so filtered-out cards retain their relative order. A stale source phase is rejected before any write. Contact archiving retains linked work and tasks.
+
 ## Verify and install
 
 ```bash

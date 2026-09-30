@@ -63,6 +63,13 @@ keeps the last usable snapshot and has no expiry deadline.
 The workspace default is selected by its direct binding. New sessions may pick
 another enabled current model and supported reasoning effort.
 
+Codex `account/updated` notifications describe provider authentication and plan
+metadata, not work performed by an agent. Core filters them before runtime event
+persistence and live transport. Chat applies the same filter to historical
+`account.updated` steps and labels, so existing transcripts and activity indicators
+remain free of account telemetry. Unknown notifications about provider work still
+use the generic runtime event fallback.
+
 ## Antigravity
 
 Antigravity is a `native_agent` using its installed structured CLI, an isolated

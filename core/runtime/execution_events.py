@@ -37,7 +37,8 @@ def is_internal_provider_noise(raw_value: str) -> bool:
     )
     normalized = " ".join(normalized.split())
     return (
-        "reading additional input from stdin" in normalized
+        is_non_chat_facing_provider_event(raw_value)
+        or "reading additional input from stdin" in normalized
         or normalized
         in {
             "thread started",
@@ -90,9 +91,13 @@ def parse_provider_json_event(raw_line: str) -> RuntimeExecutionEvent | None:
 
 
 def is_non_chat_facing_provider_event(event_type: str) -> bool:
-    """Return true for provider deltas that are too noisy for chat-facing event history."""
+    """Identify provider lifecycle and stream telemetry that is not user-visible work."""
     normalized = _normalize_provider_event_type(event_type)
-    return normalized in {"item command execution output delta", "item command execution terminal interaction"}
+    return normalized in {
+        "account updated",
+        "item command execution output delta",
+        "item command execution terminal interaction",
+    }
 
 
 def _normalize_provider_event_type(value: str) -> str:

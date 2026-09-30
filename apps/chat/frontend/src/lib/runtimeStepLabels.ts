@@ -57,7 +57,11 @@ export function isNonChatFacingProviderEvent(value: unknown): boolean {
     return false;
   }
   const normalized = normalizeLabel(value);
-  return normalized === "item command execution output delta" || normalized === "item command execution terminal interaction";
+  return (
+    normalized === "account updated" ||
+    normalized === "item command execution output delta" ||
+    normalized === "item command execution terminal interaction"
+  );
 }
 
 export function runtimeStepLabel(event: RuntimeEvent): string | null {

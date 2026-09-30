@@ -13,6 +13,17 @@ from core.providers.codex_app_server_runtime_notifications import _handle_generi
 
 
 class CodexAppServerRuntimeNotificationTestCase(unittest.TestCase):
+    def test_account_updates_do_not_emit_chat_runtime_steps(self) -> None:
+        emitted = []
+        runtime = SimpleNamespace(event_lock=Lock(), current_event_sink=emitted.append)
+
+        _handle_notification(
+            runtime,
+            {"method": "account/updated", "params": {"authMode": "chatgpt", "planType": "pro"}},
+        )
+
+        self.assertEqual(emitted, [])
+
     def test_token_usage_notification_emits_exact_cumulative_usage(self) -> None:
         emitted = []
         runtime = SimpleNamespace(

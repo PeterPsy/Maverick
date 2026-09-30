@@ -6,6 +6,7 @@ import type {
   Contact,
   Task,
   WorkDraft,
+  WorkPanelTab,
 } from "../types";
 import { Drawer } from "./Drawer";
 import { WorkFields, workDraft } from "./WorkFields";
@@ -15,6 +16,7 @@ import { ActivityFeed } from "./ActivityFeed";
 
 export function WorkPanel({
   item,
+  initialTab = "details",
   preset,
   contacts,
   tasks,
@@ -31,6 +33,7 @@ export function WorkPanel({
   onEditTask,
 }: {
   item: Collaboration | null;
+  initialTab?: WorkPanelTab;
   preset: Partial<WorkDraft>;
   contacts: Contact[];
   tasks: Task[];
@@ -58,7 +61,7 @@ export function WorkPanel({
 }) {
   const formId = useId();
   const [draft, setDraft] = useState(() => workDraft(item, preset));
-  const [tab, setTab] = useState("details");
+  const [tab, setTab] = useState<WorkPanelTab>(item ? initialTab : "details");
   const [integrationMessage, setIntegrationMessage] = useState("");
   const [integrationBusy, setIntegrationBusy] = useState<
     "mail" | "calendar" | null
@@ -139,12 +142,14 @@ export function WorkPanel({
     >
       {item && (
         <div className="drawer-tabs">
-          {[
-            ["details", "Dettagli"],
-            ["deliverables", `Consegne (${item.deliverables.length})`],
-            ["tasks", "Attività"],
-            ["history", "Note e cronologia"],
-          ].map(([value, label]) => (
+          {(
+            [
+              ["details", "Dettagli"],
+              ["deliverables", `Consegne (${item.deliverables.length})`],
+              ["tasks", "Attività"],
+              ["history", "Note e cronologia"],
+            ] as Array<[WorkPanelTab, string]>
+          ).map(([value, label]) => (
             <button
               aria-pressed={tab === value}
               className={tab === value ? "is-active" : ""}

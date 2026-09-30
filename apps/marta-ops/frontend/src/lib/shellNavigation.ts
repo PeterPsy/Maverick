@@ -9,8 +9,10 @@ export const DEFAULT_APP_ID = "marta-ops";
 const VIEW_IDS = new Set<ViewId>([
   "today",
   "work",
+  "deliveries",
   "contacts",
   "tasks",
+  "admin",
   "ideas",
 ]);
 

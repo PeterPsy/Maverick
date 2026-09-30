@@ -13,12 +13,26 @@ export type IconName =
   | "calendar"
   | "contacts"
   | "tasks"
+  | "deliveries"
+  | "admin"
   | "board"
   | "list"
   | "grip"
   | "note";
 
 const paths: Record<IconName, ReactNode> = {
+  deliveries: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="3" />
+      <path d="M9 3h6v4H9zM8 12h8M8 16h5" />
+    </>
+  ),
+  admin: (
+    <>
+      <rect x="3" y="6" width="18" height="14" rx="3" />
+      <path d="M3 10h18M16 15h2M7 3v3M17 3v3" />
+    </>
+  ),
   contacts: (
     <>
       <circle cx="9" cy="8" r="3" />

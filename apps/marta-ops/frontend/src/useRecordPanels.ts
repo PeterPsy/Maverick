@@ -6,10 +6,16 @@ import type {
   Task,
   TaskDraft,
   WorkDraft,
+  WorkPanelTab,
 } from "./types";
 
 export type RecordPanel = { key: number } & (
-  | { kind: "work"; id: string | null; preset: Partial<WorkDraft> }
+  | {
+      kind: "work";
+      id: string | null;
+      preset: Partial<WorkDraft>;
+      initialTab: WorkPanelTab;
+    }
   | { kind: "contact"; id: string | null }
   | { kind: "task"; id: string | null; preset: Partial<TaskDraft> }
 );
@@ -18,11 +24,16 @@ export function useRecordPanels() {
   const [panels, setPanels] = useState<RecordPanel[]>([]);
   const sequence = useRef(0);
   const openWork = useCallback(
-    (item: Collaboration | null, preset: Partial<WorkDraft> = {}) => {
+    (
+      item: Collaboration | null,
+      preset: Partial<WorkDraft> = {},
+      initialTab: WorkPanelTab = "details",
+    ) => {
       const panel: RecordPanel = {
         kind: "work",
         id: item?.id || null,
         preset,
+        initialTab,
         key: ++sequence.current,
       };
       setPanels((current) => [...current, panel]);

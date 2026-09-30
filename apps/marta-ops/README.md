@@ -1,13 +1,15 @@
 # Marta Ops
 
-Marta Ops is the operational workspace for Marta Giunti and her team. Version 0.4 adds an Atomic CRM-inspired relationship and follow-up workflow around the existing collaboration model.
+Marta Ops is the operational workspace for Marta Giunti and her team. Version 0.5 adds global delivery production and lightweight administrative control around the existing collaboration workflow.
 
 ## Product scope
 
 - **Oggi** brings together urgent work, upcoming deadlines, follow-ups, pipeline totals and recent activity. Outstanding invoices remain visible after a collaboration closes.
 - **Lavori** offers a Kanban pipeline and a searchable list, with filters by status, kind and phase. Each column shows its count and value. Cards can be moved using mouse/touch drag, keyboard drag, or their phase selector; ordering and phase changes are persisted.
+- **Consegne** flattens deliverables across every work item into one status board. It highlights overdue and near-term delivery dates, supports work and text filters, changes status in place, and opens the owning work directly on its delivery tab.
 - **Contatti** stores brand/agency representatives, their details and tags, linked work, follow-ups, notes and history. Archiving a contact retains its relationships.
 - **Attività** tracks tasks, calls, emails and meetings with deadlines and optional contact/work links. Tasks can be completed, reopened and edited.
+- **Amministrazione** derives a compact control list from work values, payment states, contract states and rights expiries. It supports in-place updates but deliberately does not implement invoices, tax, bookkeeping or payment processing.
 - **Idee** retains the lightweight editorial inbox.
 
 Work panels keep details, deliverables, tasks and timeline in separate tabs. Unsaved fields survive unrelated data refreshes and failed requests. Contact and task creation use focused drawers with keyboard focus handling. All screens use the app-owned Maverick tokens and responsive layout.
@@ -22,7 +24,7 @@ Marta Ops continues to use Maverick's authentication, hosting and app-owned JSON
 
 ## Maverick sidebar and events
 
-The app owns its native Maverick sidebar with Oggi, Lavori, Contatti, Attività and Idee, plus the **Nuovo lavoro** footer action. Sidebar selection and in-app navigation stay synchronized without reloading; selecting a destination closes the mobile sidebar.
+The app owns its native Maverick sidebar with Oggi, Lavori, Consegne, Contatti, Attività, Amministrazione and Idee, plus the **Nuovo lavoro** footer action. Sidebar selection and in-app navigation stay synchronized without reloading; selecting a destination closes the mobile sidebar. The in-app mobile navigation scrolls horizontally rather than wrapping the seven destinations into multiple rows.
 
 The shared SDK resolves the Core-injected local app binding and validates the exact shell parent for navigation messages. Data updates use the SDK's app event transport, including isolated frames and reconnects. Frontend builds use the standard Maverick asset manifest and isolated-frame asset URL plugins. No app data is persisted in browser storage.
 
@@ -62,4 +64,4 @@ maverick app marta-ops frontend build --json
 maverick core cli run core.app-sdk.status --app-id marta-ops --json
 ```
 
-Backend tests cover old-data retention, validation, contact links, task completion/reopening, notes, sparse and filtered pipeline ordering, and Mail/Calendar request contracts. Frontend tests cover record editing/failure recovery, contact autofill, phase changes without dragging, task relationships, closed-work invoices, stacked-drawer saves, exact shell origin checks and refresh races. Browser preview verification uses synthetic records with the real app backend in a temporary data root; it does not read or seed the workspace's production data.
+Backend tests cover old-data retention, validation, contact links, task completion/reopening, notes, sparse and filtered pipeline ordering, and Mail/Calendar request contracts. Frontend tests cover record editing/failure recovery, contact autofill, phase changes without dragging, task relationships, delivery status changes, administrative updates, closed-work invoices, stacked-drawer saves, exact shell origin checks and refresh races. Browser preview verification uses synthetic records with the real app backend in a temporary data root; it does not read or seed the workspace's production data.

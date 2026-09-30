@@ -71,6 +71,7 @@ export function RecordPanels({
               key={panel.key}
               activity={state.activity}
               contacts={state.contacts}
+              initialTab={panel.initialTab}
               item={work}
               onClose={closePanel}
               onAddDeliverable={async (id, deliverable) => {

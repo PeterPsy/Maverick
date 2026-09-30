@@ -6,6 +6,8 @@ import { TodayView } from "./components/TodayView";
 import { WorksView } from "./components/WorksView";
 import { ContactsView } from "./components/ContactsView";
 import { TasksView } from "./components/TasksView";
+import { DeliveriesView } from "./components/DeliveriesView";
+import { AdministrationView } from "./components/AdministrationView";
 import {
   isMaverickParentMessage,
   mountedAppIdFromPath,
@@ -128,13 +130,15 @@ export function App() {
           ? "Nuova idea"
           : "Nuovo lavoro";
   const searchLabel =
-    view === "contacts"
-      ? "Cerca contatti"
-      : view === "tasks"
-        ? "Cerca attività"
-        : view === "ideas"
-          ? "Cerca idee"
-          : "Cerca lavori";
+    view === "deliveries"
+      ? "Cerca consegne"
+      : view === "contacts"
+        ? "Cerca contatti"
+        : view === "tasks"
+          ? "Cerca attività"
+          : view === "ideas"
+            ? "Cerca idee"
+            : "Cerca lavori";
 
   return (
     <div className="marta-shell">
@@ -220,6 +224,22 @@ export function App() {
                 saving={saving}
               />
             )}
+            {view === "deliveries" && (
+              <DeliveriesView
+                items={state.collaborations}
+                onOpen={(work) => openWork(work, {}, "deliverables")}
+                onUpdate={async (workId, deliverableId, changes) => {
+                  await mutate({
+                    action: "update_deliverable",
+                    collaboration_id: workId,
+                    id: deliverableId,
+                    changes,
+                  });
+                }}
+                query={query}
+                saving={saving}
+              />
+            )}
             {view === "contacts" && (
               <ContactsView
                 contacts={state.contacts}
@@ -239,6 +259,17 @@ export function App() {
                 saving={saving}
                 tasks={state.tasks}
                 works={state.collaborations}
+              />
+            )}
+            {view === "admin" && (
+              <AdministrationView
+                items={state.collaborations}
+                onOpen={(work) => openWork(work)}
+                onUpdate={async (id, changes) => {
+                  await mutate({ action: "update_collaboration", id, changes });
+                }}
+                query={query}
+                saving={saving}
               />
             )}
             {view === "ideas" && (

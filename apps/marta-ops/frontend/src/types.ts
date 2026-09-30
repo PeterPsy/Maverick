@@ -1,4 +1,12 @@
-export type ViewId = "today" | "work" | "contacts" | "tasks" | "ideas";
+export type ViewId =
+  | "today"
+  | "work"
+  | "deliveries"
+  | "contacts"
+  | "tasks"
+  | "admin"
+  | "ideas";
+export type WorkPanelTab = "details" | "deliverables" | "tasks" | "history";
 export type CollaborationKind =
   | "partnership"
   | "organic"

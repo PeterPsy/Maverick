@@ -51,4 +51,6 @@ it("uses the Core-injected local app binding and accepts only the exact shell", 
   ).toBe(false);
   expect(viewFromAppPage("contacts")).toBe("contacts");
   expect(viewFromAppPage("tasks")).toBe("tasks");
+  expect(viewFromAppPage("deliveries")).toBe("deliveries");
+  expect(viewFromAppPage("admin")).toBe("admin");
 });

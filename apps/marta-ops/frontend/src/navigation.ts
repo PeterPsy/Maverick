@@ -10,6 +10,12 @@ export const SECTIONS: Array<{
   { id: "today", label: "Oggi", icon: "today", note: "Priorità e scadenze" },
   { id: "work", label: "Lavori", icon: "work", note: "Pipeline e consegne" },
   {
+    id: "deliveries",
+    label: "Consegne",
+    icon: "deliveries",
+    note: "Produzione e approvazioni",
+  },
+  {
     id: "contacts",
     label: "Contatti",
     icon: "contacts",
@@ -20,6 +26,12 @@ export const SECTIONS: Array<{
     label: "Attività",
     icon: "tasks",
     note: "Follow-up e promemoria",
+  },
+  {
+    id: "admin",
+    label: "Amministrazione",
+    icon: "admin",
+    note: "Incassi, contratti e diritti",
   },
   { id: "ideas", label: "Idee", icon: "ideas", note: "Inbox creativa" },
 ];

@@ -2068,7 +2068,13 @@ Chat retains a selection-backed document-copy fallback because browsers may
 still deny asynchronous clipboard writes after exposing the API in a delegated
 cross-origin frame; copied feedback is shown only after either path succeeds.
 Full app frames retain microphone delegation, while Chat-owned widget frames
-receive it for composer dictation.
+receive it for composer dictation. Since frames bootstrap through `srcdoc` and
+a body-only form rather than an isolated `src`, Base Shell binds every
+delegated feature to the exact Core-validated launch origin before navigation,
+including recovery launches, and denies it while that origin is unresolved.
+The reverse proxy must leave microphone at its browser default; an explicit
+`microphone=(self)` header on the shell blocks isolated app origins regardless
+of the iframe delegation. Camera and geolocation remain disabled.
 Public static assets remain cross-origin readable and must never carry
 user-specific data, but their document interpretation is sandboxed and
 `nosniff`.

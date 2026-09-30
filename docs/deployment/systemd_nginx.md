@@ -194,7 +194,7 @@ Do not continue with a wrong `Service user`, `Service group`, or `Install root`.
 
 - bind the core service to `127.0.0.1`
 - terminate TLS at nginx
-- keep the nginx `Permissions-Policy` restrictive, but allow `microphone=(self)` so same-origin app iframes such as Chat dictation can request browser microphone access
+- keep camera and geolocation disabled in nginx `Permissions-Policy`, and omit the microphone directive so Base Shell can delegate microphone access to each validated isolated app origin through the iframe `allow` attribute. `microphone=(self)` blocks Chat dictation because app origins differ from the shell origin; iframe attributes cannot override that header. Existing installations must update their nginx configuration and reload it before reloading the shell on desktop or mobile.
 - set upload limits
 - keep logs outside the repository
 - keep the configured control-plane store and `.env.maverick` on restricted filesystem permissions

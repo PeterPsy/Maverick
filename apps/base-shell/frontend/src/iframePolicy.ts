@@ -17,6 +17,15 @@ export function widgetFrameBrowserFeaturePolicy(publicAppId: string): string {
     : "fullscreen";
 }
 
+/** A srcdoc/form launch has no isolated iframe src to use as the default allowlist. */
+export function isolatedFrameBrowserFeaturePolicy(features: string | undefined, origin: string | null): string | undefined {
+  return features?.split(";")
+    .map((feature) => feature.trim())
+    .filter(Boolean)
+    .map((feature) => `${feature} ${origin || "'none'"}`)
+    .join("; ");
+}
+
 const MAX_FRAME_OWNER_ID_LENGTH = 256;
 const MAX_FRAME_SCOPE_ID_LENGTH = 256;
 

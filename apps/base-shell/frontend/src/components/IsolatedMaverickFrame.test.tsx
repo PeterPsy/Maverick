@@ -35,7 +35,8 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     const origin = "http://af-123.sidecars.maverick.localhost:8000";
     const initialLaunch = launchPayload(origin, "initial-ticket");
     const recoveredLaunch = launchPayload(origin, "recovered-ticket");
-    const laterLaunch = launchPayload(origin, "later-ticket");
+    const laterOrigin = "http://af-456.sidecars.maverick.localhost:8000";
+    const laterLaunch = launchPayload(laterOrigin, "later-ticket");
     const initialResponse = deferred<Response>();
     const fetchMock = vi.fn()
       .mockReturnValueOnce(initialResponse.promise)
@@ -50,6 +51,7 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     await act(async () => {
       root.render(
         <IsolatedMaverickFrame
+          allow="clipboard-write; fullscreen; microphone"
           appId="chat"
           frameScope={FRAME_SCOPE}
           launchPath="/apps/chat/?thread=initial"
@@ -61,8 +63,10 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
 
     const frame = container.querySelector("iframe");
     expect(frame).not.toBeNull();
+    expect(frame?.allow).toBe("clipboard-write 'none'; fullscreen 'none'; microphone 'none'");
     initialResponse.resolve(jsonResponse(initialLaunch));
     await flushPromises();
+    expect(frame?.allow).toBe(`clipboard-write ${origin}; fullscreen ${origin}; microphone ${origin}`);
     const initialPostMessage = vi.spyOn(frame!.contentWindow!, "postMessage").mockImplementation(() => undefined);
     await finishBootstrap(frame as HTMLIFrameElement);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -105,6 +109,7 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     await flushPromises();
     const recoveredRelayDocument = frame!.srcdoc;
     expect(recoveredRelayDocument).not.toBe(initialRelayDocument);
+    expect(frame?.allow).toBe(`clipboard-write ${origin}; fullscreen ${origin}; microphone ${origin}`);
     await finishBootstrap(frame as HTMLIFrameElement);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -128,6 +133,7 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
       path: laterPath,
     });
     expect(frame?.dataset.maverickFrameOrigin).toBe(laterLaunch.origin);
+    expect(frame?.allow).toBe(`clipboard-write ${laterOrigin}; fullscreen ${laterOrigin}; microphone ${laterOrigin}`);
   });
 
   it("paints the initial frame with Maverick colors before the remote document loads", async () => {

@@ -9,6 +9,7 @@ import {
 
 import {
   isMaverickFrameMessage,
+  isolatedFrameBrowserFeaturePolicy,
   setMaverickFrameOrigin,
   type MaverickFrameScope,
 } from "../iframePolicy";
@@ -52,6 +53,7 @@ type IsolatedMaverickFrameProps = Omit<IframeHTMLAttributes<HTMLIFrameElement>, 
 
 export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaverickFrameProps>(
   function IsolatedMaverickFrame({
+    allow,
     appId,
     frameScope,
     launchPath,
@@ -77,6 +79,7 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
       pendingLaunchRef.current = null;
       activeBootstrapIdRef.current = null;
       setMaverickFrameOrigin(frame, null, appId, frameScope);
+      frame.allow = isolatedFrameBrowserFeaturePolicy(allow, null) || "";
       delete frame.dataset.maverickFrameBootstrapArmed;
 
       const launchFrame = (requestedPath: string, preserveCurrentOrigin: boolean) => {
@@ -88,6 +91,9 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
             if (controller.signal.aborted || frameRef.current !== frame) return;
             delete frame.dataset.maverickFrameBootstrapArmed;
             setMaverickFrameOrigin(frame, launch.origin, appId, frameScope);
+            // Apply before navigating the relay: bare directives default to
+            // the shell origin because this frame uses srcdoc, not src.
+            frame.allow = isolatedFrameBrowserFeaturePolicy(allow, launch.origin) || "";
             bootstrapPendingRef.current = true;
             const bootstrapId = crypto.randomUUID();
             activeBootstrapIdRef.current = bootstrapId;
@@ -137,11 +143,12 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
         delete frame.dataset.maverickFrameBootstrapArmed;
         setMaverickFrameOrigin(frame, null, appId, frameScope);
       };
-    }, [appId, frameScope, launchPath, onLaunchError]);
+    }, [allow, appId, frameScope, launchPath, onLaunchError]);
 
     return (
       <iframe
         {...iframeProps}
+        allow={isolatedFrameBrowserFeaturePolicy(allow, null)}
         name={frameNameRef.current}
         onLoad={(event) => {
           const frame = event.currentTarget;

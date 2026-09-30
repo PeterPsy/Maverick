@@ -8,7 +8,7 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v43`.
+direct path was then removed. The current executor contract is `macos-v44`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
@@ -58,7 +58,7 @@ audit remain in Core. WebKit exposes only `maverickDeviceUse`; arguments,
 results, screenshots and credentials never pass through JavaScript or Storage.
 The retired `maverickLocalRuntime` handler and broker do not exist.
 
-The v43 path deliberately remains one provider/runtime family:
+The v44 path deliberately remains one provider/runtime family:
 
 - source app and agent `chat`;
 - Codex app-server with the active model profile and reasoning effort already
@@ -131,7 +131,7 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v43`;
+- executor `macos-v44`;
 - tool digest
   `d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1`;
 - mode `on` or `full`;
@@ -140,7 +140,9 @@ the WSS directly and sends:
 v41 added mode to the hello, ready frame, immutable `DeviceUseSessionBinding`,
 public thread projection and provider instructions. v42 removed the
 executor-level model pin. v43 adds the governed `mac_project` tool and therefore
-changes the frozen tool digest. Runtime session creation still records the
+changes the frozen tool digest. v44 keeps the same schemas/digest and aligns
+native/Core media deadlines while improving precise timebases and cancellable
+sampling. Runtime session creation still records the
 selected Codex model and effort in the ordinary immutable
 `RuntimeExecutionBinding`, and both thread/start requests read that binding. In
 On, Core validates the initial app against the admitted list and applies the
@@ -170,7 +172,7 @@ or sent through the WebView. EventKit retains the 512 KB control-frame bound.
 
 ## Governed project media
 
-`mac_project` is the sole v43 filesystem exception. `authorize_project` opens a
+`mac_project` is the sole v44 filesystem exception. `authorize_project` opens a
 native directory picker and persists a security-scoped bookmark behind a random
 opaque `project_id`. Neither Core nor the model receives an absolute path.
 Every later argument is project-relative; absolute paths, traversal, symlinks,
@@ -221,7 +223,7 @@ invariants.
 
 Core:
 
-- `core/device_use/contract.py` — v43 identity, tool schemas and On/Full prompts;
+- `core/device_use/contract.py` — v44 identity, tool schemas and On/Full prompts;
 - `core/device_use/models.py` — immutable mode binding;
 - `core/device_use/service.py` — activation, lease, serialization, ledger,
   binary images and On-only quota;
@@ -273,7 +275,7 @@ python3 -m unittest discover -s scripts -p 'test_mac_*.py'
 
 The Apple-silicon workflow must also run Swift tests, release build, real
 Peekaboo catalog smoke and signing/designated-requirement checks. Deploy/restart
-Core before installing a v43 Mac client. With MaverickMac closed, dispatch the
+Core before installing a v44 Mac client. With MaverickMac closed, dispatch the
 existing workflow using `install_and_open=true`; the installer atomically
 replaces `~/Applications/MaverickMac.app`. Never create a second app bundle.
 
@@ -302,3 +304,43 @@ Core projects every dynamic native call as a redaction-safe
 those events to show the current Mac action and the persisted Actions group;
 raw arguments, typed text, screenshots and native result bodies stay private.
 The model may add brief milestone narration, but should not narrate every click.
+
+## v44 media correctness and operation budgets (2026-09-30)
+
+Project calls use the same budget on Core and Mac: 5 minutes for ordinary
+media operations and the native folder picker, 15 minutes for transcription or
+subclip export, and 20 minutes for a declarative script. Other native tools
+retain their 3-minute wire deadline. Core allows a further 5 seconds for result
+delivery; Stop or disconnect still unblocks the worker immediately and never
+replays a call. A cancelled picker closes without persisting a new bookmark.
+
+Authorization returns a bounded inventory of project-relative media files
+(128 files / 1,024 visited entries / depth 8), excluding symlinks, packages,
+hidden files and generated output. `inventory_complete=false` means there may
+be additional media; never infer that the returned list is exhaustive.
+
+Inspection exposes each track's native timebase and minimum frame duration.
+Subclips convert start and end independently using the source track timebase,
+reject collapsed ranges, retain the precise source tick manifest, and replace
+generated exports atomically. They do not infer constant frame rate for
+variable-rate media: use the actual timestamps returned by frame sampling.
+Asynchronous image generation is cancellable and returns actual CMTime values
+and timebases. Hash streaming and audio scanning yield execution rather than
+blocking the native UI; full source hashes remain checked across transforms.
+The complete Speech result is persisted; there is no silent 2,000-word cap.
+The wire result may return a marked partial transcript to stay within its bound.
+
+Verification samples eight frames without rendering or JPEG-encoding an unused
+contact sheet, fails on detected black samples, and rechecks the file hash
+after sampling. `valid=true` covers the requested dimensions/fps/duration and
+those samples only. It is not proof of the whole video, audio quality, captions
+or a CapCut preset; audio reporting is track presence only. Inspect targeted
+contact sheets, run audio analysis as needed, and observe CapCut for creative
+acceptance. Intentional black samples require review, not an automatic pass.
+SRT generation rejects overlapping captions and intervals that collapse to the
+same millisecond before writing.
+
+Automatic tests and signed installation are separate from the blueprint's
+CapCut acceptance: a real authorized source, the Marco Shorts preset, final
+export inspection and three consecutive measured successful runs are still
+required before claiming CapCut 1.0.

@@ -20,11 +20,49 @@ from core.device_use.service import DeviceUseService, encode_image_frame
 
 
 class DeviceUseServiceTestCase(unittest.TestCase):
-    def test_contract_digest_is_the_frozen_macos_v43_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v44_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
             "d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1",
         )
+
+    def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):
+        for tool, action, expected_ms in (
+            ("mac_computer", "observe", 180_000),
+            ("mac_project", "inspect_media", 300_000),
+            ("mac_project", "transcribe_media", 900_000),
+            ("mac_project", "prepare_subclip", 900_000),
+            ("mac_project", "run_project_script", 1_200_000),
+        ):
+            with self.subTest(action=action):
+                service, binding, outbound = self.connected()
+                errors = []
+                worker = threading.Thread(target=lambda: self._capture_error(errors, lambda: service.invoke(
+                    binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                    provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+                    call_id="media-call", tool_name=tool, arguments={"action": action}, task_text="media",
+                )))
+                worker.start()
+                frame = outbound.get(timeout=1)
+                self.assertEqual(frame["deadline_ms"], expected_ms)
+                service.stop_activation(binding.activation_id, reason="user_stop")
+                worker.join(timeout=1)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertEqual(str(errors[0]), "device_use_execution_unknown")
+
+    def test_invalid_deadline_is_denied_before_dispatch(self):
+        service, binding, outbound = self.connected()
+        for timeout in (True, 0, -1, float("nan"), float("inf"), 301, "300"):
+            with self.subTest(timeout=timeout):
+                with self.assertRaisesRegex(DeviceUseAuthorizationError, "device_use_deadline_invalid"):
+                    service.invoke(
+                        binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                        provider_thread_id="provider-thread", provider_turn_id="provider-turn",
+                        call_id="media-call", tool_name="mac_project",
+                        arguments={"action": "inspect_media"}, task_text="media", timeout_seconds=timeout,
+                    )
+        self.assertTrue(outbound.empty())
 
     def test_persisted_binding_requires_mode_and_full_does_not_treat_discovery_as_scope(self):
         document = {

@@ -36,10 +36,13 @@ from core.device_use.models import (
     DeviceUseResult,
     DeviceUseSessionBinding,
 )
+from core.device_use.invocation_deadline import (
+    RESULT_DELIVERY_GRACE_SECONDS,
+    invocation_timeout_seconds,
+)
 
 
 ACTIVATION_TTL_SECONDS = 60
-DEFAULT_INVOCATION_TIMEOUT_SECONDS = 180.0
 MAX_APPROVED_APPS = 24
 MAX_CALLS_PER_TURN = 512
 MAX_JOURNAL_RECORDS = 2048
@@ -318,7 +321,7 @@ class DeviceUseService:
         tool_name: str,
         arguments: dict[str, object],
         task_text: str,
-        timeout_seconds: float = DEFAULT_INVOCATION_TIMEOUT_SECONDS,
+        timeout_seconds: float | None = None,
     ) -> DeviceUseResult:
         """Dispatch one physical operation and block only its dedicated worker."""
         tool = str(tool_name or "").strip()
@@ -341,6 +344,17 @@ class DeviceUseService:
         action = str(arguments.get("action") or "").strip()[:64]
         if not action:
             raise DeviceUseAuthorizationError("device_use_action_required")
+        maximum_timeout = invocation_timeout_seconds(tool, action)
+        relay_grace_seconds = RESULT_DELIVERY_GRACE_SECONDS if timeout_seconds is None else 0.0
+        if timeout_seconds is None:
+            timeout_seconds = maximum_timeout
+        elif (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not math.isfinite(timeout_seconds)
+            or not 0 < timeout_seconds <= maximum_timeout
+        ):
+            raise DeviceUseAuthorizationError("device_use_deadline_invalid")
         invocation_id = str(uuid4())
         dispatched_at = self._now()
         record = DeviceUseInvocationJournalRecord(
@@ -405,7 +419,7 @@ class DeviceUseService:
                     "device_use_transport_backpressure"
                 ) from error
         started = self._monotonic()
-        if not pending.completed.wait(max(0.01, timeout_seconds)):
+        if not pending.completed.wait(timeout_seconds + relay_grace_seconds):
             with self._lock:
                 if self._pending.pop(invocation_id, None) is not None:
                     self._update_journal_locked(

@@ -78,7 +78,7 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual(provider_threads, ["thread-1"])
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.output_text, "hello")
-        self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta"])
+        self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta", "runtime.output.message.completed"])
         self.assertEqual(emitted[0].payload["text"], "hello")
         self.assertEqual(FakeCodexProcess.requests[-3:], ["initialize", "thread/start", "turn/start"])
         self.assertEqual(
@@ -170,7 +170,7 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.output_text, "snapshot answer")
-        self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta"])
+        self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta", "runtime.output.message.completed"])
         self.assertEqual(emitted[0].payload["text"], "snapshot answer")
 
     def test_codex_execution_has_no_default_turn_timeout(self) -> None:
@@ -427,7 +427,7 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(result.output_text, "Checklist pronta")
-        self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta", "runtime.output.structured"])
+        self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta", "runtime.output.structured", "runtime.output.message.completed"])
         self.assertEqual(emitted[0].payload["text"], "Checklist pronta")
         self.assertEqual(emitted[1].payload["structured_content"]["kind"], "checklist.design")
         self.assertEqual(emitted[1].payload["structured_content"]["payload"]["id"], "check_demo1234")

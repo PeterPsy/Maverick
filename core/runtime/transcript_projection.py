@@ -26,6 +26,7 @@ class _OrderedMessage:
 @dataclass
 class _OutputSegment:
     text: str
+    message_id: str
     created_at: datetime
     order_event_id: str
     source_event_ids: list[str]
@@ -129,11 +130,20 @@ def project_runtime_transcript(
             text = payload.get("text") if isinstance(payload.get("text"), str) else ""
             if text:
                 current = active_output.get(turn_id)
+                message_id = str(payload.get("message_id") or "")
+                if not message_id and payload.get("provider_event_type") == "item.completed" and text.strip():
+                    emitted = rendered_output.get(turn_id, "") + (current.text if current else "")
+                    if emitted.rstrip().endswith(text.rstrip()):
+                        continue
+                if message_id and current and current.message_id != message_id:
+                    flush_output(turn_id, complete=True)
+                    current = None
                 if current is None:
                     index = next_segment_index.get(turn_id, 0)
                     next_segment_index[turn_id] = index + 1
                     active_output[turn_id] = _OutputSegment(
                         text=text,
+                        message_id=message_id,
                         created_at=event.created_at,
                         order_event_id=event.event_id,
                         source_event_ids=[event.event_id],
@@ -142,6 +152,15 @@ def project_runtime_transcript(
                 else:
                     current.text += text
                     current.source_event_ids.append(event.event_id)
+            continue
+        if event.event_type == "runtime.output.message.completed":
+            current = active_output.get(turn_id)
+            if current and (not payload.get("message_id") or current.message_id == payload["message_id"]):
+                current.source_event_ids.append(event.event_id)
+                flush_output(turn_id, complete=True)
+            continue
+        if event.event_type.startswith("runtime.tool_call."):
+            flush_output(turn_id, complete=turn_id in latest_final_by_turn)
             continue
         if event.event_type == "runtime.output.structured":
             flush_output(turn_id, complete=turn_id in latest_final_by_turn)
@@ -271,7 +290,9 @@ def _project_final_output(event, *, turn_id: str, entries: list[_OrderedMessage]
     has_final_text = bool(final_text.strip())
     authoritative = complete_text if has_complete_text else final_text if has_final_text else ""
     source_event_ids = [event.event_id]
-    if has_complete_text and rendered_text:
+    if has_complete_text and rendered_text.rstrip().endswith(complete_text.rstrip()):
+        authoritative = ""
+    elif has_complete_text and rendered_text:
         prefix_end = _prefix_end_ignoring_whitespace(complete_text, rendered_text)
         if prefix_end is None:
             removed = [

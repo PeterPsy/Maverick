@@ -295,7 +295,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
   const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map(messageTurnId));
   const outputSegmentsByTurn = new Map<
     string,
-    { text: string; createdAt: string; index: number; order: number; sourceFields: MessageSourceFields }
+    { text: string; messageId: string; createdAt: string; index: number; order: number; sourceFields: MessageSourceFields }
   >();
   const nextOutputSegmentIndexByTurn = new Map<string, number>();
   const renderedOutputByTurn = new Map<string, string>();
@@ -455,6 +455,15 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
     if (event.event_type === "runtime.output.delta") {
       const text = deltaTextPayload(event);
       if (text) {
+        const messageId = stringPayload(event.payload.message_id);
+        if (!messageId && event.payload.provider_event_type === "item.completed") {
+          const currentText = `${renderedOutputByTurn.get(turnId) || ""}${outputSegmentsByTurn.get(turnId)?.text || ""}`;
+          if (currentText.trimEnd().endsWith(text.trimEnd())) continue;
+        }
+        const previous = outputSegmentsByTurn.get(turnId);
+        if (messageId && previous && previous.messageId !== messageId) {
+          flushOutputSegment(turnId, true);
+        }
         flushToolSegment(turnId, true);
         const current = outputSegmentsByTurn.get(turnId);
         const index = nextOutputSegmentIndexByTurn.get(turnId) || 0;
@@ -463,11 +472,19 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
         }
         outputSegmentsByTurn.set(turnId, {
           text: current ? `${current.text}${text}` : text,
+          messageId: current?.messageId || messageId,
           createdAt: event.created_at,
           order: current ? current.order : eventIndex,
           index: current ? current.index : index,
           sourceFields: current?.sourceFields || sourceFields,
         });
+      }
+    }
+    if (event.event_type === "runtime.output.message.completed") {
+      const messageId = stringPayload(event.payload.message_id);
+      const current = outputSegmentsByTurn.get(turnId);
+      if (!messageId || current?.messageId === messageId) {
+        flushOutputSegment(turnId, true);
       }
     }
     if (event.event_type === "runtime.output.structured") {
@@ -655,6 +672,9 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
 function finalOutputProjection(event: RuntimeEvent, renderedText: string): { text: string; previewText: string; replaceRenderedOutput: boolean } {
   const finalText = textPayload(event);
   const completeText = completeTextPayload(event);
+  if (completeText && renderedText.trimEnd().endsWith(completeText.trimEnd())) {
+    return { text: "", previewText: completeText, replaceRenderedOutput: false };
+  }
   if (finalText) {
     if (completeText && renderedText && textStartsWithRenderedText(completeText, renderedText)) {
       const completeRemainder = finalTextRemainder(completeText, renderedText);

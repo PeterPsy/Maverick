@@ -101,6 +101,8 @@ def execute_codex_app_server_turn(
     with runtime.event_lock:
         runtime.current_event_sink = event_sink
         runtime.current_chunks = []
+        runtime.current_final_answer = None
+        runtime.agent_message_phases = {}
         runtime.streamed_agent_item_ids = set()
         runtime.pending_agent_json_chunks = {}
         runtime.emitted_structured_keys = set()
@@ -267,9 +269,12 @@ def execute_codex_app_server_turn(
         with runtime.event_lock:
             runtime.current_event_sink = None
             chunks = list(runtime.current_chunks)
+            final_answer = runtime.current_final_answer
             error_text = runtime.current_error_text
             failure_reason_code = runtime.current_failure_reason_code
             runtime.current_chunks = []
+            runtime.current_final_answer = None
+            runtime.agent_message_phases = {}
             runtime.streamed_agent_item_ids = set()
             runtime.pending_agent_json_chunks = {}
             runtime.emitted_structured_keys = set()
@@ -287,7 +292,7 @@ def execute_codex_app_server_turn(
         finish_device_use_turn(runtime, runtime_turn_id)
 
     status = str(completion.get("status") or "completed").strip().lower() if isinstance(completion, dict) else "completed"
-    output = "".join(chunks).strip()
+    output = final_answer if final_answer is not None else "".join(chunks).strip()
     fallback_output = error_text if status not in {"completed", "success", "succeeded"} and error_text else "(Codex completed without output.)"
     _debug_log(
         runtime,

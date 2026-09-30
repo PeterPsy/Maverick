@@ -1401,6 +1401,48 @@ describe("runtime event transcript projection", () => {
     expect(messages).toMatchObject([{ role: "agent", content: "How are you?", status: "pending" }]);
   });
 
+  it("does not append an aggregate final after a repeated completed snapshot", () => {
+    const messages = eventsToMessages([
+      event({ event_type: "runtime.output.delta", payload: { text: "Checking.\nWhich calendar?" } }),
+      event({ event_id: "snapshot", event_type: "runtime.output.delta", payload: { text: "Which calendar?", provider_event_type: "item.completed" } }),
+      event({ event_id: "tool", event_type: "runtime.tool_call.completed", payload: { name: "test", tool_call_id: "test" } }),
+      event({ event_id: "answer", event_type: "runtime.output.delta", payload: { text: "Done.\n\n- Passed." } }),
+      event({ event_id: "final", event_type: "runtime.output.final", payload: { text: "Checking.\nWhich calendar?Done.\n\n- Passed.", complete_text: "Checking.\nWhich calendar?Done.\n\n- Passed." } }),
+    ]);
+    expect(messages.filter(message => message.role === "agent").map(message => message.content)).toEqual([
+      "Checking.\nWhich calendar?", "Done.\n\n- Passed.",
+    ]);
+  });
+
+  it("preserves completed message boundaries and a streamed final answer", () => {
+    const messages = eventsToMessages([
+      event({ event_type: "runtime.output.delta", payload: { message_id: "progress", text: "Checking." } }),
+      event({ event_id: "progress-completed", event_type: "runtime.output.message.completed", payload: { message_id: "progress", phase: "commentary" } }),
+      event({ event_id: "answer", event_type: "runtime.output.delta", payload: { message_id: "answer", text: "Done.\n\n- Passed." } }),
+      event({ event_id: "answer-completed", event_type: "runtime.output.message.completed", payload: { message_id: "answer", phase: "final" } }),
+      event({ event_id: "final", event_type: "runtime.output.final", payload: { text: "", complete_text: "Done.\n\n- Passed." } }),
+    ]);
+    expect(messages.map(({ content, status }) => ({ content, status }))).toEqual([
+      { content: "Checking.", status: "complete" }, { content: "Done.\n\n- Passed.", status: "complete" },
+    ]);
+  });
+
+  it("splits distinct streamed messages even when the completion boundary is absent", () => {
+    const messages = eventsToMessages([
+      event({ event_type: "runtime.output.delta", payload: { message_id: "first", text: "First update." } }),
+      event({ event_id: "second", event_type: "runtime.output.delta", payload: { message_id: "second", text: "Second update." } }),
+    ]);
+    expect(messages.map(message => message.content)).toEqual(["First update.", "Second update."]);
+  });
+
+  it("preserves identical text from two distinct completed messages", () => {
+    const messages = eventsToMessages([
+      event({ event_type: "runtime.output.delta", payload: { message_id: "first", text: "Done.", provider_event_type: "item.completed" } }),
+      event({ event_id: "second", event_type: "runtime.output.delta", payload: { message_id: "second", text: "Done.", provider_event_type: "item.completed" } }),
+    ]);
+    expect(messages.map(message => message.content)).toEqual(["Done.", "Done."]);
+  });
+
   it("projects cancelled turns as system messages", () => {
     const messages = eventsToMessages([
       event({

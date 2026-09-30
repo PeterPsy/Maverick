@@ -105,6 +105,8 @@ class _RuntimeTurnOutputRecorder:
 def _missing_final_suffix(output_text: str, streamed_text: str) -> str:
     if not output_text or not streamed_text:
         return output_text
+    if streamed_text.rstrip().endswith(output_text.rstrip()):
+        return ""
     if output_text.startswith(streamed_text):
         return output_text[len(streamed_text) :].lstrip()
     prefix_end = _prefix_end_ignoring_whitespace(output_text, streamed_text)

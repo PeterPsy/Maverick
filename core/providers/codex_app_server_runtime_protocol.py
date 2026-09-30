@@ -10,6 +10,12 @@ from core.providers.codex_app_server_runtime_errors import (
     codex_error_info,
     codex_terminal_failure_reason_code,
 )
+from core.providers.codex_agent_messages import (
+    emit_agent_message_delta,
+    flush_pending_agent_json_chunks as _flush_pending_agent_json_chunks,
+    handle_agent_message_item,
+    is_agent_message_item as _is_agent_message_item,
+)
 from core.providers.codex_app_server_skill_rehydration import schedule_codex_skill_rehydration
 from core.providers.codex_app_server_runtime_usage import codex_usage_event as _codex_usage_event
 from core.providers.codex_prompt_budget import final_prompt_budget_payload
@@ -19,6 +25,7 @@ from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_
 _CODEX_RESEARCH_ALLOWED_ITEM_TYPES = frozenset(
     {
         "agentMessage",
+        "AgentMessage",
         "contextCompaction",
         "plan",
         "reasoning",
@@ -94,16 +101,7 @@ def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any
         _put_completion(runtime, {"status": str(turn.get("status") or "completed")})
         return
     if method == "item/agentMessage/delta":
-        delta = str(params.get("delta") or "")
-        if delta:
-            item_id = _item_id(params)
-            if item_id and _should_buffer_agent_json_delta(runtime=runtime, item_id=item_id, delta=delta):
-                return
-            with runtime.event_lock:
-                runtime.current_chunks.append(delta)
-                if item_id:
-                    runtime.streamed_agent_item_ids.add(item_id)
-            _emit(runtime, RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": delta, "provider_event_type": method}))
+        emit_agent_message_delta(runtime, params=params, provider_type=method)
         return
     if method in {"item/started", "item/completed"}:
         item = params.get("item") if isinstance(params.get("item"), dict) else {}
@@ -185,19 +183,9 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
     ):
         _fail_research_item(runtime, item_type=item_type)
         return
-    if _is_agent_message_item(item) and provider_type.endswith("completed"):
-        if _emit_completed_agent_message_output(runtime=runtime, provider_type=provider_type, item=item):
-            return
-        text = str(item.get("text") or "").strip()
-        if text:
-            item_id = _item_id(item)
-            with runtime.event_lock:
-                already_streamed = item_id in runtime.streamed_agent_item_ids if item_id else bool(runtime.current_chunks)
-                if not already_streamed:
-                    runtime.current_chunks.append(text)
-            if not already_streamed:
-                _emit(runtime, RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": text, "provider_event_type": provider_type}))
-            return
+    if _is_agent_message_item(item):
+        handle_agent_message_item(runtime, provider_type=provider_type, item=item)
+        return
     event = parse_provider_json_event(json.dumps({"type": provider_type, "item": item}))
     if event is not None and not _research_event_allowed(runtime, event):
         _fail_research_item(runtime, item_type=item_type)
@@ -240,82 +228,5 @@ def _research_event_allowed(
     return event.payload.get("tool_kind") == "web_search"
 
 
-def _is_agent_message_item(item: dict[str, Any]) -> bool:
-    return str(item.get("type") or "").strip() in {"agentMessage", "agent_message"}
-
-
 def _is_context_compaction_item(item: dict[str, Any]) -> bool:
     return str(item.get("type") or "").strip() in {"contextCompaction", "context_compaction"}
-
-
-def _should_buffer_agent_json_delta(*, runtime: _CodexAppServerRuntime, item_id: str, delta: str) -> bool:
-    with runtime.event_lock:
-        pending = runtime.pending_agent_json_chunks.get(item_id)
-        if pending is not None:
-            pending.append(delta)
-            return True
-        if delta.lstrip().startswith("{"):
-            runtime.pending_agent_json_chunks[item_id] = [delta]
-            return True
-    return False
-
-
-def _emit_completed_agent_message_output(*, runtime: _CodexAppServerRuntime, provider_type: str, item: dict[str, Any]) -> bool:
-    item_id = _item_id(item)
-    text = str(item.get("text") or "")
-    pending_text = _pop_pending_agent_json_chunk(runtime, item_id)
-    candidate_text = text or pending_text
-    if candidate_text:
-        parsed = _parse_structured_agent_output(candidate_text)
-        if parsed is not None:
-            _emit_agent_text_output(runtime=runtime, provider_event_type=provider_type, item_id=item_id, text=parsed.get("text") or "")
-            _emit_structured_output(
-                runtime,
-                provider_event_type=provider_type,
-                structured=parsed["structured_content"],
-                tool_call_id=item_id or None,
-            )
-            return True
-    if pending_text:
-        _emit_agent_text_output(runtime=runtime, provider_event_type=provider_type, item_id=item_id, text=candidate_text)
-        return True
-    return False
-
-
-def _pop_pending_agent_json_chunk(runtime: _CodexAppServerRuntime, item_id: str) -> str:
-    if not item_id:
-        return ""
-    with runtime.event_lock:
-        chunks = runtime.pending_agent_json_chunks.pop(item_id, None)
-    return "".join(chunks or [])
-
-
-def _emit_agent_text_output(*, runtime: _CodexAppServerRuntime, provider_event_type: str, item_id: str, text: str) -> None:
-    if not text:
-        return
-    with runtime.event_lock:
-        runtime.current_chunks.append(text)
-        if item_id:
-            runtime.streamed_agent_item_ids.add(item_id)
-    _emit(runtime, RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": text, "provider_event_type": provider_event_type}))
-
-
-def _flush_pending_agent_json_chunks(runtime: _CodexAppServerRuntime, *, provider_event_type: str) -> None:
-    with runtime.event_lock:
-        pending_items = list(runtime.pending_agent_json_chunks.items())
-        runtime.pending_agent_json_chunks = {}
-    for item_id, chunks in pending_items:
-        text = "".join(chunks)
-        if not text:
-            continue
-        parsed = _parse_structured_agent_output(text)
-        if parsed is not None:
-            _emit_agent_text_output(runtime=runtime, provider_event_type=provider_event_type, item_id=item_id, text=parsed.get("text") or "")
-            _emit_structured_output(
-                runtime,
-                provider_event_type=provider_event_type,
-                structured=parsed["structured_content"],
-                tool_call_id=item_id or None,
-            )
-            continue
-        _emit_agent_text_output(runtime=runtime, provider_event_type=provider_event_type, item_id=item_id, text=text)

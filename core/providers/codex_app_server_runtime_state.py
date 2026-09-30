@@ -35,6 +35,8 @@ class _CodexAppServerRuntime:
     current_provider_turn_id: str | None = None
     current_event_sink: RuntimeExecutionEventSink | None = None
     current_chunks: list[str] = field(default_factory=list)
+    current_final_answer: str | None = None
+    agent_message_phases: dict[str, str] = field(default_factory=dict)
     streamed_agent_item_ids: set[str] = field(default_factory=set)
     pending_agent_json_chunks: dict[str, list[str]] = field(default_factory=dict)
     emitted_structured_keys: set[str] = field(default_factory=set)

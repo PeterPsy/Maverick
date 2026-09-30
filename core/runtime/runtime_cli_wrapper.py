@@ -158,8 +158,12 @@ if __name__ == "__main__":
 
 def runtime_device_use_mcp_wrapper_source() -> str:
     """Return the workspace-local Device Use MCP stdio wrapper installed into runtime/bin."""
-    import json
     from core.device_use.contract import device_use_dynamic_tools
+    from core.device_use.invocation_deadline import (
+        DEFAULT_INVOCATION_TIMEOUT_SECONDS,
+        RESULT_DELIVERY_GRACE_SECONDS,
+        invocation_timeout_seconds,
+    )
 
     tools = [
         {
@@ -170,6 +174,11 @@ def runtime_device_use_mcp_wrapper_source() -> str:
         for tool in device_use_dynamic_tools()
     ]
     tools_repr = repr(tools)
+    timeouts = {
+        (tool["name"], action): invocation_timeout_seconds(tool["name"], action)
+        for tool in tools
+        for action in tool["inputSchema"]["properties"]["action"]["enum"]
+    }
     return f"""#!/usr/bin/env python3
 import json
 import os
@@ -178,6 +187,9 @@ import urllib.error
 import urllib.request
 
 FALLBACK_TOOLS = {tools_repr}
+INVOCATION_TIMEOUTS = {timeouts!r}
+DEFAULT_TIMEOUT = {DEFAULT_INVOCATION_TIMEOUT_SECONDS!r}
+DELIVERY_GRACE = {RESULT_DELIVERY_GRACE_SECONDS!r}
 
 
 def send_response(resp):
@@ -230,7 +242,8 @@ def call_tool(name, arguments):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=200.0) as resp:
+        timeout = INVOCATION_TIMEOUTS.get((name, str(arguments.get("action") or "")), DEFAULT_TIMEOUT)
+        with urllib.request.urlopen(req, timeout=timeout + DELIVERY_GRACE + 10.0) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             invoke_result = data.get("result") or {{}}
             image_b64 = data.get("image_base64")
@@ -330,4 +343,3 @@ def main():
 if __name__ == "__main__":
     main()
 """
-

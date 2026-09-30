@@ -1,7 +1,7 @@
 # macOS Device Use through Maverick
 
 Status (2026-09-15): **the only macOS execution path**. Maverick Chat and Core
-own the Codex turn; `MaverickMac` is only the signed native executor. The old
+own the model turn; `MaverickMac` is only the signed native executor. The old
 local/direct Codex mode, local transcript, credential provisioning, native setup
 chrome and Chat execution switch have been deleted without a compatibility
 shim.
@@ -47,10 +47,10 @@ MaverickMac WebView / Chat iframe
   -> authenticated one-shot Core activation
   -> trusted base-shell broker (control metadata only)
   -> native WSS MaverickMac <-> Core
-  -> Codex dynamic tool call
+  -> native provider tool call
   -> ComputerTools / Peekaboo / EventKit executor
   -> JSON result plus optional binary JPEG
-  -> same active Codex turn and transcript
+  -> same active provider turn and transcript
 ```
 
 Model ownership, provider credentials, conversation state, image injection and
@@ -58,21 +58,26 @@ audit remain in Core. WebKit exposes only `maverickDeviceUse`; arguments,
 results, screenshots and credentials never pass through JavaScript or Storage.
 The retired `maverickLocalRuntime` handler and broker do not exist.
 
-The v44 path deliberately remains one provider/runtime family:
+The v44 executor retains one native execution path, with two existing Core
+provider adapters:
 
 - source app and agent `chat`;
-- Codex app-server with the active model profile and reasoning effort already
-  selected in Chat;
-- one agent, Device Use tools only;
-- no skills, attachments, app references, multi-agent mode, MCP servers, shell
-  or arbitrary filesystem tools during a Device Use turn;
-- one native `mac_project` capability limited to a user-picked media project.
+- Codex app-server uses dynamic tools and same-turn image steering with the
+  model profile and reasoning effort already selected in Chat;
+- Antigravity CLI uses its existing private `maverick-device-use-mcp` wrapper,
+  forwarding the same four tools to Core's Device Use invoke API;
+- the native app remains a single executor, without provider runtime or
+  credentials;
+- Codex Device Use disables skills, attachments, app references, multi-agent,
+  MCP servers, shell and arbitrary filesystem tools;
+- one native `mac_project` capability is limited to a user-picked media project.
 
-Every active Codex model exposed by the ordinary Maverick model selector is
-therefore usable without a second Device Use selector. Hosted and generic tool
-loop providers are not admitted because this bridge depends on Codex dynamic
-tools and same-turn image steering. Provider-family and multi-agent expansion
-require a separate design; do not add speculative abstraction to this path.
+Compatible models from these admitted native families use the ordinary model
+selector. The Antigravity adapter was added before v44; v44 does not broaden
+provider or multi-agent authority. Its HTTP wrapper uses the same operation
+budget plus Core result-delivery grace and 10 seconds of client margin, rather
+than aborting every media operation after 200 seconds. Other provider families
+require a separate design.
 
 ## Off, On and Full authority
 
@@ -167,8 +172,10 @@ separately framed JPEG under 4 MB. The same binary route carries the single
 timecoded contact sheet produced by `mac_project.sample_frames`. Core validates
 the exact admitted tool/action, framing, call identity, dimensions and digest,
 injects the JPEG into the same Codex turn with one minimal `turn/steer`, then
-releases the original text tool result. Image bytes are not duplicated, stored
-or sent through the WebView. EventKit retains the 512 KB control-frame bound.
+releases the original text tool result. For the existing Antigravity adapter,
+Core's invoke API returns that same image to the private MCP wrapper, which
+projects one MCP image content item in the active provider call. Image bytes
+are not sent through the WebView or stored by the relay. EventKit retains the 512 KB control-frame bound.
 
 ## Governed project media
 
@@ -239,7 +246,7 @@ Core:
 Native:
 
 - `DeviceUseRuntime.swift` — Off/On/Full settings and lifecycle;
-- `DeviceUseBridge.swift` — v43 WSS and binary image transport;
+- `DeviceUseBridge.swift` — v44 WSS and binary image transport;
 - `ComputerTools.swift` / `IntegratedComputerTools.swift` — dispatcher;
 - `ProjectAccess.swift` — native picker, opaque bookmarks and path confinement;
 - `ProjectTools.swift` / `ProjectMedia*.swift` — bounded media operations;

@@ -9,6 +9,6 @@ describe('Storage picker UI placement', () => {
     expect(source).toContain('closePreviewModal();');
     expect(source).not.toContain('storage-picker-action');
     expect(source).not.toContain('details-dialog-actions');
-    expect(source.match(/Use video/g) || []).toHaveLength(1);
+    expect(source).toContain("pickerContext.mode === 'fitness-coach-media' ? 'Use video' : 'Use file'");
   });
 });

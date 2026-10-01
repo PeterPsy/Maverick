@@ -1434,7 +1434,7 @@ function App() {
       return;
     }
     if (!storagePickerAcceptsFile(pickerContext, selectedFile)) {
-      setError('Choose a video file before returning to Fitness Coach.');
+      setError('Choose a supported file before returning to the connected app.');
       return;
     }
     const result = storagePickerResultForFile(selectedFile, driveTargetRef.current);
@@ -1444,6 +1444,7 @@ function App() {
         app_id: pickerContext.returnAppId,
         params: {
           picker_mode: pickerContext.mode,
+          picker_context: pickerContext.returnContext,
           storage_picker_result: JSON.stringify(result)
         }
       },
@@ -2967,15 +2968,15 @@ function App() {
                 <h2 id="preview-modal-title">{selectedFile.name}</h2>
               </div>
               <div className="preview-modal-actions">
-                {pickerContext && selectedFile.preview_kind === 'video' ? (
+                {pickerContext && storagePickerAcceptsFile(pickerContext, selectedFile) ? (
                   <button
                     className="primary-action storage-picker-preview-action"
                     disabled={!pickerSelectionAllowed}
                     onClick={sendPickerSelection}
                     type="button"
                   >
-                    <Icon name="movie" />
-                    Use video
+                    <Icon name={pickerContext.mode === 'fitness-coach-media' ? 'movie' : 'check'} />
+                    {pickerContext.mode === 'fitness-coach-media' ? 'Use video' : 'Use file'}
                   </button>
                 ) : null}
                 <button className="icon-button preview-fullscreen-action" type="button" onClick={() => togglePreviewFullscreen().catch((err: Error) => setError(err.message))} aria-label={previewFullscreenLabel} aria-pressed={previewFullscreenActive} title={previewFullscreenLabel}>

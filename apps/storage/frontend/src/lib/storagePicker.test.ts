@@ -29,8 +29,10 @@ describe('storage picker context', () => {
       picker_return_app_id: 'fitness-coach'
     })).toEqual({
       acceptedPreviewKinds: ['video'],
+      localOnly: false,
       mode: 'fitness-coach-media',
-      returnAppId: 'fitness-coach'
+      returnAppId: 'fitness-coach',
+      returnContext: ''
     });
 
     expect(storagePickerContextFromParams({})).toBeNull();
@@ -38,6 +40,29 @@ describe('storage picker context', () => {
       picker_mode: 'fitness-coach-media',
       picker_return_app_id: 'other-app'
     })).toBeNull();
+  });
+
+  it('supports a generic local workspace file picker', () => {
+    const context = storagePickerContextFromParams({
+      picker_accept: 'any',
+      picker_context: 'work_1',
+      picker_local_only: 'true',
+      picker_mode: 'workspace-file',
+      picker_return_app_id: 'marta-ops'
+    });
+
+    expect(context).toMatchObject({
+      localOnly: true,
+      mode: 'workspace-file',
+      returnAppId: 'marta-ops',
+      returnContext: 'work_1'
+    });
+    expect(storagePickerAcceptsFile(context!, storageFile({ preview_kind: 'pdf', content_type: 'application/pdf', name: 'brief.pdf' }))).toBe(true);
+    expect(storagePickerAcceptsFile(context!, storageFile({
+      drive_file_id: 'remote',
+      provider: 'google_drive',
+      workspace_relative_path: ''
+    }))).toBe(false);
   });
 
   it('limits selectable files to accepted preview kinds', () => {

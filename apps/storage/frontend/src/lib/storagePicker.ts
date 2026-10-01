@@ -2,9 +2,11 @@ import type { FileRole, PreviewKind, StorageFile } from '../types';
 import { decodeParam, scalarString, type StorageNavigationParams } from './storageNavigationParams';
 
 export type StoragePickerContext = {
-  acceptedPreviewKinds: Array<'image' | 'video'>;
-  mode: 'fitness-coach-media';
-  returnAppId: 'fitness-coach';
+  acceptedPreviewKinds: PreviewKind[];
+  localOnly: boolean;
+  mode: 'fitness-coach-media' | 'workspace-file';
+  returnAppId: string;
+  returnContext: string;
 };
 
 export type StoragePickerSourceFolder =
@@ -37,27 +39,47 @@ export type StoragePickerResult = {
 
 const FITNESS_PICKER_MODE = 'fitness-coach-media';
 const FITNESS_RETURN_APP_ID = 'fitness-coach';
-const supportedPreviewKinds = new Set<PreviewKind>(['image', 'video']);
+const WORKSPACE_FILE_PICKER_MODE = 'workspace-file';
+const supportedPreviewKinds = new Set<PreviewKind>([
+  'image',
+  'video',
+  'audio',
+  'markdown',
+  'text',
+  'pdf',
+  'document',
+  'presentation',
+  'spreadsheet',
+  'file'
+]);
+const appIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function storagePickerContextFromParams(params: StorageNavigationParams): StoragePickerContext | null {
   const mode = scalarString(params.picker_mode);
   const returnAppId = scalarString(params.picker_return_app_id);
-  if (mode !== FITNESS_PICKER_MODE || returnAppId !== FITNESS_RETURN_APP_ID) {
+  const fitnessPicker = mode === FITNESS_PICKER_MODE && returnAppId === FITNESS_RETURN_APP_ID;
+  const workspacePicker = mode === WORKSPACE_FILE_PICKER_MODE && appIdPattern.test(returnAppId);
+  if (!fitnessPicker && !workspacePicker) {
     return null;
   }
-  const acceptedPreviewKinds = acceptedKindsFromParam(params.picker_accept);
+  const acceptedPreviewKinds = acceptedKindsFromParam(params.picker_accept, workspacePicker ? 'any' : 'video');
   if (!acceptedPreviewKinds.length) {
     return null;
   }
   return {
     acceptedPreviewKinds,
-    mode: FITNESS_PICKER_MODE,
-    returnAppId: FITNESS_RETURN_APP_ID
+    localOnly: workspacePicker && (params.picker_local_only === true || scalarString(params.picker_local_only) === 'true'),
+    mode: fitnessPicker ? FITNESS_PICKER_MODE : WORKSPACE_FILE_PICKER_MODE,
+    returnAppId,
+    returnContext: scalarString(params.picker_context).slice(0, 200)
   };
 }
 
-export function storagePickerAcceptsFile(context: StoragePickerContext, file: Pick<StorageFile, 'preview_kind'>) {
-  return context.acceptedPreviewKinds.includes(file.preview_kind as 'image' | 'video');
+export function storagePickerAcceptsFile(context: StoragePickerContext, file: Pick<StorageFile, 'preview_kind' | 'provider' | 'workspace_relative_path'>) {
+  if (context.localOnly && (file.provider === 'google_drive' || !file.workspace_relative_path)) {
+    return false;
+  }
+  return context.acceptedPreviewKinds.includes(file.preview_kind);
 }
 
 export function storagePickerResultForFile(file: StorageFile, driveTarget: StoragePickerDriveFolderTarget | null): StoragePickerResult {
@@ -69,12 +91,15 @@ export function storagePickerResultForFile(file: StorageFile, driveTarget: Stora
   };
 }
 
-function acceptedKindsFromParam(value: unknown): Array<'image' | 'video'> {
-  const raw = scalarString(value) || 'video';
+function acceptedKindsFromParam(value: unknown, fallback: string): PreviewKind[] {
+  const raw = scalarString(value) || fallback;
+  if (raw === 'any') {
+    return Array.from(supportedPreviewKinds);
+  }
   const accepted = raw
     .split(',')
     .map((part) => decodeParam(part).trim())
-    .filter((part): part is 'image' | 'video' => part === 'image' || part === 'video')
+    .filter((part): part is PreviewKind => supportedPreviewKinds.has(part as PreviewKind))
     .filter((part) => supportedPreviewKinds.has(part));
   return Array.from(new Set(accepted));
 }

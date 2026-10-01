@@ -19,7 +19,9 @@ from core.device_use.contract import (
     device_use_base_instructions,
 )
 from core.device_use.errors import DeviceUseUnavailableError
-from core.device_use.runtime_registry import register_device_use_session, unregister_device_use_session
+from core.device_use.runtime_registry import (
+    device_use_service_for_session, register_device_use_session, unregister_device_use_session,
+)
 from core.device_use.service import DeviceUseService
 from core.providers.codex_app_server_device_use import process_device_use_request
 from core.providers.codex_app_server_device_use_turn import codex_turn_start_params
@@ -47,7 +49,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             activation["activation_id"], owner_user_id="user", workspace_id="default",
         )
         self.service.bind_session(self.binding, session_id="runtime")
-        register_device_use_session("runtime", self.service)
+        register_device_use_session("runtime", self.service, activation_id=self.binding.activation_id)
 
     def tearDown(self):
         unregister_device_use_session("runtime")
@@ -295,11 +297,34 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.assertNotIn("PRIVATE_NATIVE_FAILURE", json.dumps([event.payload for event in events]))
 
-    def test_provider_exit_revokes_and_unregisters_the_device_lease(self):
-        runtime = SimpleNamespace(
-            session_id="runtime",
-            device_use_binding=self.binding,
+    def _exit_runtime(self, *, active=False, completed=False):
+        return _CodexAppServerRuntime(
+            session_id="runtime", workspace_id="default", runtime_root="/tmp/runtime",
+            process=SimpleNamespace(), device_use_binding=self.binding,
+            current_event_sink=(lambda _event: None) if active else None,
+            current_completion_received=completed,
         )
+
+    def test_idle_provider_exit_preserves_the_device_lease(self):
+        stop_device_use_runtime(self._exit_runtime(), reason="device_use_provider_process_ended")
+        self.assertEqual(self.service.binding_snapshot(
+            self.binding.activation_id, owner_user_id="user", workspace_id="default",
+            bound_session_id="runtime",
+        ), self.binding)
+        self.assertIs(device_use_service_for_session("runtime"), self.service)
+        self.assertTrue(self.outbound.empty())
+
+    def test_provider_exit_after_completion_preserves_the_device_lease(self):
+        stop_device_use_runtime(
+            self._exit_runtime(active=True, completed=True), reason="device_use_provider_process_ended",
+        )
+        self.assertTrue(self.service.public_activation(
+            self.binding.activation_id, owner_user_id="user", workspace_id="default",
+        )["ready"])
+        self.assertIs(device_use_service_for_session("runtime"), self.service)
+
+    def test_unfinished_provider_exit_revokes_and_unregisters_the_device_lease(self):
+        runtime = self._exit_runtime(active=True)
 
         stop_device_use_runtime(runtime, reason="device_use_provider_process_ended")
 
@@ -315,6 +340,12 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             )
         # A second stop is deliberately idempotent after registry removal.
         stop_device_use_runtime(runtime, reason="device_use_provider_process_ended")
+        self.assertIsNone(device_use_service_for_session("runtime"))
+
+    def test_delayed_provider_exit_does_not_unregister_a_reconnected_lease(self):
+        register_device_use_session("runtime", self.service, activation_id="new-activation")
+        stop_device_use_runtime(self._exit_runtime(active=True), reason="device_use_provider_process_ended")
+        self.assertIs(device_use_service_for_session("runtime"), self.service)
 
 
 if __name__ == "__main__":

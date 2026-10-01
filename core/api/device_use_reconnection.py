@@ -1,0 +1,82 @@
+"""Explicit native lease renewal for an idle, already admitted conversation."""
+
+from core.device_use.errors import DeviceUseAuthorizationError, DeviceUseUnavailableError
+from core.device_use.runtime_registry import register_device_use_session
+from core.runtime.errors import RuntimeProviderStateError, RuntimeSessionNotFoundError
+from core.runtime.agentic_runtime_service import update_runtime_provider_state
+from core.runtime.runtime_process_lifecycle import ACTIVE_TURN_STATUSES, release_idle_runtime_processes
+
+
+def reconnect_device_use_session(
+    state, *, session_id: str, owner_user_id: str, workspace_id: str,
+    auth_session_id: str, activation_id: str, previous_activation_id: str,
+) -> dict[str, object]:
+    """Renew physical transport without changing the conversation's authority."""
+    store = state.runtime_store
+    service = state.device_use_service
+    with store.session_lifecycle_handoff(workspace_id=workspace_id, session_id=session_id):
+        try:
+            session = store.get_session(session_id)
+        except RuntimeSessionNotFoundError as error:
+            raise DeviceUseAuthorizationError("device_use_session_forbidden") from error
+        previous = session.device_use_binding
+        if (
+            session.workspace_id != workspace_id
+            or session.owner_user_id != owner_user_id
+            or previous is None
+            or previous.owner_user_id != owner_user_id
+            or previous.workspace_id != workspace_id
+            or session.session_kind != "chat_root"
+        ):
+            raise DeviceUseAuthorizationError("device_use_session_forbidden")
+        if previous.activation_id != previous_activation_id:
+            raise DeviceUseAuthorizationError("device_use_binding_changed")
+        if session.status not in {"created", "running"}:
+            raise DeviceUseUnavailableError("device_use_session_stopped")
+        if any(turn.status in ACTIVE_TURN_STATUSES for turn in store.list_turns(session_id)):
+            raise DeviceUseUnavailableError("device_use_session_busy")
+        binding = service.binding_snapshot(
+            activation_id, owner_user_id=owner_user_id, workspace_id=workspace_id,
+            auth_session_id=auth_session_id,
+        )
+        if (
+            binding.mode != previous.mode
+            or binding.protocol_version != previous.protocol_version
+            or binding.executor_contract != previous.executor_contract
+            or binding.tool_contract_digest != previous.tool_contract_digest
+            or (binding.mode == "on" and (
+                binding.initial_app != previous.initial_app
+                or set(binding.approved_apps) != set(previous.approved_apps)
+            ))
+        ):
+            raise DeviceUseAuthorizationError("device_use_reconnect_scope_changed")
+        # Retire any idle provider carrying the old binding before publishing the
+        # new one. The lifecycle fence also excludes concurrent queue admission.
+        release_idle_runtime_processes(
+            state, session_id=session_id, provider_id=session.provider_id,
+            reason="device_use_reconnected", idle_ttl_seconds=0,
+        )
+        service.bind_session(binding, session_id=session_id)
+        try:
+            store.replace_session_device_use_lease(
+                session_id=session_id, workspace_id=workspace_id,
+                expected_activation_id=previous.activation_id, binding=binding,
+            )
+            # The old Codex thread was ephemeral and has no resumable archive.
+            # Start a fresh provider context under the SAME execution binding;
+            # governed provider-input capture restores visible text next turn.
+            update_runtime_provider_state(store, session_id=session_id, updates={
+                "provider_thread_id": None, "continuation_id": None,
+                "provider_request_id": None, "turn_generation": None,
+            })
+        except Exception as error:
+            service.stop_activation(activation_id, reason="device_use_reconnect_failed")
+            if isinstance(error, RuntimeProviderStateError):
+                raise DeviceUseAuthorizationError("device_use_binding_changed") from error
+            raise
+        register_device_use_session(session_id, service, activation_id=activation_id)
+        service.stop_activation(previous.activation_id, reason="device_use_reconnected")
+        return service.public_activation(
+            activation_id, owner_user_id=owner_user_id, workspace_id=workspace_id,
+            auth_session_id=auth_session_id,
+        )

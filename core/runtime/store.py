@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 from threading import RLock
 from typing import Any, ContextManager, Protocol
 
+from core.device_use.models import DeviceUseSessionBinding
+
 from core.runtime.errors import (
     RuntimeProcessNotFoundError,
     RuntimeProviderStateError,
@@ -197,6 +199,12 @@ class RuntimeStore(Protocol):
         ...
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
+        ...
+
+    def replace_session_device_use_lease(
+        self, *, session_id: str, workspace_id: str,
+        expected_activation_id: str, binding: DeviceUseSessionBinding,
+    ) -> RuntimeSessionRecord:
         ...
 
     def save_session_if_status(
@@ -728,6 +736,27 @@ class RuntimeDocumentStore:
         )
         self._remember_session_partition(record.session_id, record.workspace_id)
         return record
+
+    def replace_session_device_use_lease(
+        self, *, session_id: str, workspace_id: str,
+        expected_activation_id: str, binding: DeviceUseSessionBinding,
+    ) -> RuntimeSessionRecord:
+        """Replace only an admitted native lease, preserving all session metadata."""
+        identity = {"session_id": session_id, "workspace_id": workspace_id}
+        document = self.collections.sessions.find_one(identity)
+        previous = document.get("device_use_binding") if document is not None else None
+        if not isinstance(previous, dict) or previous.get("activation_id") != expected_activation_id:
+            raise RuntimeProviderStateError("device_use_binding_changed")
+        applied = self.collections.sessions.compare_and_set(
+            {
+                **identity,
+                "device_use_binding": previous,
+            },
+            {"$set": {"device_use_binding": asdict(binding)}},
+        )
+        if not applied:
+            raise RuntimeProviderStateError("device_use_binding_changed")
+        return self.get_session(session_id)
 
     def save_session_if_status(
         self,

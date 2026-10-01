@@ -35,6 +35,7 @@ export type ChatComposerProps = {
   deviceUseEnabled?: boolean;
   deviceUseLocked?: boolean;
   deviceUseMode?: DeviceUseMode;
+  deviceUsePinnedMode?: Exclude<DeviceUseMode, "off"> | null;
   deviceUseSnapshot?: NativeDeviceUseSnapshot;
   error: string | null;
   executionMode: ExecutionMode | null;
@@ -92,6 +93,7 @@ export function ChatComposer({
   deviceUseEnabled = false,
   deviceUseLocked = false,
   deviceUseMode = "off",
+  deviceUsePinnedMode = null,
   deviceUseSnapshot,
   error,
   executionMode,
@@ -278,6 +280,7 @@ export function ChatComposer({
                     busy={deviceUseBusy}
                     locked={deviceUseLocked}
                     mode={deviceUseMode}
+                    pinnedMode={deviceUsePinnedMode}
                     onConfigure={onConfigureDeviceUse}
                     onModeChange={onSelectDeviceUseMode}
                     onRefresh={onRefreshDeviceUse}

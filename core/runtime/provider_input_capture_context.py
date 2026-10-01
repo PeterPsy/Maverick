@@ -13,6 +13,9 @@ from core.runtime.provider_input_context import (
     runtime_provider_input_text,
 )
 from core.runtime.research_runtime import runtime_session_is_research
+from core.runtime.device_use_continuation_context import (
+    continuation_input_text, device_use_continuation_context,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,7 @@ def capture_runtime_provider_input(
         if runtime_session_is_research(session)
         else generalist_orchestration_source(state, session=session)
     )
+    continuation = device_use_continuation_context(state, session=session, turn_id=turn_id)
     sources = runtime_provider_input_sources(
         state,
         session=session,
@@ -46,16 +50,17 @@ def capture_runtime_provider_input(
         app_references=app_references,
         attachments=attachments,
         orchestration=orchestration,
+        continuation=continuation,
     )
     return CapturedRuntimeProviderInput(
-        input_text=runtime_provider_input_text(
+        input_text=continuation_input_text(continuation, runtime_provider_input_text(
             state,
             session=session,
             input_text=input_text,
             app_references=app_references,
             attachments=attachments,
             orchestration=orchestration,
-        ),
+        )),
         sources=sources,
     )
 

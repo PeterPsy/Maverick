@@ -32,6 +32,16 @@ export function stopDeviceUseActivation(activationId: string): Promise<{ status:
   return requestJson(`/api/device-use/activations/${encodeURIComponent(activationId)}`, { method: "DELETE" });
 }
 
+export function reconnectDeviceUseSession(
+  sessionId: string, activationId: string, previousActivationId: string,
+): Promise<DeviceUseActivation> {
+  return requestJson(`/api/device-use/sessions/${encodeURIComponent(sessionId)}/reconnect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ activation_id: activationId, previous_activation_id: previousActivationId }),
+  });
+}
+
 export function isRuntimeSessionUnavailableError(error: unknown, sessionId?: string): boolean {
   if (!(error instanceof ApiError)) {
     return false;

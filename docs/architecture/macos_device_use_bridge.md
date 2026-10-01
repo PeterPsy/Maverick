@@ -35,8 +35,12 @@ The composer control mirrors the Usage badge style:
 - **Full** enables all control the executor can technically perform.
 
 The modal owns the On settings and macOS permission entry points. Mode is fixed
-when a new Device Use chat is materialized. Off may stop that chat, but a stopped
-or already-bound thread is never rebound; start a new chat to choose On or Full.
+when a new Device Use chat is materialized. Off stops its native/Core lease.
+A disconnected or explicitly stopped chat can reconnect in its original mode
+without creating another conversation; changing mode or the On app scope still
+requires a new chat. Chat probes native/Core status on navigation, foreground
+return and every ten seconds while visible. A historical mode never implies a
+live connection. Submission checks the lease before clearing the composer.
 The native application menu retains the emergency **Interrompi Device Use**
 command (`Shift-Command-.`).
 
@@ -159,6 +163,29 @@ allowed. A new activation supersedes the prior lease. Tickets and raw private
 bindings never appear in public thread/status payloads. Compact public thread
 catalogs expose only `device_use_enabled` so Chat can label and filter the
 conversation without receiving native authority material.
+
+`POST /api/device-use/sessions/<session_id>/reconnect` accepts a fresh ready
+activation and the expected previous activation ID. It requires the owning user,
+workspace and current login, an existing Device Use chat, the same mode and wire
+contract, and the same initial app/app set in On. Full's running-app discovery
+snapshot may change. The persisted session lifecycle fence excludes active,
+queued and confirmation-waiting turns. A field-only CAS changes the native lease
+without overwriting session metadata or its immutable model/execution binding.
+Late cleanup of an older provider cannot unregister the renewed activation.
+
+Device Use Codex threads remain ephemeral. A connected native lease retains its
+idle provider process so a navigation/pause does not discard model context. An
+idle lease check uses the shared deadline scheduler, separate from the ordinary
+workspace process budget; it releases the retained process after disconnection.
+An idle/completed provider exit never revokes the independent Mac lease; an exit
+during unfinished work still revokes it because execution may be unknown.
+Explicit reconnection closes the old idle provider and clears only its mutable
+continuation IDs. The first subsequent turn restores bounded, redacted visible
+human/agent text through the ordinary classified provider-input capture. It keeps
+the current request separate, excludes raw tool calls/results, tickets, images
+and receipts, and instructs the model to observe current state before continuing.
+No message POST, native operation or uncertain action is automatically retried.
+The wire contract stays `macos-v44`; the installed native executor is compatible.
 
 ## Invocation and image transport
 

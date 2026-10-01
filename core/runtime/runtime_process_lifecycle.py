@@ -6,6 +6,9 @@ from contextlib import suppress
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from core.device_use.errors import DeviceUseError
+from core.device_use.runtime_registry import device_use_service_for_session
+
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import resolve_runtime_engine_for_session
 from core.runtime.agentic_runtime_service import cancel_agentic_runtime, close_agentic_runtime
@@ -43,12 +46,33 @@ def release_idle_runtime_processes(
     # The same persisted lifecycle fence guards queue admission/provider start.
     # Recheck inside it so a newly queued/active turn cannot be reaped.
     with state.runtime_store.session_lifecycle_handoff(workspace_id=session.workspace_id, session_id=session_id):
+        session = state.runtime_store.get_session(session_id)
         if any(turn.status in ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id)):
             return 0
         if ttl_seconds > 0:
+            # Device Use provider threads are ephemeral. Keep their in-memory
+            # conversation while the independent native lease is connected.
+            binding = getattr(session, "device_use_binding", None)
+            service = device_use_service_for_session(session_id)
+            if binding is not None and service is not None:
+                try:
+                    if service.binding_snapshot(
+                        binding.activation_id, owner_user_id=binding.owner_user_id,
+                        workspace_id=binding.workspace_id, bound_session_id=session_id,
+                    ) == binding:
+                        runtime_idle_deadlines.cancel(state, session_id, "reap")
+                        _schedule_device_use_runtime_check(
+                            state, session=session, provider_id=provider_id,
+                            reason=reason, idle_ttl_seconds=ttl_seconds,
+                        )
+                        return 0
+                except DeviceUseError:
+                    pass
+            runtime_idle_deadlines.cancel(state, session_id, "device-use-reap")
             return _schedule_idle_runtime_process_reap(state, session=session, provider_id=provider_id,
                 reason=reason, idle_ttl_seconds=ttl_seconds)
         runtime_idle_deadlines.cancel(state, session_id, 'reap')
+        runtime_idle_deadlines.cancel(state, session_id, "device-use-reap")
         runtime_idle_deadlines.cancel(state, session_id, 'prewarm')
         return _release_idle_runtime_processes_now(state, session_id=session_id, provider_id=provider_id, reason=reason)
 
@@ -88,6 +112,37 @@ def _release_idle_runtime_processes_now(state, *, session_id: str, provider_id: 
             event_bus=state.runtime_event_bus,
         )
     return terminated
+
+
+def _schedule_device_use_runtime_check(state, *, session, provider_id, reason, idle_ttl_seconds):
+    """Retain connected ephemeral context, then retire it when the lease ends."""
+    session_id = session.session_id
+
+    def expire():
+        with state.runtime_store.session_lifecycle_handoff(workspace_id=session.workspace_id, session_id=session_id):
+            if runtime_idle_deadlines.pending(state, session_id, "device-use-reap"):
+                return
+            current = state.runtime_store.get_session(session_id)
+            binding = current.device_use_binding
+            service = device_use_service_for_session(session_id)
+            connected = False
+            if binding is not None and service is not None:
+                with suppress(DeviceUseError):
+                    connected = service.binding_snapshot(
+                        binding.activation_id, owner_user_id=binding.owner_user_id,
+                        workspace_id=binding.workspace_id, bound_session_id=session_id,
+                    ) == binding
+            release_idle_runtime_processes(
+                state, session_id=session_id, provider_id=provider_id, reason=reason,
+                idle_ttl_seconds=idle_ttl_seconds if connected else 0,
+            )
+
+    # A separate action prevents an ordinary workspace chat's idle budget from
+    # displacing the only live native lease. Superseded native leases still retire.
+    runtime_idle_deadlines.schedule(
+        state, session_id, "device-use-reap", idle_ttl_seconds, expire,
+        retention_group=(session.workspace_id, session.owner_user_id or ""),
+    )
 
 
 def _schedule_idle_runtime_process_reap(state, *, session: RuntimeSessionRecord, provider_id: str, reason: str, idle_ttl_seconds: float) -> int:

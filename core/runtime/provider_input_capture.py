@@ -30,6 +30,7 @@ _INDEXED_SOURCE = re.compile(r"^(app-reference|attachment):(\d+):metadata$")
 _FIXED_SOURCES = {
     "agent-instruction": ("agent_instruction", "text/plain"),
     "turn-prompt": ("user_input", "text/plain"),
+    "device-use-continuation": ("provider_state", "application/json"),
     "generalist-orchestration": ("governed_context", "application/json"),
 }
 _INDEXED_PROVENANCE = {

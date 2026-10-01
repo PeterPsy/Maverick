@@ -61,6 +61,15 @@ def stop_device_use_request_worker(runtime) -> None:
 
 
 def stop_device_use_runtime(runtime, *, reason: str) -> None:
+    # The Mac connection outlives an idle provider subprocess. Only an exit
+    # during unfinished work leaves physical execution uncertain and revokes it.
+    with runtime.event_lock:
+        unfinished_turn = (
+            runtime.current_event_sink is not None
+            and not runtime.current_completion_received
+        )
+    if not unfinished_turn:
+        return
     binding = runtime.device_use_binding
     if binding is not None:
         stop_registered_device_use_session(

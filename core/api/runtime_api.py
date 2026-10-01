@@ -1089,7 +1089,10 @@ def _create_session(
                 device_binding,
                 session_id=resolved_session_id,
             )
-            register_device_use_session(resolved_session_id, state.device_use_service)
+            register_device_use_session(
+                resolved_session_id, state.device_use_service,
+                activation_id=device_binding.activation_id,
+            )
             device_registered = True
         session = create_runtime_session(
             state.runtime_store,

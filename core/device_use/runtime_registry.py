@@ -7,14 +7,16 @@ import threading
 from core.device_use.service import DeviceUseService
 
 
-_SERVICES: dict[str, DeviceUseService] = {}
+_SERVICES: dict[str, tuple[DeviceUseService, str]] = {}
 _LOCK = threading.Lock()
 
 
-def register_device_use_session(session_id: str, service: DeviceUseService) -> None:
+def register_device_use_session(
+    session_id: str, service: DeviceUseService, *, activation_id: str
+) -> None:
     """Make the ephemeral executor available to the live provider adapter."""
     with _LOCK:
-        _SERVICES[str(session_id)] = service
+        _SERVICES[str(session_id)] = (service, activation_id)
 
 
 def unregister_device_use_session(session_id: str) -> None:
@@ -31,12 +33,17 @@ def stop_registered_device_use_session(
 ) -> None:
     """Revoke and forget an ephemeral lease from a lifecycle boundary."""
     with _LOCK:
-        service = _SERVICES.pop(str(session_id), None)
-    if service is not None:
-        service.stop_activation(activation_id, reason=reason)
+        entry = _SERVICES.get(str(session_id))
+        if entry is not None and entry[1] == activation_id:
+            _SERVICES.pop(str(session_id), None)
+    if entry is not None:
+        # A delayed exit from the old provider must not unregister a reconnected
+        # lease, even when both generations use the same service instance.
+        entry[0].stop_activation(activation_id, reason=reason)
 
 
 def device_use_service_for_session(session_id: str) -> DeviceUseService | None:
     """Resolve the in-process service; missing state is fail-closed after restart."""
     with _LOCK:
-        return _SERVICES.get(str(session_id))
+        entry = _SERVICES.get(str(session_id))
+        return entry[0] if entry is not None else None

@@ -5,6 +5,7 @@ from uuid import uuid4
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.session_api import require_session
+from core.api.device_use_reconnection import reconnect_device_use_session
 from core.device_use.contract import device_use_dynamic_tools
 from core.device_use.errors import DeviceUseError
 from core.device_use.runtime_registry import device_use_service_for_session
@@ -19,6 +20,7 @@ _ACTIVATION_PATH = re.compile(r"^/api/device-use/activations/([0-9a-f-]{36})$")
 _ACTIVATION_METRICS_PATH = re.compile(
     r"^/api/device-use/activations/([0-9a-f-]{36})/metrics$"
 )
+_SESSION_RECONNECT_PATH = re.compile(r"^/api/device-use/sessions/([0-9a-f-]{36})/reconnect$")
 
 
 def _authenticate_device_use_caller(
@@ -74,6 +76,7 @@ def handle_device_use_api(
     method = str(environ.get("REQUEST_METHOD") or "GET").upper()
     match = _ACTIVATION_PATH.fullmatch(path)
     metrics_match = _ACTIVATION_METRICS_PATH.fullmatch(path)
+    reconnect_match = _SESSION_RECONNECT_PATH.fullmatch(path)
     if (
         path != DEVICE_USE_ACTIVATIONS_PATH
         and path != DEVICE_USE_TOOLS_PATH
@@ -81,6 +84,7 @@ def handle_device_use_api(
         and path != DEVICE_USE_END_TURN_PATH
         and match is None
         and metrics_match is None
+        and reconnect_match is None
     ):
         return None
 
@@ -280,6 +284,15 @@ def handle_device_use_api(
         return context
     service = state.device_use_service
     try:
+        if reconnect_match is not None and method == "POST":
+            body = read_json_body(environ)
+            return json_response(start_response, reconnect_device_use_session(
+                state, session_id=reconnect_match.group(1),
+                owner_user_id=context.user.user_id, workspace_id=context.workspace_id,
+                auth_session_id=context.session.session_id,
+                activation_id=str(body.get("activation_id") or ""),
+                previous_activation_id=str(body.get("previous_activation_id") or ""),
+            ))
         if path == DEVICE_USE_ACTIVATIONS_PATH and method == "POST":
             body = read_json_body(environ)
             generation = str(body.get("client_generation") or "").strip()

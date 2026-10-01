@@ -11,6 +11,7 @@ export function DeviceUseControl({
   busy,
   locked,
   mode,
+  pinnedMode = null,
   onConfigure,
   onModeChange,
   onRefresh,
@@ -20,6 +21,7 @@ export function DeviceUseControl({
   busy: boolean;
   locked: boolean;
   mode: DeviceUseMode;
+  pinnedMode?: Exclude<DeviceUseMode, "off"> | null;
   onConfigure: (settings: NativeDeviceUseSnapshot["settings"]) => Promise<void>;
   onModeChange: (mode: DeviceUseMode) => void;
   onRefresh: () => Promise<NativeDeviceUseSnapshot>;
@@ -62,12 +64,14 @@ export function DeviceUseControl({
             <button
               aria-checked={mode === option}
               className={mode === option ? "is-active" : ""}
-              disabled={busy || (locked && option !== "off" && option !== mode)}
+              disabled={busy || (locked && option !== "off" && option !== (pinnedMode || mode))}
               key={option}
               onClick={() => onModeChange(option)}
               role="radio"
-              title={locked && option !== "off" && option !== mode
+              title={locked && option !== "off" && option !== (pinnedMode || mode)
                 ? "Avvia una nuova chat per cambiare modalità"
+                : locked && mode === "off" && option === pinnedMode
+                  ? "Ricollega il Mac a questa chat"
                 : modeLabel(option)}
               type="button"
             >
@@ -81,6 +85,7 @@ export function DeviceUseControl({
           <DeviceUseSettingsModal
             busy={busy}
             mode={mode}
+            locked={locked}
             onClose={() => { setOpen(false); buttonRef.current?.focus(); }}
             onConfigure={onConfigure}
             onRefresh={onRefresh}
@@ -97,6 +102,7 @@ export function DeviceUseControl({
 
 function DeviceUseSettingsModal({
   busy,
+  locked,
   mode,
   onClose,
   onConfigure,
@@ -106,6 +112,7 @@ function DeviceUseSettingsModal({
   titleId,
 }: {
   busy: boolean;
+  locked: boolean;
   mode: DeviceUseMode;
   onClose: () => void;
   onConfigure: (settings: NativeDeviceUseSnapshot["settings"]) => Promise<void>;
@@ -204,7 +211,8 @@ function DeviceUseSettingsModal({
         >
           {saved ? "Salvate" : "Salva impostazioni On"}
         </button>
-        {mode !== "off" ? <p className="chatapp-device-use-modal__hint">Spegni Device Use prima di cambiare i limiti.</p> : null}
+        {locked ? <p className="chatapp-device-use-modal__hint">Per ricollegare questa chat in On, usa le stesse app consentite all'inizio. Per cambiarle, avvia una nuova chat.</p>
+          : mode !== "off" ? <p className="chatapp-device-use-modal__hint">Spegni Device Use prima di cambiare i limiti.</p> : null}
       </section>
 
       <section className="chatapp-usage-modal__section">

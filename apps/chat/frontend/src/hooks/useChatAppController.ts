@@ -412,6 +412,12 @@ export function useChatAppController({
     provider: selectedProvider,
     reasoningEffort: runtimeControls.reasoningEffort,
     onPrepare: prepareDeviceUse,
+    onReconnected: (thread, activation) => {
+      setActiveThread((current) => current?.thread_id === thread.thread_id
+        ? { ...current, device_use: activation } : current);
+      setActiveSession((current) => current?.session_id === thread.runtime_session_id
+        ? { ...current, device_use: activation } : current);
+    },
   });
   const upsertInterAgentRunDetail = useCallback((detail: InterAgentRunDetail) => {
     setInterAgentRuns((current) => {
@@ -565,6 +571,7 @@ export function useChatAppController({
     composerMentionItems,
     draftChat,
     deviceUseActivationId: deviceUse.activationId,
+    ensureDeviceUseReady: deviceUse.ensureReady,
     isBootstrapping: isBootstrapping || !initialDependenciesReady || !targetConversationResolved,
     isHistoryLoading,
     isRuntimeBusy,
@@ -755,6 +762,7 @@ export function useChatAppController({
     deviceUseError: deviceUse.error,
     deviceUseLocked: deviceUse.locked,
     deviceUseMode: deviceUse.mode,
+    deviceUsePinnedMode: deviceUse.pinnedMode,
     deviceUseSnapshot: deviceUse.snapshot,
     runtimeAdmissionBlocked: Boolean(runtimeAdmissionError),
     composerMentionItems,

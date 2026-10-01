@@ -53,6 +53,7 @@ type UseChatControllerPresentationParams = {
   deviceUseError: string | null;
   deviceUseLocked: boolean;
   deviceUseMode: DeviceUseMode;
+  deviceUsePinnedMode: Exclude<DeviceUseMode, "off"> | null;
   deviceUseSnapshot: NativeDeviceUseSnapshot;
   runtimeAdmissionBlocked: boolean;
   composerMentionItems: MentionItem[];
@@ -145,6 +146,7 @@ export function useChatControllerPresentation({
   deviceUseError,
   deviceUseLocked,
   deviceUseMode,
+  deviceUsePinnedMode,
   deviceUseSnapshot,
   runtimeAdmissionBlocked,
   composerMentionItems,
@@ -285,6 +287,7 @@ export function useChatControllerPresentation({
       deviceUseEnabled,
       deviceUseLocked,
       deviceUseMode,
+      deviceUsePinnedMode,
       deviceUseSnapshot,
       disabled: isThreadLoading || runtimeAdmissionBlocked || Boolean(historicalReadOnlyReason),
       error: effectiveComposerError,

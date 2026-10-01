@@ -129,6 +129,7 @@ def runtime_provider_input_sources(
     app_references: list[dict[str, object]] | None,
     attachments: list[dict[str, object]] | None,
     orchestration: dict[str, object] | None | object = _ORCHESTRATION_UNSET,
+    continuation: dict[str, object] | None = None,
 ) -> tuple[RuntimeProviderInputSource, ...]:
     """Keep prompt, orchestration, attachment, and app provenance separate."""
     research = runtime_session_is_research(session)
@@ -218,6 +219,7 @@ def runtime_provider_input_sources(
         input_text=input_text,
         agent_instruction=agent_instruction,
         orchestration=resolved_orchestration,
+        continuation=continuation,
         app_reference_entries=tuple(app_reference_entries),
         attachment_entries=tuple(
             (index, attachment, content, media_type, fence)
@@ -244,6 +246,16 @@ def runtime_provider_input_sources(
                 ),
             )
         )
+    if continuation is not None:
+        sources.append(RuntimeProviderInputSource(
+            source_id="device-use-continuation", provenance="provider_state",
+            content_type="application/json", content=continuation,
+            classification=_transient_input_classification(
+                state, session=session, turn_id=turn_id,
+                source_id="device-use-continuation", provenance="provider_state",
+                content_type="application/json", content=continuation,
+            ),
+        ))
     if input_text:
         sources.append(
             RuntimeProviderInputSource(

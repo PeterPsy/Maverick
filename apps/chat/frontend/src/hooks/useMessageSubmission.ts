@@ -79,6 +79,7 @@ type UseMessageSubmissionParams = {
   composerMentionItems: MentionItem[];
   draftChat: DraftChat | null;
   deviceUseActivationId: string | null;
+  ensureDeviceUseReady?: () => Promise<void>;
   canPreloadRuntime: boolean;
   isBootstrapping: boolean;
   isHistoryLoading: boolean;
@@ -370,6 +371,7 @@ export function useMessageSubmission({
   composerMentionItems,
   draftChat,
   deviceUseActivationId,
+  ensureDeviceUseReady,
   canPreloadRuntime,
   isBootstrapping,
   isHistoryLoading,
@@ -393,6 +395,7 @@ export function useMessageSubmission({
 }: UseMessageSubmissionParams) {
   const activeConversationKey = conversationKeyFor(activeThread, draftChat);
   const activeConversationKeyRef = useRef(activeConversationKey);
+  const checkingDeviceUseRef = useRef(new Set<string>());
   const activeAppContextRef = useRef(activeAppContext);
   const activeThreadRef = useRef(activeThread);
   const activeTurnRef = useRef(activeTurn);
@@ -1552,6 +1555,21 @@ export function useMessageSubmission({
     if (historicalSourceAppReadOnlyReason(target.thread?.source_app_id)) {
       setComposerError(HISTORICAL_OPENDESIGN_THREAD_READ_ONLY);
       return;
+    }
+    if (deviceUseEnabled && ensureDeviceUseReady) {
+      if (checkingDeviceUseRef.current.has(target.conversationKey)) return;
+      checkingDeviceUseRef.current.add(target.conversationKey);
+      try {
+        await ensureDeviceUseReady();
+        if (!isConversationStillActive(target.conversationKey)) return;
+      } catch (activationError) {
+        if (isConversationStillActive(target.conversationKey)) {
+          setComposerError(activationError instanceof Error ? activationError.message : "Mac scollegato. Riattiva Device Use.");
+        }
+        return;
+      } finally {
+        checkingDeviceUseRef.current.delete(target.conversationKey);
+      }
     }
     const clientMessageId = crypto.randomUUID();
     const clientSubmissionStartedAt = new Date().toISOString();

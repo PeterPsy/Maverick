@@ -33,9 +33,14 @@ def persist_runtime_provider_input_capture(
         ],
         ...,
     ],
+    continuation: dict[str, object] | None = None,
 ) -> None:
     """Persist exact materialized sources before their admission lookup."""
     sources: list[RuntimeProviderInputCaptureSource] = []
+    if continuation is not None:
+        sources.append(RuntimeProviderInputCaptureSource(
+            "device-use-continuation", "provider_state", "application/json", continuation,
+        ))
     if agent_instruction:
         sources.append(
             RuntimeProviderInputCaptureSource(

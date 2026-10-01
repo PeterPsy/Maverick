@@ -24,6 +24,21 @@ let root: Root | null = null;
 afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHTML = ""; });
 
 describe("Device Use control", () => {
+  it("allows a disconnected chat to reconnect only in its original mode", async () => {
+    const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+    const onModeChange = vi.fn();
+    await act(async () => {
+      root?.render(<DeviceUseControl busy={false} locked mode="off" pinnedMode="full"
+        onConfigure={async () => undefined} onModeChange={onModeChange}
+        onRefresh={async () => snapshot} onRequestPermission={() => undefined} snapshot={snapshot} />);
+    });
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(buttons.map((button) => button.disabled)).toEqual([false, true, false]);
+    expect(buttons[2].title).toBe("Ricollega il Mac a questa chat");
+    await act(async () => { buttons[2].click(); });
+    expect(onModeChange).toHaveBeenCalledWith("full");
+  });
+
   it("exposes the three modes and the full authority contract", async () => {
     const host = document.createElement("div"); document.body.append(host);
     root = createRoot(host);

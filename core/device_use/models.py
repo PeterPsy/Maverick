@@ -31,7 +31,7 @@ DeviceUseInvocationStatus = Literal[
 
 @dataclass(frozen=True)
 class DeviceUseSessionBinding:
-    """Immutable authority pinned to one Maverick runtime session."""
+    """One immutable lease; explicit idle renewal preserves its mode and scope."""
 
     activation_id: str
     workspace_id: str

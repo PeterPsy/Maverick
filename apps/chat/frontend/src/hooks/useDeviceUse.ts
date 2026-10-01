@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createDeviceUseActivation,
   getDeviceUseActivation,
+  reconnectDeviceUseSession,
   stopDeviceUseActivation,
   type ChatThread,
+  type DeviceUseActivation,
   type ProviderItem,
 } from "../api/client";
 import {
@@ -56,49 +58,95 @@ export function useDeviceUse({
   provider,
   reasoningEffort,
   onPrepare,
+  onReconnected,
 }: {
   activeThread: ChatThread | null;
   provider: ProviderItem | null;
   reasoningEffort: string;
   onPrepare: (providerId: string, reasoningEffort: string) => Promise<void> | void;
+  onReconnected: (thread: ChatThread, activation: DeviceUseActivation) => void;
 }) {
   const [snapshot, setSnapshot] = useState<NativeDeviceUseSnapshot>(emptySnapshot);
   const [activationId, setActivationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stoppedThreadId, setStoppedThreadId] = useState<string | null>(null);
+  const [lease, setLease] = useState<{ id: string; ready: boolean } | null>(null);
+  const validatedLeaseRef = useRef<{ id: string; ready: boolean } | null>(null);
+  const refreshSequenceRef = useRef(0);
   const activationRef = useRef<string | null>(null);
   activationRef.current = activationId;
+  const threadRef = useRef(activeThread);
+  threadRef.current = activeThread;
+  const busyRef = useRef(false);
+  const scope = `${activeThread?.thread_id || "draft"}:${activeThread?.device_use?.activation_id || activationId || ""}`;
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+
+  const pinnedMode: Exclude<DeviceUseMode, "off"> | null = activeThread?.device_use_enabled
+    ? activeThread.device_use?.mode === "full" ? "full" : "on"
+    : null;
+  const reconnectMessage = useCallback(() => {
+    const label = pinnedMode === "full" ? "Full" : "On";
+    return `Mac scollegato. Premi ${label} in Device Use per ricollegare questa chat, poi invia il messaggio.`;
+  }, [pinnedMode]);
 
   const refresh = useCallback(async () => {
-    try {
-      const current = await requestNativeDeviceUse("status");
+    const sequence = ++refreshSequenceRef.current;
+    const expectedScope = scopeRef.current;
+    const id = threadRef.current?.device_use_enabled
+      ? threadRef.current.device_use?.activation_id
+      : activationRef.current;
+    const [native, core] = await Promise.allSettled([
+      requestNativeDeviceUse("status"),
+      id ? getDeviceUseActivation(id) : Promise.resolve(null),
+    ]);
+    const current = native.status === "fulfilled" ? native.value : emptySnapshot;
+    if (sequence === refreshSequenceRef.current && scopeRef.current === expectedScope && !busyRef.current) {
       setSnapshot(current);
-      return current;
-    } catch {
-      setSnapshot(emptySnapshot);
-      return emptySnapshot;
+      const validated = id ? {
+        id,
+        ready: core.status === "fulfilled" && core.value?.ready === true
+          && current.active && current.activationId === id,
+      } : null;
+      validatedLeaseRef.current = validated;
+      setLease(validated);
     }
+    return current;
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
-
   useEffect(() => {
-    if (!activeThread?.device_use_enabled) setStoppedThreadId(null);
     if (activeThread?.device_use_enabled) setActivationId(null);
   }, [activeThread?.device_use_enabled, activeThread?.thread_id]);
 
-  const threadMode = activeThread?.device_use?.mode === "full" ? "full" : "on";
-  const mode: DeviceUseMode = activeThread?.device_use_enabled
-    ? (stoppedThreadId === activeThread.thread_id ? "off" : threadMode)
-    : activationId ? snapshot.mode : "off";
-  const enabled = mode !== "off";
+  useEffect(() => {
+    setError(null);
+    void refresh();
+    const onVisible = () => { if (document.visibilityState !== "hidden") void refresh(); };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(onVisible, 10_000);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refresh, scope]);
+
+  const currentId = activeThread?.device_use_enabled ? activeThread.device_use?.activation_id : activationId;
+  const mode: DeviceUseMode = currentId && lease?.id === currentId && lease.ready
+    ? pinnedMode || snapshot.mode
+    : "off";
+  // Even while disconnected, a Device Use conversation retains its capability
+  // restrictions (attachments, skills, references and multi-agent stay disabled).
+  const enabled = Boolean(activeThread?.device_use_enabled || activationId);
   const locked = Boolean(activeThread);
 
   const stopCurrent = useCallback(async () => {
     const current = activationRef.current || activeThread?.device_use?.activation_id || null;
+    setLease(null);
+    validatedLeaseRef.current = null;
+    refreshSequenceRef.current++;
     setActivationId(null);
-    if (activeThread?.thread_id) setStoppedThreadId(activeThread.thread_id);
     await Promise.allSettled([
       ...(current ? [stopDeviceUseActivation(current)] : []),
       requestNativeDeviceUse("stop").then(setSnapshot),
@@ -106,7 +154,9 @@ export function useDeviceUse({
   }, [activeThread?.device_use?.activation_id, activeThread?.thread_id]);
 
   const selectMode = useCallback(async (nextMode: DeviceUseMode) => {
-    if (busy || nextMode === mode) return;
+    if (busyRef.current || (nextMode === mode && nextMode !== "off")) return;
+    busyRef.current = true;
+    refreshSequenceRef.current++;
     setBusy(true);
     setError(null);
     try {
@@ -114,18 +164,20 @@ export function useDeviceUse({
         await stopCurrent();
         return;
       }
-      if (activeThread) {
-        throw new Error("La modalità è fissata per questa chat. Avvia una nuova chat per riattivarla o cambiarla.");
+      if (activeThread && (!activeThread.device_use_enabled || nextMode !== pinnedMode)) {
+        throw new Error("La modalità è fissata per questa chat. Avvia una nuova chat per cambiarla.");
       }
-      if (!providerSupportsDeviceUse(provider)) {
+      if (!activeThread && !providerSupportsDeviceUse(provider)) {
         throw new Error("Device Use richiede un modello Codex attivo.");
       }
       if (activationRef.current) await stopCurrent();
-      const selectedEffort = reasoningEffort
-        || provider.default_reasoning_effort
-        || provider.supported_reasoning_efforts?.[0]?.effort
-        || "";
-      await onPrepare(provider.provider_id, selectedEffort);
+      if (!activeThread && provider) {
+        const selectedEffort = reasoningEffort
+          || provider.default_reasoning_effort
+          || provider.supported_reasoning_efforts?.[0]?.effort
+          || "";
+        await onPrepare(provider.provider_id, selectedEffort);
+      }
       const activation = await createDeviceUseActivation(crypto.randomUUID());
       const createdId = activation.activation_id;
       if (!activation.ticket || activation.websocket_path !== "/ws/device-use/executor") {
@@ -139,46 +191,79 @@ export function useDeviceUse({
           mode: nextMode,
         });
         if (!native.available) throw new Error("Device Use è disponibile solo nell'app Maverick per macOS.");
-        await waitUntilReady(createdId);
-        setSnapshot(native);
-        setActivationId(createdId);
+        let ready = await waitUntilReady(createdId);
+        if (threadRef.current?.thread_id !== activeThread?.thread_id) {
+          throw new Error("Chat cambiata durante la connessione. Riattiva Device Use nella chat desiderata.");
+        }
+        if (activeThread) {
+          ready = await reconnectDeviceUseSession(
+            activeThread.runtime_session_id, createdId, activeThread.device_use!.activation_id,
+          );
+          onReconnected(activeThread, ready);
+        } else {
+          setActivationId(createdId);
+        }
+        setSnapshot(await requestNativeDeviceUse("status"));
+        setLease({ id: createdId, ready: ready.ready });
       } catch (activationError) {
         void stopDeviceUseActivation(createdId).catch(() => undefined);
         void requestNativeDeviceUse("stop").catch(() => undefined);
         throw activationError;
       }
     } catch (activationError) {
-      setError(activationError instanceof Error ? activationError.message : "Impossibile attivare Device Use.");
+      const message = activationError instanceof Error ? activationError.message : "Impossibile attivare Device Use.";
+      setError(message === "device_use_reconnect_scope_changed"
+        ? "Le impostazioni On sono diverse da quelle di questa chat. Ripristinale prima di ricollegarti, oppure avvia una nuova chat."
+        : message === "device_use_session_busy"
+          ? "Attendi la fine del turno o interrompilo prima di ricollegare il Mac."
+          : message);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
-  }, [activeThread, busy, mode, onPrepare, provider, reasoningEffort, stopCurrent]);
+  }, [activeThread, mode, onPrepare, onReconnected, pinnedMode, provider, reasoningEffort, stopCurrent]);
+
+  const ensureReady = useCallback(async () => {
+    if (busyRef.current) throw new Error("Attendi il completamento della connessione Device Use.");
+    const expectedScope = scopeRef.current;
+    const current = await refresh();
+    if (expectedScope !== scopeRef.current) throw new Error("La chat è cambiata durante la verifica del Mac.");
+    const id = threadRef.current?.device_use_enabled
+      ? threadRef.current.device_use?.activation_id
+      : activationRef.current;
+    if (!id || !current.active || current.activationId !== id
+        || validatedLeaseRef.current?.id !== id || !validatedLeaseRef.current.ready) {
+      throw new Error(reconnectMessage());
+    }
+  }, [reconnectMessage, refresh]);
 
   const configure = useCallback(async (settings: {
     selectedApp: string;
     additionalApps: string[];
     consentMode: DeviceUseConsentMode;
   }) => {
-    if (busy || enabled) return;
+    if (busyRef.current || mode !== "off") return;
+    busyRef.current = true;
     setBusy(true); setError(null);
     try {
       setSnapshot(await requestNativeDeviceUse("configure", settings));
     } catch (settingsError) {
       setError(settingsError instanceof Error ? settingsError.message : "Impossibile salvare le impostazioni.");
       throw settingsError;
-    } finally { setBusy(false); }
-  }, [busy, enabled]);
+    } finally { busyRef.current = false; setBusy(false); }
+  }, [mode]);
 
   const requestPermission = useCallback(async (permission: DeviceUsePermission) => {
-    if (busy || enabled) return;
+    if (busyRef.current || mode !== "off") return;
+    busyRef.current = true;
     setBusy(true); setError(null);
     try {
       setSnapshot(await requestNativeDeviceUse("permission", { permission }));
       window.setTimeout(() => { void refresh(); }, 600);
     } catch (permissionError) {
       setError(permissionError instanceof Error ? permissionError.message : "Permesso non disponibile.");
-    } finally { setBusy(false); }
-  }, [busy, enabled, refresh]);
+    } finally { busyRef.current = false; setBusy(false); }
+  }, [mode, refresh]);
 
   return {
     activationId,
@@ -186,9 +271,11 @@ export function useDeviceUse({
     busy,
     configure,
     enabled,
+    ensureReady,
     error,
     locked,
     mode,
+    pinnedMode,
     refresh,
     requestPermission,
     selectMode,

@@ -50,6 +50,9 @@ def _collaboration(payload: dict[str, Any], existing: dict[str, Any] | None = No
     timestamp = _now()
     current.setdefault("id", _new_id("work"))
     current.setdefault("deliverables", [])
+    current.setdefault("documents", [])
+    current.setdefault("mail_draft", {})
+    current.setdefault("calendar_event", {})
     current.setdefault("created_at", timestamp)
     current["updated_at"] = timestamp
     return current
@@ -94,4 +97,3 @@ def _deliverable(payload: dict[str, Any], existing: dict[str, Any] | None = None
     current.setdefault("created_at", timestamp)
     current["updated_at"] = timestamp
     return current
-

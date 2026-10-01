@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { work } from "../testFixtures";
+import { state, work } from "../testFixtures";
 import type { Collaboration, Deliverable } from "../types";
 import { AdministrationView } from "./AdministrationView";
 import { DeliveriesView } from "./DeliveriesView";
@@ -94,7 +94,16 @@ describe("operational screens", () => {
         onAddDeliverable={vi.fn()}
         onClose={vi.fn()}
         onEditTask={vi.fn()}
+        integrationOptions={state.integration_options}
+        integrationPreferences={state.integration_preferences}
         onIntegrate={vi.fn()}
+        onOpenCalendar={vi.fn()}
+        onOpenDocument={vi.fn()}
+        onOpenMail={vi.fn()}
+        onPickDocument={vi.fn()}
+        onRefreshIntegrations={vi.fn()}
+        onUnlinkDocument={vi.fn()}
+        onUpdateIntegrationPreferences={vi.fn()}
         onNewTask={vi.fn()}
         onNote={vi.fn()}
         onSave={vi.fn()}

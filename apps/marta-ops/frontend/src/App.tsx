@@ -15,6 +15,10 @@ import {
   postToShell,
   viewFromAppPage,
 } from "./lib/shellNavigation";
+import {
+  storageSelectionFromParams,
+  type StorageSelection,
+} from "./lib/storageSelection";
 import type { CollaborationPhase, Task, ViewId } from "./types";
 import { useRecordPanels } from "./useRecordPanels";
 import { RecordPanels } from "./components/RecordPanels";
@@ -41,6 +45,9 @@ export function App() {
   const controller = useRecordPanels();
   const { openWork, newWork, openContact, openTask } = controller;
   const requests = useRef(new Set<string>());
+  const integrationRefreshStarted = useRef(false);
+  const [pendingSelection, setPendingSelection] =
+    useState<StorageSelection | null>(null);
   const appId = useMemo(() => mountedAppIdFromPath(), []);
   const navigate = useCallback(
     (next: ViewId) => {
@@ -49,6 +56,29 @@ export function App() {
       openApp(appId, { app_page: next });
     },
     [appId],
+  );
+  const handleStorageSelection = useCallback(
+    (params: Record<string, unknown>) => {
+      const selection = storageSelectionFromParams(params);
+      if (!selection || requests.current.has(selection.requestKey)) return;
+      requests.current.add(selection.requestKey);
+      setView("work");
+      void Promise.resolve(
+        integrate({
+          action: "link_storage_file",
+          id: selection.workId,
+          workspace_relative_path: selection.workspaceRelativePath,
+        }),
+      )
+        .then(async () => {
+          setPendingSelection(selection);
+          await refresh();
+        })
+        .catch(() => {
+          requests.current.delete(selection.requestKey);
+        });
+    },
+    [integrate, refresh],
   );
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -64,6 +94,7 @@ export function App() {
       )
         return;
       const params = message.params || {};
+      handleStorageSelection(params);
       const next = viewFromAppPage(params.app_page);
       if (next) setView(next);
       for (const [param, target] of [
@@ -83,8 +114,50 @@ export function App() {
     }
     window.addEventListener("message", handleMessage);
     postToShell({ type: "maverick.app.ready", app_id: appId });
+    handleStorageSelection(
+      Object.fromEntries(new URLSearchParams(window.location.search)),
+    );
     return () => window.removeEventListener("message", handleMessage);
-  }, [appId, newWork, openContact, openTask]);
+  }, [appId, handleStorageSelection, newWork, openContact, openTask]);
+
+  useEffect(() => {
+    if (!pendingSelection) return;
+    const item = state.collaborations.find(
+      (work) => work.id === pendingSelection.workId,
+    );
+    if (
+      !item?.documents.some(
+        (document) =>
+          document.workspace_relative_path ===
+          pendingSelection.workspaceRelativePath,
+      )
+    )
+      return;
+    if (
+      !controller.panels.some(
+        (panel) => panel.kind === "work" && panel.id === item.id,
+      )
+    )
+      openWork(item);
+    setPendingSelection(null);
+  }, [controller.panels, openWork, pendingSelection, state.collaborations]);
+
+  useEffect(() => {
+    if (loading || saving || integrationRefreshStarted.current) return;
+    const refreshedAt = Date.parse(state.integration_options.refreshed_at);
+    const stale =
+      !Number.isFinite(refreshedAt) ||
+      Date.now() - refreshedAt > 6 * 60 * 60 * 1000;
+    const incomplete =
+      !state.integration_options.mail_provider_app_id ||
+      !state.integration_options.calendar_provider_app_id ||
+      !state.integration_options.storage_provider_app_id;
+    if (!stale && !incomplete) return;
+    integrationRefreshStarted.current = true;
+    void Promise.resolve(integrate({ action: "refresh_integrations" })).catch(
+      () => undefined,
+    );
+  }, [integrate, loading, saving, state.integration_options]);
 
   async function toggleTask(task: Task) {
     await mutate({
@@ -303,6 +376,7 @@ export function App() {
         ))}
       </nav>
       <RecordPanels
+        appId={appId}
         controller={controller}
         state={state}
         saving={saving}

@@ -29,6 +29,29 @@ class MartaOpsCRMTest(unittest.TestCase):
     def contact(self, **fields):
         return self.call("create_contact", contact={"name": "Anna Rossi", **fields})["contact"]
 
+    def configure_mail(self):
+        return self.call(
+            "integrations.mail_connections_refreshed",
+            _app_surface="dependency_backend_request_callback",
+            dependency_backend_status="completed",
+            dependency_alias="mail",
+            dependency_backend_result={
+                "status_code": 200,
+                "dependency_provider_app_id": "mail",
+                "json": {
+                    "items": [
+                        {
+                            "id": "mail-1",
+                            "display_name": "Marta",
+                            "email_address": "marta@example.test",
+                            "provider": "gmail",
+                            "status": "connected",
+                        }
+                    ]
+                },
+            },
+        )
+
     def test_old_state_is_read_without_loss_or_implicit_write(self):
         original = {"schema_version": "1", "collaborations": [{"id": "old", "title": "Esistente", "phase": "production", "notes": "Brief", "deliverables": [{"id": "reel", "title": "Reel"}]}], "ideas": [{"id": "idea", "title": "Sci"}]}
         path = self.root / "state.json"
@@ -44,6 +67,7 @@ class MartaOpsCRMTest(unittest.TestCase):
         self.assertEqual(saved["ideas"], original["ideas"])
 
     def test_contact_link_and_mail_recipient(self):
+        self.configure_mail()
         contact = self.contact(company="Outdoor", email="anna@example.test", tags=["Brand", "Brand", "Sport"])
         work = self.work("Campagna", contact_id=contact["id"])
         request = self.call("create_mail_draft", id=work["id"])["dependency_backend_requests"][0]

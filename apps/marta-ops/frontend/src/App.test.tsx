@@ -6,11 +6,12 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { state } from "./testFixtures";
 import { App } from "./App";
 
 const mutation = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const integration = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock("./useMartaOps", () => ({
   useMartaOps: () => ({
@@ -20,10 +21,15 @@ vi.mock("./useMartaOps", () => ({
     error: "",
     clearError: vi.fn(),
     mutate: mutation,
-    integrate: vi.fn(),
+    integrate: integration,
     refresh: vi.fn(),
   }),
 }));
+
+beforeEach(() => {
+  mutation.mockClear();
+  integration.mockClear();
+});
 
 it("preserves the contact draft while opening and closing a related task", async () => {
   render(<App />);
@@ -116,3 +122,38 @@ it("saves the foreground task when two create requests open stacked drawers", as
     "Prima attività",
   );
 });
+
+it("validates a Storage picker return through the backend", async () => {
+  render(<App />);
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      data: {
+        type: "maverick.app.navigate",
+        app_id: "marta-ops",
+        params: {
+          picker_mode: "workspace-file",
+          picker_context: workId(),
+          storage_picker_result: JSON.stringify({
+            file: {
+              workspace_relative_path: "storage/uploaded/brief.pdf",
+            },
+          }),
+        },
+      },
+      origin: window.location.origin,
+      source: window,
+    }),
+  );
+  await waitFor(() =>
+    expect(integration).toHaveBeenCalledWith({
+      action: "link_storage_file",
+      id: workId(),
+      workspace_relative_path: "storage/uploaded/brief.pdf",
+    }),
+  );
+});
+
+function workId() {
+  return state.collaborations[0].id;
+}

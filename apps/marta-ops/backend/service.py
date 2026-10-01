@@ -5,7 +5,14 @@ from errors import MartaOpsError
 from store import load_state, mutate_state
 from validation import _text, _object, _find, _now
 from work_records import _collaboration, _idea, _deliverable
-from integrations import _mail_draft_request, _calendar_event_request
+from integration_callbacks import CALLBACK_ACTIONS, apply_integration_callback
+from integration_settings import unlink_document, update_integration_preferences
+from integrations import (
+    calendar_event_request,
+    integration_refresh_requests,
+    mail_draft_request,
+    storage_file_request,
+)
 from activity import add_note, record_activity
 from crm_records import handle_crm_action
 from pipeline import move_work, next_order
@@ -24,6 +31,9 @@ MUTATING_ACTIONS = {
     "create_task",
     "update_task",
     "add_note",
+    "unlink_storage_file",
+    "update_integration_preferences",
+    *CALLBACK_ACTIONS,
 }
 def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     """Dispatch one mounted backend action."""
@@ -109,6 +119,33 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         state, result = mutate_state(data_root, lambda current: handle_crm_action(current, action, body))
     elif action == "add_note":
         state, result = mutate_state(data_root, lambda current: add_note(current, body))
+    elif action == "update_integration_preferences":
+        changes = _object(body, "changes")
+        state, result = mutate_state(
+            data_root,
+            lambda current: update_integration_preferences(current, changes),
+        )
+    elif action == "unlink_storage_file":
+        state, result = mutate_state(
+            data_root,
+            lambda current: unlink_document(current, body.get("id"), body.get("document_id")),
+        )
+    elif action in CALLBACK_ACTIONS:
+        state, result = mutate_state(
+            data_root,
+            lambda current: apply_integration_callback(current, action, body),
+        )
+    elif action == "refresh_integrations":
+        state = load_state(data_root)
+        result = {"dependency_backend_requests": integration_refresh_requests()}
+    elif action == "link_storage_file":
+        state = load_state(data_root)
+        _find(state["collaborations"], _text(body.get("id"), "Id", required=True, max_length=80), "Lavoro")
+        result = {
+            "dependency_backend_requests": [
+                storage_file_request(body.get("id"), body.get("workspace_relative_path"))
+            ]
+        }
     elif action in {"create_mail_draft", "create_calendar_event"}:
         item_id = _text(body.get("id"), "Id", required=True, max_length=80)
         state = load_state(data_root)
@@ -116,7 +153,15 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         if item.get("contact_id") and not item.get("partner_email"):
             contact = _find(state["contacts"], item["contact_id"], "Contatto")
             item = {**item, "partner_email": contact["email"]}
-        request = _mail_draft_request(item) if action == "create_mail_draft" else _calendar_event_request(item)
+        request = (
+            mail_draft_request(item, state["integration_preferences"])
+            if action == "create_mail_draft"
+            else calendar_event_request(
+                item,
+                state["integration_preferences"],
+                state["integration_options"],
+            )
+        )
         result = {"dependency_backend_requests": [request]}
     else:
         raise MartaOpsError(f"Azione non supportata: {action}.")

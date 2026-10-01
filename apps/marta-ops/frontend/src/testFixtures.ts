@@ -30,6 +30,9 @@ export const work: Collaboration = {
   rights_expiry_date: "",
   notes: "",
   deliverables: [],
+  documents: [],
+  mail_draft: {},
+  calendar_event: {},
   created_at: "2026-09-30T08:00:00Z",
   updated_at: "2026-09-30T08:00:00Z",
 };
@@ -47,10 +50,40 @@ export const task: Task = {
   updated_at: "2026-09-30T08:00:00Z",
 };
 export const state: MartaOpsState = {
-  schema_version: "2",
+  schema_version: "3",
   collaborations: [work],
   contacts: [contact],
   tasks: [task],
   ideas: [],
   activity: [],
+  integration_options: {
+    mail_provider_app_id: "mail",
+    calendar_provider_app_id: "calendar",
+    storage_provider_app_id: "storage",
+    mail_connections: [
+      {
+        id: "mail-1",
+        label: "marta@example.test",
+        email: "marta@example.test",
+        provider: "gmail",
+      },
+    ],
+    calendar_connections: [{ id: "cal-1", label: "Marta" }],
+    calendar_calendars: [
+      {
+        connection_id: "cal-1",
+        provider_calendar_id: "primary",
+        summary: "Marta",
+        timezone: "Europe/Rome",
+        primary: true,
+        selected: true,
+      },
+    ],
+    refreshed_at: "2026-10-01T08:00:00Z",
+  },
+  integration_preferences: {
+    mail_connection_id: "mail-1",
+    calendar_connection_id: "cal-1",
+    calendar_id: "primary",
+  },
 };

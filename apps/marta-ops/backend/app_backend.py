@@ -13,9 +13,11 @@ from service import app_events_for_action, handle_action
 
 
 payload = read_entrypoint_payload()
-action = str(payload.body.get("action") or "bootstrap")
+body = dict(payload.body)
+body["_app_surface"] = payload.raw.get("surface")
+action = str(body.get("action") or "bootstrap")
 try:
-    status_code, result = handle_action(Path(payload.data_root), payload.body)
+    status_code, result = handle_action(Path(payload.data_root), body)
 except MartaOpsError as exc:
     status_code, result = exc.status_code, {"error": str(exc)}
 

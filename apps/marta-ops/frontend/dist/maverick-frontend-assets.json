@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "1757f5a22cd0158b93f04ab2c9b918a2784979cafd19d0946f7afc8695052735",
+  "build_id": "8dc0a26aa18668db9d72de02e3e382ea7147750ca609b50a1e12e71e9ca1a9bb",
   "entrypoints": [
     "index.html",
     "widgets/marta-ops-sidebar/index.html",
@@ -13,24 +13,24 @@
       "size_bytes": 1100
     },
     {
-      "path": "assets/app-CYNwaKzV.js",
-      "sha256": "ba3a9e7a162a20b1a37e65353bc6f041d3dd09dc13ad5f4a9c86a83647575e3c",
-      "size_bytes": 190665
+      "path": "assets/app-BU0b1jE_.js",
+      "sha256": "e6891b091079dec48b1d584b954f21319174097cbce2571f08100a8d8c75384c",
+      "size_bytes": 198271
     },
     {
-      "path": "assets/app-DrmP0pPo.js",
-      "sha256": "98a1e09626670fe4bd6b923be58f788018353623e28388c7f7e821a47ebb6b41",
+      "path": "assets/app-DS3cYeyP.css",
+      "sha256": "fa83c7cf03455694630f5693c87cd4288c10b4fc2fbb1ebf4c9929a5d1a96d67",
+      "size_bytes": 36943
+    },
+    {
+      "path": "assets/app-KPaQrJoX.js",
+      "sha256": "617c6c8fae25f9ee99a5e0d9a74fbfc66ab12e84d679d028c4c4934e247a9f7e",
       "size_bytes": 1982
     },
     {
-      "path": "assets/app-tuRIwhhp.css",
-      "sha256": "e95ce9dfb8c0c51a2adf976c26d70f8d19fd513258d9e899ac1f833a0ee7560d",
-      "size_bytes": 35554
-    },
-    {
-      "path": "assets/navigation-BGUYqvoC.js",
-      "sha256": "be71f7d80d9fde8fc28ab5477a32f9427dc968b1e89a62ada407ed7e89976d79",
-      "size_bytes": 2934
+      "path": "assets/navigation-Xj_0V1vT.js",
+      "sha256": "f06b24a1dfe8ad592f29b409f4e6e2a62227aa236bbced6140f5450fc2ea0ec6",
+      "size_bytes": 3304
     },
     {
       "path": "assets/shellNavigation-BtkVtRtA.js",
@@ -51,12 +51,12 @@
     },
     {
       "path": "index.html",
-      "sha256": "3e0a3cd538ce0b96981ffb130c3431cdcf87ed7d59b3324e59fbb78e1d986a5a",
+      "sha256": "58e4ebdea07c523eed44ab6395755ccdd891b43ae17cf2d9e003fa8bbb730f9d",
       "size_bytes": 617
     },
     {
       "path": "widgets/marta-ops-sidebar/index.html",
-      "sha256": "6033af3eab6918550266f42f40ce65836a2c41df0308845968dda06eff24b553",
+      "sha256": "ce8b054bc42ab468aba916027c5a0c602f93421e9aa8db060e5389a18c09786c",
       "size_bytes": 672
     },
     {

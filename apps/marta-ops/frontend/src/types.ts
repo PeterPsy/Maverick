@@ -47,6 +47,34 @@ export type Deliverable = {
   updated_at: string;
 };
 
+export type LinkedDocument = {
+  id: string;
+  name: string;
+  workspace_relative_path: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  provider_app_id: string;
+  linked_at: string;
+};
+
+export type MailDraftReference = {
+  id?: string;
+  connection_id?: string;
+  provider_app_id?: string;
+  updated_at?: string;
+};
+
+export type CalendarEventReference = {
+  id?: string;
+  revision?: number;
+  connection_id?: string;
+  calendar_id?: string;
+  provider_app_id?: string;
+  start_date?: string;
+  updated_at?: string;
+};
+
 export type Collaboration = {
   id: string;
   title: string;
@@ -64,6 +92,9 @@ export type Collaboration = {
   rights_expiry_date: string;
   notes: string;
   deliverables: Deliverable[];
+  documents: LinkedDocument[];
+  mail_draft: MailDraftReference;
+  calendar_event: CalendarEventReference;
   created_at: string;
   updated_at: string;
 };
@@ -85,6 +116,45 @@ export type MartaOpsState = {
   contacts: Contact[];
   tasks: Task[];
   activity: Activity[];
+  integration_options: IntegrationOptions;
+  integration_preferences: IntegrationPreferences;
+};
+
+export type MailConnectionOption = {
+  id: string;
+  label: string;
+  email: string;
+  provider: string;
+};
+
+export type CalendarConnectionOption = {
+  id: string;
+  label: string;
+};
+
+export type CalendarOption = {
+  connection_id: string;
+  provider_calendar_id: string;
+  summary: string;
+  timezone: string;
+  primary: boolean;
+  selected: boolean;
+};
+
+export type IntegrationOptions = {
+  mail_provider_app_id: string;
+  calendar_provider_app_id: string;
+  storage_provider_app_id: string;
+  mail_connections: MailConnectionOption[];
+  calendar_connections: CalendarConnectionOption[];
+  calendar_calendars: CalendarOption[];
+  refreshed_at: string;
+};
+
+export type IntegrationPreferences = {
+  mail_connection_id: string;
+  calendar_connection_id: string;
+  calendar_id: string;
 };
 
 export type Contact = {
@@ -143,8 +213,10 @@ export type BackendPayload = {
   activity?: Activity;
   dependency_backend_request_results?: Array<{
     dependency_alias: string;
+    provider_app_id?: string;
     status: string;
     status_code: number;
+    callback_status_code?: number;
     error?: string;
   }>;
 };
@@ -153,6 +225,9 @@ export type WorkDraft = Omit<
   Collaboration,
   | "id"
   | "deliverables"
+  | "documents"
+  | "mail_draft"
+  | "calendar_event"
   | "created_at"
   | "updated_at"
   | "value_minor"

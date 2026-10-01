@@ -18,9 +18,24 @@ export type IconName =
   | "board"
   | "list"
   | "grip"
-  | "note";
+  | "note"
+  | "file"
+  | "refresh"
+  | "external";
 
 const paths: Record<IconName, ReactNode> = {
+  file: (
+    <>
+      <path d="M14 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-8Z" />
+      <path d="M14 3v7h7M8 14h8M8 18h5" />
+    </>
+  ),
+  refresh: (
+    <path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.7-1L20 9M4 15l2.2 2A7 7 0 0 0 18 16" />
+  ),
+  external: (
+    <path d="M14 4h6v6M20 4l-9 9M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" />
+  ),
   deliveries: (
     <>
       <rect x="4" y="3" width="16" height="18" rx="3" />

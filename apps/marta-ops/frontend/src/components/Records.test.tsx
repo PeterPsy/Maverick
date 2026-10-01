@@ -24,6 +24,15 @@ const workProps = {
   onNewTask: vi.fn(),
   onToggleTask: noop,
   onEditTask: vi.fn(),
+  integrationOptions: state.integration_options,
+  integrationPreferences: state.integration_preferences,
+  onRefreshIntegrations: noop,
+  onUpdateIntegrationPreferences: noop,
+  onPickDocument: vi.fn(),
+  onUnlinkDocument: noop,
+  onOpenMail: vi.fn(),
+  onOpenCalendar: vi.fn(),
+  onOpenDocument: vi.fn(),
 };
 
 describe("record flows", () => {

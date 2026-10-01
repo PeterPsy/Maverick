@@ -5,12 +5,26 @@ import { callBackend } from "./api";
 import type { BackendPayload, MartaOpsState } from "./types";
 
 const EMPTY_STATE: MartaOpsState = {
-  schema_version: "2",
+  schema_version: "3",
   collaborations: [],
   ideas: [],
   contacts: [],
   tasks: [],
   activity: [],
+  integration_options: {
+    mail_provider_app_id: "",
+    calendar_provider_app_id: "",
+    storage_provider_app_id: "",
+    mail_connections: [],
+    calendar_connections: [],
+    calendar_calendars: [],
+    refreshed_at: "",
+  },
+  integration_preferences: {
+    mail_connection_id: "",
+    calendar_connection_id: "",
+    calendar_id: "",
+  },
 };
 
 export function useMartaOps() {
@@ -114,22 +128,31 @@ export function useMartaOps() {
       setSaving(true);
       try {
         const payload = await callBackend<BackendPayload>(body);
-        const result = payload.dependency_backend_request_results?.[0];
-        if (
-          !result ||
-          result.status !== "completed" ||
-          result.status_code >= 400
-        ) {
+        const results = payload.dependency_backend_request_results || [];
+        const failed = results.find(
+          (result) =>
+            result.status !== "completed" ||
+            result.status_code >= 400 ||
+            (result.callback_status_code !== undefined &&
+              result.callback_status_code !== 200),
+        );
+        if (!results.length || failed) {
           const isMail = body.action === "create_mail_draft";
+          const isStorage = body.action === "link_storage_file";
+          const isRefresh = body.action === "refresh_integrations";
           throw new Error(
             isMail
               ? "Impossibile creare la bozza. Apri Mail, verifica l’account e riprova."
-              : "Impossibile creare l’evento. Verifica Calendario e riprova.",
+              : isStorage
+                ? "Impossibile collegare il file. Verifica Storage e riprova."
+                : isRefresh
+                  ? "Impossibile aggiornare le connessioni Mail, Calendario e Storage."
+                  : "Impossibile aggiornare l’evento. Verifica Calendario e riprova.",
           );
         }
         setState(payload.state);
         setError("");
-        return result;
+        return results;
       } catch (integrationError) {
         const message =
           integrationError instanceof Error

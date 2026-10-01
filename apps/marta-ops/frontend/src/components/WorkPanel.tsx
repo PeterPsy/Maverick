@@ -1,9 +1,11 @@
 import { useId, useState, type FormEvent } from "react";
-import { Icon } from "../Icon";
 import type {
   Activity,
   Collaboration,
   Contact,
+  IntegrationOptions,
+  IntegrationPreferences,
+  LinkedDocument,
   Task,
   WorkDraft,
   WorkPanelTab,
@@ -13,6 +15,7 @@ import { WorkFields, workDraft } from "./WorkFields";
 import { WorkDeliverables } from "./WorkDeliverables";
 import { TaskList } from "./TaskList";
 import { ActivityFeed } from "./ActivityFeed";
+import { WorkIntegrations } from "./WorkIntegrations";
 
 export function WorkPanel({
   item,
@@ -31,6 +34,15 @@ export function WorkPanel({
   onNewTask,
   onToggleTask,
   onEditTask,
+  integrationOptions,
+  integrationPreferences,
+  onRefreshIntegrations,
+  onUpdateIntegrationPreferences,
+  onPickDocument,
+  onUnlinkDocument,
+  onOpenMail,
+  onOpenCalendar,
+  onOpenDocument,
 }: {
   item: Collaboration | null;
   initialTab?: WorkPanelTab;
@@ -45,6 +57,17 @@ export function WorkPanel({
     changes: Record<string, unknown>,
   ) => Promise<void>;
   onIntegrate: (id: string, target: "mail" | "calendar") => Promise<void>;
+  integrationOptions: IntegrationOptions;
+  integrationPreferences: IntegrationPreferences;
+  onRefreshIntegrations: () => Promise<void>;
+  onUpdateIntegrationPreferences: (
+    changes: Record<string, string>,
+  ) => Promise<void>;
+  onPickDocument: (id: string) => void;
+  onUnlinkDocument: (id: string, document: LinkedDocument) => Promise<void>;
+  onOpenMail: () => void;
+  onOpenCalendar: () => void;
+  onOpenDocument: (document: LinkedDocument) => void;
   onAddDeliverable: (
     id: string,
     deliverable: { title: string; due_date: string },
@@ -63,9 +86,7 @@ export function WorkPanel({
   const [draft, setDraft] = useState(() => workDraft(item, preset));
   const [tab, setTab] = useState<WorkPanelTab>(item ? initialTab : "details");
   const [integrationMessage, setIntegrationMessage] = useState("");
-  const [integrationBusy, setIntegrationBusy] = useState<
-    "mail" | "calendar" | null
-  >(null);
+  const [integrationBusy, setIntegrationBusy] = useState("");
   const linkedTasks = tasks.filter(
     (task) => task.collaboration_id === item?.id,
   );
@@ -108,7 +129,23 @@ export function WorkPanel({
     } catch (error) {
       if (error instanceof Error) setIntegrationMessage(error.message);
     } finally {
-      setIntegrationBusy(null);
+      setIntegrationBusy("");
+    }
+  }
+  async function integrationAction(
+    key: string,
+    action: () => Promise<void>,
+    success = "",
+  ) {
+    setIntegrationBusy(key);
+    setIntegrationMessage("");
+    try {
+      await action();
+      if (success) setIntegrationMessage(success);
+    } catch (error) {
+      if (error instanceof Error) setIntegrationMessage(error.message);
+    } finally {
+      setIntegrationBusy("");
     }
   }
 
@@ -171,43 +208,46 @@ export function WorkPanel({
         <WorkFields contacts={contacts} draft={draft} setDraft={setDraft} />
       </form>
       {tab === "details" && item && (
-        <section className="integrations-section">
-          <div className="section-heading">
-            <h3>Azioni collegate</h3>
-          </div>
-          <div className="integration-actions">
-            <button
-              className="secondary-action"
-              disabled={
-                saving ||
-                Boolean(integrationBusy) ||
-                !(
-                  draft.partner_email ||
-                  contacts.find((contact) => contact.id === draft.contact_id)
-                    ?.email
-                )
-              }
-              onClick={() => void integrate("mail")}
-              type="button"
-            >
-              <Icon name="mail" size={16} />
-              {integrationBusy === "mail"
-                ? "Creo la bozza…"
-                : "Crea bozza Mail"}
-            </button>
-            <button
-              className="secondary-action"
-              disabled={saving || Boolean(integrationBusy) || !draft.due_date}
-              onClick={() => void integrate("calendar")}
-              type="button"
-            >
-              <Icon name="calendar" size={16} />
-              {integrationBusy === "calendar"
-                ? "Aggiungo…"
-                : "Aggiungi al Calendario"}
-            </button>
-          </div>
-        </section>
+        <WorkIntegrations
+          busy={integrationBusy}
+          canCalendar={Boolean(draft.due_date)}
+          canMail={Boolean(
+            draft.partner_email ||
+              contacts.find((contact) => contact.id === draft.contact_id)
+                ?.email,
+          )}
+          item={item}
+          onIntegrate={(target) => void integrate(target)}
+          onOpenCalendar={onOpenCalendar}
+          onOpenDocument={onOpenDocument}
+          onOpenMail={onOpenMail}
+          onPickDocument={() =>
+            void integrationAction("storage", async () => {
+              await onSave(item.id, normalizedDraft());
+              onPickDocument(item.id);
+            })
+          }
+          onPreferenceChange={(changes) =>
+            void integrationAction("preferences", () =>
+              onUpdateIntegrationPreferences(changes),
+            )
+          }
+          onRefresh={() =>
+            void integrationAction(
+              "refresh",
+              onRefreshIntegrations,
+              "Connessioni aggiornate.",
+            )
+          }
+          onUnlinkDocument={(document) =>
+            void integrationAction("storage", () =>
+              onUnlinkDocument(item.id, document),
+            )
+          }
+          options={integrationOptions}
+          preferences={integrationPreferences}
+          saving={saving}
+        />
       )}
       {integrationMessage && tab === "details" && (
         <p className="inline-feedback" role="status">

@@ -1,16 +1,24 @@
-import type { BackendPayload, MartaOpsState, Task } from "../types";
+import type {
+  BackendPayload,
+  LinkedDocument,
+  MartaOpsState,
+  Task,
+} from "../types";
 import type { useRecordPanels } from "../useRecordPanels";
+import { openApp } from "../lib/shellNavigation";
 import { ContactPanel } from "./ContactPanel";
 import { WorkPanel } from "./WorkPanel";
 import { TaskPanel } from "./TaskPanel";
 
 export function RecordPanels({
+  appId,
   controller,
   state,
   saving,
   mutate,
   integrate,
 }: {
+  appId: string;
   controller: ReturnType<typeof useRecordPanels>;
   state: MartaOpsState;
   saving: boolean;
@@ -89,6 +97,64 @@ export function RecordPanels({
                       ? "create_mail_draft"
                       : "create_calendar_event",
                   id,
+                });
+              }}
+              integrationOptions={state.integration_options}
+              integrationPreferences={state.integration_preferences}
+              onRefreshIntegrations={async () => {
+                await integrate({ action: "refresh_integrations" });
+              }}
+              onUpdateIntegrationPreferences={async (changes) => {
+                await mutate({
+                  action: "update_integration_preferences",
+                  changes,
+                });
+              }}
+              onPickDocument={(id) => {
+                openApp(state.integration_options.storage_provider_app_id, {
+                  picker_mode: "workspace-file",
+                  picker_return_app_id: appId,
+                  picker_context: id,
+                  picker_accept: "any",
+                  picker_local_only: true,
+                });
+              }}
+              onUnlinkDocument={async (id, document) => {
+                await mutate({
+                  action: "unlink_storage_file",
+                  id,
+                  document_id: document.id,
+                });
+              }}
+              onOpenMail={() => {
+                const reference = work?.mail_draft;
+                const provider =
+                  reference?.provider_app_id ||
+                  state.integration_options.mail_provider_app_id;
+                if (!provider || !reference?.id) return;
+                openApp(provider, {
+                  draft: reference.id,
+                  connection_id: reference.connection_id || "",
+                });
+              }}
+              onOpenCalendar={() => {
+                const reference = work?.calendar_event;
+                const provider =
+                  reference?.provider_app_id ||
+                  state.integration_options.calendar_provider_app_id;
+                if (!provider || !reference?.id) return;
+                openApp(provider, {
+                  event_id: reference.id,
+                  app_page: `events/${encodeURIComponent(reference.id)}`,
+                });
+              }}
+              onOpenDocument={(document: LinkedDocument) => {
+                const provider =
+                  document.provider_app_id ||
+                  state.integration_options.storage_provider_app_id;
+                if (!provider) return;
+                openApp(provider, {
+                  workspace_relative_path: document.workspace_relative_path,
                 });
               }}
               onNewTask={() =>

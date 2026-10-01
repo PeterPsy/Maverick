@@ -1,6 +1,6 @@
 # Marta Ops
 
-Marta Ops is the operational workspace for Marta Giunti and her team. Version 0.5 adds global delivery production and lightweight administrative control around the existing collaboration workflow.
+Marta Ops is the operational workspace for Marta Giunti and her team. Version 0.6 completes the focused Mail, Calendar and Storage workflow around each collaboration.
 
 ## Product scope
 
@@ -28,18 +28,19 @@ The app owns its native Maverick sidebar with Oggi, Lavori, Consegne, Contatti, 
 
 The shared SDK resolves the Core-injected local app binding and validates the exact shell parent for navigation messages. Data updates use the SDK's app event transport, including isolated frames and reconnects. Frontend builds use the standard Maverick asset manifest and isolated-frame asset URL plugins. No app data is persisted in browser storage.
 
-## Mail and Calendar
+## Mail, Calendar and Storage
 
-Existing work exposes two narrow actions:
+Each existing work exposes one compact integration area:
 
-- **Crea bozza Mail** saves current work fields and prepares a draft for the partner email, falling back to the linked contact's email when needed. It never sends the message.
-- **Aggiungi al Calendario** saves current fields and creates an idempotent all-day event for the work deadline.
+- **Mail** selects one connected account, saves current work fields, and creates or updates the same partner draft. Linked Storage documents are added as workspace attachments. Marta Ops never sends the message.
+- **Calendar** selects one writable Google calendar and creates or updates the same all-day deadline event. Its provider id and revision are retained to avoid duplicates and stale updates.
+- **Storage** opens the native local-file picker, validates the returned file through Storage, and links only its stable metadata to the work. Opening a document returns to Storage; unlinking it does not delete the original file.
 
-Both integrations use declared optional app interfaces (`mail.workspace` and `calendar.events`) through Maverick's governed dependency backend. No other app's private data is accessed.
+Available accounts and calendars refresh automatically when stale and can be refreshed manually. Marta Ops stores only bounded, redaction-safe connection labels, user preferences, and resource references. The integrations use declared optional app interfaces (`mail.workspace`, `calendar.events`, and `file.catalog`) through Maverick's governed dependency backend and callback surface; no other app's private store is accessed.
 
 ## Owned data
 
-Data lives in `data/marta-ops/state.json` through the SDK's atomic update helper. The envelope contains collaborations, ideas, contacts, tasks and an activity timeline (schema 2).
+Data lives in `data/marta-ops/state.json` through the SDK's atomic update helper. The envelope contains collaborations, ideas, contacts, tasks, an activity timeline, integration preferences and stable external references (schema 3).
 
 Schema 1 work and idea records are retained. Missing collections and contact/order fields receive additive defaults in memory and are written only with the next explicit mutation. Bootstrap never rewrites existing data. Kanban moves anchor against the complete destination column so filtered-out cards retain their order. A stale source phase is rejected before any write. The timeline stores plain-text notes and successful record changes; it is an operational history, not a security audit log. Existing records do not receive invented historical events.
 
@@ -64,4 +65,4 @@ maverick app marta-ops frontend build --json
 maverick core cli run core.app-sdk.status --app-id marta-ops --json
 ```
 
-Backend tests cover old-data retention, validation, contact links, task completion/reopening, notes, sparse and filtered pipeline ordering, and Mail/Calendar request contracts. Frontend tests cover record editing/failure recovery, contact autofill, phase changes without dragging, task relationships, delivery status changes, administrative updates, closed-work invoices, stacked-drawer saves, exact shell origin checks and refresh races. Browser preview verification uses synthetic records with the real app backend in a temporary data root; it does not read or seed the workspace's production data.
+Backend tests cover old-data retention, validation, contact links, task completion/reopening, notes, sparse and filtered pipeline ordering, governed callbacks, draft/event reuse and verified Storage attachments. Frontend tests cover record editing/failure recovery, contact autofill, phase changes without dragging, task relationships, delivery status changes, administrative updates, integration controls, Storage picker returns, stacked-drawer saves, exact shell origin checks and refresh races. Browser preview verification uses synthetic records with the real app backend in a temporary data root; it does not read or seed the workspace's production data.

@@ -480,17 +480,6 @@
   border-top: 1px solid var(--marta-border);
   padding: 18px 24px;
 }
-.integrations-section .section-heading {
-  margin-bottom: 10px;
-}
-.integration-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.integration-actions .secondary-action {
-  min-height: 38px;
-}
 
 .deliverable-list {
   display: grid;

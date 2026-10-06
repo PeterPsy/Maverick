@@ -1188,14 +1188,18 @@ The first declarations are Website Studio `site-snapshots`, Storage
 envelopes, TTLs, and budgets; each app still owns its backend validator and
 strict sanitizer. App events are mapped from declared owner/resource aliases
 to scoped lifecycle invalidation only after the sender's registered owner
-matches the declared owner. A `401` or `403` disables the mounted broker,
-clears the applicable structured scope, and notifies AppShell to discard its
-authenticated state and unmount every app/widget frame; successful login then
-mounts fresh documents. Shell API calls, both PWA-config projections, the
-structured-data broker, the Storage file broker, and isolated-frame launch all
-enter that same immediate, idempotent revocation channel. Every observed
-authorization failure emits a synchronous UI notification, including while a
-prior durable cleanup is still pending; only the cleanup promise is coalesced.
+matches the declared owner. A resource `401` or `403` disables the mounted
+broker, cleans the applicable private display copies, and confirms the platform
+session through one uncached, single-flight check. Only an explicit anonymous
+session or session-endpoint `401` notifies AppShell to discard authenticated
+state and unmount every app/widget frame; successful login mounts fresh
+documents. Shell APIs, PWA-config projections, both brokers and isolated-frame
+launch share this confirmation path. Every confirmed platform loss emits the
+synchronous revocation signal, including while earlier durable cleanup is
+pending; cleanup remains coalesced and serialized. Permission denial and
+transient confirmation failures preserve login. Foreground verification,
+bounded cookie renewal and native recovery follow
+`docs/architecture/auth_session_lifecycle.md`.
 An already received `401`/`403` retains its terminal HTTP classification even
 when serialized cleanup takes longer than the network timeout.
 

@@ -1792,10 +1792,11 @@ owner verification; only an exact top-level shell message may intentionally
 cross owners. Workspace and authenticated-session transitions rotate the
 generation and synchronously remove frames from the previous scope, so a late
 old frame is rejected before a warm new-workspace value can be read. If a warm
-read has already rendered and its revalidation returns `401` or `403`, the broker starts
-durable cleanup and AppShell clears authenticated UI and unmounts every app and
-widget frame. Reauthentication creates new frame documents, so private data
-from the revoked scope cannot remain in the DOM.
+read has already rendered and its revalidation returns `401` or `403`, the broker
+blocks and cleans private display copies and confirms platform session loss.
+Only confirmed platform loss makes AppShell clear authenticated UI and unmount
+every app/widget frame. Reauthentication creates new frame documents. Resource
+permission denial and transient confirmation errors preserve platform login.
 
 The session handoff is an AppShell publication barrier, not an eventual effect.
 Before a replacement session is fetched, a workspace mutation is sent, or a
@@ -1807,16 +1808,19 @@ commit. Lifecycle transition, end-session,
 authorization-failure, invalidation, and clear operations are serialized. The
 candidate session and its registry become renderable only after the applicable
 lifecycle transition completes and only while that load remains current; a
-concurrent authorization failure cancels publication. Logout finishes in the
+concurrent confirmed platform loss cancels publication. Logout finishes in the
 anonymous shell after local cleanup regardless of a failed network response and
 does not remount frames through a follow-up session read.
 
 Every parent-owned path that can observe `401` or `403`—shell APIs, PWA config,
 structured data, Storage file bytes, and isolated-frame launch—uses one
-idempotent authorization-revocation channel. Each observed authorization
-failure synchronously signals AppShell, cancels the active shell load, and
-removes authenticated UI even when a prior cleanup is pending. Only the durable
-cleanup promise is coalesced and serialized. Cleanup latency is outside request
+uncached, single-flight platform session confirmation path. Only an explicit
+anonymous session or session-endpoint `401` invokes the idempotent revocation
+channel, synchronously signals AppShell, cancels the active load and removes
+authenticated UI even when previous cleanup is pending. Durable cleanup remains
+coalesced and serialized. Foreground renewal updates expiry without rotating
+frame generation; identity/workspace/login changes retain the publication
+barrier. See `docs/architecture/auth_session_lifecycle.md`. Cleanup latency is outside request
 timeout classification: once an HTTP authorization response exists, it remains
 the terminal HTTP result and cannot be rewritten as a transport timeout.
 

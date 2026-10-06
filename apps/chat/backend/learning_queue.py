@@ -11,6 +11,7 @@ from learning_input import build_input
 _SECRET = re.compile(r"(?i)(bearer\s+\S+|(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s,;]+)")
 _JSON_SECRET = re.compile(r'''(?i)(["'](?:api[_-]?key|password|secret|token)["']\s*:\s*)["'][^"']+["']''')
 _PRIVATE_KEY = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL)
+BUDGET_WAIT_REASON = "Daily token allowance cannot cover the next analysis"
 
 
 def clean(text, limit=16_000):
@@ -114,20 +115,25 @@ def tick(data_root, body):
                 return {"background_generation_cancel_requests": [active["request_id"]], "next_due_in_seconds": 15}
             return {"next_due_in_seconds": 15}
         busy = set(body.get("busy_runtime_session_ids", []))
-        row = db.execute("""SELECT j.*,c.project_id,c.last_activity,c.cursor,c.busy FROM learning_jobs j
+        rows = db.execute("""SELECT j.*,c.project_id,c.last_activity,c.cursor,c.busy FROM learning_jobs j
                             JOIN learning_conversations c ON c.session_id=j.session_id
-                            WHERE j.status='queued' AND j.due<=? ORDER BY j.created_at LIMIT 1""", (now(),)).fetchone()
+                            WHERE j.status='queued' AND j.due<=? ORDER BY j.created_at""", (now(),)).fetchall()
+        changed = False
+        row = None
+        for candidate in rows:
+            if candidate["attempts"] >= 3:
+                db.execute("UPDATE learning_jobs SET status='failed',error='Analysis retry limit reached',updated_at=? WHERE id=?", (now(), candidate["id"]))
+                changed = True
+            elif excluded(config, candidate["session_id"], candidate["project_id"]):
+                db.execute("UPDATE learning_jobs SET status='cancelled',updated_at=? WHERE id=?", (now(), candidate["id"]))
+                changed = True
+            elif candidate["session_id"] in busy or (candidate["busy"] and not body.get("runtime_status_complete")) or now() < candidate["last_activity"] + config["idle_seconds"]:
+                db.execute("UPDATE learning_jobs SET due=? WHERE id=?", (now() + 15, candidate["id"]))
+            else:
+                row = candidate
+                break
         if not row:
-            return {"next_due_in_seconds": 30}
-        if row["attempts"] >= 3:
-            db.execute("UPDATE learning_jobs SET status='failed',error='Analysis retry limit reached',updated_at=? WHERE id=?", (now(), row["id"]))
-            return {"next_due_in_seconds": 1, "_changed": True}
-        if excluded(config, row["session_id"], row["project_id"]):
-            db.execute("UPDATE learning_jobs SET status='cancelled' WHERE id=?", (row["id"],))
-            return {"next_due_in_seconds": 1}
-        if row["session_id"] in busy or (row["busy"] and not body.get("runtime_status_complete")) or now() < row["last_activity"] + config["idle_seconds"]:
-            db.execute("UPDATE learning_jobs SET due=? WHERE id=?", (now() + 15, row["id"]))
-            return {"next_due_in_seconds": 15}
+            return {"next_due_in_seconds": 15 if rows else 30, "_changed": changed}
         input_data = build_input(db, row, config, memory_provider_app_id=body.get("memory_provider_app_id", ""))
         exchanges = input_data["exchanges"]
         if not exchanges:
@@ -141,7 +147,9 @@ def tick(data_root, body):
         day = datetime.now(UTC).date().isoformat()
         used = daily_consumption(db, day)
         if used + reservation > config["daily_token_budget"]:
-            return {"next_due_in_seconds": 60, "budget_exhausted": True}
+            updated = db.execute("UPDATE learning_jobs SET error=?,updated_at=? WHERE id=? AND error!=?",
+                                 (BUDGET_WAIT_REASON, now(), row["id"], BUDGET_WAIT_REASON)).rowcount
+            return {"next_due_in_seconds": 60, "budget_exhausted": True, "_changed": changed or bool(updated)}
         token = new_id("attempt")
         db.execute("INSERT INTO learning_attempts(request_id,job_id,day,reserved) VALUES(?,?,?,?)", (token, row["id"], day, reservation))
         db.execute("""UPDATE learning_jobs SET status='running',upto=?,request_id=?,attempts=attempts+1,

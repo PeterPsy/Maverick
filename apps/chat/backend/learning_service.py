@@ -3,7 +3,7 @@
 import json
 
 from learning_memory import dependency_request, memory_callback, save_request
-from learning_queue import capture, enqueue, tick
+from learning_queue import BUDGET_WAIT_REASON, capture, enqueue, excluded, tick
 from learning_results import complete_analysis
 from learning_store import audit, connection, daily_consumption, now, settings, validate_settings
 
@@ -46,9 +46,12 @@ def handle_learning(payload):
             db.execute("INSERT INTO learning_settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body", (json.dumps(config),))
             audit(db, "settings.updated", actor=actor)
             result = {}
-            if not config["enabled"] or config["paused"]:
-                result["background_generation_cancel_requests"] = [x[0] for x in db.execute("SELECT request_id FROM learning_jobs WHERE status='running'")]
-                db.execute("UPDATE learning_jobs SET status='queued',request_id='',due=? WHERE status='running'", (now() + 15,))
+            for job in db.execute("SELECT j.*,c.project_id FROM learning_jobs j JOIN learning_conversations c ON c.session_id=j.session_id WHERE j.status='running'").fetchall():
+                is_excluded = excluded(config, job["session_id"], job["project_id"])
+                if is_excluded or not config["enabled"] or config["paused"] or not (config["memory_enabled"] or config["improvements_enabled"]):
+                    result.setdefault("background_generation_cancel_requests", []).append(job["request_id"])
+                    db.execute("UPDATE learning_jobs SET status=?,request_id='',due=?,updated_at=? WHERE id=?",
+                               ("cancelled" if is_excluded else "queued", now() + 15, now(), job["id"]))
             return {**dashboard(db), **result}
         if action == "learning.analyze_now":
             session = str(body.get("session_id", ""))
@@ -72,7 +75,9 @@ def dashboard(db):
         job.pop("input_json", None)
         job.pop("request_id", None)
         job.pop("output_text", None)
-    items = [dict(x) for x in db.execute("SELECT * FROM learning_items ORDER BY updated_at DESC LIMIT 200")]
+    items = [dict(x) for x in db.execute("""SELECT * FROM learning_items
+        ORDER BY CASE WHEN status IN ('pending','accepted','checking','saving','undoing') THEN 0 ELSE 1 END,
+        updated_at DESC LIMIT 200""")]
     for item in items:
         item["evidence"] = json.loads(item["evidence"])
         item["details"] = json.loads(item["details"])
@@ -80,8 +85,19 @@ def dashboard(db):
     from datetime import UTC, datetime
     day = datetime.now(UTC).date().isoformat()
     spent = daily_consumption(db, day)
+    counts = {"pending_memory": 0, "pending_improvements": 0, "queued": 0, "running": 0, "failed": 0}
+    for row in db.execute("SELECT kind,COUNT(*) AS total FROM learning_items WHERE status='pending' GROUP BY kind"):
+        counts["pending_memory" if row["kind"] == "memory" else "pending_improvements"] = row["total"]
+    for row in db.execute("SELECT status,COUNT(*) AS total FROM learning_jobs WHERE status IN ('queued','running','failed') GROUP BY status"):
+        counts[row["status"]] = row["total"]
+    counts["budget_waiting"] = db.execute("SELECT COUNT(*) FROM learning_jobs WHERE status='queued' AND error=?", (BUDGET_WAIT_REASON,)).fetchone()[0]
+    conversations = [dict(x) for x in db.execute("""SELECT c.session_id,c.project_id,c.last_activity,
+        (SELECT input_text FROM learning_exchanges e WHERE e.session_id=c.session_id ORDER BY seq LIMIT 1) AS label
+        FROM learning_conversations c ORDER BY last_activity DESC LIMIT 100""")]
+    for conversation in conversations:
+        conversation["label"] = " ".join((conversation["label"] or "").split())[:80] or "Chat " + conversation["session_id"][:8]
     return {"settings": config, "jobs": jobs, "items": items, "daily_tokens_reserved_or_used": spent,
-            "concurrency": 1, "conversations": [dict(x) for x in db.execute("SELECT session_id,project_id,last_activity FROM learning_conversations ORDER BY last_activity DESC LIMIT 100")],
+            "concurrency": 1, "counts": counts, "conversations": conversations,
             "audit": [dict(x) for x in db.execute("SELECT * FROM learning_audit ORDER BY id DESC LIMIT 50")]}
 
 

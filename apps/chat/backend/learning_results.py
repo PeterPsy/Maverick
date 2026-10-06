@@ -3,31 +3,37 @@
 import json
 
 from learning_queue import enqueue
-from learning_store import audit, connection, new_id, now
+from learning_store import audit, connection, new_id, now, settings
 from learning_validation import validated_items
 
 
 def complete_analysis(data_root, body):
     with connection(data_root, write=True) as db:
+        state = body.get("status")
+        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+        tokens = usage.get("total_tokens", 0)
+        tokens = tokens if isinstance(tokens, int) and not isinstance(tokens, bool) and tokens >= 0 else 0
+        # Account for inference even when its result has been fenced by cancellation.
+        db.execute("UPDATE learning_attempts SET usage=MAX(usage,?),status=CASE WHEN status='running' THEN ? ELSE status END WHERE request_id=? AND job_id=?",
+                   (tokens, state or "failed", body.get("request_id", ""), body.get("job_id", "")))
         job = db.execute("SELECT * FROM learning_jobs WHERE id=? AND status='running' AND request_id=?",
                          (body.get("job_id", ""), body.get("request_id", ""))).fetchone()
         if not job:
             return {"ignored": True}
-        state = body.get("status")
         if state == "busy":
             db.execute("UPDATE learning_attempts SET status='busy' WHERE request_id=?", (job["request_id"],))
             db.execute("UPDATE learning_jobs SET status='queued',attempts=MAX(0,attempts-1),reserved=0,reservation_day='',request_id='',due=? WHERE id=?",
                        (now() + 15, job["id"]))
             return {}
-        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
-        tokens = usage.get("total_tokens", 0)
-        tokens = tokens if isinstance(tokens, int) and not isinstance(tokens, bool) and tokens >= 0 else 0
-        db.execute("UPDATE learning_attempts SET usage=?,status=? WHERE request_id=?", (tokens, state, job["request_id"]))
         error = str(body.get("error") or "Analysis failed")[:160]
         items = []
         if state == "completed":
             try:
-                items = validated_items(body.get("output_text", ""), json.loads(job["input_json"]))
+                input_data = json.loads(job["input_json"])
+                config = settings(db)
+                for channel in ("memory_enabled", "improvements_enabled"):
+                    input_data[channel] = input_data.get(channel, True) and config[channel]
+                items = validated_items(body.get("output_text", ""), input_data)
             except (ValueError, KeyError, TypeError) as failure:
                 state, error = "failed", str(failure)
         if state != "completed":

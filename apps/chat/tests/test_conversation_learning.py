@@ -87,6 +87,50 @@ class ConversationLearningTests(unittest.TestCase):
         with connection(self.root) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM learning_exchanges').fetchone()[0], 1)
 
+    def test_busy_oldest_chat_does_not_starve_ready_chats(self):
+        self.capture(session='busy-chat')
+        self.capture(turn='turn-2', session='ready-chat')
+        result = tick(self.root, {'runtime_status_complete': True, 'busy_runtime_session_ids': ['busy-chat']})
+        request = result['background_generation_requests'][0]
+        self.assertEqual(json.loads(request['input_text'])['session_id'], 'ready-chat')
+        self.assertEqual(sum(job['status'] == 'running' for job in self.data()['jobs']), 1)
+
+    def test_late_cancelled_usage_is_accounted_without_materializing_results(self):
+        self.capture()
+        request = self.start()
+        self.admin('learning.job', job_id=request['callback']['payload']['job_id'], command='cancel')
+        self.assertEqual(self.finish(request, [candidate()], usage={'total_tokens': 25000}), {'ignored': True})
+        self.assertEqual(self.data()['daily_tokens_reserved_or_used'], 25000)
+        self.assertEqual(self.data()['items'], [])
+
+    def test_new_exclusion_cancels_running_analysis_and_fences_results(self):
+        self.capture()
+        request = self.start()
+        response = self.configure(excluded_thread_ids=['chat-1'])
+        self.assertEqual(response['background_generation_cancel_requests'], [request['request_id']])
+        self.assertEqual(self.finish(request, [candidate()]), {'ignored': True})
+        self.assertEqual(self.data()['items'], [])
+
+    def test_disabled_output_channel_is_respected_by_inflight_results(self):
+        self.capture()
+        request = self.start()
+        self.configure(memory_enabled=False)
+        self.finish(request, [candidate()], [candidate()])
+        self.assertEqual([item['kind'] for item in self.data()['items']], ['improvement'])
+
+    def test_exact_counts_and_pending_results_are_not_hidden_by_history_limit(self):
+        self.capture()
+        self.finish(self.start(), improvements=[candidate()])
+        with connection(self.root, write=True) as db:
+            for index in range(205):
+                db.execute("INSERT INTO learning_items(id,fingerprint,kind,title,body,status,evidence,details,updated_at) VALUES(?,?,'memory','History','Fact','saved','[]','{}',?)",
+                           (str(index), str(index), now() + index))
+        data = self.data()
+        self.assertEqual(len(data['items']), 200)
+        self.assertEqual(data['items'][0]['status'], 'pending')
+        self.assertEqual(data['counts']['pending_improvements'], 1)
+        self.assertEqual(data['conversations'][0]['label'], 'Preferisco risposte brevi e in italiano.')
+
     def test_new_turn_during_analysis_is_not_consumed_or_overwritten(self):
         self.capture()
         first = self.start()
@@ -134,6 +178,8 @@ class ConversationLearningTests(unittest.TestCase):
         self.capture()
         self.configure(daily_token_budget=1000)
         self.assertTrue(tick(self.root, {}).get('budget_exhausted'))
+        self.assertEqual(self.data()['counts']['budget_waiting'], 1)
+        self.assertIn('Daily token allowance', self.data()['jobs'][0]['error'])
         self.configure(daily_token_budget=100000)
         for _ in range(3):
             run = self.start()

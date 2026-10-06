@@ -48,3 +48,30 @@ Memory approve/reject/undo, proposal lifecycle and run transcripts. Browsing and
 mutating learning state requires platform or workspace admin authority.
 Thread cleanup removes pending inputs and cancels their jobs; already approved
 Memory knowledge retains its explicit source provenance and can be undone.
+
+## Review hardening (2026-10-06)
+
+Queue selection skips occupied chats and chats still inside their idle window,
+then claims the oldest ready chat in the same transaction. An occupied oldest
+chat cannot monopolize the serial worker. The installation-wide generation
+lock and request-token fences remain the authority for single-pass execution.
+
+Saving exclusions immediately cancels a matching in-flight pass and clears its
+claim. Turning both output channels off also cancels the pass; disabling one
+channel filters that channel out when an already-running result is validated.
+Late callbacks still reconcile their known attempt's observed usage, using a
+monotonic maximum, before result fencing. They cannot create candidates or
+move the conversation cursor after cancellation.
+
+The administrative read model includes exact pending/queue/failure counts,
+independent of bounded result history, and short redacted evidence labels for
+captured chats. Results awaiting review precede archived items in the bounded
+list. A budget-blocked job records a visible waiting reason; its first transition
+publishes an invalidation without producing an event on every idle tick.
+Settings presents status, allowance, output channels and
+review results first, with model/timing, usage/retention and exclusions in
+collapsible sections. Refresh preserves local settings/candidate drafts,
+selection and focus; discarding edits is explicit. Partial pause/resume actions
+leave other drafts intact. Read epochs prevent a pre-save response from
+replacing newer saved state. Live invalidations use the SDK shell event stream
+for isolated app frames, and evidence links target the injected shell origin.

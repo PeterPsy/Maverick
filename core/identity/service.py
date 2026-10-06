@@ -18,6 +18,7 @@ from core.identity.models import (
 )
 from core.identity.errors import UserNotFoundError
 from core.identity.store import IdentityStore
+from core.identity.session_lifecycle import SESSION_IDLE_DAYS
 from core.workspaces.service import ensure_workspace_membership, get_active_workspace_for_user, set_active_workspace_for_user
 from core.workspaces.store import WorkspaceStore
 
@@ -341,6 +342,6 @@ def revoke_auth_session(
     return identity_store.save_auth_session(updated)
 
 
-def session_expiry(*, now: datetime | None = None, days: int = 7) -> datetime:
+def session_expiry(*, now: datetime | None = None, days: int = SESSION_IDLE_DAYS) -> datetime:
     """Return the default auth-session expiry timestamp."""
     return (now or utcnow()) + timedelta(days=days)

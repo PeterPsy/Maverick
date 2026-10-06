@@ -81,8 +81,9 @@ security decision exists; this rollout does not manufacture an opt-in UI.
 ### 4. Transport recovery is internal and bounded
 
 UI consumers receive only `loading`, `success`, or terminal `error`.
-Transport failures and timeouts may move an idempotent read into an internal
-waiting/retry substate while it continues to render as loading. Retry is
+Transport failures, timeouts and HTTP `408/425/429/500/502/503/504` may move an
+idempotent read into an internal waiting/retry substate while it continues to
+render as loading. Retry is
 single-flight per request key, cancellable, rate-limited, and uses exponential
 backoff with jitter. Browser `online`, focus, and visibility events are hints
 that may advance a retry; only a Maverick response confirms useful transport.
@@ -288,9 +289,10 @@ catalog rows remain read-only until fresh workspace, installation, pin, and
 other authority inputs arrive. Across every pilot, expired data is a miss,
 `maverick.app.data-changed` is accepted only from the shell or a frame whose
 registered owner exactly matches the declared owner. A `401`/`403` triggers
-scoped cleanup, notifies the shell to clear authenticated UI, and unmounts all
-app/widget frames so previously rendered private data cannot survive; a later
-authenticated session creates fresh frames. No cache result grants
+scoped cleanup and platform session confirmation. Confirmed platform loss
+notifies the shell to clear authenticated UI and unmount all app/widget frames;
+a later authenticated session creates fresh frames. Resource permission denial
+and unavailable confirmation preserve platform login. No cache result grants
 mutation, provider, capability, publication, or launch authority. Both the
 global and all per-app M5 gates remain off by default; implementation readiness
 does not replace privacy or physical Safari/Home Screen release evidence.
@@ -320,11 +322,14 @@ transitions the lifecycle and loads the new registry before publishing the
 resulting session.
 
 Shell API requests, PWA-config reads, structured-data reads, Storage file
-reads, and isolated-frame launch share one authorization-revocation channel.
-Every invocation signals AppShell synchronously, including while another
-revocation cleanup is pending; only the durable cleanup promise is coalesced
-through the serialized lifecycle. That cleanup is not part of network timeout
-classification: a received `401`/`403` remains a terminal HTTP response even
+reads, and isolated-frame launch share uncached platform session confirmation.
+Resource denial blocks private display copies; only a confirmed anonymous
+platform session or session-endpoint `401` invokes the authorization-revocation
+channel. Every confirmed loss signals AppShell synchronously, including while
+another cleanup is pending; durable cleanup is coalesced through the serialized
+lifecycle. Foreground verification and bounded renewal follow
+`docs/architecture/auth_session_lifecycle.md`. That cleanup is not part of
+network timeout classification: a received `401`/`403` remains a terminal HTTP response even
 if cleanup is delayed behind another lifecycle operation.
 
 ## M6 implementation profile

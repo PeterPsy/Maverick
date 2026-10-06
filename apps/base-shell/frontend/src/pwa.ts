@@ -1,5 +1,6 @@
+import { reportShellAuthorizationFailure } from "./shellAuthorization";
 import { useSyncExternalStore } from "react";
-import { revokeShellAuthorization, shellPwaMetrics } from "./pwaCacheRuntime";
+import { shellPwaMetrics } from "./pwaCacheRuntime";
 
 export type ShellPwaUpdateState = {
   applying: boolean;
@@ -117,7 +118,7 @@ async function projectedDataFeatureEnabled(
     });
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
-        void revokeShellAuthorization(response.status);
+        void reportShellAuthorizationFailure(response.status);
         return false;
       }
       return TRANSIENT_CONFIG_STATUSES.has(response.status) ? null : false;
@@ -171,7 +172,7 @@ async function serviceWorkerV2Enabled(): Promise<boolean | null> {
     });
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
-        void revokeShellAuthorization(response.status);
+        void reportShellAuthorizationFailure(response.status);
       }
       return null;
     }

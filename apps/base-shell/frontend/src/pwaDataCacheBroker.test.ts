@@ -481,6 +481,7 @@ describe("Base Shell structured data-cache broker", () => {
   });
 
   it("cleans and blocks the cache after an app network read returns 401", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ authenticated: false })));
     vi.stubGlobal("navigator", {
       storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) },
     });
@@ -513,7 +514,7 @@ describe("Base Shell structured data-cache broker", () => {
       phase: "initial",
       status: "error",
     });
-    expect(cleanup).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
 
     const blockedChannel = new MessageChannel();
     const blockedMessages = portMessages(blockedChannel.port1);
@@ -528,6 +529,7 @@ describe("Base Shell structured data-cache broker", () => {
   });
 
   it("notifies the shell after a warm cached value revalidates with 403", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ authenticated: false })));
     vi.stubGlobal("navigator", {
       storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) },
     });
@@ -591,9 +593,9 @@ describe("Base Shell structured data-cache broker", () => {
       phase: "revalidation",
       status: "error",
     });
-    expect(authorizationFailure).toHaveBeenCalledOnce();
-    expect(authorizationFailure).toHaveBeenCalledWith(403);
-    expect(cleanup).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(authorizationFailure).toHaveBeenCalledOnce());
+    expect(authorizationFailure).toHaveBeenCalledWith(401);
+    await vi.waitFor(() => expect(cleanup).toHaveBeenCalledOnce());
   });
 
   it("answers and serves a Storage catalog read from a separately registered widget frame", async () => {

@@ -9,7 +9,8 @@ import {
   createSafeRequestRetryExecutor,
   type SafeRequestRetryExecutor,
 } from "@maverick/pwa-cache";
-import { revokeShellAuthorization, shellRetryCoordinator } from "./pwaCacheRuntime";
+import { shellRetryCoordinator } from "./pwaCacheRuntime";
+import { reportShellAuthorizationFailure } from "./shellAuthorization";
 
 export type AppLogo = {
   kind: "glyph" | "image";
@@ -107,6 +108,7 @@ export type SessionPayload =
       user: SessionUser;
       workspace_id: string;
       expires_at: string;
+      session_generation: string;
     };
 
 export type WorkspaceItem = {
@@ -277,11 +279,13 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 export class MaverickHttpError extends Error {
   readonly retryAfterMs: number | null;
+  readonly path: string;
   readonly status: number;
 
   constructor(path: string, response: Response) {
     super(`Request failed ${response.status}: ${path}`);
     this.name = "MaverickHttpError";
+    this.path = path;
     this.status = response.status;
     this.retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
   }
@@ -296,7 +300,7 @@ export class MaverickTransportError extends Error {
 
 export function isRetryableReadError(error: unknown): boolean {
   return error instanceof MaverickTransportError
-    || (error instanceof MaverickHttpError && [429, 502, 503, 504].includes(error.status));
+    || (error instanceof MaverickHttpError && [408, 425, 429, 500, 502, 503, 504].includes(error.status));
 }
 
 export function retryAfterMs(error: unknown): number | null {
@@ -328,7 +332,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     if (!response.ok) {
       const responseError = new MaverickHttpError(path, response);
       if (responseError.status === 401 || responseError.status === 403) {
-        void revokeShellAuthorization(responseError.status);
+        void reportShellAuthorizationFailure(responseError.status, responseError.path);
       }
       throw responseError;
     }
@@ -373,7 +377,7 @@ async function requestWithRetry<T>(
     if (error instanceof SafeRequestRetryHttpError) {
       const responseError = new MaverickHttpError(executor.endpoint, error.response);
       if (responseError.status === 401 || responseError.status === 403) {
-        void revokeShellAuthorization(responseError.status);
+        void reportShellAuthorizationFailure(responseError.status, responseError.path);
       }
       throw responseError;
     }
@@ -595,7 +599,7 @@ export async function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayloa
     if (error instanceof MutationRetryHttpError) {
       const responseError = new MaverickHttpError(executor.endpoint, error.response);
       if (responseError.status === 401 || responseError.status === 403) {
-        void revokeShellAuthorization(responseError.status);
+        void reportShellAuthorizationFailure(responseError.status, responseError.path);
       }
       throw responseError;
     }

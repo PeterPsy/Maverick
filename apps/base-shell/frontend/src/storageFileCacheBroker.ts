@@ -1,3 +1,4 @@
+import { reportShellAuthorizationFailure } from "./shellAuthorization";
 import {
   DEFAULT_PWA_FILE_CACHE_MAX_ENTRY_BYTES,
   MaverickFileHttpError,
@@ -6,6 +7,7 @@ import {
   PWA_FILE_CACHE_BROKER_RESULT,
   PWA_FILE_CACHE_POLICY_REVISION,
   createPwaFileCacheHost,
+  createBrowserFileCacheMaintenance,
   isParentFileCacheCancelMessage,
   isParentFileCacheOpenMessage,
   sha256Blob,
@@ -23,7 +25,7 @@ import {
   type StorageQuotaAdapter,
 } from "@maverick/pwa-cache";
 import { MaverickHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
-import { revokeShellAuthorization, shellRetryCoordinator } from "./pwaCacheRuntime";
+import { shellRetryCoordinator } from "./pwaCacheRuntime";
 import { storageFileCacheFeatureEnabled } from "./pwa";
 import { isMaverickFrameMessage } from "./iframePolicy";
 
@@ -68,8 +70,10 @@ export class StorageFileCacheBroker {
   private readonly resolvedFiles = new Map<string, ResolvedFile>();
   private readonly resolveDescriptor: NonNullable<StorageFileCacheBrokerOptions["resolveDescriptor"]>;
   private disposed = false;
+  private readonly principal: CachePrincipal;
 
   constructor(options: StorageFileCacheBrokerOptions) {
+    this.principal = options.principal;
     this.hostOrigin = options.hostOrigin ?? window.location.origin;
     this.featureEnabled = options.featureEnabled ?? storageFileCacheFeatureEnabled;
     this.resolveDescriptor = options.resolveDescriptor ?? ((request, signal) =>
@@ -211,7 +215,10 @@ export class StorageFileCacheBroker {
         this.featureWasExplicitlyDisabled = true;
         this.featureWasConfirmedEnabled = false;
         this.resolvedFiles.clear();
-        await revokeShellAuthorization(error.status);
+        const confirmation = reportShellAuthorizationFailure(error.status);
+        this.cache?.dispose();
+        await createBrowserFileCacheMaintenance().clear(this.principal).catch(() => undefined);
+        await confirmation;
       }
       if (!signal.aborted && !isAbortError(error)) this.reply(request.request_id, "error");
       else this.finish(request.request_id);

@@ -1,3 +1,5 @@
+import { reportShellAuthorizationFailure, resetShellAuthorizationChecks } from "./shellAuthorization";
+import { useShellSessionRecovery } from "./hooks/useShellSessionRecovery";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { flushSync } from "react-dom";
@@ -132,7 +134,7 @@ export function AppShell() {
   publishedSessionRef.current = session;
   const authenticatedSession = !isSessionTransitioning && session?.authenticated ? session : null;
   const authenticatedFrameScopeIdentity = authenticatedSession
-    ? JSON.stringify([authenticatedSession.user.user_id, authenticatedSession.workspace_id, authenticatedSession.expires_at])
+    ? JSON.stringify([authenticatedSession.user.user_id, authenticatedSession.workspace_id, authenticatedSession.session_generation])
     : null;
   const authenticatedFrameWorkspaceId = authenticatedSession?.workspace_id ?? null;
   const frameScope = useMemo<MaverickFrameScope | null>(() => (
@@ -156,6 +158,7 @@ export function AppShell() {
     }
   }, []);
   const beginShellSessionTransition = useCallback(() => {
+    resetShellAuthorizationChecks();
     const hadAuthenticatedUi = publishedSessionRef.current?.authenticated === true;
     publishedSessionRef.current = null;
     const unmountAuthenticatedUi = () => {
@@ -174,6 +177,7 @@ export function AppShell() {
     unmountAuthenticatedUi();
   }, []);
   const publishAnonymousShellState = useCallback(() => {
+    resetShellAuthorizationChecks();
     const anonymousSession = { authenticated: false } as const;
     publishedSessionRef.current = anonymousSession;
     flushSync(() => {
@@ -380,14 +384,11 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        void revokeShellAuthorization(loadError.status as 401 | 403);
-        return;
+        void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
+        if (loadError.path === "/api/session" && loadError.status === 401) return;
       }
-      await shellCacheLifecycle.endSession().catch(() => undefined);
-      if (shellLoadVersionRef.current !== loadVersion) {
-        return;
-      }
-      publishAnonymousShellState();
+      if (shellLoadVersionRef.current !== loadVersion) return;
+      setIsSessionTransitioning(false);
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
       measureStartupMetric("shell.bootstrap.error", loadStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
@@ -431,7 +432,7 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        void revokeShellAuthorization(loadError.status as 401 | 403);
+        void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -463,7 +464,7 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        void revokeShellAuthorization(loadError.status as 401 | 403);
+        void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -497,7 +498,7 @@ export function AppShell() {
         return;
       }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        void revokeShellAuthorization(loadError.status as 401 | 403);
+        void reportShellAuthorizationFailure(loadError.status as 401 | 403, loadError.path);
         return;
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
@@ -506,6 +507,26 @@ export function AppShell() {
       });
     }
   }
+
+  useShellSessionRecovery(async (verified) => {
+    if (shellLoadInFlightRef.current || isSessionTransitioning) return;
+    const current = publishedSessionRef.current;
+    if (!verified.authenticated) {
+      if (current?.authenticated) await revokeShellAuthorization(401);
+      else if (current === null) await loadShellState();
+      return;
+    }
+    if (!current?.authenticated || current.user.user_id !== verified.user.user_id
+      || current.workspace_id !== verified.workspace_id || current.session_generation !== verified.session_generation) {
+      await loadShellState();
+      return;
+    }
+    const version = shellLoadVersionRef.current;
+    await shellCacheLifecycle.transition(shellCachePrincipal(verified));
+    if (version !== shellLoadVersionRef.current || publishedSessionRef.current !== current) return;
+    publishedSessionRef.current = verified;
+    setSession(verified);
+  });
 
   useEffect(() => {
     void loadShellState();
@@ -883,11 +904,14 @@ export function AppShell() {
     }
   }
 
-  if (isSessionTransitioning || (isLoading && session === null)) {
+  if (isSessionTransitioning || session === null) {
     return (
       <main className="bs-shell">
         <div className="bs-shell-initial-pending">
-          <ShellPendingIndicator ariaLabel="Loading workspace" label="Loading workspace" />
+          {error ? <div role="alert">
+            <p>Connessione a Maverick non disponibile. Riprovo appena torna la connessione.</p>
+            <button type="button" onClick={() => { void loadShellState(); }}>Riprova</button>
+          </div> : <ShellPendingIndicator ariaLabel="Loading workspace" label="Loading workspace" />}
         </div>
       </main>
     );

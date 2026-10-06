@@ -51,16 +51,17 @@ from the old scope receives an immediate unavailable result and cannot inspect
 a warm entry belonging to the new workspace. App and widget fan-out handlers
 also compare the sender's registered owner with the declared owner; only an
 exact top-level shell message may fan out across owners. A `401` or `403` from a
-brokered network read additionally tells AppShell to clear authenticated UI and
-unmount every app/widget iframe immediately; reauthentication mounts fresh
-documents after cleanup, preventing an earlier warm paint from remaining in
-memory or the DOM.
+brokered network read blocks and cleans private display copies, then confirms
+the platform session. Confirmed platform loss tells AppShell to clear
+authenticated UI and unmount every app/widget iframe immediately;
+reauthentication mounts fresh documents after cleanup. Resource permission
+denial and transient confirmation failures preserve login.
 
 AppShell treats every session reload or logout as a publication barrier. It
 synchronously withdraws the broker principal and frame scope before awaiting
 network or durable cleanup, serializes every lifecycle mutation, and publishes
 a candidate authenticated session only after lifecycle transition and registry
-load succeed. A concurrent `401/403` invalidates the pending load, so its later
+load succeed. A concurrent confirmed platform session loss invalidates the pending load, so its later
 cleanup completion cannot remount that session. Logout never waits for a second
 session fetch to remove authenticated frames.
 
@@ -70,12 +71,13 @@ structured broker and Storage file broker, call the workspace endpoint, run the
 lifecycle transition, load the scoped registry, then publish. The workspace
 switcher component must never call the API directly.
 
-All parent-side authorization observations use the shared shell revocation
-channel: ordinary shell APIs, both `/api/pwa/config` projections, structured
-broker reads, Storage file broker reads, and isolated-frame launch. Every
-observation repeats the synchronous AppShell notification and iframe teardown,
-even if an earlier cleanup has not settled. Coalesce only the durable cleanup
-promise, which remains serialized. Do not await that deletion inside an HTTP
+All parent-side authorization observations use uncached, single-flight platform
+session confirmation: ordinary shell APIs, both `/api/pwa/config` projections,
+structured broker reads, Storage file broker reads, and isolated-frame launch.
+Resource denial blocks private display copies. Only a confirmed anonymous
+session or session-endpoint `401` uses the shared shell revocation channel and
+repeats synchronous AppShell notification and iframe teardown, even if earlier
+cleanup has not settled. Durable cleanup remains serialized. Do not await that deletion inside an HTTP
 request timeout window: an observed `401`/`403` must remain terminal HTTP rather
 than becoming a transport timeout.
 Cached catalog or content data is never used to authorize launch, install,

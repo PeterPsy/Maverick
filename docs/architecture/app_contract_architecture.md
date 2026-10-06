@@ -850,6 +850,31 @@ This is the correct boundary for headless app-owned orchestration. For example, 
 
 Backend recovery may invoke a declared app hook such as `backend_recovery` on enabled apps. A hosted backend may also invoke a declared `background_tick` hook periodically for active workspaces. These hooks follow the same rule: they may return generic runtime requests, but all app-specific recovery, scheduling, and orchestration decisions remain inside the app backend.
 
+Background hooks also receive source-owned active runtime session IDs, including
+unfinished linked orchestration. Recovery includes a bounded recent terminal
+snapshot (at most 100 turns, ten per source-owned user chat); apps apply their own
+activation cutoff and persisted deduplication before replaying evidence.
+
+Apps declaring `permissions.runtime.create_sessions` may return at most one
+`background_generation_requests` item per envelope for a finite tool-free text
+pass. Each item supplies `request_id`, `exclusive_key`, `system_prompt`,
+`input_text`, `output_schema`, bounded timeout/output allowance, model source
+(`workspace` Codex or configured `fast_model` API), and a callback action/payload.
+Core owns credentials, backend lifecycle cancellation and an installation-wide
+OS lock keyed by `exclusive_key`; it holds the slot through callback delivery and
+nested dependency requests. Native inference uses a private auth-only home,
+reviewed runtime version and disabled tool/context surfaces. The callback surface
+is `background_generation_callback`, and reports completed/failed/cancelled/busy,
+request ID, output and usage. An optional `admission` action/payload is checked on
+`background_generation_admission` immediately before inference; the owning app
+must return `json.allowed=true` for a still-valid durable claim. App-scoped `background_generation_cancel_requests`
+contains request IDs. These internal passes create no user runtime chat. The
+owning app persists the transcript and fences callbacks against durable attempt
+IDs. Dependency callbacks may return further requests with a maximum nesting
+depth of eight. Domain scheduling and materialization remain app-owned; see
+[Conversation Learning](conversation_learning.md) for the concrete Chat consumer.
+
+
 ### View Composition Surface Declaration
 
 Referenceable entities let apps such as Memory understand and link app-owned records. Some apps also need to render a curated set of their own records in UI after an agent or another app has selected relevant references.

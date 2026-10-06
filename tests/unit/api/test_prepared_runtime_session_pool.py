@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from threading import Event, Lock, Thread
+from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -28,7 +29,7 @@ PENDING_PREWARM = RuntimeSessionPrewarmResult(
 
 class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.TestCase):
     def test_backend_background_scheduler_starts_periodic_prepared_cleanup(self) -> None:
-        state = object()
+        state = SimpleNamespace(background_generation_shutdown_controller=None)
         shutdown_controller = Mock()
         with patch(
             "core.api.background_hooks.start_prepared_session_cleanup_scheduler"
@@ -52,6 +53,7 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
             shutdown_controller=shutdown_controller,
         )
         thread_type.return_value.start.assert_called_once_with()
+        self.assertIs(state.background_generation_shutdown_controller, shutdown_controller)
         self.assertIs(thread, thread_type.return_value)
 
     def test_idle_cleanup_tick_scans_the_session_catalog_once(self) -> None:

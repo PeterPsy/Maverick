@@ -16,6 +16,7 @@ export function activeSettingsPageHtml(context: {
   pendingDeleteUserId: string;
   persistenceController: ReturnType<typeof createPersistenceController>;
   platformSettingsHtml: () => string;
+  learningHtml: () => string;
   selectedUser: User | undefined;
   users: User[];
   workspaceApps: WorkspaceApp[];
@@ -44,6 +45,7 @@ export function activeSettingsPageHtml(context: {
     });
   }
   if (page.id === 'platform-settings') return context.platformSettingsHtml();
+  if (page.id === 'learning') return context.learningHtml();
   if (page.id === 'cache') return cacheDiagnosticsPageHtml(context.cacheDiagnosticsController.viewState());
   return persistencePageHtml(context.persistenceController.viewState());
 }

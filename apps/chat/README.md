@@ -2,6 +2,16 @@
 
 Workspace chat app that talks to the selected Maverick runtime provider.
 
+## Conversation learning
+
+Settings → Conversation learning controls a disabled-by-default, review-first loop
+for completed user chats. Chat persists evidence, idle-delayed jobs, Memory
+candidates, improvement proposals and audit history in `data/chat/learning.sqlite`.
+One installation-wide generation lock and transactional attempt fencing prevent
+overlapping analysis or late results overwriting new work. Memory writes use the
+selected optional `learning-memory` provider through source ingestion; improvements
+remain reviewable proposals. See [Conversation Learning](../../docs/architecture/conversation_learning.md).
+
 ## Contract Notes
 
 - Provider account telemetry (`account.updated`) is excluded from transcript cards and live activity labels, including saved history. Core drops these notifications before persistence and transport; Chat also filters historical steps. Authentication and plan metadata require no chat action.

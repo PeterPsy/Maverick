@@ -4,6 +4,7 @@ export type SettingsPageId =
   | 'workspace-apps'
   | 'app-links'
   | 'platform-settings'
+  | 'learning'
   | 'cache'
   | 'persistence';
 
@@ -44,6 +45,12 @@ export const SETTINGS_PAGES: SettingsPage[] = [
     title: 'Platform settings',
     summary: 'Tune the active provider model and clean runtime sessions.',
     icon: 'tune'
+  },
+  {
+    id: 'learning',
+    title: 'Conversation learning',
+    summary: 'Review Memory candidates and proposals from completed conversations.',
+    icon: 'psychology'
   },
   {
     id: 'cache',

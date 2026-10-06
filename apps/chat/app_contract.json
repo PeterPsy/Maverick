@@ -45,6 +45,14 @@
       "required": false,
       "cardinality": "one",
       "description": "Optional workspace speech provider used by Chat composer dictation to transcribe microphone audio into editable draft text."
+    },
+    {
+      "alias": "learning-memory",
+      "interface": "memory.graph",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Memory provider for reviewed conversation knowledge and evidence."
     }
   ],
   "distribution": {
@@ -67,7 +75,8 @@
     },
     "runtime": {
       "create_sessions": true,
-      "cleanup_sessions": true
+      "cleanup_sessions": true,
+      "receive_cleanup_callbacks": true
     },
     "host": {
       "telemetry": false
@@ -102,6 +111,10 @@
       {
         "resource": "view-state",
         "description": "Emitted when Chat runtime-thread/project browse filters or curated selections change through official Chat app surfaces."
+      },
+      {
+        "resource": "learning",
+        "description": "Conversation learning queue, candidates, proposals and review state changed."
       }
     ],
     "view_surfaces": [
@@ -254,14 +267,18 @@
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
-      "health_check": "hooks/health_check.py"
+      "health_check": "hooks/health_check.py",
+      "runtime_event": "backend/app_backend.py",
+      "background_tick": "backend/app_backend.py",
+      "backend_recovery": "backend/app_backend.py"
     }
   },
   "storage": {
-    "storage_kind": "json",
+    "storage_kind": "mixed",
     "data_schema_version": "2",
     "primary_paths": [
-      "data/chat/state.json"
+      "data/chat/state.json",
+      "data/chat/learning.sqlite"
     ],
     "indices": null,
     "supports_export": true,

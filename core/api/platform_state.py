@@ -67,6 +67,7 @@ from core.workspaces.store import WorkspaceDocumentStore
 
 if TYPE_CHECKING:
     from core.providers.maverick_agent_onboarding import MaverickAgentOnboardingCatalog
+    from core.shared.entrypoints import EntrypointShutdownController
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ class PlatformState:
     runtime_root_capabilities: RuntimeRootCapabilityStore
     device_use_service: DeviceUseService
     root_shell_app_id: str
+    background_generation_shutdown_controller: EntrypointShutdownController | None = None
     runtime_tool_ledger: RuntimeToolLedger | None = None
     provider_private_state_service: ProviderPrivateStateService | None = None
     agentic_egress_evaluator: AgenticEgressEvaluator | None = None

@@ -30,6 +30,7 @@ class BackgroundHookDispatchTestCase(unittest.TestCase):
                     backend=None,
                 ),
                 capabilities=SimpleNamespace(data_events=[]),
+                permissions=SimpleNamespace(runtime=SimpleNamespace(create_sessions=False)),
             )
         )
         state = SimpleNamespace(app_store=object(), app_event_bus=None)

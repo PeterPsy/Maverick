@@ -32,6 +32,28 @@ def main() -> None:
     action = str(body.get("action") or "projects.list")
     data_root = Path(payload["data_root"])
 
+    if action.startswith("learning.") or action == "runtime.cleanup_sessions" or payload.get("surface") in {"runtime_event", "background_tick", "backend_recovery"}:
+        from learning_service import handle_learning
+        try:
+            result = handle_learning(payload)
+            changed = result.pop("_changed", False)
+            mutating_action = action.startswith("learning.") and action not in {"learning.read", "learning.analysis_admit"} and body.get("command") != "inspect"
+            envelope = {"status_code": 200}
+            if (changed or mutating_action) and not result.get("ignored"):
+                envelope["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
+            for key in ("background_generation_requests", "background_generation_cancel_requests", "dependency_backend_requests"):
+                if key in result:
+                    envelope[key] = result.pop(key)
+            if "next_due_in_seconds" in result:
+                envelope["next_due_in_seconds"] = result.pop("next_due_in_seconds")
+            envelope["json"] = result
+        except PermissionError as error:
+            envelope = {"status_code": 403, "json": {"error": str(error)}}
+        except (ValueError, KeyError) as error:
+            envelope = {"status_code": 400, "json": {"error": str(error)}}
+        print(json.dumps(envelope, ensure_ascii=False))
+        return
+
     try:
         status_code, result = handle_action(
             data_root,

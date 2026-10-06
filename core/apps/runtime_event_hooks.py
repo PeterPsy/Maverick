@@ -111,6 +111,15 @@ def dispatch_source_app_runtime_event(
             "agent_id": session.agent_id,
             "source_app_id": app_id,
             "runtime_event_id": runtime_event_id or "",
+            "session_kind": session.session_kind,
+            "thread_visibility": session.thread_visibility,
+            "project_id": session.project_id or "",
+            "input_text": (turn.input_text or "")[:32_000],
+            "completed_at": (turn.completed_at or turn.updated_at).isoformat(),
+            "metrics": {
+                "duration_seconds": max(0, ((turn.completed_at or turn.updated_at) - (turn.started_at or turn.created_at)).total_seconds()),
+                "queue_seconds": max(0, ((turn.started_at or turn.created_at) - turn.created_at).total_seconds()),
+            },
         },
     }
     try:
@@ -281,7 +290,9 @@ def _dispatch_workspace_app_background_hook(
             workspace_bindings=workspace_bindings,
             surface_cache=surface_cache,
         ),
-        "body": {"action": action, **(body or {})},
+        "body": {"action": action, **(body or {}),
+                 **(_runtime_background_context(state, workspace_id, binding.app_id, recovery=action == "backend.recovery")
+                    if parsed.contract.permissions.runtime.create_sessions else {})},
     }
     result = run_json_entrypoint(source_root / hook_path, payload=payload, cwd=source_root, timeout_seconds=30)
     publish_declared_app_events(
@@ -304,6 +315,11 @@ def _dispatch_workspace_app_background_hook(
         start_path=start_path,
     )
     return result
+
+
+def _runtime_background_context(state, workspace_id, app_id, *, recovery=False):
+    from core.apps.background_runtime_context import runtime_background_context
+    return runtime_background_context(state, workspace_id, app_id, recovery=recovery)
 
 
 def _app_dependencies_payload(

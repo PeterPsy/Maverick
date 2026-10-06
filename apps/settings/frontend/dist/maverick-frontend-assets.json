@@ -1,20 +1,20 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "b72a4233ff98389e3875f177933ba7f909622c8adb0f428d2aec3eab07de9a3f",
+  "build_id": "c838423581537970ad16a4f91631211a4f7b829158b0ef1a88db46d2455eef0b",
   "entrypoints": [
     "index.html",
     "widgets/settings-sidebar/index.html"
   ],
   "immutable": [
     {
-      "path": "assets/app-5Jst-K6P.js",
-      "sha256": "406b7c70e08fb7b521cb4cd283bb725e43e843df41c893cb875eca75187fd2ec",
-      "size_bytes": 310220
+      "path": "assets/app-C6qABQOt.js",
+      "sha256": "d0c4ff7bf915b80819434015282df227eb30cb8fe5844188fe0132a5acdba14d",
+      "size_bytes": 325683
     },
     {
-      "path": "assets/app-oUyyp-D-.css",
-      "sha256": "e0d8df0e293c0f0b871428cfcfa1a1fcc9d610927bb5ab56278d8de8557065d9",
-      "size_bytes": 56025
+      "path": "assets/app-jj-F74Wv.css",
+      "sha256": "c04c1fe868d72e05abb690d6c9b77d7b54b81ac4d4f54744cd0b1f29c77f0287",
+      "size_bytes": 59244
     },
     {
       "path": "assets/index-ZDYKsvKC.css",
@@ -22,25 +22,25 @@
       "size_bytes": 6196
     },
     {
-      "path": "assets/pages-BYg8FCfy.js",
-      "sha256": "9f7cd20b75f841dd4901764a8ce853242dc70c0026f27f4dcf0c411896b7da17",
-      "size_bytes": 2328
+      "path": "assets/pages-6aoVfVEe.js",
+      "sha256": "072880283ffa47330600f36ca922085226797855586bd1281bc71be6277dc5fe",
+      "size_bytes": 2471
     },
     {
-      "path": "assets/widgets/settings-sidebar/index-CObU5Txs.js",
-      "sha256": "80e5fc525b02d85484458d20442bca3c25216888467df38773b77198bda4bb72",
+      "path": "assets/widgets/settings-sidebar/index-DhMiTM-C.js",
+      "sha256": "7f15f248d90827022b38efa6ee2b447323c076226350660ede921d461e54167c",
       "size_bytes": 3677
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "f034f5742ae62cb6dccc76fb61dd9c4fc0d01e451a8d5092ee00b7bf9edfc4cf",
+      "sha256": "bce806b42f3ef62328e106e2cff2effb63ece6fb098d5f81789b6962498f37e2",
       "size_bytes": 691
     },
     {
       "path": "widgets/settings-sidebar/index.html",
-      "sha256": "809090af3443fff4affcea32e130cce195c0c80934643c0bd69d7cfc3827094b",
+      "sha256": "c2fea1ec7fc448e19e92fed936eab19b817916b9e83aca2d810cc3bd1c14720c",
       "size_bytes": 751
     }
   ]

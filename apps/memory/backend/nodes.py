@@ -119,6 +119,13 @@ def soft_delete_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         raise MemoryValidationError("node_id is required.")
     timestamp = now_timestamp()
     with transaction(data_root, immediate=True) as db:
+        expected = body.get("expected_updated_at")
+        if expected is not None:
+            current = db.execute("SELECT updated_at,status,delete_reason FROM nodes WHERE id=?", (node_id,)).fetchone()
+            if current is not None and current[1] == 'deleted' and current[2] == body.get("reason"):
+                return {"deleted": True, "node_id": node_id}
+            if current is None or current[0] != expected:
+                raise MemoryValidationError("node changed since the saved revision; inspect Memory before removing it.")
         result = db.execute(
             """
             UPDATE nodes

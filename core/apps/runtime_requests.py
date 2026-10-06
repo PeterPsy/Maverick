@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -78,6 +79,9 @@ MAX_RUNTIME_REQUEST_ATTACHMENTS = 5
 ATTACHMENT_STORAGE_PREFIXES = (("storage", "uploaded"), ("storage", "generated"))
 
 
+_dependency_callback_depth = ContextVar("dependency_callback_depth", default=0)
+
+
 @dataclass(frozen=True)
 class RuntimeRequestPreflight:
     """Persistence-free session or pin authorized for one app runtime request."""
@@ -103,6 +107,13 @@ def apply_app_runtime_requests(
     actor_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Apply platform-owned requests returned by an app through a generic result envelope."""
+    from core.apps.background_generation import apply_background_generation_requests
+    apply_background_generation_requests(
+        state, result=result, workspace_id=workspace_id, app_id=app_id,
+        source_root=source_root, backend_entrypoint=backend_entrypoint,
+        data_root=data_root, parsed=parsed, start_path=start_path,
+        actor_user_id=actor_user_id,
+    )
     requests = _pop_runtime_requests(result)
     interrupt_requests = _pop_runtime_interrupt_requests(result)
     dependency_backend_requests = _pop_dependency_backend_requests(result)
@@ -1520,6 +1531,19 @@ def _invoke_dependency_backend_request_callback(
     status_code = int(result.get("status_code", 200))
     if status_code >= 400:
         raise AppHostingError(str(result.get("json") or result))
+    depth = _dependency_callback_depth.get()
+    if depth >= 8:
+        raise AppHostingError("dependency_callback_depth_exceeded")
+    token = _dependency_callback_depth.set(depth + 1)
+    try:
+        apply_app_runtime_requests(
+            state, result=result, workspace_id=workspace_id, app_id=app_id,
+            source_root=source_root, backend_entrypoint=backend_entrypoint,
+            data_root=data_root, parsed=parsed, start_path=start_path,
+            actor_user_id=actor_user_id,
+        )
+    finally:
+        _dependency_callback_depth.reset(token)
     return result
 
 

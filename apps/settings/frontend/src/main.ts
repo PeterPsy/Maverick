@@ -1,4 +1,8 @@
 import './styles.css';
+import './styles/learning.css';
+import { createLearningController } from './learningController';
+import { learningPageHtml } from './learningPage';
+import { bindSettingsHostEvents, settingsHostVisible } from './settingsHostEvents';
 import { createAdminUser, deleteAdminUser, installWorkspaceApp as installWorkspaceAppBinding, resetAdminUserPassword, setWorkspaceAppEnabled, uninstallWorkspaceApp as uninstallWorkspaceAppBinding, updateAdminUser, updateAdminUserMemberships } from './adminActions';
 import { clearRuntimeSessions, getPlatformSettings, loadUsers, loadWorkspaces, loadWorkspaceApps, logout, requestJson } from './adminApi';
 import type { AppDependenciesPayload, PlatformSettings, PersistenceStatus, RuntimeCleanupPayload, User, Workspace, WorkspaceApp } from './adminApi';
@@ -86,6 +90,8 @@ const cacheDiagnosticsController = createCacheDiagnosticsController({
   },
 });
 
+const learningController = createLearningController({ render, workspaceId: () => platformSettings?.workspace.workspace_id || '' });
+
 function selectedUser(): User | undefined { return users.find((user) => user.user_id === selectedUserId) || users[0]; }
 function userIdFromNavigationParams(params: Record<string, unknown>): string {
   const directUserId = scalarParam(params.user_id) || scalarParam(params.selected_user_id) || scalarParam(params.id);
@@ -132,6 +138,7 @@ function applyNavigationParams(params: Record<string, unknown>) {
     void ensureRuntimeInventoryLoaded();
     void providerUsageController.ensureLoaded();
   }
+  if (pageId === 'learning') void learningController.load();
   if (pageId === 'cache') {
     void cacheDiagnosticsController.ensureLoaded();
   }
@@ -227,6 +234,7 @@ async function refresh() {
     platformSettings = settingsPayload;
     if (previousWorkspaceId !== nextWorkspaceId) {
       appLinksController.reset();
+      learningController.reset();
       runtimeInventoryWorkspaceId = '';
       providerUsageController.reset();
     }
@@ -245,6 +253,7 @@ async function refresh() {
     void ensureRuntimeInventoryLoaded();
     void providerUsageController.ensureLoaded();
   }
+  if (selectedPageId === 'learning') void learningController.load();
   if (selectedPageId === 'cache') {
     void cacheDiagnosticsController.ensureLoaded();
   }
@@ -477,6 +486,7 @@ function render() {
           pendingDeleteUserId,
           persistenceController,
           platformSettingsHtml: platformSettingsPageHtml,
+          learningHtml: () => learningPageHtml(learningController.viewState(), platformSettings?.provider.available_providers?.find((p) => p.provider_id === 'codex')?.model_options || []),
           selectedUser: user,
           users,
           workspaceApps,
@@ -488,6 +498,7 @@ function render() {
     ${persistenceMigrationModalHtml(persistenceController.viewState())}
   </main>`;
   bindEvents();
+  learningController.setVisible(selectedPageId === 'learning' && settingsHostVisible() && !isLoading);
   mountUsageVisualizations({ history: settingsPanelState.usageHistory, filters: settingsPanelState.usageHistoryFilters, isLoading: settingsPanelState.isLoadingUsageHistory, onFiltersChange: providerUsageController.updateUsageHistoryFilters, settings: platformSettings });
   publishSelectedPage(page);
   if (!isLoading) {
@@ -496,6 +507,7 @@ function render() {
 }
 
 function bindEvents() {
+  learningController.bind();
   bindSettingsEvents({
     clearRuntimeSessionsFromPanel,
     cacheDiagnosticsController,
@@ -569,16 +581,9 @@ function showError(error: unknown) {
   render();
 }
 
-window.addEventListener('message', (event) => {
-  if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
-    return;
-  }
-  const payload = event.data as { app_id?: string; params?: Record<string, unknown>; type?: string };
-  if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'settings')) {
-    applyNavigationParams(payload.params || {});
-  }
+bindSettingsHostEvents({
+  navigate: applyNavigationParams,
+  visibilityChanged: (visible) => learningController.setVisible(selectedPageId === 'learning' && visible && !isLoading),
 });
-
-window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'settings' }, "*");
 
 refresh().catch(showError);

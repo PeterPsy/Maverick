@@ -14,6 +14,9 @@ from service import app_events_for_action, handle_action
 
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
+    if payload.get("surface") == "secret_selector":
+        print(json.dumps({"status_code": 200, "secret_requests": []}))
+        return
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
     action = str(body.get("action") or "context").strip()
     app_id = str(payload.get("app_id") or "memory")

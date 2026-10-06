@@ -20,10 +20,34 @@ from core.device_use.service import DeviceUseService, encode_image_frame
 
 
 class DeviceUseServiceTestCase(unittest.TestCase):
-    def test_contract_digest_is_the_frozen_macos_v44_digest(self):
+    def test_one_input_with_declared_observation_returns_image_and_user_wait(self):
+        service, binding, outbound = self.connected()
+        results = []
+        worker = threading.Thread(target=lambda: results.append(service.invoke(
+            binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+            provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="combined",
+            tool_name="mac_peekaboo", arguments={"action": "click", "bundle_id": "com.apple.Safari",
+            "snapshot": "snapshot-1", "element": "B1", "observe_after": True}, task_text="click", timeout_seconds=1)))
+        worker.start()
+        frame = outbound.get(timeout=1)
+        jpeg = b"\xff\xd8after-input\xff\xd9"
+        service.accept_invocation(binding.activation_id, frame)
+        service.deliver_result(binding.activation_id, {
+            "invocation_id": frame["invocation_id"], "call_id": "combined", "arguments_digest": frame["arguments_digest"],
+            "result": {"success": True, "contentItems": [{"type": "inputText", "text": "action_outcome=confirmed_change"}]},
+            "has_image": True, "image_sha256": hashlib.sha256(jpeg).hexdigest(),
+            "native_duration_ms": 100, "native_user_wait_ms": 40,
+        })
+        service.deliver_image(binding.activation_id, encode_image_frame(invocation_id=frame["invocation_id"], call_id="combined", jpeg=jpeg))
+        worker.join(timeout=1)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(results[0].image_jpeg, jpeg)
+        self.assertEqual(results[0].native_user_wait_ms, 40)
+
+    def test_contract_digest_is_the_frozen_macos_v45_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1",
+            "0b96e1a3013c1bfece055623d8b104cd029b1b8ebb21719686999531abbf424d",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):

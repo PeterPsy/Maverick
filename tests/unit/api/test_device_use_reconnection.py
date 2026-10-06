@@ -25,6 +25,22 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_reviewed_v44_upgrade_renews_existing_chat_without_changing_authority(self):
+        old = replace(self.before.device_use_binding, executor_contract="macos-v44",
+                      tool_contract_digest="d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1")
+        self.state.runtime_store.save_session(replace(self.before, device_use_binding=old))
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual(status, 200, payload)
+        current = self.state.runtime_store.get_session(self.session_id)
+        self.assertEqual(current.device_use_binding.executor_contract, "macos-v45")
+        self.assertEqual(current.execution_binding, self.before.execution_binding)
+
+    def test_unknown_contract_upgrade_is_rejected(self):
+        old = replace(self.before.device_use_binding, executor_contract="macos-v43", tool_contract_digest="unknown")
+        self.state.runtime_store.save_session(replace(self.before, device_use_binding=old))
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual((status, payload["error"]), (409, "device_use_reconnect_scope_changed"))
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

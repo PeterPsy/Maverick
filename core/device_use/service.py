@@ -40,6 +40,7 @@ from core.device_use.invocation_deadline import (
     RESULT_DELIVERY_GRACE_SECONDS,
     invocation_timeout_seconds,
 )
+from core.device_use.result_facts import native_result_facts
 
 
 ACTIVATION_TTL_SECONDS = 60
@@ -79,10 +80,13 @@ class _Activation:
 @dataclass
 class _PendingInvocation:
     record: DeviceUseInvocationJournalRecord
+    allows_image: bool = False
+    binding: DeviceUseSessionBinding | None = None
     result: dict[str, object] | None = None
     image_jpeg: bytes | None = None
     expected_image_sha256: str | None = None
     native_duration_ms: float | None = None
+    native_user_wait_ms: float | None = None
     failure_reason_code: str | None = None
     completed: threading.Event = field(default_factory=threading.Event)
 
@@ -95,9 +99,11 @@ class DeviceUseService:
         *,
         now: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] | None = None,
+        evidence_archive=None,
     ) -> None:
         self._now = now or (lambda: datetime.now(tz=UTC))
         self._monotonic = monotonic or time.monotonic
+        self.evidence_archive = evidence_archive
         self._lock = threading.RLock()
         self._activations: dict[str, _Activation] = {}
         self._pending: dict[str, _PendingInvocation] = {}
@@ -371,7 +377,15 @@ class DeviceUseService:
             dispatched_at=dispatched_at,
             updated_at=dispatched_at,
         )
-        pending = _PendingInvocation(record=record)
+        pending = _PendingInvocation(record=record, binding=binding, allows_image=(
+            (tool, action) in {
+                ("mac_computer", "observe"), ("mac_peekaboo", "observe"),
+                ("mac_peekaboo", "observe_app"), ("mac_project", "sample_frames"),
+            } or (tool == "mac_peekaboo" and action in {
+                "click", "double_click", "right_click", "type", "replace", "click_point",
+                "type_at_point", "replace_at_point", "press", "scroll",
+            } and arguments.get("observe_after") is True)
+        ))
         with self._lock:
             activation = self._activation_for_binding_locked(binding, session_id=session_id)
             seen_key = (activation.activation_id, turn)
@@ -383,6 +397,7 @@ class DeviceUseService:
             seen.add(call)
             self._pending[invocation_id] = pending
             self._append_journal_locked(record)
+            self._capture_evidence(pending, arguments=arguments)
             outbound = activation.outbound
             if outbound is None:
                 self._pending.pop(invocation_id, None)
@@ -443,8 +458,9 @@ class DeviceUseService:
                 raise DeviceUseUnavailableError("device_use_result_missing")
             self._update_journal_locked(
                 pending,
-                status="completed",
+                status="completed" if pending.result.get("success") is True else "failed",
                 image_bytes=len(pending.image_jpeg or b""),
+                failure_reason_code=native_result_facts(pending.result)["failure_reason_code"],
             )
             return DeviceUseResult(
                 invocation_id=invocation_id,
@@ -457,6 +473,7 @@ class DeviceUseService:
                     if pending.native_duration_ms is not None
                     else elapsed_ms
                 ),
+                native_user_wait_ms=pending.native_user_wait_ms,
             )
 
     def accept_invocation(self, activation_id: str, frame: dict[str, object]) -> None:
@@ -514,16 +531,17 @@ class DeviceUseService:
             ):
                 raise DeviceUseAuthorizationError("device_use_native_duration_invalid")
             has_image = frame.get("has_image") is True
+            user_wait = frame.get("native_user_wait_ms")
+            if user_wait is not None and (
+                isinstance(user_wait, bool) or not isinstance(user_wait, (int, float))
+                or not math.isfinite(user_wait) or user_wait < 0
+                or duration is None or user_wait > duration
+            ):
+                raise DeviceUseAuthorizationError("device_use_user_wait_invalid")
             image_sha256 = str(frame.get("image_sha256") or "").strip()
             if has_image:
                 if (
-                    (pending.record.tool_name, pending.record.action)
-                    not in {
-                        ("mac_computer", "observe"),
-                        ("mac_peekaboo", "observe"),
-                        ("mac_peekaboo", "observe_app"),
-                        ("mac_project", "sample_frames"),
-                    }
+                    not pending.allows_image
                     or result.get("success") is not True
                     or not _is_sha256(image_sha256)
                 ):
@@ -533,6 +551,7 @@ class DeviceUseService:
                 raise DeviceUseAuthorizationError("device_use_unexpected_image_digest")
             pending.result = dict(result)
             pending.native_duration_ms = float(duration) if duration is not None else None
+            pending.native_user_wait_ms = float(user_wait) if user_wait is not None else None
             self._update_journal_locked(pending, status="result_received")
             if not has_image:
                 pending.completed.set()
@@ -564,6 +583,15 @@ class DeviceUseService:
         if runtime_session_id is None:
             return records
         return [item for item in records if item.runtime_session_id == runtime_session_id]
+
+    def binding_connected(self, binding, runtime_session_id):
+        """Read the common live-lease fence before best-effort provider warmup."""
+        with self._lock:
+            try:
+                self._activation_for_binding_locked(binding, session_id=runtime_session_id)
+            except (DeviceUseAuthorizationError, DeviceUseUnavailableError):
+                return False
+            return True
 
     def activation_metrics(
         self,
@@ -769,17 +797,32 @@ class DeviceUseService:
                 or (timestamp if status in {"completed", "failed", "execution_unknown"} else None)
             ),
             native_duration_ms=pending.native_duration_ms,
+            native_user_wait_ms=pending.native_user_wait_ms,
             image_bytes=(
                 pending.record.image_bytes if image_bytes is None else image_bytes
             ),
             failure_reason_code=failure_reason_code,
+            **({key: value for key, value in native_result_facts(pending.result).items()
+                if key != "failure_reason_code"} if pending.result else {}),
         )
         pending.record = updated
+        if status in {"completed", "failed", "execution_unknown"}:
+            self._capture_evidence(pending, result=pending.result, jpeg=pending.image_jpeg)
         for index in range(len(self._journal) - 1, -1, -1):
             if self._journal[index].invocation_id == updated.invocation_id:
                 self._journal[index] = updated
                 return
         self._journal.append(updated)
+
+    def _capture_evidence(self, pending, **content):
+        if self.evidence_archive is None or pending.binding is None:
+            return
+        try:
+            self.evidence_archive.capture(binding=pending.binding, record=pending.record, **content)
+        except Exception:
+            # Audit I/O must not turn a completed physical input into a replay.
+            # Missing evidence is explicit in the official audit read model.
+            pass
 
     def _expire_locked(self) -> None:
         now = self._now()
@@ -985,6 +1028,10 @@ def _metric_payload(record: DeviceUseInvocationJournalRecord) -> dict[str, objec
         ),
         "bridge_end_to_end_ms": end_to_end_ms,
         "native_duration_ms": record.native_duration_ms,
+        "native_user_wait_ms": record.native_user_wait_ms,
+        "native_success": record.native_success,
+        "result_valid": record.result_valid,
+        "outcome_state": record.outcome_state,
         "relay_overhead_ms": relay_overhead_ms,
         "image_bytes": record.image_bytes,
         "failure_reason_code": record.failure_reason_code,

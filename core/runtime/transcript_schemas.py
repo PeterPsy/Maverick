@@ -41,3 +41,23 @@ TRANSCRIPT_MESSAGE_READ_ARGUMENT_SCHEMA = {
     "required": ["thread_id", "message_id"],
     "additionalProperties": False,
 }
+
+DEVICE_USE_AUDIT_ARGUMENT_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["thread_id"],
+    "properties": {
+        "thread_id": {"type": "string", "minLength": 1, "maxLength": 240},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 30},
+        "before_cursor": {"type": "string", "maxLength": 512},
+    },
+}
+
+DEVICE_USE_CALL_ARGUMENT_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["thread_id", "turn_id", "call_id"],
+    "properties": {
+        "thread_id": {"type": "string", "minLength": 1, "maxLength": 240},
+        "turn_id": {"type": "string", "minLength": 1, "maxLength": 240},
+        "call_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "offset": {"type": "integer", "minimum": 0, "default": 0},
+        "max_chars": {"type": "integer", "minimum": 1, "maximum": 12000, "default": 12000},
+    },
+}

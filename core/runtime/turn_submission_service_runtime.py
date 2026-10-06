@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from contextlib import suppress
-from dataclasses import dataclass
 from threading import Event, Lock, Thread
 import time
 from typing import TYPE_CHECKING, Callable
@@ -65,6 +64,10 @@ from core.runtime.provider_start_handoff import (
     runtime_provider_start_handoff,
 )
 from core.runtime.runtime_idle_deadlines import runtime_idle_deadlines
+from core.runtime.session_prewarm_policy import (
+    RuntimeSessionPrewarmResult, SessionPrewarmState as _SessionPrewarmState,
+    native_session_connected, failure_cooling_down,
+)
 from core.runtime.runtime_process_lifecycle import (
     IDLE_RUNTIME_REAP_TTL_SECONDS,
     interrupt_runtime_provider_turn,
@@ -97,52 +100,11 @@ _PREWARM_COMPLETIONS_LOCK = Lock()
 _PREWARM_STATUS_MAX_ENTRIES = 2048
 
 
-@dataclass
-class _SessionPrewarmState:
-    completion: Event
-    started_perf_counter: float
-    status: str = "pending"
-    provider_id: str | None = None
-    provider_thread_id: str | None = None
-    elapsed_ms: float | None = None
-    runtime_ready: bool = False
-
-
-@dataclass(frozen=True)
-class RuntimeSessionPrewarmResult:
-    """Redaction-safe readiness state for one runtime session prewarm."""
-
-    status: str
-    prewarm_completed: bool
-    provider_thread_ready: bool
-    runtime_ready: bool = False
-    provider_id: str | None = None
-    provider_thread_id: str | None = None
-    prewarm_total_ms: float | None = None
-
-
-def _debug_log_runtime_turn_with_timing(
-    state: PlatformState,
-    *,
-    session: RuntimeSessionRecord,
-    provider_id: str,
-    turn_id: str,
-    message: str,
-    payload: dict[str, object],
-) -> None:
-    _debug_log_runtime_turn(
-        state,
-        session=session,
-        provider_id=provider_id,
-        turn_id=turn_id,
-        message=message,
-        payload=payload,
-    )
-
-
 def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessionRecord) -> None:
     """Best-effort warmup for Codex runtime process and provider thread."""
     if runtime_session_is_plain_hosted_chat(session):
+        return
+    if not native_session_connected(session):
         return
     if _session_has_executing_turn(state, session.session_id):
         return
@@ -307,6 +269,8 @@ def schedule_runtime_session_prewarm(
     """Schedule best-effort prewarm for the next turn after the current worker releases its lock."""
     if runtime_session_is_plain_hosted_chat(session):
         return
+    if not native_session_connected(session):
+        return
     if _session_has_executing_turn(state, session.session_id):
         return
 
@@ -332,7 +296,7 @@ def _session_has_executing_turn(state: PlatformState, session_id: str) -> bool:
 def _register_session_prewarm(session_id: str) -> _SessionPrewarmState | None:
     with _PREWARM_COMPLETIONS_LOCK:
         existing = _PREWARM_COMPLETIONS.get(session_id)
-        if existing is not None and not existing.completion.is_set():
+        if existing is not None and (not existing.completion.is_set() or failure_cooling_down(existing, time.perf_counter())):
             return None
         state = _SessionPrewarmState(completion=Event(), started_perf_counter=time.perf_counter())
         _PREWARM_COMPLETIONS[session_id] = state
@@ -717,7 +681,7 @@ def submit_runtime_turn_async(
         lock.acquire()
         try:
             worker_metrics["session_lock_wait_ms"] = (time.perf_counter() - lock_wait_started_at) * 1000
-            _debug_log_runtime_turn_with_timing(
+            _debug_log_runtime_turn(
                 state,
                 session=session,
                 provider_id=worker_provider_id,
@@ -731,7 +695,7 @@ def submit_runtime_turn_async(
                 current = state.runtime_store.get_turn(turn.turn_id)
                 worker_metrics["worker_turn_lookup_ms"] = (time.perf_counter() - turn_lookup_started_at) * 1000
                 if current.status == "cancelled":
-                    _debug_log_runtime_turn_with_timing(
+                    _debug_log_runtime_turn(
                         state,
                         session=session,
                         provider_id=worker_provider_id,
@@ -845,7 +809,7 @@ def submit_runtime_turn_async(
                     start_path=state.repository_root,
                 )
                 worker_metrics["worker_session_lookup_ms"] = (time.perf_counter() - session_lookup_started_at) * 1000
-                _debug_log_runtime_turn_with_timing(
+                _debug_log_runtime_turn(
                     state,
                     session=current_session,
                     provider_id=worker_provider_id,

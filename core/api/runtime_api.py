@@ -26,6 +26,7 @@ from core.api.provider_api import (
 )
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.runtime_tool_confirmation_api import handle_runtime_tool_confirmation
+from core.api.device_use_audit_api import handle_device_use_audit
 from core.api.session_api import RequestSession, require_session
 from core.api.runtime_thread_delete_api import (
     delete_runtime_threads,
@@ -3084,6 +3085,8 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
         )
 
     parts = [part for part in path.removeprefix("/api/runtime/").split("/") if part]
+    if len(parts) == 3 and parts[0] == "turns" and parts[2] == "device-use-audit" and method == "GET":
+        return handle_device_use_audit(state, context, turn_id=parts[1], query_string=query_string, start_response=start_response)
     if len(parts) == 3 and parts[0] == "threads" and parts[2] == "read":
         return _handle_thread_read(state, context, parts[1], method, start_response)
     if len(parts) == 2 and parts[0] == "threads":

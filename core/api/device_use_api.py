@@ -205,6 +205,7 @@ def handle_device_use_api(
                     "result": invoke_result.result,
                     "image_base64": image_b64,
                     "native_duration_ms": invoke_result.native_duration_ms,
+                    "native_user_wait_ms": invoke_result.native_user_wait_ms,
                     "is_error": invoke_result.result.get("success") is False,
                 },
             )

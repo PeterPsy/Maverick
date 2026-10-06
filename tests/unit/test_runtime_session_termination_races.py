@@ -174,7 +174,7 @@ class RuntimeSessionTerminationRaceTest(unittest.TestCase):
             patch.object(module, "Thread", InlineThread) if asynchronous else nullcontext(),
             patch.object(module, "_record_turn_worker_entered"),
             patch.object(module, "_debug_log_runtime_turn"),
-            patch.object(module, "_debug_log_runtime_turn_with_timing") if asynchronous else nullcontext(),
+            patch.object(module, "_debug_log_runtime_turn") if asynchronous else nullcontext(),
             patch.object(
                 module,
                 "_record_turn_started",

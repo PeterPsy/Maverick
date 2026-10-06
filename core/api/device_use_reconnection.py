@@ -2,6 +2,7 @@
 
 from core.device_use.errors import DeviceUseAuthorizationError, DeviceUseUnavailableError
 from core.device_use.runtime_registry import register_device_use_session
+from core.device_use.contract import DEVICE_USE_EXECUTOR_CONTRACT, DEVICE_USE_TOOL_CONTRACT_DIGEST
 from core.runtime.errors import RuntimeProviderStateError, RuntimeSessionNotFoundError
 from core.runtime.agentic_runtime_service import update_runtime_provider_state
 from core.runtime.runtime_process_lifecycle import ACTIVE_TURN_STATUSES, release_idle_runtime_processes
@@ -44,8 +45,7 @@ def reconnect_device_use_session(
         if (
             binding.mode != previous.mode
             or binding.protocol_version != previous.protocol_version
-            or binding.executor_contract != previous.executor_contract
-            or binding.tool_contract_digest != previous.tool_contract_digest
+            or not _renewable_contract(previous, binding)
             or (binding.mode == "on" and (
                 binding.initial_app != previous.initial_app
                 or set(binding.approved_apps) != set(previous.approved_apps)
@@ -85,3 +85,14 @@ def reconnect_device_use_session(
             activation_id, owner_user_id=owner_user_id, workspace_id=workspace_id,
             auth_session_id=auth_session_id,
         )
+
+
+def _renewable_contract(previous, binding):
+    if (previous.executor_contract, previous.tool_contract_digest) == (binding.executor_contract, binding.tool_contract_digest):
+        return True
+    # Reviewed additive v45 upgrade: explicit idle reconnection retires the old
+    # provider context. Owner, workspace, protocol and On/Full scope stay fixed.
+    return (previous.executor_contract, previous.tool_contract_digest) == (
+        "macos-v44", "d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1"
+    ) and (binding.executor_contract, binding.tool_contract_digest) == (
+        DEVICE_USE_EXECUTOR_CONTRACT, DEVICE_USE_TOOL_CONTRACT_DIGEST)

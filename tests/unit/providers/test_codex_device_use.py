@@ -41,7 +41,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
-            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v44",
+            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v45",
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="on", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
@@ -272,7 +272,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
                 "contentItems": [{"type": "inputText", "text": "PRIVATE_NATIVE_FAILURE"}],
             },
             image_jpeg=None,
-            native_duration_ms=12.0,
+            native_duration_ms=12.0, native_user_wait_ms=0.0,
         )
 
         with patch(

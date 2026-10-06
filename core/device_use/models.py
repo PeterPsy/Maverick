@@ -55,6 +55,7 @@ class DeviceUseResult:
     image_jpeg: bytes | None
     image_sha256: str | None
     native_duration_ms: float | None
+    native_user_wait_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -77,8 +78,12 @@ class DeviceUseInvocationJournalRecord:
     result_received_at: datetime | None = None
     completed_at: datetime | None = None
     native_duration_ms: float | None = None
+    native_user_wait_ms: float | None = None
     image_bytes: int = 0
     failure_reason_code: str | None = None
+    native_success: bool | None = None
+    result_valid: bool | None = None
+    outcome_state: str | None = None
 
 
 def device_use_binding_from_document(value: object) -> DeviceUseSessionBinding | None:

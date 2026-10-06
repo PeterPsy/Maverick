@@ -69,6 +69,9 @@ def steer_codex_app_server_turn(
                 ],
             }
             normalized_client_message_id = str(client_message_id or "").strip()
+            device_use = getattr(runtime, "device_use_binding", None) is not None
+            if device_use:
+                params["input"] = [{"type": "text", "text": input_text}]
             if normalized_client_message_id:
                 params["clientUserMessageId"] = normalized_client_message_id
             try:
@@ -117,7 +120,11 @@ def steer_codex_app_server_turn(
                 return RuntimeSteerResult(status="failed", provider_turn_id=actual_turn_id, reason=error.message)
 
             response_turn_id = str(result.get("turnId") or result.get("turn_id") or expected_turn_id).strip()
-            if invoked_skills:
+            if device_use and response_turn_id == expected_turn_id:
+                with runtime.active_turn_lock:
+                    if runtime.current_provider_turn_id == expected_turn_id:
+                        runtime.current_task_text = runtime.current_task_text[:1500] + "\n[Latest user correction]\n" + input_text[-2400:]
+            if invoked_skills and not device_use:
                 with runtime.skill_rehydration_lock:
                     skills_by_id = {skill.skill_id: skill for skill in runtime.current_invoked_skills}
                     for skill in invoked_skills:

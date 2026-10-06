@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
+
+from core.runtime import turn_submission_service_runtime as prewarm_runtime
 
 from core.runtime.service import create_runtime_session, queue_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -11,6 +14,30 @@ from tests.support.repo import make_temp_repo_root
 
 
 class TurnSubmissionPrewarmWaitTestCase(unittest.TestCase):
+    def test_disconnected_native_sessions_do_not_prewarm_or_schedule_provider_launch(self):
+        session = SimpleNamespace(session_id="native-offline", device_use_binding=object(), execution_binding=None)
+        with patch.object(prewarm_runtime, "runtime_session_is_plain_hosted_chat", return_value=False), \
+             patch("core.device_use.runtime_registry.device_use_service_for_session", return_value=None), \
+             patch.object(prewarm_runtime, "_register_session_prewarm") as register, \
+             patch.object(prewarm_runtime.runtime_idle_deadlines, "schedule") as schedule:
+            prewarm_runtime.prewarm_runtime_session_async(SimpleNamespace(), session=session)
+            prewarm_runtime.schedule_runtime_session_prewarm(SimpleNamespace(), session=session)
+        register.assert_not_called()
+        schedule.assert_not_called()
+
+    def test_failed_prewarm_has_a_cooldown_before_automatic_retry(self):
+        session_id = "prewarm-failure-cooldown"
+        try:
+            with patch.object(prewarm_runtime.time, "perf_counter", return_value=100):
+                state = prewarm_runtime._register_session_prewarm(session_id)
+                prewarm_runtime._complete_session_prewarm(session_id, state, status="failed")
+            with patch.object(prewarm_runtime.time, "perf_counter", return_value=101):
+                self.assertIsNone(prewarm_runtime._register_session_prewarm(session_id))
+            with patch.object(prewarm_runtime.time, "perf_counter", return_value=161):
+                self.assertIsNotNone(prewarm_runtime._register_session_prewarm(session_id))
+        finally:
+            prewarm_runtime._PREWARM_COMPLETIONS.pop(session_id, None)
+
     def test_wait_for_session_prewarm_times_out_with_short_default_cap(self) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = _runtime_store()

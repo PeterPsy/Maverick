@@ -6,6 +6,8 @@ from typing import Any, Callable
 
 from core.mcp.core_tool_helpers import WORKSPACE_SAFE, core_mcp_tool
 from core.mcp.models import McpInvocationContext, McpToolDefinition
+from core.device_use.audit import read_device_use_audit, read_device_use_call
+from core.device_use.evidence import DeviceUseEvidenceArchive
 from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptValidationError
 from core.runtime.store import RuntimeStore
 from core.runtime.transcript_models import RuntimeTranscriptReadContext
@@ -13,6 +15,8 @@ from core.runtime.transcript_schemas import (
     THREAD_LIST_ARGUMENT_SCHEMA,
     TRANSCRIPT_MESSAGE_READ_ARGUMENT_SCHEMA,
     TRANSCRIPT_READ_ARGUMENT_SCHEMA,
+    DEVICE_USE_AUDIT_ARGUMENT_SCHEMA,
+    DEVICE_USE_CALL_ARGUMENT_SCHEMA,
 )
 from core.runtime.transcript_service import (
     list_runtime_transcript_threads,
@@ -25,6 +29,7 @@ def runtime_transcript_tool_specs(
     *,
     runtime_store: RuntimeStore | None = None,
     observability_store=None,
+    start_path=None,
 ) -> list[tuple[McpToolDefinition, Any]]:
     """Build transcript MCP tools over the core runtime store."""
 
@@ -74,7 +79,34 @@ def runtime_transcript_tool_specs(
             )
         )
 
+    def audit_read(arguments, context):
+        return _run(lambda: read_device_use_audit(
+            _required_store(runtime_store), context=_read_context(context),
+            thread_id=str(arguments.get("thread_id") or ""), limit=arguments.get("limit", 30),
+            before_cursor=arguments.get("before_cursor"),
+        ))
+
+    def call_read(arguments, context):
+        return _run(lambda: read_device_use_call(
+            _required_store(runtime_store),
+            archive=DeviceUseEvidenceArchive.for_repository(_required_store(runtime_store), start_path),
+            context=_read_context(context), thread_id=str(arguments.get("thread_id") or ""),
+            turn_id=str(arguments.get("turn_id") or ""), call_id=str(arguments.get("call_id") or ""),
+            offset=arguments.get("offset", 0), max_chars=arguments.get("max_chars", 12000),
+        ))
+
     definitions = [
+        (
+            "core.runtime.device-use.audit.read",
+            "Read authorized native call lifecycle, evidence availability and measured turn timings.",
+            DEVICE_USE_AUDIT_ARGUMENT_SCHEMA, audit_read,
+        ),
+        (
+            "core.runtime.device-use.call.read",
+            "Read a bounded encrypted native evidence window as the thread owner or admin; typed text is withheld.",
+            DEVICE_USE_CALL_ARGUMENT_SCHEMA, call_read,
+        ),
+
         (
             "core.runtime.threads.list",
             "List only runtime threads whose transcripts the caller may read.",

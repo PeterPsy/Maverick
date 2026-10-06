@@ -82,6 +82,7 @@ def _core_command_specs(
         runtime_transcript_command_specs(
             runtime_store=runtime_store,
             observability_store=observability_store,
+            start_path=start_path,
         )
     )
     specs.extend(

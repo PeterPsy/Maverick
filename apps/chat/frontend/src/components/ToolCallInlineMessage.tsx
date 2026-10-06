@@ -9,6 +9,7 @@ import {
 import { isNoisyRuntimeLabel } from "../lib/runtimeStepLabels";
 import { toolActivityLabel } from "../lib/toolPresentation";
 import { ActivityDisclosure } from "./ActivityDisclosure";
+import { DeviceUseAuditPanel } from "./DeviceUseAuditPanel";
 
 type ToolCallInlineMessageProps = {
   createdAt?: string;
@@ -100,6 +101,7 @@ function ToolCallPanel({ id, toolCall }: { id: string; toolCall: ToolCallMessage
           <h3 className="chatapp-tool-call-panel__title">{displayToolName(toolCall)}</h3>
           <div className="chatapp-tool-call-panel__badges">
             <span className="chat-ui-badge chat-ui-badge--neutral">{toolCall.status}</span>
+            {toolCall.detail.result_valid === false ? <span className="chat-ui-badge chat-ui-badge--neutral">Verifica non superata</span> : null}
             {toolCall.createdAt ? <span className="chat-ui-badge chat-ui-badge--neutral">{formatToolTime(toolCall.createdAt)}</span> : null}
           </div>
         </div>
@@ -114,6 +116,8 @@ function ToolCallPanel({ id, toolCall }: { id: string; toolCall: ToolCallMessage
         {output ? <ToolPanelCode title="Output" value={output} /> : null}
         {error ? <ToolPanelCode title="Error" value={error} isError /> : null}
         {toolCall.status === "awaiting_confirmation" ? <ToolConfirmationPanel toolCall={toolCall} /> : null}
+        {toolCall.detail.tool_kind === "device_use" && stringValue(toolCall.detail.turn_id) && stringValue(toolCall.detail.call_id) ?
+          <DeviceUseAuditPanel turnId={stringValue(toolCall.detail.turn_id)} callId={stringValue(toolCall.detail.call_id)} /> : null}
         <ToolPanelCode title="Raw Payload" value={JSON.stringify(toolCall.detail, null, 2)} />
       </div>
     </section>

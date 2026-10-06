@@ -8,6 +8,7 @@ from typing import Any
 
 from core.device_use.errors import DeviceUseError
 from core.device_use.runtime_registry import device_use_service_for_session
+from core.device_use.result_facts import native_result_facts
 from core.providers.codex_app_server_runtime_transport import _send_request
 from core.runtime.execution_events import RuntimeExecutionEvent
 
@@ -49,6 +50,7 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
         action=str(arguments.get("action") or ""),
         call_id=call_id,
     )
+    event_payload["turn_id"] = runtime_turn_id
     _emit(runtime, "runtime.tool_call.started", event_payload)
     try:
         result = service.invoke(
@@ -99,6 +101,8 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
                 **event_payload,
                 "status": status,
                 "native_duration_ms": result.native_duration_ms,
+                "native_user_wait_ms": result.native_user_wait_ms,
+                **native_result_facts(tool_result),
             },
         )
         _send_result(runtime, request_id, tool_result)

@@ -65,6 +65,7 @@ def _core_tool_specs(
         runtime_transcript_tool_specs(
             runtime_store=runtime_store,
             observability_store=observability_store,
+            start_path=start_path,
         )
     )
     specs.extend(

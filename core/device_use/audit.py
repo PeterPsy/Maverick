@@ -1,0 +1,149 @@
+"""Authorized, paginated Device Use audit over persistent runtime history."""
+
+import json
+
+from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptValidationError
+from core.runtime.transcript_access import resolve_authorized_transcript_thread
+from core.runtime.transcript_history import read_runtime_event_history
+from core.runtime.transcript_payloads import bounded_int
+from core.runtime.transcript_safety import redact_transcript_text
+from core.runtime.private_payload_models import RuntimePrivatePayloadError
+
+
+def read_device_use_audit(store, *, context, thread_id, limit=30, before_cursor=None):
+    thread, session, _relation = resolve_authorized_transcript_thread(store, context=context, thread_id=thread_id)
+    bounded = bounded_int(limit, minimum=1, maximum=50, field="limit")
+    history = read_runtime_event_history(store, session.session_id)
+    calls = _calls(history.events)
+    cursor_found = before_cursor is None
+    end = len(calls)
+    if before_cursor:
+        for index, call in enumerate(calls):
+            if call["audit_id"] == before_cursor:
+                end = index
+                cursor_found = True
+                break
+        if not cursor_found:
+            raise RuntimeTranscriptValidationError("audit_cursor_not_found")
+    start = max(0, end - bounded)
+    page = calls[start:end]
+    return {"thread_id": thread.thread_id, "calls": page,
+            "page": {"has_more_before": start > 0, "before_cursor": page[0]["audit_id"] if start > 0 else None},
+            "history_complete": history.complete, "coverage": "native_lifecycle_and_available_encrypted_evidence",
+            "turns": _turn_metrics(store.list_turns(session.session_id), calls),
+            "content_trust": "untrusted_conversation_data"}
+
+
+def read_device_use_call(store, *, archive, context, thread_id, turn_id, call_id, offset=0, max_chars=12000):
+    _thread, session, relation = resolve_authorized_transcript_thread(store, context=context, thread_id=thread_id)
+    if relation not in {"owner", "admin"}:
+        raise RuntimeTranscriptAccessError("device_use_evidence_owner_required", status_code=403)
+    offset = bounded_int(offset, minimum=0, maximum=2_147_483_647, field="offset")
+    max_chars = bounded_int(max_chars, minimum=1, maximum=12000, field="max_chars")
+    events = read_runtime_event_history(store, session.session_id).events
+    selected = [event for event in events if event.event_type == "runtime.device_use.evidence"
+                and event.turn_id == turn_id and event.payload.get("call_id") == call_id]
+    if not selected or archive is None:
+        raise RuntimeTranscriptAccessError("device_use_evidence_unavailable", status_code=404)
+    try:
+        documents = [archive.read(session=session, ref=event.payload["evidence_ref"]) for event in selected]
+    except (RuntimePrivatePayloadError, ValueError, KeyError):
+        raise RuntimeTranscriptAccessError("device_use_evidence_unavailable", status_code=404) from None
+    arguments = next((document.get("arguments") for document in documents if "arguments" in document), None)
+    terminal = documents[-1]
+    safe = {"arguments": arguments, "result": terminal.get("result"), "journal": terminal.get("journal"),
+            "has_image": bool(terminal.get("image_refs")), "typed_text_withheld": True}
+    text = redact_transcript_text(json.dumps(safe, ensure_ascii=False, default=str, indent=2))
+    end = min(len(text), offset + max_chars)
+    return {"thread_id": thread_id, "turn_id": turn_id, "call_id": call_id,
+            "content": text[offset:end], "content_char_count": len(text),
+            "offset": offset, "has_more": end < len(text), "next_offset": end if end < len(text) else None,
+            "has_image": bool(terminal.get("image_refs")),
+            "content_trust": "untrusted_native_observation_data"}
+
+
+def device_use_call_image(store, *, archive, context, thread_id, turn_id, call_id):
+    _thread, session, relation = resolve_authorized_transcript_thread(store, context=context, thread_id=thread_id)
+    if relation not in {"owner", "admin"}:
+        raise RuntimeTranscriptAccessError("device_use_evidence_owner_required", status_code=403)
+    events = read_runtime_event_history(store, session.session_id).events
+    event = next((event for event in reversed(events) if event.event_type == "runtime.device_use.evidence"
+                  and event.turn_id == turn_id and event.payload.get("call_id") == call_id
+                  and event.payload.get("has_image") is True), None)
+    if event is None or archive is None:
+        raise RuntimeTranscriptAccessError("device_use_image_unavailable", status_code=404)
+    try:
+        return archive.image(session=session, document=archive.read(session=session, ref=event.payload["evidence_ref"]))
+    except (RuntimePrivatePayloadError, ValueError, KeyError):
+        raise RuntimeTranscriptAccessError("device_use_image_unavailable", status_code=404) from None
+
+
+def _calls(events):
+    grouped = {}
+    for event in events:
+        payload = event.payload
+        is_evidence = event.event_type == "runtime.device_use.evidence"
+        is_call = event.event_type in {"runtime.tool_call.started", "runtime.tool_call.completed", "runtime.tool_call.failed"} and payload.get("tool_kind") == "device_use"
+        if not is_evidence and not is_call:
+            continue
+        call_id = payload.get("call_id") or payload.get("tool_call_id")
+        if not isinstance(call_id, str) or not event.turn_id:
+            continue
+        key = (event.turn_id, call_id)
+        tool = payload.get("tool_name") if is_evidence else payload.get("name")
+        item = grouped.setdefault(key, {"audit_id": f"{event.turn_id}:{call_id}", "turn_id": event.turn_id,
+                                        "call_id": call_id, "tool_name": tool, "action": payload.get("action"),
+                                        "started_at": event.created_at.isoformat(), "status": "started",
+                                        "evidence_available": False})
+        if is_evidence:
+            item["tool_name"] = tool
+            item["action"] = payload.get("action")
+            item["evidence_available"] = True
+            item["has_image"] = payload.get("has_image") is True or item.get("has_image", False)
+        status = payload.get("status") if is_evidence else event.event_type.rsplit(".", 1)[-1]
+        if status in {"completed", "failed", "execution_unknown"} and item["status"] != "execution_unknown":
+            item["status"] = status
+            item["completed_at"] = event.created_at.isoformat()
+        for name in ["native_duration_ms", "native_user_wait_ms", "result_valid", "native_success", "outcome_state", "failure_reason_code", "image_bytes", "bridge_end_to_end_ms", "project_stage"]:
+            if name in payload:
+                item[name] = payload[name]
+    return list(grouped.values())
+
+
+def _turn_metrics(turns, calls):
+    result = []
+    for turn in turns:
+        selected = [item for item in calls if item["turn_id"] == turn.turn_id]
+        if not selected:
+            continue
+        finish = getattr(turn, "completed_at", None)
+        elapsed = max(0, (finish - turn.created_at).total_seconds() * 1000) if finish else None
+        native = sum(float(item.get("native_duration_ms") or 0) for item in selected)
+        user_wait = sum(float(item.get("native_user_wait_ms") or 0) for item in selected)
+        bridge = sum(float(item.get("bridge_end_to_end_ms") or 0) for item in selected)
+        by_action = {}
+        for item in selected:
+            key = f"{item.get('tool_name')}.{item.get('action')}"
+            entry = by_action.setdefault(key, {"call_count": 0, "native_duration_ms": 0, "native_user_wait_ms": 0})
+            entry["call_count"] += 1
+            entry["native_duration_ms"] += float(item.get("native_duration_ms") or 0)
+            entry["native_user_wait_ms"] += float(item.get("native_user_wait_ms") or 0)
+        result.append({"turn_id": turn.turn_id, "started_at": turn.created_at.isoformat(),
+                       "completed_at": finish.isoformat() if finish else None,
+                       "elapsed_ms": elapsed, "native_duration_ms": native,
+                       "native_user_wait_ms": user_wait, "native_execution_ms": max(0, native - user_wait),
+                       "outside_native_ms": max(0, elapsed - native) if elapsed is not None else None,
+                       "call_count": len(selected), "failed_count": sum(item["status"] == "failed" for item in selected),
+                       "execution_unknown_count": sum(item["status"] == "execution_unknown" for item in selected),
+                       "invalid_result_count": sum(item.get("result_valid") is False for item in selected),
+                       "image_count": sum(item.get("has_image") is True for item in selected),
+                       "image_bytes": sum(item.get("image_bytes") or 0 for item in selected),
+                       "bridge_end_to_end_ms": bridge,
+                       "bridge_overhead_ms": sum(max(0, float(item["bridge_end_to_end_ms"]) - float(item.get("native_duration_ms") or 0)) for item in selected if item.get("bridge_end_to_end_ms") is not None),
+                       "by_action": by_action,
+                       "project_checkpoints": [{"stage": item["project_stage"], "recorded_at": item.get("completed_at")} for item in selected if item.get("project_stage")],
+                       "measured_user_wait": "native_approvals_and_project_picker",
+                       "unavailable_metrics": ["model_processing_ms", "image_token_breakdown"],
+                       "token_cache_metrics_source": "authoritative_core_usage",
+                       "timing_coverage": "recorded_turn_and_native_clocks; outside_native_is_not_model_time"})
+    return result

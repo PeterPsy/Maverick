@@ -8,7 +8,7 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v44`.
+direct path was then removed. The current executor contract is `macos-v45`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
@@ -50,7 +50,7 @@ and live readiness. Selecting a cached Device Use thread without that summary
 loads its authorized detail before enabling a mode; missing metadata never
 defaults to On. Explicit reconnection publishes the updated catalog binding so
 other Chat views keep the new lease ID. This is a Core/Chat change and retains
-the native `macos-v44` wire contract.
+the native `macos-v45` wire contract.
 
 ## Architecture
 
@@ -66,11 +66,13 @@ MaverickMac WebView / Chat iframe
 ```
 
 Model ownership, provider credentials, conversation state, image injection and
-audit remain in Core. WebKit exposes only `maverickDeviceUse`; arguments,
-results, screenshots and credentials never pass through JavaScript or Storage.
+audit remain in Core. WebKit exposes only `maverickDeviceUse`; live invocation
+arguments, results, screenshots and credentials do not travel through the bridge
+JavaScript. The separate owner-authorized audit UI can explicitly fetch historical
+results and images through Core; credentials and typed input text are withheld.
 The retired `maverickLocalRuntime` handler and broker do not exist.
 
-The v44 executor retains one native execution path, with two existing Core
+The v45 executor retains one native execution path, with two existing Core
 provider adapters:
 
 - source app and agent `chat`;
@@ -148,7 +150,7 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v44`;
+- executor `macos-v45`;
 - tool digest
   `d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1`;
 - mode `on` or `full`;
@@ -193,7 +195,7 @@ human/agent text through the ordinary classified provider-input capture. It keep
 the current request separate, excludes raw tool calls/results, tickets, images
 and receipts, and instructs the model to observe current state before continuing.
 No message POST, native operation or uncertain action is automatically retried.
-The wire contract stays `macos-v44`; the installed native executor is compatible.
+The wire contract stays `macos-v45`; the installed native executor is compatible.
 
 ## Invocation and image transport
 
@@ -214,7 +216,7 @@ are not sent through the WebView or stored by the relay. EventKit retains the 51
 
 ## Governed project media
 
-`mac_project` is the sole v44 filesystem exception. `authorize_project` opens a
+`mac_project` is the sole v45 filesystem exception. `authorize_project` opens a
 native directory picker and persists a security-scoped bookmark behind a random
 opaque `project_id`. Neither Core nor the model receives an absolute path.
 Every later argument is project-relative; absolute paths, traversal, symlinks,
@@ -258,14 +260,15 @@ turn handling clears native per-turn observations and On consent in order.
 captures one stable exact main window in one read-only call. Use
 `list_windows` plus `observe` only for explicit alternate-window selection or
 ambiguity. Persistent WSS, one serialized invocation, one JPEG, no Storage hop,
-no polling, no batching and no speculative execution are deliberate performance
-invariants.
+no polling, one GUI input per invocation and no speculative execution are
+deliberate performance invariants. Explicit `observe_after` attaches one fresh
+same-window capture to that input; it never repeats or sequences GUI inputs.
 
 ## Source map
 
 Core:
 
-- `core/device_use/contract.py` — v44 identity, tool schemas and On/Full prompts;
+- `core/device_use/contract.py` — v45 identity, tool schemas and On/Full prompts;
 - `core/device_use/models.py` — immutable mode binding;
 - `core/device_use/service.py` — activation, lease, serialization, ledger,
   binary images and On-only quota;
@@ -281,7 +284,7 @@ Core:
 Native:
 
 - `DeviceUseRuntime.swift` — Off/On/Full settings and lifecycle;
-- `DeviceUseBridge.swift` — v44 WSS and binary image transport;
+- `DeviceUseBridge.swift` — v45 WSS and binary image transport;
 - `ComputerTools.swift` / `IntegratedComputerTools.swift` — dispatcher;
 - `ProjectAccess.swift` — native picker, opaque bookmarks and path confinement;
 - `ProjectTools.swift` / `ProjectMedia*.swift` — bounded media operations;
@@ -317,9 +320,10 @@ python3 -m unittest discover -s scripts -p 'test_mac_*.py'
 
 The Apple-silicon workflow must also run Swift tests, release build, real
 Peekaboo catalog smoke and signing/designated-requirement checks. Deploy/restart
-Core before installing a v44 Mac client. With MaverickMac closed, dispatch the
-existing workflow using `install_and_open=true`; the installer atomically
-replaces `~/Applications/MaverickMac.app`. Never create a second app bundle.
+Core before installing a v45 Mac client. Dispatch the existing workflow using
+`install_and_open=true`; the installer requests normal Quit if MaverickMac is
+running, then atomically replaces `~/Applications/MaverickMac.app`. Never create
+a second app bundle.
 
 Unit/CI checks prove contract and build integrity, not physical GUI behavior.
 After material executor changes, one complete real task is sufficient because
@@ -386,3 +390,102 @@ Automatic tests and signed installation are separate from the blueprint's
 CapCut acceptance: a real authorized source, the Marco Shorts preset, final
 export inspection and three consecutive measured successful runs are still
 required before claiming CapCut 1.0.
+
+
+## v45 CapCut report corrections (2026-10-06)
+
+The report in Chat `ab031d45-5bb7-49bc-a889-3e797a8a22dd` is the regression
+source. Three exports from one timeline do not establish three independent
+end-to-end passes. Neither lower failure rates nor faster completion are claimed
+from automated tests alone.
+
+The additive tool contract is `macos-v45`, digest
+`0b96e1a3013c1bfece055623d8b104cd029b1b8ebb21719686999531abbf424d`.
+Explicit idle reconnection permits the reviewed v44 digest
+`d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1`
+to upgrade to v45. It retires the old provider context, retains the execution
+binding/history, and preserves owner, workspace, protocol and On/Full scope.
+Other version transitions are rejected. Deploy Core first, then install the
+matching native client. The installer requests normal Quit only for an explicit
+install; if the app does not close it refuses replacement. Xcode and its checkout
+are untouched.
+
+| Finding | Implemented correction | Regression evidence |
+| --- | --- | --- |
+| P0 window identity | Remember the last visible owner-bound primary; recover missing AX metadata only with a prior root or one unique visible primary. Associate a tiny Finder rename overlay with its uniquely containing document. Auxiliary roles/frames and inference basis are returned. | Native window/scene and recovery tests; ambiguity remains a precise failure. |
+| P0 repeated picker/reconnection | Persist chat-to-project opaque ID beside security-scoped bookmarks. `resume_project` returns inventory and checkpoint without a picker. `save_checkpoint` uses CAS revisions and explicit export stages. Disconnected native sessions skip provider prewarm and reject every native family. | Checkpoint, project binding, Core reconnection and offline-prewarm tests. |
+| P0 uncertain input | Consume receipts before dispatch; unknown, partial, suspected no-op and transport loss require same-app observation in On and Full, across turn boundaries. No other engine or input can bypass verification. | Peekaboo recovery tests including Full and end-turn. |
+| P1 late prerequisites | `preflight` batches at most 24 sources, durations, hash duplicates, inventory coverage and local Speech capability. Empty inventory fails early; unavailable analysis is distinct from absent speech. Preset/project GUI checks remain explicitly unverified until observed. | Media/cache and validation tests. |
+| P1 redundant decisions/rounding | Hash-bound inspection reuse, whole-frame CFR subclip preparation and output fps/duration check. Compact AX observations with `details=true`; `observe_after=true` performs exactly one input then captures the same window, without replay. | Native 30fps multi-range fixture and bridge image-admission tests. |
+| P1 limited quality checks | Planned cut samples at ±one frame, optional all-frame decode up to 120s, timestamp discontinuities, repeated imagery, black frames, decoded audio peak/RMS, clipping, silence, gaps and duration mismatch. | Generated media pipeline tests. Technical validity does not certify captions, preset, lip sync or creative quality. |
+| P1 inaccessible/overwritten audit | Encrypted per-call results/images, official paginated CLI/MCP reads and owner/admin HTTP readback. Immutable project evidence paths retain every analysis; failures identify step/field, completed steps and result artifact. | Audit encryption, paging, image integrity and tenant/owner denial tests. |
+| P2 stale requirements/prewarm | Same-turn steering sends plain Device Use input and updates native task context with the acknowledged latest correction. Failed automatic prewarm has a 60s cooldown. Native user wait is separate from execution and transport. | Steering, cooldown and timing tests. |
+
+### Project and quality evidence
+
+`resume_project` requires an existing bookmark for the same chat or an explicitly
+supplied previously authorized opaque ID. A v44 installation did not store a
+chat-to-project association: its first v45 authorization can require one picker;
+thereafter the association survives native restart and lease renewal. A revoked
+or stale bookmark is never replaced by guessed filesystem access.
+
+Checkpoints store a bounded latest requirements revision, project label, relative
+destination/edit plan, last verified step and one stage: `planning`,
+`timeline_ready`, `export_dialog_open`, `export_started`, `file_present`,
+`file_verified`. They are historical hints, never GUI receipts or proof that an
+interrupted export succeeded. A resume observes the real app and inspects the
+existing destination before deciding whether to continue.
+
+Artifacts live below `.maverick/working/evidence/<uuid>/`; each analysis,
+transcript, edit plan, verification and contact sheet has a new path. Named
+`.maverick/scripts/` definitions remain explicitly replaceable. Final media stays
+below the selected project's `output/`, with its relative path/hash in evidence.
+The native executor does not transfer arbitrary local files to Storage; a workflow
+requiring a workspace deliverable must use a separately authorized Storage flow.
+
+Speech reports `speech_detected` or `speech_absent` only after successful local
+recognition. Missing locale/engine/permission reports `analysis_unavailable` and
+must not trigger repeated attempts until capability changes. There is no cloud
+fallback. GUI requirements, such as a mandatory CapCut preset, are checked before
+editing and cannot be satisfied by a generic media verification.
+
+Full-frame scans decode every frame but sample a 32×18 luma grid in each frame;
+repeated signatures and silence need comparison with the intended edit. Audio
+clipping timestamps are bounded with explicit completeness. No automated result
+claims perceptual listening, caption synchronization or lip-sync acceptance.
+
+### Authorized audit and timing
+
+`core.runtime.device-use.audit.read` returns paginated lifecycle summaries by
+thread, keyed by `turn_id` and `call_id`, including native failure versus invalid
+media. `core.runtime.device-use.call.read` returns bounded encrypted evidence
+windows. `/api/runtime/turns/<turn_id>/device-use-audit?call_id=...` serves the same
+owner/admin evidence, and `image=true` returns JPEG with `Cache-Control: no-store`.
+Chat loads evidence/screenshots only on explicit inspection.
+
+Runtime events contain only opaque evidence references and safe facts. Blobs use
+Core's context-bound AES-GCM private store, 2MiB blob and 128MiB session quotas;
+JPEGs are chunked. Typed text is withheld even from audit owners. Capture failure
+never triggers physical input replay. Old calls honestly report unavailable
+private evidence; provider log files are not a readback fallback.
+
+`native_duration_ms` includes `native_user_wait_ms`; subtracting the latter gives
+native execution. The turn remainder is `outside_native_ms`, not model time.
+Bridge elapsed/overhead and image bytes are separate. Token/cache totals remain
+owned by Core Usage and its coverage/accuracy markers; missing provider timing or
+image-token breakdown is unavailable, never estimated from wall time.
+
+Release verification for this correction passed 104 focused Core/API/provider
+tests, the additional native-outcome audit regression, and 41 Chat tests.
+Native commit `8a70575fab71c2345d19119582de3ea068a5ee2f` passed 259 Swift tests,
+the release build, native catalog smoke and stable signing checks in Actions run
+`37489843667`. The broader Core fast suite has unrelated failures reproduced
+on the pre-change revision; it is not reported as passing.
+
+Acceptance on the connected Mac must distinguish build/unit tests from actual
+CapCut trials: five silent clips; spoken footage with pauses/repetitions and
+captions; Space/fullscreen changes; disconnect during export; exact import/frame
+rate; absent required preset. Repeat independent projects and compare total/phase
+times, model/tool calls, recoveries and manual interventions. The report's target
+of fewer than 5% failures and half as many model/tool round trips is a measured
+acceptance objective, not an asserted outcome of this patch.

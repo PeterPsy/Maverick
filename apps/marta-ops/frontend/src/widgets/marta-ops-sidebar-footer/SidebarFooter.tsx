@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import {
   mountedAppIdFromPath,
-  openApp,
+  openWidgetApp,
   postToShell,
   isMaverickParentMessage,
   viewFromAppPage,
@@ -19,7 +19,7 @@ export function MartaOpsSidebarFooter() {
   const action = createAction(viewFromAppPage(params.app_page) || "today");
   const available = !loading && !error;
   const openCreate = useCallback(() => {
-    openApp(appId, {
+    openWidgetApp(appId, {
       app_page: action.view,
       [action.param]: true,
       [`${action.param}_request_id`]: crypto.randomUUID(),

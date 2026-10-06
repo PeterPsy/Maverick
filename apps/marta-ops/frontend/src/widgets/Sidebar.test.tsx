@@ -76,7 +76,7 @@ it("shows bounded live counts, opens a quick filter and closes the mobile sideba
   fireEvent.click(screen.getByRole("button", { name: /Da approvare/ }));
   expect(post).toHaveBeenCalledWith(
     {
-      type: "maverick.app.open-app",
+      type: "maverick.widget.open-app",
       app_id: "marta-ops",
       params: {
         app_page: "deliveries",
@@ -222,7 +222,7 @@ it("uses the current footer action for clicks and trusted mobile header invokes"
   shellMessage(invoke);
   expect(post).toHaveBeenCalledWith(
     {
-      type: "maverick.app.open-app",
+      type: "maverick.widget.open-app",
       app_id: "marta-ops",
       params: {
         app_page: "contacts",
@@ -236,7 +236,7 @@ it("uses the current footer action for clicks and trusted mobile header invokes"
   fireEvent.click(screen.getByRole("button", { name: "Nuova idea" }));
   expect(post).toHaveBeenLastCalledWith(
     {
-      type: "maverick.app.open-app",
+      type: "maverick.widget.open-app",
       app_id: "marta-ops",
       params: {
         app_page: "ideas",

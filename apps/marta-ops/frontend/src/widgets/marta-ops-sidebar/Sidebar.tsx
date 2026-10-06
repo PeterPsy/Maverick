@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Icon } from "../../Icon";
 import {
   mountedAppIdFromPath,
-  openApp,
+  openWidgetApp,
   postToShell,
   viewFromAppPage,
 } from "../../lib/shellNavigation";
@@ -46,7 +46,7 @@ export function MartaOpsSidebar() {
   const activeView = viewFromAppPage(params.app_page) || "today";
 
   function navigate(next: Record<string, unknown>) {
-    openApp(appId, next);
+    openWidgetApp(appId, next);
     if (isMobile) postToShell({ type: "maverick.shell.sidebar.close" });
   }
 

@@ -51,6 +51,10 @@ export function openApp(appId: string, params: Record<string, unknown>) {
   postToShell({ type: "maverick.app.open-app", app_id: appId, params });
 }
 
+export function openWidgetApp(appId: string, params: Record<string, unknown>) {
+  postToShell({ type: "maverick.widget.open-app", app_id: appId, params });
+}
+
 export function isMaverickParentMessage(event: MessageEvent) {
   return (
     isExactMaverickParentMessage(event) &&

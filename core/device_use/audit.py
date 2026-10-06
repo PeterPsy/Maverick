@@ -118,32 +118,46 @@ def _turn_metrics(turns, calls):
             continue
         finish = getattr(turn, "completed_at", None)
         elapsed = max(0, (finish - turn.created_at).total_seconds() * 1000) if finish else None
-        native = sum(float(item.get("native_duration_ms") or 0) for item in selected)
-        user_wait = sum(float(item.get("native_user_wait_ms") or 0) for item in selected)
-        bridge = sum(float(item.get("bridge_end_to_end_ms") or 0) for item in selected)
-        by_action = {}
+        native = _measured_sum(selected, "native_duration_ms")
+        user_wait = _measured_sum(selected, "native_user_wait_ms")
+        bridge = _measured_sum(selected, "bridge_end_to_end_ms")
+        images_known = all("has_image" in item for item in selected)
+        image_bytes = _measured_sum(selected, "image_bytes")
+        groups = {}
         for item in selected:
             key = f"{item.get('tool_name')}.{item.get('action')}"
-            entry = by_action.setdefault(key, {"call_count": 0, "native_duration_ms": 0, "native_user_wait_ms": 0})
-            entry["call_count"] += 1
-            entry["native_duration_ms"] += float(item.get("native_duration_ms") or 0)
-            entry["native_user_wait_ms"] += float(item.get("native_user_wait_ms") or 0)
+            groups.setdefault(key, []).append(item)
+        by_action = {key: {"call_count": len(group),
+                           "native_duration_ms": _measured_sum(group, "native_duration_ms"),
+                           "native_user_wait_ms": _measured_sum(group, "native_user_wait_ms")}
+                     for key, group in groups.items()}
+        coverage = {field: sum(item.get(field) is not None for item in selected)
+                    for field in ["native_duration_ms", "native_user_wait_ms", "bridge_end_to_end_ms", "image_bytes"]}
+        coverage["image_count"] = sum("has_image" in item for item in selected)
+        unavailable = ["model_processing_ms", "image_token_breakdown"]
+        unavailable.extend(field for field, count in coverage.items() if count < len(selected))
         result.append({"turn_id": turn.turn_id, "started_at": turn.created_at.isoformat(),
                        "completed_at": finish.isoformat() if finish else None,
                        "elapsed_ms": elapsed, "native_duration_ms": native,
-                       "native_user_wait_ms": user_wait, "native_execution_ms": max(0, native - user_wait),
-                       "outside_native_ms": max(0, elapsed - native) if elapsed is not None else None,
+                       "native_user_wait_ms": user_wait,
+                       "native_execution_ms": max(0, native - user_wait) if native is not None and user_wait is not None else None,
+                       "outside_native_ms": max(0, elapsed - native) if elapsed is not None and native is not None else None,
                        "call_count": len(selected), "failed_count": sum(item["status"] == "failed" for item in selected),
                        "execution_unknown_count": sum(item["status"] == "execution_unknown" for item in selected),
                        "invalid_result_count": sum(item.get("result_valid") is False for item in selected),
-                       "image_count": sum(item.get("has_image") is True for item in selected),
-                       "image_bytes": sum(item.get("image_bytes") or 0 for item in selected),
+                       "image_count": sum(item.get("has_image") is True for item in selected) if images_known else None,
+                       "image_bytes": int(image_bytes) if image_bytes is not None else None,
                        "bridge_end_to_end_ms": bridge,
-                       "bridge_overhead_ms": sum(max(0, float(item["bridge_end_to_end_ms"]) - float(item.get("native_duration_ms") or 0)) for item in selected if item.get("bridge_end_to_end_ms") is not None),
+                       "bridge_overhead_ms": sum(max(0, float(item["bridge_end_to_end_ms"]) - float(item["native_duration_ms"])) for item in selected) if native is not None and bridge is not None else None,
                        "by_action": by_action,
                        "project_checkpoints": [{"stage": item["project_stage"], "recorded_at": item.get("completed_at")} for item in selected if item.get("project_stage")],
                        "measured_user_wait": "native_approvals_and_project_picker",
-                       "unavailable_metrics": ["model_processing_ms", "image_token_breakdown"],
+                       "unavailable_metrics": unavailable, "metric_measured_call_counts": coverage,
                        "token_cache_metrics_source": "authoritative_core_usage",
                        "timing_coverage": "recorded_turn_and_native_clocks; outside_native_is_not_model_time"})
     return result
+
+
+def _measured_sum(calls, field):
+    values = [item.get(field) for item in calls]
+    return sum(float(value) for value in values) if all(value is not None for value in values) else None

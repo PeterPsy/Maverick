@@ -119,3 +119,23 @@ class DeviceUseAuditTests(unittest.TestCase):
                 self.assertEqual(facts["outcome_state"], outcome)
         facts = native_result_facts({"success": False, "contentItems": [{"text": "MC-PEEKABOO-01: unknown"}]})
         self.assertIsNone(facts["outcome_state"])
+
+    def test_legacy_and_mixed_history_report_missing_measurements_as_unavailable(self):
+        self.store.save_event(self.fixture.event("legacy-call", "runtime.tool_call.completed", {
+            "tool_kind": "device_use", "tool_call_id": "legacy", "name": "mac_project",
+            "action": "verify_media", "native_duration_ms": 500,
+        }))
+        for mixed in [False, True]:
+            with self.subTest(mixed=mixed):
+                if mixed:
+                    self.capture("new", result={"success": True})
+                metrics = read_device_use_audit(self.store, context=self.fixture.context(),
+                                               thread_id="session-1")["turns"][0]
+                self.assertEqual(metrics["native_duration_ms"], 1500 if mixed else 500)
+                self.assertIsNone(metrics["native_user_wait_ms"])
+                self.assertIsNone(metrics["native_execution_ms"])
+                self.assertIsNone(metrics["image_count"])
+                self.assertIsNone(metrics["bridge_overhead_ms"])
+                self.assertIn("native_user_wait_ms", metrics["unavailable_metrics"])
+                self.assertEqual(metrics["metric_measured_call_counts"]["native_user_wait_ms"], int(mixed))
+                self.assertIsNone(metrics["by_action"]["mac_project.verify_media"]["native_user_wait_ms"])

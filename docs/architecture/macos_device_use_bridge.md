@@ -474,13 +474,20 @@ native execution. The turn remainder is `outside_native_ms`, not model time.
 Bridge elapsed/overhead and image bytes are separate. Token/cache totals remain
 owned by Core Usage and its coverage/accuracy markers; missing provider timing or
 image-token breakdown is unavailable, never estimated from wall time.
+Legacy or mixed history with missing clock/image measurements returns `null`
+for incomplete totals and derived execution/overhead, lists the unavailable
+metrics and reports measured call counts. Missing user wait is never zero wait.
 
 Release verification for this correction passed 104 focused Core/API/provider
-tests, the additional native-outcome audit regression, and 41 Chat tests.
+tests, the additional native-outcome and legacy-coverage audit regressions,
+and 41 Chat tests.
 Native commit `8a70575fab71c2345d19119582de3ea068a5ee2f` passed 259 Swift tests,
 the release build, native catalog smoke and stable signing checks in Actions run
 `37489843667`. The broader Core fast suite has unrelated failures reproduced
 on the pre-change revision; it is not reported as passing.
+Explicit install run `37492029914` built the same native commit, passed the
+259 tests and signing checks again, and confirmed `Installed and running:
+0.1.2 (45)` on the managed runner. Physical CapCut acceptance remains separate.
 
 Acceptance on the connected Mac must distinguish build/unit tests from actual
 CapCut trials: five silent clips; spoken footage with pauses/repetitions and

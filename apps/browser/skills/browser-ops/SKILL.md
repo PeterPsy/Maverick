@@ -7,7 +7,8 @@ description: "Use Browser's governed CLI or MCP surfaces for isolated read-only 
 
 Use Browser when a task needs an actual browser session: page navigation,
 accessibility snapshots, screenshots, console messages, network observations,
-tab state, or controlled Maverick development UI inspection.
+rendered text and media metadata, bounded scrolling, video frames, tab state,
+or controlled Maverick development UI inspection.
 
 Do not use Browser for ordinary web search, product research, or facts that can
 be answered through a normal search surface. Browser is a full-access-only P0
@@ -62,10 +63,16 @@ For page inspection, prefer MCP tools in this order:
    `viewport_width`/`viewport_height` when the task requires mobile layout.
 2. `browser_navigate` with the returned `session_id` and target URL.
 3. `browser_snapshot` to get the accessibility tree and stable refs.
-4. `browser_take_screenshot` only when visual evidence is useful.
-5. `browser_console_messages`, `browser_network_requests`, and `browser_tabs`
+4. `browser_read_content` for bounded visible text and link/image/video metadata.
+   Use `browser_scroll` in small batches, then read again for lazy-loaded pages.
+   Deduplicate observed links across batches; report incomplete coverage honestly.
+5. `browser_take_screenshot` when visual evidence is useful, or
+   `browser_video_frame` for a decoded video element identified by `video_index`.
+   Optional `time_seconds` seeks within the loaded video's finite duration.
+   One frame is not a full video review and includes no audio transcription.
+6. `browser_console_messages`, `browser_network_requests`, and `browser_tabs`
    when debugging page behavior.
-6. `browser_session_close` as soon as the task is complete.
+7. `browser_session_close` as soon as the task is complete.
 
 Minimal read-only flow:
 
@@ -92,9 +99,17 @@ They require `mode: "maverick_dev_inspector"` and a policy-approved Maverick
 development target URL. Do not use these tools for arbitrary websites.
 
 For public web targets, Browser P0 is read-only: agents may navigate to explicit
-URLs and inspect snapshots, screenshots, console messages, network requests, and
-tabs, but they must not click, type, press keys, submit forms, or otherwise
-interact with arbitrary external sites through Browser.
+URLs, scroll the document, inspect a rendered video frame, and collect content,
+snapshots, screenshots, console messages, network requests, and tabs. They must
+not click, type, press keys, submit forms, or perform social actions on external
+sites. Scroll and video pause/seek change local viewing state and are declared as
+mutating MCP effects; they do not authorize forms or account actions.
+
+Read results cover the currently rendered document. Link and media URL queries
+are redacted; returned media URLs are not signed download handles. A bottom-of-page
+result does not establish complete feed coverage. If a site requires login,
+report that requirement; the current broker does not support authenticated
+profiles or connecting to the user's Chrome session.
 
 ## P0 Boundaries
 

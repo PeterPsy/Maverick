@@ -14,7 +14,8 @@ extension.
 - Broker: local development sidecar in `broker/` that connects to a Dockerized
   Playwright `run-server` through the Playwright protocol.
 - MCP: declared P0 Browser Lab tools for sessions, navigation, snapshots,
-  screenshots, console logs, network logs, tabs, waits, and Maverick dev
+  screenshots, rendered content, bounded scrolling, video frames, console logs,
+  network logs, tabs, waits, and Maverick dev
   inspector actions. It also exposes `web_search` and `web_open`, two bounded
   read-only operations that create and close an isolated ephemeral session for
   the Chat Research runner.
@@ -109,6 +110,38 @@ interactive tools only for admin-approved Maverick development UI targets.
 For local Maverick app URLs, do not use `127.0.0.1` directly. Use the exact
 allowlisted `hostmachine:<port>` target with `mode=maverick_dev_inspector` from
 an admin context.
+
+## Rendered Reading Extension
+
+Version 0.2 adds three tools within the existing isolated session and egress
+boundary:
+
+- `browser_read_content`: bounded rendered text and visible link/image/video
+  metadata, with timestamps, totals, and truncation indicators. URL query strings
+  and fragments are redacted; media URLs are observations, not download handles.
+- `browser_scroll`: one to five bounded vertical document scrolls to expose
+  additional content. A viewport boundary does not prove a complete infinite feed.
+- `browser_video_frame`: an inline JPEG of one decoded video element, optionally
+  after a bounded seek. It reports the observed video time; it does not transcribe
+  audio or analyze the whole video.
+
+The controller validates parameters and authorizes the existing session before
+broker handoff. Scripts and element selectors are fixed app code, never supplied
+by the caller. Scrolling and video pause/seek change local viewing state, so those
+two MCP tools declare a mutating effect even in Browser's social read-only mode.
+Clicks, forms, messages, and other external-site interactions remain unavailable.
+
+These tools do not add login or persistent profiles. The open-source Instagram
+integration decision and authenticated browsing requirements are documented in
+[`browser_reading_architecture.md`](../../docs/architecture/browser_reading_architecture.md).
+
+Focused checks:
+
+```bash
+python3 -m unittest discover -s apps/browser/tests -p 'test_browser*.py'
+node --test apps/browser/broker/*.test.mjs
+python3 -m unittest tests.unit.runtime_tools.test_browser_execution_closure
+```
 
 ## P0 Playwright Broker
 

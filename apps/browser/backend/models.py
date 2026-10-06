@@ -18,6 +18,9 @@ READ_ONLY_ACTIONS = frozenset(
         "network.requests",
         "tabs",
         "wait_for",
+        "content.read",
+        "scroll",
+        "video.frame",
     }
 )
 DEV_INSPECTOR_ACTIONS = frozenset({"click", "type", "press_key"})
@@ -36,6 +39,9 @@ MCP_TOOL_ACTIONS = {
     "browser_network_requests": "network.requests",
     "browser_tabs": "tabs",
     "browser_wait_for": "wait_for",
+    "browser_read_content": "content.read",
+    "browser_scroll": "scroll",
+    "browser_video_frame": "video.frame",
     "browser_click": "click",
     "browser_type": "type",
     "browser_press_key": "press_key",

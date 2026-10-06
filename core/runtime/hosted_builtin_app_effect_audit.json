@@ -33,11 +33,11 @@
     "browser": {
       "cli": {
         "descriptor_sha256": "2bb021ebd09bcecfbec52b28b43833764b0458bd79254b153b222560f770db92",
-        "execution_sha256": "8e5089e83e40323795957d67d22216718c58279034e79585db94b97e802e8771"
+        "execution_sha256": "07ac6476597580f9c2e736728c91e8fe77a5b675359e6fa53113538e0abb0a66"
       },
       "mcp": {
-        "descriptor_sha256": "9ec0cf9e0e89396a29ccf2d84c8077c34198e4dea0e8e99483e19f43d256a7ad",
-        "execution_sha256": "0f0e3eb70f1914ef3ef1362664778bed748fa136a7baf9ea17cd0bd522db0e11"
+        "descriptor_sha256": "82417f590d1beb40eae34d851513a3672348fe697c26b70eb7b5fd1d1476d2ad",
+        "execution_sha256": "19d2253ee9598e33ed4a5a9fe1a5f84601bd2df85140659e563713ec80f0be12"
       }
     },
     "calendar": {
@@ -221,6 +221,6 @@
       }
     }
   },
-  "audit_revision": "2026-09-14-browser-research-reads-reviewed-v7",
+  "audit_revision": "2026-10-06-browser-rendered-reading-reviewed-v8",
   "schema_version": "2"
 }

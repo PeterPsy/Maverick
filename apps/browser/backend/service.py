@@ -1,4 +1,4 @@
-"""Browser app controller for P0 policy, state, audit, and broker handoff."""
+"""Browser controller for governed reading, dev inspection, and broker handoff."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ from models import (
     READ_ONLY_ACTIONS,
     RESEARCH_ACTIONS,
 )
+from reading_validation import READING_ACTION_FIELDS, validate_reading_action
 from store import (
     append_audit_record,
     load_state,
@@ -78,7 +79,7 @@ FORBIDDEN_ARTIFACT_FIELDS = frozenset(
         "storagePath",
     }
 )
-P0_ACTION_FIELDS = {
+BROKER_ACTION_FIELDS = {
     "session.create": frozenset({"action", "mode", "viewport_width", "viewport_height", "mobile"}),
     "session.close": frozenset({"action", "session_id"}),
     "navigate": frozenset({"action", "session_id", "url", "mode"}),
@@ -91,6 +92,7 @@ P0_ACTION_FIELDS = {
     "click": frozenset({"action", "session_id", "ref", "target_url", "mode"}),
     "type": frozenset({"action", "session_id", "ref", "text", "target_url", "mode"}),
     "press_key": frozenset({"action", "session_id", "key", "target_url", "mode"}),
+    **READING_ACTION_FIELDS,
 }
 ACCEPTANCE_URL_ENV = "MAVERICK_BROWSER_ACCEPTANCE_URL"
 DEFAULT_ACCEPTANCE_URL = "https://example.com/"
@@ -357,6 +359,13 @@ def status_payload(
             "automatic_download_persistence": False,
             "arbitrary_code_evaluation": False,
         },
+        "reading_scope": {
+            "rendered_content": True,
+            "bounded_scroll": True,
+            "video_frames": True,
+            "audio_transcription": False,
+            "authenticated_browser": False,
+        },
     }
 
 
@@ -395,7 +404,7 @@ def operations_manifest() -> dict[str, Any]:
         "modes": {
             "read_only": {
                 "actions": sorted(READ_ONLY_ACTIONS),
-                "description": "Navigate, observe snapshots, screenshots, tabs, console, and network metadata under core egress policy.",
+                "description": "Navigate, read rendered content, scroll, inspect video frames, and collect snapshots and diagnostics under core egress policy. No external-site forms or social actions.",
             },
             "maverick_dev_inspector": {
                 "actions": sorted(READ_ONLY_ACTIONS | DEV_INSPECTOR_ACTIONS),
@@ -839,7 +848,7 @@ def broker_action_result(
     workspace_id: str | None,
     admin_dev_targets_enabled: bool,
 ) -> tuple[int, dict[str, Any]]:
-    validate_p0_broker_action(action, body)
+    validate_broker_action(action, body)
     session = require_authorized_session(data_root, action, body, admin_dev_targets_enabled=admin_dev_targets_enabled)
     mode = session["mode"] if session is not None else str(body.get("mode") or "read_only")
     if mode == "maverick_dev_inspector" and not admin_dev_targets_enabled:
@@ -874,7 +883,7 @@ def broker_action_result(
     return response.status_code, payload
 
 
-def validate_p0_broker_action(action: str, body: dict[str, Any]) -> None:
+def validate_broker_action(action: str, body: dict[str, Any]) -> None:
     forbidden = sorted(field for field in FORBIDDEN_PROFILE_FIELDS if field in body)
     if forbidden:
         raise BrowserValidationError(
@@ -893,11 +902,11 @@ def validate_p0_broker_action(action: str, body: dict[str, Any]) -> None:
             "Browser P0 does not automatically persist artifacts; Storage handoff requires an explicit future action.",
             field=artifact_fields[0],
         )
-    allowed_fields = P0_ACTION_FIELDS.get(action, frozenset({"action"}))
+    allowed_fields = BROKER_ACTION_FIELDS.get(action, frozenset({"action"}))
     extra_fields = sorted(field for field in body if field not in allowed_fields)
     if extra_fields:
         raise BrowserValidationError(
-            f"{extra_fields[0]} is not allowed for Browser P0 action {action}.",
+            f"{extra_fields[0]} is not allowed for Browser action {action}.",
             field=extra_fields[0],
         )
     if action == "session.create":
@@ -921,6 +930,7 @@ def validate_p0_broker_action(action: str, body: dict[str, Any]) -> None:
         require_string(body, "text")
     if action == "press_key":
         require_string(body, "key")
+    validate_reading_action(action, body)
 
 
 def broker_payload(

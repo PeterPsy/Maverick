@@ -4,6 +4,13 @@ Date: 2026-05-23
 
 Status: P0 scope locked for implementation.
 
+Implementation update, 2026-10-06: Browser 0.2 extends isolated observations with
+rendered content, bounded document scrolling, and inline video frames. The
+[reading architecture](../architecture/browser_reading_architecture.md) records
+the open-source-only Instagram integration decision and distinguishes these
+implemented tools from the still-unimplemented authenticated browser providers.
+The P0 login/profile and external interaction restrictions below still apply.
+
 ## Purpose
 
 This report defines how Maverick should integrate browser capabilities for

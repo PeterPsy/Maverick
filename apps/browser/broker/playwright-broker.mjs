@@ -9,6 +9,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SessionLifecycle } from "./session-lifecycle.mjs";
+import { readContent, scrollPage, videoFrame } from "./reading-actions.mjs";
 
 const require = createRequire(import.meta.url);
 const appPackage = require("../package.json");
@@ -231,6 +232,15 @@ async function handleActionDirect(action, payload) {
       return { statusCode: 200, payload: await navigate(payload) };
     case "snapshot":
       return { statusCode: 200, payload: await snapshot(payload) };
+    case "content.read":
+    case "scroll":
+    case "video.frame": {
+      const session = requireSession(payload);
+      assertSessionAccessAllowed(session, payload);
+      const operation = { "content.read": readContent, scroll: scrollPage, "video.frame": videoFrame }[action];
+      const result = await operation(session.activePage, payload, redactUrl);
+      return { statusCode: 200, payload: { session_id: session.id, url: redactUrl(session.activePage.url()), ...result } };
+    }
     case "screenshot":
       return { statusCode: 200, payload: await screenshot(payload) };
     case "console.messages":

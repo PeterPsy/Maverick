@@ -145,6 +145,50 @@
         "additionalProperties": false
       }
     },
+    "browser_read_content": {
+      "effect_class": "read",
+      "description": "Read bounded rendered text, links, images, video metadata, and coverage from the current page. URLs are redacted; this does not download media or read unvisited content.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "max_chars": {"type": "integer", "minimum": 1, "maximum": 100000, "default": 40000},
+          "max_items": {"type": "integer", "minimum": 1, "maximum": 200, "default": 100}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_scroll": {
+      "effect_class": "mutating",
+      "description": "Scroll the current document in bounded steps to load more rendered content. Does not click or submit forms; reaching the viewport bottom does not prove a complete infinite feed.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "direction": {"type": "string", "enum": ["up", "down"], "default": "down"},
+          "pixels": {"type": "integer", "minimum": 1, "maximum": 2000, "default": 900},
+          "steps": {"type": "integer", "minimum": 1, "maximum": 5, "default": 1},
+          "settle_ms": {"type": "integer", "minimum": 0, "maximum": 1500, "default": 500}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_video_frame": {
+      "effect_class": "mutating",
+      "description": "Pause a rendered video, optionally seek to a bounded time, and return one inline JPEG frame with its observed timestamp. Does not transcribe audio or persist the image.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "video_index": {"type": "integer", "minimum": 0, "maximum": 199, "default": 0},
+          "time_seconds": {"type": "number", "minimum": 0, "maximum": 86400}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
     "browser_click": {
       "effect_class": "mutating",
       "description": "Click by snapshot ref only for maverick_dev_inspector targets.",

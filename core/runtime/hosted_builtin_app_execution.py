@@ -63,6 +63,19 @@ def hosted_builtin_app_execution_roots(
     if app_id == "vault":
         # Vault deliberately imports its single app-root implementation module.
         roots.append(Path("agent_operations.py"))
+    if app_id == "browser":
+        # The Python controller hands observations to this Node broker. Include
+        # its reachable source and dependency pins in Browser's read authority.
+        roots.extend(
+            Path(relative)
+            for relative in (
+                "broker/playwright-broker.mjs",
+                "broker/session-lifecycle.mjs",
+                "broker/reading-actions.mjs",
+                "package.json",
+                "package-lock.json",
+            )
+        )
     if app_id in {"crm", "mail"}:
         # Imported backend read projections load this app-root policy as data.
         # Its fields govern output, so Python-only closure hashing is insufficient.

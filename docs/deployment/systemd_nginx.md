@@ -190,6 +190,66 @@ Prompt answers:
 If a wrong value was entered at a prompt, press `Ctrl+C` and rerun the installer.
 Do not continue with a wrong `Service user`, `Service group`, or `Install root`.
 
+## Recovering the Azure migration
+
+The Azure host runs `migrated-nginx.service` with
+`RootDirectory=/srv/migration/loopino-root` and
+`/etc/nginx/azure-runtime.conf` inside that root. This configuration includes
+`azure-loopino-unified.conf` instead of `sites-enabled/*`. Migrated Maverick
+virtual hosts and systemd units therefore need explicit activation on the new
+host. An omitted HTTPS virtual host can cause Nginx to present another site's
+certificate for `maverick.loopino.ai`.
+
+Render the recovery plan without privileged writes:
+
+```bash
+bash scripts/deploy/restore_azure_maverick.sh --render-only
+```
+
+Review `.maverick/install/azure-recovery/`, then run from an administrative
+terminal on the Azure host:
+
+```bash
+sudo bash /srv/migration/loopino-root/home/ubuntu/projects/maverick-v3/scripts/deploy/restore_azure_maverick.sh --apply
+```
+
+This first-install recovery refuses to overwrite existing host Maverick
+services. It preserves the migrated core/rescue units and their drop-ins,
+uses the migrated Ubuntu account's numeric UID/GID, and runs them inside the
+same root as Nginx. It adds the installation directory's operating group as a
+numeric supplementary group so migrated JSON collections and lock files remain
+accessible when their group differs from the account's primary group. If this
+GID has no host group entry, the recovery registers `maverick-migrated-data`
+with that GID before starting services; systemd requires the supplementary
+group to resolve in the host's group database. This group registration remains
+available after a configuration rollback.
+Executable, working-directory, SQLite and provider paths
+stay relative to that root. `EnvironmentFile=` uses the corresponding outer
+host path because systemd reads it before applying `RootDirectory=`. The
+process home remains `/home/ubuntu` even if the host account has another name.
+
+The script backs up the changed configuration under
+`/var/backups/maverick-azure.*`, activates only the main and browser-origin
+virtual hosts, routes HTTP-01 challenges before renewing the migrated main
+certificate and reserved browser-origin probe certificates, then enables the
+core/rescue services and switches to HTTPS. It adds main-certificate renewal
+to the existing migration renewal service. The existing renewal timer must be
+enabled. It does not bootstrap users, migrate stores, rebuild frontends, or
+activate provider rescue automation and optional Browser/CRM/public-app services.
+
+Nginx syntax, core health, the anonymous session response, PWA configuration,
+and both reserved browser-origin TLS names must pass local validation. Errors
+or interruption before local validation restore the prior Nginx/systemd
+configuration; renewed certificates remain available. Public DNS/TLS checks
+run afterward. If public checks fail, the working local recovery remains
+active and the command exits nonzero. Correct the public A/AAAA records for
+the main hostname and `*.sidecars.maverick.loopino.ai`, then repeat the
+read-only verification:
+
+```bash
+bash scripts/deploy/restore_azure_maverick.sh --verify
+```
+
 ## Minimum Hardening
 
 - bind the core service to `127.0.0.1`

@@ -1,11 +1,13 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLearningController, type LearningData } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { settingsPageIdFromParams } from './pages';
 
 const api = vi.hoisted(() => ({ request: vi.fn(), dependencies: vi.fn(), select: vi.fn() }));
+const events = vi.hoisted(() => ({ subscribe: vi.fn(), stop: vi.fn() }));
 vi.mock('./adminApi', () => ({ requestJson: api.request, getAppDependencies: api.dependencies, saveAppDependencySelection: api.select }));
+vi.mock('@maverick/pwa-cache', () => ({ connectAppEventSocket: events.subscribe }));
 const fixture = (): LearningData => ({
   settings: { enabled: true, paused: false, memory_enabled: true, improvements_enabled: true, memory_mode: 'review', idle_seconds: 120,
     model_source: 'workspace', model_id: '', reasoning_effort: 'low', max_context_chars: 30000, max_output_tokens: 2048, timeout_seconds: 120,
@@ -18,8 +20,10 @@ describe('Conversation learning Settings', () => {
     vi.resetAllMocks();
     api.dependencies.mockResolvedValue({ workspace_id: 'default', consumer_app_id: 'chat', dependencies: [] });
     api.request.mockResolvedValue(fixture());
+    events.subscribe.mockReturnValue(events.stop);
     document.body.innerHTML = '';
   });
+  afterEach(() => vi.unstubAllGlobals());
   function mount(workspaceId = () => 'default') {
     let controller: ReturnType<typeof createLearningController>;
     const render = () => { document.body.innerHTML = learningPageHtml(controller.viewState()); controller.bind(); };
@@ -77,5 +81,101 @@ describe('Conversation learning Settings', () => {
     await vi.waitFor(() => expect(controller.viewState().saving).toBe(false));
     const mutation = api.request.mock.calls.find(([, options]) => JSON.parse(options.body).action === 'learning.review');
     expect(JSON.parse(mutation![1].body)).toMatchObject({ item_id: 'candidate', command: 'edit', title: 'Edited' });
+  });
+
+  it('uses the shell event transport and refreshes results while preserving focused drafts', async () => {
+    const { controller } = mount();
+    await controller.load(); controller.setVisible(true);
+    const field = document.querySelector<HTMLTextAreaElement>('[name=instructions]')!;
+    field.value = 'Keep this draft'; field.focus(); field.setSelectionRange(3, 5);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    const changed = fixture(); changed.daily_tokens_reserved_or_used = 4200;
+    api.request.mockResolvedValue(changed);
+    events.subscribe.mock.calls[0][0]({ workspace_id: 'default', owner_app_id: 'chat', resource: 'learning' });
+    await vi.waitFor(() => expect(controller.viewState().data?.daily_tokens_reserved_or_used).toBe(4200));
+    expect(document.querySelector<HTMLTextAreaElement>('[name=instructions]')!.value).toBe('Keep this draft');
+    expect(document.activeElement?.getAttribute('name')).toBe('instructions');
+    expect((document.activeElement as HTMLTextAreaElement).selectionStart).toBe(3);
+    controller.setVisible(false); expect(events.stop).toHaveBeenCalled();
+  });
+
+  it('refresh preserves drafts and discard explicitly clears them', async () => {
+    const { controller } = mount(); await controller.load();
+    const field = document.querySelector<HTMLInputElement>('[name=idle_seconds]')!;
+    field.value = '300'; field.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector<HTMLButtonElement>('#learning-refresh')!.click();
+    await vi.waitFor(() => expect(controller.viewState().loading).toBe(false));
+    expect(document.querySelector<HTMLInputElement>('[name=idle_seconds]')!.value).toBe('300');
+    document.querySelector<HTMLButtonElement>('#learning-discard')!.click();
+    expect(document.querySelector<HTMLInputElement>('[name=idle_seconds]')!.value).toBe('120');
+    expect(controller.viewState().dirty).toBe(false);
+  });
+
+  it('pause is independent of unsaved settings and selected chats survive rerenders', async () => {
+    const data = fixture(); data.conversations.push({ session_id: 'chat-1', project_id: '', last_activity: 1, label: 'A useful chat' });
+    api.request.mockResolvedValue(data);
+    const { controller } = mount(); await controller.load();
+    const field = document.querySelector<HTMLInputElement>('[name=idle_seconds]')!;
+    field.value = '300'; field.dispatchEvent(new Event('input', { bubbles: true }));
+    const select = document.querySelector<HTMLSelectElement>('#learning-session')!;
+    select.value = 'chat-1'; select.dispatchEvent(new Event('change'));
+    document.querySelector<HTMLButtonElement>('#learning-pause')!.click();
+    await vi.waitFor(() => expect(controller.viewState().saving).toBe(false));
+    expect(document.querySelector<HTMLInputElement>('[name=idle_seconds]')!.value).toBe('300');
+    expect(document.querySelector<HTMLSelectElement>('#learning-session')!.value).toBe('chat-1');
+    const mutation = api.request.mock.calls.find(([, options]) => JSON.parse(options.body).action === 'learning.configure');
+    expect(JSON.parse(mutation![1].body).settings).toEqual({ paused: true });
+  });
+
+  it('rejects a pre-save read that arrives after the updated settings', async () => {
+    const { controller } = mount(); await controller.load();
+    let finishRead!: (value: LearningData) => void;
+    api.request.mockReturnValueOnce(new Promise<LearningData>((done) => { finishRead = done; }));
+    const staleRead = controller.load(true);
+    const data = fixture(); data.settings.idle_seconds = 300;
+    api.request.mockResolvedValue(data);
+    const field = document.querySelector<HTMLInputElement>('[name=idle_seconds]')!;
+    field.value = '300'; field.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector<HTMLFormElement>('#learning-settings')!.dispatchEvent(new Event('submit', { cancelable: true }));
+    await vi.waitFor(() => expect(controller.viewState().saving).toBe(false));
+    finishRead(fixture()); await staleRead;
+    expect(controller.viewState().data?.settings.idle_seconds).toBe(300);
+  });
+
+  it('opens evidence on the platform origin from an isolated Settings frame', async () => {
+    const data = fixture();
+    data.items.push({ id: 'candidate', kind: 'memory', title: 'Preference', body: 'Fact', status: 'pending', occurrences: 1,
+      node_id: '', provider_id: '', details: {}, evidence: [{ session_id: 'chat-1', turn_id: 'turn-1', role: 'user', quote: 'Quoted evidence', metrics: {} }] });
+    api.request.mockResolvedValue(data);
+    const parent = { postMessage: vi.fn() };
+    const original = window;
+    vi.stubGlobal('window', new Proxy(original, { get: (target, key) => key === 'parent' ? parent : key === '__MAVERICK_PLATFORM_ORIGIN__' ? 'https://maverick.test' : Reflect.get(target, key) }));
+    const { controller } = mount(); await controller.load();
+    document.querySelector<HTMLAnchorElement>('a[href^="/app/chat"]')!.click();
+    expect(parent.postMessage).toHaveBeenCalledWith({ type: 'maverick.app.open-app', app_id: 'chat', params: { app_page: 'threads/chat-1' } }, 'https://maverick.test');
+  });
+
+  it('hides irrelevant model controls and supports keyboard tabs', async () => {
+    const { controller } = mount(); await controller.load();
+    const select = document.querySelector<HTMLSelectElement>('[name=model_source]')!;
+    select.value = 'fast_model'; select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(document.querySelector<HTMLElement>('[data-learning-native]')!.hidden).toBe(true);
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=memory]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(controller.viewState().tab).toBe('improvements');
+    expect(document.activeElement?.id).toBe('learning-tab-improvements');
+  });
+
+  it('does not display a late analysis detail after leaving its tab', async () => {
+    const data = fixture();
+    const job = { id: 'analysis-1', session_id: 'chat-1', status: 'completed', attempts: 1, created_at: 1, usage: 50, reserved: 100, error: '', model: '' };
+    data.jobs.push(job); api.request.mockResolvedValue(data);
+    const { controller } = mount(); await controller.load();
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=analyses]')!.click();
+    let finish!: (value: { job: typeof job }) => void;
+    api.request.mockReturnValueOnce(new Promise((done) => { finish = done; }));
+    document.querySelector<HTMLButtonElement>('[data-learning-command=inspect]')!.click();
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=memory]')!.click();
+    finish({ job }); await Promise.resolve();
+    expect(controller.viewState().detail).toBeNull();
   });
 });

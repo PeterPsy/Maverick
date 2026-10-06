@@ -1,4 +1,5 @@
 import { getAppDependencies, requestJson, saveAppDependencySelection, type AppDependenciesPayload } from './adminApi';
+import { connectAppEventSocket } from '@maverick/pwa-cache';
 
 export type LearningSettings = {
   enabled: boolean; paused: boolean; memory_enabled: boolean; improvements_enabled: boolean;
@@ -20,21 +21,25 @@ export type LearningItem = {
 export type LearningData = {
   settings: LearningSettings; jobs: LearningJob[]; items: LearningItem[]; concurrency: number;
   daily_tokens_reserved_or_used: number;
-  conversations: { session_id: string; project_id: string; last_activity: number }[];
+  counts?: { pending_memory: number; pending_improvements: number; queued: number; running: number; failed: number; budget_waiting?: number };
+  conversations: { session_id: string; project_id: string; last_activity: number; label?: string }[];
   audit: { id: number; action: string; target: string; actor: string; created_at: number }[];
 };
 export type LearningView = {
   data: LearningData | null; error: string; loading: boolean; saving: boolean;
   tab: 'memory' | 'improvements' | 'analyses' | 'audit'; detail: LearningJob | null;
   dependency: AppDependenciesPayload | null; dirty: boolean;
+  notice?: string; openSections?: string[]; selectedSession?: string; filter?: 'pending' | 'all';
+  draftSettings?: Partial<LearningSettings>;
 };
 
 export function createLearningController(context: { render: () => void; workspaceId: () => string }) {
   let state: LearningView = { data: null, error: '', loading: false, saving: false, tab: 'memory', detail: null, dependency: null, dirty: false };
   let scope = '';
   let generation = 0;
-  let socket: WebSocket | null = null;
-  let reconnect: ReturnType<typeof setTimeout> | null = null;
+  let loadEpoch = 0;
+  let detailEpoch = 0;
+  let stopSocket: (() => void) | null = null;
   let visible = false;
   let invalidated = false;
   const drafts = new Map<string, string | boolean>();
@@ -42,11 +47,24 @@ export function createLearningController(context: { render: () => void; workspac
   const call = <T>(body: object) => requestJson<T>('/api/apps/chat/backend', { method: 'POST', body: JSON.stringify(body) });
 
   function closeSocket() {
-    const previous = socket;
-    socket = null;
-    if (previous) { previous.onclose = null; previous.close(); }
-    if (reconnect) clearTimeout(reconnect);
-    reconnect = null;
+    stopSocket?.();
+    stopSocket = null;
+  }
+
+  function render() {
+    const active = document.activeElement;
+    const selector = active?.id ? `#${active.id}` : active?.getAttribute('name') ? `[name="${active.getAttribute('name')}"]`
+      : ['data-learning-title', 'data-learning-body', 'data-learning-target'].map((attr) => active?.hasAttribute(attr) ? `[${attr}="${active.getAttribute(attr)}"]` : '').find(Boolean);
+    const selection = active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement ? [active.selectionStart, active.selectionEnd] : null;
+    const sections = new Set(state.openSections);
+    document.querySelectorAll<HTMLDetailsElement>('[data-learning-disclosure]').forEach((element) => {
+      if (element.open) sections.add(element.dataset.learningDisclosure!); else sections.delete(element.dataset.learningDisclosure!);
+    });
+    state.openSections = [...sections];
+    context.render();
+    const replacement = selector ? document.querySelector<HTMLElement>(selector) : null;
+    replacement?.focus({ preventScroll: true });
+    if (selection?.[0] != null && (replacement instanceof HTMLTextAreaElement || replacement instanceof HTMLInputElement && replacement.type === 'text')) replacement.setSelectionRange(selection[0], selection[1]);
   }
 
   function reset() {
@@ -60,27 +78,12 @@ export function createLearningController(context: { render: () => void; workspac
   }
 
   function connect() {
-    if (!visible || socket || typeof WebSocket === 'undefined') return;
-    const url = new URL('/api/apps/events/ws', window.location.href);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    const current = new WebSocket(url);
-    socket = current;
+    if (!visible || stopSocket) return;
     const revision = generation;
-    current.onmessage = (event) => {
-      if (revision !== generation || current !== socket) return;
-      try {
-        const change = JSON.parse(String(event.data));
-        if (change.workspace_id === scope && change.owner_app_id === 'chat' && change.resource === 'learning') {
-          invalidated = true;
-          if (!state.dirty && !state.saving) void load(true);
-        }
-      } catch { /* Ignore unrelated protocol frames. */ }
-    };
-    current.onclose = () => {
-      if (current !== socket) return;
-      socket = null;
-      if (visible) reconnect = setTimeout(() => { connect(); if (!state.dirty) void load(true); }, 3000);
-    };
+    const refresh = () => { if (revision === generation) { invalidated = true; if (!state.saving) void load(true); } };
+    stopSocket = connectAppEventSocket<{ workspace_id?: string; owner_app_id?: string; resource?: string }>((change) => {
+      if (change.workspace_id === scope && change.owner_app_id === 'chat' && change.resource === 'learning') refresh();
+    }, refresh);
   }
 
   async function load(force = false) {
@@ -89,51 +92,57 @@ export function createLearningController(context: { render: () => void; workspac
     if (scope !== workspace) { reset(); scope = workspace; }
     if (state.loading || (!force && state.data)) return;
     const revision = generation;
+    const epoch = ++loadEpoch;
+    invalidated = false;
     state.loading = true;
-    if (!state.data) context.render();
+    if (!state.data) render();
     try {
       const [data, dependency] = await Promise.all([
         call<LearningData>({ action: 'learning.read' }), getAppDependencies('chat')
       ]);
-      if (revision !== generation || workspace !== context.workspaceId()) return;
+      if (revision !== generation || epoch !== loadEpoch || workspace !== context.workspaceId()) return;
       state.data = data;
       state.dependency = dependency;
       state.error = '';
-      invalidated = false;
     } catch (error) {
-      if (revision === generation) state.error = message(error);
+      if (revision === generation && epoch === loadEpoch) state.error = message(error);
     } finally {
-      if (revision === generation) { state.loading = false; context.render(); }
+      if (revision === generation && epoch === loadEpoch) { state.loading = false; render(); if (invalidated && !state.saving && visible) void load(true); }
     }
   }
 
   async function mutate(body: object, before?: () => Promise<unknown>) {
     if (state.saving) return;
     const revision = generation;
+    loadEpoch++;
+    state.loading = false;
     state.saving = true;
     state.error = '';
-    context.render();
+    state.notice = '';
+    render();
     try {
       if (before) await before();
       if (revision !== generation) return;
       await call(body);
       if (revision !== generation) return;
-      const action = body as { action?: string; item_id?: string };
-      if (action.action === 'learning.configure') drafts.clear();
+      const action = body as { action?: string; item_id?: string; settings?: Record<string, unknown> };
+      if (action.action === 'learning.configure' && action.settings && 'enabled' in action.settings) drafts.clear();
+      state.notice = action.action === 'learning.configure' ? 'Settings saved' : 'Action completed';
       if (action.item_id) for (const key of itemDrafts.keys()) if (key.endsWith(':' + action.item_id)) itemDrafts.delete(key);
       state.dirty = drafts.size > 0 || itemDrafts.size > 0;
       await load(true);
     } catch (error) {
       if (revision === generation) state.error = message(error);
     } finally {
-      if (revision === generation) { state.saving = false; context.render(); }
+      if (revision === generation) { state.saving = false; render(); if (invalidated && visible) void load(true); }
     }
   }
 
   async function save(form: HTMLFormElement) {
     const values = new FormData(form);
     const settings: Record<string, unknown> = {};
-    for (const key of ['enabled', 'paused', 'memory_enabled', 'improvements_enabled']) settings[key] = values.get(key) === 'on';
+    settings.paused = state.data!.settings.paused;
+    for (const key of ['enabled', 'memory_enabled', 'improvements_enabled']) settings[key] = values.get(key) === 'on';
     for (const key of ['idle_seconds', 'max_context_chars', 'max_output_tokens', 'timeout_seconds', 'daily_token_budget', 'retention_days']) settings[key] = Number(values.get(key));
     for (const key of ['memory_mode', 'model_source', 'model_id', 'reasoning_effort', 'instructions']) settings[key] = String(values.get(key) || '');
     for (const key of ['excluded_thread_ids', 'excluded_project_ids']) settings[key] = String(values.get(key) || '').split(/[\s,]+/).filter(Boolean);
@@ -159,12 +168,27 @@ export function createLearningController(context: { render: () => void; workspac
             if (element.name) drafts.set(element.name, element instanceof HTMLInputElement && element.type === 'checkbox' ? element.checked : element.value);
           }
         }
+        updateFormHints();
       };
       form.addEventListener('input', remember);
       form.addEventListener('change', remember);
+      updateFormHints();
     }
     form?.addEventListener('submit', (event) => { event.preventDefault(); void save(form); });
-    document.querySelector('#learning-refresh')?.addEventListener('click', () => { state.dirty = false; drafts.clear(); itemDrafts.clear(); void load(true); });
+    document.querySelector('#learning-refresh')?.addEventListener('click', () => { void load(true); });
+    document.querySelector('#learning-discard')?.addEventListener('click', () => { state.dirty = false; drafts.clear(); itemDrafts.clear(); state.notice = ''; render(); });
+    document.querySelector('#learning-pause')?.addEventListener('click', () => { void mutate({ action: 'learning.configure', settings: { paused: !state.data!.settings.paused } }); });
+    document.querySelector<HTMLSelectElement>('#learning-session')?.addEventListener('change', (event) => { state.selectedSession = (event.target as HTMLSelectElement).value; render(); });
+    document.querySelector<HTMLSelectElement>('#learning-filter')?.addEventListener('change', (event) => { state.filter = (event.target as HTMLSelectElement).value as 'pending' | 'all'; render(); });
+    document.querySelectorAll<HTMLDetailsElement>('[data-learning-disclosure]').forEach((element) => {
+      element.open = Boolean(state.openSections?.includes(element.dataset.learningDisclosure!));
+      element.addEventListener('toggle', () => {
+        if (!element.isConnected) return;
+        const sections = new Set(state.openSections);
+        if (element.open) sections.add(element.dataset.learningDisclosure!); else sections.delete(element.dataset.learningDisclosure!);
+        state.openSections = [...sections];
+      });
+    });
     document.querySelector('#learning-analyze')?.addEventListener('click', () => {
       const session = document.querySelector<HTMLSelectElement>('#learning-session')?.value;
       if (session) void mutate({ action: 'learning.analyze_now', session_id: session });
@@ -173,27 +197,33 @@ export function createLearningController(context: { render: () => void; workspac
       document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[${attribute}]`).forEach((element) => {
         const key = attribute + ':' + element.getAttribute(attribute);
         if (itemDrafts.has(key)) element.value = itemDrafts.get(key)!;
-        element.addEventListener('input', () => { itemDrafts.set(key, element.value); state.dirty = true; });
+        element.addEventListener('input', () => { itemDrafts.set(key, element.value); state.dirty = true; updateFormHints(); });
       });
     }
     document.querySelectorAll<HTMLAnchorElement>('.learning-results a[href^="/app/"]').forEach((link) => link.addEventListener('click', (event) => {
       if (window.parent === window || event.ctrlKey || event.metaKey) return;
       event.preventDefault();
       const parts = new URL(link.href).pathname.split('/').filter(Boolean);
-      window.parent.postMessage({ type: 'maverick.app.open-app', app_id: decodeURIComponent(parts[1]), params: { app_page: parts.slice(2).map(decodeURIComponent).join('/') } }, window.location.origin);
+      const origin = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }).__MAVERICK_PLATFORM_ORIGIN__ || '*';
+      window.parent.postMessage({ type: 'maverick.app.open-app', app_id: decodeURIComponent(parts[1]), params: { app_page: parts.slice(2).map(decodeURIComponent).join('/') } }, origin);
     }));
     document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button) => button.addEventListener('click', () => {
-      state.tab = button.dataset.learningTab as LearningView['tab']; state.detail = null; context.render();
+      detailEpoch++; state.tab = button.dataset.learningTab as LearningView['tab']; state.detail = null; render();
+    }));
+    document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button, index, buttons) => button.addEventListener('keydown', (event) => {
+      const next = { ArrowRight: (index + 1) % buttons.length, ArrowLeft: (index + buttons.length - 1) % buttons.length, Home: 0, End: buttons.length - 1 }[event.key];
+      if (next !== undefined) { event.preventDefault(); buttons[next].click(); document.querySelector<HTMLElement>(`#${buttons[next].id}`)?.focus(); }
     }));
     document.querySelectorAll<HTMLElement>('[data-learning-job]').forEach((button) => button.addEventListener('click', async () => {
       const jobId = button.dataset.learningJob;
       const command = button.dataset.learningCommand;
       if (command !== 'inspect') { await mutate({ action: 'learning.job', job_id: jobId, command }); return; }
       const revision = generation;
+      const epoch = ++detailEpoch;
       try {
         const result = await call<{ job: LearningJob }>({ action: 'learning.job', job_id: jobId, command });
-        if (revision === generation) { state.detail = result.job; context.render(); }
-      } catch (error) { if (revision === generation) { state.error = message(error); context.render(); } }
+        if (revision === generation && epoch === detailEpoch) { state.detail = result.job; render(); }
+      } catch (error) { if (revision === generation && epoch === detailEpoch) { state.error = message(error); render(); } }
     }));
     document.querySelectorAll<HTMLElement>('[data-learning-item]').forEach((button) => button.addEventListener('click', () => {
       const itemId = button.dataset.learningItem;
@@ -209,9 +239,31 @@ export function createLearningController(context: { render: () => void; workspac
     visible = value;
     if (!value) { closeSocket(); return; }
     if (scope) connect();
-    if (invalidated && !state.dirty) void load(true);
+    if (invalidated && !state.saving) void load(true);
   }
-  return { load, reset, bind, setVisible, viewState: () => state };
+  function updateFormHints() {
+    const status = document.querySelector('#learning-draft-status');
+    if (status) status.textContent = state.dirty ? 'Unsaved changes' : state.notice || 'Settings are up to date';
+    const discard = document.querySelector<HTMLButtonElement>('#learning-discard');
+    if (discard) discard.disabled = !state.dirty || state.saving;
+    const memory = document.querySelector<HTMLInputElement>('[name=memory_enabled]');
+    const options = document.querySelector<HTMLElement>('#learning-memory-options');
+    if (options && memory) options.hidden = !memory.checked;
+    const source = document.querySelector<HTMLSelectElement>('[name=model_source]')?.value;
+    document.querySelectorAll<HTMLElement>('[data-learning-native]').forEach((element) => { element.hidden = source !== 'workspace'; });
+    const hint = document.querySelector('#learning-mode-hint');
+    if (hint) hint.textContent = document.querySelector<HTMLSelectElement>('[name=memory_mode]')?.value === 'automatic' ? 'Only explicit user facts with verified quotes and no Memory matches are saved automatically.' : 'You approve each fact before it enters Memory.';
+  }
+  function viewState(): LearningView {
+    const draftSettings: Record<string, unknown> = {};
+    for (const [key, value] of drafts) {
+      if (key === 'memory_provider' || !state.data) continue;
+      const original = state.data.settings[key as keyof LearningSettings];
+      draftSettings[key] = typeof original === 'number' ? Number(value) : Array.isArray(original) ? String(value).split(/[\s,]+/).filter(Boolean) : value;
+    }
+    return { ...state, draftSettings };
+  }
+  return { load, reset, bind, setVisible, viewState };
 }
 
 function message(error: unknown) { return error instanceof Error ? error.message : 'Learning operation failed'; }

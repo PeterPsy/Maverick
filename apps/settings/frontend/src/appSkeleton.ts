@@ -35,6 +35,10 @@ function activePageSkeletonHtml(page: SettingsPage): string {
   if (page.id === 'cache') {
     return cacheSkeletonHtml();
   }
+  if (page.id === 'learning') {
+    return `<section class="settings-card settings-loading-skeleton__settings" aria-hidden="true">${headingSkeletonHtml(true)}<div class="settings-loading-skeleton__field-grid">${repeatHtml(3, () => lineHtml('copy'))}</div></section>
+      <section class="settings-card settings-loading-skeleton__settings" aria-hidden="true">${headingSkeletonHtml(true)}${repeatHtml(2, () => blockHtml('toggle'))}${repeatHtml(3, () => lineHtml('copy-wide'))}${blockHtml('button')}</section>`;
+  }
   return usersSkeletonHtml();
 }
 

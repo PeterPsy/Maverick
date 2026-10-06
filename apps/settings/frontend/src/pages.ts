@@ -49,7 +49,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
   {
     id: 'learning',
     title: 'Conversation learning',
-    summary: 'Review Memory candidates and proposals from completed conversations.',
+    summary: 'Learn from your chats. Review knowledge and discover better ways to work.',
     icon: 'psychology'
   },
   {

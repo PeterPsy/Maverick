@@ -193,6 +193,20 @@ describe("RAM retry coordinator", () => {
     await expect(pending).resolves.toBe("ok");
   });
 
+  it.each([408, 425, 500])("retries safe reads after transient HTTP %i", async (status) => {
+    vi.useFakeTimers();
+    const coordinator = new RetryCoordinator({ random: () => 0.5 });
+    try {
+      const fetchMock = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(new Response(null, { status }))
+        .mockResolvedValueOnce(jsonResponse("recovered"));
+      const pending = coordinator.runRequest<string>({ executor: safeRequest(), key: `read:transient:${status}` });
+      await vi.advanceTimersByTimeAsync(2_000);
+      await expect(pending).resolves.toBe("recovered");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally { coordinator.dispose(); }
+  });
+
   it("never replays an opaque callback even if it issues an unsafe request", async () => {
     vi.useFakeTimers();
     const coordinator = new RetryCoordinator();

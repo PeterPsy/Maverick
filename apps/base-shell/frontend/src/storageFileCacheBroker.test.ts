@@ -133,6 +133,7 @@ describe("Base Shell Storage file-cache broker", () => {
   });
 
   it("revokes shell authorization when a Storage parent request returns 403", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ authenticated: false })));
     const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure")
       .mockResolvedValue({ pendingCleanupCount: 0, removed: 0, status: "complete" });
     const revoked = vi.fn();
@@ -155,8 +156,8 @@ describe("Base Shell Storage file-cache broker", () => {
     await accepted;
     await expect(nextPortMessage(channel.port1)).resolves.toMatchObject({ status: "error" });
 
-    expect(revoked).toHaveBeenCalledOnce();
-    expect(revoked).toHaveBeenCalledWith(403);
+    await vi.waitFor(() => expect(revoked).toHaveBeenCalledOnce());
+    expect(revoked).toHaveBeenCalledWith(401);
     expect(cleanup).toHaveBeenCalledOnce();
     unsubscribe();
     broker.dispose();

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from uuid import uuid4
 
 from core.api.http import StartResponse, json_response, read_json_body, request_cookies
 from core.api.platform_state import PlatformState
 from core.identity.errors import SessionNotFoundError, UserNotFoundError
 from core.identity.models import AuthSessionRecord, UserRecord
+from core.identity.session_lifecycle import SESSION_ABSOLUTE_DAYS, renew_auth_session
 from core.identity.service import (
     authenticate_password,
     build_auth_session,
@@ -62,7 +64,7 @@ def resolve_request_session(state: PlatformState, environ: dict) -> RequestSessi
     except SessionNotFoundError:
         return None
     now = _now()
-    if session.status != "active" or session.expires_at <= now:
+    if session.status != "active" or session.expires_at <= now or session.created_at + timedelta(days=SESSION_ABSOLUTE_DAYS) <= now:
         return None
     try:
         user = state.identity_store.get_user(session.user_id)
@@ -99,6 +101,7 @@ def session_payload(context: RequestSession | None) -> dict[str, object]:
         "user": public_user_payload(context.user),
         "workspace_id": context.workspace_id,
         "expires_at": context.session.expires_at,
+        "session_generation": sha256(context.session.session_id.encode()).hexdigest(),
     }
 
 
@@ -115,7 +118,19 @@ def handle_session_api(state: PlatformState, environ: dict, start_response: Star
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
     if path == "/api/session" and method == "GET":
-        return json_response(start_response, session_payload(resolve_request_session(state, environ)))
+        context = resolve_request_session(state, environ)
+        if context is not None and not environ.get("maverick.app_frame_proxy"):
+            try:
+                renewed = renew_auth_session(state.identity_store, context.session, now=_now())
+                context = replace(context, session=renewed) if renewed.status == "active" and renewed.expires_at > _now() else None
+            except SessionNotFoundError:
+                context = None
+        headers = []
+        if context is not None and not environ.get("maverick.app_frame_proxy"):
+            # Always synchronize expiry: another native/browser request may
+            # already have renewed the same persisted session.
+            headers.append(session_cookie_header(context.session.session_id, expires_at=context.session.expires_at, secure=_request_is_https(environ)))
+        return json_response(start_response, session_payload(context), headers=headers)
     if path == "/api/auth/login" and method == "POST":
         body = read_json_body(environ)
         username = str(body.get("username") or "").strip()

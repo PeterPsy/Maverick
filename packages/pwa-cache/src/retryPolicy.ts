@@ -54,7 +54,7 @@ export type RetryCoordinatorOptions = {
 };
 
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const RETRYABLE_HTTP_STATUSES = new Set([429, 502, 503, 504]);
+const RETRYABLE_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export class RetryCancelledError extends Error {
   constructor(message = "Retry operation was cancelled.") {

@@ -1,3 +1,4 @@
+import { reportShellAuthorizationFailure } from "./shellAuthorization";
 import {
   PWA_DATA_CACHE_BROKER_ACCEPTED,
   PWA_DATA_CACHE_BROKER_NETWORK_REQUEST,
@@ -29,7 +30,7 @@ import {
 } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
 import { PwaDataCacheRetryMetrics } from "./pwaDataCacheRetryMetrics";
-import { revokeShellAuthorization, shellCacheLifecycle, shellPwaMetrics, shellRetryCoordinator } from "./pwaCacheRuntime";
+import { shellCacheLifecycle, shellPwaMetrics, shellRetryCoordinator } from "./pwaCacheRuntime";
 import {
   RESOURCE_DECLARATIONS,
   type ResourceDeclaration,
@@ -439,7 +440,10 @@ export class PwaDataCacheBroker {
         new DOMException("PWA data-cache authorization was revoked.", "AbortError"),
       );
     }
-    await revokeShellAuthorization(status);
+    const confirmation = reportShellAuthorizationFailure(status);
+    // Denied private display copies are removed even when platform login survives.
+    await Promise.all([...this.resources.values()].map(resource => resource.invalidate().catch(() => 0)));
+    await confirmation;
   }
 
   private reply(

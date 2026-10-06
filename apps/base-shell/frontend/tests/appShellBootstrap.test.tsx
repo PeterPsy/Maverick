@@ -347,9 +347,45 @@ describe("AppShell bootstrap", () => {
       await Promise.resolve();
     });
 
-    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
-    expect(container.querySelector("[aria-label='Loading workspace']")).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+    expect(container.querySelector("[role='alert']")).not.toBeNull();
     expect(api.getSession).toHaveBeenCalledOnce();
+  });
+
+  it.each([500, 408])("retains recovery state after startup HTTP %i and recovers on foreground", async (status) => {
+    api.getSession.mockRejectedValueOnce(new MaverickHttpError("/api/session", new Response(null, { status })));
+    await renderShell();
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
+  });
+
+  it("recovers from the login screen when native cookies become available", async () => {
+    api.getSession.mockResolvedValueOnce({ authenticated: false });
+    await renderShell();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+    await act(async () => { window.dispatchEvent(new Event("maverick.session-changed")); });
+    expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
+  });
+
+  it("refreshes renewed expiry without replacing the frame generation", async () => {
+    await renderShell();
+    const frame = container.querySelector("[data-testid='mounted-app-frame']");
+    const generation = dataCacheBrokerHost.frameScope?.sessionGeneration;
+    api.getSession.mockResolvedValueOnce({ ...sessionPayload(), expires_at: "2026-08-08T00:00:00Z" });
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(dataCacheBrokerHost.frameScope?.sessionGeneration).toBe(generation);
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBe(frame);
+    expect(dataCacheBrokerHost.principal?.sessionExpiresAt).toBe("2026-08-08T00:00:00Z");
+    expect(api.listApps).toHaveBeenCalledOnce();
+  });
+
+  it("verifies platform loss on resume and withdraws authenticated frames", async () => {
+    await renderShell();
+    api.getSession.mockResolvedValueOnce({ authenticated: false });
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
   });
 
   it("keeps the mounted shell without rebootstrap on a generic transport confirmation", async () => {
@@ -458,6 +494,7 @@ describe("AppShell bootstrap", () => {
 
   it.each([401, 403])("revokes the shell instead of retaining rail pins after refresh HTTP %i", async (status) => {
     await renderShell();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ authenticated: false })));
     api.listPinnedApps.mockRejectedValueOnce(
       new MaverickHttpError("/api/apps/app-store/backend", new Response(null, { status })),
     );
@@ -691,6 +728,7 @@ function sessionPayload(workspaceId = "default"): Extract<SessionPayload, { auth
   return {
     authenticated: true,
     expires_at: "2026-07-08T00:00:00Z",
+    session_generation: "test-login-generation",
     user: {
       account_type: "local",
       display_name: "Admin",

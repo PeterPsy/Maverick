@@ -1,3 +1,4 @@
+import { reportShellAuthorizationFailure } from "../shellAuthorization";
 import {
   forwardRef,
   useEffect,
@@ -13,7 +14,6 @@ import {
   setMaverickFrameOrigin,
   type MaverickFrameScope,
 } from "../iframePolicy";
-import { revokeShellAuthorization } from "../pwaCacheRuntime";
 import type { ShellEffectiveTheme } from "../theme";
 
 const APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch";
@@ -202,7 +202,7 @@ export async function requestAppFrameLaunch(
     signal,
   });
   if (!response.ok && (response.status === 401 || response.status === 403)) {
-    void revokeShellAuthorization(response.status);
+    void reportShellAuthorizationFailure(response.status);
   }
   const payload = (await response.json().catch(() => ({}))) as RawLaunchPayload;
   if (!response.ok) {

@@ -22,6 +22,8 @@ def start_background_hook_scheduler(state, *, interval_seconds: float | None = N
     """Start the backend-owned app background hook scheduler."""
     interval = _background_hook_interval_seconds(interval_seconds)
     stop = Event()
+    # PlatformState is frozen; attach the host lifecycle owner during startup.
+    object.__setattr__(state, "background_generation_shutdown_controller", shutdown_controller)
     if shutdown_controller is not None:
         shutdown_controller.register_cleanup(stop.set)
         shutdown_controller.register_cleanup(lambda: runtime_idle_deadlines.cancel_owner(state))

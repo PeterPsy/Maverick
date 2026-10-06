@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from core.api.background_hooks import run_background_hook_tick
+from core.api.background_hooks import run_background_hook_tick, start_background_hook_scheduler
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,24 @@ class State:
 
 
 class BackgroundHookSchedulerTest(unittest.TestCase):
+    def test_start_attaches_shutdown_controller_to_frozen_state(self) -> None:
+        state = State(workspace_store=WorkspaceStore())
+        shutdown_controller = Mock()
+
+        with (
+            patch("core.api.background_hooks.start_prepared_session_cleanup_scheduler"),
+            patch("core.api.background_hooks.start_runtime_session_root_purge_scheduler"),
+            patch("core.api.background_hooks.Thread") as thread_class,
+        ):
+            start_background_hook_scheduler(
+                state,
+                interval_seconds=1,
+                shutdown_controller=shutdown_controller,
+            )
+
+        self.assertIs(state.background_generation_shutdown_controller, shutdown_controller)
+        thread_class.return_value.start.assert_called_once_with()
+
     def test_tick_dispatches_declared_background_hook_for_active_workspaces(self) -> None:
         calls: list[dict[str, object]] = []
 

@@ -20,6 +20,19 @@ from broker_client import broker_health
 from lab_runtime_control import APP_ROOT, SERVICE_ROOT, SOCKET_PATH
 
 
+def signal_group(child, signum: int) -> None:
+    try:
+        os.killpg(child.pid, signum)
+    except ProcessLookupError:
+        pass
+
+
+def runtime_status(children: dict, health: dict) -> dict:
+    alive = {name: child.poll() is None for name, child in children.items()}
+    ready = len(alive) == 2 and all(alive.values()) and health.get("connected")
+    return {"status": "ready" if ready else "starting", "provider": "core_hosted_worker", "children": alive}
+
+
 def main(node: str) -> None:
     os.environ["MAVERICK_BROWSER_BROKER_TIMEOUT_SECONDS"] = "2"
     SERVICE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -60,6 +73,9 @@ def main(node: str) -> None:
                     for name, script in scripts.items():
                         child = children.get(name)
                         if child is None or child.poll() is not None:
+                            if child is not None:
+                                # A dead wrapper can leave its run-server child alive.
+                                signal_group(child, signal.SIGKILL)
                             if time.monotonic()-restarted[name] < 3:
                                 continue
                             restarted[name] = time.monotonic()
@@ -84,19 +100,20 @@ def main(node: str) -> None:
                             if request.get("action") == "stop":
                                 stopped.set(); result = {"status": "stopping"}
                             else:
-                                result = {"status": "ready" if health.get("connected") else "starting", "provider": "core_hosted_worker", "children": {name: child.poll() is None for name,child in children.items()}}
+                                result = runtime_status(children, health)
                             client.sendall(json.dumps(result).encode())
                         except (OSError, ValueError):
                             pass
             finally:
                 for child in children.values():
-                    if child.poll() is None:
-                        os.killpg(child.pid, signal.SIGTERM)
+                    signal_group(child, signal.SIGTERM)
                 for child in children.values():
                     try:
                         child.wait(timeout=10)
                     except subprocess.TimeoutExpired:
-                        os.killpg(child.pid, signal.SIGKILL); child.wait(timeout=5)
+                        signal_group(child, signal.SIGKILL); child.wait(timeout=5)
+                    # Reap any grandchildren left after the wrapper exited.
+                    signal_group(child, signal.SIGKILL)
                 SOCKET_PATH.unlink(missing_ok=True)
 
 

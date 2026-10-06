@@ -114,6 +114,9 @@ Core install, migration, background and recovery hooks manage Browser's worker
 inside Core's service cgroup. The worker supervises and reaps broker/Playwright
 children, restarts failed children and rotates bounded logs. A private Unix socket
 provides status and stop. Administrator stop disables automatic recovery.
+Readiness requires both supervised children to be alive and the broker connection
+to succeed. Failed wrappers and shutdown cleanup terminate their entire process
+groups, including a run-server grandchild that outlives its wrapper.
 
 Installation-local infrastructure resides in `runtime/browser/`; credentials and
 runtime state are excluded from Git. This deployment's backend filesystem namespace

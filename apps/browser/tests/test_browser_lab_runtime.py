@@ -6,9 +6,15 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 import lab_runtime_control as runtime
+from lab_runtime_worker import runtime_status
 
 
 class BrowserLabRuntimeTests(unittest.TestCase):
+    def test_stale_connected_probe_cannot_hide_a_dead_child(self):
+        from types import SimpleNamespace
+        children = {"playwright": SimpleNamespace(poll=lambda: 1), "broker": SimpleNamespace(poll=lambda: None)}
+        self.assertEqual(runtime_status(children, {"connected": True})["status"], "starting")
+
     def test_worker_receives_runtime_paths_without_parent_credentials(self):
         with TemporaryDirectory() as folder, patch.object(runtime, "SERVICE_ROOT", Path(folder)), \
              patch.object(runtime, "control", side_effect=[{"status": "stopped"}, {"status": "ready"}]), \

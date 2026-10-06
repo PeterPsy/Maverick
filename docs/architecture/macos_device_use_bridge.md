@@ -44,6 +44,14 @@ live connection. Submission checks the lease before clearing the composer.
 The native application menu retains the emergency **Interrompi Device Use**
 command (`Shift-Command-.`).
 
+REST and WebSocket thread catalogs, including the bounded display cache, retain
+the public activation ID and original On/Full mode. They omit native credentials
+and live readiness. Selecting a cached Device Use thread without that summary
+loads its authorized detail before enabling a mode; missing metadata never
+defaults to On. Explicit reconnection publishes the updated catalog binding so
+other Chat views keep the new lease ID. This is a Core/Chat change and retains
+the native `macos-v44` wire contract.
+
 ## Architecture
 
 ```text

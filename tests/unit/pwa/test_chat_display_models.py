@@ -6,6 +6,16 @@ from core.runtime.display_models import completed_message_display, thread_displa
 
 
 class ChatDisplayTest(TestCase):
+    def test_thread_display_keeps_original_device_use_mode_and_strips_native_credentials(self):
+        page = {'threads': [{'thread_id': 't', 'device_use_enabled': True, 'device_use': {
+            'activation_id': 'activation-1', 'mode': 'full', 'ticket': 'secret',
+            'approved_apps': ['private-app'], 'ready': True,
+        }}]}
+        result = thread_display_page(page)['payload']['data']['threads'][0]
+        self.assertEqual(result['device_use'], {'activation_id': 'activation-1', 'mode': 'full'})
+        self.assertNotIn('secret', str(result))
+        self.assertNotIn('ready', result['device_use'])
+
     def test_completed_only_no_provider_or_tool_payload(self):
         date = datetime(2026, 9, 5, tzinfo=timezone.utc)
         store = Mock()

@@ -482,6 +482,7 @@ export type ChatThreadSummary = {
   has_unread_completed_response?: boolean;
   runtime_profile?: "workspace" | "research" | string;
   device_use_enabled?: boolean;
+  device_use?: DeviceUseThreadBinding | null;
 };
 
 export type ChatThread = ChatThreadSummary & {
@@ -493,7 +494,6 @@ export type ChatThread = ChatThreadSummary & {
   provider_id?: string | null;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;
-  device_use?: DeviceUseActivation | null;
 };
 
 export type ChatProject = {
@@ -624,6 +624,8 @@ export type DeviceUseActivation = {
   ticket?: string;
   websocket_path?: string;
 };
+
+export type DeviceUseThreadBinding = Pick<DeviceUseActivation, "activation_id" | "mode">;
 
 export type RuntimeAdmission = {
   status: "direct" | "restart_required";

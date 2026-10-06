@@ -20,6 +20,7 @@ from core.runtime.provider_input_capture_context import capture_runtime_provider
 from core.runtime.runtime_process_lifecycle import release_idle_runtime_processes
 from core.runtime.runtime_idle_deadlines import runtime_idle_deadlines
 from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.runtime_threads import create_runtime_thread
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
@@ -121,6 +122,21 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual(status, 200, payload)
         self.assertEqual(payload["mode"], "on")
+
+    def test_reconnect_publishes_the_new_binding_to_other_thread_views(self):
+        create_runtime_thread(
+            self.state.runtime_store, workspace_id="default", runtime_session_id=self.session_id,
+            thread_id=self.session_id, agent_label="chat", source_app_id="chat",
+        )
+        activation = self._ready_activation()
+        with patch.object(self.state.runtime_thread_event_bus, "publish") as publish:
+            status, payload = self._reconnect(activation)
+        self.assertEqual(status, 200, payload)
+        event = publish.call_args.kwargs
+        self.assertEqual(event["workspace_id"], "default")
+        self.assertEqual(event["event"]["thread"]["device_use"], {
+            "activation_id": activation["activation_id"], "mode": "on",
+        })
 
     def test_active_and_queued_turns_cannot_be_rebound(self):
         for turn_status in ("active", "queued", "waiting_for_tool_confirmation"):

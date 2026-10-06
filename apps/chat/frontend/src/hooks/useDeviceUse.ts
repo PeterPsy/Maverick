@@ -15,6 +15,7 @@ import {
   type DeviceUsePermission,
   type NativeDeviceUseSnapshot,
 } from "../lib/deviceUse";
+import { useDeviceUseThreadBinding } from "./useDeviceUseThreadBinding";
 
 const emptySnapshot: NativeDeviceUseSnapshot = {
   available: false,
@@ -71,6 +72,9 @@ export function useDeviceUse({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lease, setLease] = useState<{ id: string; ready: boolean } | null>(null);
+  const { binding: threadBinding, error: bindingError } = useDeviceUseThreadBinding(activeThread);
+  const threadBindingRef = useRef(threadBinding);
+  threadBindingRef.current = threadBinding;
   const validatedLeaseRef = useRef<{ id: string; ready: boolean } | null>(null);
   const refreshSequenceRef = useRef(0);
   const activationRef = useRef<string | null>(null);
@@ -78,23 +82,25 @@ export function useDeviceUse({
   const threadRef = useRef(activeThread);
   threadRef.current = activeThread;
   const busyRef = useRef(false);
-  const scope = `${activeThread?.thread_id || "draft"}:${activeThread?.device_use?.activation_id || activationId || ""}`;
+  const scope = `${activeThread?.thread_id || "draft"}:${threadBinding?.activation_id || activationId || ""}`;
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
 
-  const pinnedMode: Exclude<DeviceUseMode, "off"> | null = activeThread?.device_use_enabled
-    ? activeThread.device_use?.mode === "full" ? "full" : "on"
-    : null;
+  const pinnedMode = threadBinding?.mode === "full" || threadBinding?.mode === "on"
+    ? threadBinding.mode : null;
   const reconnectMessage = useCallback(() => {
+    if (activeThread?.device_use_enabled && !pinnedMode) {
+      return bindingError || "Attendi il caricamento della modalità Device Use originale.";
+    }
     const label = pinnedMode === "full" ? "Full" : "On";
     return `Mac scollegato. Premi ${label} in Device Use per ricollegare questa chat, poi invia il messaggio.`;
-  }, [pinnedMode]);
+  }, [activeThread?.device_use_enabled, bindingError, pinnedMode]);
 
   const refresh = useCallback(async () => {
     const sequence = ++refreshSequenceRef.current;
     const expectedScope = scopeRef.current;
     const id = threadRef.current?.device_use_enabled
-      ? threadRef.current.device_use?.activation_id
+      ? threadBindingRef.current?.activation_id
       : activationRef.current;
     const [native, core] = await Promise.allSettled([
       requestNativeDeviceUse("status"),
@@ -132,7 +138,7 @@ export function useDeviceUse({
     };
   }, [refresh, scope]);
 
-  const currentId = activeThread?.device_use_enabled ? activeThread.device_use?.activation_id : activationId;
+  const currentId = activeThread?.device_use_enabled ? threadBinding?.activation_id : activationId;
   const mode: DeviceUseMode = currentId && lease?.id === currentId && lease.ready
     ? pinnedMode || snapshot.mode
     : "off";
@@ -142,7 +148,7 @@ export function useDeviceUse({
   const locked = Boolean(activeThread);
 
   const stopCurrent = useCallback(async () => {
-    const current = activationRef.current || activeThread?.device_use?.activation_id || null;
+    const current = activationRef.current || threadBinding?.activation_id || null;
     setLease(null);
     validatedLeaseRef.current = null;
     refreshSequenceRef.current++;
@@ -151,7 +157,7 @@ export function useDeviceUse({
       ...(current ? [stopDeviceUseActivation(current)] : []),
       requestNativeDeviceUse("stop").then(setSnapshot),
     ]);
-  }, [activeThread?.device_use?.activation_id, activeThread?.thread_id]);
+  }, [threadBinding?.activation_id, activeThread?.thread_id]);
 
   const selectMode = useCallback(async (nextMode: DeviceUseMode) => {
     if (busyRef.current || (nextMode === mode && nextMode !== "off")) return;
@@ -197,7 +203,7 @@ export function useDeviceUse({
         }
         if (activeThread) {
           ready = await reconnectDeviceUseSession(
-            activeThread.runtime_session_id, createdId, activeThread.device_use!.activation_id,
+            activeThread.runtime_session_id, createdId, threadBinding!.activation_id,
           );
           onReconnected(activeThread, ready);
         } else {
@@ -221,7 +227,7 @@ export function useDeviceUse({
       busyRef.current = false;
       setBusy(false);
     }
-  }, [activeThread, mode, onPrepare, onReconnected, pinnedMode, provider, reasoningEffort, stopCurrent]);
+  }, [activeThread, mode, onPrepare, onReconnected, pinnedMode, provider, reasoningEffort, stopCurrent, threadBinding]);
 
   const ensureReady = useCallback(async () => {
     if (busyRef.current) throw new Error("Attendi il completamento della connessione Device Use.");
@@ -229,7 +235,7 @@ export function useDeviceUse({
     const current = await refresh();
     if (expectedScope !== scopeRef.current) throw new Error("La chat è cambiata durante la verifica del Mac.");
     const id = threadRef.current?.device_use_enabled
-      ? threadRef.current.device_use?.activation_id
+      ? threadBindingRef.current?.activation_id
       : activationRef.current;
     if (!id || !current.active || current.activationId !== id
         || validatedLeaseRef.current?.id !== id || !validatedLeaseRef.current.ready) {
@@ -272,7 +278,7 @@ export function useDeviceUse({
     configure,
     enabled,
     ensureReady,
-    error,
+    error: error || bindingError,
     locked,
     mode,
     pinnedMode,

@@ -11,6 +11,9 @@ const schemas: Record<string, DisplayModelSchema> = {
       archived: 'boolean',
       device_use_enabled: 'boolean',
     },
+    objects: { device_use: {
+      required: ['activation_id', 'mode'], fields: text(['activation_id', 'mode']),
+    } },
   } }, objects: { page: { fields: { cursor: 'string', has_more: 'boolean', limit: 'number', total: 'number', filtered_total: 'number' } } } },
   messages: { required: ['messages'], lists: { messages: { required: ['id', 'turn_id', 'role', 'text', 'created_at'], fields: text(['id', 'turn_id', 'role', 'text', 'created_at']) } } },
 };

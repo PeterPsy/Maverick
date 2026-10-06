@@ -205,7 +205,7 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
                     protocol_version="maverick.device-use.v1",
                     executor_contract="macos-v43",
                     tool_contract_digest="digest",
-                    mode="on",
+                    mode="full",
                     initial_app="com.apple.Safari",
                     approved_apps=("com.apple.Safari",),
                     created_at=started_at,
@@ -240,7 +240,12 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
         self.assertFalse(by_session_id["research-session"]["device_use_enabled"])
         self.assertEqual(by_session_id["device-session"]["runtime_profile"], "workspace")
         self.assertTrue(by_session_id["device-session"]["device_use_enabled"])
+        self.assertEqual(by_session_id["device-session"]["device_use"], {
+            "activation_id": "activation-1", "mode": "full",
+        })
         self.assertNotIn("device_use_binding", by_session_id["device-session"])
+        self.assertNotIn("owner_user_id", str(by_session_id["device-session"]))
+        self.assertNotIn("approved_apps", str(by_session_id["device-session"]))
 
 
 class RuntimeThreadWebSocketSchedulingTest(unittest.IsolatedAsyncioTestCase):

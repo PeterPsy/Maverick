@@ -75,6 +75,13 @@ def thread_catalog_summary_payload(
         return payload
     payload["runtime_profile"] = session.runtime_profile
     payload["device_use_enabled"] = session.device_use_binding is not None
+    if session.device_use_binding is not None:
+        # Catalogs carry the immutable conversation scope, never live readiness
+        # or executor credentials. Chat checks the current lease separately.
+        payload["device_use"] = {
+            "activation_id": session.device_use_binding.activation_id,
+            "mode": session.device_use_binding.mode,
+        }
     return payload
 
 

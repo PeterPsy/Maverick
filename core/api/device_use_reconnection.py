@@ -5,6 +5,8 @@ from core.device_use.runtime_registry import register_device_use_session
 from core.runtime.errors import RuntimeProviderStateError, RuntimeSessionNotFoundError
 from core.runtime.agentic_runtime_service import update_runtime_provider_state
 from core.runtime.runtime_process_lifecycle import ACTIVE_TURN_STATUSES, release_idle_runtime_processes
+from core.runtime.runtime_threads import find_runtime_thread_by_session
+from core.runtime.thread_catalog_events import publish_runtime_thread_catalog_change
 
 
 def reconnect_device_use_session(
@@ -76,6 +78,9 @@ def reconnect_device_use_session(
             raise
         register_device_use_session(session_id, service, activation_id=activation_id)
         service.stop_activation(previous.activation_id, reason="device_use_reconnected")
+        thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=session_id)
+        if thread is not None:
+            publish_runtime_thread_catalog_change(state, workspace_id=workspace_id, action="updated", thread=thread)
         return service.public_activation(
             activation_id, owner_user_id=owner_user_id, workspace_id=workspace_id,
             auth_session_id=auth_session_id,

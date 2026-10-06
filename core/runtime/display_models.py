@@ -10,6 +10,11 @@ def thread_display_page(page: dict, known_revision=None) -> dict:
         result = {key: item[key] for key in _THREAD_TEXT if key in item and (item[key] is None or isinstance(item[key], str))}
         result['archived'] = item.get('archived') is True
         result['device_use_enabled'] = item.get('device_use_enabled') is True
+        binding = item.get('device_use')
+        if result['device_use_enabled'] and isinstance(binding, dict):
+            activation_id = binding.get('activation_id')
+            if isinstance(activation_id, str) and 0 < len(activation_id) <= 240 and binding.get('mode') in ('on', 'full'):
+                result['device_use'] = {'activation_id': activation_id, 'mode': binding['mode']}
         threads.append(result)
     pagination = {key: value for key, value in page.get('threads_page', page.get('page', {})).items() if key in ('cursor', 'has_more', 'limit', 'total', 'filtered_total')}
     return conditional_display_response({'kind': 'threads', 'data': {'threads': threads, 'page': pagination}}, known_revision)

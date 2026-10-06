@@ -3,14 +3,14 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createDeviceUseActivation, getDeviceUseActivation, reconnectDeviceUseSession, stopDeviceUseActivation,
+  createDeviceUseActivation, getDeviceUseActivation, getRuntimeThread, reconnectDeviceUseSession, stopDeviceUseActivation,
   type ChatThread, type DeviceUseActivation, type ProviderItem,
 } from "../api/client";
 import { requestNativeDeviceUse, type NativeDeviceUseSnapshot } from "../lib/deviceUse";
 import { useDeviceUse } from "./useDeviceUse";
 
 vi.mock("../api/client", () => ({
-  createDeviceUseActivation: vi.fn(), getDeviceUseActivation: vi.fn(),
+  createDeviceUseActivation: vi.fn(), getDeviceUseActivation: vi.fn(), getRuntimeThread: vi.fn(),
   reconnectDeviceUseSession: vi.fn(), stopDeviceUseActivation: vi.fn(),
 }));
 vi.mock("../lib/deviceUse", () => ({ requestNativeDeviceUse: vi.fn() }));
@@ -20,10 +20,13 @@ const newId = "00000000-0000-0000-0000-000000000002";
 const activation = (id: string): DeviceUseActivation => ({
   activation_id: id, ready: true, bound: true, status: "bound", mode: "full",
 });
-const originalThread = {
+const originalThread: ChatThread = {
   thread_id: "thread", runtime_session_id: "session", device_use_enabled: true,
   device_use: activation(oldId),
-} as ChatThread;
+  title: "Device Use", agent_label: "chat", agent_type_id: "", agent_role_id: "",
+  source_app_id: "chat", project_id: null, archived: false, availability: "free",
+  created_at: "2026-10-01T00:00:00Z", updated_at: "2026-10-01T00:00:00Z",
+};
 const provider = {
   provider_id: "codex", runtime_engine_id: "codex", provider_role: "runtime_engine",
   workspace_profile_binding_id: "profile", status: "active",
@@ -62,6 +65,7 @@ beforeEach(() => {
     settings: { selectedApp: "com.apple.Safari", additionalApps: [], consentMode: "perTask" },
   };
   vi.mocked(getDeviceUseActivation).mockImplementation(async (id) => activation(id));
+  vi.mocked(getRuntimeThread).mockResolvedValue(originalThread);
   vi.mocked(createDeviceUseActivation).mockResolvedValue({
     ...activation(newId), bound: false, ticket: "one-shot-ticket", websocket_path: "/ws/device-use/executor",
   });
@@ -76,6 +80,35 @@ beforeEach(() => {
 afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHTML = ""; });
 
 describe("Device Use conversation continuation", () => {
+  it("reconnects Full when selected from the minimal thread catalog", async () => {
+    native = { ...native, active: false, activationId: null, mode: "off" };
+    await render({ ...originalThread, device_use: { activation_id: oldId, mode: "full" } });
+    expect(result.pinnedMode).toBe("full");
+    expect(getRuntimeThread).not.toHaveBeenCalled();
+    await act(async () => { await result.selectMode("full"); });
+    expect(requestNativeDeviceUse).toHaveBeenCalledWith("start", expect.objectContaining({ mode: "full" }));
+    expect(reconnectDeviceUseSession).toHaveBeenCalledWith("session", newId, oldId);
+  });
+
+  it("loads the original mode from thread detail when an old cached catalog omitted it", async () => {
+    native = { ...native, active: false, activationId: null, mode: "off" };
+    await render({ ...originalThread, device_use: undefined });
+    expect(getRuntimeThread).toHaveBeenCalledWith("thread");
+    expect(result.pinnedMode).toBe("full");
+    await act(async () => { await result.selectMode("full"); });
+    expect(reconnectDeviceUseSession).toHaveBeenCalledWith("session", newId, oldId);
+  });
+
+  it("never assumes On if the original binding cannot be read", async () => {
+    vi.mocked(getRuntimeThread).mockRejectedValue(new Error("offline"));
+    await render({ ...originalThread, device_use: undefined });
+    expect(result.pinnedMode).toBeNull();
+    expect(result.error).toContain("modalità Device Use originale");
+    await act(async () => { await result.selectMode("on"); });
+    expect(createDeviceUseActivation).not.toHaveBeenCalled();
+    expect(requestNativeDeviceUse).not.toHaveBeenCalledWith("start", expect.anything());
+  });
+
   it("keeps a healthy returning conversation active without a new activation", async () => {
     await render();
     expect(result.mode).toBe("full");

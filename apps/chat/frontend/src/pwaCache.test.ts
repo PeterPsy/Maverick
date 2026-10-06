@@ -6,6 +6,16 @@ import { eventsToMessages } from './lib/transcript';
 const mocks = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('@maverick/pwa-cache', async (original) => ({ ...await original<object>(), readAppCacheModel: mocks.read }));
 describe('approved Chat persistence', () => {
+  it('preserves the original Full binding in a cached thread without live readiness or credentials', () => {
+    const model = sanitizeChatReadModel({ kind: 'threads', data: { threads: [{
+      thread_id: 'device', runtime_session_id: 'session', title: 'Device Use', device_use_enabled: true,
+      device_use: { activation_id: 'activation-1', mode: 'full', ready: true, ticket: 'secret' },
+    }] } });
+    const thread = displayThread((model!.data.threads as Record<string, unknown>[])[0]);
+    expect(thread.device_use).toEqual({ activation_id: 'activation-1', mode: 'full' });
+    expect(JSON.stringify(model)).not.toContain('secret');
+    expect(thread.device_use).not.toHaveProperty('ready');
+  });
   it('projects only completed display roles, never tool or runtime authority', () => {
     expect(sanitizeChatReadModel({ kind: 'messages', data: { activeSession: { secret: 1 }, messages: [
       { id: 'm', turn_id: 't', role: 'assistant', text: 'Answer', created_at: '2026-09-05', provider: 'secret' },

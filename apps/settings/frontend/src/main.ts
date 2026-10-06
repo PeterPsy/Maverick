@@ -128,9 +128,7 @@ function applyNavigationParams(params: Record<string, unknown>) {
   if (!changed) {
     return;
   }
-  if (users.length || isLoading) {
-    render();
-  }
+  render();
   if (pageId === 'app-links') {
     void ensureAppLinksLoaded();
   }

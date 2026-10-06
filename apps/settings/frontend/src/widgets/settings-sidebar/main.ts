@@ -1,3 +1,4 @@
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import {
   DEFAULT_SETTINGS_PAGE_ID,
   SETTINGS_PAGES,
@@ -57,7 +58,7 @@ function openPageInShell(pageId: SettingsPageId) {
 }
 
 function handleShellMessage(event: MessageEvent) {
-  if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+  if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') {
     return;
   }
   const payload = event.data as {

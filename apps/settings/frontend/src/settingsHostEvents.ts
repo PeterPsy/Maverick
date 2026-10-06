@@ -1,3 +1,5 @@
+import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
+
 let hostVisible = true;
 
 export const settingsHostVisible = () => hostVisible && !document.hidden;
@@ -7,7 +9,7 @@ export function bindSettingsHostEvents(context: {
   visibilityChanged: (visible: boolean) => void;
 }) {
   window.addEventListener('message', (event) => {
-    if (event.source !== window.parent || event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+    if (!isExactMaverickParentMessage(event) || !event.data || typeof event.data !== 'object') return;
     const payload = event.data as { app_id?: string; params?: Record<string, unknown>; type?: string; visible?: boolean };
     if (payload.type === 'maverick.app.visibility-changed' && payload.app_id === 'settings') {
       hostVisible = payload.visible === true;

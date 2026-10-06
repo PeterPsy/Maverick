@@ -22,6 +22,10 @@ status_code, result = handle_action(
     effective_mode=payload.effective_mode,
     platform_role=payload.platform_role,
     workspace_role=payload.workspace_role,
+    user_id=payload.user_id,
+    surface=payload.raw.get("surface"),
+    runtime_session_id=payload.runtime_session_id,
+    dependencies=payload.raw.get("app_dependencies"),
 )
 response = backend_response(status_code, result)
 if status_code < 400:

@@ -18,6 +18,7 @@ from core.egress import (
 )
 
 from broker_client import broker_health, call_broker_action
+from companion_service import handle as handle_companion, handles as handles_companion
 from errors import BrowserBrokerUnavailableError, BrowserPolicyError, BrowserValidationError
 from models import (
     AUDITED_ACTIONS,
@@ -102,6 +103,8 @@ DEFAULT_MOBILE_VIEWPORT = {"viewport_width": 390, "viewport_height": 844, "mobil
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
+    if action in {"companion.connect", "companion.disconnect", "companion.complete", "operation.cancel", "instagram.collect", "video.analyze", "media.completed"}:
+        return [{"type": "maverick.app.data-changed", "resource": "companion"}]
     if action in ACTION_EVENTS:
         return [{"type": "maverick.app.data-changed", "resource": "state"}]
     return []
@@ -116,10 +119,30 @@ def handle_action(
     effective_mode: str | None = None,
     platform_role: str | None = None,
     workspace_role: str | None = None,
+    user_id: str | None = None,
+    surface: str | None = None,
+    runtime_session_id: str | None = None,
+    dependencies: dict | None = None,
 ) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "status").strip()
     admin_dev_targets_enabled = is_admin_authority(platform_role=platform_role, workspace_role=workspace_role)
     try:
+        if action in {"service.status", "service.start", "service.stop"}:
+            from lab_runtime_control import control, ensure_running, stop
+            if action != "service.status" and not admin_dev_targets_enabled:
+                return 403, {"error": "admin_required", "detail": "Browser Lab lifecycle controls require an administrator."}
+            if set(body) - {"action"}:
+                return 400, {"error": "validation_error", "detail": "Lifecycle controls do not accept arguments."}
+            if action == "service.start":
+                return 200, ensure_running(enable=True)
+            if action == "service.stop":
+                return 200, stop()
+            return 200, control("status")
+        if handles_companion(action, body):
+            return handle_companion(
+                data_root, body, workspace_id=workspace_id, user_id=user_id,
+                surface=surface, runtime_session_id=runtime_session_id, dependencies=dependencies,
+            )
         if action in {"status", "operations.manifest"}:
             result = status_payload(
                 data_root,
@@ -197,6 +220,10 @@ def mcp_result_for_tool(
     effective_mode: str | None = None,
     platform_role: str | None = None,
     workspace_role: str | None = None,
+    user_id: str | None = None,
+    surface: str | None = None,
+    runtime_session_id: str | None = None,
+    dependencies: dict | None = None,
 ) -> tuple[int, dict[str, Any]]:
     action = MCP_TOOL_ACTIONS.get(tool_name)
     if action is None:
@@ -219,6 +246,10 @@ def mcp_result_for_tool(
         effective_mode=effective_mode,
         platform_role=platform_role,
         workspace_role=workspace_role,
+        user_id=user_id,
+        surface=surface,
+        runtime_session_id=runtime_session_id,
+        dependencies=dependencies,
     )
 
 
@@ -353,7 +384,7 @@ def status_payload(
         "p0_scope": {
             "browser_lab_read_only": True,
             "maverick_dev_inspector": True,
-            "chrome_companion": False,
+            "chrome_companion": True,
             "persistent_profiles": False,
             "file_upload": False,
             "automatic_download_persistence": False,
@@ -363,8 +394,8 @@ def status_payload(
             "rendered_content": True,
             "bounded_scroll": True,
             "video_frames": True,
-            "audio_transcription": False,
-            "authenticated_browser": False,
+            "audio_transcription": "local_only_via_speech",
+            "authenticated_browser": "user_shared_chrome",
         },
     }
 
@@ -412,6 +443,14 @@ def operations_manifest() -> dict[str, Any]:
             },
         },
         "mcp_tools": sorted(MCP_TOOL_ACTIONS),
+        "chrome_companion": {
+            "mode": "read_only",
+            "actions": ["navigate", "snapshot", "content.read", "scroll", "screenshot", "video.frame", "video.analyze", "instagram.collect", "tabs", "wait_for"],
+            "results": "Queued operations; poll operation.get for observed results, or cancel with operation.cancel.",
+            "authentication": "One Instagram tab explicitly shared through the human Chrome connector.",
+            "audio_transcription": "Declared Speech dependency with local_only enforced.",
+            "saved_evidence": "Declared Storage dependency, verified callback identities.",
+        },
         "research": {
             "actions": sorted(RESEARCH_ACTIONS),
             "description": "Ephemeral search and open operations with no interactive browser controls.",

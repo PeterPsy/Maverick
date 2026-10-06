@@ -227,3 +227,13 @@ python3 -m unittest discover -s apps/speech/tests -p 'test_*.py'
 ```
 
 `speech` is an installation-level sealed app under `apps/speech`; it is not a workspace-local app project. Do not use `core.app-sdk.register-local` or `core.app-sdk.install-local` for this app unless it is intentionally copied into a workspace-local development project.
+
+## Local-only requests
+
+Finite `transcribe_audio` and `transcribe_file` calls accept `local_only: true`.
+The request uses only faster-whisper or whisper.cpp, ignores remote defaults,
+strips delivered vendor credentials/provider configuration and leaves workspace
+settings unchanged. Backend secret preflight requests no vendor secret for this
+mode. If no local model is available, the call fails without remote fallback.
+The flag must be boolean; live conversation/dictation/session requests are rejected.
+The CLI and `speech_transcribe_file` MCP expose the same optional file setting.

@@ -12,10 +12,18 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "app_id": {"type": "string"},
-          "schema_version": {"type": "string"},
-          "operations": {"type": "object"}
+          "status_code": {
+            "type": "integer"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "operations": {
+            "type": "object"
+          }
         }
       }
     },
@@ -31,17 +39,27 @@
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "app_id": {"type": "string"},
-          "schema_version": {"type": "string"},
-          "entity_types": {"type": "array"}
+          "status_code": {
+            "type": "integer"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "entity_types": {
+            "type": "array"
+          }
         }
       }
     },
     "speech_transcribe_file": {
       "effect_class": "read",
       "description": "Transcribe a bounded workspace Storage audio file. This tool does not accept live microphone streams or absolute host paths.",
-      "required_secrets": ["deepgram-api-key"],
+      "required_secrets": [
+        "deepgram-api-key"
+      ],
       "input_schema": {
         "type": "object",
         "properties": {
@@ -56,27 +74,60 @@
           "language": {
             "type": "string",
             "description": "Optional short language code."
+          },
+          "local_only": {
+            "type": "boolean",
+            "default": false,
+            "description": "Force local Whisper transcription for this request; never use a remote STT engine or change workspace settings."
           }
         },
-        "required": ["workspace_relative_path"],
+        "required": [
+          "workspace_relative_path"
+        ],
         "additionalProperties": false
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "status_code": {"type": "integer"},
-          "job_id": {"type": "string"},
-          "text": {"type": "string"},
-          "segments": {"type": "array"},
-          "language": {"type": "string"},
-          "language_probability": {"type": "number"},
-          "duration_seconds": {"type": "number"},
-          "engine": {"type": "string"},
-          "model": {"type": "string"},
-          "profile": {"type": "string"},
-          "beam_size": {"type": "integer"},
-          "worker": {"type": "object"},
-          "retention": {"type": "string"}
+          "status_code": {
+            "type": "integer"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "segments": {
+            "type": "array"
+          },
+          "language": {
+            "type": "string"
+          },
+          "language_probability": {
+            "type": "number"
+          },
+          "duration_seconds": {
+            "type": "number"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "beam_size": {
+            "type": "integer"
+          },
+          "worker": {
+            "type": "object"
+          },
+          "retention": {
+            "type": "string"
+          }
         }
       }
     }

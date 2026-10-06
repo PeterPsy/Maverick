@@ -11,7 +11,7 @@ rendered text and media metadata, bounded scrolling, video frames, tab state,
 or controlled Maverick development UI inspection.
 
 Do not use Browser for ordinary web search, product research, or facts that can
-be answered through a normal search surface. Browser is a full-access-only P0
+be answered through a normal search surface. Browser is a full-access-only
 utility and must be invoked only through official Maverick app CLI or MCP
 surfaces.
 
@@ -26,7 +26,7 @@ maverick app browser mcp list --json
 maverick app browser mcp inspect browser_session_create --json
 ```
 
-The P0 command and tools report `requires_full_access: true` and
+The Browser command and tools report `requires_full_access: true` and
 `sandbox_agent_allowed: false`. Do not try to invoke Browser from a sandbox
 runtime. Leave this restriction in place unless a later policy review creates a
 separate read-only sandbox mode.
@@ -54,7 +54,33 @@ admin context. The default admin dev targets are `hostmachine:8000` and
 `hostmachine:8014`; any other local port must be added as an exact admin dev
 target before use.
 
-## MCP Session Flow
+## User-shared Instagram
+
+Use `browser_companion_status` to find the actor's connected `chrome-` session.
+Sharing, login and revocation are human Browser UI/Chrome actions. Do not create,
+export or read login credentials, or call connector setup/completion through shell,
+CLI or MCP. If no shared session is connected, direct the user to Browser's setup.
+
+On Chrome sessions, navigation/read/scroll/frame/screenshot calls return queued
+operations. Poll `browser_operation_get` using the operation id; only successful
+terminal results establish observations. Do not resend a command because one
+poll is still running. Use `browser_operation_cancel` to cancel pending work.
+
+Use `browser_instagram_collect` for bounded profile text and post/Reel discovery.
+Then open collected URLs and read each caption/media to substantiate analysis.
+Use `browser_video_analyze` for sampled frames and local audio transcription.
+`max_seconds` is bounded to 180; duration beyond the observed portion is uncovered.
+With `save_evidence: true`, verified Storage references replace inline frames.
+Read and view the actual images through Storage/native image inspection before
+claiming visual details. Report missing transcript/capture/evidence explicitly.
+
+Chrome navigation is limited to Instagram profile/post/Reel routes. There are no
+external clicks/forms, caller selectors, arbitrary scripts, history reads or cookie
+exports. Social read-only mode permits local scroll/seek/playback for observation.
+Do not close or revoke the user's shared Chrome session during agent cleanup;
+close only isolated Lab sessions you created. Browser controls sharing ownership.
+
+## Isolated Lab Session Flow
 
 For page inspection, prefer MCP tools in this order:
 
@@ -108,12 +134,11 @@ mutating MCP effects; they do not authorize forms or account actions.
 Read results cover the currently rendered document. Link and media URL queries
 are redacted; returned media URLs are not signed download handles. A bottom-of-page
 result does not establish complete feed coverage. If a site requires login,
-report that requirement; the current broker does not support authenticated
-profiles or connecting to the user's Chrome session.
+use the user-shared Chrome flow above. The isolated Lab does not hold user login state.
 
-## P0 Boundaries
+## Lab Boundaries
 
-Browser P0 intentionally does not support:
+The isolated Lab intentionally does not support:
 
 - persistent profiles or stored login state
 - file upload

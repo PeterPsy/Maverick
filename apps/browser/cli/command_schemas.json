@@ -11,7 +11,13 @@
           "policy.preflight": "read",
           "audit.list": "read",
           "acceptance.smoke": "mutating",
-          "dev.smoke": "mutating"
+          "dev.smoke": "mutating",
+          "companion.overview": "read",
+          "operation.get": "read",
+          "operation.cancel": "mutating",
+          "service.status": "read",
+          "service.start": "mutating",
+          "service.stop": "destructive"
         }
       },
       "description": "Inspect Browser Lab status, operation manifest, audit records, run URL policy preflight, execute the P0 acceptance smoke, or run an admin local-dev smoke.",
@@ -26,7 +32,13 @@
               "policy.preflight",
               "audit.list",
               "acceptance.smoke",
-              "dev.smoke"
+              "dev.smoke",
+              "companion.overview",
+              "operation.get",
+              "operation.cancel",
+              "service.status",
+              "service.start",
+              "service.stop"
             ],
             "default": "operations.manifest"
           },
@@ -51,7 +63,10 @@
           },
           "mode": {
             "type": "string",
-            "enum": ["read_only", "maverick_dev_inspector"],
+            "enum": [
+              "read_only",
+              "maverick_dev_inspector"
+            ],
             "default": "read_only"
           },
           "viewport_width": {
@@ -68,6 +83,10 @@
             "type": "boolean",
             "default": false,
             "description": "Use mobile browser context defaults for smoke/session creation when viewport dimensions are omitted."
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "additionalProperties": false

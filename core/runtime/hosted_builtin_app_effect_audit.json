@@ -32,12 +32,12 @@
     },
     "browser": {
       "cli": {
-        "descriptor_sha256": "2bb021ebd09bcecfbec52b28b43833764b0458bd79254b153b222560f770db92",
-        "execution_sha256": "07ac6476597580f9c2e736728c91e8fe77a5b675359e6fa53113538e0abb0a66"
+        "descriptor_sha256": "5975554e6d022ed3491f525d69ef616fd679a0896e6b37b529da69331a2be505",
+        "execution_sha256": "640dd102b9c94c3cd44f0f0882ec19e9f69919abefd010dff17aa55f15aa60d9"
       },
       "mcp": {
-        "descriptor_sha256": "82417f590d1beb40eae34d851513a3672348fe697c26b70eb7b5fd1d1476d2ad",
-        "execution_sha256": "19d2253ee9598e33ed4a5a9fe1a5f84601bd2df85140659e563713ec80f0be12"
+        "descriptor_sha256": "b7e28dd695dc4c088c1e39b93af08eab20751cf52e3063c20d9dfe5090d48b21",
+        "execution_sha256": "cd043c50934ac838b56af6ac89a5f17283925f5875dec17734f17ee929ed1f67"
       }
     },
     "calendar": {
@@ -182,12 +182,12 @@
     },
     "speech": {
       "cli": {
-        "descriptor_sha256": "9dc25b4daec267050121d91831839297c5c4c7e655229daa7c046be291e529f7",
-        "execution_sha256": "e14d09fff8e2f3cd26c728123262567da08a5afea3d5389c3952a43585699a6f"
+        "descriptor_sha256": "f3ad8fe8903d71ffb9471944a3f11b4713a9218c9db45fdfa51bddb35be63708",
+        "execution_sha256": "eb56b11e55835a70a3173a6974a3a9f09e4b3d933cb9db246ac2a1cd33117bf8"
       },
       "mcp": {
-        "descriptor_sha256": "846f5cc570baa69a45422c62610a6ac41c212aeaf62eda3f17a656275bbebc19",
-        "execution_sha256": "6ba29801ec976eb37f05b076c232cf3e2dbe97ec174e658a3dc1224c38f9d624"
+        "descriptor_sha256": "38af04549db5d94eaccf52036796ac5e3c0348b788dd6af980353e93fbf16347",
+        "execution_sha256": "fb8255744e68b06aafacec41d73e0447a627d4260601cc2be8f14de4061b7894"
       }
     },
     "storage": {
@@ -221,6 +221,6 @@
       }
     }
   },
-  "audit_revision": "2026-10-06-browser-rendered-reading-reviewed-v8",
+  "audit_revision": "2026-10-06-browser-companion-local-speech-reviewed-v9",
   "schema_version": "2"
 }

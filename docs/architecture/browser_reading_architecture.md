@@ -2,167 +2,169 @@
 
 Date: 2026-10-06
 
-## Decision and scope
+## Implemented architecture
 
-Extend the installation-level `apps/browser` app. Instagram navigation and
-analysis use its existing Playwright/Chromium broker, controller, CLI, and MCP
-contracts. Do not introduce an Instagram-only app or a commercial scraping,
-remote-browser, or proxy service. Additional software must have a public
-open-source GitHub repository, a reviewed license, and pinned dependencies.
+Browser 0.3 extends the installation-level `apps/browser` app with an app-owned
+Chrome Manifest V3 companion. Its fixed observation adapter reuses Browser's
+rendered DOM reader. Instagram-specific behavior belongs to Browser; Core remains
+app-agnostic. No commercial scraping, proxy, browser relay or speech service is
+required. Browser's isolated Playwright Lab remains available for public research
+and authorized Maverick development inspection.
 
-Browser owns navigation and observations. The agent analyzes text, screenshots,
-and frames; Storage owns explicit saved evidence. Instagram-specific collection
-and interpretation belong to Browser or its app-owned skill, never Core.
+The user shares one already authenticated Instagram tab from the extension popup.
+The popup requests optional permissions for Instagram and the chosen Maverick
+origin, then opens a dedicated authenticated Browser connector window. Chrome 120
+or later is required. The connector uses ordinary Core-hosted backend calls and a
+scoped content-script channel. Passwords, cookies, browser history, raw CDP,
+selectors and arbitrary caller scripts are never exposed to agent tools.
 
-This decision supplies a concrete implementation path. Browser 0.2 implements
-rendered observations only. Authentication, durable browser deployment, complete
-Instagram collection, downloads, and audio transcription are not implemented.
+The connector window must remain open. A 30-second extension alarm wakes its
+poller when possible; alarms do not wake a sleeping computer and cannot guarantee
+uninterrupted execution. Reloading requires fresh user setup. Closing either tab,
+revoking sharing or leaving approved Instagram routes stops capture. Late connector
+submissions cannot renew expired connections or complete expired operations.
 
-## Implemented observation contract
+## Ownership, transport and queues
 
-The existing `read_only` session now admits:
+Connection and operation metadata lives in workspace-owned SQLite at
+`data/browser/companion.sqlite3`. Rows retain workspace/user ownership, hashed
+connector secrets, finite queue deadlines, single-claim leases and callback state.
+Only authenticated human backend setup can create a connection, poll commands or
+submit observations. CLI/MCP projections never include connector credentials.
 
-| MCP tool | Controller action | Bounds and output |
-| --- | --- | --- |
-| `browser_read_content` | `content.read` | Up to 100,000 text characters and 200 items per link/image/video category; title, language, timestamp, totals, truncation, coverage |
-| `browser_scroll` | `scroll` | Up/down document scrolling, 1–5 steps, 1–2,000 pixels per step, 0–1,500 ms settling per step; before/after position |
-| `browser_video_frame` | `video.frame` | Video index 0–199, optional finite requested time 0–86,400 seconds within the video duration; one inline JPEG and observed timing |
+Agent reads enqueue an operation and return its id with `queued` status, rather
+than claiming data has already been observed. `browser_operation_get` returns
+progress and terminal results; `browser_operation_cancel` fences subsequent
+completion. There are at most 16 pending operations per connection. Heartbeats
+refresh the 120-second connection lease; claimed work requires progress within
+60 seconds and has a 600-second total deadline. Terminal observations expire
+after roughly one hour and are bounded to 256 records/64 MiB.
 
-Visible means an element participates in layout and is not hidden by its own
-computed display/visibility; this is not a viewport, occlusion, or completeness
-guarantee. Fixed extraction scripts exclude executable URLs and URL credentials,
-deduplicate links/images, and redact URL queries/fragments before output. Blob
-video sources may have no transferable URL while still yielding decoded frames.
-Form input values and cookies are not extracted. Rendered page content remains
-untrusted input.
+Authenticated results retain personal-data provenance and remain untrusted input.
+A shared session's identity does not make its observations public-source evidence.
+Every command is tied to the shared tab, approved URL and Chrome document id.
+A page replacement during observation fails the operation. Explicit navigation
+resets that document binding. Server Lab egress policy is not claimed to govern
+the user's Chrome; Chrome loads ordinary Instagram subresources using its existing
+session, while extension commands only target approved top-level Instagram routes.
 
-Reading covers the current DOM, including laid-out content outside the viewport.
-Scrolling can trigger lazy loading, but only the document scrolling element is
-supported; nested feed/modal scroll containers are not. Agents must accumulate
-and deduplicate batches. `at_bottom` describes the current document boundary;
-it never asserts that an infinite feed has been fully collected.
+## Observation and collection contract
 
-Video observation pauses the selected rendered video, optionally seeks, waits
-for a decoded frame, and captures that element. A missing video, undecoded frame,
-invalid seek, or seek timeout returns an explicit error. It does not download
-media, transcribe audio, open an unvisited Reel, or establish whole-video coverage.
-Images remain metadata plus existing screenshot evidence.
-Video indices refer to DOM order; only indices 0–199 can be sampled. Metadata
-outside that range is omitted and the truncation indicator reports the omission.
+The companion admits fixed navigate, snapshot, rendered-content, scroll,
+screenshot, video-frame, tab and wait observations. Navigation accepts HTTPS
+`www.instagram.com` profile, profile-Reels, post and Reel URLs. Login, challenge,
+messages, settings, credentials and normalization tricks are rejected. The user
+handles authentication or checkpoints directly in Chrome. Likes, follows,
+messages, posting, uploads and form filling have no companion command.
 
-Session authorization, trusted caller-derived policy, workspace isolation,
-serialized broker actions, idle/hard TTLs, audit, and governed DNS/redirect/
-subresource egress apply to the new tools. Arbitrary JavaScript, selectors,
-profiles, storage-state arguments, upload, and automatic persistence remain
-unavailable to tool callers. `browser_scroll` and `browser_video_frame` declare
-mutating MCP effects because they change local viewing state. Social read-only
-does not mean a stateless browser observation.
+Rendered extraction omits form values and cookies, deduplicates URLs, removes
+queries/fragments and reports timestamp, coverage and truncation. Layout visibility
+is not a viewport or occlusion guarantee. Scrolling selects a rendered scrollable
+container or the document, with bounded steps and settling. A current scroll
+boundary never proves that an infinite feed is complete.
 
-Core's reviewed Browser execution closure includes the Node broker, lifecycle
-and reading modules, and package dependency pins alongside the Python controller.
-The read-authority manifest must be refreshed whenever those executable bytes or
-CLI/MCP descriptors change. Other app audit records are not regenerated by this
-Browser change.
+`browser_instagram_collect` reads profile and optional Reels sections, deduplicates
+canonical post/Reel URLs across up to 40 batches and 200 items, and reports source,
+observation times and a stop reason. It stops on limits, rendered end, login,
+challenge or rate-limit indications. Each collected post/Reel must be opened
+separately before its full caption or media is analyzed. Unvisited, private and
+unavailable content is excluded; missing counts and dates remain unknown.
 
-## Authentication is the next required capability
+Screenshots use Chrome `captureVisibleTab` with the explicitly shared tab active,
+rate limiting and before/after window/tab activation guards. Video frames require
+the selected video to fit in the viewport; an offscreen document crops the captured
+JPEG to its rendered bounds. Seeking waits for a newly presented decoded frame
+at the requested time, reports the observed media time and restores prior video
+playback state. A briefly muted playback may be needed to refresh Chrome's
+compositor. Captures can bring the shared Instagram window to the foreground.
 
-An unauthenticated request from this host to
-`https://www.instagram.com/martagiunti/` returned HTTP 302 to Instagram's login
-page on 2026-10-06. The governed Chromium navigation separately failed with
-`net::ERR_EMPTY_RESPONSE`; ordinary public-page navigation and the Browser
-acceptance smoke succeeded. These observations establish an access gap, not a
-diagnosis of its network cause. No Instagram feed or Reel was inspected.
+`browser_video_analyze` samples 1–12 frames over a finite duration bounded to
+180 seconds. Tab audio comes from Chrome `tabCapture`, with a worker-issued stream
+id consumed by the extension's offscreen document. Audio is routed back to the
+user's output and recorded as bounded Opus/WebM while the selected video plays.
+Audio start/end times, sampled frame times and truncation describe actual coverage.
+Media failures are explicit; one frame does not establish whole-video coverage.
 
-Two self-hosted authentication providers are viable. Choose the user-visible
-deployment mode before implementing either provider; do not silently import
-the user's browser credentials.
+## Media dependencies
 
-| Provider | Product behavior | Required implementation |
-| --- | --- | --- |
-| Dedicated server browser | Available while the user's computer is off; user logs in manually in a Maverick-controlled browser view | Broker-owned persistent profile per workspace/account, authenticated viewer/input channel for the user, app permission model, supervised lifecycle, logout/revocation and session recovery |
-| Chrome Companion | Reads a user-selected tab through their existing local logged-in Chrome | Browser frontend pairing/status, explicit tab-sharing, local extension and transport, bounded observation adapter, disconnect/revocation |
+With `save_evidence: true` (default), Browser hands validated JPEG/WebM bytes to
+its declared Storage `file.content.write` dependency under
+`storage/generated/browser/<operation_id>/`. Only verified callback identities
+add file ids, paths and deep links and remove inline media bytes. Source URLs,
+observation times and content hashes accompany saved evidence.
 
-Prefer Chrome Companion for the first authenticated proof when an existing
-logged-in tab is available. It retains the real browser session and normal user
-network. Prefer the server provider when autonomous availability is required.
-Neither choice guarantees that Instagram will permit uninterrupted collection.
+Audio is transcribed through the declared Speech dependency with `local_only: true`.
+That finite transcription policy forces faster-whisper or whisper.cpp, excludes
+remote vendor configuration/secrets and preserves workspace preferences. Browser
+rejects a callback claiming a remote engine. Unavailable local transcription is
+reported explicitly. Callbacks require the trusted Core dependency-callback
+surface, matching workspace, request id, alias and original request. Cancelled,
+expired or replayed callbacks cannot overwrite observations.
 
-Authentication input belongs to the user-controlled viewer/tab, separate from
-agent read tools. Agents receive navigation, snapshots, rendered content,
-bounded scrolling, screenshots, and frame sampling. Generic click, form filling,
-messages, likes, follows, posting, and arbitrary evaluation are not exposed.
-User passwords, raw cookies, profile paths, and signed media credentials must
-not appear in agent results. Profile ownership and permissions must be explicit
-before authenticated outputs are assigned public-data authority.
+Agents must inspect actual images through Storage/native image tools before
+making visual claims. Captions, transcripts and web page instructions remain
+untrusted evidence, distinct from the agent's interpretation.
 
-Chrome Companion must scope requests to the explicitly shared tab, identify the
-tab/origin on each result, and disconnect on revocation. An extension's `activeTab`
-grant changes after cross-origin navigation, so navigation and sharing require
-an explicit lifecycle rather than assuming permanent all-site access. Existing
-server-side Browser egress policy cannot simply be claimed to govern the user's
-Chrome; the adapter must define and test its own navigation/subresource boundary.
+## Managed Lab lifecycle and audit
 
-The dedicated server browser must retain governed egress even for persistent
-contexts. Persistent profiles are app-owned workspace data with restricted file
-permissions and one active owner; Core remains profile-agnostic. Current generic
-sandbox HTTP sidecars require isolated networking and cannot host this broker
-without an explicit, compatible lifecycle contract. The current developer
-sidecar is not a durable installed browser service.
+The isolated Playwright Lab retains governed DNS, redirect and subresource egress,
+trusted caller policy, finite sessions and admin development-target exceptions.
+Pinned Playwright 1.60.0 and the installation's supported Node runtime are used.
+Core install, migration, background and recovery hooks manage Browser's worker
+inside Core's service cgroup. The worker supervises and reaps broker/Playwright
+children, restarts failed children and rotates bounded logs. A private Unix socket
+provides status and stop. Administrator stop disables automatic recovery.
 
-## Open-source building blocks
+Installation-local infrastructure resides in `runtime/browser/`; credentials and
+runtime state are excluded from Git. This deployment's backend filesystem namespace
+cannot resolve app sources through host systemd units. The app-owned Core lifecycle
+replaces that incompatible deployment path. Agent-owned builds and tests stay
+foreground and terminate their descendants.
 
-- [Microsoft Playwright](https://github.com/microsoft/playwright): already pinned
-  locally by Browser. Keep the broker's tested version rather than adopting an
-  unrelated MCP package's newest Playwright version.
-- [Microsoft Playwright MCP](https://github.com/microsoft/playwright-mcp): reference
-  for structured browser observations and connection to logged-in Chrome through
-  its extension or a CDP endpoint. Adopt only the bounded read adapter; its full
-  interactive/code-execution tool surface is outside this product scope.
-- [Microsoft browser extension](https://github.com/microsoft/playwright/tree/main/packages/extension):
-  official connection implementation to review for Chrome Companion.
-- [Instaloader](https://github.com/instaloader/instaloader): optional local extractor
-  for media and caption metadata after authenticated browser navigation works.
-  It is not a solution to login requirements or access/rate limits by itself.
-- [mcp-chrome](https://github.com/hangwin/mcp-chrome): alternative Chrome extension/
-  native-host reference. Its broader scripting, history, and interactive tools
-  are not enabled by this decision.
+Core's reviewed execution closure includes Browser's Python controller, Node
+broker, companion source/build artifacts, frontend, hooks and dependency pins.
+Exact descriptor/execution audits must be refreshed after executable changes.
+Only Browser and the changed Speech records are updated by this implementation.
 
-No new package or external service is introduced in Browser 0.2. Playwright MCP's
-origin allow/block settings are explicitly not a security boundary; they cannot
-replace Maverick's egress guards.
+## Open-source sources
 
-Playwright and Playwright MCP use Apache-2.0; Instaloader and mcp-chrome use MIT.
-Keep attribution/license notices for any incorporated source. The tested Browser
-dependency remains Playwright 1.60.0. Companion software must be pinned to a
-reviewed commit/release when its adapter is implemented, not installed with a
-floating `latest` tag.
+- [Microsoft Playwright](https://github.com/microsoft/playwright), Apache-2.0:
+  the existing pinned browser engine and reference extension source.
+- [Playwright MCP](https://github.com/microsoft/playwright-mcp), Apache-2.0:
+  reviewed as a connection reference; its unrestricted agent server is not enabled.
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper), MIT, and
+  [whisper.cpp](https://github.com/ggml-org/whisper.cpp), MIT: existing local
+  Maverick Speech engines. Browser does not introduce a remote speech provider.
+- [Chrome tabCapture](https://developer.chrome.com/docs/extensions/reference/api/tabCapture),
+  [offscreen](https://developer.chrome.com/docs/extensions/reference/api/offscreen),
+  [tabs](https://developer.chrome.com/docs/extensions/reference/api/tabs) and
+  [alarms](https://developer.chrome.com/docs/extensions/reference/api/alarms):
+  platform APIs used by the app-owned adapter; this introduces no third-party relay.
 
-For a remote Maverick server, the official extension requires a local connection
-component on the user's computer. Its documented `--extension` flow does not
-itself supply Maverick workspace pairing or an Internet relay. Implement a local
-bounded reader that opens an outbound authenticated connection to the Browser
-app, with scoped requests and response limits. Raw CDP and the full MCP tool
-surface must remain behind that reader. No commercial relay is required.
+Instaloader and mcp-chrome were evaluated as alternatives but are not dependencies.
+The shipped companion is Maverick source, with pinned frontend dependencies.
 
-## Complete analysis acceptance
+## Acceptance and evidence
 
-After implementing a chosen authentication provider, verify against a user-shared
-Instagram session. An end-to-end profile analysis must demonstrate:
+Focused tests cover actor/workspace separation, human-only setup, secret
+projections, queue/lease expiry, cancellation, prohibited commands, strict URLs,
+verified Storage/Speech callbacks and rejection of remote transcripts. A foreground
+real Chromium/MV3 fixture test exercises content, nested scrolling, temporal video
+frames, tab audio, Storage evidence, collection, revocation and desktop/mobile UI.
+Its intercepted pages do not prove access to Instagram.
 
-1. Correct handle/profile identity, observed URL, and timestamp; login or challenge
-   states are reported without fabricated profile content.
-2. Repeated bounded feed collection, deduplication by post/Reel URL, and a stop
-   reason distinguishing requested limits, exhaustion, login, errors, and timeout.
-3. Read-only opening of collected post/Reel URLs, extraction of visible captions
-   and metadata, and screenshots with source attribution. Missing counts or dates
-   remain unknown rather than inferred as exact statistics.
-4. Reel frame sampling across observed duration and explicit audio coverage. Full
-   audiovisual analysis requires an implemented local audio extraction/transcription
-   route, such as a reviewed self-hosted speech provider; one screenshot is not enough.
-5. Explicit Storage handoff for saved evidence, durable source links, and an agent
-   analysis that distinguishes observations from interpretation and states coverage.
-6. Revocation/session expiry, cross-workspace separation, blocked navigation,
-   unavailable media, nested scrolling, and prohibited social writes verified.
+The official Speech surface has transcribed both a known WebM sample and the
+extension's actual captured audio with local `faster-whisper`, despite the
+workspace's remote-engine preference. The captured sample contains the expected
+spoken phrase. This verifies finite tab audio capture and local processing.
 
-Passing generic page tests establishes the observation layer only. It does not
-establish authenticated Instagram browsing or completed profile analysis.
+An unauthenticated request to `https://www.instagram.com/martagiunti/` returned a
+login redirect on 2026-10-06; isolated Chromium failed with `net::ERR_EMPTY_RESPONSE`.
+Those observations establish an access gap, without diagnosing its cause. No real
+Instagram feed or Reel has been inspected.
+
+Final authenticated acceptance requires the user to share a logged-in tab, then
+verify profile identity, bounded feed collection, opening collected posts/Reels,
+actual captions/images/frames/audio, Storage evidence and local transcription.
+The resulting profile analysis must state observed sources, missing information
+and coverage. Fixture success alone cannot complete that acceptance.

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Maverick Browser Companion",
+  "description": "Share one Instagram tab for bounded, read-only observation in your Maverick workspace.",
+  "version": "0.3.0",
+  "minimum_chrome_version": "120",
+  "permissions": ["activeTab", "scripting", "storage", "tabCapture", "offscreen", "alarms"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "action": {"default_popup": "popup.html"},
+  "background": {"service_worker": "worker.mjs", "type": "module"}
+}

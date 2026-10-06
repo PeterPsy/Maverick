@@ -20,7 +20,7 @@ TOOL_ACTIONS = {
 TOOL_ARGUMENT_FIELDS = {
     "speech_operations_manifest": set(),
     "speech_reference_manifest": set(),
-    "speech_transcribe_file": {"workspace_relative_path", "content_type", "language"},
+    "speech_transcribe_file": {"workspace_relative_path", "content_type", "language", "local_only"},
 }
 
 

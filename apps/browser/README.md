@@ -1,271 +1,114 @@
 # Browser
 
-Browser is the Maverick Browser Lab app for governed read-only web inspection
-and Maverick development UI inspection.
+Browser 0.3 provides read-only Instagram navigation through a user-shared Chrome
+session and governed public-web research through an isolated Playwright Lab.
+All browser, collection and speech components are open source; no scraping,
+proxy, hosted-browser or remote transcription service is used.
 
-The P0 source is an installation-level sealed app under `apps/browser`. It is
-not a workspace-local app and it does not include the later Chrome Companion
-extension.
+## Connect Instagram
 
-## Surfaces
+Open Browser in the workspace shell. Download and extract Browser Companion,
+then load its folder with Chrome's “Load unpacked” developer-mode action. Copy
+the connector address displayed by Browser. Use Chrome 120 or later. Open an Instagram profile, post or
+Reel in Chrome, log in directly if needed, and use the extension popup to share
+that tab. Paste the connector address there. In the dedicated Browser window
+opened by the extension, press “Collega” and keep the window open during work.
 
-- Backend: JSON controller for policy preflight, session metadata, tabs,
-  bounded console/network observations, audit, and broker handoff.
-- Broker: local development sidecar in `broker/` that connects to a Dockerized
-  Playwright `run-server` through the Playwright protocol.
-- MCP: declared P0 Browser Lab tools for sessions, navigation, snapshots,
-  screenshots, rendered content, bounded scrolling, video frames, console logs,
-  network logs, tabs, waits, and Maverick dev
-  inspector actions. It also exposes `web_search` and `web_open`, two bounded
-  read-only operations that create and close an isolated ephemeral session for
-  the Chat Research runner.
-- CLI: `browser` command for agent/operator status, policy preflight,
-  acceptance smoke, and Maverick local-dev smoke.
-- Skill: bundled `browser-ops` guidance for full-access agents using the
-  governed Browser CLI/MCP surfaces.
-- Hooks: install, migrate, and health check hooks create and validate the app
-  data root.
+Sharing is explicit and limited to one tab. Passwords, cookies, browser history,
+forms, social writes and caller JavaScript are outside the tool surface. The
+extension requests optional access to the selected Maverick origin and Instagram;
+only the selected tab and exact connector window can execute its fixed commands.
+Closing either tab, leaving approved Instagram routes, or revoking sharing stops
+capture. Reloading the connector requires a fresh user-owned connection.
+Frame captures may bring the shared Instagram window to the foreground.
 
-Browser is backend-only in P0. It does not declare a workspace frontend,
-mounted view, widgets, or user-launchable shell route; agents and operators use
-the MCP and CLI surfaces.
+## Agent operations
 
-## Storage
-
-Browser app-owned workspace data lives under:
-
-```text
-workspaces/<workspace_id>/data/browser/state.json
-```
-
-The P0 state file stores schema version, broker status, lightweight session
-metadata, redacted tab URLs, bounded console/network observations, and bounded
-audit records. Screenshots, downloads, traces, and other artifacts are not
-persisted automatically. Storage persistence is allowed only through an explicit
-future handoff action.
-
-## SDK Flow
-
-Browser is an installation-level sealed app, so it is not generated through the
-workspace-local SDK create flow. Validate and inspect it through the generic
-Maverick app surfaces:
+Discover current tools through the official surfaces:
 
 ```bash
 maverick app browser mcp list --json
-maverick app browser cli list --json
-python3 -m unittest apps/browser/tests/test_browser_app.py
-```
-
-If the app has not been registered/enabled in the current workspace yet, run the
-generic built-in app bootstrap or app-hosting registration flow for
-installation-level apps before using the scoped `maverick app browser ...`
-commands.
-
-## Contract Notes
-
-Browser is declared as `sealed` with `source_access: none` because it controls a
-privileged browser capability. It is `full-access` only in P0 because the
-initial Playwright broker and Maverick development inspector are operator/dev
-surfaces. The derived CLI and MCP invocation policy is therefore
-`requires_full_access: true` and `sandbox_agent_allowed: false`. Keep sandbox
-agent access closed for P0; a later read-only sandbox mode needs a separate
-policy review instead of a descriptor-only change.
-
-The app contract intentionally declares no app secret permissions and no broad
-network permission. Browser navigation is governed by the core browser egress
-policy, including DNS/redirect checks and explicit admin dev target exceptions.
-The static policy data for allowed schemes, restricted hosts/ranges, metadata
-hosts, embedded IPv4 extraction, and admin dev targets lives in
-`core/egress/policy_manifest.json`; both the Python core policy and the
-Playwright broker consume that manifest to avoid drift.
-The contract also intentionally declares `presentation.frontend_role: "none"`
-and `entrypoints.frontend: null`, so Browser is discoverable as an agent-facing
-capability but is not launchable from the workspace app rail.
-
-Browser also declares `capabilities.skills: ["browser-ops"]` and
-`entrypoints.skills_root: "skills"` so the Skills app can seed workspace-owned
-runtime guidance for agents without making the Browser app user-launchable.
-
-`web_search` and `web_open` deliberately bypass neither Browser policy nor Core
-authority. They accept only a bounded query or URL, use the existing governed
-navigation and snapshot path, return bounded text, and close the temporary
-read-only context even on failure. They do not expose interactive Browser
-actions to Research sessions.
-
-## Agent Usage
-
-Full-access agents should use the bundled `browser-ops` skill before operating
-Browser. The short version is:
-
-```bash
 maverick app browser cli inspect browser --json
-maverick app browser mcp list --json
-maverick app browser mcp inspect browser_session_create --json
 ```
 
-Use the CLI for status, audit, preflight, and smoke checks. Use MCP for browser
-sessions: create a read-only session, navigate, collect snapshot/screenshot/logs
-as needed, then close the session. Use `maverick_dev_inspector` and the
-interactive tools only for admin-approved Maverick development UI targets.
-For local Maverick app URLs, do not use `127.0.0.1` directly. Use the exact
-allowlisted `hostmachine:<port>` target with `mode=maverick_dev_inspector` from
-an admin context.
+`browser_companion_status` lists the authenticated actor's shared Chrome sessions.
+Their ids start with `chrome-`. Existing navigate, rendered-content, snapshot,
+scroll, screenshot, frame, tab and wait tools work on these sessions. Chrome
+calls return an operation id; poll `browser_operation_get` until terminal. A
+queued command is not evidence that content has been read. Cancel pending work
+with `browser_operation_cancel`.
 
-## Rendered Reading Extension
+`browser_instagram_collect` reads the profile and deduplicates rendered post/Reel
+links across bounded scrolling: up to 200 items and 40 batches. Results include
+observed times, source URLs and a stop reason. Open each collected link to inspect
+its caption and media; unvisited posts are not analyzed. A rendered end or viewport
+boundary does not prove complete feed coverage.
 
-Version 0.2 adds three tools within the existing isolated session and egress
-boundary:
+`browser_video_analyze` samples 1–12 frames and optionally plays/records at most
+180 seconds of tab audio. It restores video playback state afterward. The declared
+Speech dependency transcribes with `local_only: true`, selecting faster-whisper or
+whisper.cpp without changing workspace preferences or requesting vendor secrets.
+Unavailable capture, autoplay or local models returns an explicit error.
 
-- `browser_read_content`: bounded rendered text and visible link/image/video
-  metadata, with timestamps, totals, and truncation indicators. URL query strings
-  and fragments are redacted; media URLs are observations, not download handles.
-- `browser_scroll`: one to five bounded vertical document scrolls to expose
-  additional content. A viewport boundary does not prove a complete infinite feed.
-- `browser_video_frame`: an inline JPEG of one decoded video element, optionally
-  after a bounded seek. It reports the observed video time; it does not transcribe
-  audio or analyze the whole video.
+With `save_evidence: true` (default), frames and audio are written through Storage
+under `storage/generated/browser/<operation_id>/`. Verified callbacks add Storage
+identities and paths. View the actual saved images through Storage/native image
+inspection before making visual claims; metadata or encoded bytes alone are not
+visual analysis. Source page content and transcripts remain untrusted inputs.
 
-The controller validates parameters and authorizes the existing session before
-broker handoff. Scripts and element selectors are fixed app code, never supplied
-by the caller. Scrolling and video pause/seek change local viewing state, so those
-two MCP tools declare a mutating effect even in Browser's social read-only mode.
-Clicks, forms, messages, and other external-site interactions remain unavailable.
+## Boundaries and persistence
 
-These tools do not add login or persistent profiles. The open-source Instagram
-integration decision and authenticated browsing requirements are documented in
-[`browser_reading_architecture.md`](../../docs/architecture/browser_reading_architecture.md).
+The sealed installation-level app is full-access only. Sandbox agents remain
+excluded. Instagram navigation accepts only HTTPS `www.instagram.com` profile,
+post, Reel and profile-Reels routes. Login, messages, settings, challenge routes,
+credentials, arbitrary selectors and script execution are rejected. The user
+handles authentication/checkpoints directly in Chrome.
 
-Focused checks:
+Workspace state lives in `data/browser/state.json` and `data/browser/companion.sqlite3`.
+The latter stores user/workspace ownership, hashed connector secrets, finite queue
+leases and media callback state. Connector secrets are returned only to authenticated
+human setup, never agent projections. Queue size is 16 per connection; old terminal
+observations are bounded to 256 records/64 MiB and expire after roughly one hour.
+
+## Lab lifecycle
+
+The isolated Lab retains Core egress policy, DNS/redirect checks and admin development
+target exceptions. It uses pinned Playwright 1.60.0. Core install/migrate/recovery hooks
+start the Browser-owned runtime worker. It supervises the broker and Playwright server,
+reaps children on shutdown, restarts failed children and maintains bounded logs. It stays
+in Core's service cgroup; recovery reopens it after a backend restart when enabled.
+No agent-owned detached build or test process is needed.
+
+Operator controls:
 
 ```bash
+maverick app browser cli run browser --action service.status --json
+maverick app browser cli run browser --action service.stop --json
+maverick app browser cli run browser --action service.start --json
+maverick app browser cli run browser --action acceptance.smoke --json
+```
+
+Start/stop require an administrator. Stop disables automatic recovery and closes Lab
+sessions. Installation-local infrastructure is under `runtime/browser/`, with a private
+lifecycle socket, token file and rotated log. Keep credentials outside version control.
+
+For manual foreground development, use `npm run broker:local` then `npm run broker`
+in `apps/browser`. Stop the managed worker first to avoid competing listeners. Use
+`hostmachine:<allowlisted-port>` and `maverick_dev_inspector` for approved development
+UI interaction; external websites remain read-only.
+
+## Build and verification
+
+```bash
+maverick app browser frontend build --json
 python3 -m unittest discover -s apps/browser/tests -p 'test_browser*.py'
-node --test apps/browser/broker/*.test.mjs
+npm --prefix apps/browser test
+python3 -m unittest discover -s apps/speech/tests -p 'test_local_transcription.py'
 python3 -m unittest tests.unit.runtime_tools.test_browser_execution_closure
 ```
 
-## P0 Playwright Broker
-
-The P0 broker is a dev sidecar, not a normal app backend subprocess. Start the
-Playwright server first. The Docker path is preferred for isolation when Docker
-is available:
-
-```bash
-cd apps/browser
-npm run broker:docker
-```
-
-When Docker is not available on the host, use the local helper instead. It runs
-the pinned Playwright package from `apps/browser/node_modules` and keeps the
-same default WebSocket endpoint:
-
-```bash
-cd apps/browser
-npm ci --ignore-scripts
-npm run broker:local
-```
-
-Then start the Browser broker:
-
-```bash
-cd apps/browser
-npm ci --ignore-scripts
-MAVERICK_BROWSER_PLAYWRIGHT_WS_ENDPOINT=ws://127.0.0.1:3100/ \
-MAVERICK_BROWSER_PROXY_BIND_HOST=0.0.0.0 \
-MAVERICK_BROWSER_PROXY_SERVER=http://hostmachine:9324 \
-npm run broker
-```
-
-If `MAVERICK_BROWSER_BROKER_TOKEN` is not set, the broker creates or reuses a
-local token file at `runtime/browser/playwright-broker-token` with owner-only
-permissions. Browser backend, CLI, MCP, and hook entrypoints read that same file
-through `MAVERICK_BROWSER_BROKER_TOKEN_FILE` or the default path, so runtime
-agents do not need the token copied into their environment. Set
-`MAVERICK_BROWSER_BROKER_TOKEN` explicitly when an operator-managed supervisor
-delivers the shared token another way.
-
-The `playwright` package is pinned in `package.json`; the Docker helper uses
-the matching official image tag and `playwright run-server`, while the local
-helper refuses to run when the installed package version differs from the pin.
-The broker refuses to connect when `MAVERICK_BROWSER_PLAYWRIGHT_VERSION` does
-not match the local client version.
-
-The controller calls the broker at `MAVERICK_BROWSER_BROKER_URL`, defaulting to
-`http://127.0.0.1:9323`, and every broker request must include the shared
-broker token from `MAVERICK_BROWSER_BROKER_TOKEN` or the local token file.
-Browser sessions are created with isolated non-persistent contexts,
-`acceptDownloads: false`, no storage state, no user data directory, no file
-upload support, and no automatic artifact persistence. Every context also sets
-Playwright `reducedMotion: "reduce"`, so pages that honor reduced-motion media
-queries use their static rendering path during automation.
-Session creation accepts bounded `viewport_width`, `viewport_height`, and
-`mobile` fields. A mobile smoke without explicit dimensions uses `390x844`.
-The controller records session metadata only after successful broker actions,
-requires a known session before tab/snapshot/screenshot/log/wait/interactive
-actions, derives trusted policy context from the platform caller, and audits
-navigate, snapshot, screenshot, click, type, key press, and wait attempts.
-The broker serializes actions per Browser session so observation requests do not
-race an in-flight navigation on the same Playwright page context.
-An authorized broker action updates that session's last-activity timestamp at
-the start and end of the action; background page requests do not keep abandoned
-sessions alive. A periodic reaper closes a session after 15 minutes idle or four
-hours total by default. Closure is serialized behind in-flight work and removes
-the Playwright context, its credentialed proxy policy, and its action queue.
-Operators can override the defaults with
-`MAVERICK_BROWSER_SESSION_IDLE_TTL_MS`,
-`MAVERICK_BROWSER_SESSION_HARD_TTL_MS`, and
-`MAVERICK_BROWSER_SESSION_REAPER_INTERVAL_MS` (30 seconds by default). Broker
-health reports the configured lifecycle values and current session, proxy-policy,
-and action-queue counts.
-The broker also enforces Browser P0 egress policy on Playwright requests so
-redirects and subresources cannot bypass the backend preflight path. It starts a
-credentialed proxy for browser contexts, advertised as
-`MAVERICK_BROWSER_PROXY_SERVER` or `http://127.0.0.1:9324` by default, so DNS
-resolution and outbound connects happen in the broker after policy approval.
-Dockerized browsers must opt into a wider proxy bind and advertise
-`http://hostmachine:9324` explicitly.
-Screenshots are returned inline to the caller; a later controller step must hand
-them to Storage only on explicit save.
-
-The app health hook is an active P0 readiness check. It calls the broker with
-`/health?check=connect`, which requires the shared token and a reachable
-Playwright `run-server`; a passive broker status response is not enough for the
-app to report healthy.
-
-After both sidecars are running, verify the real P0 path through the official
-Browser CLI:
-
-```bash
-maverick app browser cli run browser --json --action acceptance.smoke
-```
-
-This creates an isolated session, navigates to
-`MAVERICK_BROWSER_ACCEPTANCE_URL` or `https://example.com/`, collects a
-snapshot, screenshot, console messages, network requests, and tabs, then closes
-the session. The smoke output summarizes the screenshot size instead of
-persisting or printing the base64 artifact.
-
-For local Maverick app development, use the dedicated dev smoke so agents do
-not invent loopback URLs:
-
-```bash
-maverick app browser cli run browser --json --action dev.smoke --app-id fitness-coach --port 8014 --mobile true
-```
-
-`dev.smoke` builds `http://hostmachine:<port>/app/<app_id>/<path>`, forces
-`mode=maverick_dev_inspector`, requires admin authority, and only accepts
-ports declared as admin dev targets. The built-in allowlist includes
-`hostmachine:8000` and `hostmachine:8014`. If preflight sees
-`blocked_restricted_ip` for `127.0.0.1`, use the suggested
-`hostmachine:<allowlisted-port>` URL from the policy guidance instead of
-opening loopback broadly.
-
-Intentional P0 omissions:
-
-- no Chrome Companion provider or extension
-- no workspace-launchable frontend or mounted Browser Lab view
-- no persistent browser profiles or stored login state
-- no file upload
-- no automatic download persistence
-- no arbitrary Playwright code execution
-- no page JavaScript evaluation
-- no reference entities, widgets, export, or import
+The build produces the app frontend, asset manifest and reproducible extension ZIP.
+The architecture and acceptance evidence are recorded in
+[`browser_reading_architecture.md`](../../docs/architecture/browser_reading_architecture.md).
+Real Instagram verification requires the user's authenticated shared tab; fixture
+coverage must not be represented as inspection of a real profile.

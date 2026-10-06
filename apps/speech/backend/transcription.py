@@ -32,6 +32,7 @@ from models import (
     TRANSCRIPTION_PROFILE_MODELS,
 )
 from store import append_job, read_settings
+from transcription_policy import local_only_requested, local_transcription_settings
 
 HALLUCINATION_TRANSCRIPTS = {
     "bye",
@@ -75,6 +76,7 @@ DICTATION_COMMANDS = {
 
 
 def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
+    local_only = local_only_requested(body)
     request_started = time.monotonic()
     upstream_body_stage_seconds = body_file_stage_seconds(body)
     body_stage_seconds = upstream_body_stage_seconds
@@ -104,6 +106,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             dictation_mode=dictation_mode,
             app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
             provider_config=body.get("_provider_config") if isinstance(body.get("_provider_config"), dict) else {},
+            local_only=local_only,
             conversation_mode=conversation_mode,
         )
     body_decode_started = time.monotonic()
@@ -123,6 +126,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
         dictation_mode=dictation_mode,
         app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
         provider_config=body.get("_provider_config") if isinstance(body.get("_provider_config"), dict) else {},
+        local_only=local_only,
         conversation_mode=conversation_mode,
     )
 
@@ -144,6 +148,7 @@ def transcribe_inline_body_file(
     app_secrets: dict | None = None,
     provider_config: dict | None = None,
     conversation_mode: bool = False,
+    local_only: bool = False,
 ) -> dict:
     if not audio_path.exists() or not audio_path.is_file():
         raise SpeechValidationError("inline audio upload is unavailable.", operation="transcribe_audio")
@@ -170,6 +175,7 @@ def transcribe_inline_body_file(
         dictation_mode=dictation_mode,
         app_secrets=app_secrets,
         provider_config=provider_config,
+        local_only=local_only,
         conversation_mode=conversation_mode,
     )
 
@@ -189,6 +195,7 @@ def transcribe_file_payload(
     uploaded_storage_root: Path | None,
     body: dict,
 ) -> dict:
+    local_only = local_only_requested(body)
     request_started = time.monotonic()
     audio_path = resolve_workspace_audio_path(
         generated_storage_root=generated_storage_root,
@@ -214,6 +221,7 @@ def transcribe_file_payload(
         source={"kind": "storage", "workspace_relative_path": normalized_workspace_relative_path(body)},
         app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
         provider_config=body.get("_provider_config") if isinstance(body.get("_provider_config"), dict) else {},
+        local_only=local_only,
     )
 
 
@@ -233,6 +241,7 @@ def transcribe_bytes(
     app_secrets: dict | None = None,
     provider_config: dict | None = None,
     conversation_mode: bool = False,
+    local_only: bool = False,
 ) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     body_write_started = time.monotonic()
@@ -256,6 +265,7 @@ def transcribe_bytes(
             dictation_mode=dictation_mode,
             app_secrets=app_secrets,
             provider_config=provider_config,
+            local_only=local_only,
             conversation_mode=conversation_mode,
         )
 
@@ -278,6 +288,7 @@ def transcribe_path(
     app_secrets: dict | None = None,
     provider_config: dict | None = None,
     conversation_mode: bool = False,
+    local_only: bool = False,
 ) -> dict:
     if request_started is None:
         request_started = time.monotonic()
@@ -290,6 +301,7 @@ def transcribe_path(
         settings = {**settings, "_app_secrets": dict(app_secrets)}
     if provider_config:
         settings = {**settings, "_provider_config": dict(provider_config)}
+    settings = local_transcription_settings(settings, local_only)
     settings["_data_root"] = str(data_root)
     dictation_stream_mode = deepgram_dictation_stream_enabled(
         settings,

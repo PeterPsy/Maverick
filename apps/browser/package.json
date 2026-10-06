@@ -1,21 +1,26 @@
 {
   "name": "@maverick/browser",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "test": "node --test broker/*.test.mjs",
+    "test": "node --test broker/*.test.mjs companion/*.test.mjs",
     "prebroker": "node ../../scripts/check-node-runtime.mjs",
     "broker": "node broker/playwright-broker.mjs",
     "prebroker:docker": "node ../../scripts/check-node-runtime.mjs",
     "broker:docker": "node broker/playwright-server-docker.mjs",
     "prebroker:local": "node ../../scripts/check-node-runtime.mjs",
-    "broker:local": "node broker/playwright-server-local.mjs"
+    "broker:local": "node broker/playwright-server-local.mjs",
+    "build": "node companion/build.mjs && vite build",
+    "test:companion": "node tests/companion.e2e.mjs"
   },
   "dependencies": {
     "playwright": "1.60.0"
   },
   "engines": {
     "node": ">=24.11.0 <25"
+  },
+  "devDependencies": {
+    "vite": "7.3.7"
   }
 }

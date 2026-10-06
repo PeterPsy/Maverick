@@ -20,16 +20,30 @@
       "description": "Configure workspace Speech engine/language preferences, inspect health/settings, prewarm persistent workers, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
       "secret_selectors": [
         {
-          "when": {"action": "list_engines"},
-          "required_secrets": ["deepgram-api-key", "openrouter-api-key"]
+          "when": {
+            "action": "list_engines"
+          },
+          "required_secrets": [
+            "deepgram-api-key",
+            "openrouter-api-key"
+          ]
         },
         {
-          "when": {"action": "engine_health"},
-          "required_secrets": ["deepgram-api-key", "openrouter-api-key"]
+          "when": {
+            "action": "engine_health"
+          },
+          "required_secrets": [
+            "deepgram-api-key",
+            "openrouter-api-key"
+          ]
         },
         {
-          "when": {"action": "transcribe_file"},
-          "required_secrets": ["deepgram-api-key"]
+          "when": {
+            "action": "transcribe_file"
+          },
+          "required_secrets": [
+            "deepgram-api-key"
+          ]
         }
       ],
       "argument_schema": {
@@ -70,7 +84,14 @@
           },
           "synthesis_engine": {
             "type": "string",
-            "enum": ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter", "kokoro-deepinfra"],
+            "enum": [
+              "auto",
+              "piper",
+              "espeak",
+              "espeak-ng",
+              "kokoro-openrouter",
+              "kokoro-deepinfra"
+            ],
             "description": "Workspace synthesis engine selection used by set_engine."
           },
           "synthesis_language": {
@@ -79,13 +100,27 @@
           },
           "transcription_engine": {
             "type": "string",
-            "enum": ["auto", "faster-whisper", "whisper.cpp", "deepgram"],
+            "enum": [
+              "auto",
+              "faster-whisper",
+              "whisper.cpp",
+              "deepgram"
+            ],
             "description": "Workspace transcription engine selection used by set_engine."
           },
           "transcription_profile": {
             "type": "string",
-            "enum": ["fast", "balanced", "accurate"],
+            "enum": [
+              "fast",
+              "balanced",
+              "accurate"
+            ],
             "description": "Workspace transcription profile used by set_engine."
+          },
+          "local_only": {
+            "type": "boolean",
+            "default": false,
+            "description": "Force local-only one-shot file transcription without changing the workspace engine."
           }
         },
         "required": [],

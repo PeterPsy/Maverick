@@ -45,4 +45,9 @@ MCP_TOOL_ACTIONS = {
     "browser_click": "click",
     "browser_type": "type",
     "browser_press_key": "press_key",
+    "browser_companion_status": "companion.overview",
+    "browser_operation_get": "operation.get",
+    "browser_operation_cancel": "operation.cancel",
+    "browser_instagram_collect": "instagram.collect",
+    "browser_video_analyze": "video.analyze",
 }

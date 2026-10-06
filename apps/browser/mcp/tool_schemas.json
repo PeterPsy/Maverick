@@ -6,9 +6,15 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "query": {"type": "string", "minLength": 1, "maxLength": 500}
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
         },
-        "required": ["query"],
+        "required": [
+          "query"
+        ],
         "additionalProperties": false
       }
     },
@@ -18,9 +24,15 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "url": {"type": "string", "minLength": 1, "maxLength": 4096}
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
         },
-        "required": ["url"],
+        "required": [
+          "url"
+        ],
         "additionalProperties": false
       }
     },
@@ -30,9 +42,24 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "mode": {"type": "string", "enum": ["read_only", "maverick_dev_inspector"], "default": "read_only"},
-          "viewport_width": {"type": "integer", "minimum": 320, "maximum": 3840},
-          "viewport_height": {"type": "integer", "minimum": 320, "maximum": 2160},
+          "mode": {
+            "type": "string",
+            "enum": [
+              "read_only",
+              "maverick_dev_inspector"
+            ],
+            "default": "read_only"
+          },
+          "viewport_width": {
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 3840
+          },
+          "viewport_height": {
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 2160
+          },
           "mobile": {
             "type": "boolean",
             "default": false,
@@ -48,35 +75,57 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"}
+          "session_id": {
+            "type": "string"
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
     "browser_navigate": {
       "effect_class": "mutating",
-      "description": "Navigate after core browser egress policy approval.",
+      "description": "Navigate a Lab session after Core egress approval, or navigate a shared Chrome tab to an approved Instagram profile/post/Reel. Chrome returns a queued operation_id.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "url": {"type": "string"},
-          "mode": {"type": "string", "enum": ["read_only", "maverick_dev_inspector"], "default": "read_only"}
+          "session_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "read_only",
+              "maverick_dev_inspector"
+            ],
+            "default": "read_only"
+          }
         },
-        "required": ["session_id", "url"],
+        "required": [
+          "session_id",
+          "url"
+        ],
         "additionalProperties": false
       }
     },
     "browser_snapshot": {
       "effect_class": "read",
-      "description": "Return an accessibility snapshot with refs for one session.",
+      "description": "Read a Lab accessibility snapshot or bounded rendered content from shared Chrome (queued operation_id).",
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"}
+          "session_id": {
+            "type": "string"
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -86,10 +135,17 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "full_page": {"type": "boolean", "default": false}
+          "session_id": {
+            "type": "string"
+          },
+          "full_page": {
+            "type": "boolean",
+            "default": false
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -99,10 +155,19 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100}
+          "session_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -112,10 +177,19 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100}
+          "session_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -125,9 +199,13 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"}
+          "session_id": {
+            "type": "string"
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -137,11 +215,28 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "state": {"type": "string", "enum": ["load", "domcontentloaded", "networkidle"], "default": "load"},
-          "timeout_ms": {"type": "integer", "minimum": 0, "maximum": 30000, "default": 5000}
+          "session_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "load",
+              "domcontentloaded",
+              "networkidle"
+            ],
+            "default": "load"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 30000,
+            "default": 5000
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -151,11 +246,25 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "max_chars": {"type": "integer", "minimum": 1, "maximum": 100000, "default": 40000},
-          "max_items": {"type": "integer", "minimum": 1, "maximum": 200, "default": 100}
+          "session_id": {
+            "type": "string"
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "default": 40000
+          },
+          "max_items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 100
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -165,13 +274,39 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "direction": {"type": "string", "enum": ["up", "down"], "default": "down"},
-          "pixels": {"type": "integer", "minimum": 1, "maximum": 2000, "default": 900},
-          "steps": {"type": "integer", "minimum": 1, "maximum": 5, "default": 1},
-          "settle_ms": {"type": "integer", "minimum": 0, "maximum": 1500, "default": 500}
+          "session_id": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ],
+            "default": "down"
+          },
+          "pixels": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000,
+            "default": 900
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 1
+          },
+          "settle_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1500,
+            "default": 500
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -181,11 +316,24 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "video_index": {"type": "integer", "minimum": 0, "maximum": 199, "default": 0},
-          "time_seconds": {"type": "number", "minimum": 0, "maximum": 86400}
+          "session_id": {
+            "type": "string"
+          },
+          "video_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 199,
+            "default": 0
+          },
+          "time_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 86400
+          }
         },
-        "required": ["session_id"],
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     },
@@ -195,12 +343,28 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "ref": {"type": "string"},
-          "target_url": {"type": "string"},
-          "mode": {"type": "string", "enum": ["maverick_dev_inspector"]}
+          "session_id": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "target_url": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "maverick_dev_inspector"
+            ]
+          }
         },
-        "required": ["session_id", "ref", "target_url", "mode"],
+        "required": [
+          "session_id",
+          "ref",
+          "target_url",
+          "mode"
+        ],
         "additionalProperties": false
       }
     },
@@ -210,13 +374,32 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "ref": {"type": "string"},
-          "text": {"type": "string"},
-          "target_url": {"type": "string"},
-          "mode": {"type": "string", "enum": ["maverick_dev_inspector"]}
+          "session_id": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "target_url": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "maverick_dev_inspector"
+            ]
+          }
         },
-        "required": ["session_id", "ref", "text", "target_url", "mode"],
+        "required": [
+          "session_id",
+          "ref",
+          "text",
+          "target_url",
+          "mode"
+        ],
         "additionalProperties": false
       }
     },
@@ -226,12 +409,155 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "session_id": {"type": "string"},
-          "key": {"type": "string"},
-          "target_url": {"type": "string"},
-          "mode": {"type": "string", "enum": ["maverick_dev_inspector"]}
+          "session_id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "target_url": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "maverick_dev_inspector"
+            ]
+          }
         },
-        "required": ["session_id", "key", "target_url", "mode"],
+        "required": [
+          "session_id",
+          "key",
+          "target_url",
+          "mode"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "browser_companion_status": {
+      "effect_class": "read",
+      "description": "List your shared Chrome connections and recent operations. Sharing is performed by the user in Browser; credentials are never returned.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    "browser_operation_get": {
+      "effect_class": "read",
+      "description": "Read a queued Chrome operation. Only status completed contains successful observations; queued and running do not prove content was inspected.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "operation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "browser_operation_cancel": {
+      "effect_class": "mutating",
+      "description": "Cancel one pending observation on your shared Chrome connection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "operation_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "browser_instagram_collect": {
+      "effect_class": "mutating",
+      "description": "Collect rendered profile text and deduplicated post/Reel links with bounded scrolling in a shared Chrome tab. Returns an operation_id; poll browser_operation_get. Open each collected URL to read its full content.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "pattern": "^chrome-[a-f0-9-]{36}$",
+            "description": "User-owned Chrome session from browser_companion_status."
+          },
+          "username": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._]{1,30}$"
+          },
+          "max_items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 60
+          },
+          "max_batches": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 40,
+            "default": 12
+          },
+          "include_reels": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "session_id",
+          "username"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "browser_video_analyze": {
+      "effect_class": "mutating",
+      "description": "Sample frames and optionally record up to 180 seconds of played tab audio, transcribed locally. Uses the selected rendered video in shared Chrome, restores playback state, and returns an operation_id. Saving evidence writes verified Storage files.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "pattern": "^chrome-[a-f0-9-]{36}$",
+            "description": "User-owned Chrome session from browser_companion_status."
+          },
+          "video_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 199,
+            "default": 0
+          },
+          "frame_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "default": 6
+          },
+          "max_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 180,
+            "default": 90
+          },
+          "include_audio": {
+            "type": "boolean",
+            "default": true
+          },
+          "save_evidence": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "session_id"
+        ],
         "additionalProperties": false
       }
     }

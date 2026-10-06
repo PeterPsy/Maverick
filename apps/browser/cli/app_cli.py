@@ -9,7 +9,7 @@ from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from errors import BrowserValidationError
-from service import acceptance_smoke_payload, dev_smoke_payload, handle_action
+from service import acceptance_smoke_payload, app_events_for_action, dev_smoke_payload, handle_action
 
 
 payload = read_entrypoint_payload()
@@ -54,6 +54,12 @@ else:
         effective_mode=payload.effective_mode,
         platform_role=payload.platform_role,
         workspace_role=payload.workspace_role,
+        user_id=payload.user_id,
+        surface=payload.raw.get("surface"),
+        runtime_session_id=payload.runtime_session_id,
+        dependencies=payload.raw.get("app_dependencies"),
     )
 result.update({"app_id": local_app_id, "workspace_id": payload.workspace_id, "command_id": command_id, "status_code": status_code})
+if status_code < 400:
+    result["app_events"] = app_events_for_action(arguments["action"])
 emit_json(result)

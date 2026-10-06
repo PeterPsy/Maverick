@@ -2,8 +2,8 @@
   "app_id": "browser",
   "contract_version": "1.0",
   "name": "Browser",
-  "version": "0.2.0",
-  "description": "Maverick Browser Lab for governed page reading, scrolling, video-frame inspection, and Maverick development UI inspection.",
+  "version": "0.3.0",
+  "description": "Read-only Instagram navigation and media analysis through a user-shared Chrome tab, plus isolated Browser Lab research.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -18,7 +18,24 @@
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "storage-file-content-write",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Store requested frame and audio evidence through Storage."
+    },
+    {
+      "alias": "speech-to-text",
+      "interface": "speech.transcription",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Transcribe shared tab audio with a local-only engine."
+    }
+  ],
   "distribution": {
     "mode": "sealed",
     "source_access": "none"
@@ -27,7 +44,7 @@
     "platform_roles": null
   },
   "presentation": {
-    "frontend_role": "none"
+    "frontend_role": "workspace"
   },
   "permissions": {
     "secrets": {
@@ -63,7 +80,12 @@
       "browser_video_frame",
       "browser_click",
       "browser_type",
-      "browser_press_key"
+      "browser_press_key",
+      "browser_companion_status",
+      "browser_operation_get",
+      "browser_operation_cancel",
+      "browser_instagram_collect",
+      "browser_video_analyze"
     ],
     "cli_commands": [
       "browser"
@@ -71,11 +93,17 @@
     "skills": [
       "browser-ops"
     ],
-    "views": [],
+    "views": [
+      "main"
+    ],
     "data_events": [
       {
         "resource": "state",
         "description": "Emitted when Browser Lab session metadata or audit records change through official Browser surfaces."
+      },
+      {
+        "resource": "companion",
+        "description": "Chrome connection or observation operation changed."
       }
     ],
     "view_surfaces": [],
@@ -86,19 +114,22 @@
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",
     "backend": "backend/app_backend.py",
-    "frontend": null,
+    "frontend": "frontend/dist",
     "skills_root": "skills",
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
-      "health_check": "hooks/health_check.py"
+      "health_check": "hooks/health_check.py",
+      "backend_recovery": "hooks/backend_recovery.py",
+      "background_tick": "hooks/backend_recovery.py"
     }
   },
   "storage": {
-    "storage_kind": "json",
+    "storage_kind": "hybrid",
     "data_schema_version": "1",
     "primary_paths": [
-      "data/browser/state.json"
+      "data/browser/state.json",
+      "data/browser/companion.sqlite3"
     ],
     "indices": null,
     "supports_export": false,
@@ -118,7 +149,8 @@
     "import_seconds": 120,
     "validate_after_import_seconds": 60,
     "repair_after_import_seconds": 180,
-    "health_check_seconds": 30
+    "health_check_seconds": 30,
+    "backend_seconds": 300
   },
   "lifecycle": {
     "install": true,

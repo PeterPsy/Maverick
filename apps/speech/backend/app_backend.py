@@ -34,7 +34,7 @@ def main() -> None:
         from store import read_settings
         body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
         engine = read_settings(Path(payload["data_root"])).get("transcription_engine", "auto")
-        needs = body.get("action") in {"transcribe_file", "transcribe_audio"} and engine == "deepgram"
+        needs = body.get("action") in {"transcribe_file", "transcribe_audio"} and engine == "deepgram" and body.get("local_only") is not True
         print(json.dumps({"requires_secrets": needs, "logical_names": ["deepgram-api-key"] if needs else []}))
         return
     if streaming_response_requested(payload):

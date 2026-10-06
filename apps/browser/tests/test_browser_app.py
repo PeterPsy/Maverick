@@ -46,12 +46,12 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(parsed.app_id, "browser")
         self.assertEqual(parsed.contract.distribution.mode, "sealed")
         self.assertEqual(parsed.contract.distribution.source_access, "none")
-        self.assertEqual(parsed.contract.presentation.frontend_role, "none")
-        self.assertIsNone(parsed.contract.entrypoints.frontend)
-        self.assertFalse(app_frontend_is_launchable(parsed.contract))
+        self.assertEqual(parsed.contract.presentation.frontend_role, "workspace")
+        self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
+        self.assertTrue(app_frontend_is_launchable(parsed.contract))
         self.assertEqual(parsed.contract.compatibility.supported_workspace_modes, ["full-access"])
-        self.assertEqual(parsed.contract.storage.primary_paths, ["data/browser/state.json"])
-        self.assertEqual(parsed.contract.capabilities.views, [])
+        self.assertEqual(parsed.contract.storage.primary_paths, ["data/browser/state.json", "data/browser/companion.sqlite3"])
+        self.assertEqual(parsed.contract.capabilities.views, ["main"])
         self.assertEqual(parsed.contract.capabilities.skills, ["browser-ops"])
         self.assertEqual(parsed.contract.entrypoints.skills_root, "skills")
         self.assertIn("browser_navigate", parsed.contract.capabilities.mcp_tools)
@@ -61,7 +61,7 @@ class BrowserAppTests(unittest.TestCase):
 
         package = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
         skill = APP_ROOT / "skills" / "browser-ops" / "SKILL.md"
-        self.assertFalse((APP_ROOT / "frontend").exists())
+        self.assertTrue((APP_ROOT / "frontend/index.html").exists())
         self.assertTrue(skill.exists())
         skill_text = skill.read_text(encoding="utf-8")
         broker_text = (APP_ROOT / "broker" / "playwright-broker.mjs").read_text(encoding="utf-8")
@@ -72,8 +72,8 @@ class BrowserAppTests(unittest.TestCase):
         self.assertIn("return sessionLifecycle.enqueue(sessionId, operation);", broker_text)
         self.assertIn("sessionLifecycle.touch(session);", broker_text)
         self.assertIn('reducedMotion: "reduce"', broker_text)
-        self.assertNotIn("build", package["scripts"])
-        self.assertEqual(package["scripts"]["test"], "node --test broker/*.test.mjs")
+        self.assertIn("build", package["scripts"])
+        self.assertEqual(package["scripts"]["test"], "node --test broker/*.test.mjs companion/*.test.mjs")
         self.assertEqual(package["scripts"]["broker"], "node broker/playwright-broker.mjs")
         self.assertEqual(package["scripts"]["broker:docker"], "node broker/playwright-server-docker.mjs")
         self.assertEqual(package["scripts"]["broker:local"], "node broker/playwright-server-local.mjs")
@@ -98,6 +98,11 @@ class BrowserAppTests(unittest.TestCase):
             "browser_read_content",
             "browser_scroll",
             "browser_video_frame",
+            "browser_companion_status",
+            "browser_operation_get",
+            "browser_operation_cancel",
+            "browser_instagram_collect",
+            "browser_video_analyze",
             "browser_click",
             "browser_type",
             "browser_press_key",

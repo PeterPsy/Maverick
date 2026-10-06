@@ -17,6 +17,8 @@ class BrowserExecutionClosureTests(unittest.TestCase):
         roots = hosted_builtin_app_execution_roots("browser", surface="mcp", apps_root=APPS_ROOT)
         self.assertIn("broker/reading-actions.mjs", roots)
         self.assertIn("package-lock.json", roots)
+        self.assertIn("companion/worker.mjs", roots)
+        self.assertIn("frontend/dist", roots)
         with TemporaryDirectory() as folder:
             apps = Path(folder)
             browser = apps / "browser"
@@ -32,4 +34,8 @@ class BrowserExecutionClosureTests(unittest.TestCase):
             broker_source = browser / "broker" / "reading-actions.mjs"
             broker_source.write_text(broker_source.read_text() + "\n// changed broker source\n")
             after = hosted_builtin_app_execution_digest("browser", surface="mcp", apps_root=apps)
+            companion_source = browser / "companion" / "worker.mjs"
+            companion_source.write_text(companion_source.read_text() + "\n// changed companion source\n")
+            companion_changed = hosted_builtin_app_execution_digest("browser", surface="mcp", apps_root=apps)
         self.assertNotEqual(before, after)
+        self.assertNotEqual(after, companion_changed)

@@ -1,0 +1,103 @@
+{
+  "schema": "maverick.frontend-assets.v2",
+  "build_id": "820545bf5aeb0d324b2413f0c9a7ee16b5dec753bc489125d8d2984910c514fc",
+  "entrypoints": [
+    "companion/offscreen.html",
+    "companion/popup.html",
+    "index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/index-Ba_YAaHm.css",
+      "sha256": "ea97bc5098d77a268d120e839d7f2146e795267f7f8df2628b754ec5285e152d",
+      "size_bytes": 2533
+    },
+    {
+      "path": "assets/index-CpNnO9fy.js",
+      "sha256": "6e63c0f373e0b3fb20815fc73daa73f0d2ad76487e10eb1f70f59208a6e6aa4a",
+      "size_bytes": 8369
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "companion/content.js",
+      "sha256": "5d455da272a0a77e7964b01353598074e7d9b7c5d4576bfb4cf29f8cd3ae86f6",
+      "size_bytes": 1168
+    },
+    {
+      "path": "companion/dom-actions.mjs",
+      "sha256": "88c1dc1f607031982e5ab8bd13751dd1d7ce37a8aec235d3b80726ea221c2085",
+      "size_bytes": 6472
+    },
+    {
+      "path": "companion/manifest.json",
+      "sha256": "92257622d2cee3920d62ffe522f6b3df0f06045c2d748d8fb48cd949f58a0d7f",
+      "size_bytes": 530
+    },
+    {
+      "path": "companion/offscreen.html",
+      "sha256": "eb59675307fa707f1bf646bddacc0dc0bef736b5db2d60cbca5cb6888c4b28bf",
+      "size_bytes": 216
+    },
+    {
+      "path": "companion/offscreen.mjs",
+      "sha256": "9f5a724c16cb3f94a3bccef72f722e53444d7036088ae64a43c145fc41ce8adf",
+      "size_bytes": 4840
+    },
+    {
+      "path": "companion/popup.css",
+      "sha256": "0e8daf1bb59fe9607ffd6395a31d1f7cd45c1542a5b0b0f1a6ff00f53f1cd3bd",
+      "size_bytes": 566
+    },
+    {
+      "path": "companion/popup.html",
+      "sha256": "ee278d3e2928547081caebc2e7b1c41ca349e50f278cd0935c1f85580dbbd618",
+      "size_bytes": 928
+    },
+    {
+      "path": "companion/popup.mjs",
+      "sha256": "6f8cb563a4941dc7e2d92818d6b79cf39e19e909ad50d1de730a2473ca9838e6",
+      "size_bytes": 1345
+    },
+    {
+      "path": "companion/reader.js",
+      "sha256": "874ab99d1a554f9196a7f9f774fcf6caa550c40fac942510aabe3ddf432a0751",
+      "size_bytes": 2919
+    },
+    {
+      "path": "companion/scope.mjs",
+      "sha256": "69d3134ece8186558e352b289fe3251f8cab1e9262360d865cda4f91e5ddf529",
+      "size_bytes": 4405
+    },
+    {
+      "path": "companion/worker.mjs",
+      "sha256": "e786057aac8f8a0988bc21b786ce70a4fd5dc751b6bc5926f09e5fafb71eacb7",
+      "size_bytes": 10280
+    },
+    {
+      "path": "companion/workflows.mjs",
+      "sha256": "87f9927c738a8362419ff885408e58ad7d21e686062b40a4e74a0afb7e13d1dd",
+      "size_bytes": 5476
+    },
+    {
+      "path": "icon.svg",
+      "sha256": "5894cb460514ed5c6eb12b8e717faf7f495d40aa9a8201a6f9749a21517e21b6",
+      "size_bytes": 307
+    },
+    {
+      "path": "index.html",
+      "sha256": "464186065204fa5b1f4d3fc0f5b31b4d02282ef8694d79e7309af431c2e028c0",
+      "size_bytes": 429
+    },
+    {
+      "path": "maverick-browser-companion.zip",
+      "sha256": "f72e66e35d3c87a2f7f214625ce048c0cf8a54e25725bc6b3a04f8a122fb93d7",
+      "size_bytes": 16493
+    },
+    {
+      "path": "maverick-icon-compact.png",
+      "sha256": "85d979955765b9d82fffb40eca6e90cafdf9fa7300622086e0f13eb05c85ec29",
+      "size_bytes": 7863
+    }
+  ]
+}

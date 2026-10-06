@@ -2940,6 +2940,15 @@ so a new process can resume the conversation, while exact runtime-version,
 private-home, environment, and structured tool-surface checks fail closed.
 Unreviewed native adapters remain unavailable for Research.
 
+Antigravity's reviewed native Research adapter follows the same no-Maverick-tools
+boundary. Its fixed primary agent declares only native `search_web` and
+`read_url_content`, disables ambient customizations, and runs over an empty
+private sandbox workdir with auth-only provider state. The immutable agent
+recipe and empty customization/MCP surfaces are mounted read-only. No Core
+wrapper or runtime API token is delivered. Initialization verifies the selected
+primary agent rather than treating the CLI's global tool inventory as its
+active tool surface, and non-web operational events terminate the session.
+
 Full-workspace hosted profiles reach CLI and MCP through discovery-first Core
 wrappers rather than embedding every enabled app schema in the provider's base
 catalog. Discovery filters the authoritative registry by the current actor,

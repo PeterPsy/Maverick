@@ -165,7 +165,7 @@ class CodexResearchRuntimeTest(unittest.TestCase):
             ):
                 spec = CodexProviderAdapter(codex_command=str(codex)).build_launch_spec(
                     session,
-                    model_id="gpt-5.6-sol",
+                    model_id="gpt-6.1-sol",
                     model_reasoning_effort="high",
                 )
 

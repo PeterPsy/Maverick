@@ -11,6 +11,7 @@ from core.runtime.workspace_instructions import (
     resolve_workspace_instruction_chain,
     workspace_relative_workdir,
 )
+from core.runtime.research_runtime import runtime_session_is_research
 
 
 def runtime_environment_context(session, *, native: bool = False) -> dict[str, str]:
@@ -35,6 +36,8 @@ def runtime_environment_context(session, *, native: bool = False) -> dict[str, s
 
 def native_runtime_input(*, session, input_text: str, skills=()) -> str:
     """Supply context for CLIs without Codex's native instruction discovery."""
+    if runtime_session_is_research(session):
+        return input_text
     device_use_binding = getattr(session, "device_use_binding", None)
     if device_use_binding is not None:
         instructions = device_use_base_instructions(

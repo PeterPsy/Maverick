@@ -37,7 +37,7 @@ CODEX_RESEARCH_ENV_KEYS = frozenset(
         "SSL_CERT_FILE",
     }
 )
-CODEX_RESEARCH_REVIEWED_VERSIONS = frozenset({"0.153.4"})
+CODEX_RESEARCH_REVIEWED_VERSIONS = frozenset({"0.153.4", "0.159.2"})
 _CODEX_VERSION_PATTERN = re.compile(r"^codex-cli (\d+\.\d+\.\d+)$")
 
 

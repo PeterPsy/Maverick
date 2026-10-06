@@ -6,7 +6,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.providers import codex_app_server_runtime_protocol as runtime_protocol
+from core.providers.codex_app_server_runtime import (
+    _codex_app_server_runtime_protocol as runtime_protocol,
+)
 from core.providers.errors import ProviderLaunchError
 from core.providers.provider_codex import CodexProviderAdapter
 from core.providers.provider_codex_research import codex_research_runtime_version
@@ -39,6 +41,17 @@ DENIED_RESEARCH_ITEM_TYPES = (
 
 
 class CodexResearchFailClosedTest(unittest.TestCase):
+    def test_current_codex_release_supports_research_for_every_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            command = Path(temp_dir) / "codex"
+            _write_codex_version(command, "0.159.2")
+            adapter = CodexProviderAdapter(codex_command=str(command))
+            for model_id in ("gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"):
+                with self.subTest(model_id=model_id):
+                    self.assertTrue(adapter.research_runtime_available(
+                        SimpleNamespace(model_id=model_id),
+                    ))
+
     def test_only_reviewed_passive_and_web_items_are_allowed(self) -> None:
         for item_type in ALLOWED_RESEARCH_ITEM_TYPES:
             with self.subTest(item_type=item_type), patch.object(

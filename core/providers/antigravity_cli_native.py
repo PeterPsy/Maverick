@@ -17,6 +17,7 @@ from core.providers.antigravity_cli_runtime_home import (
     prepare_antigravity_runtime_skills,
 )
 from core.providers.antigravity_cli_session import AntigravityCliSession
+from core.providers.antigravity_cli_research import antigravity_research_runtime_available
 from core.providers.models import ProviderSubscriptionUsage, RuntimeSteerResult
 from core.providers.native_session_runtime import NativeSessionRuntime
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
@@ -25,6 +26,7 @@ from core.providers.provider_antigravity_usage import (
     read_antigravity_subscription_usage,
 )
 from core.skills.service import resolve_available_runtime_skills
+from core.runtime.research_runtime import RESEARCH_NATIVE_WEB_RUNTIME, runtime_session_is_research
 
 
 class AntigravityCliNativeAdapter:
@@ -33,6 +35,7 @@ class AntigravityCliNativeAdapter:
     adapter_version = "5"
     local_process_lifecycle = None
     requires_resolved_launch_spec = True
+    research_runtime_kind = RESEARCH_NATIVE_WEB_RUNTIME
 
     def __init__(
         self,
@@ -64,6 +67,9 @@ class AntigravityCliNativeAdapter:
         self._skill_digests = {}
         self._preparation_locks = {}
         self._lock = Lock()
+
+    def research_runtime_available(self, _binding=None):
+        return antigravity_research_runtime_available(self.command)
 
     def read_subscription_usage(self) -> ProviderSubscriptionUsage:
         """Read redaction-safe quotas from the authenticated Antigravity CLI."""
@@ -136,6 +142,13 @@ class AntigravityCliNativeAdapter:
             return await self._prepare(context)
 
     async def _prepare(self, context):
+        if runtime_session_is_research(context.session):
+            owner = self._owner(context.session.session_id)
+            try:
+                return await owner.call(owner.engine.prepare(context))
+            except BaseException:
+                await self._retire(context, owner)
+                raise
         has_device_use = (
             getattr(context.session, "device_use_binding", None) is not None
         )

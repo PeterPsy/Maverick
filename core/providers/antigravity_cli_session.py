@@ -22,12 +22,17 @@ from core.providers.antigravity_cli_sandbox import (
     resolve_antigravity_model_selection,
 )
 from core.providers.antigravity_cli_event_projection import project_antigravity_step
+from core.providers.antigravity_cli_research import (
+    validate_antigravity_research_init,
+    validate_antigravity_research_step,
+)
 from core.providers.models import RuntimeSteerResult
 from core.providers.native_structured_cli_transport import (
     NativeJsonlConnection,
     NativeStructuredCliError,
 )
 from core.runtime.runtime_prompt_context import native_runtime_input
+from core.runtime.research_runtime import runtime_session_is_research
 
 
 _TERMINAL_STATUSES = frozenset(
@@ -84,6 +89,7 @@ class AntigravityCliSession:
                 message,
                 context=context,
                 previous=previous,
+                workdir=spec.working_directory,
             )
             if self._generation != generation:
                 raise NativeStructuredCliError("antigravity_start_cancelled")
@@ -107,7 +113,7 @@ class AntigravityCliSession:
             metadata={"steering_mode": "safe_next_turn"},
         )
 
-    def _validate_init(self, message, *, context, previous) -> str:
+    def _validate_init(self, message, *, context, previous, workdir) -> str:
         if message.get("event") != "init" or not isinstance(message.get("init"), dict):
             raise NativeStructuredCliError("antigravity_init_invalid")
         conversation_id = _conversation_id(message.get("conversation_id"))
@@ -119,7 +125,7 @@ class AntigravityCliSession:
             raise NativeStructuredCliError("antigravity_init_invalid")
         observed_cwd = Path(cwd)
         if observed_cwd.resolve(strict=False) != Path(
-            context.session.workdir
+            workdir
         ).resolve(strict=False):
             raise NativeStructuredCliError("antigravity_workspace_identity_mismatch")
         tools = payload.get("tools")
@@ -127,9 +133,12 @@ class AntigravityCliSession:
             not isinstance(tool, str) or not tool for tool in tools
         ):
             raise NativeStructuredCliError("antigravity_init_invalid")
-        if not _REQUIRED_NATIVE_TOOLS.issubset(tools):
+        research = runtime_session_is_research(context.session)
+        if research:
+            validate_antigravity_research_init(payload, workdir=workdir)
+        elif not _REQUIRED_NATIVE_TOOLS.issubset(tools):
             raise NativeStructuredCliError("antigravity_toolset_incomplete")
-        execution_mode = str(context.session.effective_mode or "").strip()
+        execution_mode = "sandbox" if research else str(context.session.effective_mode or "").strip()
         expected_permission_mode = {
             "sandbox": "proceed-in-sandbox",
             "full-access": "always-proceed",
@@ -232,6 +241,8 @@ class AntigravityCliSession:
                 accepted = True
             if event_type == "step_update":
                 update = message.get("step_update")
+                if runtime_session_is_research(context.session):
+                    validate_antigravity_research_step(update)
                 self._validate_step_sequence(update)
                 projected_type, payload = project_antigravity_step(update)
                 if projected_type == "runtime.output.delta":

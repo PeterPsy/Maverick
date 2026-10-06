@@ -1927,6 +1927,24 @@ chat's provider history. This removes Maverick-specific bias as far as the
 integration can control it; provider and service safety policy remains outside
 this profile and is never represented as removable.
 
+Research compatibility belongs to the runtime contract, not a model-name
+allowlist. The reviewed Codex releases are `0.153.4` and `0.159.2`. Antigravity
+CLI `1.1.27` also implements the native web-only contract with the selected
+model and effort. Core supplies a private `research-web-only` primary-agent
+definition whose only tools are `search_web` and `read_url_content`, with
+ambient customizations disabled and no skills, rules, plugins, subagents or
+MCP servers. The process always runs in an outer sandbox over an empty private
+workdir; it receives no workspace mount, Core wrapper, runtime API token, or
+platform environment. Agent and customization directories and the empty MCP
+configuration are read-only mounts; provider conversation/project storage
+remains writable inside the private home. Antigravity's `init.tools` reports
+its global inventory rather than the selected agent's active tools. Core
+therefore checks the exact reviewed version, its own immutable agent recipe,
+the selected primary-agent identity, private cwd, permission mode and model
+at initialization, and rejects any non-web operational step. The input path
+short-circuits workspace instructions and sends only the user conversation.
+Unknown native versions remain unavailable until reviewed.
+
 Turn submission is implemented through a dedicated runtime service so future CLI, MCP, WebSocket, or automation surfaces can reuse the same orchestration without embedding execution logic in HTTP route handlers.
 
 The runtime WebSocket endpoints are the official realtime transports for mounted apps and other interactive clients.

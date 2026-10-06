@@ -212,12 +212,14 @@ export function useChatRuntimeControls({
     setReasoningEffort(selectedReasoningEffort);
     setActiveProviderId(providerId);
     if (provider?.provider_role === "runtime_engine") {
+      setComposerError(null);
       setError(null);
       return;
     }
     try {
       const payload = await selectProvider(providerId);
       setActiveProviderId(payload.active_provider?.provider_id || providerId);
+      setComposerError(null);
       setError(null);
     } catch (selectError) {
       setError(selectError instanceof Error ? selectError.message : "Unable to select provider.");

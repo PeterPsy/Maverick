@@ -20,6 +20,7 @@ from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.native_structured_cli_transport import NativeStructuredCliError
 from core.runtime.workspace_sandbox import build_bwrap_command
 from core.runtime.workspace_api_token import issue_workspace_api_token
+from core.runtime.research_runtime import runtime_session_is_research
 
 
 ANTIGRAVITY_DEFAULT_MODEL = "gemini-3.8-flash-high"
@@ -39,6 +40,13 @@ def antigravity_stream_launch_spec(
 ):
     """Build the machine-readable command with a private OAuth profile copy."""
     session = context.session
+    if runtime_session_is_research(session):
+        from core.providers.antigravity_cli_research import antigravity_research_launch_spec
+
+        return antigravity_research_launch_spec(
+            context, command=command, dependency_roots=dependency_roots,
+            auth_home=auth_home,
+        )
     secret_env = getattr(context, "secret_env", None)
     if secret_env or getattr(context.binding, "credential_binding_id", None):
         raise NativeStructuredCliError("antigravity_oauth_boundary_invalid")

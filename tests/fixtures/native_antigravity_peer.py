@@ -9,7 +9,7 @@ import time
 
 
 if "--version" in sys.argv:
-    print("Antigravity CLI fixture 1.1.27")
+    print("1.1.27")
     raise SystemExit(0)
 
 
@@ -101,8 +101,9 @@ send(
             "tools": (
                 ["ask_permission", "run_command"]
                 if os.environ.get("ANTIGRAVITY_FIXTURE_MISSING_TOOL")
-                else ["ask_permission", "run_command", "write_to_file"]
+                else ["ask_permission", "run_command", "write_to_file", "search_web", "read_url_content"]
             ),
+            "agent": os.environ.get("ANTIGRAVITY_FIXTURE_AGENT", flag_value("--agent")),
             "permission_mode": permission_mode,
             "model": model,
         },

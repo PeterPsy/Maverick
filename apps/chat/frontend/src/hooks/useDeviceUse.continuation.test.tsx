@@ -38,8 +38,8 @@ let root: Root | null = null;
 let native: NativeDeviceUseSnapshot;
 let currentThread: ChatThread | null;
 
-function Harness({ thread }: { thread: ChatThread | null }) {
-  result = useDeviceUse({ activeThread: thread, provider, reasoningEffort: "max", onPrepare,
+function Harness({ thread, runtimeBusy = false }: { thread: ChatThread | null; runtimeBusy?: boolean }) {
+  result = useDeviceUse({ activeThread: thread, isRuntimeBusy: runtimeBusy, provider, reasoningEffort: "max", onPrepare,
     onReconnected: (previous, ready) => {
       onReconnected(previous, ready);
       currentThread = { ...previous, device_use: ready };
@@ -49,12 +49,12 @@ function Harness({ thread }: { thread: ChatThread | null }) {
   return null;
 }
 
-async function render(thread: ChatThread | null = originalThread) {
+async function render(thread: ChatThread | null = originalThread, runtimeBusy = false) {
   currentThread = thread;
   if (!root) {
     const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
   }
-  await act(async () => { root?.render(<Harness thread={thread} />); });
+  await act(async () => { root?.render(<Harness thread={thread} runtimeBusy={runtimeBusy} />); });
 }
 
 beforeEach(() => {
@@ -133,6 +133,49 @@ describe("Device Use conversation continuation", () => {
     await render();
     vi.mocked(getDeviceUseActivation).mockRejectedValue(new Error("device_use_activation_not_found"));
     await act(async () => { await expect(result.ensureReady()).rejects.toThrow("Mac scollegato"); });
+    expect(result.mode).toBe("off");
+  });
+
+  it("reconnects on a Full click without reload even when the displayed lease is stale", async () => {
+    await render();
+    expect(result.mode).toBe("full");
+    native = { ...native, active: false, activationId: null, mode: "off" };
+    await act(async () => { await result.selectMode("full"); });
+    expect(reconnectDeviceUseSession).toHaveBeenCalledWith("session", newId, oldId);
+    expect(result.mode).toBe("full");
+    await act(async () => { await result.ensureReady(); });
+  });
+
+  it("explicitly renews a selected mode to recover a lost provider context in the same chat", async () => {
+    await render();
+    await act(async () => { await result.selectMode("full"); });
+    expect(reconnectDeviceUseSession).toHaveBeenCalledWith("session", newId, oldId);
+    expect(onPrepare).not.toHaveBeenCalled();
+    expect(result.mode).toBe("full");
+  });
+
+  it("does not replace the native lease while a turn is still running", async () => {
+    await render(originalThread, true);
+    await act(async () => { await result.selectMode("full"); });
+    expect(result.error).toContain("Attendi la fine del turno");
+    expect(createDeviceUseActivation).not.toHaveBeenCalled();
+    expect(requestNativeDeviceUse).not.toHaveBeenCalledWith("start", expect.anything());
+    expect(stopDeviceUseActivation).not.toHaveBeenCalled();
+  });
+
+  it("keeps Off available to stop the Mac during an active turn", async () => {
+    await render(originalThread, true);
+    await act(async () => { await result.selectMode("off"); });
+    expect(stopDeviceUseActivation).toHaveBeenCalledWith(oldId);
+    expect(createDeviceUseActivation).not.toHaveBeenCalled();
+    expect(result.mode).toBe("off");
+  });
+
+  it("refreshes lease readiness when a turn ends without navigation or reload", async () => {
+    await render(originalThread, true);
+    expect(result.mode).toBe("full");
+    native = { ...native, active: false, activationId: null, mode: "off" };
+    await render(originalThread, false);
     expect(result.mode).toBe("off");
   });
 

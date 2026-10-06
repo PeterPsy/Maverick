@@ -54,7 +54,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
     def tearDown(self):
         unregister_device_use_session("runtime")
 
-    def test_thread_contract_is_ephemeral_read_only_and_dynamic_only(self):
+    def test_thread_contract_is_durable_read_only_and_dynamic_only(self):
         params = codex_thread_params(
             session=SimpleNamespace(
                 device_use_binding=self.binding,
@@ -62,7 +62,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             ),
             launch_spec=SimpleNamespace(working_directory="/private/device-work", execution_mode="sandbox"),
         )
-        self.assertTrue(params["ephemeral"])
+        self.assertFalse(params["ephemeral"])
         self.assertEqual(params["model"], "gpt-5.6-sol")
         self.assertEqual(params["sandbox"], "read-only")
         self.assertEqual({item["name"] for item in params["dynamicTools"]}, {

@@ -56,12 +56,14 @@ async function waitUntilReady(activationId: string) {
 
 export function useDeviceUse({
   activeThread,
+  isRuntimeBusy = false,
   provider,
   reasoningEffort,
   onPrepare,
   onReconnected,
 }: {
   activeThread: ChatThread | null;
+  isRuntimeBusy?: boolean;
   provider: ProviderItem | null;
   reasoningEffort: string;
   onPrepare: (providerId: string, reasoningEffort: string) => Promise<void> | void;
@@ -136,7 +138,7 @@ export function useDeviceUse({
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [refresh, scope]);
+  }, [isRuntimeBusy, refresh, scope]);
 
   const currentId = activeThread?.device_use_enabled ? threadBinding?.activation_id : activationId;
   const mode: DeviceUseMode = currentId && lease?.id === currentId && lease.ready
@@ -160,7 +162,7 @@ export function useDeviceUse({
   }, [threadBinding?.activation_id, activeThread?.thread_id]);
 
   const selectMode = useCallback(async (nextMode: DeviceUseMode) => {
-    if (busyRef.current || (nextMode === mode && nextMode !== "off")) return;
+    if (busyRef.current) return;
     busyRef.current = true;
     refreshSequenceRef.current++;
     setBusy(true);
@@ -172,6 +174,9 @@ export function useDeviceUse({
       }
       if (activeThread && (!activeThread.device_use_enabled || nextMode !== pinnedMode)) {
         throw new Error("La modalità è fissata per questa chat. Avvia una nuova chat per cambiarla.");
+      }
+      if (activeThread && isRuntimeBusy) {
+        throw new Error("device_use_session_busy");
       }
       if (!activeThread && !providerSupportsDeviceUse(provider)) {
         throw new Error("Device Use richiede un modello Codex attivo.");
@@ -227,7 +232,7 @@ export function useDeviceUse({
       busyRef.current = false;
       setBusy(false);
     }
-  }, [activeThread, mode, onPrepare, onReconnected, pinnedMode, provider, reasoningEffort, stopCurrent, threadBinding]);
+  }, [activeThread, isRuntimeBusy, onPrepare, onReconnected, pinnedMode, provider, reasoningEffort, stopCurrent, threadBinding]);
 
   const ensureReady = useCallback(async () => {
     if (busyRef.current) throw new Error("Attendi il completamento della connessione Device Use.");

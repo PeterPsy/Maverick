@@ -50,8 +50,8 @@ def release_idle_runtime_processes(
         if any(turn.status in ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id)):
             return 0
         if ttl_seconds > 0:
-            # Device Use provider threads are ephemeral. Keep their in-memory
-            # conversation while the independent native lease is connected.
+            # Keep the provider warm while the independent native lease is
+            # connected; its private archive also survives process replacement.
             binding = getattr(session, "device_use_binding", None)
             service = device_use_service_for_session(session_id)
             if binding is not None and service is not None:
@@ -115,7 +115,7 @@ def _release_idle_runtime_processes_now(state, *, session_id: str, provider_id: 
 
 
 def _schedule_device_use_runtime_check(state, *, session, provider_id, reason, idle_ttl_seconds):
-    """Retain connected ephemeral context, then retire it when the lease ends."""
+    """Keep a connected native provider warm, then retire it when the lease ends."""
     session_id = session.session_id
 
     def expire():

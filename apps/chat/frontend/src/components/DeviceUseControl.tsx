@@ -70,7 +70,7 @@ export function DeviceUseControl({
               role="radio"
               title={locked && option !== "off" && option !== (pinnedMode || mode)
                 ? "Avvia una nuova chat per cambiare modalità"
-                : locked && mode === "off" && option === pinnedMode
+                : locked && option === pinnedMode
                   ? "Ricollega il Mac a questa chat"
                 : modeLabel(option)}
               type="button"

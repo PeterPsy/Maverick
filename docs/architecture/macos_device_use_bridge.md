@@ -39,8 +39,13 @@ when a new Device Use chat is materialized. Off stops its native/Core lease.
 A disconnected or explicitly stopped chat can reconnect in its original mode
 without creating another conversation; changing mode or the On app scope still
 requires a new chat. Chat probes native/Core status on navigation, foreground
-return and every ten seconds while visible. A historical mode never implies a
-live connection. Submission checks the lease before clearing the composer.
+return, turn state changes and every ten seconds while visible. A historical
+mode never implies a live connection. Submission checks the lease before
+clearing the composer. Explicitly selecting the original On/Full mode renews
+the lease even if it is already highlighted, allowing a stale connection or
+lost provider context to be repaired without reloading Chat. Renewal is rejected
+before starting another native activation while a turn is running; Off remains
+available to stop the lease.
 The native application menu retains the emergency **Interrompi Device Use**
 command (`Shift-Command-.`).
 
@@ -171,8 +176,9 @@ A binding is exact to activation, user, workspace, runtime session and contract.
 Only one activation per login generation and one physical call at a time are
 allowed. A new activation supersedes the prior lease. Tickets and raw private
 bindings never appear in public thread/status payloads. Compact public thread
-catalogs expose only `device_use_enabled` so Chat can label and filter the
-conversation without receiving native authority material.
+catalogs expose `device_use_enabled`, the public activation ID and original
+On/Full mode so Chat can label, filter and reconnect the conversation without
+receiving tickets or native authority material.
 
 `POST /api/device-use/sessions/<session_id>/reconnect` accepts a fresh ready
 activation and the expected previous activation ID. It requires the owning user,
@@ -183,7 +189,11 @@ queued and confirmation-waiting turns. A field-only CAS changes the native lease
 without overwriting session metadata or its immutable model/execution binding.
 Late cleanup of an older provider cannot unregister the renewed activation.
 
-Device Use Codex threads remain ephemeral. A connected native lease retains its
+Device Use Codex threads have a durable archive in the session's private
+`codex-home`. A later provider process resumes the same thread while keeping
+the pinned model, read-only workdir, native tools and independent Mac lease.
+Provider termination after completion therefore does not require a Chat reload
+or lease renewal before the next message. A connected native lease retains its
 idle provider process so a navigation/pause does not discard model context. An
 idle lease check uses the shared deadline scheduler, separate from the ordinary
 workspace process budget; it releases the retained process after disconnection.

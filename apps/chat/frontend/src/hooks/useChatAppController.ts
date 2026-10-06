@@ -409,6 +409,7 @@ export function useChatAppController({
   }, [clearAttachments, runtimeControls, setSelectedAgentTypeId]);
   const deviceUse = useDeviceUse({
     activeThread,
+    isRuntimeBusy,
     provider: selectedProvider,
     reasoningEffort: runtimeControls.reasoningEffort,
     onPrepare: prepareDeviceUse,

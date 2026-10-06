@@ -130,7 +130,9 @@ def codex_thread_params(
             "cwd": launch_spec.working_directory,
             "approvalPolicy": "never",
             "sandbox": "read-only",
-            "ephemeral": True,
+            # The native lease outlives an individual provider process. Keep a
+            # private archive so subsequent turns resume the same conversation.
+            "ephemeral": False,
             "environments": [],
             "dynamicTools": device_use_dynamic_tools(),
             "baseInstructions": device_use_base_instructions(

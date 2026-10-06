@@ -64,9 +64,10 @@ def reconnect_device_use_session(
                 session_id=session_id, workspace_id=workspace_id,
                 expected_activation_id=previous.activation_id, binding=binding,
             )
-            # The old Codex thread was ephemeral and has no resumable archive.
-            # Start a fresh provider context under the SAME execution binding;
-            # governed provider-input capture restores visible text next turn.
+            # A renewed native lease starts a fresh provider context: archived
+            # tool calls and receipts belong to the previous activation. Keep
+            # the execution binding and restore visible text through governed
+            # provider-input capture on the next turn.
             update_runtime_provider_state(store, session_id=session_id, updates={
                 "provider_thread_id": None, "continuation_id": None,
                 "provider_request_id": None, "turn_generation": None,

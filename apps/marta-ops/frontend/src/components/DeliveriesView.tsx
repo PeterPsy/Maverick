@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useViewState } from "../lib/viewState";
+import type { DeliveryFilter } from "../navigation";
 import { daysFromToday, dueLabel } from "../format";
 import { DELIVERABLE_OPTIONS, labelFor } from "../options";
 import type { Collaboration, Deliverable, DeliverableStatus } from "../types";
 
-type DeliveryFilter = "open" | "overdue" | "all" | "published";
 type DeliveryEntry = { deliverable: Deliverable; work: Collaboration };
 
 const OPEN_STATUSES: DeliverableStatus[] = [
@@ -30,8 +31,11 @@ export function DeliveriesView({
     changes: Record<string, unknown>,
   ) => Promise<void>;
 }) {
-  const [filter, setFilter] = useState<DeliveryFilter>("open");
-  const [workId, setWorkId] = useState("");
+  const [filter, setFilter] = useViewState<DeliveryFilter>(
+    "deliveries.filter",
+    "open",
+  );
+  const [workId, setWorkId] = useViewState("deliveries.workId", "");
   const entries = useMemo<DeliveryEntry[]>(
     () =>
       items.flatMap((work) =>
@@ -46,6 +50,7 @@ export function DeliveriesView({
         filter === "all" ||
         (filter === "open" && deliverable.status !== "published") ||
         (filter === "published" && deliverable.status === "published") ||
+        (filter === "approval" && deliverable.status === "approval") ||
         (filter === "overdue" &&
           deliverable.status !== "published" &&
           daysFromToday(deliverable.due_date) < 0);
@@ -65,11 +70,13 @@ export function DeliveriesView({
       ),
     );
   const statuses =
-    filter === "published"
-      ? (["published"] as DeliverableStatus[])
-      : filter === "all"
-        ? [...OPEN_STATUSES, "published"]
-        : OPEN_STATUSES;
+    filter === "approval"
+      ? (["approval"] as DeliverableStatus[])
+      : filter === "published"
+        ? (["published"] as DeliverableStatus[])
+        : filter === "all"
+          ? [...OPEN_STATUSES, "published"]
+          : OPEN_STATUSES;
   const overdue = entries.filter(
     ({ deliverable }) =>
       deliverable.status !== "published" &&
@@ -122,6 +129,7 @@ export function DeliveriesView({
             [
               ["open", "Aperte"],
               ["overdue", "Scadute"],
+              ["approval", "Da approvare"],
               ["all", "Tutte"],
               ["published", "Pubblicate"],
             ] as Array<[DeliveryFilter, string]>

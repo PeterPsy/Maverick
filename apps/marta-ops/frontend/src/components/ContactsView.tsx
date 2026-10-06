@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useViewState } from "../lib/viewState";
 import { formatMoney } from "../format";
 import type { Collaboration, Contact } from "../types";
 import { Avatar } from "./Avatar";
@@ -16,8 +16,8 @@ export function ContactsView({
   onOpen: (contact: Contact) => void;
   onCreate: () => void;
 }) {
-  const [archived, setArchived] = useState(false);
-  const [tag, setTag] = useState("");
+  const [archived, setArchived] = useViewState("contacts.archived", false);
+  const [tag, setTag] = useViewState("contacts.tag", "");
   const tags = [...new Set(contacts.flatMap((contact) => contact.tags))].sort();
   const needle = query.trim().toLocaleLowerCase("it");
   const visible = contacts

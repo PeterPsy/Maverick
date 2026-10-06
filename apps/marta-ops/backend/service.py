@@ -17,6 +17,7 @@ from activity import add_note, record_activity
 from crm_records import handle_crm_action
 from pipeline import move_work, next_order
 from validation import validate_links
+from sidebar import sidebar_summary
 
 MUTATING_ACTIONS = {
     "create_collaboration",
@@ -38,6 +39,8 @@ MUTATING_ACTIONS = {
 def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     """Dispatch one mounted backend action."""
     action = str(body.get("action") or "bootstrap").strip().lower()
+    if action == "sidebar_summary":
+        return 200, {"summary": sidebar_summary(load_state(data_root), body.get("today"))}
     if action in {"bootstrap", "status"}:
         state = load_state(data_root)
         return 200, {"app_id": "marta-ops", "status": "ready", "state": state}

@@ -1,5 +1,6 @@
 export async function callBackend<T>(
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(
     `/api/apps/${encodeURIComponent(mountedAppIdFromPath())}/backend`,
@@ -7,6 +8,7 @@ export async function callBackend<T>(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal,
     },
   );
   const responseText = await response.text();

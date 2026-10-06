@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useViewState } from "../lib/viewState";
+import type { AdminFilter } from "../navigation";
 import { daysFromToday, formatMoney } from "../format";
 import { CONTRACT_OPTIONS, PAYMENT_OPTIONS } from "../options";
 import type { Collaboration, ContractStatus, PaymentStatus } from "../types";
 import { Icon } from "../Icon";
-
-type AdminFilter = "attention" | PaymentStatus | "all";
 
 const PAYMENT_PRIORITY: Record<PaymentStatus, number> = {
   overdue: 0,
@@ -65,7 +65,10 @@ export function AdministrationView({
   onOpen: (work: Collaboration) => void;
   onUpdate: (id: string, changes: Record<string, unknown>) => Promise<void>;
 }) {
-  const [filter, setFilter] = useState<AdminFilter>("attention");
+  const [filter, setFilter] = useViewState<AdminFilter>(
+    "admin.filter",
+    "attention",
+  );
   const needle = query.trim().toLocaleLowerCase("it");
   const visible = useMemo(
     () =>
@@ -74,6 +77,8 @@ export function AdministrationView({
           (work) =>
             (filter === "all" ||
               (filter === "attention" && needsAttention(work)) ||
+              (filter === "receivables" &&
+                ["invoiced", "overdue"].includes(work.payment_status)) ||
               work.payment_status === filter) &&
             (!needle ||
               [work.title, work.partner, work.next_action]
@@ -140,6 +145,7 @@ export function AdministrationView({
             [
               ["attention", "Da gestire"],
               ["to_invoice", "Da fatturare"],
+              ["receivables", "Da incassare"],
               ["invoiced", "Fatturati"],
               ["overdue", "Scaduti"],
               ["paid", "Incassati"],

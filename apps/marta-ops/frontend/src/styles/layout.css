@@ -52,7 +52,7 @@ button {
   min-height: 74px;
   border-bottom: 1px solid var(--marta-border);
   padding: 12px 22px;
-  background: rgba(7, 7, 8, 0.86);
+  background: var(--marta-header-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
@@ -117,7 +117,7 @@ button {
   gap: 16px;
   border-color: var(--marta-border);
   padding: 20px 24px;
-  background: rgba(13, 13, 15, 0.92);
+  background: var(--marta-panel-bg);
 }
 .panel-header {
   border-bottom: 1px solid var(--marta-border);

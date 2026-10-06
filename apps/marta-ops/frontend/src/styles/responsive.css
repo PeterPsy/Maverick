@@ -73,7 +73,7 @@
     grid-template-columns: repeat(3, 1fr);
     border-top: 1px solid var(--marta-border);
     padding: 7px 12px max(7px, env(safe-area-inset-bottom));
-    background: rgba(7, 7, 8, 0.92);
+    background: var(--marta-header-bg);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
   }

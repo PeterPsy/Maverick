@@ -1,30 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icon";
-import { SECTIONS } from "./navigation";
-import { IdeasView } from "./components/IdeasView";
-import { TodayView } from "./components/TodayView";
-import { WorksView } from "./components/WorksView";
-import { ContactsView } from "./components/ContactsView";
-import { TasksView } from "./components/TasksView";
-import { DeliveriesView } from "./components/DeliveriesView";
-import { AdministrationView } from "./components/AdministrationView";
+import { AppContent } from "./components/AppContent";
+import { AppTopbar, SectionNavigation } from "./components/AppNavigation";
+import { useAppNavigation } from "./useAppNavigation";
+import { useShellTheme } from "./lib/shellTheme";
+import { ViewStateProvider } from "./lib/viewState";
 import {
   isMaverickParentMessage,
   mountedAppIdFromPath,
-  openApp,
   postToShell,
-  viewFromAppPage,
 } from "./lib/shellNavigation";
 import {
   storageSelectionFromParams,
   type StorageSelection,
 } from "./lib/storageSelection";
-import type { CollaborationPhase, Task, ViewId } from "./types";
 import { useRecordPanels } from "./useRecordPanels";
 import { RecordPanels } from "./components/RecordPanels";
 import { useMartaOps } from "./useMartaOps";
 
 export function App() {
+  return (
+    <ViewStateProvider>
+      <MartaOpsApp />
+    </ViewStateProvider>
+  );
+}
+
+function MartaOpsApp() {
+  useShellTheme();
+  const data = useMartaOps();
   const {
     state,
     loading,
@@ -34,29 +38,23 @@ export function App() {
     integrate,
     mutate,
     refresh,
-  } = useMartaOps();
-  const [view, setView] = useState<ViewId>(
-    () =>
-      viewFromAppPage(
-        new URLSearchParams(window.location.search).get("app_page"),
-      ) || "today",
-  );
-  const [query, setQuery] = useState("");
+  } = data;
+  const appId = useMemo(() => mountedAppIdFromPath(), []);
+  const navigation = useAppNavigation(appId);
+  const { view, setView, query, setQuery, navigate, applyParams } = navigation;
+  const embedded =
+    window.parent !== window ||
+    Boolean(
+      (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string })
+        .__MAVERICK_PLATFORM_ORIGIN__,
+    );
+  const [ideaCaptureRequest, setIdeaCaptureRequest] = useState(0);
   const controller = useRecordPanels();
   const { openWork, newWork, openContact, openTask } = controller;
   const requests = useRef(new Set<string>());
   const integrationRefreshStarted = useRef(false);
   const [pendingSelection, setPendingSelection] =
     useState<StorageSelection | null>(null);
-  const appId = useMemo(() => mountedAppIdFromPath(), []);
-  const navigate = useCallback(
-    (next: ViewId) => {
-      setView(next);
-      setQuery("");
-      openApp(appId, { app_page: next });
-    },
-    [appId],
-  );
   const handleStorageSelection = useCallback(
     (params: Record<string, unknown>) => {
       const selection = storageSelectionFromParams(params);
@@ -78,7 +76,7 @@ export function App() {
           requests.current.delete(selection.requestKey);
         });
     },
-    [integrate, refresh],
+    [integrate, refresh, setView],
   );
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -95,12 +93,12 @@ export function App() {
         return;
       const params = message.params || {};
       handleStorageSelection(params);
-      const next = viewFromAppPage(params.app_page);
-      if (next) setView(next);
+      applyParams(params);
       for (const [param, target] of [
         ["new_work", "work"],
         ["new_contact", "contacts"],
         ["new_task", "tasks"],
+        ["new_idea", "ideas"],
       ] as const) {
         if (params[param] !== true) continue;
         const request = `${param}:${params[`${param}_request_id`] || "initial"}`;
@@ -110,15 +108,34 @@ export function App() {
         if (param === "new_work") newWork();
         if (param === "new_contact") openContact(null);
         if (param === "new_task") openTask(null);
+        if (param === "new_idea") setIdeaCaptureRequest((value) => value + 1);
       }
     }
     window.addEventListener("message", handleMessage);
     postToShell({ type: "maverick.app.ready", app_id: appId });
-    handleStorageSelection(
-      Object.fromEntries(new URLSearchParams(window.location.search)),
+    const initialParams = Object.fromEntries(
+      new URLSearchParams(window.location.search),
     );
+    applyParams(initialParams);
+    handleStorageSelection(initialParams);
     return () => window.removeEventListener("message", handleMessage);
-  }, [appId, handleStorageSelection, newWork, openContact, openTask]);
+  }, [
+    appId,
+    applyParams,
+    handleStorageSelection,
+    newWork,
+    openContact,
+    openTask,
+    setView,
+  ]);
+
+  useEffect(() => {
+    if (!ideaCaptureRequest || loading || view !== "ideas") return;
+    document
+      .querySelector<HTMLInputElement>('input[aria-label="Titolo idea"]')
+      ?.focus();
+    setIdeaCaptureRequest(0);
+  }, [ideaCaptureRequest, loading, view]);
 
   useEffect(() => {
     if (!pendingSelection) return;
@@ -159,32 +176,6 @@ export function App() {
     );
   }, [integrate, loading, saving, state.integration_options]);
 
-  async function toggleTask(task: Task) {
-    await mutate({
-      action: "update_task",
-      id: task.id,
-      changes: { done: !task.done },
-    });
-  }
-  async function moveWork(
-    id: string,
-    phase: CollaborationPhase,
-    beforeId: string,
-    expectedPhase: CollaborationPhase,
-  ) {
-    try {
-      await mutate({
-        action: "move_collaboration",
-        id,
-        phase,
-        before_id: beforeId,
-        expected_phase: expectedPhase,
-      });
-    } catch (error) {
-      void refresh();
-      throw error;
-    }
-  }
   function createCurrent() {
     if (view === "contacts") openContact(null);
     else if (view === "tasks") openTask(null);
@@ -194,187 +185,27 @@ export function App() {
         ?.focus();
     else newWork();
   }
-  const createLabel =
-    view === "contacts"
-      ? "Nuovo contatto"
-      : view === "tasks"
-        ? "Nuova attività"
-        : view === "ideas"
-          ? "Nuova idea"
-          : "Nuovo lavoro";
-  const searchLabel =
-    view === "deliveries"
-      ? "Cerca consegne"
-      : view === "contacts"
-        ? "Cerca contatti"
-        : view === "tasks"
-          ? "Cerca attività"
-          : view === "ideas"
-            ? "Cerca idee"
-            : "Cerca lavori";
-
   return (
-    <div className="marta-shell">
-      <header className="app-topbar">
-        <button
-          aria-label="Marta Ops"
-          className="brand"
-          onClick={() => navigate("today")}
-          type="button"
-        >
-          <span className="brand-mark">
-            <Icon name="board" size={18} />
-          </span>
-          <span>Marta Ops</span>
-        </button>
-        <nav className="desktop-nav" aria-label="Sezioni">
-          {SECTIONS.map(({ id, label, icon }) => (
-            <button
-              aria-current={view === id ? "page" : undefined}
-              className={view === id ? "is-active" : ""}
-              key={id}
-              onClick={() => navigate(id)}
-              type="button"
-            >
-              <Icon name={icon} size={16} />
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="topbar-actions">
-          <label className="app-search">
-            <Icon name="search" size={17} />
-            <input
-              aria-label={searchLabel}
-              onChange={(event) => {
-                if (view === "today") navigate("work");
-                setQuery(event.target.value);
-              }}
-              placeholder={searchLabel}
-              value={query}
-            />
-          </label>
-          <button
-            aria-label={createLabel}
-            className="primary-action new-work"
-            disabled={loading || saving}
-            onClick={createCurrent}
-            type="button"
-          >
-            <Icon name="plus" size={17} />
-            <span>{createLabel}</span>
-          </button>
-        </div>
-      </header>
+    <div className={`marta-shell ${embedded ? "is-embedded" : ""}`}>
+      <AppTopbar
+        view={view}
+        navigate={navigate}
+        embedded={embedded}
+        query={query}
+        setQuery={setQuery}
+        disabled={loading || saving}
+        onCreate={createCurrent}
+      />
       <main className="app-content">
-        {loading ? (
-          <div className="loading-state">
-            <span />
-            <p>Carico Marta Ops…</p>
-          </div>
-        ) : (
-          <>
-            {view === "today" && (
-              <TodayView
-                onCreate={() => newWork()}
-                onEditTask={(task) => openTask(task)}
-                onNewTask={() => openTask(null)}
-                onOpen={(work) => openWork(work)}
-                onTasks={() => navigate("tasks")}
-                onToggleTask={toggleTask}
-                onWorks={() => navigate("work")}
-                saving={saving}
-                state={state}
-              />
-            )}
-            {view === "work" && (
-              <WorksView
-                items={state.collaborations}
-                onCreate={newWork}
-                onMove={moveWork}
-                onOpen={(work) => openWork(work)}
-                query={query}
-                saving={saving}
-              />
-            )}
-            {view === "deliveries" && (
-              <DeliveriesView
-                items={state.collaborations}
-                onOpen={(work) => openWork(work, {}, "deliverables")}
-                onUpdate={async (workId, deliverableId, changes) => {
-                  await mutate({
-                    action: "update_deliverable",
-                    collaboration_id: workId,
-                    id: deliverableId,
-                    changes,
-                  });
-                }}
-                query={query}
-                saving={saving}
-              />
-            )}
-            {view === "contacts" && (
-              <ContactsView
-                contacts={state.contacts}
-                onCreate={() => openContact(null)}
-                onOpen={openContact}
-                query={query}
-                works={state.collaborations}
-              />
-            )}
-            {view === "tasks" && (
-              <TasksView
-                contacts={state.contacts}
-                onCreate={() => openTask(null)}
-                onEdit={(task) => openTask(task)}
-                onToggle={toggleTask}
-                query={query}
-                saving={saving}
-                tasks={state.tasks}
-                works={state.collaborations}
-              />
-            )}
-            {view === "admin" && (
-              <AdministrationView
-                items={state.collaborations}
-                onOpen={(work) => openWork(work)}
-                onUpdate={async (id, changes) => {
-                  await mutate({ action: "update_collaboration", id, changes });
-                }}
-                query={query}
-                saving={saving}
-              />
-            )}
-            {view === "ideas" && (
-              <IdeasView
-                ideas={state.ideas}
-                onCreate={async (idea) => {
-                  await mutate({ action: "create_idea", idea });
-                }}
-                onUpdate={async (id, changes) => {
-                  await mutate({ action: "update_idea", id, changes });
-                }}
-                query={query}
-                saving={saving}
-              />
-            )}
-          </>
-        )}
+        <AppContent
+          data={data}
+          controller={controller}
+          navigation={navigation}
+        />
       </main>
-      <nav className="mobile-nav" aria-label="Sezioni">
-        {SECTIONS.map(({ id, label, icon }) => (
-          <button
-            aria-current={view === id ? "page" : undefined}
-            className={view === id ? "is-active" : ""}
-            key={id}
-            onClick={() => navigate(id)}
-            type="button"
-          >
-            <Icon name={icon} size={18} />
-            <span>{label}</span>
-          </button>
-        ))}
-      </nav>
+      {!embedded && (
+        <SectionNavigation view={view} navigate={navigate} mobile />
+      )}
       <RecordPanels
         appId={appId}
         controller={controller}

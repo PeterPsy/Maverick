@@ -6,8 +6,8 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, it, vi } from "vitest";
-import { state } from "./testFixtures";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { state, work } from "./testFixtures";
 import { App } from "./App";
 
 const mutation = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -29,6 +29,153 @@ vi.mock("./useMartaOps", () => ({
 beforeEach(() => {
   mutation.mockClear();
   integration.mockClear();
+});
+
+afterEach(() => {
+  state.collaborations = [work];
+  delete (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string })
+    .__MAVERICK_PLATFORM_ORIGIN__;
+});
+
+function navigate(params: Record<string, unknown>) {
+  fireEvent(
+    window,
+    new MessageEvent("message", {
+      origin: window.location.origin,
+      source: window,
+      data: { type: "maverick.app.navigate", app_id: "marta-ops", params },
+    }),
+  );
+}
+
+it("keeps section search and filters while navigating and starts fresh on remount", () => {
+  const app = render(<App />);
+  navigate({ app_page: "work" });
+  fireEvent.click(screen.getByRole("button", { name: "Elenco" }));
+  fireEvent.change(screen.getByLabelText("Filtra per tipo"), {
+    target: { value: "partnership" },
+  });
+  fireEvent.change(screen.getByLabelText("Cerca lavori"), {
+    target: { value: "neve" },
+  });
+  navigate({ app_page: "tasks" });
+  fireEvent.change(screen.getByLabelText("Cerca attività"), {
+    target: { value: "Anna" },
+  });
+  navigate({ app_page: "work" });
+  expect(
+    (screen.getByLabelText("Cerca lavori") as HTMLInputElement).value,
+  ).toBe("neve");
+  expect(
+    (screen.getByLabelText("Filtra per tipo") as HTMLSelectElement).value,
+  ).toBe("partnership");
+  expect(
+    screen.getByRole("button", { name: "Elenco" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  navigate({ app_page: "tasks" });
+  expect(
+    (screen.getByLabelText("Cerca attività") as HTMLInputElement).value,
+  ).toBe("Anna");
+  app.unmount();
+  render(<App />);
+  navigate({ app_page: "work" });
+  expect(
+    (screen.getByLabelText("Cerca lavori") as HTMLInputElement).value,
+  ).toBe("");
+  expect(
+    (screen.getByLabelText("Filtra per tipo") as HTMLSelectElement).value,
+  ).toBe("");
+});
+
+it("applies quick filters, clears conflicting search and retains manual filter changes", () => {
+  state.collaborations = [
+    {
+      ...work,
+      deliverables: [
+        {
+          id: "d1",
+          title: "Da approvare",
+          status: "approval",
+          due_date: "",
+          created_at: "",
+          updated_at: "",
+        },
+        {
+          id: "d2",
+          title: "In produzione",
+          status: "in_progress",
+          due_date: "",
+          created_at: "",
+          updated_at: "",
+        },
+      ],
+    },
+    {
+      ...work,
+      id: "w2",
+      title: "Pagamento scaduto",
+      phase: "completed",
+      payment_status: "overdue",
+    },
+    { ...work, id: "w3", title: "Da fatturare", payment_status: "to_invoice" },
+  ];
+  render(<App />);
+  navigate({ app_page: "deliveries" });
+  fireEvent.change(screen.getByLabelText("Cerca consegne"), {
+    target: { value: "invisibile" },
+  });
+  navigate({
+    app_page: "deliveries",
+    delivery_filter: "approval",
+    reset_filters: true,
+  });
+  expect(
+    (screen.getByLabelText("Cerca consegne") as HTMLInputElement).value,
+  ).toBe("");
+  expect(
+    screen.getByRole("button", { name: "Apri Da approvare in Campagna neve" }),
+  ).toBeTruthy();
+  expect(
+    screen.queryByRole("button", {
+      name: "Apri In produzione in Campagna neve",
+    }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Aperte" }));
+  navigate({
+    app_page: "admin",
+    admin_filter: "receivables",
+    reset_filters: true,
+  });
+  expect(
+    screen.getByRole("button", { name: "Apri Pagamento scaduto" }),
+  ).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Apri Da fatturare" }),
+  ).toBeNull();
+  navigate({ app_page: "deliveries" });
+  expect(
+    screen.getByRole("button", { name: "Aperte" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+});
+
+it("focuses idea capture for a sidebar create request", () => {
+  render(<App />);
+  navigate({
+    app_page: "ideas",
+    new_idea: true,
+    new_idea_request_id: "idea-1",
+  });
+  expect(document.activeElement).toBe(screen.getByLabelText("Titolo idea"));
+});
+
+it("uses the shell sidebar as navigation while keeping standalone section controls", () => {
+  (
+    window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: string }
+  ).__MAVERICK_PLATFORM_ORIGIN__ = window.location.origin;
+  render(<App />);
+  expect(screen.queryByRole("navigation", { name: "Sezioni" })).toBeNull();
+  navigate({ app_page: "contacts" });
+  expect(screen.getByLabelText("Nuovo contatto")).toBeTruthy();
 });
 
 it("preserves the contact draft while opening and closing a related task", async () => {

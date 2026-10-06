@@ -55,21 +55,22 @@ button {
 
 .marta-sidebar-widget nav {
   display: grid;
-  gap: 0.46rem;
+  gap: 0.22rem;
 }
 
 .marta-sidebar-row {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.65rem;
   width: 100%;
-  min-height: 3.2rem;
+  min-height: 2.75rem;
   border: 1px solid transparent;
   border-radius: 22px;
   background: transparent;
   padding: 0.45rem 0.7rem;
   text-align: left;
+  font-size: 0.82rem;
   transition:
     background 150ms ease,
     border-color 150ms ease,
@@ -95,39 +96,63 @@ button {
   transform: scale(0.985);
 }
 
-.marta-sidebar-row__icon {
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 14px;
+.marta-sidebar-row > .icon {
   color: var(--marta-muted);
 }
 
-.marta-sidebar-row.is-active .marta-sidebar-row__icon {
+.marta-sidebar-row.is-active > .icon {
   color: var(--marta-text);
 }
 
-.marta-sidebar-row__copy {
-  display: grid;
+.marta-sidebar-row__label {
   min-width: 0;
-  gap: 0.06rem;
-}
-
-.marta-sidebar-row__copy strong,
-.marta-sidebar-row__copy span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.marta-sidebar-row__copy strong {
-  font-size: 0.82rem;
-  font-weight: 500;
+.marta-sidebar-heading--filters {
+  margin-top: 1.5rem;
 }
-.marta-sidebar-row__copy span {
-  color: var(--marta-muted);
+.marta-sidebar-badge {
+  min-width: 1.55rem;
+  border-radius: 8px;
+  padding: 0.15rem 0.35rem;
+  color: var(--marta-soft);
+  background: var(--marta-surface-muted);
   font-size: 0.69rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.marta-sidebar-badge.is-danger {
+  color: var(--maverick-danger);
+  background: var(--marta-surface-hover);
+}
+.marta-sidebar-dot {
+  width: 5px;
+  height: 5px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: var(--marta-soft);
+}
+.marta-sidebar-dot.is-danger {
+  background: var(--maverick-danger);
+}
+.marta-sidebar-feedback {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 0.72rem;
+  color: var(--marta-muted);
+  font-size: 0.72rem;
+}
+.marta-sidebar-feedback button {
+  justify-self: start;
+  border-radius: 12px;
+  background: var(--marta-surface-muted);
+  padding: 0.5rem 0.7rem;
+}
+.marta-sidebar-widget.is-shell-mobile {
+  padding-bottom: 5.1rem;
 }
 
 .marta-sidebar-footer-widget {
@@ -146,16 +171,16 @@ button {
   width: 100%;
   height: 2.65rem;
   min-height: 2.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--marta-border);
   border-radius: 22px;
   color: var(--marta-text);
-  background: rgba(12, 12, 14, 0.58);
+  background: var(--marta-sidebar-surface);
   box-shadow: var(--maverick-inner-edge);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   padding: 0 0.82rem;
   font-size: 0.76rem;
-  font-weight: 500;
+  font-weight: 400;
   transition:
     background 140ms ease,
     transform 140ms ease;
@@ -165,6 +190,15 @@ button {
 .marta-sidebar-footer-button:focus-visible {
   background: var(--marta-surface-hover);
   outline: none;
+}
+.marta-sidebar-footer-button:focus-visible,
+.marta-sidebar-feedback button:focus-visible {
+  outline: 2px solid var(--marta-focus);
+  outline-offset: -2px;
+}
+.marta-sidebar-footer-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .marta-sidebar-footer-button:active {

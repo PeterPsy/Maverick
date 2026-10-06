@@ -16,7 +16,7 @@
   width: min(680px, 96vw);
   border-left: 1px solid var(--marta-border-strong);
   outline: 0;
-  background: #0d0d0f;
+  background: var(--marta-panel-bg);
   box-shadow: -20px 0 70px rgba(0, 0, 0, 0.45);
   animation: panel-in 150ms ease-out;
 }
@@ -39,7 +39,7 @@
   gap: 4px;
   overflow-x: auto;
   border-bottom: 1px solid var(--marta-border);
-  background: #0d0d0f;
+  background: var(--marta-panel-bg);
   padding: 12px 20px;
 }
 .drawer-tabs button {

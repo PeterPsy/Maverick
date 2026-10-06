@@ -29,8 +29,8 @@
 .brand-mark {
   display: grid;
   place-items: center;
-  color: #0b0b0c;
-  background: #fff;
+  color: var(--maverick-text-on-accent);
+  background: var(--marta-accent);
   font-weight: 700;
 }
 .brand-mark {
@@ -122,7 +122,7 @@
   background: var(--marta-accent);
 }
 .primary-action:hover {
-  background: #e5e5e5;
+  background: var(--marta-accent);
 }
 .secondary-action {
   border: 1px solid var(--marta-border);
@@ -521,7 +521,7 @@
   height: 24px;
   border: 1px solid var(--marta-border-strong);
   border-radius: 8px;
-  color: #0b0b0c;
+  color: var(--maverick-text-on-accent);
   background: transparent;
 }
 .deliverable-check.is-done {
@@ -572,7 +572,7 @@
   border: 1px solid rgba(255, 179, 191, 0.2);
   border-radius: var(--marta-radius-control);
   color: var(--maverick-danger);
-  background: rgba(38, 15, 19, 0.96);
+  background: var(--marta-toast-bg);
   box-shadow: 0 18px 55px rgba(0, 0, 0, 0.45);
   padding: 13px 14px;
   font-size: 0.78rem;

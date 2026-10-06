@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useViewState } from "../lib/viewState";
 import { daysFromToday } from "../format";
 import type { Collaboration, Contact, Task } from "../types";
 import { TaskList } from "./TaskList";
@@ -22,8 +22,8 @@ export function TasksView({
   onToggle: (task: Task) => Promise<void>;
   onEdit: (task: Task) => void;
 }) {
-  const [filter, setFilter] = useState("open");
-  const [contactId, setContactId] = useState("");
+  const [filter, setFilter] = useViewState("tasks.filter", "open");
+  const [contactId, setContactId] = useViewState("tasks.contactId", "");
   const needle = query.trim().toLocaleLowerCase("it");
   const visible = tasks
     .filter(

@@ -72,7 +72,7 @@
   border: 1px solid var(--marta-border);
   border-radius: 18px;
   margin-bottom: 9px;
-  background: #121214;
+  background: var(--marta-card-bg);
   box-shadow: var(--maverick-glass-edge);
   padding: 12px;
 }
@@ -80,7 +80,7 @@
   border-color: var(--marta-border-strong);
 }
 .kanban-card.is-dragging {
-  background: #202022;
+  background: var(--marta-drag-bg);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
 }
 .kanban-card-top,

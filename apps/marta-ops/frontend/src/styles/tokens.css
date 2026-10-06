@@ -33,6 +33,13 @@
     sans-serif;
 
   --marta-bg: var(--maverick-bg);
+  --marta-bg-strong: var(--maverick-bg-strong);
+  --marta-header-bg: rgba(7, 7, 8, 0.9);
+  --marta-panel-bg: #0d0d0f;
+  --marta-card-bg: #121214;
+  --marta-drag-bg: #202022;
+  --marta-toast-bg: rgba(38, 15, 19, 0.96);
+  --marta-sidebar-surface: rgba(12, 12, 14, 0.58);
   --marta-surface: var(--maverick-glass-surface);
   --marta-surface-muted: var(--maverick-surface);
   --marta-surface-hover: var(--maverick-surface-hover);
@@ -47,4 +54,37 @@
   --marta-focus: var(--maverick-accent);
   --marta-radius-card: var(--maverick-card-radius);
   --marta-radius-control: var(--maverick-control-radius);
+}
+
+:root[data-maverick-theme="light"] {
+  color-scheme: light;
+  --maverick-bg: #f7f8fb;
+  --maverick-bg-strong: #ffffff;
+  --maverick-surface: rgba(17, 24, 39, 0.04);
+  --maverick-surface-hover: rgba(17, 24, 39, 0.075);
+  --maverick-surface-active: rgba(17, 24, 39, 0.1);
+  --maverick-border: rgba(17, 24, 39, 0.1);
+  --maverick-border-strong: rgba(17, 24, 39, 0.2);
+  --maverick-glass-surface: rgba(255, 255, 255, 0.78);
+  --maverick-glass-edge:
+    inset 0 0 0 1px rgba(17, 24, 39, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --maverick-inner-edge:
+    inset 0 0 0 1px rgba(17, 24, 39, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --maverick-text: #20242d;
+  --maverick-text-muted: rgba(32, 36, 45, 0.7);
+  --maverick-text-soft: rgba(32, 36, 45, 0.6);
+  --maverick-accent: #20242d;
+  --maverick-accent-soft: rgba(32, 36, 45, 0.12);
+  --maverick-text-on-accent: #ffffff;
+  --maverick-success: #217451;
+  --maverick-danger: #b32943;
+  --maverick-warning: #856018;
+  --marta-header-bg: rgba(247, 248, 251, 0.9);
+  --marta-panel-bg: #ffffff;
+  --marta-card-bg: #ffffff;
+  --marta-drag-bg: #f0f2f6;
+  --marta-toast-bg: #fff1f3;
+  --marta-sidebar-surface: rgba(255, 255, 255, 0.58);
 }

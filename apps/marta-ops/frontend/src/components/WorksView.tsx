@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useViewState } from "../lib/viewState";
 import { Icon } from "../Icon";
 import { formatMoney } from "../format";
 import { KIND_OPTIONS, PHASE_OPTIONS } from "../options";
@@ -22,10 +23,10 @@ export function WorksView({
   onMove: MoveWork;
   saving: boolean;
 }) {
-  const [filter, setFilter] = useState<WorkFilter>("open");
-  const [mode, setMode] = useState<"board" | "list">("board");
-  const [kind, setKind] = useState("");
-  const [phase, setPhase] = useState("");
+  const [filter, setFilter] = useViewState<WorkFilter>("work.filter", "open");
+  const [mode, setMode] = useViewState<"board" | "list">("work.mode", "board");
+  const [kind, setKind] = useViewState("work.kind", "");
+  const [phase, setPhase] = useViewState("work.phase", "");
   const visible = useMemo(
     () => visibleWorks(items, filter, query, kind, phase),
     [filter, items, query, kind, phase],

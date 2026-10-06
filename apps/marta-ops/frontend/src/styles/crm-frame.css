@@ -16,6 +16,19 @@
 .app-search {
   width: 190px;
 }
+.marta-shell.is-embedded {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.marta-shell.is-embedded .app-topbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.app-section-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
 .page {
   width: min(100%, 1280px);
   padding: 30px 24px 60px;

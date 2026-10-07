@@ -143,6 +143,15 @@ source app when adding Mac access. Admission validates the ordinary workspace
 runtime and the authenticated native activation; app provenance is not a Mac
 permission gate. Same-turn Codex corrections keep the normal structured skill
 inputs and explicit skill-mention handling while updating the native task text.
+
+These review regressions were fixed in Core commit `468bc54b`, published on
+2026-10-07 and activated by a healthy backend restart. Verification passed 73
+Core/API/provider tests and 40 Chat frontend tests. Native 0.1.5 (49), revision
+`8ff8297b8aaf`, was rebuilt, signature-verified, installed and opened by Actions
+run `37666482424`; its runner passed 260 Swift tests and seven signed physical
+acceptance cases. Native execution uses the existing contract without changes
+to the Mac binary for these Core corrections.
+
 Turning off and back on explicitly renews an idle Full conversation, including
 when provider context has been lost. Renewal is rejected while a turn is running;
 turning off remains available. Stop only clears the local activation once Core

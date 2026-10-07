@@ -171,8 +171,16 @@ proposals stale. Accepted tickets wait for a current completed reassessment
 before launch; waiting tickets do not occupy capacity or starve ready tickets.
 Ticket polling ensures a claim for new evidence without moving an existing
 deadline, duplicating an in-flight review, or retrying cancelled/failed evidence.
+When a stale review is newer than the last finished analysis, one new claim can
+reassess retained evidence even if the conversation cursor is already current.
+The pass supplies the last retained exchange and bounded earlier context, marks
+the input as reassessment, and leaves the durable cursor unchanged. A completed,
+cancelled or failed pass after that invalidation prevents repeated polling from
+creating another claim. Source cleanup fences any in-flight analysis of affected
+remaining chats so an older source snapshot cannot clear the stale review.
 New terminal evidence still resets the idle window; manual analysis can bring
-the queued review forward. All evidence and analysis source chats must exist
+the queued review forward or reassess already consumed exchanges without adding
+messages. All evidence and analysis source chats must exist
 with matching reviewed revisions before launch or Memory commit.
 In-flight results superseded by newer or unconsumed evidence cannot publish
 new candidates. Retired content cannot be recreated by changing its model key.

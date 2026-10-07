@@ -2,11 +2,12 @@
 
 import json
 
-from learning_store import audit, connection, now
+from learning_store import audit, connection, now, settings
 
 
 def cleanup(root, session_ids):
     cancellations = []
+    remaining_sources = set()
     with connection(root, write=True) as db:
         for session in session_ids:
             db.execute("""UPDATE learning_implementations SET status='cancelled',session_id='',turn_id='',
@@ -35,5 +36,17 @@ def cleanup(root, session_ids):
                 if not remaining:
                     db.execute("""UPDATE learning_implementations SET status='cancelled',error='Source chat was deleted',
                         updated_at=? WHERE item_id=? AND status='queued'""", (now(), item["id"]))
+                elif status != "rejected":
+                    remaining_sources.update(x["session_id"] for x in remaining)
                 audit(db, "review.source_deleted", item["id"])
+        for session in remaining_sources:
+            running = db.execute("SELECT request_id FROM learning_jobs WHERE session_id=? AND status='running'", (session,)).fetchall()
+            if not running:
+                continue
+            cancellations.extend(row[0] for row in running)
+            queued = db.execute("SELECT 1 FROM learning_jobs WHERE session_id=? AND status='queued'", (session,)).fetchone()
+            # Fence the old source snapshot and keep at most one claim for the remaining evidence.
+            db.execute("""UPDATE learning_jobs SET status=?,request_id='',attempts=0,due=?,updated_at=?
+                WHERE session_id=? AND status='running'""",
+                ("cancelled" if queued else "queued", now() + settings(db)["idle_seconds"], now(), session))
     return {"background_generation_cancel_requests": cancellations}

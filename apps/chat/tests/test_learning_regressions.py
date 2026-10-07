@@ -17,7 +17,7 @@ from learning_store import connection, now
 from test_conversation_learning import analysis_output, candidate
 
 
-class LearningRegressionTests(unittest.TestCase):
+class LearningTestCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -75,6 +75,8 @@ class LearningRegressionTests(unittest.TestCase):
         return handle_learning({'data_root': self.root, 'effective_mode': 'full-access',
             'body': {'action': 'runtime.cleanup_sessions', 'runtime_session_ids': list(sessions)}})
 
+
+class LearningRegressionTests(LearningTestCase):
     def test_reassessment_ticks_preserve_deadline_and_running_claim(self):
         item = self.publish_proposal()
         self.call('learning.review', item_id=item['id'], command='accept')
@@ -233,11 +235,11 @@ class LearningRegressionTests(unittest.TestCase):
         self.assertTrue(item['details']['review_stale'])
         self.assertEqual({x['session_id'] for x in item['evidence']}, {'other'})
         self.assertEqual(set(item['details']['reviewed_sources']), {'other'})
-        self.assertNotIn('runtime_session_requests', self.runtime_tick())
-        self.capture('other-turn-2', 'other')
-        self.finish(self.start(), reconciliations=[{'item_id': item['id'], 'disposition': 'keep',
+        result = self.runtime_tick()
+        self.assertNotIn('runtime_session_requests', result)
+        self.finish(result['background_generation_requests'][0], reconciliations=[{'item_id': item['id'], 'disposition': 'keep',
             'reason': 'The remaining evidence still supports this improvement',
-            'evidence': [{'turn_id': 'other-turn-2', 'role': 'assistant', 'quote': 'La ricerca è completata e verificata.'}]}])
+            'evidence': [{'turn_id': 'other-turn', 'role': 'assistant', 'quote': 'La ricerca è completata e verificata.'}]}])
         request = self.runtime_tick()['runtime_session_requests'][0]
         self.assertNotIn('app_ref:chat/thread/source', request['input_text'])
         self.assertEqual({x['entity_id'] for x in request['app_references']}, {'other'})

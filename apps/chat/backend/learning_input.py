@@ -19,12 +19,19 @@ def bounded_episode(episode):
 
 
 def build_input(db, job, config, *, memory_provider_app_id=""):
+    cursor = job["cursor"]
+    reassessment = cursor >= job["upto"]
+    if reassessment:
+        latest = db.execute("""SELECT MAX(seq) FROM learning_exchanges
+            WHERE session_id=? AND seq<=?""", (job["session_id"], job["upto"])).fetchone()[0]
+        if latest:
+            cursor = latest - 1
     excluded_sources = set(config["excluded_thread_ids"])
     excluded_sources.update(row["session_id"] for row in db.execute("SELECT session_id,project_id FROM learning_conversations")
                             if row["project_id"] in config["excluded_project_ids"])
     state = db.execute("SELECT * FROM learning_context WHERE session_id=?", (job["session_id"],)).fetchone()
     episode = bounded_episode(json.loads(state["episode_json"]) if state else {})
-    result = {"session_id": job["session_id"], "exchanges": [], "prior_context": [],
+    result = {"session_id": job["session_id"], "exchanges": [], "prior_context": [], "reassessment": reassessment,
               "memory_enabled": config["memory_enabled"], "improvements_enabled": config["improvements_enabled"],
               "memory_provider_app_id": memory_provider_app_id,
               "source_revisions": {job["session_id"]: state["latest_turn_id"] if state else ""},
@@ -62,7 +69,7 @@ def build_input(db, job, config, *, memory_provider_app_id=""):
         elif result["current_work"]:
             result["current_work"].pop()
     prior = db.execute("SELECT * FROM learning_exchanges WHERE session_id=? AND seq<=? ORDER BY seq DESC LIMIT 8",
-                       (job["session_id"], job["cursor"])).fetchall()
+                       (job["session_id"], cursor)).fetchall()
     for row in prior:
         item = exchange(row)
         item["input_text"], item["output_text"] = item["input_text"][:1500], item["output_text"][:3000]
@@ -70,7 +77,7 @@ def build_input(db, job, config, *, memory_provider_app_id=""):
             break
         result["prior_context"].insert(0, item)
     for row in db.execute("SELECT * FROM learning_exchanges WHERE session_id=? AND seq>? AND seq<=? ORDER BY seq LIMIT 50",
-                          (job["session_id"], job["cursor"], job["upto"])):
+                          (job["session_id"], cursor, job["upto"])):
         item = exchange(row)
         if result["exchanges"] and len(encode(result)) + len(encode(item)) + 2 > limit:
             break

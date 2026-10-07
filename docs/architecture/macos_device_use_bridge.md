@@ -138,6 +138,11 @@ live connection. Only the first submission of a draft with PC use selected
 requires a ready lease before materialization. Existing chats can submit ordinary
 workspace work while the Mac is stopped or disconnected; native tool invocation
 checks the lease independently.
+Custom agent chats preserve their agent identity, prompt, skill selection and
+source app when adding Mac access. Admission validates the ordinary workspace
+runtime and the authenticated native activation; app provenance is not a Mac
+permission gate. Same-turn Codex corrections keep the normal structured skill
+inputs and explicit skill-mention handling while updating the native task text.
 Turning off and back on explicitly renews an idle Full conversation, including
 when provider context has been lost. Renewal is rejected while a turn is running;
 turning off remains available. Stop only clears the local activation once Core

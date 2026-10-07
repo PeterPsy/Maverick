@@ -70,8 +70,6 @@ def steer_codex_app_server_turn(
             }
             normalized_client_message_id = str(client_message_id or "").strip()
             device_use = getattr(runtime, "device_use_binding", None) is not None
-            if device_use:
-                params["input"] = [{"type": "text", "text": input_text}]
             if normalized_client_message_id:
                 params["clientUserMessageId"] = normalized_client_message_id
             try:

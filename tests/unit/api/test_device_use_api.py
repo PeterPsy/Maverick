@@ -115,6 +115,16 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             self.assertEqual(stopped, {"status": "stopped"})
 
     def test_runtime_session_consumes_one_activation_with_the_selected_codex_pin(self) -> None:
+        self._assert_codex_activation_consumed(source_app_id="chat", agent_id="chat", agent_type_id="", mode="on")
+
+    def test_custom_agent_session_preserves_its_identity_with_full_mac_access(self) -> None:
+        self._assert_codex_activation_consumed(
+            source_app_id="agents", agent_id="Video Editor", agent_type_id="video-editor", mode="full",
+        )
+
+    def _assert_codex_activation_consumed(
+        self, *, source_app_id: str, agent_id: str, agent_type_id: str, mode: str,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -149,14 +159,15 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 protocol_version=DEVICE_USE_PROTOCOL_VERSION,
                 executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
                 tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
-                mode="on",
+                mode=mode,
                 initial_app="com.apple.Safari",
                 approved_apps=["com.apple.Safari"],
                 outbound=queue.Queue(maxsize=8),
             )
             request = {
-                "agent_id": "chat",
-                "source_app_id": "chat",
+                "agent_id": agent_id,
+                "agent_type_id": agent_type_id,
+                "source_app_id": source_app_id,
                 "runtime_mode": "agentic",
                 "requested_mode": "full-access",
                 "workspace_profile_binding_id": binding.binding_id,
@@ -176,7 +187,10 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 )
             self.assertEqual(status, 201)
             self.assertTrue(session["device_use_enabled"])
-            self.assertEqual(session["device_use"]["mode"], "on")
+            self.assertEqual(session["device_use"]["mode"], mode)
+            self.assertEqual(session["agent_id"], agent_id)
+            self.assertEqual(session["agent_type_id"], agent_type_id)
+            self.assertEqual(session["source_app_id"], source_app_id)
             self.assertNotIn("device_use_binding", session)
             self.assertEqual(session["execution_binding"]["runtime_engine_id"], "codex")
             self.assertEqual(session["execution_binding"]["model_id"], "gpt-5.6-sol")

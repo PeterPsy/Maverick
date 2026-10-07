@@ -1202,10 +1202,11 @@ def _preflight_runtime_session_creation_before_persistence(
     activation_id = str(body.get("device_use_activation_id") or "").strip()
     device_use_binding = None
     if activation_id:
+        # App provenance identifies the session owner; native authority comes
+        # from the authenticated activation, including for custom agent chats.
         if (
             runtime_mode != "agentic"
             or runtime_profile != "workspace"
-            or str(body.get("source_app_id") or "").strip() != "chat"
             or body.get("prepare_only") is True
         ):
             raise ProviderError("device_use_requires_workspace_chat")

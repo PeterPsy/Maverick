@@ -20,19 +20,31 @@ from core.skills.models import SkillDefinition
 
 
 class CodexAppServerSteeringTestCase(unittest.TestCase):
-    def test_device_use_correction_updates_native_task_without_workspace_skill_wrapping(self):
+    def test_device_use_correction_preserves_explicit_context_and_updates_native_task(self):
         runtime = self._runtime("session-steer", provider_turn_id="provider-turn-1")
         runtime.device_use_binding = object()
         runtime.current_task_text = "Require preset MarcoShorts"
         with patch.object(runtime_steering, "_send_request", return_value={"turnId": "provider-turn-1"}) as request:
-            result = runtime_steering.steer_codex_app_server_turn(runtime.session_id, input_text="Use the standard preset instead")
+            result = runtime_steering.steer_codex_app_server_turn(
+                runtime.session_id, input_text="$uninvoked-skill use the standard preset instead",
+                skill_activation_mode="explicit",
+            )
         self.assertEqual(result.status, "steered")
-        self.assertEqual(request.call_args.args[2]["input"], [{"type": "text", "text": "Use the standard preset instead"}])
-        self.assertIn("[Latest user correction]\nUse the standard preset instead", runtime.current_task_text)
+        self.assertEqual(request.call_args.args[2]["input"], [
+            {"type": "text", "text": "＄uninvoked-skill use the standard preset instead"},
+        ])
+        self.assertIn("[Latest user correction]\n$uninvoked-skill use the standard preset instead", runtime.current_task_text)
 
     def test_steer_sends_the_same_structured_skill_item(self) -> None:
+        self._assert_steer_sends_skill_item(mac_access=False)
+
+    def test_mac_steer_preserves_the_structured_skill_item(self) -> None:
+        self._assert_steer_sends_skill_item(mac_access=True)
+
+    def _assert_steer_sends_skill_item(self, *, mac_access: bool) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             runtime = self._runtime("session-steer", provider_turn_id="provider-turn-1")
+            runtime.device_use_binding = object() if mac_access else None
             runtime.runtime_root = str(Path(temp_dir) / "runtime")
             skill_file = Path(runtime.runtime_root) / "codex-home" / "skills" / "storage-ops" / "SKILL.md"
             skill_file.parent.mkdir(parents=True)

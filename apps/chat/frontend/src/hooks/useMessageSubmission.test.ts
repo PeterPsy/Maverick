@@ -72,7 +72,7 @@ describe("runtimeSessionOptionsForNewChat", () => {
         skill_catalog_app_id: "skills",
         skill_ids: ["storage"],
         skill_activation_mode: "implicit",
-        source_app_id: "chat",
+        source_app_id: "agents",
         system_prompt: "",
         title: "GPT-5.6 Sol",
         runtime_mode: "agentic",
@@ -86,7 +86,7 @@ describe("runtimeSessionOptionsForNewChat", () => {
 
     expect(options).toMatchObject({
       agent_id: "chat",
-      source_app_id: "chat",
+      source_app_id: "agents",
       agent_role_id: "editor",
       agent_type_id: "editing-agent",
       skill_ids: ["storage"],

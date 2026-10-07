@@ -1,5 +1,6 @@
 import './styles.css';
 import './styles/learning.css';
+import './styles/learning-tickets.css';
 import { createLearningController } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { bindSettingsHostEvents, settingsHostVisible } from './settingsHostEvents';

@@ -41,6 +41,7 @@ export function learningControlsHtml(state: LearningView, models: ProviderModelO
         ${number('max_output_tokens', 'Output limit (tokens)', 128, 8192, 'Maximum size of the generated suggestions.')}
         ${number('timeout_seconds', 'Timeout (seconds)', 10, 300, 'Stop an analysis if it takes too long.')}
         ${number('retention_days', 'Transcript retention (days)', 1, 365, 'Saved Memory facts and review decisions remain available.')}
+        <label>Parallel improvement agents<input type="number" name="improvement_concurrency" min="1" max="8" value="${c.improvement_concurrency ?? 4}" required ${disabled}><small>Up to this many improvement chats run together. Memory always runs one chat at a time.</small></label>
       </div>
     </details>
     <details class="learning-advanced" data-learning-disclosure="scope" ${state.openSections?.includes('scope') ? 'open' : ''}>

@@ -1,11 +1,13 @@
 import { getAppDependencies, requestJson, saveAppDependencySelection, type AppDependenciesPayload } from './adminApi';
 import { connectAppEventSocket } from '@maverick/pwa-cache';
+import { bindLearningTickets } from './learningTicketBindings';
 
 export type LearningSettings = {
   enabled: boolean; paused: boolean; memory_enabled: boolean; improvements_enabled: boolean;
   memory_mode: string; idle_seconds: number; model_source: string; model_id: string; reasoning_effort: string;
   max_context_chars: number; max_output_tokens: number; timeout_seconds: number; daily_token_budget: number;
   excluded_thread_ids: string[]; excluded_project_ids: string[]; instructions: string; retention_days: number;
+  improvement_concurrency?: number;
 };
 export type LearningJob = {
   id: string; session_id: string; status: string; attempts: number; created_at: number;
@@ -14,6 +16,7 @@ export type LearningJob = {
 export type LearningItem = {
   id: string; kind: string; title: string; body: string; status: string; occurrences: number;
   node_id: string; provider_id: string;
+  implementation?: { status: string; session_id: string; turn_id: string; error: string; summary: string; created_at: number; updated_at: number; attempt: number };
   evidence: { session_id: string; turn_id: string; role: string; quote: string; metrics: Record<string, number> }[];
   details: { memory_matches?: { id: string; title: string }[]; memory_check_error?: string; save_error?: string;
     node_created?: boolean; category?: string; expected_impact?: string; effort?: string; verification?: string };
@@ -21,16 +24,19 @@ export type LearningItem = {
 export type LearningData = {
   settings: LearningSettings; jobs: LearningJob[]; items: LearningItem[]; concurrency: number;
   daily_tokens_reserved_or_used: number;
-  counts?: { pending_memory: number; pending_improvements: number; queued: number; running: number; failed: number; budget_waiting?: number };
+  counts?: { pending_memory: number; pending_improvements: number; queued: number; running: number; failed: number; budget_waiting?: number; open_memory?: number; open_improvement?: number };
   conversations: { session_id: string; project_id: string; last_activity: number; label?: string }[];
   audit: { id: number; action: string; target: string; actor: string; created_at: number }[];
+  projects?: { memory?: string; improvement?: string };
+  runtime_ready?: boolean;
 };
 export type LearningView = {
   data: LearningData | null; error: string; loading: boolean; saving: boolean;
   tab: 'memory' | 'improvements' | 'analyses' | 'audit'; detail: LearningJob | null;
   dependency: AppDependenciesPayload | null; dirty: boolean;
-  notice?: string; openSections?: string[]; selectedSession?: string; filter?: 'pending' | 'all';
+  notice?: string; openSections?: string[]; selectedSession?: string;
   draftSettings?: Partial<LearningSettings>;
+  ticketView?: 'board' | 'list'; ticketFilter?: 'open' | 'all' | 'closed'; ticketSearch?: string; ticketCategory?: string;
 };
 
 export function createLearningController(context: { render: () => void; workspaceId: () => string }) {
@@ -44,6 +50,7 @@ export function createLearningController(context: { render: () => void; workspac
   let invalidated = false;
   const drafts = new Map<string, string | boolean>();
   const itemDrafts = new Map<string, string>();
+  const ticketViews = new Map<string, Partial<LearningView>>();
   const call = <T>(body: object) => requestJson<T>('/api/apps/chat/backend', { method: 'POST', body: JSON.stringify(body) });
 
   function closeSocket() {
@@ -52,6 +59,7 @@ export function createLearningController(context: { render: () => void; workspac
   }
 
   function render() {
+    const boardScroll = document.querySelector('.learning-kanban')?.scrollLeft || 0;
     const active = document.activeElement;
     const selector = active?.id ? `#${active.id}` : active?.getAttribute('name') ? `[name="${active.getAttribute('name')}"]`
       : ['data-learning-title', 'data-learning-body', 'data-learning-target'].map((attr) => active?.hasAttribute(attr) ? `[${attr}="${active.getAttribute(attr)}"]` : '').find(Boolean);
@@ -62,9 +70,11 @@ export function createLearningController(context: { render: () => void; workspac
     });
     state.openSections = [...sections];
     context.render();
+    const board = document.querySelector('.learning-kanban');
+    if (board) board.scrollLeft = boardScroll;
     const replacement = selector ? document.querySelector<HTMLElement>(selector) : null;
     replacement?.focus({ preventScroll: true });
-    if (selection?.[0] != null && (replacement instanceof HTMLTextAreaElement || replacement instanceof HTMLInputElement && replacement.type === 'text')) replacement.setSelectionRange(selection[0], selection[1]);
+    if (selection?.[0] != null && (replacement instanceof HTMLTextAreaElement || replacement instanceof HTMLInputElement && ['text', 'search'].includes(replacement.type))) replacement.setSelectionRange(selection[0], selection[1]);
   }
 
   function reset() {
@@ -73,6 +83,7 @@ export function createLearningController(context: { render: () => void; workspac
     invalidated = false;
     drafts.clear();
     itemDrafts.clear();
+    ticketViews.clear();
     closeSocket();
     state = { data: null, error: '', loading: false, saving: false, tab: 'memory', detail: null, dependency: null, dirty: false };
   }
@@ -125,9 +136,9 @@ export function createLearningController(context: { render: () => void; workspac
       if (revision !== generation) return;
       await call(body);
       if (revision !== generation) return;
-      const action = body as { action?: string; item_id?: string; settings?: Record<string, unknown> };
+      const action = body as { action?: string; item_id?: string; command?: string; settings?: Record<string, unknown> };
       if (action.action === 'learning.configure' && action.settings && 'enabled' in action.settings) drafts.clear();
-      state.notice = action.action === 'learning.configure' ? 'Settings saved' : 'Action completed';
+      state.notice = action.action === 'learning.configure' ? 'Settings saved' : ['accept', 'approve', 'start', 'retry'].includes(action.command || '') ? 'Ticket queued. Its work chat appears when the agent starts.' : action.command === 'implemented' ? 'Implementation confirmed.' : action.command === 'stop' ? 'Stop requested. This chat keeps its slot until the turn ends.' : 'Action completed';
       if (action.item_id) for (const key of itemDrafts.keys()) if (key.endsWith(':' + action.item_id)) itemDrafts.delete(key);
       state.dirty = drafts.size > 0 || itemDrafts.size > 0;
       await load(true);
@@ -144,6 +155,7 @@ export function createLearningController(context: { render: () => void; workspac
     settings.paused = state.data!.settings.paused;
     for (const key of ['enabled', 'memory_enabled', 'improvements_enabled']) settings[key] = values.get(key) === 'on';
     for (const key of ['idle_seconds', 'max_context_chars', 'max_output_tokens', 'timeout_seconds', 'daily_token_budget', 'retention_days']) settings[key] = Number(values.get(key));
+    if (values.has('improvement_concurrency')) settings.improvement_concurrency = Number(values.get('improvement_concurrency'));
     for (const key of ['memory_mode', 'model_source', 'model_id', 'reasoning_effort', 'instructions']) settings[key] = String(values.get(key) || '');
     for (const key of ['excluded_thread_ids', 'excluded_project_ids']) settings[key] = String(values.get(key) || '').split(/[\s,]+/).filter(Boolean);
     const provider = String(values.get('memory_provider') || '');
@@ -153,6 +165,13 @@ export function createLearningController(context: { render: () => void; workspac
   }
 
   function bind() {
+    const reviewItem = (itemId: string, command: string) => {
+      const target = document.querySelector<HTMLSelectElement>(`[data-learning-target="${itemId}"]`)?.value || '';
+      const title = document.querySelector<HTMLInputElement>(`[data-learning-title="${itemId}"]`)?.value;
+      const body = document.querySelector<HTMLTextAreaElement>(`[data-learning-body="${itemId}"]`)?.value;
+      void mutate({ action: 'learning.review', item_id: itemId, command, target_node_id: target === 'new' ? '' : target, confirm_new: target === 'new', title, body });
+    };
+    bindLearningTickets(state, reviewItem, (changes) => { Object.assign(state, changes); render(); });
     const form = document.querySelector<HTMLFormElement>('#learning-settings');
     if (form) {
       for (const element of form.elements) {
@@ -179,7 +198,6 @@ export function createLearningController(context: { render: () => void; workspac
     document.querySelector('#learning-discard')?.addEventListener('click', () => { state.dirty = false; drafts.clear(); itemDrafts.clear(); state.notice = ''; render(); });
     document.querySelector('#learning-pause')?.addEventListener('click', () => { void mutate({ action: 'learning.configure', settings: { paused: !state.data!.settings.paused } }); });
     document.querySelector<HTMLSelectElement>('#learning-session')?.addEventListener('change', (event) => { state.selectedSession = (event.target as HTMLSelectElement).value; render(); });
-    document.querySelector<HTMLSelectElement>('#learning-filter')?.addEventListener('change', (event) => { state.filter = (event.target as HTMLSelectElement).value as 'pending' | 'all'; render(); });
     document.querySelectorAll<HTMLDetailsElement>('[data-learning-disclosure]').forEach((element) => {
       element.open = Boolean(state.openSections?.includes(element.dataset.learningDisclosure!));
       element.addEventListener('toggle', () => {
@@ -208,7 +226,10 @@ export function createLearningController(context: { render: () => void; workspac
       window.parent.postMessage({ type: 'maverick.app.open-app', app_id: decodeURIComponent(parts[1]), params: { app_page: parts.slice(2).map(decodeURIComponent).join('/') } }, origin);
     }));
     document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button) => button.addEventListener('click', () => {
-      detailEpoch++; state.tab = button.dataset.learningTab as LearningView['tab']; state.detail = null; render();
+      ticketViews.set(state.tab, { ticketView: state.ticketView, ticketFilter: state.ticketFilter, ticketSearch: state.ticketSearch, ticketCategory: state.ticketCategory });
+      detailEpoch++; state.tab = button.dataset.learningTab as LearningView['tab']; state.detail = null;
+      Object.assign(state, { ticketView: undefined, ticketFilter: undefined, ticketSearch: undefined, ticketCategory: undefined }, ticketViews.get(state.tab));
+      render();
     }));
     document.querySelectorAll<HTMLElement>('[data-learning-tab]').forEach((button, index, buttons) => button.addEventListener('keydown', (event) => {
       const next = { ArrowRight: (index + 1) % buttons.length, ArrowLeft: (index + buttons.length - 1) % buttons.length, Home: 0, End: buttons.length - 1 }[event.key];
@@ -227,11 +248,7 @@ export function createLearningController(context: { render: () => void; workspac
     }));
     document.querySelectorAll<HTMLElement>('[data-learning-item]').forEach((button) => button.addEventListener('click', () => {
       const itemId = button.dataset.learningItem;
-      const target = document.querySelector<HTMLSelectElement>(`[data-learning-target="${itemId}"]`)?.value || '';
-      const title = document.querySelector<HTMLInputElement>(`[data-learning-title="${itemId}"]`)?.value;
-      const body = document.querySelector<HTMLTextAreaElement>(`[data-learning-body="${itemId}"]`)?.value;
-      void mutate({ action: 'learning.review', item_id: itemId, command: button.dataset.learningCommand,
-        target_node_id: target === 'new' ? '' : target, confirm_new: target === 'new', title, body });
+      reviewItem(itemId!, button.dataset.learningCommand!);
     }));
   }
 

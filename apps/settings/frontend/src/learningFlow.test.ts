@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLearningController, type LearningData } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { settingsPageIdFromParams } from './pages';
+import { ticketCommandForMove } from './learningTickets';
 
 const api = vi.hoisted(() => ({ request: vi.fn(), dependencies: vi.fn(), select: vi.fn() }));
 const events = vi.hoisted(() => ({ subscribe: vi.fn(), stop: vi.fn() }));
@@ -177,5 +178,91 @@ describe('Conversation learning Settings', () => {
     document.querySelector<HTMLButtonElement>('[data-learning-tab=memory]')!.click();
     finish({ job }); await Promise.resolve();
     expect(controller.viewState().detail).toBeNull();
+  });
+
+  const proposal = (id: string, status = 'pending', implementation?: string) => ({ id, kind: 'improvement', title: `Fix ${id}`, body: 'A concrete problem', status, occurrences: 1,
+    node_id: '', provider_id: '', details: { category: 'reliability', verification: 'Run the regression check' }, evidence: [{ session_id: 'source', turn_id: 'turn', role: 'user', quote: 'Evidence', metrics: {} }],
+    ...(implementation ? { implementation: { status: implementation, session_id: `work-${id}`, turn_id: 'work-turn', error: '', summary: 'Regression passed', created_at: 1, updated_at: 1, attempt: 0 } } : {}) });
+
+  it('places tickets in honest Kanban stages and keeps completed work behind the closed filter', async () => {
+    const data = fixture();
+    data.items = [proposal('proposed'), proposal('queued', 'accepted', 'queued'), proposal('active', 'accepted', 'running'), proposal('review', 'accepted', 'awaiting_review'), proposal('done', 'implemented', 'implemented')];
+    api.request.mockResolvedValue(data);
+    const { controller } = mount(); await controller.load();
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=improvements]')!.click();
+    expect(document.querySelectorAll('.ticket-column')).toHaveLength(5);
+    expect(document.querySelector('[data-ticket-column=review] [data-ticket-id=review]')).not.toBeNull();
+    expect(document.querySelector('[data-ticket-id=done]')).toBeNull();
+    expect(document.querySelector('[data-ticket-id=active] [data-learning-command=implemented]')).toBeNull();
+    expect(document.querySelector('[data-ticket-id=review] [data-learning-command=implemented]')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('[data-ticket-filter=closed]')!.click();
+    expect(document.querySelector('[data-ticket-id=done]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ticket-id]')).toHaveLength(1);
+  });
+
+  it('accept queues implementation and links to its normal Chat thread', async () => {
+    const data = fixture(); data.items = [proposal('one')]; api.request.mockResolvedValue(data);
+    const { controller } = mount(); await controller.load();
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=improvements]')!.click();
+    data.items = [proposal('one', 'accepted', 'running')];
+    document.querySelector<HTMLButtonElement>('[data-learning-command=accept]')!.click();
+    await vi.waitFor(() => expect(controller.viewState().saving).toBe(false));
+    const mutation = api.request.mock.calls.find(([, options]) => JSON.parse(options.body).command === 'accept');
+    expect(JSON.parse(mutation![1].body)).toMatchObject({ action: 'learning.review', item_id: 'one', command: 'accept' });
+    expect(document.querySelector('a[href="/app/chat/threads/work-one"]')?.textContent).toContain('Open work chat');
+  });
+
+  it('preserves ticket filters, search focus and horizontal scroll through live updates', async () => {
+    const data = fixture(); data.items = [proposal('first'), proposal('second')]; api.request.mockResolvedValue(data);
+    const { controller } = mount(); await controller.load(); controller.setVisible(true);
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=improvements]')!.click();
+    const search = document.querySelector<HTMLInputElement>('#ticket-search')!;
+    search.focus(); search.value = 'first'; search.setSelectionRange(2, 4); search.dispatchEvent(new Event('input'));
+    expect(document.querySelectorAll('[data-ticket-id]')).toHaveLength(1);
+    document.querySelector('.learning-kanban')!.scrollLeft = 320;
+    events.subscribe.mock.calls[0][0]({ workspace_id: 'default', owner_app_id: 'chat', resource: 'learning' });
+    await vi.waitFor(() => expect(controller.viewState().loading).toBe(false));
+    expect(document.querySelector('.learning-kanban')!.scrollLeft).toBe(320);
+    expect(document.activeElement?.id).toBe('ticket-search');
+    expect((document.activeElement as HTMLInputElement).selectionStart).toBe(2);
+    document.querySelector<HTMLButtonElement>('[data-ticket-view=list]')!.click();
+    expect(document.querySelector('.learning-kanban')).toBeNull();
+    expect(document.querySelectorAll('.ticket-list-row')).toHaveLength(1);
+  });
+
+  it('maps only authorized Kanban moves to commands and cannot invent runtime progress', () => {
+    expect(ticketCommandForMove(proposal('first'), 'queued')).toBe('accept');
+    expect(ticketCommandForMove(proposal('first'), 'running')).toBeUndefined();
+    expect(ticketCommandForMove(proposal('active', 'accepted', 'running'), 'done')).toBeUndefined();
+    expect(ticketCommandForMove(proposal('review', 'accepted', 'awaiting_review'), 'done')).toBe('implemented');
+    expect(ticketCommandForMove(proposal('failed', 'accepted', 'failed'), 'queued')).toBe('retry');
+  });
+
+  it('uses the same Memory Kanban with explicit destination and separate project links', async () => {
+    const data = fixture(); data.projects = { memory: 'memory-project', improvement: 'fix-project' };
+    data.items = [{ ...proposal('fact'), kind: 'memory', provider_id: 'memory', details: { memory_matches: [{ id: 'existing', title: 'Existing fact' }] } }];
+    api.request.mockResolvedValue(data);
+    const { controller } = mount(); await controller.load();
+    expect(document.querySelector('a[href="/app/chat/projects/memory-project"]')).not.toBeNull();
+    const destination = document.querySelector<HTMLSelectElement>('[data-learning-target]')!;
+    destination.value = 'existing'; destination.dispatchEvent(new Event('input'));
+    document.querySelector<HTMLButtonElement>('[data-learning-command=approve]')!.click();
+    await vi.waitFor(() => expect(controller.viewState().saving).toBe(false));
+    const mutation = api.request.mock.calls.find(([, options]) => JSON.parse(options.body).command === 'approve');
+    expect(JSON.parse(mutation![1].body)).toMatchObject({ action: 'learning.review', item_id: 'fact', target_node_id: 'existing' });
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=improvements]')!.click();
+    expect(document.querySelector('a[href="/app/chat/projects/fix-project"]')).not.toBeNull();
+  });
+
+  it('keeps Memory and improvement filters independent when switching tabs', async () => {
+    const data=fixture(); data.items=[{...proposal('fact'),kind:'memory',details:{category:'preference'}},proposal('fix')]; api.request.mockResolvedValue(data);
+    const {controller}=mount(); await controller.load();
+    const category=document.querySelector<HTMLSelectElement>('#ticket-category')!;
+    category.value='preference'; category.dispatchEvent(new Event('change'));
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=improvements]')!.click();
+    expect(document.querySelector('[data-ticket-id=fix]')).not.toBeNull();
+    expect(document.querySelector<HTMLSelectElement>('#ticket-category')!.value).toBe('');
+    document.querySelector<HTMLButtonElement>('[data-learning-tab=memory]')!.click();
+    expect(document.querySelector<HTMLSelectElement>('#ticket-category')!.value).toBe('preference');
   });
 });

@@ -2,68 +2,70 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeDeviceUseSnapshot } from "../lib/deviceUse";
+import type { ComponentProps } from "react";
 import { DeviceUseControl } from "./DeviceUseControl";
-
-const snapshot: NativeDeviceUseSnapshot = {
-  available: true,
-  active: false,
-  activationId: null,
-  mode: "off",
-  phase: "idle",
-  notice: "",
-  apps: [
-    { bundleId: "com.apple.Notes", name: "Note" },
-    { bundleId: "com.apple.TextEdit", name: "TextEdit" },
-  ],
-  permissions: { screen: true, accessibility: false, input: true },
-  settings: { selectedApp: "com.apple.Notes", additionalApps: [], consentMode: "perAction" },
-};
 
 let root: Root | null = null;
 afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHTML = ""; });
 
-describe("Device Use control", () => {
-  it("allows a disconnected chat to reconnect only in its original mode", async () => {
-    const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
-    const onModeChange = vi.fn();
-    await act(async () => {
-      root?.render(<DeviceUseControl busy={false} locked mode="off" pinnedMode="full"
-        onConfigure={async () => undefined} onModeChange={onModeChange}
-        onRefresh={async () => snapshot} onRequestPermission={() => undefined} snapshot={snapshot} />);
-    });
-    const buttons = [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-    expect(buttons.map((button) => button.disabled)).toEqual([false, true, false]);
-    expect(buttons[2].title).toBe("Ricollega il Mac a questa chat");
-    await act(async () => { buttons[2].click(); });
+async function render(props: Partial<ComponentProps<typeof DeviceUseControl>> = {}) {
+  const host = document.createElement("div"); document.body.append(host); root = createRoot(host);
+  const onModeChange = vi.fn();
+  await act(async () => {
+    root?.render(<DeviceUseControl busy={false} locked={false} mode="off"
+      onModeChange={onModeChange} {...props} />);
+  });
+  return { host, button: host.querySelector("button")!, onModeChange };
+}
+
+describe("PC use toggle", () => {
+  it("has one composer toggle that enables full access", async () => {
+    const { host, button, onModeChange } = await render();
+    expect(host.querySelectorAll("button")).toHaveLength(1);
+    expect(host.querySelector('[role="radio"]')).toBeNull();
+    expect(button.classList.contains("chatapp-composer__tool-button")).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(button.getAttribute("aria-label")).toBe("Attiva PC use");
+    expect(button.title).toContain("accesso completo");
+    await act(async () => { button.click(); });
     expect(onModeChange).toHaveBeenCalledWith("full");
   });
 
-  it("exposes the three modes and the full authority contract", async () => {
-    const host = document.createElement("div"); document.body.append(host);
-    root = createRoot(host);
-    const onModeChange = vi.fn();
-    await act(async () => {
-      root?.render(<DeviceUseControl
-        busy={false}
-        locked={false}
-        mode="full"
-        onConfigure={async () => undefined}
-        onModeChange={onModeChange}
-        onRefresh={async () => snapshot}
-        onRequestPermission={() => undefined}
-        snapshot={{ ...snapshot, active: true, mode: "full", phase: "ready" }}
-      />);
-    });
-    const control = host.querySelector(".chatapp-device-use-control");
-    const modes = [...host.querySelectorAll('[role="radio"]')];
-    expect(control?.className).toBe("chatapp-device-use-control");
-    expect(modes.map((item) => item.textContent)).toEqual(["Off", "On", "Full"]);
-    expect(modes.find((item) => item.getAttribute("aria-checked") === "true")?.textContent).toBe("Full");
-    await act(async () => { (host.querySelector('[aria-label="Apri impostazioni Device Use"]') as HTMLButtonElement).click(); });
-    expect(document.body.textContent).toContain("Solo Off/Stop e il blocco schermo revocano l'autorità");
-    expect([...document.body.querySelectorAll('.chatapp-device-use-modal__radios input')].map((item) => item.parentElement?.textContent)).toEqual(["Ogni azione", "Una per incarico"]);
-    await act(async () => { (host.querySelector('[role="radio"]') as HTMLButtonElement).click(); });
+  it("shows the active label and switches full access off", async () => {
+    const { button, onModeChange } = await render({ locked: true, pinnedMode: "full", mode: "full" });
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(button.classList.contains("is-active")).toBe(true);
+    expect(button.textContent).toContain("PC use");
+    await act(async () => { button.click(); });
     expect(onModeChange).toHaveBeenCalledWith("off");
+  });
+
+  it("reconnects a disconnected Full conversation with the same toggle", async () => {
+    const { button, onModeChange } = await render({ locked: true, pinnedMode: "full" });
+    expect(button.disabled).toBe(false);
+    await act(async () => { button.click(); });
+    expect(onModeChange).toHaveBeenCalledWith("full");
+  });
+
+  it.each([null, "on"] as const)("requires a new chat instead of changing a %s binding", async (pinnedMode) => {
+    const { button, onModeChange } = await render({ locked: true, pinnedMode });
+    expect(button.disabled).toBe(true);
+    expect(button.title).toContain("nuova chat");
+    await act(async () => { button.click(); });
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("allows an old bounded activation to be stopped", async () => {
+    const { button, onModeChange } = await render({ locked: true, pinnedMode: "on", mode: "on" });
+    expect(button.disabled).toBe(false);
+    await act(async () => { button.click(); });
+    expect(onModeChange).toHaveBeenCalledWith("off");
+  });
+
+  it("prevents a second transition while a connection is pending", async () => {
+    const { button, onModeChange } = await render({ busy: true });
+    expect(button.disabled).toBe(true);
+    await act(async () => { button.click(); });
+    expect(onModeChange).not.toHaveBeenCalled();
   });
 });

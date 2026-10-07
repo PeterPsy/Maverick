@@ -14,7 +14,7 @@
   gap: 0.55rem;
   min-width: 0;
   flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .chatapp-composer__tool-button,
@@ -61,16 +61,20 @@
   font-size: 1.12rem;
 }
 
-.chatapp-composer__tool-button.chatapp-research-control.is-active {
+.chatapp-composer__tool-button.chatapp-research-control.is-active,
+.chatapp-composer__tool-button.chatapp-device-use-control.is-active {
+  flex: 0 0 auto;
   width: auto;
   gap: 0.32rem;
   padding: 0 0.52rem;
 }
 
-.chatapp-research-control__label {
+.chatapp-research-control__label,
+.chatapp-device-use-control__label {
   font-size: 0.7rem;
   font-weight: 650;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .chatapp-attachment-picker {
@@ -303,7 +307,7 @@
   gap: 0.42rem;
   min-width: 0;
   flex: 0 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .chatapp-composer__runtime-badges .chatapp-provider-selector {

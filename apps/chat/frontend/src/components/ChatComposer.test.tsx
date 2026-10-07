@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, transcribeSpeech, transcribeSpeechBlob } from "../api/client";
 import type { AgentTypeSummary, AppReference, MultiAgentComposerMode, ProviderItem } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
-import type { DeviceUseMode, NativeDeviceUseSnapshot } from "../lib/deviceUse";
+import type { DeviceUseMode } from "../lib/deviceUse";
 import { ChatComposer, type ExecutionMode } from "./ChatComposer";
 
 vi.mock("../api/client", async () => {
@@ -29,18 +29,6 @@ const providers: ProviderItem[] = [
     default_model_family: null,
   },
 ];
-
-const deviceUseSnapshot: NativeDeviceUseSnapshot = {
-  available: true,
-  active: true,
-  activationId: "01234567-89ab-cdef-0123-456789abcdef",
-  mode: "on",
-  phase: "ready",
-  notice: "",
-  apps: [{ bundleId: "com.apple.Notes", name: "Note" }],
-  permissions: { screen: true, accessibility: true, input: true },
-  settings: { selectedApp: "com.apple.Notes", additionalApps: [], consentMode: "perAction" },
-};
 
 const agents: AgentTypeSummary[] = [
   {
@@ -230,8 +218,7 @@ async function renderComposer({
         disabled={false}
         deviceUseAvailable={deviceUseAvailable}
         deviceUseEnabled={deviceUseEnabled}
-        deviceUseMode={deviceUseEnabled ? "on" : "off"}
-        deviceUseSnapshot={deviceUseSnapshot}
+        deviceUseMode={deviceUseEnabled ? "full" : "off"}
         error={null}
         executionMode={executionMode}
         isSending={false}
@@ -254,9 +241,6 @@ async function renderComposer({
         onRemoveAttachment={() => undefined}
         onStopTurn={() => undefined}
         onSubmit={onSubmit}
-        onConfigureDeviceUse={async () => undefined}
-        onRefreshDeviceUse={async () => deviceUseSnapshot}
-        onRequestDeviceUsePermission={() => undefined}
         onSelectDeviceUseMode={onSelectDeviceUseMode}
         providers={providers}
         researchAvailable={researchAvailable}
@@ -299,7 +283,7 @@ describe("composer utilities", () => {
   it("renders Device Use only after native availability and exposes its state", async () => {
     const onSelectDeviceUseMode = vi.fn();
     const unavailable = await renderComposer({ onSelectDeviceUseMode });
-    expect(unavailable.element.querySelector('[aria-label="Device Use"]')).toBeNull();
+    expect(unavailable.element.querySelector('.chatapp-device-use-control')).toBeNull();
     root?.unmount();
 
     const available = await renderComposer({
@@ -307,13 +291,13 @@ describe("composer utilities", () => {
       deviceUseEnabled: true,
       onSelectDeviceUseMode,
     });
-    const button = available.element.querySelector('[role="radio"][aria-checked="true"]');
+    const button = available.element.querySelector('[aria-label="Disattiva PC use"][aria-pressed="true"]');
     expect(button).toBeInstanceOf(HTMLButtonElement);
-    expect(button?.textContent).toBe("On");
-    expect(available.element.querySelector('[aria-label="Composer utility controls"]')?.contains(button)).toBe(false);
+    expect(button?.textContent).toContain("PC use");
+    expect(available.element.querySelector('[aria-label="Composer utility controls"]')?.contains(button)).toBe(true);
     expect(available.element.querySelector(".chatapp-composer__toolbar")?.contains(button)).toBe(true);
     await act(async () => { (button as HTMLButtonElement).click(); });
-    expect(onSelectDeviceUseMode).toHaveBeenCalledWith("on");
+    expect(onSelectDeviceUseMode).toHaveBeenCalledWith("off");
   });
 
   it("keeps attachment and primary actions outside the secondary utility panel", async () => {

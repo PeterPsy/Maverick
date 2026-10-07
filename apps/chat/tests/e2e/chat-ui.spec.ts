@@ -98,6 +98,92 @@ const RUN_ID = "run-chat-e2e";
 const RESEARCHER_AGENT_ID = "agent-type-researcher";
 
 test.describe("Chat app browser smoke", () => {
+  for (const width of [900, 390]) {
+    test(`toggles PC use full access in the native frame at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await installChatMocks(page);
+      const providers = providerPayload();
+      const nativeProfile = {
+        runtime_engine_id: "codex", workspace_profile_binding_id: "native-test-profile",
+        label: "GPT-6.1-Sol · Extra high · Workspace model",
+      };
+      await page.route("**/api/providers", (route) => fulfillJson(route, {
+        ...providers,
+        active_provider: { ...providers.active_provider, ...nativeProfile },
+        items: providers.items.map(provider => ({ ...provider, ...nativeProfile })),
+      }));
+      await page.addInitScript(() => {
+        Object.assign(window, { __MAVERICK_PLATFORM_ORIGIN__: location.origin });
+      });
+      const id = "01234567-89ab-cdef-0123-456789abcdef";
+      let stopped = false;
+      await page.route("**/api/device-use/activations**", async (route) => {
+        if (route.request().method() === "DELETE") {
+          stopped = true;
+          await fulfillJson(route, { status: "stopped" });
+        } else {
+          await fulfillJson(route, {
+            activation_id: id, mode: "full", ready: !stopped, bound: false, status: stopped ? "stopped" : "ready",
+            ticket: "native-frame-test-ticket", websocket_path: "/ws/device-use/executor",
+          });
+        }
+      });
+      await page.route("**/native-frame-preview", (route) => route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html><body style="margin:0;background:#070708">
+          <script>
+            const snapshot = {
+              available: true, active: false, activation_id: null, mode: "off", phase: "idle", notice: "",
+              apps: [], permissions: {screen: true, accessibility: true, input: true},
+              settings: {selected_app: "", additional_apps: [], consent_mode: "perAction"}
+            };
+            window.nativeActions = [];
+            addEventListener("message", event => {
+              if (event.data?.type !== "maverick.device-use.request.v1") return;
+              const request = event.data;
+              window.nativeActions.push({action: request.action, mode: request.mode});
+              if (request.action === "start") Object.assign(snapshot, {
+                active: true, activation_id: request.activationId, mode: request.mode, phase: "ready"
+              });
+              if (request.action === "stop") Object.assign(snapshot, {
+                active: false, activation_id: null, mode: "off", phase: "stopped"
+              });
+              event.ports[0].postMessage({ok: true, result: snapshot});
+            });
+          </script>
+          <iframe title="Maverick Mac preview" src="/apps/chat/" style="width:100%;height:100vh;border:0"></iframe>
+        </body></html>`,
+      }));
+      await page.goto("/apps/chat/native-frame-preview");
+      const chat = page.frameLocator('iframe[title="Maverick Mac preview"]');
+      if (width < 600) await chat.getByRole("button", { name: "Composer utilities" }).click();
+      const toggle = chat.locator(".chatapp-device-use-control");
+      await expect(toggle).toHaveCount(1);
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(chat.getByRole("radio", { name: "Full", exact: true })).toHaveCount(0);
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      await expect(toggle).toContainText("PC use");
+      if (width > 720) {
+        const attachment = await chat.getByRole("button", { name: "Add attachments" }).boundingBox();
+        const pcUse = await toggle.boundingBox();
+        expect(attachment).not.toBeNull();
+        expect(pcUse).not.toBeNull();
+        expect(Math.abs((attachment!.y + attachment!.height / 2) - (pcUse!.y + pcUse!.height / 2))).toBeLessThanOrEqual(1);
+      }
+      expect(await page.evaluate(() => (window as unknown as {
+        nativeActions: Array<{action: string; mode?: string}>;
+      }).nativeActions.filter(item => item.action === "start"))).toEqual([{action: "start", mode: "full"}]);
+      await page.screenshot({ path: `/tmp/pc-use-${width}.png` });
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      expect(stopped).toBe(true);
+      expect(await page.evaluate(() => (window as unknown as {
+        nativeActions: Array<{action: string}>;
+      }).nativeActions.some(item => item.action === "stop"))).toBe(true);
+    });
+  }
+
   test("boots the full app shell with composer controls", async ({ page }) => {
     await installChatMocks(page);
 

@@ -80,6 +80,30 @@ beforeEach(() => {
 afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHTML = ""; });
 
 describe("Device Use conversation continuation", () => {
+  it("starts a new chat with full native authority and no configured app requirement", async () => {
+    native = { ...native, active: false, activationId: null, mode: "off", apps: [],
+      settings: { selectedApp: "", additionalApps: [], consentMode: "perAction" } };
+    await render(null);
+    await act(async () => { await result.selectMode("full"); });
+    expect(requestNativeDeviceUse).toHaveBeenCalledWith("start", expect.objectContaining({ mode: "full" }));
+    expect(result.mode).toBe("full");
+    expect(result.activationId).toBe(newId);
+  });
+
+  it("does not create a bounded activation from the new control", async () => {
+    await render(null);
+    await act(async () => { await result.selectMode("on"); });
+    expect(createDeviceUseActivation).not.toHaveBeenCalled();
+    expect(result.error).toContain("solo accesso completo");
+  });
+
+  it("does not promote a historical bounded chat to full access", async () => {
+    await render({ ...originalThread, device_use: { activation_id: oldId, mode: "on" } });
+    await act(async () => { await result.selectMode("full"); });
+    expect(createDeviceUseActivation).not.toHaveBeenCalled();
+    expect(result.error).toContain("nuova chat");
+  });
+
   it("reconnects Full when selected from the minimal thread catalog", async () => {
     native = { ...native, active: false, activationId: null, mode: "off" };
     await render({ ...originalThread, device_use: { activation_id: oldId, mode: "full" } });
@@ -124,7 +148,7 @@ describe("Device Use conversation continuation", () => {
     expect(result.mode).toBe("off");
     expect(result.enabled).toBe(true);
     expect(result.locked).toBe(true);
-    await act(async () => { await expect(result.ensureReady()).rejects.toThrow("Premi Full"); });
+    await act(async () => { await expect(result.ensureReady()).rejects.toThrow("Attiva PC use"); });
     expect(createDeviceUseActivation).not.toHaveBeenCalled();
     expect(requestNativeDeviceUse).not.toHaveBeenCalledWith("start", expect.anything());
   });
@@ -167,8 +191,32 @@ describe("Device Use conversation continuation", () => {
     await render(originalThread, true);
     await act(async () => { await result.selectMode("off"); });
     expect(stopDeviceUseActivation).toHaveBeenCalledWith(oldId);
+    expect(requestNativeDeviceUse).toHaveBeenCalledWith("stop");
+    expect(native.active).toBe(false);
+    expect(native.activationId).toBeNull();
     expect(createDeviceUseActivation).not.toHaveBeenCalled();
     expect(result.mode).toBe("off");
+    await act(async () => { await expect(result.ensureReady()).rejects.toThrow("Attiva PC use"); });
+  });
+
+  it("keeps the active draft and its stop handle when both revocation paths fail", async () => {
+    await render(null);
+    await act(async () => { await result.selectMode("full"); });
+    vi.mocked(stopDeviceUseActivation).mockRejectedValue(new Error("Core offline"));
+    vi.mocked(requestNativeDeviceUse).mockRejectedValue(new Error("Native bridge unavailable"));
+    await act(async () => { await result.selectMode("off"); });
+    expect(result.mode).toBe("full");
+    expect(result.activationId).toBe(newId);
+    expect(result.error).toContain("Impossibile disattivare PC use");
+  });
+
+  it("accepts confirmed Core revocation when the native bridge is unavailable", async () => {
+    await render();
+    vi.mocked(requestNativeDeviceUse).mockRejectedValue(new Error("Native bridge unavailable"));
+    await act(async () => { await result.selectMode("off"); });
+    expect(stopDeviceUseActivation).toHaveBeenCalledWith(oldId);
+    expect(result.mode).toBe("off");
+    expect(result.error).toBeNull();
   });
 
   it("refreshes lease readiness when a turn ends without navigation or reload", async () => {
@@ -195,7 +243,7 @@ describe("Device Use conversation continuation", () => {
     native = { ...native, active: false, mode: "off" };
     await render();
     await act(async () => { await result.selectMode("on"); });
-    expect(result.error).toContain("modalità è fissata");
+    expect(result.error).toContain("solo accesso completo");
     await render({ ...originalThread, device_use_enabled: false, device_use: null });
     await act(async () => { await result.selectMode("full"); });
     expect(createDeviceUseActivation).not.toHaveBeenCalled();
@@ -209,7 +257,7 @@ describe("Device Use conversation continuation", () => {
     await render();
     expect(result.mode).toBe("off");
     expect(createDeviceUseActivation).not.toHaveBeenCalled();
-    await act(async () => { await expect(result.ensureReady()).rejects.toThrow("Premi Full"); });
+    await act(async () => { await expect(result.ensureReady()).rejects.toThrow("Attiva PC use"); });
   });
 
   it("refreshes native and Core status on return to the foreground", async () => {

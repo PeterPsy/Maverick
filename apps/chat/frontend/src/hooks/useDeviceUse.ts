@@ -10,9 +10,7 @@ import {
 } from "../api/client";
 import {
   requestNativeDeviceUse,
-  type DeviceUseConsentMode,
   type DeviceUseMode,
-  type DeviceUsePermission,
   type NativeDeviceUseSnapshot,
 } from "../lib/deviceUse";
 import { useDeviceUseThreadBinding } from "./useDeviceUseThreadBinding";
@@ -94,8 +92,10 @@ export function useDeviceUse({
     if (activeThread?.device_use_enabled && !pinnedMode) {
       return bindingError || "Attendi il caricamento della modalità Device Use originale.";
     }
-    const label = pinnedMode === "full" ? "Full" : "On";
-    return `Mac scollegato. Premi ${label} in Device Use per ricollegare questa chat, poi invia il messaggio.`;
+    if (pinnedMode === "on") {
+      return "Questa chat usa la vecchia modalità limitata. Avvia una nuova chat e attiva PC use.";
+    }
+    return "Mac scollegato. Attiva PC use per ricollegare questa chat, poi invia il messaggio.";
   }, [activeThread?.device_use_enabled, bindingError, pinnedMode]);
 
   const refresh = useCallback(async () => {
@@ -151,14 +151,20 @@ export function useDeviceUse({
 
   const stopCurrent = useCallback(async () => {
     const current = activationRef.current || threadBinding?.activation_id || null;
+    const [core, native] = await Promise.allSettled([
+      current ? stopDeviceUseActivation(current) : Promise.resolve(null),
+      requestNativeDeviceUse("stop"),
+    ]);
+    const coreStopped = core.status === "fulfilled" && core.value?.status === "stopped";
+    const nativeStopped = native.status === "fulfilled" && !native.value.active;
+    if (!coreStopped && !nativeStopped) {
+      throw new Error("Impossibile disattivare PC use. Riprova o usa Interrompi PC use nel menu Maverick.");
+    }
+    if (native.status === "fulfilled") setSnapshot(native.value);
     setLease(null);
     validatedLeaseRef.current = null;
     refreshSequenceRef.current++;
     setActivationId(null);
-    await Promise.allSettled([
-      ...(current ? [stopDeviceUseActivation(current)] : []),
-      requestNativeDeviceUse("stop").then(setSnapshot),
-    ]);
   }, [threadBinding?.activation_id, activeThread?.thread_id]);
 
   const selectMode = useCallback(async (nextMode: DeviceUseMode) => {
@@ -171,6 +177,9 @@ export function useDeviceUse({
       if (nextMode === "off") {
         await stopCurrent();
         return;
+      }
+      if (nextMode !== "full") {
+        throw new Error("PC use consente solo accesso completo. Avvia una nuova chat e attiva PC use.");
       }
       if (activeThread && (!activeThread.device_use_enabled || nextMode !== pinnedMode)) {
         throw new Error("La modalità è fissata per questa chat. Avvia una nuova chat per cambiarla.");
@@ -248,39 +257,10 @@ export function useDeviceUse({
     }
   }, [reconnectMessage, refresh]);
 
-  const configure = useCallback(async (settings: {
-    selectedApp: string;
-    additionalApps: string[];
-    consentMode: DeviceUseConsentMode;
-  }) => {
-    if (busyRef.current || mode !== "off") return;
-    busyRef.current = true;
-    setBusy(true); setError(null);
-    try {
-      setSnapshot(await requestNativeDeviceUse("configure", settings));
-    } catch (settingsError) {
-      setError(settingsError instanceof Error ? settingsError.message : "Impossibile salvare le impostazioni.");
-      throw settingsError;
-    } finally { busyRef.current = false; setBusy(false); }
-  }, [mode]);
-
-  const requestPermission = useCallback(async (permission: DeviceUsePermission) => {
-    if (busyRef.current || mode !== "off") return;
-    busyRef.current = true;
-    setBusy(true); setError(null);
-    try {
-      setSnapshot(await requestNativeDeviceUse("permission", { permission }));
-      window.setTimeout(() => { void refresh(); }, 600);
-    } catch (permissionError) {
-      setError(permissionError instanceof Error ? permissionError.message : "Permesso non disponibile.");
-    } finally { busyRef.current = false; setBusy(false); }
-  }, [mode, refresh]);
-
   return {
     activationId,
     available: snapshot.available,
     busy,
-    configure,
     enabled,
     ensureReady,
     error: error || bindingError,
@@ -288,7 +268,6 @@ export function useDeviceUse({
     mode,
     pinnedMode,
     refresh,
-    requestPermission,
     selectMode,
     snapshot,
   };

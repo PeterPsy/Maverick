@@ -27,27 +27,34 @@ first-paint color at document start. The web shell replaces it with the
 selected theme when ready; a default white WebKit canvas is never a loading
 state.
 
-The composer control mirrors the Usage badge style:
+The composer exposes one **PC use** toggle beside Research and the other
+composer utilities. It shares their icon-button style, `aria-pressed` state and
+active label:
 
-- its computer icon opens the settings modal;
-- **Off** revokes the active native/Core lease;
-- **On** applies the configured app list and confirmation mode;
-- **Full** enables all control the executor can technically perform.
+- switched on, it starts the existing **Full** native/Core authority;
+- switched off, it revokes the native/Core lease and prevents further device
+  calls, including while a turn is running.
 
-The modal owns the On settings and macOS permission entry points. Mode is fixed
-when a new Device Use chat is materialized. Off stops its native/Core lease.
-A disconnected or explicitly stopped chat can reconnect in its original mode
-without creating another conversation; changing mode or the On app scope still
-requires a new chat. Chat probes native/Core status on navigation, foreground
-return, turn state changes and every ten seconds while visible. A historical
-mode never implies a live connection. Submission checks the lease before
-clearing the composer. Explicitly selecting the original On/Full mode renews
-the lease even if it is already highlighted, allowing a stale connection or
-lost provider context to be repaired without reloading Chat. Renewal is rejected
-before starting another native activation while a turn is running; Off remains
-available to stop the lease.
-The native application menu retains the emergency **Interrompi Device Use**
-command (`Shift-Command-.`).
+There is no three-way selector or app-scope/consent settings modal. macOS
+permission requests remain available under **Maverick → Permessi PC use**
+while access is off. The emergency **Interrompi PC use** command retains
+`Shift-Command-.`. OS permissions and the existing Full executor's technical
+limits still apply.
+
+Mode remains immutable when a Device Use chat is materialized. Disconnected or
+stopped Full chats reconnect through the same toggle. Historical bounded On
+chats retain their original binding and can be stopped; the new control cannot
+reactivate or promote them, so Full requires a new chat. Ordinary existing chats
+also require a new chat to enable device access.
+
+Chat probes native/Core status on navigation, foreground return, turn state
+changes and every ten seconds while visible. Historical mode never implies a
+live connection. Submission checks the lease before clearing the composer.
+Turning off and back on explicitly renews an idle Full conversation, including
+when provider context has been lost. Renewal is rejected while a turn is running;
+turning off remains available. Stop only clears the local activation once Core
+or the native executor confirms revocation; if both fail, the active state and
+activation ID are retained and an error offers the native emergency stop.
 
 REST and WebSocket thread catalogs, including the bounded display cache, retain
 the public activation ID and original On/Full mode. They omit native credentials
@@ -287,13 +294,12 @@ Core:
 - `core/providers/codex_app_server_device_use*.py` — dynamic-tool and same-turn
   image adapter;
 - `apps/base-shell/frontend/src/deviceUseBroker.ts` — trusted control broker;
-- `apps/chat/frontend/src/components/DeviceUseControl.tsx` — composer control
-  and modal;
+- `apps/chat/frontend/src/components/DeviceUseControl.tsx` — binary composer toggle;
 - `apps/chat/frontend/src/hooks/useDeviceUse.ts` — activation lifecycle.
 
 Native:
 
-- `DeviceUseRuntime.swift` — Off/On/Full settings and lifecycle;
+- `DeviceUseRuntime.swift` — native activation, permissions and revocation lifecycle;
 - `DeviceUseBridge.swift` — v45 WSS and binary image transport;
 - `ComputerTools.swift` / `IntegratedComputerTools.swift` — dispatcher;
 - `ProjectAccess.swift` — native picker, opaque bookmarks and path confinement;
@@ -506,3 +512,22 @@ rate; absent required preset. Repeat independent projects and compare total/phas
 times, model/tool calls, recoveries and manual interventions. The report's target
 of fewer than 5% failures and half as many model/tool round trips is a measured
 acceptance objective, not an asserted outcome of this patch.
+
+## PC use toggle release (2026-10-07)
+
+The binary control uses Full at start and verified revocation at stop. Desktop
+attachment, utility and runtime controls stay on one row; long model labels
+truncate without separating the attachment plus. The browser regression
+reproduced a 42px vertical separation before the fix and verifies centers within
+1px afterward. Mobile keeps its existing upward Utility panel. Focused
+verification passed 91 Chat tests, 17 Core Device Use tests and two real-browser
+native-frame tests at 900px and 390px. Those browser tests verify the exact Full
+start request and both stop requests; their native executor is a test fixture.
+The broader existing Chat smoke still expects the obsolete `Default Chat` agent
+label where the current product uses `Free Agent`; it is not reported as passing.
+
+Native commit `b612d8049edc322c4f13784022bbec9961768b0a` passed 259 Swift tests,
+release build, native catalog smoke and stable signing checks in Actions run
+`37639586942`. Its explicit install completed with `Installed and running:
+0.1.2 (46)` on `MacBook-Pro-6`. Physical GUI control and macOS permission
+retention are separate from the build, installation and browser-fixture checks.

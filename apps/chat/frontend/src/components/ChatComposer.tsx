@@ -2,7 +2,7 @@ import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ChatUsageSummary, ProviderItem } from "../api/client";
 import type { MultiAgentComposerMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
-import type { DeviceUseMode, DeviceUsePermission, NativeDeviceUseSnapshot } from "../lib/deviceUse";
+import type { DeviceUseMode } from "../lib/deviceUse";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
 import type { MentionItem } from "../lib/mentions";
@@ -36,7 +36,6 @@ export type ChatComposerProps = {
   deviceUseLocked?: boolean;
   deviceUseMode?: DeviceUseMode;
   deviceUsePinnedMode?: Exclude<DeviceUseMode, "off"> | null;
-  deviceUseSnapshot?: NativeDeviceUseSnapshot;
   error: string | null;
   executionMode: ExecutionMode | null;
   isEmptyMode?: boolean;
@@ -60,9 +59,6 @@ export type ChatComposerProps = {
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
   onSubmit: () => void;
-  onConfigureDeviceUse?: (settings: NativeDeviceUseSnapshot["settings"]) => Promise<void>;
-  onRefreshDeviceUse?: () => Promise<NativeDeviceUseSnapshot>;
-  onRequestDeviceUsePermission?: (permission: DeviceUsePermission) => void;
   onSelectDeviceUseMode?: (mode: DeviceUseMode) => void;
   providers: ProviderItem[];
   reasoningEffort?: string;
@@ -94,7 +90,6 @@ export function ChatComposer({
   deviceUseLocked = false,
   deviceUseMode = "off",
   deviceUsePinnedMode = null,
-  deviceUseSnapshot,
   error,
   executionMode,
   isEmptyMode = false,
@@ -118,9 +113,6 @@ export function ChatComposer({
   onRemoveAttachment,
   onStopTurn,
   onSubmit,
-  onConfigureDeviceUse,
-  onRefreshDeviceUse,
-  onRequestDeviceUsePermission,
   onSelectDeviceUseMode,
   providers,
   reasoningEffort = "",
@@ -273,21 +265,6 @@ export function ChatComposer({
                     onCapturePageArea={onCapturePageArea}
                   />
                 ) : null}
-                {!isolatedResearch && deviceUseAvailable && deviceUseSnapshot
-                    && onConfigureDeviceUse && onRefreshDeviceUse
-                    && onRequestDeviceUsePermission && onSelectDeviceUseMode ? (
-                  <DeviceUseControl
-                    busy={deviceUseBusy}
-                    locked={deviceUseLocked}
-                    mode={deviceUseMode}
-                    pinnedMode={deviceUsePinnedMode}
-                    onConfigure={onConfigureDeviceUse}
-                    onModeChange={onSelectDeviceUseMode}
-                    onRefresh={onRefreshDeviceUse}
-                    onRequestPermission={onRequestDeviceUsePermission}
-                    snapshot={deviceUseSnapshot}
-                  />
-                ) : null}
                 <ComposerUtilities>
                   {!isolatedResearch && onCapturePageArea ? (
                     <button
@@ -331,6 +308,15 @@ export function ChatComposer({
                         onSelectMultiAgentMode?.(nextMode);
                         setMultiAgentMenuOpen(false);
                       }}
+                    />
+                  ) : null}
+                  {!isolatedResearch && deviceUseAvailable && onSelectDeviceUseMode ? (
+                    <DeviceUseControl
+                      busy={deviceUseBusy}
+                      locked={deviceUseLocked}
+                      mode={deviceUseMode}
+                      pinnedMode={deviceUsePinnedMode}
+                      onModeChange={onSelectDeviceUseMode}
                     />
                   ) : null}
                   {researchAvailable || researchEnabled ? (

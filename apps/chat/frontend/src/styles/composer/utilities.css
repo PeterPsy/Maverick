@@ -23,5 +23,5 @@
   gap: 0.55rem;
   min-width: 0;
   flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }

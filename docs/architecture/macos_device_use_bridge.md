@@ -18,7 +18,7 @@ repository; its companion source document is
 
 ### Parallel companion on the same macOS (2026-10-07)
 
-The native 0.1.5 / build 49 companion runs on the user's existing macOS. The
+The native 0.1.6 / build 50 companion runs on the user's existing macOS. The
 user explicitly rejected a second macOS. A separate native-owned headless
 Chrome/Edge process has its own persistent profile, tabs, fixed viewport and
 logical cursor; targeted CDP events never move the physical pointer or activate
@@ -89,6 +89,37 @@ signature and one process running the installed copy. Core's 74 focused bridge,
 provider and API tests passed before deployment; the managed backend restart
 returned healthy. These checks do not assert a completed CapCut workflow or
 independent native app views.
+
+The follow-up authorized Chat test `c8cf3203-dc54-484d-b648-bbbc85820cd3`
+completed all five requested steps with the installed 0.1.5 executor. Its
+complete audit contains 36 native calls and 25 archived images: companion
+observations confirm Roma/Milano titles, 600-pixel scrolls and returns to the
+top, a Venezia search result, closure of the search tab, and retention of the
+original tab IDs after CapCut. CapCut started/reused its existing PID with
+`activation_requested=false`; one custom-drawn Home click opened a new editor.
+Subsequent observations confirm the Text panel and timeline duration changing
+from zero to `00:00:03:00` after adding default text. The agent reported the
+clip in both the timeline and preview.
+
+Two calls were safely rejected or left unverified and recovered through fresh
+observations: browser typing was rejected before dispatch when the focused
+field's signature changed; the project-opening click's immediate
+exact-window observation failed after Home was replaced by a new editor window.
+The agent used `observe_app` and did not repeat the uncertain project click.
+No global-input/activation tool calls, browser timeouts, lost tabs, unknown
+executions, imports or exports appear in this audit. This is a successful
+browser/basic native-app workflow; the audit does not independently measure
+physical cursor/foreground state or establish independent native app views.
+
+Detailed review found a separate keyboard defect masked by the successful
+workflow: the agent's Return key did not submit the Wikipedia search, so it
+used the search button. A controlled Chromium form reproduces zero submissions
+with the old key-down/key-up payload, versus one trusted submission when Return
+includes `text` and `unmodifiedText` as carriage return. Native 0.1.6 (50) sends
+that character with Return's key-down and uses `rawKeyDown` for other named keys.
+The signed browser acceptance now checks Tab/Shift-Tab focus traversal and one
+trusted Return form submission, in addition to the existing input/scroll and
+transport checks. Tool schemas and the `macos-v47` contract are unchanged.
 
 The additive workspace-chat correction was deployed on 2026-10-07 from Core
 commit `b30e63a4`, followed by a healthy managed backend restart. Native build

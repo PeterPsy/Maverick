@@ -69,9 +69,12 @@ def excluded(config, session, project):
     return session in config["excluded_thread_ids"] or (project and project in config["excluded_project_ids"])
 
 
-def enqueue(db, session, due):
+def enqueue(db, session, due, *, reschedule=True):
     row = db.execute("SELECT MAX(seq) FROM learning_exchanges WHERE session_id=?", (session,)).fetchone()
     if not row or not row[0]:
+        return
+    # Ticket polling must not postpone a claim or restart reviewed/cancelled/failed evidence.
+    if not reschedule and db.execute("SELECT 1 FROM learning_jobs WHERE session_id=? AND upto>=?", (session, row[0])).fetchone():
         return
     pending = db.execute("SELECT id FROM learning_jobs WHERE session_id=? AND status='queued'", (session,)).fetchone()
     if pending:

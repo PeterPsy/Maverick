@@ -2,6 +2,7 @@
 
 import json
 
+from learning_cleanup import cleanup
 from learning_memory import dependency_request, memory_callback
 from learning_queue import BUDGET_WAIT_REASON, capture, enqueue, excluded, tick
 from learning_results import complete_analysis
@@ -220,24 +221,3 @@ def review(db, body, actor):
         raise ValueError("Invalid review transition")
     audit(db, "review." + command, item["id"], actor)
     return {}
-
-
-def cleanup(root, session_ids):
-    cancellations = []
-    with connection(root, write=True) as db:
-        for session in session_ids:
-            db.execute("""UPDATE learning_implementations SET status='cancelled',session_id='',turn_id='',
-                request_id='',request_json='{}',error='Work chat was deleted',updated_at=? WHERE session_id=?""", (now(), session))
-            cancellations.extend(x[0] for x in db.execute("SELECT request_id FROM learning_jobs WHERE session_id=? AND status='running'", (session,)))
-            db.execute("UPDATE learning_jobs SET status='cancelled',request_id='' WHERE session_id=? AND status IN ('queued','running')", (session,))
-            db.execute("DELETE FROM learning_exchanges WHERE session_id=?", (session,))
-            db.execute("DELETE FROM learning_conversations WHERE session_id=?", (session,))
-            db.execute("DELETE FROM learning_context WHERE session_id=?", (session,))
-            db.execute("UPDATE learning_jobs SET input_json='{}',output_text='' WHERE session_id=?", (session,))
-            for item in db.execute("SELECT id,evidence FROM learning_items WHERE status IN ('checking','pending','rejected')").fetchall():
-                original = json.loads(item["evidence"])
-                remaining = [x for x in original if x["session_id"] != session]
-                if len(remaining) != len(original):
-                    db.execute("UPDATE learning_items SET evidence=?,status=CASE WHEN ?=0 THEN 'rejected' ELSE status END,updated_at=? WHERE id=?",
-                               (json.dumps(remaining), len(remaining), now(), item["id"]))
-    return {"background_generation_cancel_requests": cancellations}

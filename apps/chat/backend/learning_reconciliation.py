@@ -22,12 +22,17 @@ def current_review(db, item, busy_sessions=()):
     details = json.loads(item["details"])
     if details.get("policy_version") != POLICY_VERSION or details.get("review_stale"):
         return False
-    for session, revision in details.get("reviewed_sources", {}).items():
+    reviewed = details.get("reviewed_sources", {})
+    sources = {x["session_id"] for x in json.loads(item["evidence"])}
+    sources.update(x[0] for x in db.execute("SELECT session_id FROM learning_item_sources WHERE item_id=?", (item["id"],)))
+    if not reviewed or sources - reviewed.keys():
+        return False
+    for session, revision in reviewed.items():
         if session in busy_sessions:
             return False
         state = db.execute("""SELECT c.busy,x.latest_turn_id FROM learning_conversations c
             LEFT JOIN learning_context x ON x.session_id=c.session_id WHERE c.session_id=?""", (session,)).fetchone()
-        if state and (state["busy"] or state["latest_turn_id"] != revision):
+        if not state or state["busy"] or state["latest_turn_id"] != revision:
             return False
     return True
 

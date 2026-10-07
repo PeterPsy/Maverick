@@ -13,26 +13,35 @@ def exchange(row):
     return item
 
 
+def bounded_episode(episode):
+    return {"status": episode.get("status", "uncertain"), "summary": episode.get("summary", "")[:1000],
+            "open_work": [x[:150] for x in episode.get("open_work", [])[:4]]}
+
+
 def build_input(db, job, config, *, memory_provider_app_id=""):
     excluded_sources = set(config["excluded_thread_ids"])
     excluded_sources.update(row["session_id"] for row in db.execute("SELECT session_id,project_id FROM learning_conversations")
                             if row["project_id"] in config["excluded_project_ids"])
     state = db.execute("SELECT * FROM learning_context WHERE session_id=?", (job["session_id"],)).fetchone()
-    episode = json.loads(state["episode_json"]) if state else {}
-    episode = {"status": episode.get("status", "uncertain"), "summary": episode.get("summary", "")[:1000],
-               "open_work": [x[:150] for x in episode.get("open_work", [])[:4]]}
+    episode = bounded_episode(json.loads(state["episode_json"]) if state else {})
     result = {"session_id": job["session_id"], "exchanges": [], "prior_context": [],
               "memory_enabled": config["memory_enabled"], "improvements_enabled": config["improvements_enabled"],
               "memory_provider_app_id": memory_provider_app_id,
               "source_revisions": {job["session_id"]: state["latest_turn_id"] if state else ""},
               "episode_state": {key: episode[key] for key in ("status", "summary", "open_work") if key in episode},
               "current_work": [], "existing_items": []}
-    for row in db.execute("""SELECT c.session_id,c.project_id,x.current_input FROM learning_conversations c
-        JOIN learning_context x ON x.session_id=c.session_id WHERE c.busy=1 AND c.session_id!=?
-        ORDER BY c.last_activity DESC LIMIT 8""", (job["session_id"],)):
+    for row in db.execute("""SELECT c.session_id,c.project_id,c.busy,x.current_input,x.episode_json
+        FROM learning_conversations c JOIN learning_context x ON x.session_id=c.session_id WHERE c.session_id!=?
+        ORDER BY c.last_activity DESC""", (job["session_id"],)):
         if row["session_id"] in config["excluded_thread_ids"] or row["project_id"] in config["excluded_project_ids"]:
             continue
-        result["current_work"].append({"session_id": row["session_id"], "request": row["current_input"][:700]})
+        other_episode = json.loads(row["episode_json"])
+        if not row["busy"] and other_episode.get("status") not in {"ongoing", "blocked", "uncertain"}:
+            continue
+        result["current_work"].append({"session_id": row["session_id"], "request": row["current_input"][:700],
+                                       "episode_state": bounded_episode(other_episode)})
+        if len(result["current_work"]) == 8:
+            break
     for row in db.execute("""SELECT i.*,t.status AS implementation_status FROM learning_items i
         LEFT JOIN learning_implementations t ON t.item_id=i.id
         ORDER BY EXISTS(SELECT 1 FROM learning_item_sources s WHERE s.item_id=i.id AND s.session_id=?) DESC,

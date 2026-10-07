@@ -48,8 +48,12 @@ Settings exposes enable/pause, channels, model, delay, exclusions, budgets,
 review/automatic mode, queue controls, manual analysis, editable candidates,
 Memory approve/reject/undo, proposal lifecycle and run transcripts. Browsing and
 mutating learning state requires platform or workspace admin authority.
-Thread cleanup removes pending inputs and cancels their jobs; already approved
-Memory knowledge retains its explicit source provenance and can be undone.
+Thread cleanup removes pending inputs and cancels their jobs. Unsaved candidates,
+including accepted tickets, lose the deleted source's quotes and analysis links.
+Candidates without remaining evidence are rejected before launch and their queued
+tickets are cancelled. Remaining evidence requires reassessment; admitted work receives a
+stale review and cannot commit Memory. Already saved Memory knowledge retains
+its explicit source provenance and can be undone.
 
 ## Review hardening (2026-10-06)
 
@@ -145,9 +149,12 @@ or a prediction of the user's future turns. At most three candidates per channel
 are accepted; empty outputs are expected.
 
 The reviewer receives up to eight bounded prior exchanges, the last episode
-summary, active user requests from other captured chats, and bounded existing
-items including user-discarded proposals. Thread and project exclusions apply
-to this context too. Context and output remain within the configured bounds.
+summary, and up to eight other captured chats with active user requests or
+persisted ongoing, blocked or uncertain episodes. Each includes a bounded episode
+summary and open work, so unfinished work remains visible between turns. Completed
+idle episodes are omitted. Bounded existing items include user-discarded proposals.
+Thread and project exclusions apply before selecting other chats. Context and
+output remain within the configured bounds.
 The reviewer is tool-free: evidence includes terminal text and overall/queue
 duration, not verified per-tool error/timing traces. It must distinguish a
 reported symptom from a proposed diagnosis and cannot assign total turn time
@@ -162,6 +169,11 @@ they cannot stop an already admitted agent or fabricate a completed fix.
 Admitted work gets a review warning when appropriate. New source turns mark
 proposals stale. Accepted tickets wait for a current completed reassessment
 before launch; waiting tickets do not occupy capacity or starve ready tickets.
+Ticket polling ensures a claim for new evidence without moving an existing
+deadline, duplicating an in-flight review, or retrying cancelled/failed evidence.
+New terminal evidence still resets the idle window; manual analysis can bring
+the queued review forward. All evidence and analysis source chats must exist
+with matching reviewed revisions before launch or Memory commit.
 In-flight results superseded by newer or unconsumed evidence cannot publish
 new candidates. Retired content cannot be recreated by changing its model key.
 
@@ -172,7 +184,10 @@ UI choices, temporary progress and implementation instructions are excluded,
 including a conservative guard against misclassified toggle/layout requests.
 Completed assistant research is eligible only with cited URLs or app references
 present in its supplied source exchange. A bare claim of verification is
-insufficient. The work agent reads the cited sources before saving. Citations,
+insufficient. The work agent reads the cited sources before saving. Direct
+automatic ingestion requires exclusively user-role evidence and a verbatim user
+statement. Assistant or mixed-role research requires approval and the verifying
+work agent even when the reviewer sets `explicit=true`. Citations,
 knowledge type, confirmation and review time travel through Memory source
 ingestion. A changed source blocks commit as well as automatic saving.
 

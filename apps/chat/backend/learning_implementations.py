@@ -153,7 +153,7 @@ def tick(data_root, body):
                 if not current_review(db, item, body.get("busy_runtime_session_ids", [])):
                     from learning_queue import enqueue
                     for source in db.execute("SELECT session_id FROM learning_item_sources WHERE item_id=?", (item["id"],)).fetchall():
-                        enqueue(db, source[0], now() + settings(db)["idle_seconds"])
+                        enqueue(db, source[0], now() + settings(db)["idle_seconds"], reschedule=False)
                     continue
                 ticket = dict(ticket)
                 ticket["request_id"] = ticket["request_id"] or new_id("implementation")

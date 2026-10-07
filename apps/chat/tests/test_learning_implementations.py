@@ -22,8 +22,11 @@ class ImplementationTests(unittest.TestCase):
                 evidence = [{"session_id": f"source-{index}", "turn_id": f"turn-{index}", "role": "user", "quote": "A verified quote", "metrics": {}}]
                 db.execute("""INSERT INTO learning_items(id,fingerprint,kind,title,body,status,evidence,details,updated_at)
                     VALUES(?,?,'improvement','Fix the issue','Observed failure','pending',?,?,?)""",
-                    (str(index), str(index), json.dumps(evidence), json.dumps({"verification": "Run the regression check", "policy_version": 2}), now()))
+                    (str(index), str(index), json.dumps(evidence), json.dumps({"verification": "Run the regression check",
+                        "policy_version": 2, "reviewed_sources": {f"source-{index}": f"turn-{index}"}}), now()))
                 db.execute("INSERT INTO learning_item_sources VALUES(?,?,?)", (str(index), f"analysis-{index}", f"source-{index}"))
+                db.execute("INSERT INTO learning_conversations(session_id,project_id,last_activity) VALUES(?,'',?)", (f"source-{index}", now()))
+                db.execute("INSERT INTO learning_context(session_id,latest_turn_id) VALUES(?,?)", (f"source-{index}", f"turn-{index}"))
 
     def call(self, action="learning.read", surface="backend", **body):
         return handle_learning({"data_root": self.root, "surface": surface, "user_id": "owner", "workspace_role": "admin",
@@ -120,7 +123,7 @@ class ImplementationTests(unittest.TestCase):
         self.assertEqual(self.ticket()["session_id"], "work-chat")
         self.assertEqual(self.ticket()["summary"], "Verified fix")
         self.assertEqual(self.ticket()["status"], "awaiting_review")
-        self.assertEqual(self.call()["conversations"], [])
+        self.assertEqual({x['session_id'] for x in self.call()['conversations']}, {'source-0', 'source-1', 'source-2'})
 
     def test_terminal_outbox_replay_does_not_repeat_ticket_mutations(self):
         self.review("accept")
@@ -154,7 +157,7 @@ class ImplementationTests(unittest.TestCase):
         self.assertEqual(self.ticket()["status"], "running")
         self.call("runtime.turn.completed", surface="runtime_event", runtime_session_id="work-chat", turn_id="followup", output_text="Follow-up fixed")
         self.assertEqual(self.ticket()["summary"], "Follow-up fixed")
-        self.assertEqual(self.call()["conversations"], [])
+        self.assertEqual({x['session_id'] for x in self.call()['conversations']}, {'source-0', 'source-1', 'source-2'})
 
     def test_legacy_acceptance_requires_explicit_start_and_callback_is_trusted(self):
         with connection(self.root, write=True) as db:
@@ -252,7 +255,8 @@ class ImplementationTests(unittest.TestCase):
     def test_memory_commit_is_scoped_idempotent_and_uses_pinned_destination(self):
         from core.shared.entrypoints import run_json_entrypoint
         with connection(self.root,write=True) as db:
-            db.execute("UPDATE learning_items SET kind='memory',provider_id='pinned-memory',details=? WHERE id='0'", (json.dumps({'policy_version':2,'memory_matches':[{'id':'existing','title':'Related fact'}]}),))
+            db.execute("UPDATE learning_items SET kind='memory',provider_id='pinned-memory',details=? WHERE id='0'", (json.dumps({'policy_version':2,
+                'reviewed_sources': {'source-0': 'turn-0'}, 'memory_matches':[{'id':'existing','title':'Related fact'}]}),))
         self.call('learning.review',item_id='0',command='approve',target_node_id='existing')
         self.submitted(self.tick()['runtime_session_requests'][0])
         entrypoint=Path(__file__).resolve().parents[1]/'mcp'/'server.py'

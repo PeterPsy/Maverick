@@ -63,7 +63,8 @@ def memory_callback(data_root, body):
             evidence = json.loads(item["evidence"])
             # Auto mode is intentionally limited to verbatim explicit user facts.
             verbatim = bool(normalize(item["body"])) and any(normalize(item["body"]) in normalize(x["quote"]) for x in evidence)
-            if ok and config["enabled"] and not config["paused"] and config["memory_enabled"] and config["memory_mode"] == "automatic" and not matches and details.get("explicit") is True and details.get("confidence", 0) >= .95 and verbatim and current_review(db, item):
+            user_evidence = bool(evidence) and all(x["role"] == "user" for x in evidence)
+            if ok and config["enabled"] and not config["paused"] and config["memory_enabled"] and config["memory_mode"] == "automatic" and not matches and details.get("explicit") is True and details.get("confidence", 0) >= .95 and verbatim and user_evidence and current_review(db, item):
                 return {"dependency_backend_requests": [save_request(db, item)]}
             return {}
         if item["operation_id"] != body.get("operation_id") or item["status"] not in {"saving", "undoing"}:

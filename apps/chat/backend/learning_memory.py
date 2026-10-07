@@ -4,6 +4,7 @@ import json
 
 from learning_store import audit, connection, new_id, now, settings
 from learning_validation import normalize
+from learning_reconciliation import current_review
 
 
 def dependency_request(item_id, callback, body, *, operation_id="", provider_id=""):
@@ -19,6 +20,8 @@ def save_request(db, item, *, target_node_id="", actor="system"):
     details = json.loads(item["details"])
     evidence = json.loads(item["evidence"])
     source = "\n\n".join(f"Chat /app/chat/threads/{x['session_id']} · turn {x['turn_id']} · {x['role']}\n\n{x['quote']}" for x in evidence)
+    if details.get("source_refs"):
+        source += "\n\nCited references\n\n" + "\n".join(details["source_refs"])
     details.update(target_node_id=target_node_id, node_created=not bool(target_node_id))
     db.execute("UPDATE learning_items SET status='saving',operation_id=?,details=?,updated_at=? WHERE id=?",
                (token, json.dumps(details), now(), item["id"]))
@@ -30,7 +33,9 @@ def save_request(db, item, *, target_node_id="", actor="system"):
         "confidence": details.get("confidence", 0.5), "compile_after_ingest": True,
         "body_markdown": source, "source": {"adapter_id": "inline_markdown",
             "source_key": "conversation-learning:" + item["id"], "body_markdown": source,
-            "metadata": {"candidate_id": item["id"], "chat_evidence": evidence}},
+            "metadata": {"candidate_id": item["id"], "chat_evidence": evidence,
+                "source_refs": details.get("source_refs", []), "knowledge_type": details.get("memory_type", ""),
+                "confirmation": details.get("confirmation", ""), "reviewed_at": item["updated_at"]}},
     }, operation_id=token, provider_id=item["provider_id"])
 
 
@@ -58,7 +63,7 @@ def memory_callback(data_root, body):
             evidence = json.loads(item["evidence"])
             # Auto mode is intentionally limited to verbatim explicit user facts.
             verbatim = bool(normalize(item["body"])) and any(normalize(item["body"]) in normalize(x["quote"]) for x in evidence)
-            if ok and config["enabled"] and not config["paused"] and config["memory_enabled"] and config["memory_mode"] == "automatic" and not matches and details.get("explicit") is True and details.get("confidence", 0) >= .95 and verbatim:
+            if ok and config["enabled"] and not config["paused"] and config["memory_enabled"] and config["memory_mode"] == "automatic" and not matches and details.get("explicit") is True and details.get("confidence", 0) >= .95 and verbatim and current_review(db, item):
                 return {"dependency_backend_requests": [save_request(db, item)]}
             return {}
         if item["operation_id"] != body.get("operation_id") or item["status"] not in {"saving", "undoing"}:

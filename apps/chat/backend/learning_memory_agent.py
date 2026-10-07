@@ -4,6 +4,7 @@ import json
 
 from learning_memory import save_request
 from learning_store import connection
+from learning_reconciliation import current_review
 
 
 def memory_agent_action(payload):
@@ -27,6 +28,8 @@ def memory_agent_action(payload):
             return receipt
         if ticket["status"] != "running" or item["status"] not in {"accepted", "pending"}:
             raise ValueError("Memory implementation is not active or was stopped")
+        if not current_review(db, item):
+            raise ValueError("The source conversation changed; reassess this fact before saving it")
         target = json.loads(item["details"]).get("target_node_id", "")
         request = save_request(db, item, target_node_id=target, actor=ticket["actor"])
         return {**receipt, "status": "saving", "dependency_backend_requests": [request], "_changed": True}

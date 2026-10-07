@@ -19,7 +19,8 @@ export type LearningItem = {
   implementation?: { status: string; session_id: string; turn_id: string; error: string; summary: string; created_at: number; updated_at: number; attempt: number };
   evidence: { session_id: string; turn_id: string; role: string; quote: string; metrics: Record<string, number> }[];
   details: { memory_matches?: { id: string; title: string }[]; memory_check_error?: string; save_error?: string;
-    node_created?: boolean; category?: string; expected_impact?: string; effort?: string; verification?: string };
+    node_created?: boolean; category?: string; expected_impact?: string; effort?: string; verification?: string;
+    review_stale?: boolean; review_reason?: string; generalization?: string; source_refs?: string[] };
 };
 export type LearningData = {
   settings: LearningSettings; jobs: LearningJob[]; items: LearningItem[]; concurrency: number;

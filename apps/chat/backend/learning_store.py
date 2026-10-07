@@ -33,7 +33,7 @@ def connection(data_root, *, write=False):
     db = sqlite3.connect(root / "learning.sqlite", timeout=15)
     db.row_factory = sqlite3.Row
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version > 2:
+    if version > 3:
         db.close()
         raise ValueError("Unsupported learning database schema")
     db.executescript("""
@@ -83,13 +83,16 @@ def connection(data_root, *, write=False):
         CREATE TABLE IF NOT EXISTS learning_implementation_events(
             event_id TEXT PRIMARY KEY, item_id TEXT NOT NULL, created_at REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS learning_runtime_state(id INTEGER PRIMARY KEY CHECK(id=1), ready INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS learning_context(
+            session_id TEXT PRIMARY KEY, episode_json TEXT NOT NULL DEFAULT '{}',
+            current_input TEXT NOT NULL DEFAULT '', latest_turn_id TEXT NOT NULL DEFAULT '');
     """)
-    if version < 2:
+    if version < 3:
         db.execute("BEGIN IMMEDIATE")
         columns = {row[1] for row in db.execute("PRAGMA table_info(learning_jobs)")}
         if "reservation_day" not in columns:
             db.execute("ALTER TABLE learning_jobs ADD COLUMN reservation_day TEXT NOT NULL DEFAULT ''")
-        db.execute("PRAGMA user_version=2")
+        db.execute("PRAGMA user_version=3")
         db.commit()
     try:
         if write:

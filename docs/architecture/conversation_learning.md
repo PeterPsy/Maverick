@@ -8,8 +8,10 @@ Terminal Chat callbacks enqueue evidence; they never run inference. Queued user
 messages cancel an in-flight pass and postpone its next attempt. Core asks Chat
 to revalidate the durable claim immediately before inference, closing the
 claim-to-dispatch race with pause or cancellation. The worker waits for the configured idle delay and
-for linked orchestration to finish. Only new completed exchanges are consumed;
-failed exchanges are available as process evidence, never proof of success.
+for linked orchestration to finish. The quiet period schedules review, not task
+closure. New exchanges advance the cursor; bounded previous exchanges and the
+persisted episode assessment supply context. Failed exchanges are process
+evidence, never proof of successful completion or confirmed knowledge.
 
 `background_generation_requests` is a generic app-result capability, restricted
 to apps declaring runtime session creation. Requests supply a bounded prompt,
@@ -86,7 +88,7 @@ Users cannot fabricate a running state. Improvements reach review after a normal
 agent turn and require explicit confirmation to become implemented. Memory
 requires a provider-confirmed save; a completed turn alone cannot mark it saved.
 
-Acceptance persists an implementation ticket in learning SQLite schema version 2,
+Acceptance persists an implementation ticket in learning SQLite schema version 3,
 with source-analysis associations and deduplicated runtime event receipts. Generic
 runtime requests use the accepting user and normal workspace agentic profile.
 Memory runs one work chat at a time, independently of improvement capacity.
@@ -129,3 +131,61 @@ receipt before reporting success. Memory's callback owns node/revision truth and
 guarded undo. A late confirmed save repairs a failed/stopped projection without
 admitting another active Memory chat. The existing explicit-fact automatic saving
 mode remains a direct provider operation.
+
+## Episode and relevance policy (2026-10-07)
+
+Policy version 2 requires an explicit episode assessment: completed, ongoing,
+blocked or uncertain, with summary, open work and exact quoted evidence. A
+completed assessment needs new completed evidence of the outcome and no open
+work. Runtime turn completion and idle duration do not establish this outcome.
+Only completed episodes may publish candidates. Other assessments persist
+internal context without producing tickets or Memory candidates. Classification
+is semantic model judgment constrained by this evidence contract, not a timer
+or a prediction of the user's future turns. At most three candidates per channel
+are accepted; empty outputs are expected.
+
+The reviewer receives up to eight bounded prior exchanges, the last episode
+summary, active user requests from other captured chats, and bounded existing
+items including user-discarded proposals. Thread and project exclusions apply
+to this context too. Context and output remain within the configured bounds.
+The reviewer is tool-free: evidence includes terminal text and overall/queue
+duration, not verified per-tool error/timing traces. It must distinguish a
+reported symptom from a proposed diagnosis and cannot assign total turn time
+to a particular tool.
+
+Improvements require Maverick scope, a specific capability/reliability/tool/
+performance/workflow problem, an explanation of value for other tasks, and a
+verification criterion. Task-local requests, work already requested, in
+progress, resolved or duplicated are filtered. Reconciliations cite current
+evidence and can retire pending proposals and cancel queued implementations;
+they cannot stop an already admitted agent or fabricate a completed fix.
+Admitted work gets a review warning when appropriate. New source turns mark
+proposals stale. Accepted tickets wait for a current completed reassessment
+before launch; waiting tickets do not occupy capacity or starve ready tickets.
+In-flight results superseded by newer or unconsumed evidence cannot publish
+new candidates. Retired content cannot be recreated by changing its model key.
+
+Memory requires confirmed, durable knowledge useful beyond the task: people,
+organizations, relationships, sourced discoveries, occurred events, important
+business decisions or enduring personal preferences. Development requirements,
+UI choices, temporary progress and implementation instructions are excluded,
+including a conservative guard against misclassified toggle/layout requests.
+Completed assistant research is eligible only with cited URLs or app references
+present in its supplied source exchange. A bare claim of verification is
+insufficient. The work agent reads the cited sources before saving. Citations,
+knowledge type, confirmation and review time travel through Memory source
+ingestion. A changed source blocks commit as well as automatic saving.
+
+SQLite schema 3 adds app-owned episode/current-request context while preserving
+existing records. The current policy version is stored with each candidate;
+older candidates require fresh review before approval. Core remains unchanged
+and app-agnostic; app entrypoints load the new review contract on invocation.
+
+The Chat CLI exposes administrator-only `learning.read` and
+`learning.discard_all`. Discard atomically dismisses all unsaved candidates,
+requests stops for active implementation turns, cancels outstanding analysis
+claims and advances captured evidence cursors. Delayed callbacks cannot restore
+the discarded results. Historical records and dismissal reasons remain visible;
+already saved Memory knowledge is managed through its guarded undo/provider
+surfaces. Provider writes already in progress must settle before bulk discard.
+The next captured evidence starts a new review under the current criteria.

@@ -5,7 +5,7 @@ import json
 import re
 
 from learning_store import audit, connection, daily_consumption, new_id, now, settings
-from learning_validation import OUTPUT_SCHEMA, SYSTEM_PROMPT
+from learning_review_schema import OUTPUT_SCHEMA, SYSTEM_PROMPT
 from learning_input import build_input
 
 _SECRET = re.compile(r"(?i)(bearer\s+\S+|(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s,;]+)")
@@ -40,6 +40,11 @@ def capture(data_root, body):
         if db.execute("SELECT 1 FROM learning_exchanges WHERE turn_id=?", (body.get("turn_id", ""),)).fetchone():
             return {}
         timestamp = now()
+        db.execute("""INSERT INTO learning_context(session_id,current_input,latest_turn_id) VALUES(?,?,?)
+            ON CONFLICT(session_id) DO UPDATE SET current_input=excluded.current_input,latest_turn_id=excluded.latest_turn_id""",
+            (session, clean(body.get("input_text"), 4000) if action == "runtime.turn.queued" else "", body.get("turn_id", "")))
+        from learning_reconciliation import invalidate_source
+        invalidated = invalidate_source(db, session)
         db.execute("""INSERT INTO learning_conversations(session_id,project_id,busy,last_activity)
                       VALUES(?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET
                       busy=excluded.busy,last_activity=excluded.last_activity,project_id=excluded.project_id""",
@@ -48,7 +53,7 @@ def capture(data_root, body):
             cancellations = [x[0] for x in db.execute("SELECT request_id FROM learning_jobs WHERE session_id=? AND status='running'", (session,))]
             db.execute("UPDATE learning_jobs SET status='queued',request_id='',attempts=0,due=?,updated_at=? WHERE session_id=? AND status='running'",
                        (timestamp + config["idle_seconds"], timestamp, session))
-            return {"background_generation_cancel_requests": cancellations, "_changed": bool(cancellations)}
+            return {"background_generation_cancel_requests": cancellations, "_changed": bool(cancellations) or invalidated}
         if action not in {"runtime.turn.completed", "runtime.turn.failed", "runtime.turn.cancelled"}:
             return {}
         inserted = db.execute("""INSERT OR IGNORE INTO learning_exchanges
@@ -142,7 +147,7 @@ def tick(data_root, body):
             db.execute("UPDATE learning_jobs SET status='completed' WHERE id=?", (row["id"],))
             return {"next_due_in_seconds": 1}
         prompt = json.dumps(input_data, ensure_ascii=False)
-        system = SYSTEM_PROMPT + "\n" + config["instructions"]
+        system = SYSTEM_PROMPT + "\nOptional focus guidance (the review mandate remains authoritative):\n" + config["instructions"]
         # Native Codex also receives its fixed provider instructions.
         native_overhead = 8000 if config["model_source"] == "workspace" else 0
         reservation = native_overhead + (len(prompt) + len(system)) // 3 + config["max_output_tokens"]

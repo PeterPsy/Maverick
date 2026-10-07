@@ -13,7 +13,7 @@ export function learningPageHtml(state: LearningView, models: ProviderModelOptio
     pending_improvements: data.items.filter((x) => x.kind === 'improvement' && x.status === 'pending').length,
     queued: data.jobs.filter((x) => x.status === 'queued').length, running: data.jobs.filter((x) => x.status === 'running').length, failed: data.jobs.filter((x) => x.status === 'failed').length, budget_waiting: 0 };
   const status = !c.enabled ? 'Off' : c.paused ? 'Paused' : !c.memory_enabled && !c.improvements_enabled ? 'No outputs selected' : counts.running ? 'Analyzing' : 'On';
-  const description = !c.enabled ? 'Enable learning to capture future conversations.' : c.paused ? 'Chats are still captured. Resume when you are ready.' : !c.memory_enabled && !c.improvements_enabled ? 'Choose Memory or Improvements to start analysis.' : counts.running ? 'One conversation is being analyzed. The others wait safely in the queue.' : 'New completed conversations are analyzed after the quiet period.';
+  const description = !c.enabled ? 'Enable learning to capture future conversations.' : c.paused ? 'Chats are still captured. Resume when you are ready.' : !c.memory_enabled && !c.improvements_enabled ? 'Choose Memory or Improvements to start analysis.' : counts.running ? 'One conversation is being reviewed. The others wait in the queue.' : 'Quiet periods trigger review. Only completed work can produce proposals.';
   const tokens = data.daily_tokens_reserved_or_used;
   const percent = Math.min(100, Math.round(tokens / c.daily_token_budget * 100));
   const disabled = saving ? 'disabled' : '';

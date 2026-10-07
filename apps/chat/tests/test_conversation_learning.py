@@ -20,7 +20,18 @@ from core.shared.entrypoints import run_json_entrypoint
 def candidate(quote='Preferisco risposte brevi e in italiano.', **changes):
     return {"title": "Lingua e stile", "body": quote, "dedupe_key": "user-language-style", "confidence": .99,
             "explicit": True, "category": "preference", "expected_impact": "", "effort": "", "verification": "",
+            "scope": "knowledge", "novelty": "new", "memory_type": "preference", "durable": True,
+            "confirmation": "confirmed", "problem_kind": "none", "generalization": "", "source_refs": [],
             "evidence": [{"turn_id": "turn-1", "role": "user", "quote": quote}], **changes}
+
+
+def analysis_output(input_data, memory=None, improvements=None, **changes):
+    exchange = input_data['exchanges'][-1]
+    role = 'assistant' if len(exchange['output_text']) >= 8 else 'user'
+    quote = exchange['output_text' if role == 'assistant' else 'input_text'][:500]
+    return {'episode': {'status': 'completed', 'summary': 'The work has a confirmed outcome', 'open_work': [],
+                       'evidence': [{'turn_id': exchange['turn_id'], 'role': role, 'quote': quote}]},
+            'memory': memory or [], 'improvements': improvements or [], 'reconciliations': [], **changes}
 
 
 class ConversationLearningTests(unittest.TestCase):
@@ -48,8 +59,10 @@ class ConversationLearningTests(unittest.TestCase):
         return result['background_generation_requests'][0]
 
     def finish(self, request, memory=None, improvements=None, **changes):
+        improvements = [{**item, 'scope':'maverick', 'problem_kind':'reliability', 'generalization':'Reusable across workspace tasks',
+                         'verification': 'Reproduce and verify the failure'} for item in improvements or []]
         return complete_analysis(self.root, {**request['callback']['payload'], "request_id": request['request_id'],
-            "status": "completed", "output_text": json.dumps({"memory": memory or [], "improvements": improvements or []}),
+            "status": "completed", "output_text": json.dumps(analysis_output(json.loads(request['input_text']), memory, improvements)),
             "usage": {"total_tokens": 50}, **changes})
 
     def data(self):
@@ -231,12 +244,14 @@ class ConversationLearningTests(unittest.TestCase):
         run = self.start()
         evidence = json.loads(run['input_text'])
         for bad in [candidate('Un fatto inesistente.'), candidate(explicit='yes'), candidate(category={}), candidate(dedupe_key='!!!'),
-                    candidate(evidence=[{'turn_id':'turn-1','role':'assistant','quote':'Terrò conto della preferenza.'}])]:
+                    candidate(source_refs=['https://invented.example/source'])]:
             with self.subTest(bad=bad), self.assertRaises(ValueError):
-                validated_items(json.dumps({'memory':[bad], 'improvements':[]}), evidence)
+                validated_items(json.dumps(analysis_output(evidence, [bad])), evidence)
+        unsupported = candidate(evidence=[{'turn_id':'turn-1','role':'assistant','quote':'Terrò conto della preferenza.'}])
+        self.assertEqual(validated_items(json.dumps(analysis_output(evidence, [unsupported])), evidence), [])
         evidence['exchanges'][0]['status'] = 'failed'
         with self.assertRaises(ValueError):
-            validated_items(json.dumps({'memory':[candidate()], 'improvements':[]}), evidence)
+            validated_items(json.dumps(analysis_output(evidence, [candidate()])), evidence)
 
     def test_review_first_provider_pin_and_stale_memory_callback_fence(self):
         self.capture()

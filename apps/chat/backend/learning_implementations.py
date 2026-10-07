@@ -5,6 +5,8 @@ import json
 from learning_implementation_context import implementation_request
 from learning_store import audit, connection, new_id, now, settings
 from learning_projects import learning_projects
+from learning_reconciliation import current_review
+from learning_review_schema import POLICY_VERSION
 
 ACTIVE = {"launching", "running", "stopping"}
 TERMINAL = {"completed": "awaiting_review", "failed": "failed", "cancelled": "cancelled", "timed-out": "failed"}
@@ -13,6 +15,8 @@ TERMINAL = {"completed": "awaiting_review", "failed": "failed", "cancelled": "ca
 def queue_item(db, item, actor):
     if item["kind"] not in {"improvement", "memory"} or item["status"] not in {"pending", "accepted"}:
         raise ValueError("Only proposed or accepted learning tickets can be started")
+    if json.loads(item["details"]).get("policy_version") != POLICY_VERSION:
+        raise ValueError("This candidate needs a fresh review under the current criteria before approval")
     existing = db.execute("SELECT * FROM learning_implementations WHERE item_id=?", (item["id"],)).fetchone()
     if not existing:
         db.execute("""INSERT INTO learning_implementations(item_id,status,actor,created_at,updated_at)
@@ -141,9 +145,16 @@ def tick(data_root, body):
         for kind, limit in limits.items():
             slots = max(0, limit - sum(ticket["kind"] == kind for ticket in active))
             queued = db.execute("""SELECT t.* FROM learning_implementations t JOIN learning_items i ON i.id=t.item_id
-                WHERE t.status='queued' AND i.kind=? ORDER BY t.created_at,t.item_id LIMIT ?""", (kind, slots)).fetchall()
+                WHERE t.status='queued' AND i.kind=? ORDER BY t.created_at,t.item_id""", (kind,)).fetchall()
             for ticket in queued:
+                if not slots:
+                    break
                 item = db.execute("SELECT * FROM learning_items WHERE id=?", (ticket["item_id"],)).fetchone()
+                if not current_review(db, item, body.get("busy_runtime_session_ids", [])):
+                    from learning_queue import enqueue
+                    for source in db.execute("SELECT session_id FROM learning_item_sources WHERE item_id=?", (item["id"],)).fetchall():
+                        enqueue(db, source[0], now() + settings(db)["idle_seconds"])
+                    continue
                 ticket = dict(ticket)
                 ticket["request_id"] = ticket["request_id"] or new_id("implementation")
                 request = json.loads(ticket["request_json"]) or implementation_request(db, item, ticket, project_id=projects[kind])
@@ -151,6 +162,7 @@ def tick(data_root, body):
                            (ticket["request_id"], json.dumps(request), now(), ticket["item_id"]))
                 audit(db, "implementation.launching", ticket["item_id"])
                 result.setdefault("runtime_session_requests", []).append(request)
+                slots -= 1
                 result["_changed"] = True
         if not active and not result.get("runtime_session_requests"):
             result["next_due_in_seconds"] = 30

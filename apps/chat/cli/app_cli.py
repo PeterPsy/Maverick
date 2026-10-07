@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from service import ChatValidationError, app_events_for_result, handle_action, unsupported_action_payload, validation_error_payload
 from surface_manifest import OPERATIONS_MANIFEST
 
-CLI_ACTIONS = ["operations.manifest", *OPERATIONS_MANIFEST["operations"]]
+CLI_ACTIONS = ["operations.manifest", *OPERATIONS_MANIFEST["operations"], "learning.read", "learning.discard_all"]
 CLI_ARGUMENT_FIELDS = {
     "action",
     "entity_type",
@@ -51,9 +51,22 @@ elif unexpected_fields:
     )
 else:
     try:
+        if action.startswith("learning."):
+            from learning_service import handle_learning
+            result = handle_learning({**payload, "body": body})
+            changed = result.pop("_changed", False)
+            response = {"status_code": 200, "workspace_id": payload.get("workspace_id"), "app_id": payload.get("app_id"), **result}
+            if changed:
+                response["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
+            print(json.dumps(response, ensure_ascii=False))
+            sys.exit(0)
         status_code, result = handle_action(Path(payload["data_root"]), body)
     except ChatValidationError as error:
         status_code, result = 400, validation_error_payload(error, action)
+    except PermissionError as error:
+        status_code, result = 403, {"error": str(error)}
+    except ValueError as error:
+        status_code, result = 400, {"error": str(error)}
 
 response = {
     "status_code": status_code,

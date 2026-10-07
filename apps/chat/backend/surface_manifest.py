@@ -82,6 +82,10 @@ OPERATIONS_MANIFEST = {
         "project": "Chat project UUID stored as project_id/entity_id.",
         "thread": "Core runtime thread id; Chat view filters may reference it but Chat does not own thread records.",
     },
+    "administrative_cli_operations": {
+        "learning.read": "Read the learning dashboard; workspace administrator required.",
+        "learning.discard_all": "Dismiss all unsaved learning candidates, stop linked agents, cancel queued analyses and advance consumed evidence. Retains audit and saved Memory knowledge; administrator required.",
+    },
     "payload_profiles": {
         "default": "compact operations manifest",
         "projects.list": "project_id, name, created_at, updated_at, preferences",
@@ -106,6 +110,6 @@ OPERATIONS_MANIFEST = {
     },
     "notes": [
         "Runtime threads, messages, turns, and cleanup are core runtime concerns.",
-        "Chat CLI/MCP operations only expose app-owned project references and view state.",
+        "Chat CLI also exposes administrator-only learning inspection and backlog dismissal.",
     ],
 }

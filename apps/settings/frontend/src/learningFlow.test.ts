@@ -41,6 +41,17 @@ describe('Conversation learning Settings', () => {
     expect(document.querySelector('img')).toBeNull();
     expect(document.body.textContent).toContain('<script>alert(1)</script>');
   });
+  it('explains reassessment and the reason a proposal was dismissed without rendering markup', () => {
+    const data = fixture();
+    data.items.push({id:'proposal',kind:'improvement',title:'Workbook editing',body:'Preserve formulas',status:'accepted',occurrences:1,
+      node_id:'',provider_id:'',evidence:[],implementation:{status:'queued',session_id:'',turn_id:'',error:'',summary:'',created_at:0,updated_at:0,attempt:0},
+      details:{review_stale:true,review_reason:'<img src=x>Handled in the source chat',generalization:'Helps other workbook tasks'}});
+    document.body.innerHTML=learningPageHtml({data,error:'',loading:false,saving:false,tab:'improvements',detail:null,dependency:null,dirty:false});
+    expect(document.body.textContent).toContain('wait for reassessment');
+    expect(document.body.textContent).toContain('Why this helps other tasks');
+    expect(document.body.textContent).toContain('Handled in the source chat');
+    expect(document.querySelector('img')).toBeNull();
+  });
   it('preserves unsaved Settings edits when changing tabs and saves their values', async () => {
     const { controller } = mount();
     await controller.load();

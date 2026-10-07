@@ -54,6 +54,9 @@ def handle_learning(payload):
     with connection(root, write=True) as db:
         if action == "learning.read":
             return {**dashboard(db), "projects": learning_projects(root)[0]}
+        if action == "learning.discard_all":
+            from learning_reset import discard_all
+            return discard_all(db, actor)
         if action == "learning.configure":
             previous = settings(db)
             config = validate_settings(body.get("settings", {}), previous)
@@ -154,6 +157,8 @@ def review(db, body, actor):
         raise ValueError("Candidate not found")
     command = body.get("command")
     details = json.loads(item["details"])
+    if item["status"] == "rejected":
+        raise ValueError("This candidate was dismissed")
     if command == "reject" and db.execute("SELECT 1 FROM learning_implementations WHERE item_id=? AND status NOT IN ('cancelled','failed')", (item["id"],)).fetchone():
         raise ValueError("Stop the work chat before rejecting the ticket")
     if item["kind"] == "memory" and command in {"retry", "stop"}:
@@ -227,6 +232,7 @@ def cleanup(root, session_ids):
             db.execute("UPDATE learning_jobs SET status='cancelled',request_id='' WHERE session_id=? AND status IN ('queued','running')", (session,))
             db.execute("DELETE FROM learning_exchanges WHERE session_id=?", (session,))
             db.execute("DELETE FROM learning_conversations WHERE session_id=?", (session,))
+            db.execute("DELETE FROM learning_context WHERE session_id=?", (session,))
             db.execute("UPDATE learning_jobs SET input_json='{}',output_text='' WHERE session_id=?", (session,))
             for item in db.execute("SELECT id,evidence FROM learning_items WHERE status IN ('checking','pending','rejected')").fetchall():
                 original = json.loads(item["evidence"])

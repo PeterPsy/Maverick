@@ -5,12 +5,20 @@ Workspace chat app that talks to the selected Maverick runtime provider.
 ## Conversation learning
 
 Settings → Conversation learning controls a disabled-by-default, review-first loop
-for completed user chats. Chat persists evidence, idle-delayed jobs, Memory
+for completed work episodes. Idle delay schedules review; unfinished work remains
+internal context. The reviewer filters already requested/in-progress development,
+finds general Maverick limits, and retains durable sourced knowledge rather than
+UI requirements. Changed sources hold implementation or Memory writes until
+reassessment. Chat persists episode context, evidence, idle-delayed jobs, Memory
 candidates, improvement proposals and audit history in `data/chat/learning.sqlite`.
 One installation-wide generation lock and transactional attempt fencing prevent
 overlapping analysis or late results overwriting new work. Memory writes use the
 selected optional `learning-memory` provider through source ingestion; improvements
 start visible implementation chats after acceptance. Memory candidates start their own source-verifying chat and save through the scoped `chat_learning_memory` MCP tool. Memory chats run serially; improvements default to four parallel chats. Generated conversations live in distinct Memory and Improvements projects and are excluded from analysis. See [Conversation Learning](../../docs/architecture/conversation_learning.md).
+
+Administrators can use `maverick app chat cli run chat --action learning.read --json`
+to inspect learning and `--action learning.discard_all` to dismiss unsaved proposals,
+stop linked implementations and fence the consumed backlog, retaining its audit.
 
 ## Contract Notes
 

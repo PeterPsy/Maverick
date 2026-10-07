@@ -22,7 +22,7 @@ class ImplementationTests(unittest.TestCase):
                 evidence = [{"session_id": f"source-{index}", "turn_id": f"turn-{index}", "role": "user", "quote": "A verified quote", "metrics": {}}]
                 db.execute("""INSERT INTO learning_items(id,fingerprint,kind,title,body,status,evidence,details,updated_at)
                     VALUES(?,?,'improvement','Fix the issue','Observed failure','pending',?,?,?)""",
-                    (str(index), str(index), json.dumps(evidence), json.dumps({"verification": "Run the regression check"}), now()))
+                    (str(index), str(index), json.dumps(evidence), json.dumps({"verification": "Run the regression check", "policy_version": 2}), now()))
                 db.execute("INSERT INTO learning_item_sources VALUES(?,?,?)", (str(index), f"analysis-{index}", f"source-{index}"))
 
     def call(self, action="learning.read", surface="backend", **body):
@@ -229,6 +229,16 @@ class ImplementationTests(unittest.TestCase):
             handle_learning({'data_root':self.root,'surface':'mcp','runtime_session_id':'source-0',
                              'body':{'action':'learning.memory_agent','item_id':'0','command':'commit'}})
 
+    def test_stale_oldest_ticket_does_not_block_a_ready_ticket(self):
+        self.call('learning.configure', settings={'improvement_concurrency':1})
+        self.review('accept', '0')
+        self.review('accept', '1')
+        with connection(self.root, write=True) as db:
+            db.execute("UPDATE learning_items SET details=? WHERE id='0'", (json.dumps({'policy_version':2,'review_stale':True}),))
+        requests = self.tick()['runtime_session_requests']
+        self.assertEqual([x['callback']['payload']['item_id'] for x in requests], ['1'])
+        self.assertEqual(self.ticket('0')['status'], 'queued')
+
     def test_memory_turn_completion_without_provider_receipt_is_not_saved(self):
         with connection(self.root,write=True) as db:
             db.execute("UPDATE learning_items SET kind='memory',provider_id='memory' WHERE id='0'")
@@ -242,7 +252,7 @@ class ImplementationTests(unittest.TestCase):
     def test_memory_commit_is_scoped_idempotent_and_uses_pinned_destination(self):
         from core.shared.entrypoints import run_json_entrypoint
         with connection(self.root,write=True) as db:
-            db.execute("UPDATE learning_items SET kind='memory',provider_id='pinned-memory',details=? WHERE id='0'", (json.dumps({'memory_matches':[{'id':'existing','title':'Related fact'}]}),))
+            db.execute("UPDATE learning_items SET kind='memory',provider_id='pinned-memory',details=? WHERE id='0'", (json.dumps({'policy_version':2,'memory_matches':[{'id':'existing','title':'Related fact'}]}),))
         self.call('learning.review',item_id='0',command='approve',target_node_id='existing')
         self.submitted(self.tick()['runtime_session_requests'][0])
         entrypoint=Path(__file__).resolve().parents[1]/'mcp'/'server.py'

@@ -26,7 +26,7 @@ class CodexDeviceUseContinuationTests(unittest.TestCase):
                 home.mkdir()
                 binding = DeviceUseSessionBinding(
                     activation_id="activation", workspace_id="default", owner_user_id="user",
-                    protocol_version="maverick.device-use.v1", executor_contract="macos-v45",
+                    protocol_version="maverick.device-use.v1", executor_contract="macos-v46",
                     tool_contract_digest="a" * 64, mode=mode, initial_app="com.apple.Safari",
                     approved_apps=("com.apple.Safari",), created_at=datetime.now(UTC),
                 )

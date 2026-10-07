@@ -91,9 +91,10 @@ def reconnect_device_use_session(
 def _renewable_contract(previous, binding):
     if (previous.executor_contract, previous.tool_contract_digest) == (binding.executor_contract, binding.tool_contract_digest):
         return True
-    # Reviewed additive v45 upgrade: explicit idle reconnection retires the old
+    # Reviewed additive companion upgrade: explicit idle reconnection retires the old
     # provider context. Owner, workspace, protocol and On/Full scope stay fixed.
-    return (previous.executor_contract, previous.tool_contract_digest) == (
-        "macos-v44", "d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1"
-    ) and (binding.executor_contract, binding.tool_contract_digest) == (
+    return (previous.executor_contract, previous.tool_contract_digest) in {
+        ("macos-v44", "d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1"),
+        ("macos-v45", "0b96e1a3013c1bfece055623d8b104cd029b1b8ebb21719686999531abbf424d"),
+    } and (binding.executor_contract, binding.tool_contract_digest) == (
         DEVICE_USE_EXECUTOR_CONTRACT, DEVICE_USE_TOOL_CONTRACT_DIGEST)

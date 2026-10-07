@@ -16,6 +16,43 @@ repository; its companion source document is
 
 ## Product contract
 
+### Parallel companion on the same macOS (2026-10-07)
+
+The native 0.1.3 / build 47 companion runs on the user's existing macOS. The
+user explicitly rejected a second macOS. A separate native-owned headless
+Chrome/Edge process has its own persistent profile, tabs, fixed viewport and
+logical cursor; targeted CDP events never move the physical pointer or activate
+user windows. A nonactivating read-only native preview shows the cyan secondary
+cursor. A native sign-in command opens only the dedicated profile while PC use
+is off. No VM, personal-profile attachment, provider runtime or credential copy
+is introduced.
+
+The fifth dynamic tool, `mac_browser`, provides companion tab management,
+HTTP(S) navigation, exact-tab observations and receipt-bound input. It rejects
+file/JavaScript/browser-internal URLs and exposes no arbitrary script/CDP entry.
+Focus verification precedes typing; one receipt admits one gesture; navigation,
+Stop and turn boundaries invalidate receipts. Transport loss/uncertainty cannot
+replay an action or fall back to the desktop. Chrome/Edge must be installed.
+Native file chooser/upload and downloads are unsupported by this tool.
+
+Companion is enabled by default in the native menu. While enabled, global
+`mac_computer` input/activation is rejected before dispatch; `select_app` only
+changes internal targeting. Native Peekaboo retains strict background delivery,
+and EventKit/project APIs remain independent of cursor/focus. Arbitrary native
+apps can still share document/view/app-internal focus with the human: complete
+independent browser views do not imply general third-party app virtualization.
+An explicitly selected shared-desktop mode revokes the current lease first.
+
+The additive contract is `macos-v46`, digest
+`776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb`.
+Core admits companion images through its existing WSS/binary JPEG path and
+adds companion guidance to both provider adapters. Full admits the browser;
+bounded On retains existing native scope and cannot use it. Reviewed v44/v45
+conversations can upgrade only by explicit idle reconnection, retiring provider
+context without changing their model or On/Full binding. Deploy Core before
+installing this native contract. The companion source document owns native
+module/resource/lifecycle details and physical acceptance results.
+
 The Mac app is a chrome-free WebView of the ordinary Maverick Chat. There is no
 native status/setup toolbar and no `Sul server` / `Su questo Mac` selector. Chat
 renders its Device Use control only when the trusted macOS bridge answers the

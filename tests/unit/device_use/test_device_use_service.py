@@ -20,6 +20,31 @@ from core.device_use.service import DeviceUseService, encode_image_frame
 
 
 class DeviceUseServiceTestCase(unittest.TestCase):
+    def test_companion_observation_and_declared_input_image_use_the_existing_binary_route(self):
+        for action, extra in [("observe", {}), ("click", {"observe_after": True})]:
+            with self.subTest(action=action):
+                service, binding, outbound = self.connected()
+                results, errors = [], []
+                args = {"action": action, "tab_id": "companion-tab", **extra}
+                worker = threading.Thread(target=lambda: self._capture_error(errors, lambda: results.append(service.invoke(
+                    binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                    provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="browser-call",
+                    tool_name="mac_browser", arguments=args, task_text="browse in companion", timeout_seconds=1))))
+                worker.start()
+                frame = outbound.get(timeout=1)
+                jpeg = b"\xff\xd8companion\xff\xd9"
+                service.accept_invocation(binding.activation_id, frame)
+                service.deliver_result(binding.activation_id, {
+                    "invocation_id": frame["invocation_id"], "call_id": "browser-call", "arguments_digest": frame["arguments_digest"],
+                    "result": {"success": True, "contentItems": [{"type": "inputText", "text": "execution_environment=parallel_companion"}]},
+                    "has_image": True, "image_sha256": hashlib.sha256(jpeg).hexdigest(),
+                })
+                service.deliver_image(binding.activation_id, encode_image_frame(invocation_id=frame["invocation_id"], call_id="browser-call", jpeg=jpeg))
+                worker.join(timeout=1)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(errors, [])
+                self.assertEqual(results[0].image_jpeg, jpeg)
+
     def test_one_input_with_declared_observation_returns_image_and_user_wait(self):
         service, binding, outbound = self.connected()
         results = []
@@ -44,10 +69,10 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertEqual(results[0].image_jpeg, jpeg)
         self.assertEqual(results[0].native_user_wait_ms, 40)
 
-    def test_contract_digest_is_the_frozen_macos_v45_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v46_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "0b96e1a3013c1bfece055623d8b104cd029b1b8ebb21719686999531abbf424d",
+            "776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):

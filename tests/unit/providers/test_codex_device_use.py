@@ -41,7 +41,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
-            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v45",
+            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v46",
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="on", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
@@ -66,7 +66,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.assertEqual(params["model"], "gpt-5.6-sol")
         self.assertEqual(params["sandbox"], "read-only")
         self.assertEqual({item["name"] for item in params["dynamicTools"]}, {
-            "mac_computer", "mac_peekaboo", "mac_calendar", "mac_project",
+            "mac_computer", "mac_peekaboo", "mac_calendar", "mac_project", "mac_browser",
         })
         self.assertEqual(params["config"], {"mcp_servers": {}, "project_doc_max_bytes": 0})
 

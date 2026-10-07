@@ -381,10 +381,16 @@ class DeviceUseService:
             (tool, action) in {
                 ("mac_computer", "observe"), ("mac_peekaboo", "observe"),
                 ("mac_peekaboo", "observe_app"), ("mac_project", "sample_frames"),
+                ("mac_browser", "observe"),
             } or (tool == "mac_peekaboo" and action in {
                 "click", "double_click", "right_click", "type", "replace", "click_point",
                 "type_at_point", "replace_at_point", "press", "scroll",
-            } and arguments.get("observe_after") is True)
+            } and arguments.get("observe_after") is True) or (
+                tool == "mac_browser" and action in {
+                    "navigate", "click", "double_click", "right_click", "hover",
+                    "type_text", "replace_text", "keypress", "scroll",
+                } and arguments.get("observe_after") is True
+            )
         ))
         with self._lock:
             activation = self._activation_for_binding_locked(binding, session_id=session_id)

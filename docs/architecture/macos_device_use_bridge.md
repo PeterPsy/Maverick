@@ -47,7 +47,7 @@ reattaches to the same owned process and invalidates old sessions/receipts.
 bundle ID. Native apps retain control over their own windows and can activate
 themselves; this does not promise private native views. `click_point` is a primary
 window-targeted CGEvent route rather than an AXPress fallback. It binds the
-process launch identity, exact visible normal-layer window and unchanged bounds
+kernel process birth identity, exact visible normal-layer window and unchanged bounds
 to capture, revalidates immediately before dispatch, pairs down/up synchronously,
 and never warps the cursor or sends global input. An input reported as
 `dispatched_unverified` can satisfy `observe_after` by returning a fresh exact
@@ -76,6 +76,19 @@ conversations can upgrade only by explicit idle reconnection, retiring provider
 context without changing their model or On/Full binding. Deploy Core before
 installing this native contract. The companion source document owns native
 module/resource/lifecycle details and physical acceptance results.
+
+The repair was installed on `MacBook-Pro-6` on 2026-10-07 as native 0.1.5
+(49), revision `f945e1eb9487`. Build run `37665013284` and explicit install run
+`37665247139` each passed 260 generic Swift tests, all 7 tests in a signed
+physical host with empty failure diagnostics, and 37 Python script tests.
+The physical tests cover multi-tab scrolling, preservation through an RPC
+timeout and socket reconnection, trusted browser input, nonactivating native
+launch and an exact custom-drawn window click without global pointer events.
+Read-only diagnostic run `37665584494` confirmed the installed revision, valid
+signature and one process running the installed copy. Core's 74 focused bridge,
+provider and API tests passed before deployment; the managed backend restart
+returned healthy. These checks do not assert a completed CapCut workflow or
+independent native app views.
 
 The additive workspace-chat correction was deployed on 2026-10-07 from Core
 commit `b30e63a4`, followed by a healthy managed backend restart. Native build

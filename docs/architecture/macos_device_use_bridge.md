@@ -8,7 +8,7 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v46`.
+direct path was then removed. The current executor contract is `macos-v47`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
@@ -18,7 +18,7 @@ repository; its companion source document is
 
 ### Parallel companion on the same macOS (2026-10-07)
 
-The native 0.1.4 / build 48 companion runs on the user's existing macOS. The
+The native 0.1.5 / build 49 companion runs on the user's existing macOS. The
 user explicitly rejected a second macOS. A separate native-owned headless
 Chrome/Edge process has its own persistent profile, tabs, fixed viewport and
 logical cursor; targeted CDP events never move the physical pointer or activate
@@ -35,6 +35,30 @@ Stop and turn boundaries invalidate receipts. Transport loss/uncertainty cannot
 replay an action or fall back to the desktop. Chrome/Edge must be installed.
 Native file chooser/upload and downloads are unsupported by this tool.
 
+Version 47 addresses the multi-tab/scroll regression from the authorized test
+thread `39dd8328-e73f-489a-b50e-9cb31dbd787b`. The private renderer is activated
+before observation/input and actual tab selection. Wheel amounts use CSS pixels
+(default 300, maximum 10000); omitted coordinates default to the viewport center.
+A single RPC timeout/cancellation retires only its waiter, preserving the browser
+and all tabs. Socket loss fails pending commands without replay; a fresh read
+reattaches to the same owned process and invalidates old sessions/receipts.
+
+`mac_peekaboo.launch_app` requests nonactivating NSWorkspace launch by installed
+bundle ID. Native apps retain control over their own windows and can activate
+themselves; this does not promise private native views. `click_point` is a primary
+window-targeted CGEvent route rather than an AXPress fallback. It binds the
+process launch identity, exact visible normal-layer window and unchanged bounds
+to capture, revalidates immediately before dispatch, pairs down/up synchronously,
+and never warps the cursor or sends global input. An input reported as
+`dispatched_unverified` can satisfy `observe_after` by returning a fresh exact
+window image; delivery does not claim the intended effect. Unknown/partial
+outcomes still require the same-app verification boundary without replay.
+Schema failures identify the field without echoing private input values.
+Provider guidance asks agents to store plain observation metadata rather than
+image-bearing tool wrappers; the functions.exec storage implementation is
+outside the native/Core bridge and has not been changed.
+
+
 Companion is enabled by default in the native menu. While enabled, global
 `mac_computer` input/activation is rejected before dispatch; `select_app` only
 changes internal targeting. Native Peekaboo retains strict background delivery,
@@ -43,11 +67,11 @@ apps can still share document/view/app-internal focus with the human: complete
 independent browser views do not imply general third-party app virtualization.
 An explicitly selected shared-desktop mode revokes the current lease first.
 
-The additive contract is `macos-v46`, digest
-`776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb`.
+The additive contract is `macos-v47`, digest
+`d0405d09ac1ff6903336a7fa7427c7c28e2922167a0dfe302a4db0bc48b00c71`.
 Core admits companion images through its existing WSS/binary JPEG path and
 adds companion guidance to both provider adapters. Full admits the browser;
-bounded On retains existing native scope and cannot use it. Reviewed v44/v45
+bounded On retains existing native scope and cannot use it. Reviewed v44/v45/v46
 conversations can upgrade only by explicit idle reconnection, retiring provider
 context without changing their model or On/Full binding. Deploy Core before
 installing this native contract. The companion source document owns native
@@ -113,7 +137,7 @@ and live readiness. Selecting a cached Device Use thread without that summary
 loads its authorized detail before enabling a mode; missing metadata never
 defaults to On. Explicit reconnection publishes the updated catalog binding so
 other Chat views keep the new lease ID. This is a Core/Chat change and retains
-the native transport; the current paired contract is `macos-v46`.
+the native transport; the current paired contract is `macos-v47`.
 
 ## Architecture
 
@@ -224,9 +248,9 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v46`;
+- executor `macos-v47`;
 - tool digest
-  `776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb`;
+  `d0405d09ac1ff6903336a7fa7427c7c28e2922167a0dfe302a4db0bc48b00c71`;
 - mode `on` or `full`;
 - initial app and the running-app discovery/allowlist snapshot.
 
@@ -274,7 +298,7 @@ human/agent text through the ordinary classified provider-input capture. It keep
 the current request separate, excludes raw tool calls/results, tickets, images
 and receipts, and instructs the model to observe current state before continuing.
 No message POST, native operation or uncertain action is automatically retried.
-The current paired wire contract is `macos-v46`; the installed executor is compatible.
+The current paired wire contract is `macos-v47`; the installed executor is compatible.
 
 ## Invocation and image transport
 

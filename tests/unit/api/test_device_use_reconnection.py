@@ -25,6 +25,15 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_reviewed_v46_repair_upgrade_retires_old_context(self):
+        old = replace(self.before.device_use_binding, executor_contract="macos-v46",
+                      tool_contract_digest="776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb")
+        self.state.runtime_store.save_session(replace(self.before, device_use_binding=old))
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual(status, 200, payload)
+        current = self.state.runtime_store.get_session(self.session_id)
+        self.assertEqual(current.device_use_binding.executor_contract, "macos-v47")
+
     def test_reviewed_v45_companion_upgrade_retires_context_and_preserves_authority(self):
         old = replace(self.before.device_use_binding, executor_contract="macos-v45",
                       tool_contract_digest="0b96e1a3013c1bfece055623d8b104cd029b1b8ebb21719686999531abbf424d")
@@ -32,7 +41,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual(status, 200, payload)
         current = self.state.runtime_store.get_session(self.session_id)
-        self.assertEqual(current.device_use_binding.executor_contract, "macos-v46")
+        self.assertEqual(current.device_use_binding.executor_contract, "macos-v47")
         self.assertEqual(current.device_use_binding.mode, old.mode)
         self.assertEqual(current.execution_binding, self.before.execution_binding)
 
@@ -43,7 +52,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual(status, 200, payload)
         current = self.state.runtime_store.get_session(self.session_id)
-        self.assertEqual(current.device_use_binding.executor_contract, "macos-v46")
+        self.assertEqual(current.device_use_binding.executor_contract, "macos-v47")
         self.assertEqual(current.execution_binding, self.before.execution_binding)
 
     def test_unknown_contract_upgrade_is_rejected(self):

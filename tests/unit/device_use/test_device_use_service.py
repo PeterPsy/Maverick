@@ -69,10 +69,19 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertEqual(results[0].image_jpeg, jpeg)
         self.assertEqual(results[0].native_user_wait_ms, 40)
 
-    def test_contract_digest_is_the_frozen_macos_v46_digest(self):
+    def test_companion_scroll_units_and_native_launch_are_declared(self):
+        from core.device_use.contract import device_use_dynamic_tools, DEVICE_USE_COMPANION_GUIDANCE
+        tools = {tool["name"]: tool for tool in device_use_dynamic_tools()}
+        amount = tools["mac_browser"]["inputSchema"]["properties"]["amount"]
+        self.assertEqual((amount["default"], amount["maximum"]), (300, 10000))
+        self.assertIn("pixels", amount["description"])
+        self.assertIn("launch_app", tools["mac_peekaboo"]["inputSchema"]["properties"]["action"]["enum"])
+        self.assertIn("plain metadata", DEVICE_USE_COMPANION_GUIDANCE)
+
+    def test_contract_digest_is_the_frozen_macos_v47_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb",
+            "d0405d09ac1ff6903336a7fa7427c7c28e2922167a0dfe302a4db0bc48b00c71",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):

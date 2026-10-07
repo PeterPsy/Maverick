@@ -37,11 +37,14 @@ def main() -> None:
         try:
             result = handle_learning(payload)
             changed = result.pop("_changed", False)
+            projects_changed = result.pop("_projects_changed", False)
             mutating_action = action.startswith("learning.") and action not in {"learning.read", "learning.analysis_admit"} and body.get("command") != "inspect"
             envelope = {"status_code": 200}
             if (changed or mutating_action) and not result.get("ignored"):
                 envelope["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
-            for key in ("background_generation_requests", "background_generation_cancel_requests", "dependency_backend_requests"):
+            if projects_changed:
+                envelope.setdefault("app_events", []).append({"type": "maverick.app.data-changed", "resource": "projects"})
+            for key in ("background_generation_requests", "background_generation_cancel_requests", "dependency_backend_requests", "runtime_session_requests", "runtime_turn_interrupt_requests"):
                 if key in result:
                     envelope[key] = result.pop(key)
             if "next_due_in_seconds" in result:

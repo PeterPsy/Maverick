@@ -26,6 +26,8 @@ def capture(data_root, body):
         return {}
     with connection(data_root, write=True) as db:
         config = settings(db)
+        if db.execute("SELECT 1 FROM learning_implementations WHERE session_id=?", (session,)).fetchone():
+            return {}
         if not config["enabled"] or excluded(config, session, body.get("project_id", "")):
             return {}
         action = body.get("action")

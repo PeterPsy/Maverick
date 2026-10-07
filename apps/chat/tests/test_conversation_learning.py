@@ -60,6 +60,14 @@ class ConversationLearningTests(unittest.TestCase):
             "dependency_backend_status": "completed", "dependency_backend_result": {"status_code": 200,
             "dependency_provider_app_id": provider, "json": {"results": results or []}}})
 
+    def approved_memory_request(self, item):
+        request = handle_learning({"data_root": str(self.root), "surface": "background_tick", "body": {"action": "backend.tick", "runtime_request_states": []}})['runtime_session_requests'][0]
+        handle_learning({"data_root": str(self.root), "surface": "runtime_request_callback", "body": {
+            **request['callback']['payload'], "action": "learning.implementation_started", "request_id": request['request_id'],
+            "runtime_request_status": "submitted", "runtime_session_id": "memory-work", "turn_id": "memory-turn"}})
+        return handle_learning({"data_root": str(self.root), "surface": "mcp", "runtime_session_id": "memory-work",
+            "body": {"action": "learning.memory_agent", "item_id": item['id'], "command": "commit"}})['dependency_backend_requests'][0]
+
     def test_disabled_excluded_hidden_and_derived_chats_are_not_captured(self):
         self.configure(enabled=False)
         self.capture()
@@ -239,11 +247,11 @@ class ConversationLearningTests(unittest.TestCase):
         item = self.data()['items'][0]
         self.assertEqual(item['status'], 'pending')
         result = self.admin('learning.review', item_id=item['id'], command='approve')
-        save = result['dependency_backend_requests'][0]
+        self.assertNotIn('dependency_backend_requests', result)
+        save = self.approved_memory_request(item)
         self.assertEqual(save['provider_app_id'], 'memory-original')
         self.assertEqual(save['body']['source_key'], 'conversation-learning:' + item['id'])
-        with self.assertRaises(ValueError):
-            self.admin('learning.review', item_id=item['id'], command='approve')
+        self.assertEqual(self.data()['items'][0]['implementation']['status'], 'running')
         saved = memory_callback(self.root, {**save['callback']['payload'], 'action':'learning.memory_saved',
             'dependency_backend_status':'completed', 'dependency_backend_result':{'status_code':200,
             'dependency_provider_app_id':'memory-original', 'json':{'node':{'id':'node-1','updated_at':'rev-1'}}}})
@@ -272,8 +280,8 @@ class ConversationLearningTests(unittest.TestCase):
         item = self.data()['items'][0]
         with self.assertRaises(ValueError):
             self.admin('learning.review', item_id=item['id'], command='approve')
-        save = self.admin('learning.review', item_id=item['id'], command='approve', target_node_id='existing')
-        self.assertEqual(save['dependency_backend_requests'][0]['body']['node_id'], 'existing')
+        self.admin('learning.review', item_id=item['id'], command='approve', target_node_id='existing')
+        self.assertEqual(self.approved_memory_request(item)['body']['node_id'], 'existing')
 
     def test_proposals_are_reviewed_and_duplicate_evidence_aggregated(self):
         self.capture()
@@ -284,8 +292,9 @@ class ConversationLearningTests(unittest.TestCase):
         proposal = self.data()['items'][0]
         self.assertEqual(proposal['occurrences'], 2)
         self.admin('learning.review', item_id=proposal['id'], command='accept')
-        self.admin('learning.review', item_id=proposal['id'], command='implemented')
-        self.assertEqual(self.data()['items'][0]['status'], 'implemented')
+        self.assertEqual(self.data()['items'][0]['implementation']['status'], 'queued')
+        with self.assertRaises(ValueError):
+            self.admin('learning.review', item_id=proposal['id'], command='implemented')
 
     def test_pause_cleanup_and_admin_authority(self):
         self.capture()
@@ -300,6 +309,9 @@ class ConversationLearningTests(unittest.TestCase):
         self.assertEqual(self.data()['conversations'], [])
 
     def test_read_and_idle_ticks_do_not_emit_data_change_events(self):
+        from learning_projects import learning_projects
+        learning_projects(self.root, ensure=True)
+        handle_learning({"data_root":str(self.root),'surface':'background_tick','body':{'action':'backend.tick'}})
         for body, surface in [({'action':'learning.read'}, 'backend'), ({'action':'background.tick'}, 'background_tick')]:
             result = run_json_entrypoint(BACKEND/'app_backend.py', payload={'data_root':str(self.root),'workspace_role':'admin','surface':surface,'body':body}, cwd=BACKEND.parent)
             self.assertEqual(result['status_code'],200)

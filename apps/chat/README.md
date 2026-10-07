@@ -10,7 +10,7 @@ candidates, improvement proposals and audit history in `data/chat/learning.sqlit
 One installation-wide generation lock and transactional attempt fencing prevent
 overlapping analysis or late results overwriting new work. Memory writes use the
 selected optional `learning-memory` provider through source ingestion; improvements
-remain reviewable proposals. See [Conversation Learning](../../docs/architecture/conversation_learning.md).
+start visible implementation chats after acceptance. Memory candidates start their own source-verifying chat and save through the scoped `chat_learning_memory` MCP tool. Memory chats run serially; improvements default to four parallel chats. Generated conversations live in distinct Memory and Improvements projects and are excluded from analysis. See [Conversation Learning](../../docs/architecture/conversation_learning.md).
 
 ## Contract Notes
 

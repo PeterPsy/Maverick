@@ -2,19 +2,35 @@
 
 import json
 
-from learning_memory import dependency_request, memory_callback, save_request
+from learning_memory import dependency_request, memory_callback
 from learning_queue import BUDGET_WAIT_REASON, capture, enqueue, excluded, tick
 from learning_results import complete_analysis
 from learning_store import audit, connection, daily_consumption, now, settings, validate_settings
+import learning_implementations as implementations
+from learning_projects import learning_projects
 
 
 def handle_learning(payload):
     root, body = payload["data_root"], payload.get("body", {})
     action, surface = body.get("action", ""), payload.get("surface", "")
+    if action == "learning.memory_agent":
+        from learning_memory_agent import memory_agent_action
+        return memory_agent_action(payload)
     if surface == "runtime_event":
-        return capture(root, body)
+        ticket_event = implementations.runtime_event(root, body)
+        return ticket_event if ticket_event is not None else capture(root, body)
     if surface in {"background_tick", "backend_recovery"}:
-        return tick(root, {**body, "memory_provider_app_id": selected_memory_provider(payload)})
+        if surface == "backend_recovery":
+            for event in body.get("recent_terminal_exchanges", []):
+                implementations.runtime_event(root, event)
+        tickets = implementations.tick(root, body)
+        learning = tick(root, {**body, "memory_provider_app_id": selected_memory_provider(payload)})
+        return {**learning, **tickets, "_changed": learning.get("_changed", False) or tickets.get("_changed", False),
+                "next_due_in_seconds": min(learning.get("next_due_in_seconds", 30), tickets["next_due_in_seconds"])}
+    if action == "learning.implementation_started":
+        if surface != "runtime_request_callback":
+            raise PermissionError("Trusted implementation callback required")
+        return implementations.started(root, body)
     if action == "learning.analysis_admit":
         if surface != "background_generation_admission":
             raise PermissionError("Trusted analysis admission required")
@@ -37,7 +53,7 @@ def handle_learning(payload):
     actor = payload.get("user_id") or "operator"
     with connection(root, write=True) as db:
         if action == "learning.read":
-            return dashboard(db)
+            return {**dashboard(db), "projects": learning_projects(root)[0]}
         if action == "learning.configure":
             previous = settings(db)
             config = validate_settings(body.get("settings", {}), previous)
@@ -70,6 +86,7 @@ def handle_learning(payload):
 
 def dashboard(db):
     config = settings(db)
+    runtime = db.execute("SELECT ready FROM learning_runtime_state WHERE id=1").fetchone()
     jobs = [dict(x) for x in db.execute("SELECT * FROM learning_jobs ORDER BY created_at DESC LIMIT 100")]
     for job in jobs:
         job.pop("input_json", None)
@@ -82,6 +99,7 @@ def dashboard(db):
         item["evidence"] = json.loads(item["evidence"])
         item["details"] = json.loads(item["details"])
         item.pop("operation_id", None)
+    implementations.attach_tickets(db, items)
     from datetime import UTC, datetime
     day = datetime.now(UTC).date().isoformat()
     spent = daily_consumption(db, day)
@@ -91,12 +109,17 @@ def dashboard(db):
     for row in db.execute("SELECT status,COUNT(*) AS total FROM learning_jobs WHERE status IN ('queued','running','failed') GROUP BY status"):
         counts[row["status"]] = row["total"]
     counts["budget_waiting"] = db.execute("SELECT COUNT(*) FROM learning_jobs WHERE status='queued' AND error=?", (BUDGET_WAIT_REASON,)).fetchone()[0]
+    for kind in ("memory", "improvement"):
+        counts["open_" + kind] = db.execute("""SELECT COUNT(*) FROM learning_items i LEFT JOIN learning_implementations t ON t.item_id=i.id
+            WHERE i.kind=? AND i.status NOT IN ('rejected','implemented','undone') AND
+            (i.status IN ('pending','accepted','checking','saving','undoing') OR t.status IN ('queued','launching','running','stopping','awaiting_review','failed','cancelled'))""", (kind,)).fetchone()[0]
     conversations = [dict(x) for x in db.execute("""SELECT c.session_id,c.project_id,c.last_activity,
         (SELECT input_text FROM learning_exchanges e WHERE e.session_id=c.session_id ORDER BY seq LIMIT 1) AS label
         FROM learning_conversations c ORDER BY last_activity DESC LIMIT 100""")]
     for conversation in conversations:
         conversation["label"] = " ".join((conversation["label"] or "").split())[:80] or "Chat " + conversation["session_id"][:8]
     return {"settings": config, "jobs": jobs, "items": items, "daily_tokens_reserved_or_used": spent,
+            "runtime_ready": bool(runtime and runtime[0]),
             "concurrency": 1, "counts": counts, "conversations": conversations,
             "audit": [dict(x) for x in db.execute("SELECT * FROM learning_audit ORDER BY id DESC LIMIT 50")]}
 
@@ -131,8 +154,23 @@ def review(db, body, actor):
         raise ValueError("Candidate not found")
     command = body.get("command")
     details = json.loads(item["details"])
+    if command == "reject" and db.execute("SELECT 1 FROM learning_implementations WHERE item_id=? AND status NOT IN ('cancelled','failed')", (item["id"],)).fetchone():
+        raise ValueError("Stop the work chat before rejecting the ticket")
+    if item["kind"] == "memory" and command in {"retry", "stop"}:
+        return implementations.ticket_action(db, item, command, actor)
     if item["status"] in {"saving", "undoing", "checking"}:
         raise ValueError("This candidate has an operation in progress")
+    if item["kind"] == "memory" and command == "approve" and item["status"] == "accepted":
+        return implementations.queue_item(db, item, actor)
+    if item["kind"] == "memory" and command == "start" and item["status"] == "accepted":
+        return implementations.queue_item(db, item, actor)
+    if command == "edit" and db.execute("SELECT 1 FROM learning_implementations WHERE item_id=? AND status IN ('queued','launching','running','stopping')", (item["id"],)).fetchone():
+        raise ValueError("Stop the work chat before editing an approved ticket")
+    if item["kind"] == "improvement":
+        if command in {"accept", "start"}:
+            return implementations.queue_item(db, item, actor)
+        if command in {"retry", "stop", "implemented"} and db.execute("SELECT 1 FROM learning_implementations WHERE item_id=?", (item["id"],)).fetchone():
+            return implementations.ticket_action(db, item, command, actor)
     if command in {"edit", "approve"} and item["status"] == "pending":
         title, text = body.get("title", item["title"]), body.get("body", item["body"])
         if not isinstance(title, str) or not title.strip() or len(title) > 240 or not isinstance(text, str) or not text.strip() or len(text) > 4000:
@@ -154,7 +192,9 @@ def review(db, body, actor):
             raise ValueError("Choose an existing Memory node or explicitly create a separate fact")
         if target and target not in {x["id"] for x in matches}:
             raise ValueError("Choose a matching Memory node")
-        return {"dependency_backend_requests": [save_request(db, item, target_node_id=target, actor=actor)]}
+        details["target_node_id"] = target
+        db.execute("UPDATE learning_items SET details=? WHERE id=?", (json.dumps(details), item["id"]))
+        return implementations.queue_item(db, item, actor)
     elif command == "undo" and item["kind"] == "memory" and item["status"] == "saved":
         if not details.get("node_created"):
             raise ValueError("This save attached evidence to an existing node; manage its sources in Memory")
@@ -169,6 +209,8 @@ def review(db, body, actor):
             raise ValueError("Invalid review transition")
         status = {"reject": "rejected", "accept": "accepted", "implemented": "implemented"}[command]
         db.execute("UPDATE learning_items SET status=?,updated_at=? WHERE id=?", (status, now(), item["id"]))
+        if command == "reject":
+            db.execute("UPDATE learning_implementations SET status='cancelled',updated_at=? WHERE item_id=?", (now(), item["id"]))
     else:
         raise ValueError("Invalid review transition")
     audit(db, "review." + command, item["id"], actor)
@@ -179,6 +221,8 @@ def cleanup(root, session_ids):
     cancellations = []
     with connection(root, write=True) as db:
         for session in session_ids:
+            db.execute("""UPDATE learning_implementations SET status='cancelled',session_id='',turn_id='',
+                request_id='',request_json='{}',error='Work chat was deleted',updated_at=? WHERE session_id=?""", (now(), session))
             cancellations.extend(x[0] for x in db.execute("SELECT request_id FROM learning_jobs WHERE session_id=? AND status='running'", (session,)))
             db.execute("UPDATE learning_jobs SET status='cancelled',request_id='' WHERE session_id=? AND status IN ('queued','running')", (session,))
             db.execute("DELETE FROM learning_exchanges WHERE session_id=?", (session,))

@@ -1,5 +1,14 @@
 {
   "tools": {
+    "chat_learning_memory": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {"argument_name": "command", "omitted_effect_class": "mutating", "value_effect_classes": {"inspect": "read", "commit": "mutating"}},
+      "description": "Inspect or commit an accepted Memory learning candidate from its assigned work chat. Writes exactly the approved fact and evidence through the pinned Memory provider; no arbitrary content or destination is accepted.",
+      "input_schema": {"type": "object", "properties": {"item_id": {"type": "string", "minLength": 1, "maxLength": 128}, "command": {"type": "string", "enum": ["inspect", "commit"]}}, "required": ["item_id", "command"], "additionalProperties": false},
+      "output_schema": {"type": "object"},
+      "supports_idempotency": true,
+      "safe_to_retry": true
+    },
     "chat_operations_manifest": {
       "effect_class": "read",
       "description": "Return the compact Chat operations manifest with supported CLI/MCP workflows, payload profiles, examples, and runtime ownership notes.",

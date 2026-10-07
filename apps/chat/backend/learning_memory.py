@@ -81,5 +81,6 @@ def memory_callback(data_root, body):
         provider = raw.get("dependency_provider_app_id", "")
         db.execute("UPDATE learning_items SET status='saved',node_id=?,provider_id=?,details=?,updated_at=? WHERE id=?",
                    (node.get("id", ""), provider, json.dumps(details), now(), item["id"]))
+        db.execute("UPDATE learning_implementations SET status='saved',error='',updated_at=? WHERE item_id=? AND status IN ('failed','cancelled')", (now(), item["id"]))
         audit(db, "memory.saved", item["id"])
         return {}

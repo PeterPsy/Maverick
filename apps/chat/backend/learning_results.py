@@ -51,6 +51,7 @@ def complete_analysis(data_root, body):
                 merged = {json.dumps(x, sort_keys=True): x for x in previous + item["evidence"]}
                 db.execute("UPDATE learning_items SET evidence=?,occurrences=occurrences+1,updated_at=? WHERE id=?",
                            (json.dumps(list(merged.values())[-25:]), now(), existing["id"]))
+                db.execute("INSERT OR IGNORE INTO learning_item_sources VALUES(?,?,?)", (existing["id"], job["id"], job["session_id"]))
                 continue
             identifier = new_id("candidate" if item["kind"] == "memory" else "proposal")
             details = {key: value for key, value in item.items() if key not in {"title", "body", "evidence", "fingerprint", "kind"}}
@@ -59,6 +60,7 @@ def complete_analysis(data_root, body):
             db.execute("INSERT INTO learning_items(id,fingerprint,kind,title,body,status,evidence,details,updated_at,operation_id,provider_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                        (identifier, item["fingerprint"], item["kind"], item["title"], item["body"], status,
                         json.dumps(item["evidence"]), json.dumps(details), now(), operation, provider))
+            db.execute("INSERT OR IGNORE INTO learning_item_sources VALUES(?,?,?)", (identifier, job["id"], job["session_id"]))
             if item["kind"] == "memory":
                 from learning_memory import dependency_request
                 requests.append(dependency_request(identifier, "learning.memory_checked", {

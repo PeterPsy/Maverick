@@ -14,6 +14,7 @@ DEFAULTS = {
     "max_context_chars": 30_000, "max_output_tokens": 2048, "timeout_seconds": 120,
     "daily_token_budget": 100_000, "excluded_thread_ids": [], "excluded_project_ids": [],
     "instructions": "", "retention_days": 30,
+    "improvement_concurrency": 4,
 }
 
 
@@ -32,7 +33,7 @@ def connection(data_root, *, write=False):
     db = sqlite3.connect(root / "learning.sqlite", timeout=15)
     db.row_factory = sqlite3.Row
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version > 1:
+    if version > 2:
         db.close()
         raise ValueError("Unsupported learning database schema")
     db.executescript("""
@@ -68,13 +69,27 @@ def connection(data_root, *, write=False):
         CREATE TABLE IF NOT EXISTS learning_audit(
             id INTEGER PRIMARY KEY, action TEXT NOT NULL, target TEXT NOT NULL,
             actor TEXT NOT NULL, created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS learning_implementations(
+            item_id TEXT PRIMARY KEY, status TEXT NOT NULL, actor TEXT NOT NULL,
+            session_id TEXT NOT NULL DEFAULT '', turn_id TEXT NOT NULL DEFAULT '',
+            request_id TEXT NOT NULL DEFAULT '', request_json TEXT NOT NULL DEFAULT '{}',
+            attempt INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
+            summary TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL, updated_at REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS learning_implementation_queue ON learning_implementations(status,created_at);
+        CREATE INDEX IF NOT EXISTS learning_implementation_session ON learning_implementations(session_id);
+        CREATE TABLE IF NOT EXISTS learning_item_sources(
+            item_id TEXT NOT NULL, job_id TEXT NOT NULL, session_id TEXT NOT NULL,
+            PRIMARY KEY(item_id,job_id));
+        CREATE TABLE IF NOT EXISTS learning_implementation_events(
+            event_id TEXT PRIMARY KEY, item_id TEXT NOT NULL, created_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS learning_runtime_state(id INTEGER PRIMARY KEY CHECK(id=1), ready INTEGER NOT NULL);
     """)
-    if version == 0:
+    if version < 2:
         db.execute("BEGIN IMMEDIATE")
         columns = {row[1] for row in db.execute("PRAGMA table_info(learning_jobs)")}
         if "reservation_day" not in columns:
             db.execute("ALTER TABLE learning_jobs ADD COLUMN reservation_day TEXT NOT NULL DEFAULT ''")
-        db.execute("PRAGMA user_version=1")
+        db.execute("PRAGMA user_version=2")
         db.commit()
     try:
         if write:
@@ -120,6 +135,7 @@ def validate_settings(body, current):
             ranges = {"idle_seconds": (0, 3600), "max_context_chars": (4000, 60_000),
                       "max_output_tokens": (128, 8192), "timeout_seconds": (10, 300),
                       "daily_token_budget": (1000, 10_000_000), "retention_days": (1, 365)}
+            ranges["improvement_concurrency"] = (1, 8)
             low, high = ranges[key]
             if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
                 raise ValueError(f"{key} must be between {low} and {high}")

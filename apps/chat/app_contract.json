@@ -92,7 +92,8 @@
       "chat_reference_manifest",
       "chat_reference_search",
       "chat_reference_resolve",
-      "chat_reference_summarize"
+      "chat_reference_summarize",
+      "chat_learning_memory"
     ],
     "cli_commands": [
       "chat"

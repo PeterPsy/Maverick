@@ -14,6 +14,22 @@ from service import ChatValidationError, app_events_for_result, handle_action, u
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
 tool_name = str(payload.get("tool_name") or "")
+if tool_name == "chat_learning_memory":
+    from learning_service import handle_learning
+    try:
+        if set(arguments) - {"item_id", "command"}:
+            raise ValueError("Use item_id and command only")
+        result = handle_learning({**payload, "body": {"action": "learning.memory_agent", **arguments}})
+        changed = result.pop("_changed", False)
+        response = {"status_code": 200, **result}
+        if changed:
+            response["app_events"] = [{"type": "maverick.app.data-changed", "resource": "learning"}]
+    except PermissionError as error:
+        response = {"status_code": 403, "error": str(error)}
+    except ValueError as error:
+        response = {"status_code": 400, "error": str(error)}
+    print(json.dumps(response, ensure_ascii=False))
+    raise SystemExit(0)
 tool_actions = {
     "chat_operations_manifest": "operations.manifest",
     "chat_reference_manifest": "references.manifest",

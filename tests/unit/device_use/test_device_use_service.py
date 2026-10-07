@@ -78,10 +78,10 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertIn("launch_app", tools["mac_peekaboo"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertIn("plain metadata", DEVICE_USE_COMPANION_GUIDANCE)
 
-    def test_contract_digest_is_the_frozen_macos_v47_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v48_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "d0405d09ac1ff6903336a7fa7427c7c28e2922167a0dfe302a4db0bc48b00c71",
+            "5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):

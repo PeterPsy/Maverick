@@ -5,6 +5,8 @@ RESULT_DELIVERY_GRACE_SECONDS = 5.0
 
 
 def invocation_timeout_seconds(tool: str, action: str) -> float:
+    if tool == "mac_code" and action == "authorize_project":
+        return 300.0
     if tool != "mac_project":
         return DEFAULT_INVOCATION_TIMEOUT_SECONDS
     if action in {"transcribe_media", "prepare_subclip"}:

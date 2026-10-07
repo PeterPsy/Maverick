@@ -40,7 +40,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
-            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v47",
+            ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract="macos-v48",
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="on", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
@@ -67,7 +67,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.assertEqual(params["model"], "gpt-5.6-sol")
         self.assertEqual(params["sandbox"], "danger-full-access")
         self.assertEqual({item["name"] for item in params["dynamicTools"]}, {
-            "mac_computer", "mac_peekaboo", "mac_calendar", "mac_project", "mac_browser",
+            "mac_computer", "mac_peekaboo", "mac_calendar", "mac_project", "mac_browser", "mac_code",
         })
         self.assertEqual(params["config"], {
             "mcp_servers": {}, "features": {"code_mode_host": True, "code_mode": False},

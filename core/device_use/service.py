@@ -524,7 +524,7 @@ class DeviceUseService:
             result = frame.get("result")
             if not isinstance(result, dict):
                 raise DeviceUseAuthorizationError("device_use_result_invalid")
-            _validate_text_result(result)
+            _validate_text_result(result, allows_code_text=pending.record.tool_name == "mac_code")
             if frame.get("arguments_digest") != pending.record.arguments_digest:
                 raise DeviceUseAuthorizationError("device_use_arguments_digest_mismatch")
             duration = frame.get("native_duration_ms")
@@ -906,7 +906,7 @@ def decode_image_frame(payload: bytes) -> tuple[dict[str, object], bytes]:
     return header, jpeg
 
 
-def _validate_text_result(result: dict[str, object]) -> None:
+def _validate_text_result(result: dict[str, object], *, allows_code_text: bool = False) -> None:
     try:
         encoded = _canonical_json_bytes(result)
     except (TypeError, ValueError) as error:
@@ -922,7 +922,7 @@ def _validate_text_result(result: dict[str, object]) -> None:
         or set(items[0]) != {"type", "text"}
         or items[0].get("type") != "inputText"
         or not isinstance(items[0].get("text"), str)
-        or "data:image" in items[0]["text"]
+        or ("data:image" in items[0]["text"] and not allows_code_text)
     ):
         raise DeviceUseAuthorizationError("device_use_result_invalid")
 

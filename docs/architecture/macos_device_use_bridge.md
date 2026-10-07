@@ -14,6 +14,40 @@ The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
 `docs/maverick-macos-device-use.md`. Keep both sides synchronized.
 
+## Mac-local coding companion (v48)
+
+The additive contract `macos-v48` has digest
+`5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d`.
+Reviewed explicit idle reconnection from v47 retires the old provider context
+while preserving chat, owner, workspace and On/Full mode. Core must be deployed
+before the matching native client; unknown digests remain rejected.
+
+Full PC use now includes `mac_code`: a native folder picker, persistent chat-owned
+coding bookmarks, guarded UTF-8 read/write/replace, directory listing/creation,
+and local shell jobs with opaque handles, independent output pagination, stdin
+and stop. The native app remains an executor; Core still owns the model,
+transcript, credentials, tool ledger and encrypted evidence. No provider runtime
+is copied to the Mac, and no server permission is inherited from native access.
+
+The selected cwd confines file-tool paths but is not a shell sandbox. Native
+consent explicitly states that commands have the user's macOS permissions and
+network access. The motor runs `/bin/zsh -c` with an explicit local environment,
+without Terminal, global input or app activation. Core's wire calls remain short
+(180s; picker 300s); the native command has its own 1–3600s lifetime budget.
+Transport success and exit success are separate in result facts.
+
+Jobs are owned by the active chat/turn and stop on turn completion, Stop, lock,
+disconnect and app exit/crash. A signed bundled command host monitors a lifetime
+pipe and monotonic deadline, terminates the shell group/ordinary descendants,
+and removes leftover group children after shell completion. Deliberate detachment
+is unsupported. There is no automatic replay. File writes use expected hashes,
+exclusive creation and atomic replacement; there is no universal filesystem lock
+against concurrent user writes. Existing bounded media primitives remain shell-free.
+
+Native 0.2.0 (51) also packages the user's supplied SVG as AppIcon.icns and assigns
+the running Dock image. Verification and installation evidence follow the managed
+runner build; native-picker interaction is separate from automated project fixtures.
+
 ## Product contract
 
 ### Parallel companion on the same macOS (2026-10-07)

@@ -36,6 +36,14 @@ def native_result_facts(result):
             validations = [item for item in validations if isinstance(item, bool)]
             if validations:
                 valid = all(validations)
+        if isinstance(payload, dict) and payload.get("action") in {
+            "run_command", "read_process", "write_stdin", "stop_process"
+        }:
+            state, exit_code = payload.get("state"), payload.get("exit_code")
+            if state == "exited" and type(exit_code) is int:
+                valid = exit_code == 0
+            elif state in {"signalled", "cancelled", "timed_out", "launch_failed"}:
+                valid = False
     except (ValueError, TypeError, AttributeError):
         pass
     return {"native_success": success, "result_valid": valid,

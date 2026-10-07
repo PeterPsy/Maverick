@@ -8,7 +8,7 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v45`.
+direct path was then removed. The current executor contract is `macos-v46`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
@@ -99,7 +99,7 @@ and live readiness. Selecting a cached Device Use thread without that summary
 loads its authorized detail before enabling a mode; missing metadata never
 defaults to On. Explicit reconnection publishes the updated catalog binding so
 other Chat views keep the new lease ID. This is a Core/Chat change and retains
-the native `macos-v45` wire contract.
+the native transport; the current paired contract is `macos-v46`.
 
 ## Architecture
 
@@ -109,7 +109,7 @@ MaverickMac WebView / Chat iframe
   -> trusted base-shell broker (control metadata only)
   -> native WSS MaverickMac <-> Core
   -> native provider tool call
-  -> ComputerTools / Peekaboo / EventKit executor
+  -> CompanionBrowser / ComputerTools / Peekaboo / EventKit executor
   -> JSON result plus optional binary JPEG
   -> same active provider turn and transcript
 ```
@@ -121,14 +121,14 @@ JavaScript. The separate owner-authorized audit UI can explicitly fetch historic
 results and images through Core; credentials and typed input text are withheld.
 The retired `maverickLocalRuntime` handler and broker do not exist.
 
-The v45 executor retains one native execution path, with two existing Core
+The v46 executor retains one native execution path, with two existing Core
 provider adapters:
 
 - source app and agent `chat`;
 - Codex app-server uses dynamic tools and same-turn image steering with the
   model profile and reasoning effort already selected in Chat;
 - Antigravity CLI uses its existing private `maverick-device-use-mcp` wrapper,
-  forwarding the same four tools to Core's Device Use invoke API;
+  forwarding the same five tools to Core's Device Use invoke API;
 - the native app remains a single executor, without provider runtime or
   credentials;
 - Codex Device Use disables skills, attachments, app references, multi-agent,
@@ -199,9 +199,9 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v45`;
+- executor `macos-v46`;
 - tool digest
-  `d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1`;
+  `776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb`;
 - mode `on` or `full`;
 - initial app and the running-app discovery/allowlist snapshot.
 
@@ -249,7 +249,7 @@ human/agent text through the ordinary classified provider-input capture. It keep
 the current request separate, excludes raw tool calls/results, tickets, images
 and receipts, and instructs the model to observe current state before continuing.
 No message POST, native operation or uncertain action is automatically retried.
-The wire contract stays `macos-v45`; the installed native executor is compatible.
+The current paired wire contract is `macos-v46`; the installed executor is compatible.
 
 ## Invocation and image transport
 
@@ -322,7 +322,7 @@ same-window capture to that input; it never repeats or sequences GUI inputs.
 
 Core:
 
-- `core/device_use/contract.py` — v45 identity, tool schemas and On/Full prompts;
+- `core/device_use/contract.py` — v46 identity, tool schemas and On/Full prompts;
 - `core/device_use/models.py` — immutable mode binding;
 - `core/device_use/service.py` — activation, lease, serialization, ledger,
   binary images and On-only quota;
@@ -337,8 +337,9 @@ Core:
 Native:
 
 - `DeviceUseRuntime.swift` — native activation, permissions and revocation lifecycle;
-- `DeviceUseBridge.swift` — v45 WSS and binary image transport;
+- `DeviceUseBridge.swift` — v46 WSS and binary image transport;
 - `ComputerTools.swift` / `IntegratedComputerTools.swift` — dispatcher;
+- `CompanionBrowser*.swift` / `CompanionPreview.swift` — owned browser, exact-tab input and independent preview;
 - `ProjectAccess.swift` — native picker, opaque bookmarks and path confinement;
 - `ProjectTools.swift` / `ProjectMedia*.swift` — bounded media operations;
 - `DesktopSessionMonitor.swift` — On invalidation and Full lock-only monitor;
@@ -373,7 +374,7 @@ python3 -m unittest discover -s scripts -p 'test_mac_*.py'
 
 The Apple-silicon workflow must also run Swift tests, release build, real
 Peekaboo catalog smoke and signing/designated-requirement checks. Deploy/restart
-Core before installing a v45 Mac client. Dispatch the existing workflow using
+Core before installing a v46 Mac client. Dispatch the existing workflow using
 `install_and_open=true`; the installer requests normal Quit if MaverickMac is
 running, then atomically replaces `~/Applications/MaverickMac.app`. Never create
 a second app bundle.

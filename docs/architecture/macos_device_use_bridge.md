@@ -45,8 +45,22 @@ exclusive creation and atomic replacement; there is no universal filesystem lock
 against concurrent user writes. Existing bounded media primitives remain shell-free.
 
 Native 0.2.0 (51) also packages the user's supplied SVG as AppIcon.icns and assigns
-the running Dock image. Verification and installation evidence follow the managed
-runner build; native-picker interaction is separate from automated project fixtures.
+the running Dock image. Core revision `62c3cfc8` passed 65 focused contract/service/audit/provider/API
+checks and the unused-import check before deployment. The verified managed
+backend restarted from PID 916947 to 945651 and returned healthy.
+
+Native SHA `3b2d1330a2c56a072f665ef4345483d8c861f0d7` passed build run
+`37690246211` and explicit install run `37691007515`: 44 script tests, 273 Swift
+tests including 13 coding regressions, seven signed physical-host background
+checks with no diagnostics, release build and signing continuity. The real code
+fixture edited and executed a source file while the foreground app stayed the
+same; its bookmark and folder are isolated fixtures, not a user's picker grant.
+The installer confirmed `Installed and running: 0.2.0 (51)`.
+
+Read-only diagnostic run `37691363550` confirmed the exact installed revision,
+one running installed copy, valid app/command-host signatures, and the declared
+208657-byte AppIcon.icns. Native-picker selection and a model-led coding task
+with a real user project remain separate from these automated acceptance checks.
 
 ## Product contract
 

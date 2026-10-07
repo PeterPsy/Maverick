@@ -85,6 +85,7 @@ def dispatch_source_app_runtime_event(
     if not hook_path:
         return None
     paths = workspace_paths(session.workspace_id, start_path=start_path)
+    from core.apps.background_runtime_context import runtime_request_id_for_turn
     payload = {
         "surface": "runtime_event",
         "workspace_id": session.workspace_id,
@@ -111,6 +112,7 @@ def dispatch_source_app_runtime_event(
             "agent_id": session.agent_id,
             "source_app_id": app_id,
             "runtime_event_id": runtime_event_id or "",
+            "runtime_request_id": runtime_request_id_for_turn(state, session, turn.turn_id),
             "session_kind": session.session_kind,
             "thread_visibility": session.thread_visibility,
             "project_id": session.project_id or "",

@@ -358,6 +358,17 @@ def _apply_one_runtime_request(
     stream_requested = bool(request.get("create_stream"))
     actor_id = _text(actor_user_id) or "system"
     try:
+        from core.apps.runtime_request_actor import runtime_request_actor
+        actor_user_id = runtime_request_actor(request, actor_user_id)
+        actor_id = _text(actor_user_id) or "system"
+        from core.apps.runtime_request_replay import replay_runtime_request
+        replay_context = dict(workspace_id=workspace_id, app_id=app_id, source_root=source_root,
+                              backend_entrypoint=backend_entrypoint, data_root=data_root, parsed=parsed, start_path=start_path)
+        if stream_requested:
+            existing = state.runtime_store.find_app_stream_by_key(
+                workspace_id=workspace_id, source_app_id=app_id, idempotency_key=_text(request.get("idempotency_key")))
+            if existing is not None:
+                return replay_runtime_request(state, stream=existing, request=request, actor_id=actor_id, **replay_context)
         preflight = _preflight_runtime_request_before_persistence(
             state,
             request=request,
@@ -390,17 +401,7 @@ def _apply_one_runtime_request(
                 )
             )
             if not inserted:
-                return {
-                    "request_id": request_id,
-                    "status": stream.status,
-                    "stream_id": stream.stream_id,
-                    "runtime_session_id": stream.session_id,
-                    "turn_id": stream.turn_id,
-                    "error": "",
-                    "callback_status_code": 0,
-                    "idempotent_replay": True,
-                    "_visible": request.get("result_visibility") != "internal",
-                }
+                return replay_runtime_request(state, stream=stream, request=request, actor_id=actor_id, **replay_context)
         attachments = _validated_runtime_request_attachments(
             request.get("attachments"),
             workspace_id=workspace_id,
@@ -600,6 +601,7 @@ def _runtime_session_for_request(
             start_path=start_path,
         ),
         source_app_id=app_id,
+        project_id=_text(request.get("project_id")) or None,
         owner_user_id=_text(actor_user_id) or None,
         created_by_user_id=_text(actor_user_id) or None,
         grants=[],

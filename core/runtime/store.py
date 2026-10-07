@@ -632,6 +632,9 @@ class RuntimeStore(Protocol):
     def reserve_app_stream(self, record: RuntimeAppStreamRecord) -> tuple[RuntimeAppStreamRecord, bool]:
         ...
 
+    def find_app_stream_by_key(self, *, workspace_id: str, source_app_id: str, idempotency_key: str) -> RuntimeAppStreamRecord | None:
+        ...
+
     def bind_app_stream(
         self,
         *,
@@ -2109,6 +2112,14 @@ class RuntimeDocumentStore:
         if existing.request_fingerprint != record.request_fingerprint:
             raise RuntimeAppStreamError("runtime_app_stream_idempotency_conflict")
         return existing, inserted
+
+    def find_app_stream_by_key(self, *, workspace_id: str, source_app_id: str, idempotency_key: str) -> RuntimeAppStreamRecord | None:
+        collection = self.collections.app_streams
+        if collection is None:
+            raise RuntimeAppStreamError("runtime_app_streams_unavailable")
+        document = collection.find_one({"workspace_id": workspace_id, "source_app_id": source_app_id,
+                                        "idempotency_key": idempotency_key})
+        return _app_stream_from_document(document) if document else None
 
     def get_app_stream(
         self,

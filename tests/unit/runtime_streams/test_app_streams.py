@@ -61,6 +61,9 @@ class RuntimeAppStreamTests(unittest.TestCase):
         self.assertTrue(inserted)
         self.assertFalse(replay_inserted)
         self.assertEqual(replay.stream_id, first.stream_id)
+        self.assertEqual(store.find_app_stream_by_key(workspace_id='default',source_app_id='source-app',idempotency_key=first.idempotency_key).stream_id,first.stream_id)
+        self.assertIsNone(store.find_app_stream_by_key(workspace_id='other',source_app_id='source-app',idempotency_key=first.idempotency_key))
+        self.assertIsNone(store.find_app_stream_by_key(workspace_id='default',source_app_id='other-app',idempotency_key=first.idempotency_key))
         with self.assertRaisesRegex(RuntimeAppStreamError, "not_found"):
             store.get_app_stream("stream-one", workspace_id="other", source_app_id="source-app")
         with self.assertRaisesRegex(RuntimeAppStreamError, "idempotency_conflict"):

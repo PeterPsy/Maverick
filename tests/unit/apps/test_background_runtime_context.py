@@ -13,6 +13,7 @@ class BackgroundRuntimeContextTests(unittest.TestCase):
         turn=SimpleNamespace(turn_id='turn',status='completed',input_text='evidence',completed_at=timestamp,updated_at=timestamp,started_at=timestamp,created_at=timestamp)
         store=Mock()
         store.list_sessions.return_value=[session('chat','consumer'),session('foreign','other')]
+        store.list_app_streams_for_session.return_value=[SimpleNamespace(source_app_id='consumer',request_id='request',session_id='chat',turn_id='turn',status='completed'),SimpleNamespace(source_app_id='other',request_id='foreign')]
         store.has_turn_with_status.return_value=False
         store.list_recent_turns.return_value=[turn]
         store.find_turn_event.return_value=SimpleNamespace(payload={'output_text':'result'})
@@ -22,6 +23,7 @@ class BackgroundRuntimeContextTests(unittest.TestCase):
         result=runtime_background_context(state,'default','consumer',recovery=True)
         self.assertEqual(result['busy_runtime_session_ids'],['chat'])
         self.assertEqual(result['recent_terminal_exchanges'][0]['output_text'],'result')
+        self.assertEqual(result['runtime_request_states'],[{'request_id':'request','session_id':'chat','turn_id':'turn','status':'completed'}])
         store.has_turn_with_status.assert_called_once()
         store.list_recent_turns.assert_called_once_with('chat',limit=10)
         store.reset_mock()

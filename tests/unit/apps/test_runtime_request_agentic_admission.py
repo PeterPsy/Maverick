@@ -148,6 +148,7 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
         self.assertEqual(state.runtime_store.method_calls, [])
 
     def test_remote_stream_request_is_rejected_before_reservation(self) -> None:
+        self.runtime_store.find_app_stream_by_key.return_value = None
         request = {
             "request_id": "remote-stream",
             "idempotency_key": "remote-stream-key",

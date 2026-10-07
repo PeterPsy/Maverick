@@ -828,6 +828,8 @@ Apps may also return `runtime_turn_interrupt_requests` for turns that belong to 
 
 Apps that need to translate a long-running runtime turn into an app-owned streaming protocol require an app-agnostic durable runtime stream rather than direct access to runtime persistence. The generic boundary owns submission, a durable `stream_id`, monotonically sequenced runtime events, reads after an acknowledged sequence, inspection, recovery, and idempotent interrupt. Every operation is scoped to the current workspace and the session's `source_app_id`; the authenticated actor and ownership fields are stamped by core. App-specific route names, event schemas, correlation records, SSE encoding, and terminal packages remain in the app backend. A sidecar or browser must not receive provider credentials, core cookies, arbitrary host paths, or a reusable runtime capability through this surface.
 
+A trusted app result may supply `on_behalf_of_user_id` to preserve the approving actor for deferred background work. It cannot override an authenticated actor with a different user. Core runs the usual live actor/profile and remote-admission gates for each new session and stamps ownership; apps do not provide execution authority.
+
 A streamed request sets `create_stream: true` and supplies a bounded
 `idempotency_key`. It may request an existing app-data-relative project
 directory with `project_root: {"scope":"app_data","relative_path":"..."}`.
@@ -838,7 +840,7 @@ assistant text, project-relative file changes, and terminal status. Provider
 payloads, chain-of-thought, prompts, host paths, credentials, and provider homes
 are not part of the projection. The ASGI host asks the app backend to translate
 each bounded ordered batch and advances only after an exact acknowledgement;
-the WSGI path fails with `426` instead of buffering a stream.
+the WSGI path fails with `426` instead of buffering a stream. Replaying an admitted idempotency key reconciles the original stream and redelivers its callback without fresh profile admission or turn submission. Actor and request fingerprint must match. Callback failures do not fail an existing turn. Unbound reservations remain reserved and cannot silently create duplicate sessions.
 
 Apps that declare `permissions.runtime.cleanup_sessions: true` may return `runtime_cleanup_requests` from a backend result. Requests may identify a `runtime_session_id`, `thread_id`, or app-owned grouping key such as `project_id`; the core resolves those identifiers inside the active workspace and performs runtime thread/session cleanup through the same platform cleanup path used by the runtime thread delete API. The contract permission only enables the app to request cleanup; it does not register that app to receive cleanup callbacks. Every existing runtime session is still authorized against the caller, workspace governance, and visibility policy with the normal runtime cleanup policy. Hidden inter-agent participant sessions are excluded from app-requested cleanup and are removed only by inter-agent close/root cleanup cascade. When an app-owned record must be removed only after cleanup succeeds, the result may include `runtime_cleanup_commit` with a backend action and payload; the host runs that commit action after all cleanup requests complete, and the commit remains responsible for mutating app-owned data and publishing declared app events.
 
@@ -850,7 +852,7 @@ This is the correct boundary for headless app-owned orchestration. For example, 
 
 Backend recovery may invoke a declared app hook such as `backend_recovery` on enabled apps. A hosted backend may also invoke a declared `background_tick` hook periodically for active workspaces. These hooks follow the same rule: they may return generic runtime requests, but all app-specific recovery, scheduling, and orchestration decisions remain inside the app backend.
 
-Background hooks also receive source-owned active runtime session IDs, including
+Source runtime events include the owning streamed request ID when available. Background hooks also receive source-owned stream request/session/turn/status projections and active runtime session IDs, including
 unfinished linked orchestration. Recovery includes a bounded recent terminal
 snapshot (at most 100 turns, ten per source-owned user chat); apps apply their own
 activation cutoff and persisted deduplication before replaying evidence.

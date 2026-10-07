@@ -121,6 +121,14 @@ The signed browser acceptance now checks Tab/Shift-Tab focus traversal and one
 trusted Return form submission, in addition to the existing input/scroll and
 transport checks. Tool schemas and the `macos-v47` contract are unchanged.
 
+Native revision `dca46011672635c151623d9c412f0cb7a2836865` passed all 260
+generic Swift tests, 7 signed physical-host tests and 37 Python script tests in
+explicit install run `37674354930`. It installed and launched 0.1.6 (50) on
+2026-10-07. Signed results had zero failures and empty diagnostics, including
+the new keyboard assertions. Read-only diagnostic run `37674654669` confirmed
+revision `dca460116726`, valid signature and exactly one process running the
+installed copy. Core required no implementation/schema change or restart.
+
 The additive workspace-chat correction was deployed on 2026-10-07 from Core
 commit `b30e63a4`, followed by a healthy managed backend restart. Native build
 0.1.4 (48), revision `6fca24f26f24`, was installed and opened on `MacBook-Pro-6`

@@ -14,7 +14,6 @@ from core.providers.codex_app_server_runtime_thread_params import (
     CODEX_RESEARCH_DISABLED_FEATURES,
     CODEX_RESEARCH_ENABLED_FEATURES,
 )
-from core.providers.codex_device_use_home import device_use_workdir
 from core.providers.provider_codex_reasoning import CODEX_DEFAULT_REASONING_EFFORT
 from core.runtime.research_runtime import runtime_session_is_research
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -104,7 +103,7 @@ def codex_launch_scope(session: RuntimeSessionRecord) -> CodexLaunchScope:
     workdir = (
         runtime_root / "research-workdir"
         if research
-        else device_use_workdir(session, runtime_root)
+        else Path(session.workdir)
     )
     workdir.mkdir(parents=True, exist_ok=True)
     return CodexLaunchScope(

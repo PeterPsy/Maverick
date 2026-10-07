@@ -49,6 +49,15 @@ class RuntimePromptContextTest(unittest.TestCase):
         self.assertIn("Changed rules.", second)
         self.assertNotIn("Nested rules.", second)
 
+    def test_mac_capability_keeps_workspace_rules_persona_and_skills(self):
+        (Path(self.session.workspace_root) / "AGENTS.md").write_text("Workspace rules")
+        self.session.system_prompt = "Use Maverick Storage."
+        self.session.device_use_binding = SimpleNamespace(mode="full", approved_apps=("com.apple.Safari",), initial_app="com.apple.Safari")
+        skill = SimpleNamespace(name="Storage", description="Workspace files", source_root="/workspace/skills/storage")
+        text = native_runtime_input(session=self.session, input_text="Use both environments", skills=[skill])
+        for expected in ("Workspace rules", "Use Maverick Storage.", "maverick apps list", "[Available skills]", "[Additional Mac capability]", "Use both environments"):
+            self.assertIn(expected, text)
+
     def test_workspace_instruction_symlinks_do_not_escape_the_boundary(self):
         outside = self.root / "outside.md"
         outside.write_text("Must not be read.\n")

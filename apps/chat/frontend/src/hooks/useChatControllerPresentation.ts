@@ -22,6 +22,7 @@ import type { PendingMessage, QueuedMessage } from "../lib/messageState";
 import { runtimeActivityLabel } from "../lib/runtimeActivity";
 import { historicalSourceAppReadOnlyReason } from "../lib/sourceAppPresentation";
 import { eventsToMessages } from "../lib/transcript";
+import { providerSupportsDeviceUse } from "./useDeviceUse";
 import { useChatRootDropHandlers } from "./useChatRootDropHandlers";
 import { useDockedComposerHeight } from "./useDockedComposerHeight";
 import type { DraftChat } from "./useMessageSubmission";
@@ -263,7 +264,7 @@ export function useChatControllerPresentation({
     return interAgentComposerBudgetLabel(multiAgentMode);
   }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
-    disabled: isThreadLoading || runtimeAdmissionBlocked || deviceUseEnabled || isolatedResearch || Boolean(historicalReadOnlyReason),
+    disabled: isThreadLoading || runtimeAdmissionBlocked || isolatedResearch || Boolean(historicalReadOnlyReason),
     handleAddAttachments,
   });
   const surfaceProps: ChatSurfaceProps = {
@@ -285,7 +286,7 @@ export function useChatControllerPresentation({
       executionMode,
       isSending,
       isolatedResearch,
-      mentionItems: deviceUseEnabled || isolatedResearch ? [] : composerMentionItems,
+      mentionItems: isolatedResearch ? [] : composerMentionItems,
       usage: chatUsage,
       multiAgentBudgetLabel,
       multiAgentMode,
@@ -303,7 +304,7 @@ export function useChatControllerPresentation({
       onStopTurn: handleStopTurn,
       onSubmit: handleSend,
       onSelectDeviceUseMode: handleSelectDeviceUseMode,
-      providers,
+      providers: deviceUseEnabled ? providers.filter(providerSupportsDeviceUse) : providers,
       reasoningEffort,
       researchAvailable,
       providerSelectorLocked,

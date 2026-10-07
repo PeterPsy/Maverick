@@ -164,6 +164,9 @@ test.describe("Chat app browser smoke", () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute("aria-pressed", "true");
       await expect(toggle).toContainText("PC use");
+      await expect(chat.getByRole("button", { name: "Add attachments", exact: true })).toBeEnabled();
+      await expect(chat.getByRole("button", { name: "Apps and references", exact: true })).toBeEnabled();
+      await expect(chat.getByRole("button", { name: "Multi-agent mode: Off", exact: true })).toBeEnabled();
       if (width > 720) {
         const attachment = await chat.getByRole("button", { name: "Add attachments" }).boundingBox();
         const pcUse = await toggle.boundingBox();

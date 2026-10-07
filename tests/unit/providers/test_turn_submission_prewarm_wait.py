@@ -14,16 +14,16 @@ from tests.support.repo import make_temp_repo_root
 
 
 class TurnSubmissionPrewarmWaitTestCase(unittest.TestCase):
-    def test_disconnected_native_sessions_do_not_prewarm_or_schedule_provider_launch(self):
+    def test_disconnected_mac_does_not_block_ordinary_provider_prewarm(self):
         session = SimpleNamespace(session_id="native-offline", device_use_binding=object(), execution_binding=None)
         with patch.object(prewarm_runtime, "runtime_session_is_plain_hosted_chat", return_value=False), \
-             patch("core.device_use.runtime_registry.device_use_service_for_session", return_value=None), \
-             patch.object(prewarm_runtime, "_register_session_prewarm") as register, \
+             patch.object(prewarm_runtime, "_session_has_executing_turn", return_value=False), \
+             patch.object(prewarm_runtime, "_register_session_prewarm", return_value=None) as register, \
              patch.object(prewarm_runtime.runtime_idle_deadlines, "schedule") as schedule:
             prewarm_runtime.prewarm_runtime_session_async(SimpleNamespace(), session=session)
             prewarm_runtime.schedule_runtime_session_prewarm(SimpleNamespace(), session=session)
-        register.assert_not_called()
-        schedule.assert_not_called()
+        register.assert_called_once_with(session.session_id)
+        schedule.assert_called_once()
 
     def test_failed_prewarm_has_a_cooldown_before_automatic_retry(self):
         session_id = "prewarm-failure-cooldown"

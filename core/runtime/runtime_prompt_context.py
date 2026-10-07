@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from core.device_use.contract import device_use_base_instructions
+from core.device_use.contract import device_use_instructions
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.workspace_instructions import (
     resolve_workspace_instruction_chain,
@@ -39,18 +39,6 @@ def native_runtime_input(*, session, input_text: str, skills=()) -> str:
     if runtime_session_is_research(session):
         return input_text
     device_use_binding = getattr(session, "device_use_binding", None)
-    if device_use_binding is not None:
-        instructions = device_use_base_instructions(
-            mode=device_use_binding.mode,
-            approved_apps=device_use_binding.approved_apps,
-            initial_app=device_use_binding.initial_app,
-        )
-        return (
-            "[Device Use Instructions]\n"
-            f"{instructions}\n\n"
-            "[Maverick user input]\n"
-            f"{input_text}"
-        )
     sections = [
         "[Maverick runtime context]\n"
         "An active workspace is available. Use filesystem tools to inspect it "
@@ -94,6 +82,14 @@ def native_runtime_input(*, session, input_text: str, skills=()) -> str:
                     for skill in skills
                 ],
                 ensure_ascii=False,
+            )
+        )
+    if device_use_binding is not None:
+        sections.append(
+            "[Additional Mac capability]\n" + device_use_instructions(
+                mode=device_use_binding.mode,
+                approved_apps=device_use_binding.approved_apps,
+                initial_app=device_use_binding.initial_app,
             )
         )
     sections.append("[Maverick user input]\n" + input_text)

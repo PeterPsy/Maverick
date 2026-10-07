@@ -38,7 +38,7 @@ class CodexDeviceUseContinuationTests(unittest.TestCase):
                 launch = RuntimeBackendLaunchSpec(
                     provider_id="codex", command=["codex", "app-server"],
                     env_overrides={"CODEX_HOME": str(home)}, credential_binding_id=None,
-                    resolved_secret_refs=[], working_directory=str(root / "device-work"),
+                    resolved_secret_refs=[], working_directory=str(root / "workspace"),
                     execution_mode="sandbox", readable_roots=[], writable_roots=[],
                 )
 

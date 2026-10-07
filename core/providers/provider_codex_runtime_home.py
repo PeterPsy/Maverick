@@ -6,7 +6,6 @@ from pathlib import Path
 import shutil
 from typing import TYPE_CHECKING
 
-from core.providers.codex_device_use_home import prepare_device_use_runtime_home
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
 from core.providers.provider_codex_continuation_home import resolve_codex_runtime_home
 from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME, write_codex_post_tool_use_hook
@@ -154,8 +153,6 @@ class CodexRuntimeHomeMixin:
         self._remove_disabled_runtime_material(runtime_home)
         for filename in CODEX_RUNTIME_HOME_FILES:
             self._copy_file_if_present(source_home / filename, runtime_home / filename)
-        if prepare_device_use_runtime_home(self, session, runtime_home):
-            return runtime_home
         self._write_runtime_config(
             source_home / "config.toml",
             runtime_home / "config.toml",

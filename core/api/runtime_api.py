@@ -35,6 +35,7 @@ from core.api.runtime_thread_delete_api import (
 )
 from core.device_use.errors import DeviceUseError
 from core.device_use.models import DeviceUseSessionBinding
+from core.device_use.turn_authority import reconcile_device_use_login
 from core.device_use.runtime_registry import (
     register_device_use_session,
     unregister_device_use_session,
@@ -1058,7 +1059,7 @@ def _create_session(
         session_id=resolved_session_id,
         workspace_id=context.workspace_id,
         agent_id=agent_id,
-        requested_mode="sandbox" if device_binding is not None else body.get("requested_mode"),
+        requested_mode=body.get("requested_mode"),
         governance=governance,
         platform_allows_full_access=context.workspace_id == "default",
         start_path=start_path,
@@ -1100,7 +1101,7 @@ def _create_session(
             session_id=resolved_session_id,
             workspace_id=context.workspace_id,
             agent_id=agent_id,
-            requested_mode="sandbox" if device_binding is not None else body.get("requested_mode"),
+            requested_mode=body.get("requested_mode"),
             runtime_mode=runtime_mode,
             runtime_profile=runtime_profile,
             hosted_provider_id=(
@@ -1111,34 +1112,18 @@ def _create_session(
             ),
             declared_remote_data_class=None,
             prepared_session_fingerprint=prepared_fingerprint,
-            # Device instructions are injected only into the private Codex thread.
-            # Do not mirror native app scope into browser-visible thread metadata.
-            system_prompt=(
-                None
-                if device_binding is not None
-                else str(body.get("system_prompt") or "").strip() or None
-            ),
-            skill_ids=(
-                []
-                if device_binding is not None
-                else body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else []
-            ),
-            skill_activation_mode=(
-                "explicit" if device_binding is not None else body.get("skill_activation_mode")
-            ),
-            skill_catalog_app_id=(
-                None
-                if device_binding is not None
-                else runtime_skill_catalog_app_id_for_request(
-                    state.app_store,
-                    workspace_id=context.workspace_id,
-                    source_app_id=source_app_id,
-                    explicit_app_id=str(body.get("skill_catalog_app_id") or "").strip() or None,
-                    user=context.user,
-                    workspace_store=state.workspace_store,
-                    start_path=start_path,
-                    allow_missing_source_app=True,
-                )
+            system_prompt=str(body.get("system_prompt") or "").strip() or None,
+            skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
+            skill_activation_mode=body.get("skill_activation_mode"),
+            skill_catalog_app_id=runtime_skill_catalog_app_id_for_request(
+                state.app_store,
+                workspace_id=context.workspace_id,
+                source_app_id=source_app_id,
+                explicit_app_id=str(body.get("skill_catalog_app_id") or "").strip() or None,
+                user=context.user,
+                workspace_store=state.workspace_store,
+                start_path=start_path,
+                allow_missing_source_app=True,
             ),
             source_app_id=source_app_id,
             thread_title=str(body.get("title") or "").strip(),
@@ -1219,18 +1204,11 @@ def _preflight_runtime_session_creation_before_persistence(
     if activation_id:
         if (
             runtime_mode != "agentic"
-            or str(body.get("agent_id") or "").strip() != "chat"
+            or runtime_profile != "workspace"
             or str(body.get("source_app_id") or "").strip() != "chat"
-            or str(body.get("requested_mode") or "").strip() not in {"", "sandbox"}
-            or str(body.get("agent_type_id") or "").strip()
-            or str(body.get("agent_role_id") or "").strip()
-            or raw_skill_ids
-            or raw_invoked_skill_ids
-            or raw_attachments
-            or raw_app_references
             or body.get("prepare_only") is True
         ):
-            raise ProviderError("device_use_requires_codex_mono_agent_chat")
+            raise ProviderError("device_use_requires_workspace_chat")
         try:
             device_use_binding = state.device_use_service.binding_snapshot(
                 activation_id,
@@ -1303,11 +1281,7 @@ def _preflight_runtime_session_creation_before_persistence(
             workspace_id=context.workspace_id,
             execution_mode=resolve_runtime_execution_mode(
                 workspace_id=context.workspace_id,
-                requested_mode=(
-                    "sandbox"
-                    if device_use_binding is not None
-                    else body.get("requested_mode")
-                ),
+                requested_mode=body.get("requested_mode"),
                 governance=governance,
                 platform_allows_full_access=context.workspace_id == "default",
             ),
@@ -1324,11 +1298,7 @@ def _preflight_runtime_session_creation_before_persistence(
             turn_id=f"session-admission:{session_id}",
             live_execution_mode=resolve_runtime_execution_mode(
                 workspace_id=context.workspace_id,
-                requested_mode=(
-                    "sandbox"
-                    if device_use_binding is not None
-                    else body.get("requested_mode")
-                ),
+                requested_mode=body.get("requested_mode"),
                 governance=governance,
                 platform_allows_full_access=context.workspace_id == "default",
             ),
@@ -1358,7 +1328,7 @@ def _preflight_runtime_session_creation_before_persistence(
             device_use_binding is not None
             and execution_binding.runtime_engine_id not in {"codex", "antigravity-cli"}
         ):
-            raise ProviderError("device_use_requires_codex_runtime")
+            raise ProviderError("device_use_requires_native_runtime")
     return RuntimeSessionCreationPreflight(
         session_id=session_id,
         runtime_profile=runtime_profile,
@@ -2496,35 +2466,12 @@ def _prepare_runtime_turn_submission(
     raw_attachments = body.get("attachments", [])
     raw_app_references = body.get("app_references", [])
     if session.device_use_binding is not None:
-        if (
-            body.get("skill_ids")
-            or body.get("invoked_skill_ids")
-            or raw_attachments
-            or raw_app_references
-        ):
-            _release_client_message_claim(state, release_claim_on_failure)
-            return None, json_response(
-                start_response,
-                {"error": "device_use_blocks_skills_attachments_and_app_references"},
-                status="400 Bad Request",
-            )
-        try:
-            current_binding = state.device_use_service.binding_snapshot(
-                session.device_use_binding.activation_id,
-                owner_user_id=session.device_use_binding.owner_user_id,
-                workspace_id=session.device_use_binding.workspace_id,
-                auth_session_id=context.session.session_id,
-                bound_session_id=session.session_id,
-            )
-            if current_binding != session.device_use_binding:
-                raise DeviceUseError("device_use_binding_changed")
-        except DeviceUseError as error:
-            _release_client_message_claim(state, release_claim_on_failure)
-            return None, json_response(
-                start_response,
-                {"error": error.reason_code},
-                status="409 Conflict",
-            )
+        reconcile_device_use_login(
+            state.device_use_service,
+            session=session,
+            owner_user_id=context.user.user_id,
+            auth_session_id=context.session.session_id,
+        )
     try:
         assert_research_runtime_input_allowed(
             session,

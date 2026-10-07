@@ -152,17 +152,14 @@ class AntigravityCliNativeAdapter:
         has_device_use = (
             getattr(context.session, "device_use_binding", None) is not None
         )
-        if has_device_use:
-            skills = ()
-        else:
-            skills = tuple(getattr(context, "invoked_skills", ()) or ())
-            if getattr(context.session, "skill_activation_mode", "implicit") == "implicit":
-                skills = tuple(
-                    await asyncio.to_thread(
-                        resolve_available_runtime_skills,
-                        context.session,
-                    )
+        skills = tuple(getattr(context, "invoked_skills", ()) or ())
+        if getattr(context.session, "skill_activation_mode", "implicit") == "implicit":
+            skills = tuple(
+                await asyncio.to_thread(
+                    resolve_available_runtime_skills,
+                    context.session,
                 )
+            )
         await asyncio.to_thread(
             prepare_antigravity_runtime_mcp_config,
             Path(context.session.runtime_root),

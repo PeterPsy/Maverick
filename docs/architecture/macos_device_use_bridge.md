@@ -86,7 +86,10 @@ also require a new chat to enable device access.
 
 Chat probes native/Core status on navigation, foreground return, turn state
 changes and every ten seconds while visible. Historical mode never implies a
-live connection. Submission checks the lease before clearing the composer.
+live connection. Only the first submission of a draft with PC use selected
+requires a ready lease before materialization. Existing chats can submit ordinary
+workspace work while the Mac is stopped or disconnected; native tool invocation
+checks the lease independently.
 Turning off and back on explicitly renews an idle Full conversation, including
 when provider context has been lost. Renewal is rejected while a turn is running;
 turning off remains available. Stop only clears the local activation once Core
@@ -131,8 +134,19 @@ provider adapters:
   forwarding the same five tools to Core's Device Use invoke API;
 - the native app remains a single executor, without provider runtime or
   credentials;
-- Codex Device Use disables skills, attachments, app references, multi-agent,
-  MCP servers, shell and arbitrary filesystem tools;
+- Mac control supplements the ordinary workspace agent. Both Codex and
+  Antigravity retain platform/agent instructions, workspace skill selection,
+  app CLI access, attachments, app references and delegation;
+- Codex retains the ordinary managed runtime home, workdir and execution policy,
+  adding the pinned native tools and Mac-specific developer instructions. The
+  bundled code-mode host handles native dynamic calls; ordinary server requests
+  continue through the standard provider handler;
+- Full grants Mac authority independently of server/workspace permissions. Stop
+  and disconnect deny native calls, while ordinary provider prewarm and workspace
+  turns remain available. A turn from another owner/login revokes the native
+  lease while leaving ordinary workspace admission intact. Collaborators never
+  inherit the native binding;
+- Research remains its separate web-only profile and cannot acquire Mac access;
 - one native `mac_project` capability is limited to a user-picked media project.
 
 Compatible models from these admitted native families use the ordinary model
@@ -235,7 +249,7 @@ Late cleanup of an older provider cannot unregister the renewed activation.
 
 Device Use Codex threads have a durable archive in the session's private
 `codex-home`. A later provider process resumes the same thread while keeping
-the pinned model, read-only workdir, native tools and independent Mac lease.
+the pinned model, ordinary workspace workdir/policy, native tools and independent Mac lease.
 Provider termination after completion therefore does not require a Chat reload
 or lease renewal before the next message. A connected native lease retains its
 idle provider process so a navigation/pause does not discard model context. An
@@ -467,13 +481,13 @@ are untouched.
 | Finding | Implemented correction | Regression evidence |
 | --- | --- | --- |
 | P0 window identity | Remember the last visible owner-bound primary; recover missing AX metadata only with a prior root or one unique visible primary. Associate a tiny Finder rename overlay with its uniquely containing document. Auxiliary roles/frames and inference basis are returned. | Native window/scene and recovery tests; ambiguity remains a precise failure. |
-| P0 repeated picker/reconnection | Persist chat-to-project opaque ID beside security-scoped bookmarks. `resume_project` returns inventory and checkpoint without a picker. `save_checkpoint` uses CAS revisions and explicit export stages. Disconnected native sessions skip provider prewarm and reject every native family. | Checkpoint, project binding, Core reconnection and offline-prewarm tests. |
+| P0 repeated picker/reconnection | Persist chat-to-project opaque ID beside security-scoped bookmarks. `resume_project` returns inventory and checkpoint without a picker. `save_checkpoint` uses CAS revisions and explicit export stages. Disconnected native sessions reject every native family while retaining ordinary workspace prewarm and turns. | Checkpoint, project binding, Core reconnection and offline-prewarm tests. |
 | P0 uncertain input | Consume receipts before dispatch; unknown, partial, suspected no-op and transport loss require same-app observation in On and Full, across turn boundaries. No other engine or input can bypass verification. | Peekaboo recovery tests including Full and end-turn. |
 | P1 late prerequisites | `preflight` batches at most 24 sources, durations, hash duplicates, inventory coverage and local Speech capability. Empty inventory fails early; unavailable analysis is distinct from absent speech. Preset/project GUI checks remain explicitly unverified until observed. | Media/cache and validation tests. |
 | P1 redundant decisions/rounding | Hash-bound inspection reuse, whole-frame CFR subclip preparation and output fps/duration check. Compact AX observations with `details=true`; `observe_after=true` performs exactly one input then captures the same window, without replay. | Native 30fps multi-range fixture and bridge image-admission tests. |
 | P1 limited quality checks | Planned cut samples at ±one frame, optional all-frame decode up to 120s, timestamp discontinuities, repeated imagery, black frames, decoded audio peak/RMS, clipping, silence, gaps and duration mismatch. | Generated media pipeline tests. Technical validity does not certify captions, preset, lip sync or creative quality. |
 | P1 inaccessible/overwritten audit | Encrypted per-call results/images, official paginated CLI/MCP reads and owner/admin HTTP readback. Immutable project evidence paths retain every analysis; failures identify step/field, completed steps and result artifact. | Audit encryption, paging, image integrity and tenant/owner denial tests. |
-| P2 stale requirements/prewarm | Same-turn steering sends plain Device Use input and updates native task context with the acknowledged latest correction. Failed automatic prewarm has a 60s cooldown. Native user wait is separate from execution and transport. | Steering, cooldown and timing tests. |
+| P2 stale requirements/prewarm | Same-turn steering preserves ordinary workspace/skill input and updates native task context with the acknowledged latest correction. Failed automatic prewarm has a 60s cooldown. Native user wait is separate from execution and transport. | Steering, cooldown and timing tests. |
 
 ### Project and quality evidence
 

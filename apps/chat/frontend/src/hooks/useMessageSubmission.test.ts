@@ -63,15 +63,15 @@ describe("runtimeSessionOptionsForNewChat", () => {
     expect(options.skill_activation_mode).toBe("implicit");
   });
 
-  it("preserves the selected Codex model binding and reasoning effort for Device Use", () => {
+  it("adds Mac access while preserving the ordinary agent context and selected model", () => {
     const options = runtimeSessionOptionsForNewChat({
       agentRuntimeConfig: {
         agent_id: "chat",
-        agent_role_id: "",
-        agent_type_id: "",
-        skill_catalog_app_id: "",
-        skill_ids: [],
-        skill_activation_mode: "explicit",
+        agent_role_id: "editor",
+        agent_type_id: "editing-agent",
+        skill_catalog_app_id: "skills",
+        skill_ids: ["storage"],
+        skill_activation_mode: "implicit",
         source_app_id: "chat",
         system_prompt: "",
         title: "GPT-5.6 Sol",
@@ -81,22 +81,23 @@ describe("runtimeSessionOptionsForNewChat", () => {
       },
       deviceUseActivationId: "01234567-89ab-cdef-0123-456789abcdef",
       draftChat: null,
-      systemPrompt: "must not enter the device thread",
+      systemPrompt: "Use Maverick apps and the Mac",
     });
 
     expect(options).toMatchObject({
       agent_id: "chat",
       source_app_id: "chat",
-      agent_role_id: "",
-      agent_type_id: "",
-      skill_ids: [],
-      skill_activation_mode: "explicit",
+      agent_role_id: "editor",
+      agent_type_id: "editing-agent",
+      skill_ids: ["storage"],
+      skill_activation_mode: "implicit",
       runtime_mode: "agentic",
       workspace_profile_binding_id: "binding-sol",
       reasoning_effort: "max",
       device_use_activation_id: "01234567-89ab-cdef-0123-456789abcdef",
     });
-    expect(options.system_prompt).toBeUndefined();
+    expect(options.system_prompt).toBe("Use Maverick apps and the Mac");
+    expect(options.skill_catalog_app_id).toBe("skills");
   });
 
   it("pins Research without project, prompt, skills, or workspace context", () => {

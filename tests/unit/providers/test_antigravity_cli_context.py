@@ -1,6 +1,7 @@
 """Native context parity through Antigravity's actual structured transport."""
 
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +11,25 @@ from tests.unit.providers.antigravity_cli_fixture import AntigravityCliFixture
 
 
 class AntigravityCliContextTest(AntigravityCliFixture, unittest.IsolatedAsyncioTestCase):
+    async def test_mac_capability_preserves_workspace_skills_and_app_instructions(self):
+        self.session.device_use_binding = SimpleNamespace(mode="full", approved_apps=("com.apple.Safari",), initial_app="com.apple.Safari")
+        self.session.system_prompt = "Use Maverick app surfaces."
+        (Path(self.session.workspace_root) / "AGENTS.md").write_text("Keep workspace rules")
+        skill_root = self.root / "engineering"
+        skill_root.mkdir()
+        (skill_root / "SKILL.md").write_text("Use the Storage app")
+        self.context.invoked_skills = (SkillDefinition(
+            skill_id="engineering", local_skill_id="engineering", name="Engineering",
+            description="Workspace workflow", source_root=str(skill_root),
+            owner_kind="workspace", owner_id="default", workspace_id="default", status="available",
+        ),)
+        await self.controller.prepare(self.context)
+        with patch("core.providers.antigravity_cli_session.device_use_service_for_session", return_value=None):
+            await self.collect("Read Storage and then use the Mac")
+        wire = [message for message in self.messages() if message.get("event") == "user"][-1]
+        for value in ("Keep workspace rules", "Use Maverick app surfaces.", "maverick apps list", "additional capability", "Engineering"):
+            self.assertIn(value, wire["message"]["content"])
+
     async def test_context_preserves_workspace_agent_skills_and_user_input_on_resume(self):
         workspace = Path(self.session.workspace_root)
         instructions = workspace / "AGENTS.md"

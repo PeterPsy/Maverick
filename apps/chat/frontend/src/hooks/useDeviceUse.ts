@@ -32,7 +32,7 @@ export function providerSupportsDeviceUse(provider: ProviderItem | null): provid
   return Boolean(
     provider
     && provider.provider_role === "runtime_engine"
-    && runtimeEngineId === "codex"
+    && (runtimeEngineId === "codex" || runtimeEngineId === "antigravity-cli")
     && Boolean(provider.workspace_profile_binding_id)
     && provider.selectable !== false
     && provider.status === "active"
@@ -144,8 +144,8 @@ export function useDeviceUse({
   const mode: DeviceUseMode = currentId && lease?.id === currentId && lease.ready
     ? pinnedMode || snapshot.mode
     : "off";
-  // Even while disconnected, a Device Use conversation retains its capability
-  // restrictions (attachments, skills, references and multi-agent stay disabled).
+  // The chat retains its Mac capability binding when the native lease is off;
+  // ordinary workspace capabilities remain available independently.
   const enabled = Boolean(activeThread?.device_use_enabled || activationId);
   const locked = Boolean(activeThread);
 
@@ -188,7 +188,7 @@ export function useDeviceUse({
         throw new Error("device_use_session_busy");
       }
       if (!activeThread && !providerSupportsDeviceUse(provider)) {
-        throw new Error("Device Use richiede un modello Codex attivo.");
+        throw new Error("PC use richiede un modello Codex o Antigravity attivo.");
       }
       if (activationRef.current) await stopCurrent();
       if (!activeThread && provider) {

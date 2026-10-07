@@ -14,9 +14,8 @@ import unittest
 from unittest.mock import patch
 
 from core.device_use.contract import (
-    DEVICE_USE_CODEX_CONFIG,
     DEVICE_USE_TOOL_CONTRACT_DIGEST,
-    device_use_base_instructions,
+    device_use_instructions,
 )
 from core.device_use.errors import DeviceUseUnavailableError
 from core.device_use.runtime_registry import (
@@ -24,8 +23,8 @@ from core.device_use.runtime_registry import (
 )
 from core.device_use.service import DeviceUseService
 from core.providers.codex_app_server_device_use import process_device_use_request
-from core.providers.codex_app_server_device_use_turn import codex_turn_start_params
-from core.providers.codex_app_server_device_use_requests import stop_device_use_runtime
+from core.providers.codex_app_server_device_use_turn import codex_turn_input, codex_turn_start_params
+from core.providers.codex_app_server_device_use_requests import dispatch_server_request, stop_device_use_runtime
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime
 from core.providers.codex_app_server_runtime_thread_params import codex_thread_params
 from core.providers.errors import ProviderLaunchError
@@ -54,21 +53,29 @@ class CodexDeviceUseTestCase(unittest.TestCase):
     def tearDown(self):
         unregister_device_use_session("runtime")
 
-    def test_thread_contract_is_durable_read_only_and_dynamic_only(self):
+    def test_mac_tools_extend_the_ordinary_workspace_thread(self):
         params = codex_thread_params(
             session=SimpleNamespace(
                 device_use_binding=self.binding,
                 execution_binding=SimpleNamespace(model_id="gpt-5.6-sol"),
+                system_prompt="Use the official Maverick app surfaces.",
+                skill_activation_mode="implicit",
             ),
-            launch_spec=SimpleNamespace(working_directory="/private/device-work", execution_mode="sandbox"),
+            launch_spec=SimpleNamespace(working_directory="/workspace", execution_mode="full-access"),
         )
         self.assertFalse(params["ephemeral"])
         self.assertEqual(params["model"], "gpt-5.6-sol")
-        self.assertEqual(params["sandbox"], "read-only")
+        self.assertEqual(params["sandbox"], "danger-full-access")
         self.assertEqual({item["name"] for item in params["dynamicTools"]}, {
             "mac_computer", "mac_peekaboo", "mac_calendar", "mac_project", "mac_browser",
         })
-        self.assertEqual(params["config"], {"mcp_servers": {}, "project_doc_max_bytes": 0})
+        self.assertEqual(params["config"], {
+            "mcp_servers": {}, "features": {"code_mode_host": True, "code_mode": False},
+        })
+        self.assertEqual(params["cwd"], "/workspace")
+        self.assertIn("Use the official Maverick app surfaces.", params["developerInstructions"])
+        self.assertIn("additional capability", params["developerInstructions"])
+        self.assertNotIn("baseInstructions", params)
 
     def test_full_mode_instructions_remove_native_authority_limits(self):
         params = codex_thread_params(
@@ -78,7 +85,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             ),
             launch_spec=SimpleNamespace(working_directory="/private/device-work", execution_mode="sandbox"),
         )
-        instructions = params["baseInstructions"]
+        instructions = params["developerInstructions"]
         self.assertIn("There is no application allowlist", instructions)
         self.assertIn("Only an explicit Stop or a positively detected screen lock", instructions)
         self.assertIn("inspect the source project/view", instructions)
@@ -88,7 +95,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.assertNotIn("Never operate credential or security UI", instructions)
 
     def test_scoped_mode_requires_source_app_grounding_and_milestone_updates(self):
-        instructions = device_use_base_instructions(
+        instructions = device_use_instructions(
             mode="on",
             approved_apps=("com.apple.Safari",),
             initial_app="com.apple.Safari",
@@ -105,17 +112,54 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             provider_thread_id="provider-thread",
             turn_input=[{"type": "text", "text": "Observe"}],
             reasoning_effort="max",
-            launch_spec=SimpleNamespace(),
-            sandbox_policy=lambda _spec: {},
+            launch_spec=SimpleNamespace(working_directory="/workspace"),
+            sandbox_policy=lambda _spec: {"type": "dangerFullAccess"},
         )
 
         self.assertEqual(params["effort"], "max")
+        self.assertEqual(params["sandboxPolicy"], {"type": "dangerFullAccess"})
+        self.assertEqual(params["cwd"], "/workspace")
 
-    def test_device_runtime_routes_dynamic_tools_through_code_mode_host(self):
-        features = tomllib.loads(DEVICE_USE_CODEX_CONFIG)["features"]
+    def test_mac_turn_preserves_workspace_input_and_invoked_skills(self):
+        session = SimpleNamespace(device_use_binding=self.binding, skill_activation_mode="implicit")
+        runtime = SimpleNamespace(runtime_root="/runtime", runtime_home="/runtime/home")
+        skills = [object()]
+        with patch("core.providers.codex_app_server_device_use_turn.codex_provider_input_text", return_value="Workspace request") as wrap, patch("core.providers.codex_app_server_device_use_turn.codex_skill_input_items", return_value=[{"type": "skill", "name": "Storage"}]) as project:
+            device, research, items = codex_turn_input(session, runtime, "Use Storage and the Mac", skills)
+        self.assertTrue(device)
+        self.assertFalse(research)
+        self.assertEqual(items, [{"type": "text", "text": "Workspace request"}, {"type": "skill", "name": "Storage"}])
+        wrap.assert_called_once_with("Use Storage and the Mac", skill_activation_mode="implicit")
+        project.assert_called_once_with(runtime.runtime_root, skills, runtime_home=runtime.runtime_home)
 
-        self.assertIs(features["code_mode"], False)
-        self.assertIs(features["code_mode_host"], True)
+    def test_workspace_server_requests_keep_the_normal_handler(self):
+        runtime = SimpleNamespace(device_use_binding=self.binding, server_request_queue=queue.Queue())
+        normal = {"id": 1, "method": "item/commandExecution/requestApproval", "params": {}}
+        native = {"id": 2, "method": "item/tool/call", "params": {"tool": "mac_computer"}}
+        with patch(__name__ + ".process_device_use_request") as fallback:
+            dispatch_server_request(runtime, normal, fallback)
+            dispatch_server_request(runtime, native, fallback)
+            fallback.assert_called_once_with(runtime, normal)
+        self.assertEqual(runtime.server_request_queue.get_nowait(), native)
+
+    def test_mac_runtime_preserves_normal_config_and_rules(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source"
+            source.mkdir()
+            (source / "config.toml").write_text("[features]\nshell_tool = true\nunified_exec = true\nmulti_agent = true\ncode_mode_host = true\n")
+            (source / "rules").mkdir()
+            (source / "rules" / "workspace.rules").write_text("Workspace rules")
+            home = root / "runtime" / "codex-home"
+            session = SimpleNamespace(device_use_binding=self.binding, workspace_root=str(root), runtime_root=str(home.parent), effective_mode="sandbox", skill_activation_mode="implicit")
+            adapter = CodexProviderAdapter()
+            with patch.object(adapter, "_source_codex_home", return_value=source), patch.object(adapter, "_runtime_home", return_value=home):
+                adapter._prepare_runtime_home(session)
+            config = tomllib.loads((home / "config.toml").read_text())
+            for name in ("shell_tool", "unified_exec", "multi_agent"):
+                self.assertIsNot(config["features"].get(name), False)
+            self.assertEqual((home / "rules" / "workspace.rules").read_text(), "Workspace rules")
+            self.assertIn("shell_environment_policy", config)
 
     def test_device_runtime_mounts_the_bundled_code_mode_host(self):
         with tempfile.TemporaryDirectory() as temp_dir:

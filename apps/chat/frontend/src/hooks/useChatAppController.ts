@@ -401,12 +401,8 @@ export function useChatAppController({
     runtimeControls.handleSelectAgent(agentTypeId);
   }, [clearAttachments, runtimeControls, setSelectedReferences]);
   const prepareDeviceUse = useCallback(async (providerId: string, effort: string) => {
-    clearAttachments();
-    setSelectedReferences([]);
-    setSelectedAgentTypeId("");
-    setMultiAgentMode("off");
     await runtimeControls.handleSelectProvider(providerId, effort);
-  }, [clearAttachments, runtimeControls, setSelectedAgentTypeId]);
+  }, [runtimeControls]);
   const deviceUse = useDeviceUse({
     activeThread,
     isRuntimeBusy,

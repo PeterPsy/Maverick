@@ -66,7 +66,7 @@ from core.runtime.provider_start_handoff import (
 from core.runtime.runtime_idle_deadlines import runtime_idle_deadlines
 from core.runtime.session_prewarm_policy import (
     RuntimeSessionPrewarmResult, SessionPrewarmState as _SessionPrewarmState,
-    native_session_connected, failure_cooling_down,
+    failure_cooling_down,
 )
 from core.runtime.runtime_process_lifecycle import (
     IDLE_RUNTIME_REAP_TTL_SECONDS,
@@ -103,8 +103,6 @@ _PREWARM_STATUS_MAX_ENTRIES = 2048
 def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessionRecord) -> None:
     """Best-effort warmup for Codex runtime process and provider thread."""
     if runtime_session_is_plain_hosted_chat(session):
-        return
-    if not native_session_connected(session):
         return
     if _session_has_executing_turn(state, session.session_id):
         return
@@ -268,8 +266,6 @@ def schedule_runtime_session_prewarm(
 ) -> None:
     """Schedule best-effort prewarm for the next turn after the current worker releases its lock."""
     if runtime_session_is_plain_hosted_chat(session):
-        return
-    if not native_session_connected(session):
         return
     if _session_has_executing_turn(state, session.session_id):
         return

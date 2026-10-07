@@ -258,21 +258,6 @@ export function runtimeSessionOptionsForNewChat({
   draftChat: DraftChat | null;
   systemPrompt: string;
 }): RuntimeSessionOptions {
-  if (deviceUseActivationId) {
-    return {
-      agent_id: "chat",
-      agent_role_id: "",
-      agent_type_id: "",
-      source_app_id: "chat",
-      skill_ids: [],
-      skill_activation_mode: "explicit",
-      runtime_mode: "agentic",
-      workspace_profile_binding_id: agentRuntimeConfig?.workspace_profile_binding_id,
-      reasoning_effort: agentRuntimeConfig?.reasoning_effort,
-      device_use_activation_id: deviceUseActivationId,
-      title: "New chat",
-    };
-  }
   return {
     agent_id: agentRuntimeConfig?.agent_id,
     agent_role_id: agentRuntimeConfig?.agent_role_id,
@@ -294,6 +279,7 @@ export function runtimeSessionOptionsForNewChat({
     workspace_profile_binding_id: agentRuntimeConfig?.workspace_profile_binding_id,
     reasoning_effort: agentRuntimeConfig?.reasoning_effort,
     title: "New chat",
+    ...(deviceUseActivationId ? { device_use_activation_id: deviceUseActivationId } : {}),
   };
 }
 
@@ -1545,10 +1531,7 @@ export function useMessageSubmission({
     if (!target) {
       return;
     }
-    const deviceUseEnabled = target.thread
-      ? Boolean(target.thread.device_use_enabled)
-      : Boolean(deviceUseActivationId);
-    const targetAttachments = isComposerSubmission && !deviceUseEnabled ? [...attachments] : [];
+    const targetAttachments = isComposerSubmission ? [...attachments] : [];
     if ((!input && !targetAttachments.length) || hasInvalidAttachments(targetAttachments)) {
       return;
     }
@@ -1556,7 +1539,7 @@ export function useMessageSubmission({
       setComposerError(HISTORICAL_OPENDESIGN_THREAD_READ_ONLY);
       return;
     }
-    if (deviceUseEnabled && ensureDeviceUseReady) {
+    if (!target.thread && deviceUseActivationId && ensureDeviceUseReady) {
       if (checkingDeviceUseRef.current.has(target.conversationKey)) return;
       checkingDeviceUseRef.current.add(target.conversationKey);
       try {
@@ -1573,10 +1556,8 @@ export function useMessageSubmission({
     }
     const clientMessageId = crypto.randomUUID();
     const clientSubmissionStartedAt = new Date().toISOString();
-    const appReferences = deviceUseEnabled
-      ? []
-      : mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
-    const targetMultiAgentMode = deviceUseEnabled ? "off" : isComposerSubmission ? multiAgentMode : "off";
+    const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
+    const targetMultiAgentMode = isComposerSubmission ? multiAgentMode : "off";
     const clientSubmissionMetrics: RuntimeTurnClientMetrics = {};
     const localMessage: QueuedMessage = {
       clientMessageId,

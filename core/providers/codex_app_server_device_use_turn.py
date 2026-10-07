@@ -17,14 +17,12 @@ def codex_turn_input(
     input_text: str,
     invoked_skills,
 ) -> tuple[bool, bool, list[dict[str, object]]]:
-    """Keep Device Use prompts free of workspace skills and instruction wrappers."""
+    """Add native authority without changing ordinary workspace turn input."""
     device_use = getattr(session, "device_use_binding", None) is not None
     research = runtime_session_is_research(session)
     if research:
         return False, True, [{"type": "text", "text": input_text}]
-    if device_use:
-        return True, False, [{"type": "text", "text": input_text}]
-    return False, False, [
+    return device_use, False, [
         {
             "type": "text",
             "text": codex_provider_input_text(
@@ -79,11 +77,7 @@ def codex_turn_start_params(
     sandbox_policy,
 ) -> dict[str, object]:
     params: dict[str, object] = {"threadId": provider_thread_id, "input": turn_input}
-    if device_use:
-        effort = str(reasoning_effort or "").strip()
-        if effort:
-            params["effort"] = effort
-    elif research:
+    if research:
         params.update({
             "approvalPolicy": "never",
             "sandboxPolicy": {"type": "readOnly"},
@@ -95,4 +89,8 @@ def codex_turn_start_params(
             "sandboxPolicy": sandbox_policy(launch_spec),
             "cwd": launch_spec.working_directory,
         })
+        if device_use:
+            effort = str(reasoning_effort or "").strip()
+            if effort:
+                params["effort"] = effort
     return params

@@ -3,8 +3,6 @@
 from dataclasses import dataclass
 from threading import Event
 
-from core.runtime.runtime_session import RuntimeSessionRecord
-
 
 @dataclass
 class SessionPrewarmState:
@@ -28,15 +26,6 @@ class RuntimeSessionPrewarmResult:
     provider_id: str | None = None
     provider_thread_id: str | None = None
     prewarm_total_ms: float | None = None
-
-
-def native_session_connected(session: RuntimeSessionRecord) -> bool:
-    binding = getattr(session, "device_use_binding", None)
-    if binding is None:
-        return True
-    from core.device_use.runtime_registry import device_use_service_for_session
-    service = device_use_service_for_session(session.session_id)
-    return service is not None and service.binding_connected(binding, session.session_id)
 
 
 def failure_cooling_down(state: SessionPrewarmState, now: float) -> bool:

@@ -16,30 +16,30 @@ const setter = vi.fn();
 const setComposer = vi.fn();
 const setComposerError = vi.fn();
 
-function Harness({ verify, activeThread = thread }: { verify: () => Promise<void>; activeThread?: ChatThread }) {
+function Harness({ verify, activeThread = thread }: { verify: () => Promise<void>; activeThread?: ChatThread | null }) {
   result = useMessageSubmission({
     activeInterAgentRun: null, activeAppContext: null, activeThread, activeTurn: null,
     attachments: [], clearAttachments: setter, composer: "Riprendi il lavoro", composerMentionItems: [],
-    draftChat: null, deviceUseActivationId: null, ensureDeviceUseReady: verify, canPreloadRuntime: false,
+    draftChat: activeThread ? null : { draftId: "draft", projectId: null, systemPrompt: "" }, deviceUseActivationId: activeThread ? null : "draft-mac", ensureDeviceUseReady: verify, canPreloadRuntime: false,
     isBootstrapping: false, isHistoryLoading: false, isRuntimeBusy: false, multiAgentMode: "off",
     navigationScope: "test", notifyActiveThreadChanged: setter, selectedAgentRuntimeConfig: async () => null,
     setActiveSession: setter, setActiveThread: setter, setActiveTurn: setter, setComposer, setComposerError,
     setDraftChat: setter, setError: setter, setEvents: setter, setSelectedReferences: setter,
-    setThreads: setter, threads: [activeThread],
+    setThreads: setter, threads: activeThread ? [activeThread] : [],
   });
   return null;
 }
 
-async function render(verify: () => Promise<void>, activeThread = thread) {
+async function render(verify: () => Promise<void>, activeThread: ChatThread | null = thread) {
   if (!root) { const host = document.createElement("div"); document.body.append(host); root = createRoot(host); }
   await act(async () => { root?.render(<Harness verify={verify} activeThread={activeThread} />); });
 }
 afterEach(() => { act(() => root?.unmount()); root = null; vi.clearAllMocks(); document.body.innerHTML = ""; });
 
 describe("Device Use submission admission", () => {
-  it("preserves the draft and does not post or create an error bubble when the lease is lost", async () => {
+  it("preserves the unsent draft when initial Mac activation is unavailable", async () => {
     const verify = vi.fn().mockRejectedValue(new Error("Mac scollegato. Premi Full."));
-    await render(verify);
+    await render(verify, null);
     await act(async () => { await result.handleSend(); });
     expect(verify).toHaveBeenCalledOnce();
     expect(setComposerError).toHaveBeenCalledWith("Mac scollegato. Premi Full.");
@@ -49,10 +49,20 @@ describe("Device Use submission admission", () => {
     expect(result.failedUserMessages).toEqual([]);
   });
 
+  it("submits ordinary workspace work when the chat's Mac is disconnected", async () => {
+    const verify = vi.fn().mockRejectedValue(new Error("Mac scollegato"));
+    vi.mocked(sendRuntimeTurn).mockResolvedValue({ delivery: "queued" });
+    await render(verify);
+    await act(async () => { await result.handleSend(); });
+    expect(verify).not.toHaveBeenCalled();
+    expect(sendRuntimeTurn).toHaveBeenCalledOnce();
+    expect(setComposerError).toHaveBeenCalledWith(null);
+  });
+
   it("does not duplicate submission while checking a lease or send it to a newly opened chat", async () => {
     let resolve!: () => void;
     const verify = vi.fn(() => new Promise<void>((done) => { resolve = done; }));
-    await render(verify);
+    await render(verify, null);
     let pending!: Promise<void>;
     await act(async () => {
       pending = result.handleSend();

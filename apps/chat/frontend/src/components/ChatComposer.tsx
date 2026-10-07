@@ -260,7 +260,7 @@ export function ChatComposer({
                 {!isolatedResearch ? (
                   <AttachmentMenu
                     attachments={attachments}
-                    disabled={disabled || deviceUseEnabled}
+                    disabled={disabled}
                     onAddAttachments={onAddAttachments}
                     onCapturePageArea={onCapturePageArea}
                   />
@@ -270,7 +270,7 @@ export function ChatComposer({
                     <button
                       aria-label="Capture page area"
                       className="chatapp-composer__tool-button chatapp-composer-utilities__capture-button"
-                      disabled={disabled || deviceUseEnabled}
+                      disabled={disabled}
                       onClick={onCapturePageArea}
                       title="Capture page area"
                       type="button"
@@ -286,7 +286,7 @@ export function ChatComposer({
                       aria-haspopup="listbox"
                       aria-label="Apps and references"
                       className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
-                      disabled={disabled || deviceUseEnabled}
+                      disabled={disabled}
                       onClick={openAppPicker}
                       ref={appPickerButtonRef}
                       type="button"
@@ -299,7 +299,7 @@ export function ChatComposer({
                   {!isolatedResearch ? (
                     <MultiAgentModeControl
                       budgetLabel={multiAgentBudgetLabel}
-                      disabled={disabled || isSending || deviceUseEnabled}
+                      disabled={disabled || isSending}
                       groupChatEnabled={multiAgentGroupChatEnabled}
                       menuOpen={multiAgentMenuOpen}
                       mode={multiAgentMode}
@@ -340,7 +340,7 @@ export function ChatComposer({
                   {!researchEnabled ? (
                     <AgentSelector
                       agents={agents}
-                      disabled={disabled || isSending || deviceUseEnabled}
+                      disabled={disabled || isSending}
                       loading={agentCatalogLoading}
                       locked={agentSelectorLocked}
                       onSelect={onSelectAgent}
@@ -349,7 +349,7 @@ export function ChatComposer({
                   ) : null}
                   <ComposerRuntimeBadges
                     activeProviderId={activeProviderId}
-                    disabled={disabled || isSending || deviceUseEnabled}
+                    disabled={disabled || isSending}
                     executionMode={executionMode}
                     locked={providerSelectorLocked}
                     onSelectProvider={onSelectProvider}
@@ -366,7 +366,7 @@ export function ChatComposer({
                 dictationControl={
                   <ComposerDictationButton
                     chunkedDictationSupported={transcriptionChunkedDictationSupported}
-                    disabled={disabled || isSending || deviceUseEnabled}
+                    disabled={disabled || isSending}
                     maxAudioBytes={transcriptionMaxAudioBytes}
                     maxDurationSeconds={transcriptionMaxDurationSeconds}
                     onError={setDictationError}

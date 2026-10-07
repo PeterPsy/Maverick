@@ -9,6 +9,8 @@ from core.api import app_reference_payloads
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.device_use.models import DeviceUseSessionBinding
+from core.device_use.contract import DEVICE_USE_PROTOCOL_VERSION, DEVICE_USE_EXECUTOR_CONTRACT, DEVICE_USE_TOOL_CONTRACT_DIGEST
 from core.providers.agentic_profiles import build_pinned_execution_binding
 from core.providers.errors import AgenticRuntimeError
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -132,6 +134,12 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
         self.assertEqual(status, 202)
 
     def test_runtime_turn_materializes_references_server_side(self) -> None:
+        self._assert_reference_materialization(mac_access=False)
+
+    def test_disconnected_mac_chat_still_materializes_app_references(self) -> None:
+        self._assert_reference_materialization(mac_access=True)
+
+    def _assert_reference_materialization(self, *, mac_access: bool) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             self._write_reference_app(repo_root / "apps" / "records")
@@ -156,6 +164,12 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 workspace_id="default",
                 agent_id="chat",
                 owner_user_id="user:admin",
+                device_use_binding=DeviceUseSessionBinding(
+                    activation_id="stopped-mac", workspace_id="default", owner_user_id="user:admin",
+                    protocol_version=DEVICE_USE_PROTOCOL_VERSION, executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
+                    tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="full", initial_app="com.apple.Safari",
+                    approved_apps=("com.apple.Safari",), created_at=datetime.now(timezone.utc),
+                ) if mac_access else None,
                 requested_mode="sandbox",
                 start_path=repo_root,
                 execution_binding=build_pinned_execution_binding(

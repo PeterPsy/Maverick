@@ -124,7 +124,7 @@ def steer_codex_app_server_turn(
                 with runtime.active_turn_lock:
                     if runtime.current_provider_turn_id == expected_turn_id:
                         runtime.current_task_text = runtime.current_task_text[:1500] + "\n[Latest user correction]\n" + input_text[-2400:]
-            if invoked_skills and not device_use:
+            if invoked_skills:
                 with runtime.skill_rehydration_lock:
                     skills_by_id = {skill.skill_id: skill for skill in runtime.current_invoked_skills}
                     for skill in invoked_skills:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.device_use.contract import (
-    device_use_base_instructions,
+    device_use_instructions,
     device_use_dynamic_tools,
 )
 from core.providers.codex_prompt_budget import (
@@ -118,38 +118,37 @@ def codex_thread_params(
             "personality": "none",
             "config": codex_research_config(),
         }
-    if getattr(session, "device_use_binding", None) is not None:
-        binding = session.device_use_binding
-        execution_binding = getattr(session, "execution_binding", None)
-        model_id = str(getattr(execution_binding, "model_id", "") or "").strip()
-        if not model_id:
-            raise ValueError("Device Use requires a pinned Codex model")
-        return {
-            "model": model_id,
-            "modelProvider": "openai",
-            "cwd": launch_spec.working_directory,
-            "approvalPolicy": "never",
-            "sandbox": "read-only",
-            # The native lease outlives an individual provider process. Keep a
-            # private archive so subsequent turns resume the same conversation.
-            "ephemeral": False,
-            "environments": [],
-            "dynamicTools": device_use_dynamic_tools(),
-            "baseInstructions": device_use_base_instructions(
-                mode=binding.mode,
-                approved_apps=binding.approved_apps,
-                initial_app=binding.initial_app,
-            ),
-            "config": {"mcp_servers": {}, "project_doc_max_bytes": 0},
-        }
     params = {
         "approvalPolicy": "never",
         "cwd": launch_spec.working_directory,
         "sandbox": "danger-full-access" if launch_spec.execution_mode == "full-access" else "read-only",
-        "developerInstructions": session.system_prompt or "",
+        "developerInstructions": getattr(session, "system_prompt", None) or "",
         "config": {"mcp_servers": {}},
     }
     if getattr(session, "skill_activation_mode", "implicit") == "explicit":
         params["baseInstructions"] = CODEX_EXPLICIT_BASE_INSTRUCTIONS
         params["config"]["project_doc_max_bytes"] = CODEX_EXPLICIT_PROJECT_DOC_MAX_BYTES
+    binding = getattr(session, "device_use_binding", None)
+    if binding is not None:
+        execution_binding = getattr(session, "execution_binding", None)
+        model_id = str(getattr(execution_binding, "model_id", "") or "").strip()
+        if not model_id:
+            raise ValueError("Device Use requires a pinned Codex model")
+        params.update({
+            "model": model_id,
+            "modelProvider": "openai",
+            "ephemeral": False,
+            "dynamicTools": device_use_dynamic_tools(),
+            "developerInstructions": "\n\n".join(filter(None, (
+                params["developerInstructions"],
+                device_use_instructions(
+                    mode=binding.mode,
+                    approved_apps=binding.approved_apps,
+                    initial_app=binding.initial_app,
+                ),
+            ))),
+        })
+        # Native dynamic calls require the bundled host, alongside the ordinary
+        # shell and workspace tools enabled by the managed runtime home.
+        params["config"]["features"] = {"code_mode_host": True, "code_mode": False}
     return params

@@ -158,11 +158,13 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 "agent_id": "chat",
                 "source_app_id": "chat",
                 "runtime_mode": "agentic",
-                "requested_mode": "sandbox",
+                "requested_mode": "full-access",
                 "workspace_profile_binding_id": binding.binding_id,
                 "reasoning_effort": "max",
                 "device_use_activation_id": activation["activation_id"],
-                "system_prompt": "must be ignored",
+                "system_prompt": "Use Maverick app surfaces and the Mac",
+                "skill_activation_mode": "implicit",
+                "project_id": "mac-project",
             }
             with patch("core.api.runtime_api._prewarm_new_runtime_session", return_value=None):
                 status, session, _ = self._invoke(
@@ -179,10 +181,12 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             self.assertEqual(session["execution_binding"]["runtime_engine_id"], "codex")
             self.assertEqual(session["execution_binding"]["model_id"], "gpt-5.6-sol")
             self.assertEqual(session["execution_binding"]["reasoning_effort"], "max")
-            self.assertEqual(session["requested_mode"], "sandbox")
-            self.assertEqual(session["system_prompt"], None)
+            self.assertEqual(session["requested_mode"], "full-access")
+            self.assertEqual(session["effective_mode"], "full-access")
+            self.assertEqual(session["system_prompt"], "Use Maverick app surfaces and the Mac")
             self.assertEqual(session["skill_ids"], [])
-            self.assertEqual(session["skill_activation_mode"], "explicit")
+            self.assertEqual(session["skill_activation_mode"], "implicit")
+            self.assertEqual(session["project_id"], "mac-project")
 
             before = state.runtime_store.list_all_sessions()
             with patch("core.api.runtime_api._prewarm_new_runtime_session", return_value=None):

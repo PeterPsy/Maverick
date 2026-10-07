@@ -300,6 +300,15 @@ describe("composer utilities", () => {
     expect(onSelectDeviceUseMode).toHaveBeenCalledWith("off");
   });
 
+  it("keeps ordinary composer capabilities available with PC use enabled", async () => {
+    const { element } = await renderComposer({ deviceUseAvailable: true, deviceUseEnabled: true });
+    for (const label of ["Add attachments", "Apps and references", "Multi-agent mode: Off", "Agent runner: Free Agent"]) {
+      const button = element.querySelector(`[aria-label="${label}"]`);
+      expect(button, label).toBeInstanceOf(HTMLButtonElement);
+      expect((button as HTMLButtonElement).disabled, label).toBe(false);
+    }
+  });
+
   it("keeps attachment and primary actions outside the secondary utility panel", async () => {
     const { element } = await renderComposer({
       canStopTurn: true,

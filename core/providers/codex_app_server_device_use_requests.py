@@ -6,6 +6,7 @@ import queue
 import threading
 from typing import Any, Callable
 
+from core.device_use.contract import device_use_dynamic_tools
 from core.device_use.runtime_registry import stop_registered_device_use_session
 from core.providers.codex_app_server_device_use import (
     process_device_use_request,
@@ -14,6 +15,7 @@ from core.providers.codex_app_server_device_use import (
 
 
 ServerRequestFallback = Callable[[object, dict[str, Any]], None]
+_NATIVE_TOOL_NAMES = frozenset(tool["name"] for tool in device_use_dynamic_tools())
 
 
 def start_device_use_request_worker(runtime) -> None:
@@ -35,7 +37,13 @@ def dispatch_server_request(
     fallback: ServerRequestFallback,
 ) -> None:
     """Keep native calls off stdout; preserve legacy handling otherwise."""
-    if runtime.device_use_binding is None:
+    params = payload.get("params")
+    if (
+        runtime.device_use_binding is None
+        or payload.get("method") != "item/tool/call"
+        or not isinstance(params, dict)
+        or params.get("tool") not in _NATIVE_TOOL_NAMES
+    ):
         fallback(runtime, payload)
         return
     try:

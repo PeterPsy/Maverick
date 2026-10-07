@@ -18,7 +18,7 @@ repository; its companion source document is
 
 ### Parallel companion on the same macOS (2026-10-07)
 
-The native 0.1.3 / build 47 companion runs on the user's existing macOS. The
+The native 0.1.4 / build 48 companion runs on the user's existing macOS. The
 user explicitly rejected a second macOS. A separate native-owned headless
 Chrome/Edge process has its own persistent profile, tabs, fixed viewport and
 logical cursor; targeted CDP events never move the physical pointer or activate
@@ -52,6 +52,17 @@ conversations can upgrade only by explicit idle reconnection, retiring provider
 context without changing their model or On/Full binding. Deploy Core before
 installing this native contract. The companion source document owns native
 module/resource/lifecycle details and physical acceptance results.
+
+The additive workspace-chat correction was deployed on 2026-10-07 from Core
+commit `b30e63a4`, followed by a healthy managed backend restart. Native build
+0.1.4 (48), revision `6fca24f26f24`, was installed and opened on `MacBook-Pro-6`
+by GitHub Actions run `37659756971`. The runner passed 265 Swift and 37 Python
+tests, verified the Apple Development signature and update identity continuity,
+and reported the installed version running. Core/provider/API regression tests,
+88 Chat unit tests, the official Chat frontend build and the PC use browser
+checks at desktop/mobile widths passed. These checks cover chat admission,
+normal workspace context and native authority; they do not assert a physical
+cross-app business workflow was completed.
 
 The Mac app is a chrome-free WebView of the ordinary Maverick Chat. There is no
 native status/setup toolbar and no `Sul server` / `Su questo Mac` selector. Chat

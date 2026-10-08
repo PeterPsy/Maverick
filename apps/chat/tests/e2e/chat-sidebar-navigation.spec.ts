@@ -140,6 +140,49 @@ for (const width of [280, 390]) {
       path: testInfo.outputPath(`sidebar-${width}.png`),
     });
 
+    const viewSwitcher = page.getByRole("button", { name: "Choose chat view" });
+    const searchTrigger = page.getByRole("button", {
+      name: "Search chats",
+      exact: true,
+    });
+    await expect(viewSwitcher).not.toContainText("Chat");
+    const viewBounds = await viewSwitcher.boundingBox();
+    const searchBounds = await searchTrigger.boundingBox();
+    expect(Math.abs(viewBounds!.y - searchBounds!.y)).toBeLessThan(1);
+    expect(searchBounds!.x).toBeGreaterThanOrEqual(
+      viewBounds!.x + viewBounds!.width,
+    );
+    await searchTrigger.click();
+    const expandedSearch = page.getByRole("textbox", { name: "Search chats" });
+    await expect(expandedSearch).toBeFocused();
+    await expect(viewSwitcher).toBeHidden();
+    const searchFrame = page.locator(".bs-chat-sidebar-search-frame");
+    expect((await searchFrame.boundingBox())!.width).toBeGreaterThan(
+      viewBounds!.width,
+    );
+    await page.screenshot({
+      path: testInfo.outputPath(`sidebar-search-${width}.png`),
+    });
+    await expandedSearch.press("Escape");
+    await expect(viewSwitcher).toBeVisible();
+    await expect(searchTrigger).toBeFocused();
+
+    await searchTrigger.click();
+    await expandedSearch.fill("Market research");
+    await expect(page.locator(".bs-chat-list__item")).toHaveCount(1);
+    await page
+      .getByRole("button", { name: "New project", exact: true })
+      .focus();
+    await expect(viewSwitcher).toBeVisible();
+    await expect(searchTrigger).toHaveAttribute(
+      "title",
+      "Search: Market research",
+    );
+    await searchTrigger.click();
+    await expect(expandedSearch).toHaveValue("Market research");
+    await expandedSearch.press("Escape");
+    await expect(page.locator(".bs-chat-list__item")).toHaveCount(6);
+
     await page.getByRole("button", { name: "Choose chat view" }).click();
     const menu = page.getByRole("menu");
     await expect(menu.getByRole("menuitemradio")).toHaveCount(8);

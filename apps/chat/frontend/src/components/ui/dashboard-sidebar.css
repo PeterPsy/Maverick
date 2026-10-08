@@ -16,16 +16,25 @@
 .dashboard-sidebar__toolbar {
   flex: none;
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 6px;
   padding: 0 4px 10px;
+}
+.dashboard-sidebar__toolbar.is-searching {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dashboard-sidebar__toolbar.is-searching .dashboard-sidebar__switcher {
+  display: none;
 }
 .dashboard-sidebar__switcher {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   width: 100%;
-  min-height: 52px;
-  padding: 7px 8px;
+  min-width: 0;
+  height: var(--chat-sidebar-search-height);
+  padding: 3px 4px;
   border-radius: 12px;
   background: transparent;
 }
@@ -44,14 +53,10 @@
   color: var(--maverick-text-on-accent);
 }
 .dashboard-sidebar__switcher-copy {
-  display: grid;
-  gap: 3px;
-}
-.dashboard-sidebar__eyebrow {
-  font-size: 10px;
-  color: var(--maverick-text-muted);
+  display: block;
 }
 .dashboard-sidebar__switcher-title {
+  display: block;
   font-size: 13px;
   font-weight: 600;
 }
@@ -165,15 +170,36 @@
   cursor: default;
 }
 .dashboard-sidebar__switcher:focus-visible,
+.dashboard-sidebar__search-trigger:focus-visible,
 .dashboard-sidebar__icon-button:focus-visible {
   outline: 2px solid var(--maverick-accent);
   outline-offset: -2px;
 }
-.dashboard-sidebar__shortcut {
-  color: var(--maverick-text-soft);
-  font-family: inherit;
-  font-size: 9px;
-  white-space: nowrap;
+.dashboard-sidebar__search-trigger {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: var(--chat-sidebar-search-height);
+  padding: 0;
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: 10px;
+  background: var(--chat-sidebar-glass-surface);
+  color: var(--maverick-text-muted);
+}
+.dashboard-sidebar__search-trigger:hover,
+.dashboard-sidebar__search-trigger.has-query {
+  background: var(--chat-sidebar-soft-surface-hover);
+  color: var(--maverick-text);
+}
+.dashboard-sidebar__search-indicator {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--maverick-accent);
 }
 .dashboard-sidebar__disclosure {
   display: grid;

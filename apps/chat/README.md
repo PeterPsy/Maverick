@@ -120,8 +120,12 @@ The shell-hosted `chat-sidebar` uses the adapted dashboard sidebar in
 `frontend/src/components/ui/dashboard-sidebar.tsx`. Its dropdown groups real
 conversation views (all, recent, unread/active) and categories (Research,
 Multi-agent, Device Use, Senses, OpenDesign), with live catalog counts. Search
-still uses the existing title/project/transcript index; Cmd/Ctrl K focuses it,
-and Escape or the clear button resets it. Changing search or view opens the
+still uses the existing title/project/transcript index. The view selector and
+search trigger share one row, without a Chat subtitle. Clicking search or pressing
+Cmd/Ctrl K expands the field across the whole row and hides the selector. Leaving
+the search field restores the compact row and retains the query, indicated on
+the search trigger; Escape clears the query and closes search. The clear button
+resets a query, or closes an empty field. Changing search or view opens the
 matching project groups. Each whole project header toggles an animated disclosure;
 the project toolbar can expand/collapse all groups or create a project even when
 the current view is empty; successful creation returns to all conversations so

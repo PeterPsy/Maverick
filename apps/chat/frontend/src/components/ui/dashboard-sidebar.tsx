@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronDown, Search, X, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, type LucideIcon } from "lucide-react";
+import { SidebarSearch } from "./sidebar-search";
 import "./dashboard-sidebar.css";
 
 export type NavItemData = {
@@ -32,28 +33,18 @@ export function SidebarNav({
   onSearchChange: (query: string) => void;
   children: ReactNode;
 }) {
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const activeItem =
     groups
       .flatMap((group) => group.items)
       .find((item) => item.id === activeId) ?? groups[0]?.items[0];
   const ActiveIcon = activeItem?.icon;
 
-  useEffect(() => {
-    function focusSearch(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
-      }
-    }
-    document.addEventListener("keydown", focusSearch);
-    return () => document.removeEventListener("keydown", focusSearch);
-  }, []);
-
   return (
     <div className="dashboard-sidebar flex min-h-0 flex-1 flex-col">
-      <div className="dashboard-sidebar__toolbar">
+      <div
+        className={`dashboard-sidebar__toolbar ${isSearchExpanded ? "is-searching" : ""}`}
+      >
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
@@ -65,7 +56,6 @@ export function SidebarNav({
                 {ActiveIcon ? <ActiveIcon size={18} strokeWidth={1.5} /> : null}
               </span>
               <span className="dashboard-sidebar__switcher-copy min-w-0 flex-1 text-left">
-                <span className="dashboard-sidebar__eyebrow">Chat</span>
                 <span className="dashboard-sidebar__switcher-title truncate">
                   {activeItem?.title}
                 </span>
@@ -135,35 +125,12 @@ export function SidebarNav({
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
-        <div className="bs-chat-sidebar-search-frame">
-          <Search aria-hidden="true" size={16} />
-          <input
-            aria-label="Search chats"
-            className="bs-chat-sidebar-search"
-            onChange={(event) => onSearchChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") onSearchChange("");
-            }}
-            placeholder="Search chats and messages"
-            ref={searchRef}
-            value={searchQuery}
-          />
-          {searchQuery ? (
-            <button
-              aria-label="Clear chat search"
-              className="dashboard-sidebar__icon-button"
-              onClick={() => {
-                onSearchChange("");
-                searchRef.current?.focus();
-              }}
-              type="button"
-            >
-              <X size={14} />
-            </button>
-          ) : (
-            <kbd className="dashboard-sidebar__shortcut">⌘/Ctrl K</kbd>
-          )}
-        </div>
+        <SidebarSearch
+          expanded={isSearchExpanded}
+          onExpandedChange={setIsSearchExpanded}
+          onSearchChange={onSearchChange}
+          searchQuery={searchQuery}
+        />
       </div>
       {children}
     </div>

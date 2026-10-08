@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "bc64f30fdfdb6943a22e29500757d113904bc333090895c6ff93b77ed4e80d13",
+  "build_id": "019c5a959551dfc98e5ff9bab630e3cd8fdcaecdbba8b162a1e5c767b094ccae",
   "entrypoints": [
     "index.html",
     "widgets/chat-floating/index.html",
@@ -51,14 +51,14 @@
       "size_bytes": 15136
     },
     {
+      "path": "assets/index-B91EimU7.css",
+      "sha256": "53f850094bee9e31a50195037048a3000764c0fd01f392528a8905aef099e0f4",
+      "size_bytes": 37238
+    },
+    {
       "path": "assets/index-BQbK3Xl0.js",
       "sha256": "66fbe5f142913832db585ac5d2290879a87e2828c262d07a3189dc34dd6821f4",
       "size_bytes": 4207
-    },
-    {
-      "path": "assets/index-BUTTj1xq.css",
-      "sha256": "4de7345fb9b838652674be367d3939561fd63202465ed15bfca1054dd28424b8",
-      "size_bytes": 36514
     },
     {
       "path": "assets/index-CW9znrVY.css",
@@ -111,9 +111,9 @@
       "size_bytes": 3609
     },
     {
-      "path": "assets/widgets/chat-sidebar/index-BEOq5Vld.js",
-      "sha256": "151b374448af1ed08e63357c04aba64cf12c2b9418cfa718e5d0826d90d778c3",
-      "size_bytes": 119645
+      "path": "assets/widgets/chat-sidebar/index-D8w5hhnf.js",
+      "sha256": "76651107fdf767850cea92f6869add88600d73200e786dede8f91b21900c397b",
+      "size_bytes": 120377
     },
     {
       "path": "assets/widgets/chat-sidebar-footer/index-BjCTxTad.js",
@@ -159,7 +159,7 @@
     },
     {
       "path": "widgets/chat-sidebar/index.html",
-      "sha256": "7d97805011b7b37048f044153559e8d3f40ec16e62c590d93c5035d0a16db674",
+      "sha256": "8b468103d4c9591a3ed56788329b5657ce8589989531e865a24a86ccfd702c98",
       "size_bytes": 2227
     },
     {

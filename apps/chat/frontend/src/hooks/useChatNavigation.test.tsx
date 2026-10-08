@@ -26,6 +26,8 @@ const shellMocks = vi.hoisted(() => ({
   openChatThreadRouteInShell: vi.fn(),
 }));
 
+const catalogMocks = vi.hoisted(() => ({ threadsLoaded: true }));
+
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
   return {
@@ -37,7 +39,7 @@ vi.mock("../api/client", async (importOriginal) => {
 });
 
 vi.mock("./useRuntimeThreadCatalog", () => ({
-  useRuntimeThreadCatalog: () => ({ threadsLoaded: true }),
+  useRuntimeThreadCatalog: () => ({ threadsLoaded: catalogMocks.threadsLoaded }),
 }));
 
 vi.mock("./useRuntimeTranscriptCache", () => ({
@@ -61,14 +63,10 @@ vi.mock("../lib/queuedMessages", () => ({
   readRecoverableQueuedMessages: vi.fn(() => []),
 }));
 
-vi.mock("../lib/shellNavigation", () => ({
-  chatNavigationRequestKey: vi.fn(() => "navigation-key"),
-  consumeNewChatRequest: vi.fn(() => true),
-  normalizeChatRouteParams: (params: Record<string, string | boolean | null>) => params,
+vi.mock("../lib/shellNavigation", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../lib/shellNavigation")>(),
   openChatRootRouteInShell: shellMocks.openChatRootRouteInShell,
   openChatThreadRouteInShell: shellMocks.openChatThreadRouteInShell,
-  runtimeSessionThreadMetadataFromParams: vi.fn(() => ({})),
-  scalarString: (value: unknown) => (typeof value === "string" ? value : ""),
 }));
 
 vi.mock("../lib/threadNavigation", async (importOriginal) => {
@@ -81,6 +79,7 @@ vi.mock("../lib/threadNavigation", async (importOriginal) => {
 
 type ProbeState = {
   activeThread: ChatThread | null;
+  draftChat: DraftChat | null;
   error: string | null;
   isBootstrapping: boolean;
   targetConversationResolved: boolean;
@@ -107,10 +106,12 @@ function thread(overrides: Partial<ChatThread> = {}): ChatThread {
 
 function NavigationProbe({
   initialThreads = [],
+  onNavigationReady,
   onState,
   threadId,
 }: {
   initialThreads?: ChatThread[];
+  onNavigationReady?: (navigation: ReturnType<typeof useChatNavigation>) => void;
   onState: (state: ProbeState) => void;
   threadId: string | null;
 }) {
@@ -137,7 +138,6 @@ function NavigationProbe({
   void activeSession;
   void activeTurn;
   void composer;
-  void draftChat;
   void events;
   void failedUserMessages;
   void isHistoryLoading;
@@ -146,7 +146,7 @@ function NavigationProbe({
   void queuedMessages;
   void selectedReferences;
 
-  useChatNavigation({
+  const navigation = useChatNavigation({
     activeAppContext: null,
     activeSession,
     activeThread,
@@ -191,8 +191,12 @@ function NavigationProbe({
   });
 
   useEffect(() => {
-    onState({ activeThread, error, isBootstrapping, targetConversationResolved, threads });
-  }, [activeThread, error, isBootstrapping, onState, targetConversationResolved, threads]);
+    onNavigationReady?.(navigation);
+  }, [navigation, onNavigationReady]);
+
+  useEffect(() => {
+    onState({ activeThread, draftChat, error, isBootstrapping, targetConversationResolved, threads });
+  }, [activeThread, draftChat, error, isBootstrapping, onState, targetConversationResolved, threads]);
 
   return null;
 }
@@ -218,11 +222,14 @@ async function waitForAssertion(assertion: () => void) {
   throw lastError;
 }
 
-describe("useChatNavigation deep links", () => {
+describe("useChatNavigation initial selection and deep links", () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    window.history.replaceState(null, "", "/apps/chat/");
+    catalogMocks.threadsLoaded = true;
     apiMocks.createThread.mockReset();
     apiMocks.getRuntimeThread.mockReset();
     apiMocks.isRuntimeSessionUnavailableError.mockClear();
@@ -240,6 +247,97 @@ describe("useChatNavigation deep links", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it.each(["free", "busy", "quarantined"])("starts a new chat instead of selecting the first %s thread", async (availability) => {
+    const states: ProbeState[] = [];
+    await act(async () => {
+      root.render(<NavigationProbe initialThreads={[thread({ availability })]} onState={(state) => states.push(state)} threadId={null} />);
+    });
+
+    await waitForAssertion(() => {
+      expect(states.at(-1)?.draftChat?.draftId).toBe("active");
+      expect(states.at(-1)?.isBootstrapping).toBe(false);
+    });
+    expect(states.at(-1)?.activeThread).toBeNull();
+    expect(states.at(-1)?.targetConversationResolved).toBe(true);
+    expect(states.at(-1)?.error).toBeNull();
+    expect(apiMocks.getRuntimeThread).not.toHaveBeenCalled();
+    expect(apiMocks.createThread).not.toHaveBeenCalled();
+    expect(transcriptMocks.setActiveRuntimeSessionId).not.toHaveBeenCalled();
+    expect(shellMocks.openChatRootRouteInShell).not.toHaveBeenCalled();
+  });
+
+  it("opens a thread explicitly requested in the URL", async () => {
+    const states: ProbeState[] = [];
+    window.history.replaceState(null, "", "/apps/chat/?thread_id=requested-thread");
+    await act(async () => {
+      root.render(<NavigationProbe initialThreads={[thread(), thread({ thread_id: "requested-thread" })]} onState={(state) => states.push(state)} threadId={null} />);
+    });
+    await waitForAssertion(() => expect(states.at(-1)?.activeThread?.thread_id).toBe("requested-thread"));
+    expect(states.at(-1)?.draftChat).toBeNull();
+  });
+
+  it("opens delayed shell navigation without replacing its route with the initial draft", async () => {
+    const states: ProbeState[] = [];
+    let navigation: ReturnType<typeof useChatNavigation>;
+    const selectedThread = thread({ thread_id: "selected-thread" });
+    await act(async () => {
+      root.render(<NavigationProbe initialThreads={[thread(), selectedThread]}
+        onNavigationReady={(value) => { navigation = value; }} onState={(state) => states.push(state)} threadId={null} />);
+    });
+    expect(states.at(-1)?.draftChat?.draftId).toBe("active");
+    expect(shellMocks.openChatRootRouteInShell).not.toHaveBeenCalled();
+
+    await act(async () => navigation.handleNavigationParams({ app_page: "threads/selected-thread" }));
+
+    expect(states.at(-1)?.activeThread?.thread_id).toBe("selected-thread");
+    expect(states.at(-1)?.draftChat).toBeNull();
+    expect(shellMocks.openChatRootRouteInShell).not.toHaveBeenCalled();
+    expect(shellMocks.openChatThreadRouteInShell).toHaveBeenCalledWith("selected-thread", { navigationScope: "test" });
+  });
+
+  it("keeps pending shell navigation authoritative when the catalog arrives during its read", async () => {
+    catalogMocks.threadsLoaded = false;
+    const states: ProbeState[] = [];
+    let navigation: ReturnType<typeof useChatNavigation>;
+    let resolveThread!: (value: ChatThread) => void;
+    apiMocks.getRuntimeThread.mockReturnValue(new Promise<ChatThread>((resolve) => { resolveThread = resolve; }));
+    const renderProbe = () => root.render(<NavigationProbe initialThreads={[thread()]}
+      onNavigationReady={(value) => { navigation = value; }} onState={(state) => states.push(state)} threadId={null} />);
+    await act(async () => renderProbe());
+
+    let pendingNavigation!: Promise<void>;
+    await act(async () => {
+      pendingNavigation = navigation.handleNavigationParams({ app_page: "threads/selected-thread" });
+    });
+    catalogMocks.threadsLoaded = true;
+    await act(async () => renderProbe());
+
+    expect(states.at(-1)?.isBootstrapping).toBe(true);
+    expect(states.at(-1)?.draftChat).toBeNull();
+    expect(states.at(-1)?.activeThread).toBeNull();
+    expect(shellMocks.openChatRootRouteInShell).not.toHaveBeenCalled();
+    await act(async () => {
+      resolveThread(thread({ thread_id: "selected-thread" }));
+      await pendingNavigation;
+    });
+    expect(states.at(-1)?.activeThread?.thread_id).toBe("selected-thread");
+    expect(states.at(-1)?.draftChat).toBeNull();
+    expect(states.at(-1)?.isBootstrapping).toBe(false);
+  });
+
+  it.each([403, 503])("keeps a %s thread read failure visible without substituting another chat", async (status) => {
+    const states: ProbeState[] = [];
+    apiMocks.getRuntimeThread.mockRejectedValue(new ApiError("Unable to open chat.", { path: "/api/runtime/threads/selected-thread", status }));
+    await act(async () => {
+      root.render(<NavigationProbe initialThreads={[thread()]} onState={(state) => states.push(state)} threadId="selected-thread" />);
+    });
+    await waitForAssertion(() => expect(states.at(-1)?.error).toBe("Unable to open chat."));
+    expect(states.at(-1)?.activeThread).toBeNull();
+    expect(states.at(-1)?.draftChat).toBeNull();
+    expect(states.at(-1)?.targetConversationResolved).toBe(false);
+    expect(shellMocks.openChatRootRouteInShell).not.toHaveBeenCalled();
   });
 
   it("opens an existing deep-linked thread that is outside the local catalog", async () => {
@@ -262,7 +360,7 @@ describe("useChatNavigation deep links", () => {
     expect(transcriptMocks.setActiveRuntimeSessionId).toHaveBeenCalledWith("deep-session");
   });
 
-  it("keeps send disabled when a deep-linked thread is really missing", async () => {
+  it("falls back to a new chat when a deep-linked thread is confirmed missing", async () => {
     const states: ProbeState[] = [];
     apiMocks.getRuntimeThread.mockRejectedValue(
       new ApiError("runtime_thread_not_found", {
@@ -281,6 +379,8 @@ describe("useChatNavigation deep links", () => {
 
     expect(apiMocks.getRuntimeThread).toHaveBeenCalledWith("missing-thread");
     expect(states.at(-1)?.activeThread).toBeNull();
-    expect(states.at(-1)?.targetConversationResolved).toBe(false);
+    expect(states.at(-1)?.targetConversationResolved).toBe(true);
+    expect(states.at(-1)?.draftChat?.draftId).toBe("active");
+    expect(shellMocks.openChatRootRouteInShell).toHaveBeenCalled();
   });
 });

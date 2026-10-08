@@ -80,6 +80,13 @@ Mounted app frontends have a canonical user-facing shell route:
 
 This route belongs to the base shell and is served by the configured root shell app. It selects an enabled workspace app binding by its local app id and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `maverick.app.navigate` message.
 
+On reload, Base Shell preserves an explicit Chat conversation route. Chat
+starts with a new draft when no conversation is requested and never selects a
+saved conversation implicitly from its catalog. Its initial empty draft does
+not rewrite the shell URL while host navigation is pending; explicit navigation
+takes precedence over catalog bootstrap. A confirmed missing conversation falls
+back to a new draft, while transport and authorization failures remain errors.
+
 The frontend mount namespace remains:
 
 ```text

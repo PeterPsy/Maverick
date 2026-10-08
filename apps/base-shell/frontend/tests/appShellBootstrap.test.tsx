@@ -55,8 +55,14 @@ vi.mock("../src/usePwaDataCacheBrokerHost", () => ({
 }));
 
 vi.mock("../src/components/WorkspaceView", () => ({
-  WorkspaceView: ({ activeWorkspaceId, isLoading }: { activeWorkspaceId: string; isLoading: boolean }) => (
-    <div data-loading={String(isLoading)} data-testid="workspace-view" data-workspace-id={activeWorkspaceId}>
+  WorkspaceView: ({ activeWorkspaceId, activeApp, activeAppParams, isLoading }: {
+    activeWorkspaceId: string;
+    activeApp: AppRegistryItem | null;
+    activeAppParams: Record<string, string | boolean | null>;
+    isLoading: boolean;
+  }) => (
+    <div data-loading={String(isLoading)} data-testid="workspace-view" data-workspace-id={activeWorkspaceId}
+      data-app-id={activeApp?.app_id} data-app-params={JSON.stringify(activeAppParams)}>
       <iframe data-testid="mounted-app-frame" title="Mounted app" />
     </div>
   ),
@@ -120,6 +126,7 @@ describe("AppShell bootstrap", () => {
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    window.history.replaceState(null, "", "/");
     vi.clearAllMocks();
     dataCacheBrokerHost.frameScope = null;
     dataCacheBrokerHost.principal = null;
@@ -151,6 +158,37 @@ describe("AppShell bootstrap", () => {
       await Promise.resolve();
     });
   }
+
+  it("preserves the selected chat and its URL on a document reload", async () => {
+    window.history.replaceState(null, "", "/app/chat/threads/quarantined-thread?thread_id=quarantined-thread");
+    vi.spyOn(window.performance, "getEntriesByType").mockReturnValue([
+      { type: "reload" } as PerformanceNavigationTiming,
+    ]);
+
+    await renderShell();
+
+    const view = container.querySelector("[data-testid='workspace-view']");
+    expect(view?.getAttribute("data-app-id")).toBe("chat");
+    expect(JSON.parse(view!.getAttribute("data-app-params")!)).toEqual({
+      app_page: "threads/quarantined-thread",
+      thread_id: "quarantined-thread",
+    });
+    expect(window.location.pathname).toBe("/app/chat/threads/quarantined-thread");
+    expect(window.location.search).toBe("?thread_id=quarantined-thread");
+  });
+
+  it("forwards a chat deep link when the document is opened explicitly", async () => {
+    window.history.replaceState(null, "", "/app/chat/threads/selected-thread");
+    vi.spyOn(window.performance, "getEntriesByType").mockReturnValue([
+      { type: "navigate" } as PerformanceNavigationTiming,
+    ]);
+
+    await renderShell();
+
+    const view = container.querySelector("[data-testid='workspace-view']");
+    expect(JSON.parse(view!.getAttribute("data-app-params")!)).toEqual({ app_page: "threads/selected-thread" });
+    expect(window.location.pathname).toBe("/app/chat/threads/selected-thread");
+  });
 
   it("discards app settings on app switches, workspace changes and authorization loss", async () => {
     api.listApps.mockResolvedValue({ items: [app("chat"), app("mail")] });

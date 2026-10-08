@@ -95,6 +95,22 @@ describe("base-shell navigation", () => {
     expect(shellAppPath("memory", { preview_context: true, preview_context_request_id: "request-5" })).toBe("/app/memory");
   });
 
+  it.each([
+    ["/app/chat/threads/thread-123", ""],
+    ["/app/chat", "?thread_id=thread-123"],
+    ["/app/chat/runtime-sessions/session-123", ""],
+  ])("preserves the selected chat route at startup: %s%s", (path, search) => {
+    const route = parseShellAppRoute(path, search);
+    expect(isInitialChatLaunchRoute(route)).toBe(false);
+    expect(initialShellLaunchRoute(route, () => "request-1")).toEqual(route);
+  });
+
+  it("preserves other app routes at startup", () => {
+    const appRoute = parseShellAppRoute("/app/docs/page-123", "?focus=activity");
+    expect(isInitialChatLaunchRoute(appRoute)).toBe(false);
+    expect(initialShellLaunchRoute(appRoute, () => "request-1")).toEqual(appRoute);
+  });
+
   it("keeps mobile command params in the explicit transient set", () => {
     expect(Array.from(TRANSIENT_APP_COMMAND_PARAMS).sort()).toEqual([
       "new_agent",

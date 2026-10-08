@@ -44,6 +44,7 @@ type CreateChatOptions = {
   activeAppContext?: ActiveAppContext | null;
   projectId?: string | null;
   resetView?: boolean;
+  updateShellRoute?: boolean;
 };
 
 type UseChatNavigationParams = {
@@ -326,8 +327,8 @@ export function useChatNavigation({
       }
       const requestedThreadId = threadId || query.get("thread_id");
       const requestedGraphRunId = query.get("view") === "graph" ? query.get("inter_agent_run_id") || "" : "";
-      const firstThread = requestedThreadId ? threads.find((thread) => thread.thread_id === requestedThreadId) || null : threads[0] || null;
-      if (!firstThread) {
+      const requestedThread = requestedThreadId ? threads.find((thread) => thread.thread_id === requestedThreadId) || null : null;
+      if (!requestedThread) {
         if (requestedGraphRunId) {
           setActiveInterAgentGraphRunId(requestedGraphRunId);
         }
@@ -342,11 +343,12 @@ export function useChatNavigation({
           }
           return;
         }
-        createDraftChat({ activeAppContext, resetView: false });
+        // Host navigation may arrive after the catalog. Keep its URL intact.
+        createDraftChat({ activeAppContext, resetView: false, updateShellRoute: false });
         setError(null);
         return;
       }
-      await selectThreadWithoutHttp(firstThread);
+      await selectThreadWithoutHttp(requestedThread);
       setActiveInterAgentGraphRunId(requestedGraphRunId || null);
       setError(null);
     } catch (selectionError) {
@@ -374,7 +376,7 @@ export function useChatNavigation({
     clearAttachments();
   }
 
-  function createDraftChat({ activeAppContext: activeAppContextOverride, projectId = null, resetView = true }: CreateChatOptions = {}) {
+  function createDraftChat({ activeAppContext: activeAppContextOverride, projectId = null, resetView = true, updateShellRoute = true }: CreateChatOptions = {}) {
     initialSelectionHandledRef.current = true;
     debugThreadSync("app-create-draft-chat-start", {
       activeThreadId: activeThread?.thread_id || "",
@@ -402,12 +404,12 @@ export function useChatNavigation({
     setIsHistoryLoading(false);
     setIsOlderHistoryLoading(false);
     setActiveTurn(null);
-    if (resetView) {
-    }
     void loadDefaultSystemPrompt(activeAppContextOverride ?? activeAppContext).then((systemPrompt) => {
       setDraftChat((current) => (current ? { ...current, systemPrompt } : current));
     });
-    openChatRootRouteInShell({ navigationScope });
+    if (updateShellRoute) {
+      openChatRootRouteInShell({ navigationScope });
+    }
   }
 
   async function selectThreadWithoutHttp(thread: ChatThread | null) {
@@ -465,6 +467,7 @@ export function useChatNavigation({
     if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat && !requestedGraphRunId) {
       return;
     }
+    initialSelectionHandledRef.current = true;
     if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat && requestedGraphRunId) {
       setActiveInterAgentGraphRunId(requestedGraphRunId);
       return;
@@ -584,8 +587,7 @@ export function useChatNavigation({
       }
     }
     suppressedExternalThreadIdRef.current = threadId;
-    resetActiveConversation();
-    setTargetConversationResolved(false);
+    createDraftChat();
     setError(THREAD_NOT_FOUND_MESSAGE);
     return false;
   }

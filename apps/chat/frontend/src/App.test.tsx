@@ -585,13 +585,17 @@ describe("App agent catalog dependency refresh", () => {
 });
 
 describe("App thread navigation", () => {
-  it("does not allow sending to a draft when a requested thread is missing", async () => {
+  it("opens a usable new draft with a notice when the requested thread is missing", async () => {
     const element = await renderApp({ runtimeThreads: [] as ChatThread[], runtimeThreadsLoaded: true, threadId: "missing-thread" });
 
     await waitForAssertion(() => {
       expect(element.textContent).toContain("This chat is no longer available.");
-      expect(element.querySelector('[role="textbox"]')?.getAttribute("aria-disabled")).toBe("true");
+      expect(element.querySelector('[role="textbox"]')?.getAttribute("aria-disabled")).toBe("false");
       expect((element.querySelector('[aria-label="Send message"]') as HTMLButtonElement | null)?.disabled).toBe(true);
+    });
+    await typeComposerMessage(element, "Start a new conversation");
+    await waitForAssertion(() => {
+      expect((element.querySelector('[aria-label="Send message"]') as HTMLButtonElement | null)?.disabled).toBe(false);
     });
   });
 

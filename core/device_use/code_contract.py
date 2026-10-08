@@ -17,7 +17,7 @@ def code_tool_spec() -> dict[str, object]:
                 "expected_sha256": {"type": "string", "description": "Current read_file SHA-256 required for writes/replacements; use absent only when creating a new file."},
                 "old_text": {"type": "string", "maxLength": 12000, "description": "Exactly one occurrence required for replace_text."},
                 "new_text": {"type": "string", "maxLength": 12000},
-                "offset": {"type": "integer", "minimum": 0, "maximum": 4194304, "description": "UTF-8 byte offset from read_file next_offset."},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 4194304, "description": "Offset from next_offset: UTF-8 bytes for read_file, sorted entry index for list_files."},
                 "max_bytes": {"type": "integer", "minimum": 256, "maximum": 16000, "description": "Page size per file/output stream; default 8000."},
                 "command": {"type": "string", "maxLength": 8000, "description": "Explicit user-task shell command executed once on the Mac using /bin/zsh -c."},
                 "cwd": {"type": "string", "maxLength": 1000, "description": "Project-relative working directory, default .; this does not sandbox the shell."},

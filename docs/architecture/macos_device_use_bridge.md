@@ -8,17 +8,17 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v47`.
+direct path was then removed. The current executor contract is `macos-v49`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
 `docs/maverick-macos-device-use.md`. Keep both sides synchronized.
 
-## Mac-local coding companion (v48)
+## Mac-local coding companion (v49)
 
-The additive contract `macos-v48` has digest
-`5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d`.
-Reviewed explicit idle reconnection from v47 retires the old provider context
+The reviewed contract `macos-v49` has digest
+`eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf`.
+Reviewed explicit idle reconnection from v44–v48 retires the old provider context
 while preserving chat, owner, workspace and On/Full mode. Core must be deployed
 before the matching native client; unknown digests remain rejected.
 
@@ -35,6 +35,22 @@ network access. The motor runs `/bin/zsh -c` with an explicit local environment,
 without Terminal, global input or app activation. Core's wire calls remain short
 (180s; picker 300s); the native command has its own 1–3600s lifetime budget.
 Transport success and exit success are separate in result facts.
+
+Full operation deadlines cancel the exact native invocation without revoking the
+activation. The executor enforces its own deadline and accepts an owner-bound
+`device_use.cancel.v1` frame containing activation, invocation and call IDs.
+Core fences further operations while a timed-out invocation is settling; late
+acceptance, text or declared images are validated and discarded without changing
+its execution-unknown journal or replaying it. Stop, lock and actual transport
+loss still cancel work. Turn completion releases jobs and receipts while keeping
+the chat connected. Bounded On retains its existing timeout revocation contract.
+
+File cancellation is synchronized with final rename and each directory creation;
+prepared writes cannot commit after cancellation wins that boundary. Directory
+pages use a sorted entry-index `offset`/`next_offset` (256 entries, up to 100,000
+entries per scan). Re-read changed listings before continuing. Process output
+pages preserve valid UTF-8 scalars, wait for incomplete pipe bytes while running,
+and retain replacement decoding for invalid output or a discarded terminal tail.
 
 Jobs are owned by the active chat/turn and stop on turn completion, Stop, lock,
 disconnect and app exit/crash. A signed bundled command host monitors a lifetime

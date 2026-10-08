@@ -78,10 +78,10 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertIn("launch_app", tools["mac_peekaboo"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertIn("plain metadata", DEVICE_USE_COMPANION_GUIDANCE)
 
-    def test_contract_digest_is_the_frozen_macos_v48_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v49_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d",
+            "eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):
@@ -143,7 +143,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "initial app"):
             device_use_binding_from_document({**document, "mode": "on"})
 
-    def connected(self):
+    def connected(self, *, mode="on"):
         service = DeviceUseService()
         activation, ticket = service.create_activation(
             owner_user_id="user-1",
@@ -157,7 +157,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
             protocol_version=DEVICE_USE_PROTOCOL_VERSION,
             executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            mode="on",
+            mode=mode,
             initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"],
             outbound=outbound,
@@ -169,6 +169,65 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         )
         service.bind_session(binding, session_id="runtime-1")
         return service, binding, outbound
+
+    def test_full_timeout_cancels_only_exact_operation_and_accepts_late_settlement(self):
+        for has_image in (False, True):
+            with self.subTest(has_image=has_image):
+                service, binding, outbound = self.connected(mode="full")
+                errors = []
+                worker = threading.Thread(target=lambda: self._capture_error(errors, lambda: service.invoke(
+                    binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                    provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="slow-call",
+                    tool_name="mac_computer", arguments={"action": "observe"}, task_text="observe", timeout_seconds=.05)))
+                worker.start(); frame = outbound.get(timeout=1)
+                worker.join(timeout=1)
+                self.assertEqual(str(errors[0]), "device_use_execution_timeout")
+                self.assertEqual(outbound.get(timeout=1), {
+                    "type": "device_use.cancel.v1", "activation_id": binding.activation_id,
+                    "invocation_id": frame["invocation_id"], "call_id": "slow-call",
+                })
+                self.assertTrue(service.binding_connected(binding, "runtime-1"))
+                with self.assertRaisesRegex(DeviceUseUnavailableError, "device_use_previous_execution_pending"):
+                    service.invoke(binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                        provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="before-settlement",
+                        tool_name="mac_computer", arguments={"action": "observe"}, task_text="observe", timeout_seconds=.01)
+                # Even acceptance can race the relay timeout. It never changes
+                # the terminal journal or dispatches the operation again.
+                service.accept_invocation(binding.activation_id, frame)
+                jpeg = b"\xff\xd8late\xff\xd9"
+                service.deliver_result(binding.activation_id, {
+                    "invocation_id": frame["invocation_id"], "call_id": "slow-call",
+                    "arguments_digest": frame["arguments_digest"],
+                    "result": {"success": True, "contentItems": [{"type": "inputText", "text": "late"}]},
+                    "has_image": has_image, **({"image_sha256": hashlib.sha256(jpeg).hexdigest()} if has_image else {}),
+                })
+                if has_image:
+                    service.deliver_image(binding.activation_id, encode_image_frame(
+                        invocation_id=frame["invocation_id"], call_id="slow-call", jpeg=jpeg))
+                self.assertEqual(service.journal()[-1].status, "execution_unknown")
+                self.assertEqual(service._pending, {})
+                service.end_turn(binding, runtime_session_id="runtime-1", turn_id="turn-1")
+                self.assertEqual(outbound.get(timeout=1)["type"], "device_use.turn_end.v1")
+                self.assertTrue(service.binding_connected(binding, "runtime-1"))
+
+    def test_bounded_on_timeout_retains_its_existing_revocation_contract(self):
+        service, binding, outbound = self.connected()
+        with self.assertRaisesRegex(Exception, "device_use_execution_timeout"):
+            service.invoke(binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="slow",
+                tool_name="mac_computer", arguments={"action": "observe"}, task_text="observe", timeout_seconds=.01)
+        self.assertEqual(outbound.get(timeout=1)["type"], "device_use.stop.v1")
+        self.assertFalse(service.binding_connected(binding, "runtime-1"))
+
+    def test_full_timeout_fence_is_cleaned_on_real_transport_loss(self):
+        service, binding, outbound = self.connected(mode="full")
+        with self.assertRaisesRegex(Exception, "device_use_execution_timeout"):
+            service.invoke(binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
+                provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="slow",
+                tool_name="mac_code", arguments={"action": "authorize_project"}, task_text="select", timeout_seconds=.01)
+        service.disconnect_executor(binding.activation_id)
+        self.assertEqual(service._pending, {})
+        self.assertEqual(service.journal()[-1].failure_reason_code, "device_use_execution_timeout")
 
     def test_full_mode_has_no_app_catalog_or_request_count_ceiling(self):
         service = DeviceUseService()

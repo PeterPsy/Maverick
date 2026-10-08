@@ -394,6 +394,10 @@ class DeviceUseService:
         ))
         with self._lock:
             activation = self._activation_for_binding_locked(binding, session_id=session_id)
+            if any(item.record.activation_id == activation.activation_id and
+                   item.failure_reason_code == "device_use_execution_timeout"
+                   for item in self._pending.values()):
+                raise DeviceUseUnavailableError("device_use_previous_execution_pending")
             seen_key = (activation.activation_id, turn)
             seen = self._seen_calls.setdefault(seen_key, set())
             if call in seen or (
@@ -442,7 +446,7 @@ class DeviceUseService:
         started = self._monotonic()
         if not pending.completed.wait(timeout_seconds + relay_grace_seconds):
             with self._lock:
-                if self._pending.pop(invocation_id, None) is not None:
+                if not pending.completed.is_set():
                     self._update_journal_locked(
                         pending,
                         status="execution_unknown",
@@ -450,11 +454,22 @@ class DeviceUseService:
                     )
                     activation = self._activations.get(binding.activation_id)
                     if activation is not None:
-                        self._stop_locked(
-                            activation,
-                            "device_use_execution_timeout",
-                        )
-            raise DeviceUseExecutionUnknownError("device_use_execution_timeout")
+                        if activation.mode == "full" and activation.outbound is not None:
+                            # Keep the lease. Gate further calls until the exact
+                            # native operation settles; late results never replay it.
+                            pending.failure_reason_code = "device_use_execution_timeout"
+                            try:
+                                activation.outbound.put_nowait({
+                                    "type": "device_use.cancel.v1",
+                                    "activation_id": activation.activation_id,
+                                    "invocation_id": invocation_id, "call_id": call,
+                                })
+                            except queue.Full:
+                                pass  # Native deadline also cancels the operation.
+                        else:
+                            self._pending.pop(invocation_id, None)
+                            self._stop_locked(activation, "device_use_execution_timeout")
+                    raise DeviceUseExecutionUnknownError("device_use_execution_timeout")
         elapsed_ms = max(0.0, (self._monotonic() - started) * 1000)
         with self._lock:
             self._pending.pop(invocation_id, None)
@@ -486,6 +501,8 @@ class DeviceUseService:
         """Record native acceptance without granting a duplicate execution."""
         with self._lock:
             pending = self._pending_for_frame_locked(activation_id, frame)
+            if pending.failure_reason_code == "device_use_execution_timeout":
+                return
             if pending.record.status != "dispatched":
                 raise DeviceUseAuthorizationError("device_use_duplicate_acceptance")
             self._update_journal_locked(pending, status="accepted")
@@ -519,7 +536,8 @@ class DeviceUseService:
         """Admit a bounded text tool result and wait for a declared image if any."""
         with self._lock:
             pending = self._pending_for_frame_locked(activation_id, frame)
-            if pending.record.status != "accepted" or pending.result is not None:
+            timed_out = pending.failure_reason_code == "device_use_execution_timeout"
+            if (pending.record.status != "accepted" and not timed_out) or pending.result is not None:
                 raise DeviceUseAuthorizationError("device_use_duplicate_result")
             result = frame.get("result")
             if not isinstance(result, dict):
@@ -558,6 +576,10 @@ class DeviceUseService:
             pending.result = dict(result)
             pending.native_duration_ms = float(duration) if duration is not None else None
             pending.native_user_wait_ms = float(user_wait) if user_wait is not None else None
+            if timed_out:
+                if not has_image:
+                    self._pending.pop(pending.record.invocation_id, None)
+                return
             self._update_journal_locked(pending, status="result_received")
             if not has_image:
                 pending.completed.set()
@@ -567,13 +589,17 @@ class DeviceUseService:
         header, jpeg = decode_image_frame(payload)
         with self._lock:
             pending = self._pending_for_frame_locked(activation_id, header)
-            if pending.record.status != "result_received" or pending.image_jpeg is not None:
+            timed_out = pending.failure_reason_code == "device_use_execution_timeout"
+            if (pending.record.status != "result_received" and not timed_out) or pending.image_jpeg is not None:
                 raise DeviceUseAuthorizationError("device_use_duplicate_image")
             if pending.result is None or pending.expected_image_sha256 is None:
                 raise DeviceUseAuthorizationError("device_use_image_not_declared")
             actual_digest = hashlib.sha256(jpeg).hexdigest()
             if not hmac.compare_digest(actual_digest, pending.expected_image_sha256):
                 raise DeviceUseAuthorizationError("device_use_image_digest_mismatch")
+            if timed_out:
+                self._pending.pop(pending.record.invocation_id, None)
+                return
             pending.image_jpeg = jpeg
             self._update_journal_locked(
                 pending,
@@ -763,8 +789,11 @@ class DeviceUseService:
         *,
         execution_unknown: bool,
     ) -> None:
-        for pending in self._pending.values():
+        for pending in list(self._pending.values()):
             if pending.record.activation_id != activation_id:
+                continue
+            if pending.failure_reason_code == "device_use_execution_timeout":
+                self._pending.pop(pending.record.invocation_id, None)
                 continue
             pending.failure_reason_code = reason
             self._update_journal_locked(

@@ -9,7 +9,7 @@ from core.device_use.code_contract import CODE_GUIDANCE, code_tool_spec
 
 
 DEVICE_USE_PROTOCOL_VERSION = "maverick.device-use.v1"
-DEVICE_USE_EXECUTOR_CONTRACT = "macos-v48"
+DEVICE_USE_EXECUTOR_CONTRACT = "macos-v49"
 DEVICE_USE_MAX_JPEG_BYTES = 4_000_000
 # EventKit v40 admits a bounded 200 KB JSON read before it is wrapped as a
 # dynamic-tool result. The relay bound includes JSON string escaping so the

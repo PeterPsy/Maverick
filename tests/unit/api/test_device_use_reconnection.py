@@ -25,6 +25,16 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_reviewed_v48_coding_upgrade_retires_old_context(self):
+        old = replace(self.before.device_use_binding, executor_contract="macos-v48",
+                      tool_contract_digest="5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d")
+        self.state.runtime_store.save_session(replace(self.before, device_use_binding=old))
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual(status, 200, payload)
+        current = self.state.runtime_store.get_session(self.session_id)
+        self.assertEqual(current.device_use_binding.executor_contract, DEVICE_USE_EXECUTOR_CONTRACT)
+        self.assertEqual(current.execution_binding, self.before.execution_binding)
+
     def test_reviewed_v46_repair_upgrade_retires_old_context(self):
         old = replace(self.before.device_use_binding, executor_contract="macos-v46",
                       tool_contract_digest="776dd4eeb79c7eca35ddda4475d6c412401987cebdd1f14fab34d1ef5345c7fb")
@@ -32,7 +42,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual(status, 200, payload)
         current = self.state.runtime_store.get_session(self.session_id)
-        self.assertEqual(current.device_use_binding.executor_contract, "macos-v47")
+        self.assertEqual(current.device_use_binding.executor_contract, DEVICE_USE_EXECUTOR_CONTRACT)
 
     def test_reviewed_v45_companion_upgrade_retires_context_and_preserves_authority(self):
         old = replace(self.before.device_use_binding, executor_contract="macos-v45",
@@ -41,7 +51,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual(status, 200, payload)
         current = self.state.runtime_store.get_session(self.session_id)
-        self.assertEqual(current.device_use_binding.executor_contract, "macos-v47")
+        self.assertEqual(current.device_use_binding.executor_contract, DEVICE_USE_EXECUTOR_CONTRACT)
         self.assertEqual(current.device_use_binding.mode, old.mode)
         self.assertEqual(current.execution_binding, self.before.execution_binding)
 
@@ -52,7 +62,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual(status, 200, payload)
         current = self.state.runtime_store.get_session(self.session_id)
-        self.assertEqual(current.device_use_binding.executor_contract, "macos-v47")
+        self.assertEqual(current.device_use_binding.executor_contract, DEVICE_USE_EXECUTOR_CONTRACT)
         self.assertEqual(current.execution_binding, self.before.execution_binding)
 
     def test_unknown_contract_upgrade_is_rejected(self):

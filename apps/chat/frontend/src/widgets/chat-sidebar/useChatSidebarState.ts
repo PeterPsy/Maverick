@@ -100,6 +100,7 @@ export function useChatSidebarState() {
   const isBulkDeletePendingRef = useRef(isBulkDeletePending);
   const confirmSelectedThreadDeletionRef = useRef<() => Promise<void>>(async () => {});
   const searchTerm = searchQuery.trim();
+  const collapseSectionsByDefault = threadFilter === "all" && !searchTerm;
   const threadCatalogIdentityKey = useMemo(
     () => threads.map((thread) => `${thread.thread_id}:${thread.runtime_session_id}`).sort().join("|"),
     [threads],
@@ -656,11 +657,15 @@ export function useChatSidebarState() {
     setExpandedThreadTitle("");
   }
 
-  function toggleSection(sectionId: string) {
-    setCollapsedSections((current) => ({ ...current, [sectionId]: !(current[sectionId] ?? false) }));
+  function isSectionCollapsed(sectionId: string) {
+    return collapsedSections[sectionId] ?? collapseSectionsByDefault;
   }
 
-  const areAllSectionsCollapsed = sections.length > 0 && sections.every((section) => collapsedSections[section.id]);
+  function toggleSection(sectionId: string) {
+    setCollapsedSections((current) => ({ ...current, [sectionId]: !(current[sectionId] ?? collapseSectionsByDefault) }));
+  }
+
+  const areAllSectionsCollapsed = sections.length > 0 && sections.every((section) => isSectionCollapsed(section.id));
 
   async function addProject() {
     const project = await projectActions.addProject();
@@ -695,7 +700,6 @@ export function useChatSidebarState() {
     cancelProjectEdit: projectActions.cancelProjectEdit,
     cancelThreadTouch,
     closeExpandedThread,
-    collapsedSections,
     confirmProjectDeletion: projectActions.confirmProjectDeletion,
     createChat,
     editingProject: projectActions.editingProject,
@@ -707,6 +711,7 @@ export function useChatSidebarState() {
     isInitialLoading,
     isPending,
     isProjectsLoading,
+    isSectionCollapsed,
     isShellMobileLayout,
     moveThread,
     multiAgentThreadIds,

@@ -86,7 +86,7 @@ function ChatSidebarWidget() {
             sidebar.sections.map((section) => (
               <ProjectSection
                 activeThreadId={sidebar.activeThreadId}
-                collapsed={sidebar.collapsedSections[section.id] ?? false}
+                collapsed={sidebar.isSectionCollapsed(section.id)}
                 editingProject={sidebar.editingProject}
                 editingProjectRef={sidebar.editingProjectRef}
                 expandedThreadId={sidebar.expandedThreadId}

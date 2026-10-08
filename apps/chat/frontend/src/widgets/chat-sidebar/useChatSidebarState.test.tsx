@@ -132,6 +132,50 @@ describe("useChatSidebarState search persistence", () => {
     vi.useRealTimers();
   });
 
+  it("starts compact, retains manual openings across runtime updates and reveals filtered results", async () => {
+    let sidebar!: ReturnType<typeof useChatSidebarState>;
+    let publishThreads!: Dispatch<SetStateAction<ChatThread[]>>;
+    const initialThread = thread({ title: "General research", runtime_profile: "research" });
+    mocks.readChatDisplay.mockResolvedValue({ projects: [{ project_id: "empty", name: "Empty project" }], has_more: false });
+    mocks.useRuntimeThreads.mockImplementation(({ setThreads }) => {
+      publishThreads = setThreads;
+      useEffect(() => { setThreads([initialThread]); }, []);
+    });
+    function Probe() {
+      sidebar = useChatSidebarState();
+      return null;
+    }
+    await act(async () => { root.render(<Probe />); });
+    expect(sidebar.sections).toHaveLength(2);
+    expect(sidebar.areAllSectionsCollapsed).toBe(true);
+
+    await act(async () => { sidebar.toggleSection("unassigned"); });
+    expect(sidebar.isSectionCollapsed("unassigned")).toBe(false);
+    expect(sidebar.isSectionCollapsed("empty")).toBe(true);
+    await act(async () => {
+      publishThreads([initialThread, thread({ thread_id: "late", runtime_session_id: "late-session", project_id: "late-project" })]);
+    });
+    expect(sidebar.sections).toHaveLength(3);
+    expect(sidebar.isSectionCollapsed("unassigned")).toBe(false);
+    expect(sidebar.isSectionCollapsed("project:late-project")).toBe(true);
+
+    await act(async () => { sidebar.toggleAllSections(); });
+    expect(sidebar.areAllSectionsCollapsed).toBe(true);
+    await act(async () => { sidebar.toggleAllSections(); });
+    expect(sidebar.sections.every(section => !sidebar.isSectionCollapsed(section.id))).toBe(true);
+
+    await act(async () => { sidebar.setSearchQuery("General research"); });
+    expect(sidebar.sections[0].items).toEqual([initialThread]);
+    expect(sidebar.isSectionCollapsed(sidebar.sections[0].id)).toBe(false);
+    await act(async () => { sidebar.setSearchQuery(""); });
+    expect(sidebar.areAllSectionsCollapsed).toBe(true);
+    await act(async () => { sidebar.setThreadFilter("research"); });
+    expect(sidebar.sections).toHaveLength(1);
+    expect(sidebar.isSectionCollapsed(sidebar.sections[0].id)).toBe(false);
+    await act(async () => { sidebar.setThreadFilter("all"); });
+    expect(sidebar.areAllSectionsCollapsed).toBe(true);
+  });
+
   it("keeps the project-read failure visible and recoverable when the runtime clears its own error", async () => {
     let setRuntimeError: Dispatch<SetStateAction<string | null>> = () => undefined;
     mocks.readChatDisplay.mockRejectedValueOnce(new Error("Project catalog unavailable"));

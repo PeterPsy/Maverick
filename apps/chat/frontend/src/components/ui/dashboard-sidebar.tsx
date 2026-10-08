@@ -54,9 +54,14 @@ export function SidebarNav({
               className="dashboard-sidebar__switcher"
               type="button"
             >
-              <span className="dashboard-sidebar__avatar">
-                {ActiveIcon ? <ActiveIcon size={18} strokeWidth={1.5} /> : null}
-              </span>
+              {ActiveIcon ? (
+                <ActiveIcon
+                  aria-hidden="true"
+                  className="dashboard-sidebar__view-icon"
+                  size={16}
+                  strokeWidth={1.5}
+                />
+              ) : null}
               <span className="dashboard-sidebar__switcher-copy min-w-0 flex-1 text-left">
                 <span className="dashboard-sidebar__switcher-title truncate">
                   {activeItem?.title}

@@ -127,6 +127,28 @@ for (const width of [280, 390]) {
     await expect(
       page.getByRole("button", { name: "Choose chat view" }),
     ).toContainText("All conversations");
+    await expect(
+      page.locator(".dashboard-sidebar__disclosure[inert]"),
+    ).toHaveCount(3);
+    await expect(
+      page.getByRole("button", { name: "Expand all projects" }),
+    ).toBeEnabled();
+    await page.screenshot({
+      path: testInfo.outputPath(`sidebar-default-${width}.png`),
+    });
+    await page
+      .getByRole("button", { name: "Show chats in project Product" })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Build the new sidebar", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".dashboard-sidebar__disclosure[inert]"),
+    ).toHaveCount(2);
+    await page
+      .getByRole("button", { name: "Hide chats in project Product" })
+      .click();
+    await page.getByRole("button", { name: "Expand all projects" }).click();
     const busyRow = page.locator(".bs-chat-list__item.is-busy");
     await expect(busyRow.locator(".bs-chat-list__glow-layer")).toHaveCount(6);
     expect(
@@ -258,6 +280,10 @@ for (const width of [280, 390]) {
     await page
       .getByRole("menuitemradio", { name: "All conversations" })
       .click();
+    await expect(
+      page.locator(".dashboard-sidebar__disclosure[inert]"),
+    ).toHaveCount(3);
+    await page.getByRole("button", { name: "Expand all projects" }).click();
     await page.getByRole("button", { name: "Collapse all projects" }).click();
     await expect(
       page.locator(".dashboard-sidebar__disclosure[inert]"),
@@ -312,7 +338,7 @@ for (const width of [280, 390]) {
     await rename.press("Enter");
     await expect(
       page.getByRole("button", {
-        name: "Hide chats in project Product launch",
+        name: "Show chats in project Product launch",
       }),
     ).toBeVisible();
     expect(mutations).toContainEqual({
@@ -340,7 +366,7 @@ for (const width of [280, 390]) {
       .getByRole("button", { name: "New project", exact: true })
       .click();
     await expect(
-      page.getByRole("button", { name: "Hide chats in project New project" }),
+      page.getByRole("button", { name: "Show chats in project New project" }),
     ).toBeVisible();
     expect(mutations).toContainEqual({
       action: "projects.create",

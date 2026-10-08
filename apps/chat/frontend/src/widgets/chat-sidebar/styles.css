@@ -224,8 +224,7 @@ input {
 }
 
 .bs-chat-sidebar-search-frame:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px rgba(var(--maverick-contrast-rgb), 0.18);
+  background: var(--chat-sidebar-soft-surface-hover);
 }
 
 @media (max-width: 979px) {

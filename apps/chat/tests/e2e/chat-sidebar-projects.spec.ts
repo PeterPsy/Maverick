@@ -124,6 +124,7 @@ test.describe("mobile filtered chat scrolling", () => {
     await expect(page.locator(".bs-chat-list__item")).toHaveCount(filteredThreads.length);
 
     const list = page.locator(".bs-chat-list");
+    await expect.poll(() => list.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0);
     const metrics = await list.evaluate((element) => ({
       clientHeight: element.clientHeight,
       scrollHeight: element.scrollHeight,

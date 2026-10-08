@@ -122,12 +122,19 @@ conversation views (all, recent, unread/active) and categories (Research,
 Multi-agent, Device Use, Senses, OpenDesign), with live catalog counts. Search
 still uses the existing title/project/transcript index. The view selector,
 expand/collapse and new-project actions, and search trigger share one row,
-without Chat or Projects headings. Clicking search or pressing
+without Chat or Projects headings. The selected view keeps the same inline icon
+as its dropdown item, including on narrow sidebars. The selector and search use
+soft background feedback on focus without bright outlines or focus rings.
+Clicking search or pressing
 Cmd/Ctrl K expands the field across the whole row and hides the selector. Leaving
 the search field restores the compact row and retains the query, indicated on
 the search trigger; Escape clears the query and closes search. The clear button
-resets a query, or closes an empty field. Changing search or view opens the
-matching project groups. Each whole project header toggles an animated disclosure.
+resets a query, or closes an empty field. Search and category views open their
+matching groups. All conversations starts with every group closed,
+including No project and projects arriving later from the catalog. Individual
+toggles and expand/collapse all stay consistent with that default; runtime updates
+retain manual choices. Returning to All conversations or clearing its search
+restores the compact list. Each whole project header toggles an animated disclosure.
 Closed project groups use compact 32px headers with 4px spacing.
 The project toolbar can expand/collapse all groups or create a project even when
 the current view is empty; successful creation returns to all conversations so

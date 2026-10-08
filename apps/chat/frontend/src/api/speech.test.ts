@@ -30,7 +30,7 @@ describe("synthesizeSpeechStream", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       action: "synthesize",
       _app_secret_request: {
-        logical_names: ["deepinfra-api-key", "openrouter-api-key"],
+        logical_names: ["deepinfra-api-key", "openrouter-api-key", "google-ai-studio-api-key"],
         required: false,
       },
       format: "pcm",

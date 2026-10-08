@@ -7,7 +7,7 @@ import type {
   SpeechTranscribePayload,
 } from "./types";
 
-const SYNTHESIS_SECRET_NAMES = ["deepinfra-api-key", "openrouter-api-key"];
+const SYNTHESIS_SECRET_NAMES = ["deepinfra-api-key", "openrouter-api-key", "google-ai-studio-api-key"];
 const CAPABILITY_SECRET_NAMES = ["deepgram-api-key", ...SYNTHESIS_SECRET_NAMES];
 
 export function getSpeechCapabilities(providerAppId: string): Promise<SpeechCapabilitiesPayload> {

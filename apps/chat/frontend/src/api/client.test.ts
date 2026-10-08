@@ -340,7 +340,7 @@ describe("speech provider client calls", () => {
       action: "synthesize",
       text: "Hello",
       language: "it",
-      _app_secret_request: { logical_names: ["deepinfra-api-key", "openrouter-api-key"], required: false },
+      _app_secret_request: { logical_names: ["deepinfra-api-key", "openrouter-api-key", "google-ai-studio-api-key"], required: false },
     });
     expect(fetchMock.mock.calls[3]?.[1]?.signal).toBe(synthesisController.signal);
     expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body || "{}"))).toEqual({

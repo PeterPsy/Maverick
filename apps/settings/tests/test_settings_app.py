@@ -339,6 +339,8 @@ function transpile(relativePath) {
 }
 
 transpile('frontend/src/adminApi.ts');
+transpile('frontend/src/html.ts');
+transpile('frontend/src/speechSynthesisSettings.ts');
 transpile('frontend/src/bouncyToggle.ts');
 transpile('frontend/src/providerModelOptions.ts');
 transpile('frontend/src/providerUsageSummary.ts');

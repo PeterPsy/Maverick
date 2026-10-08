@@ -30,7 +30,16 @@
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "text-to-speech",
+      "interface": "speech.synthesis",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional Speech provider whose workspace synthesis engine and language are configured in Settings."
+    }
+  ],
   "distribution": {
     "mode": "sealed",
     "source_access": "none"

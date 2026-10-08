@@ -1,3 +1,4 @@
+import { createSpeechSynthesisState, speechSynthesisSettingsHtml } from './speechSynthesisSettings';
 import type {
   AgenticAdminItem,
   AgenticAdminPayload,
@@ -49,6 +50,7 @@ type RuntimeProviderEntry = {
 };
 
 export type SettingsPanelState = {
+  speechSynthesis: import('./speechSynthesisSettings').SpeechSynthesisState;
   activatingNativeProviders: Set<string>;
   nativeProviderErrors: Record<string, string>;
   agenticBindingErrors: Record<string, string>;
@@ -93,6 +95,7 @@ export type SettingsPanelActions = {
 
 export function createSettingsPanelState(): SettingsPanelState {
   return {
+    speechSynthesis: createSpeechSynthesisState(),
     activatingNativeProviders: new Set(),
     nativeProviderErrors: {},
     agenticBindingErrors: {},
@@ -332,6 +335,7 @@ function speechModelSettingsCardHtml(
   return `<section class="settings-card settings-platform settings-speech-model-settings-card">
     ${modelSettingsHeadingHtml('record_voice_over', 'Speech model settings')}
     <div class="settings-platform-provider-forms">
+      ${speechSynthesisSettingsHtml(state.speechSynthesis)}
       ${hostedProviderSettingsListHtml({
         modelOptions: hostedSpeechModelOptions,
         openHostedModel,

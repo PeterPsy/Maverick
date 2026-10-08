@@ -1,6 +1,8 @@
 import './styles.css';
 import './styles/learning.css';
 import './styles/learning-tickets.css';
+import './styles/speech-settings.css';
+import { createSpeechSynthesisController } from './speechSynthesisSettings';
 import { createLearningController } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { bindSettingsHostEvents, settingsHostVisible } from './settingsHostEvents';
@@ -54,6 +56,11 @@ let lastPublishedPageId = '';
 let lastPublishedUserId = '';
 let runtimeInventoryWorkspaceId = '';
 let isRuntimeInventoryLoading = false;
+
+const speechSynthesisController = createSpeechSynthesisController({
+  state: settingsPanelState.speechSynthesis, render,
+  notify: (message) => { notice = { tone: 'success', message }; }
+});
 
 const persistenceController = createPersistenceController({
   getPersistence: () => persistence,
@@ -136,6 +143,7 @@ function applyNavigationParams(params: Record<string, unknown>) {
   if (pageId === 'platform-settings') {
     void ensureRuntimeInventoryLoaded();
     void providerUsageController.ensureLoaded();
+    void speechSynthesisController.load(platformSettings?.workspace.workspace_id || '');
   }
   if (pageId === 'learning') void learningController.load();
   if (pageId === 'cache') {
@@ -236,6 +244,7 @@ async function refresh() {
       learningController.reset();
       runtimeInventoryWorkspaceId = '';
       providerUsageController.reset();
+      speechSynthesisController.reset();
     }
     syncSettingsPanelDraft(settingsPanelState, platformSettings);
     if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
@@ -251,6 +260,7 @@ async function refresh() {
   if (selectedPageId === 'platform-settings') {
     void ensureRuntimeInventoryLoaded();
     void providerUsageController.ensureLoaded();
+    void speechSynthesisController.load(platformSettings?.workspace.workspace_id || '', true);
   }
   if (selectedPageId === 'learning') void learningController.load();
   if (selectedPageId === 'cache') {
@@ -506,6 +516,7 @@ function render() {
 }
 
 function bindEvents() {
+  speechSynthesisController.bind();
   learningController.bind();
   bindSettingsEvents({
     clearRuntimeSessionsFromPanel,

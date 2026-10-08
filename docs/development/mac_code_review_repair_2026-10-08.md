@@ -15,16 +15,20 @@ Validation: 39 Device Use tests and 47 API/provider tests passed. Script tests:
 Native build run `37755584889` succeeded: 278 Swift tests, seven signed native
 background-input cases, release build, pinned signature and identity continuity.
 
-Installation run `37755999882` was dispatched once with `install_and_open=true`,
-at the exact native commit above. It is still in progress; do not infer install
-success or redispatch without inspecting that run. Target version: 0.2.2 (53).
+Installation run `37755999882` completed successfully at the exact native commit
+above, with `install_and_open=true`. The log confirms the atomic update at the
+existing path, signature continuity and `Installed and running: 0.2.2 (53)` at
+09:22:21 UTC. This run repeated all 278 Swift tests and seven signed native cases
+without failures. No second dispatch was needed.
 
-Backend deployment is pending. The ordinary restart CLI returned
-`restarted=false` because its mount namespace lacks the host's systemd socket.
-Read-only host-namespace inspection via `sudo -n nsenter --target 1 --mount`
-confirmed `maverick-core.service` is active with `Restart=always`, PID 945651.
-The user explicitly authorized a necessary backend restart. Use host systemd to
-restart that service and verify a changed PID, active state and `/health`.
-The service owns this agent's cgroup, so restart can interrupt this turn; resume
-from these recorded run IDs and current state. The Mac connection must be
-observed anew; never replay any native invocation.
+Backend restart completed at 09:22:31 UTC. The ordinary restart CLI could not
+reach systemd from its mount namespace; the user-authorized host-namespace
+systemctl operation restarted `maverick-core.service`. Subsequent inspection
+confirmed PID 1016581 (previously 945651), active/running state and `/health`
+returning `{"status":"ok","service":"maverick-core"}`.
+
+After installation/restart, this chat's direct native calls returned
+`Device Use executor is unavailable`. No native input was replayed. Installation
+and launch are verified from the signed runner, but a fresh live chat-to-Mac
+end-to-end picker test remains unverified until PC use is reconnected. This is
+separate from the tested operation-timeout and cross-turn activation fixes.

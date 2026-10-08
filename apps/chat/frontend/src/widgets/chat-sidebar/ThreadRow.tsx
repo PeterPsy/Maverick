@@ -1,4 +1,5 @@
 import { useState, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { FolderInput, MoreHorizontal } from "lucide-react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import {
   attachChatThreadDragImage,
@@ -8,6 +9,7 @@ import {
 import { BusyChatGlow } from "../BusyChatGlow";
 import { isThreadBusy, isThreadTitlePending, isThreadUnread, threadSourceBadges } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
+import { ThreadSourceIcon } from "./ThreadSourceIcon";
 import { formatThreadLastMessageTimestamp, threadLastMessageIso } from "./threadTimestamps";
 
 export function ThreadRow({
@@ -106,6 +108,7 @@ export function ThreadRow({
           </span>
         ) : (
           <button
+            aria-current={activeThreadId === thread.thread_id ? "page" : undefined}
             className="bs-chat-list__select-button"
             onClick={() => onSelectThreadClick(thread)}
             onPointerCancel={(event) => onTrackThreadTouchCancel(event, thread)}
@@ -129,9 +132,7 @@ export function ThreadRow({
                 <span className="bs-chat-list__source-badges">
                   {sourceBadges.map((badge) => (
                     <span className="bs-chat-list__source-badge" key={badge.kind} title={badge.label}>
-                      <span aria-hidden="true" className="material-symbols-rounded">
-                        {badge.icon}
-                      </span>
+                      <ThreadSourceIcon kind={badge.kind} />
                     </span>
                   ))}
                 </span>
@@ -166,9 +167,7 @@ export function ThreadRow({
               onClick={() => void onMoveThread(thread, sectionProjectId)}
               type="button"
             >
-              <span aria-hidden="true" className="material-symbols-rounded">
-                drive_file_move
-              </span>
+              <FolderInput aria-hidden="true" size={16} />
             </button>
           ) : (
             <button
@@ -180,9 +179,7 @@ export function ThreadRow({
               title={isTitlePending ? "Title generation pending" : "Edit chat"}
               type="button"
             >
-              <span aria-hidden="true" className="material-symbols-rounded">
-                more_horiz
-              </span>
+              <MoreHorizontal aria-hidden="true" size={16} />
             </button>
           )}
         </div>

@@ -114,6 +114,33 @@ stop linked implementations and fence the consumed backlog, retaining its audit.
 
 `register-local`, `install-local`, and `package` operate on workspace-local app projects under `workspaces/<workspace_id>/apps/<app_id>/`; they are not the correct lifecycle for this built-in Chat app source.
 
+## Sidebar components
+
+The shell-hosted `chat-sidebar` uses the adapted dashboard sidebar in
+`frontend/src/components/ui/dashboard-sidebar.tsx`. Its dropdown groups real
+conversation views (all, recent, unread/active) and categories (Research,
+Multi-agent, Device Use, Senses, OpenDesign), with live catalog counts. Search
+still uses the existing title/project/transcript index; Cmd/Ctrl K focuses it,
+and Escape or the clear button resets it. Changing search or view opens the
+matching project groups. Each whole project header toggles an animated disclosure;
+the project toolbar can expand/collapse all groups or create a project even when
+the current view is empty; successful creation returns to all conversations so
+the new project is visible. Project menus expose rename, new chat and the existing
+inline delete confirmation. Thread editing, selection, drag references, unread
+states and Busy glow animations retain their existing runtime behavior. Collapsed
+groups are inert and pause their hidden Busy animations.
+
+Chat already uses React, TypeScript and Lucide. Tailwind v4 is built through
+`@tailwindcss/vite`, with utilities and theme imports in
+`frontend/src/components/ui/dashboard-sidebar.css`; preflight is omitted to
+preserve existing Chat styles. Theme colors map to Chat's Maverick tokens.
+`components.json` and the Vite/TypeScript `@` alias establish the shadcn structure:
+`@/components/ui` resolves to `frontend/src/components/ui`, rather than a repository
+root `/components/ui`. Keeping shared UI primitives there lets the component
+generator and app imports agree on one location. `@/lib/utils` supplies `cn`.
+After `npm install`, additional shadcn components can be added from `apps/chat`
+with `npx shadcn@latest add <component>`; no TypeScript/Tailwind setup is needed.
+
 ## Browser E2E
 
 Chat has an app-level Playwright harness for full-browser smoke coverage:

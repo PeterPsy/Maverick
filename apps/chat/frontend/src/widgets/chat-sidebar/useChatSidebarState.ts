@@ -190,6 +190,7 @@ export function useChatSidebarState() {
   function updateSearchQuery(nextQuery: string) {
     localSearchRevisionRef.current += 1;
     setSearchQuery(nextQuery);
+    if (nextQuery.trim()) setCollapsedSections({});
   }
 
   function updateThreadFilter(nextFilter: ThreadFilter) {
@@ -200,6 +201,7 @@ export function useChatSidebarState() {
       setRetainedUnreadThreadId(null);
     }
     setThreadFilter(nextFilter);
+    setCollapsedSections({});
   }
 
 
@@ -658,6 +660,20 @@ export function useChatSidebarState() {
     setCollapsedSections((current) => ({ ...current, [sectionId]: !(current[sectionId] ?? false) }));
   }
 
+  const areAllSectionsCollapsed = sections.length > 0 && sections.every((section) => collapsedSections[section.id]);
+
+  async function addProject() {
+    const project = await projectActions.addProject();
+    if (project) {
+      updateThreadFilter("all");
+      updateSearchQuery("");
+    }
+  }
+
+  function toggleAllSections() {
+    setCollapsedSections(Object.fromEntries(sections.map((section) => [section.id, !areAllSectionsCollapsed])));
+  }
+
   function toggleThreadEdit(thread: ChatThread) {
     projectActions.clearProjectEditing();
     setExpandedThreadId((current) => {
@@ -672,7 +688,8 @@ export function useChatSidebarState() {
 
   return {
     activeThreadId,
-    addProject: projectActions.addProject,
+    areAllSectionsCollapsed,
+    addProject,
     areThreadActionsRevealed,
     cancelProjectDeletion: projectActions.cancelProjectDeletion,
     cancelProjectEdit: projectActions.cancelProjectEdit,
@@ -714,6 +731,7 @@ export function useChatSidebarState() {
     threadFilter,
     threadFilterCounts,
     toggleSection,
+    toggleAllSections,
     toggleThreadEdit,
     toggleThreadSelection,
     trackThreadTouchMove,

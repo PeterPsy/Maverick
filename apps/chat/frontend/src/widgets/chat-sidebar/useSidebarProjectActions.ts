@@ -60,8 +60,10 @@ export function useSidebarProjectActions({
       updateFromSidebarPayload(payload, setProjects);
       clearProjectEditing();
       setError(null);
+      return payload.project;
     } catch (projectError) {
       setError(projectError instanceof Error ? projectError.message : "Unable to create project.");
+      return null;
     } finally {
       setIsPending(false);
     }

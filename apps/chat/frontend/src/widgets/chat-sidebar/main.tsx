@@ -1,6 +1,12 @@
 import { createRoot } from "react-dom/client";
-import { Search } from "lucide-react";
-import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
+import { ChevronsDownUp, ChevronsUpDown, FolderPlus } from "lucide-react";
+import { SidebarNav } from "../../components/ui/dashboard-sidebar";
+import { chatNavigationGroups } from "./navigation";
+import type { ThreadFilter } from "./sections";
+import {
+  applyInitialMaverickTheme,
+  listenForMaverickThemeMessages,
+} from "../../lib/shellTheme";
 import { ChatSidebarSkeleton } from "./ChatSidebarSkeleton";
 import { ProjectSection } from "./ProjectSection";
 import "./styles.css";
@@ -19,7 +25,7 @@ function ChatSidebarWidget() {
       } ${sidebar.areThreadActionsRevealed ? "has-thread-actions-revealed" : ""}`}
     >
       {sidebar.error ? (
-        <div role="alert">
+        <div className="bs-chat-sidebar-error" role="alert">
           <p className="bs-chat-folder__empty">{sidebar.error}</p>
           {sidebar.projectsError ? (
             <button
@@ -28,176 +34,105 @@ function ChatSidebarWidget() {
               onClick={() => void sidebar.refreshProjects()}
               type="button"
             >
-              {sidebar.isProjectsLoading ? "Loading projects…" : "Reload project names"}
+              {sidebar.isProjectsLoading
+                ? "Loading projects…"
+                : "Reload project names"}
             </button>
           ) : null}
         </div>
       ) : null}
 
-      <div className="bs-chat-sidebar-search-frame">
-        <Search size={17} aria-hidden="true" />
-        <input
-          aria-label="Search chats"
-          className="bs-chat-sidebar-search"
-          onChange={(event) => sidebar.setSearchQuery(event.target.value)}
-          placeholder="Search chats"
-          value={sidebar.searchQuery}
-        />
-      </div>
-
-      <div aria-label="Chat filters" className="bs-chat-sidebar-source-filter" role="group">
-        <button
-          aria-pressed={sidebar.threadFilter === "all"}
-          className={`bs-chat-sidebar-source-filter__button ${sidebar.threadFilter === "all" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("all")}
-          type="button"
-        >
-          <span className="bs-chat-sidebar-source-filter__label">All</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.all}</span>
-        </button>
-        <button
-          aria-label="Hot chats from the last 24 hours"
-          aria-pressed={sidebar.threadFilter === "hot"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "hot" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("hot")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            local_fire_department
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">Hot</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.hot}</span>
-        </button>
-        <button
-          aria-label="Unread or active chats"
-          aria-pressed={sidebar.threadFilter === "unread"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "unread" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("unread")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            mark_chat_unread
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">Unread</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.unread}</span>
-        </button>
-        <span aria-hidden="true" className="bs-chat-sidebar-source-filter__separator" />
-        <button
-          aria-label="OpenDesign chats"
-          aria-pressed={sidebar.threadFilter === "opendesign"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "opendesign" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("opendesign")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            design_services
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">OpenDesign</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.opendesign}</span>
-        </button>
-        <button
-          aria-label="Senses chats"
-          aria-pressed={sidebar.threadFilter === "senses"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "senses" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("senses")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            sensors
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">Senses</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.senses}</span>
-        </button>
-        <button
-          aria-label="Research chats"
-          aria-pressed={sidebar.threadFilter === "research"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "research" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("research")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            travel_explore
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">Research</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.research}</span>
-        </button>
-        <button
-          aria-label="Device Use chats (macOS)"
-          aria-pressed={sidebar.threadFilter === "device_use"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "device_use" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("device_use")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            desktop_windows
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">Device Use</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.device_use}</span>
-        </button>
-        <button
-          aria-label="Multi-agent chats"
-          aria-pressed={sidebar.threadFilter === "multi_agent"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "multi_agent" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("multi_agent")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            account_tree
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">Multi</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.multi_agent}</span>
-        </button>
-      </div>
-
-      <div className="bs-chat-list">
-        {sidebar.isInitialLoading ? (
-          <ChatSidebarSkeleton />
-        ) : sidebar.sections.length ? (
-          sidebar.sections.map((section) => (
-            <ProjectSection
-              activeThreadId={sidebar.activeThreadId}
-              collapsed={sidebar.collapsedSections[section.id] ?? false}
-              editingProject={sidebar.editingProject}
-              editingProjectRef={sidebar.editingProjectRef}
-              expandedThreadId={sidebar.expandedThreadId}
-              expandedThreadTitle={sidebar.expandedThreadTitle}
-              isPending={sidebar.isPending}
-              key={section.id}
-              multiAgentThreadIds={sidebar.multiAgentThreadIds}
-              onAddProject={sidebar.addProject}
-              onCancelProjectDeletion={sidebar.cancelProjectDeletion}
-              onCancelProjectEdit={sidebar.cancelProjectEdit}
-              onCloseExpandedThread={sidebar.closeExpandedThread}
-              onConfirmProjectDeletion={sidebar.confirmProjectDeletion}
-              onCreateChat={sidebar.createChat}
-              onMoveThread={sidebar.moveThread}
-              onRemoveEditingProject={sidebar.removeEditingProject}
-              onRemoveThread={sidebar.removeThread}
-              onRenameThread={sidebar.renameThread}
-              onSaveProjectEdit={sidebar.saveProjectEdit}
-              onSelectThreadClick={sidebar.selectThreadFromClick}
-              onSelectThreadPointer={sidebar.selectThreadFromPointer}
-              onTrackThreadTouchCancel={sidebar.cancelThreadTouch}
-              onTrackThreadTouchMove={sidebar.trackThreadTouchMove}
-              onSetEditingProjectName={sidebar.setEditingProjectName}
-              onSetExpandedThreadTitle={sidebar.setExpandedThreadTitle}
-              onStartProjectEdit={sidebar.startProjectEdit}
-              onToggleSection={sidebar.toggleSection}
-              onToggleThreadEdit={sidebar.toggleThreadEdit}
-              onToggleThreadSelection={sidebar.toggleThreadSelection}
-              onTrackThreadTouchStart={sidebar.trackThreadTouchStart}
-              pendingProjectDeletion={sidebar.pendingProjectDeletion}
-              projects={sidebar.projects}
-              section={section}
-              selectedThreadIds={sidebar.selectedThreadIds}
-            />
-          ))
-        ) : (
-          <p className="bs-chat-folder__empty">No chats match this filter.</p>
-        )}
-      </div>
+      <SidebarNav
+        activeId={sidebar.threadFilter}
+        groups={chatNavigationGroups(sidebar.threadFilterCounts)}
+        onSearchChange={sidebar.setSearchQuery}
+        onSelect={(id) => sidebar.setThreadFilter(id as ThreadFilter)}
+        searchQuery={sidebar.searchQuery}
+      >
+        <div className="bs-chat-list">
+          <div className="bs-chat-sidebar-projects-heading">
+            <span>
+              {sidebar.searchQuery.trim() ? "Search results" : "Projects"}
+            </span>
+            <div className="bs-chat-folder__header-actions">
+              <button
+                aria-label={
+                  sidebar.areAllSectionsCollapsed
+                    ? "Expand all projects"
+                    : "Collapse all projects"
+                }
+                className="dashboard-sidebar__icon-button"
+                disabled={!sidebar.sections.length}
+                onClick={sidebar.toggleAllSections}
+                type="button"
+              >
+                {sidebar.areAllSectionsCollapsed ? (
+                  <ChevronsUpDown size={15} />
+                ) : (
+                  <ChevronsDownUp size={15} />
+                )}
+              </button>
+              <button
+                aria-label="New project"
+                className="dashboard-sidebar__icon-button"
+                disabled={sidebar.isPending}
+                onClick={() => void sidebar.addProject()}
+                type="button"
+              >
+                <FolderPlus size={16} />
+              </button>
+            </div>
+          </div>
+          {sidebar.isInitialLoading ? (
+            <ChatSidebarSkeleton />
+          ) : sidebar.sections.length ? (
+            sidebar.sections.map((section) => (
+              <ProjectSection
+                activeThreadId={sidebar.activeThreadId}
+                collapsed={sidebar.collapsedSections[section.id] ?? false}
+                editingProject={sidebar.editingProject}
+                editingProjectRef={sidebar.editingProjectRef}
+                expandedThreadId={sidebar.expandedThreadId}
+                expandedThreadTitle={sidebar.expandedThreadTitle}
+                isPending={sidebar.isPending}
+                key={section.id}
+                multiAgentThreadIds={sidebar.multiAgentThreadIds}
+                onCancelProjectDeletion={sidebar.cancelProjectDeletion}
+                onCancelProjectEdit={sidebar.cancelProjectEdit}
+                onCloseExpandedThread={sidebar.closeExpandedThread}
+                onConfirmProjectDeletion={sidebar.confirmProjectDeletion}
+                onCreateChat={sidebar.createChat}
+                onMoveThread={sidebar.moveThread}
+                onRemoveEditingProject={sidebar.removeEditingProject}
+                onRemoveThread={sidebar.removeThread}
+                onRenameThread={sidebar.renameThread}
+                onSaveProjectEdit={sidebar.saveProjectEdit}
+                onSelectThreadClick={sidebar.selectThreadFromClick}
+                onSelectThreadPointer={sidebar.selectThreadFromPointer}
+                onTrackThreadTouchCancel={sidebar.cancelThreadTouch}
+                onTrackThreadTouchMove={sidebar.trackThreadTouchMove}
+                onSetEditingProjectName={sidebar.setEditingProjectName}
+                onSetExpandedThreadTitle={sidebar.setExpandedThreadTitle}
+                onStartProjectEdit={sidebar.startProjectEdit}
+                onToggleSection={sidebar.toggleSection}
+                onToggleThreadEdit={sidebar.toggleThreadEdit}
+                onToggleThreadSelection={sidebar.toggleThreadSelection}
+                onTrackThreadTouchStart={sidebar.trackThreadTouchStart}
+                pendingProjectDeletion={sidebar.pendingProjectDeletion}
+                projects={sidebar.projects}
+                section={section}
+                selectedThreadIds={sidebar.selectedThreadIds}
+              />
+            ))
+          ) : (
+            <p className="bs-chat-folder__empty">No chats match this filter.</p>
+          )}
+        </div>
+      </SidebarNav>
     </main>
   );
 }
 
-createRoot(document.getElementById("chat-sidebar-root") as HTMLElement).render(<ChatSidebarWidget />);
+createRoot(document.getElementById("chat-sidebar-root") as HTMLElement).render(
+  <ChatSidebarWidget />,
+);

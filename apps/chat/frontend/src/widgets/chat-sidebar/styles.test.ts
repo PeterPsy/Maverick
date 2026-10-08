@@ -26,65 +26,6 @@ describe("chat sidebar scroll clearance", () => {
 });
 
 describe("chat sidebar search", () => {
-  it("uses the compact glass search frame copied from the Skills sidebar pattern", () => {
-    const styles = readStyle("styles.css");
-
-    expect(styles).toContain("--chat-sidebar-scroll-under-top: 3.12rem;");
-    expect(styles).toContain("--chat-sidebar-search-height: 2.65rem;");
-    expect(styles).toContain(".bs-chat-sidebar-search-frame");
-    expect(styles).toContain("grid-template-columns: auto minmax(0, 1fr);");
-    expect(styles).toContain("border-radius: 22px;");
-    expect(styles).toContain("backdrop-filter: blur(26px);");
-    expect(styles).toContain(".bs-chat-sidebar-search-frame:focus-within");
-    expect(styles).toMatch(
-      /padding: calc\(var\(--chat-sidebar-(?:scroll-under-top\) \+ var\(--chat-sidebar-search-height|source-filter-top\) \+ var\(--chat-sidebar-source-filter-height)\) \+ 0\.72rem\) 0 var\(--chat-sidebar-scroll-under-bottom\);/,
-    );
-  });
-
-  it("keeps the source filters on one horizontally scrollable row with compact pills", () => {
-    const styles = readStyle("styles.css");
-
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*display:\s*flex;/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*flex-wrap:\s*nowrap;/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*overflow-x:\s*auto;/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*flex:\s*0 0 auto;/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*width:\s*max-content;/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*max-width:\s*var\(--chat-sidebar-source-filter-max-width\);/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*background:\s*var\(--chat-sidebar-glass-surface\);/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*backdrop-filter:\s*blur\(26px\);/);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*-webkit-backdrop-filter:\s*blur\(26px\);/);
-  });
-
-  it("separates the primary chat filters from feature filters", () => {
-    const source = readStyle("main.tsx");
-    const allIndex = source.indexOf('sidebar.setThreadFilter("all")');
-    const hotIndex = source.indexOf('sidebar.setThreadFilter("hot")');
-    const unreadIndex = source.indexOf('sidebar.setThreadFilter("unread")');
-    const separatorIndex = source.indexOf("bs-chat-sidebar-source-filter__separator");
-    const openDesignIndex = source.indexOf('sidebar.setThreadFilter("opendesign")');
-    const researchIndex = source.indexOf('sidebar.setThreadFilter("research")');
-    const deviceUseIndex = source.indexOf('sidebar.setThreadFilter("device_use")');
-    const multiIndex = source.indexOf('sidebar.setThreadFilter("multi_agent")');
-    const styles = readStyle("styles.css");
-
-    expect(source).toContain("local_fire_department");
-    expect(allIndex).toBeGreaterThan(-1);
-    expect(hotIndex).toBeGreaterThan(allIndex);
-    expect(unreadIndex).toBeGreaterThan(hotIndex);
-    expect(separatorIndex).toBeGreaterThan(unreadIndex);
-    expect(openDesignIndex).toBeGreaterThan(separatorIndex);
-    expect(researchIndex).toBeGreaterThan(openDesignIndex);
-    expect(deviceUseIndex).toBeGreaterThan(researchIndex);
-    expect(multiIndex).toBeGreaterThan(deviceUseIndex);
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__separator\s*{[\s\S]*flex:\s*0 0 1px;/);
-  });
-
-  it("collapses non-All filter labels when the sidebar iframe is narrow", () => {
-    const styles = readStyle("styles.css");
-
-    expect(styles).toMatch(/@media \(max-width: 25rem\)[\s\S]*\.is-label-collapsible \.bs-chat-sidebar-source-filter__label\s*{[\s\S]*display:\s*none;/);
-  });
-
   it("keeps source badges compact as icon-only pills", () => {
     const styles = readStyle("styles.css");
 

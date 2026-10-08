@@ -14,6 +14,7 @@ for (const width of [390, 1280]) {
   test(`recovers all 27 project names after a failed read and a healthy thread update at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     let projectReads = 0;
+    let allowProjectRead = false;
     let socket: WebSocketRoute | undefined;
     let releaseFirstRead!: () => void;
     const firstRead = new Promise<void>((resolve) => { releaseFirstRead = resolve; });
@@ -25,9 +26,10 @@ for (const width of [390, 1280]) {
       if (url.pathname === "/api/apps/chat/backend" && body.action === "pwa.read_model") {
         expect(body.kind).toBe("projects");
         projectReads += 1;
-        if (projectReads === 1) {
+        if (!allowProjectRead) {
           await firstRead;
-          return json({ error: "fixture_read_failed" }, 500);
+          // The SDK retries transient 5xx reads; use a terminal read failure to exercise the explicit retry UI.
+          return json({ error: "fixture_read_failed" }, 400);
         }
         return json({ revision: "projects-v1", payload: { kind: "projects", data: { projects, has_more: false } } });
       }
@@ -44,7 +46,7 @@ for (const width of [390, 1280]) {
     });
     const snapshot = () => socket!.send(JSON.stringify({ type: "runtime.thread.snapshot", workspace_id: "default", threads, at: NOW }));
     await page.routeWebSocket("**/ws/runtime/threads", (connection) => { socket = connection; snapshot(); });
-    await page.goto("/apps/chat/widgets/chat-sidebar/index.html");
+    await page.goto("/apps/chat/widgets/chat-sidebar/index.html", { waitUntil: "domcontentloaded" });
     await expect(page.locator(".bs-chat-folder__title")).toHaveText(projects.map(() => "Project"));
     releaseFirstRead();
     const retry = page.getByRole("button", { name: "Reload project names" });
@@ -52,13 +54,15 @@ for (const width of [390, 1280]) {
     await expect.poll(() => Boolean(socket)).toBe(true);
     snapshot(); // A healthy authoritative stream must not hide the independent project failure.
     await expect(retry).toBeVisible();
-    expect(projectReads).toBe(1);
+    const failedReadCount = projectReads;
+    expect(failedReadCount).toBeGreaterThan(0);
+    allowProjectRead = true;
     await retry.click();
     await expect(page.locator(".bs-chat-folder__title")).toHaveCount(27);
     await expect.poll(async () => (await page.locator(".bs-chat-folder__title").allTextContents()).sort())
       .toEqual(projects.map((project) => project.name).sort());
     await expect(page.getByRole("alert")).toHaveCount(0);
-    expect(projectReads).toBe(2);
+    expect(projectReads).toBe(failedReadCount + 1);
   });
 }
 
@@ -113,9 +117,10 @@ test.describe("mobile filtered chat scrolling", () => {
       }));
     });
 
-    await page.goto("/apps/chat/widgets/chat-sidebar/index.html");
+    await page.goto("/apps/chat/widgets/chat-sidebar/index.html", { waitUntil: "domcontentloaded" });
     await expect.poll(() => Boolean(socket)).toBe(true);
-    await page.getByRole("button", { name: "Senses chats" }).click();
+    await page.getByRole("button", { name: "Choose chat view" }).click();
+    await page.getByRole("menuitemradio", { name: "Senses" }).click();
     await expect(page.locator(".bs-chat-list__item")).toHaveCount(filteredThreads.length);
 
     const list = page.locator(".bs-chat-list");

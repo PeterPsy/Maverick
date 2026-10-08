@@ -114,7 +114,7 @@ describe("ThreadRow", () => {
 
     const badge = container?.querySelector(".bs-chat-list__source-badge");
     expect(badge?.getAttribute("title")).toBe("Senses");
-    expect(badge?.textContent?.trim()).toBe("sensors");
+    expect(badge?.querySelector("svg")).not.toBeNull();
     expect(container?.querySelector(".bs-chat-list__row > .bs-chat-list__source-badges .bs-chat-list__source-badge")).toBe(badge);
     expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBeNull();
     expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBeNull();
@@ -126,7 +126,7 @@ describe("ThreadRow", () => {
 
     const badge = container?.querySelector(".bs-chat-list__source-badge");
     expect(badge?.getAttribute("title")).toBe("Multi-chat");
-    expect(badge?.textContent?.trim()).toBe("account_tree");
+    expect(badge?.querySelector("svg")).not.toBeNull();
     expect(container?.querySelector(".bs-chat-list__row > .bs-chat-list__source-badges .bs-chat-list__source-badge")).toBe(badge);
     expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBeNull();
     expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBeNull();
@@ -137,7 +137,7 @@ describe("ThreadRow", () => {
 
     const badge = container?.querySelector(".bs-chat-list__source-badge");
     expect(badge?.getAttribute("title")).toBe("Research");
-    expect(badge?.textContent?.trim()).toBe("travel_explore");
+    expect(badge?.querySelector("svg")).not.toBeNull();
   });
 
   it("shows a macOS badge for Device Use threads", async () => {
@@ -145,7 +145,7 @@ describe("ThreadRow", () => {
 
     const badge = container?.querySelector(".bs-chat-list__source-badge");
     expect(badge?.getAttribute("title")).toBe("Device Use (macOS)");
-    expect(badge?.textContent?.trim()).toBe("desktop_windows");
+    expect(badge?.querySelector("svg")).not.toBeNull();
   });
 
   it("does not show a source badge for ordinary chat threads", async () => {

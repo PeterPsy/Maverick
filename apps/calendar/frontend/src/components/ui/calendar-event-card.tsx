@@ -1,3 +1,4 @@
+import { t } from "@/preferences"
 import { useState } from "react"
 import { Clock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -35,7 +36,10 @@ export function EventCard({
   if (variant === "compact") {
     return (
       <div
-        draggable
+        role="button" tabIndex={0} onFocus={() => setIsHovered(true)} onBlur={() => setIsHovered(false)}
+      aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
+      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEventClick(event) } }}
+      draggable
         onDragStart={() => onDragStart(event)}
         onDragEnd={onDragEnd}
         onClick={() => onEventClick(event)}
@@ -64,7 +68,7 @@ export function EventCard({
                 {event.description && <p className="text-xs text-muted-foreground line-clamp-2">{event.description}</p>}
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  <span>{formatTime(event.startTime)} - {formatTime(event.endTime)}</span>
+                  <span>{event.all_day ? t("All day") : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}</span>
                   <span className="text-[10px]">({getDuration()})</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -82,7 +86,10 @@ export function EventCard({
   if (variant === "detailed") {
     return (
       <div
-        draggable
+        role="button" tabIndex={0} onFocus={() => setIsHovered(true)} onBlur={() => setIsHovered(false)}
+      aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
+      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEventClick(event) } }}
+      draggable
         onDragStart={() => onDragStart(event)}
         onDragEnd={onDragEnd}
         onClick={() => onEventClick(event)}
@@ -99,7 +106,7 @@ export function EventCard({
         {event.description && <div className="mt-1 text-sm opacity-90 line-clamp-2">{event.description}</div>}
         <div className="mt-2 flex items-center gap-2 text-xs opacity-80">
           <Clock className="h-3 w-3" />
-          {formatTime(event.startTime)} - {formatTime(event.endTime)}
+          {event.all_day ? t("All day") : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}
         </div>
         {isHovered && (
           <div className="mt-2 flex flex-wrap gap-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
@@ -113,6 +120,9 @@ export function EventCard({
 
   return (
     <div
+      role="button" tabIndex={0} onFocus={() => setIsHovered(true)} onBlur={() => setIsHovered(false)}
+      aria-label={`${event.title}, ${event.all_day ? t("All day") : formatTime(event.startTime)}`}
+      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEventClick(event) } }}
       draggable
       onDragStart={() => onDragStart(event)}
       onDragEnd={onDragEnd}
@@ -143,7 +153,7 @@ export function EventCard({
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>{formatTime(event.startTime)} - {formatTime(event.endTime)}</span>
+                  <span>{event.all_day ? t("All day") : `${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}</span>
                   <span className="text-[10px]">({getDuration()})</span>
                 </div>
                 <div className="flex flex-wrap gap-1">

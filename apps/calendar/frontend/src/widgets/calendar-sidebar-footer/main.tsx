@@ -1,3 +1,5 @@
+import { useCalendarPreferences } from "../../useCalendarPreferences";
+import { t } from "../../preferences";
 import { useEffect, useState } from 'react';
 import {
   isExactMaverickParentMessage,
@@ -8,7 +10,7 @@ import {
 import { createRoot } from 'react-dom/client';
 import { CalendarPlus, Plus } from 'lucide-react';
 import { startGoogleOAuth } from '../../api';
-import { notifyCalendarUiStateChanged, writeCalendarUiState } from '../../calendar-ui-state';
+import { notifyCalendarUiStateChanged, writeCalendarUiState, readCalendarUiState } from '../../calendar-ui-state';
 import { calendarOAuthRedirectUri, maverickPlatformOrigin, runtimeAppIdFromPathname } from '../../runtime';
 import './styles.css';
 
@@ -16,6 +18,7 @@ const PRIMARY_ACTION_LABEL = 'New event';
 const WIDGET_ID = 'calendar-sidebar-footer';
 
 function CalendarSidebarFooterWidget() {
+  useCalendarPreferences();
   const appId = runtimeAppIdFromPathname(window.location.pathname);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState('');
@@ -45,9 +48,10 @@ function CalendarSidebarFooterWidget() {
 
   return (
     <main className="calendar-sidebar-footer-widget">
+      {error && <p role="alert" className="calendar-footer-error">{error}</p>}
       <button className="calendar-sidebar-footer__new-event" onClick={() => openCreate(appId)} type="button">
         <Plus aria-hidden="true" />
-        <span>New event</span>
+        <span>{t("New event")}</span>
       </button>
       <button
         className="calendar-sidebar-footer__connect"
@@ -57,14 +61,17 @@ function CalendarSidebarFooterWidget() {
         type="button"
       >
         <CalendarPlus aria-hidden="true" />
-        <span>{isConnecting ? 'Connecting' : 'Connect'}</span>
+        <span>{t(isConnecting ? 'Connecting' : 'Connect')}</span>
       </button>
     </main>
   );
 }
 
 function openCreate(appId: string) {
-  writeCalendarUiState(appId, { sidebarMode: 'create', selectedEventId: '' });
+  const visible = readCalendarUiState(appId).viewDate;
+  const start = visible ? new Date(visible) : new Date();
+  start.setHours(9, 0, 0, 0);
+  writeCalendarUiState(appId, { sidebarMode: 'create', selectedEventId: '', createStart: start.toISOString() });
   notifyCalendarUiStateChanged(appId, { action: 'new-event' });
 }
 

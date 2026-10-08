@@ -1,13 +1,16 @@
 import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility } from '@maverick/pwa-cache';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listCalendars, listConnections, listEvents } from '../../api';
+import { accountSummary } from '../../api';
 import { CALENDAR_UI_STATE_RESOURCE } from '../../calendar-ui-state';
 import type { CalendarConnection, CalendarEvent, CalendarRemoteCalendar } from '../../types';
+
+const EMPTY_EVENTS: CalendarEvent[] = [];
 
 export function useCalendarSidebarReads(appId: string) {
   const currentAppId = useRef(appId);
   currentAppId.current = appId;
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const events = EMPTY_EVENTS;
+  const [localEventCount, setLocalEventCount] = useState(0);
   const [connections, setConnections] = useState<CalendarConnection[]>([]);
   const [calendars, setCalendars] = useState<CalendarRemoteCalendar[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,12 +25,9 @@ export function useCalendarSidebarReads(appId: string) {
     read.current = controller;
     const current = () => !controller.signal.aborted && currentAppId.current === appId;
     try {
-      const [nextEvents, nextConnections, nextCalendars] = await Promise.all([
-        listEvents(appId, controller.signal), listConnections(appId, controller.signal),
-        listCalendars(appId, undefined, controller.signal),
-      ]);
+      const summary = await accountSummary(appId, controller.signal);
       if (!current()) return;
-      setEvents(nextEvents); setConnections(nextConnections); setCalendars(nextCalendars); setError('');
+      setLocalEventCount(summary.localEventCount); setConnections(summary.connections); setCalendars(summary.calendars); setError('');
     } catch (error) {
       if (current()) setError(error instanceof Error ? error.message : 'Unable to load Calendar accounts.');
     } finally {
@@ -55,5 +55,5 @@ export function useCalendarSidebarReads(appId: string) {
     return () => { suspend(); stopVisibility(); stopEvents(); };
   }, [appId, refreshCalendarState, scheduleRefresh]);
 
-  return { events, connections, calendars, setCalendars, isLoading, error, setError, refreshCalendarState, scheduleRefresh };
+  return { events, localEventCount, connections, calendars, setCalendars, isLoading, error, setError, refreshCalendarState, scheduleRefresh };
 }

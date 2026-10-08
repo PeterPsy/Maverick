@@ -1,6 +1,6 @@
 import { connectAppEventSocket, maverickAppIsVisible, observeMaverickVisibility } from '@maverick/pwa-cache';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listCalendars, listConnections, listEvents, readViewFilter } from './api';
+import { getFullEvent, listCalendars, listConnections, listEvents, readViewFilter } from './api';
 import { CALENDAR_UI_STATE_RESOURCE } from './calendar-ui-state';
 import { calendarEvents, calendarWindow, readCalendarEvent, readCalendarWindow } from './pwaCache';
 import { mergeReloadMode, type ReloadMode } from './runtime';
@@ -56,6 +56,10 @@ export function useCalendarReads(appId: string) {
         detailEvent.current = item;
         setEvents((current) => [...current.filter((event) => event.id !== item.id), item]);
       }, request.report);
+      if (maverickAppIsVisible()) {
+        const event = await getFullEvent(appId, id, request.signal);
+        if (event && request.current()) { detailEvent.current = event; setEvents(current => [...current.filter(e => e.id !== id), event]) }
+      }
     } catch (error) { request.report(error); }
   }
 

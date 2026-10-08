@@ -305,3 +305,9 @@ in place while the sidebar avoids returning thousands of event records.
 Visibility affects displayed lists. Explicit event ids still resolve hidden sources,
 and Google writes retain provider routing and write-permission checks. Mutation
 warnings use the same availability flags and recurrence expansion as planning.
+
+A draft edited during event-detail loading merges only its changed fields over the
+complete record. Saving waits for complete metadata, protecting provider recurrence
+and reminders. Contextual creation also follows the visible day from the shell
+sidebar action. UI behavior is verified with component tests and the official
+frontend build, including the committed distribution assets.

@@ -1,3 +1,5 @@
+import { useCalendarPreferences } from "../../useCalendarPreferences";
+import { t } from "../../preferences";
 import { useEffect, useMemo, useState } from 'react';
 import { isExactMaverickParentMessage } from '@maverick/pwa-cache';
 import { createRoot } from 'react-dom/client';
@@ -37,15 +39,16 @@ type CalendarTreeNode = {
 };
 
 function CalendarSidebarWidget() {
+  useCalendarPreferences();
   const appId = runtimeAppIdFromPathname(window.location.pathname);
-  const { events, connections, calendars, setCalendars, isLoading, error, setError,
+  const { events, localEventCount, connections, calendars, setCalendars, isLoading, error, setError,
     refreshCalendarState, scheduleRefresh } = useCalendarSidebarReads(appId);
   const [uiState, setUiState] = useState<CalendarUiState>(() => readCalendarUiState(appId));
   const [activeOperation, setActiveOperation] = useState('');
 
   const accountGroups = useMemo(
-    () => buildAccountGroups(events, connections, calendars),
-    [events, connections, calendars],
+    () => buildAccountGroups(events, connections, calendars, localEventCount),
+    [events, connections, calendars, localEventCount],
   );
   const accountTreeNodes = useMemo(
     () => buildCalendarTree(accountGroups, activeOperation),
@@ -90,14 +93,13 @@ function CalendarSidebarWidget() {
   }, [appId, scheduleRefresh]);
 
   async function toggleRemoteCalendar(calendar: CalendarRemoteCalendar, checked: boolean) {
-    setActiveOperation(calendar.id);
+    setActiveOperation(calendarIdentity(calendar));
     setError('');
     try {
       const updated = await selectCalendar(appId, calendar.connection_id, calendar.id, {
         selected: checked,
-        syncEnabled: checked,
       });
-      setCalendars((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setCalendars((current) => current.map((item) => (item.connection_id === updated.connection_id && item.provider_calendar_id === updated.provider_calendar_id ? updated : item)));
       notifyCalendarDataChanged(appId, 'calendars');
     } catch (toggleError) {
       setError(toggleError instanceof Error ? toggleError.message : 'Calendar selection failed.');
@@ -113,8 +115,9 @@ function CalendarSidebarWidget() {
     setActiveOperation(connection.id);
     setError('');
     try {
-      await syncCalendar(appId, connection.id);
+      const result = await syncCalendar(appId, connection.id);
       await refreshCalendarState();
+      if (!result.synced) setError(t("Sync is partial; continue syncing to fetch remaining pages."));
       notifyCalendarDataChanged(appId, 'events');
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : 'Calendar sync failed.');
@@ -127,8 +130,8 @@ function CalendarSidebarWidget() {
     if (node.type === 'account') {
       return;
     }
-    if (node.type === 'calendar' && node.calendar && activeOperation !== node.calendar.id) {
-      void toggleRemoteCalendar(node.calendar, node.calendar.sync_enabled === false);
+    if (node.type === 'calendar' && node.calendar && activeOperation !== calendarIdentity(node.calendar)) {
+      void toggleRemoteCalendar(node.calendar, node.calendar.selected === false);
     }
   }
 
@@ -179,7 +182,7 @@ function CalendarTreeNodeView({ node, level, isLast, onSelect, onSyncConnection,
 }) {
   const hasChildren = node.children.length > 0 || Boolean(node.type === 'account' && node.account?.provider !== 'local');
   const label = node.status && node.status !== 'connected' ? `${node.label} (${node.status})` : node.label;
-  const isCalendarEnabled = node.calendar?.sync_enabled !== false;
+  const isCalendarEnabled = node.calendar?.selected !== false;
   const icon = node.type === 'account'
     ? <CircleUserRound className="h-4 w-4" />
     : isCalendarEnabled
@@ -189,7 +192,7 @@ function CalendarTreeNodeView({ node, level, isLast, onSelect, onSyncConnection,
   return (
     <TreeNode isLast={isLast} level={level} nodeId={node.id}>
       <TreeNodeTrigger
-        className={node.calendar?.sync_enabled === false ? 'calendar-folder-tree-muted' : ''}
+        className={node.calendar?.selected === false ? 'calendar-folder-tree-muted' : ''}
         onClick={() => {
           onSelect(node);
         }}
@@ -212,6 +215,8 @@ function CalendarTreeNodeView({ node, level, isLast, onSelect, onSyncConnection,
           </button>
         ) : null}
       </TreeNodeTrigger>
+      {node.calendar && <CalendarFlags calendar={node.calendar} onChange={() => notifyCalendarDataChanged(runtimeAppIdFromPathname(window.location.pathname), 'calendars')} />}
+      {node.account?.connection && <p className="calendar-sync-status">{syncLabel(node.account.connection.sync_status, node.account.connection.last_sync_at)}</p>}
       <TreeNodeContent hasChildren={hasChildren}>
         {node.children.length === 0 && node.type === 'account' && node.account?.provider !== 'local' ? (
           <TreeNode isLast level={level + 1} nodeId={`${node.id}:empty`}>
@@ -236,6 +241,20 @@ function CalendarTreeNodeView({ node, level, isLast, onSelect, onSyncConnection,
       </TreeNodeContent>
     </TreeNode>
   );
+}
+
+function syncLabel(status?: { status?: string; error?: string; stale?: boolean; last_sync_at?: string }, last?: string) {
+  return `${status?.status || 'idle'} · ${last || status?.last_sync_at ? new Date(last || status!.last_sync_at!).toLocaleString() : t('Never synced')}${status?.stale ? ' · ' + t('Data needs updating') : ''}${status?.error ? ' · ' + status.error : ''}`;
+}
+function CalendarFlags({ calendar, onChange }: { calendar: CalendarRemoteCalendar; onChange: () => void }) {
+  const [error, setError] = useState(''), [saving, setSaving] = useState(false);
+  async function toggle(key: 'syncEnabled' | 'availabilityEnabled', value: boolean) {
+    setSaving(true); setError('');
+    try { await selectCalendar(runtimeAppIdFromPathname(window.location.pathname), calendar.connection_id, calendar.provider_calendar_id, { [key]: value }); onChange() }
+    catch (err) { setError(err instanceof Error ? err.message : 'Setting failed') }
+    finally { setSaving(false) }
+  }
+  return <div className="calendar-source-flags"><label><input type="checkbox" disabled={saving} checked={calendar.sync_enabled !== false} onChange={e => void toggle('syncEnabled', e.target.checked)} />{t('Sync')}</label><label><input type="checkbox" disabled={saving} checked={calendar.availability_enabled !== false} onChange={e => void toggle('availabilityEnabled', e.target.checked)} />{t('Availability')}</label><p>{syncLabel(calendar.sync_status)}</p>{calendar.sync_status?.time_min && <p>{new Date(calendar.sync_status.time_min).toLocaleDateString()} – {calendar.sync_status.time_max ? new Date(calendar.sync_status.time_max).toLocaleDateString() : '…'}</p>}{error && <p role="alert">{error}</p>}</div>;
 }
 
 function AccountSkeleton() {

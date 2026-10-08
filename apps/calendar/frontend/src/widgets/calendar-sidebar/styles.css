@@ -383,3 +383,7 @@ button {
     transform: rotate(360deg);
   }
 }
+.calendar-source-flags { padding: 0 8px 8px 48px; font-size: 11px; color: var(--calendar-muted); display: flex; flex-wrap: wrap; gap: 5px 10px; }
+.calendar-source-flags label { display: inline-flex; align-items: center; gap: 4px; }
+.calendar-source-flags p { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
+.calendar-sync-status { margin: 0 10px 8px 30px; font-size: 11px; color: var(--calendar-muted); overflow-wrap: anywhere; }

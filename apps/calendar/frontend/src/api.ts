@@ -17,13 +17,15 @@ export class CalendarApiError extends Error {
   code: string;
   detail: string;
   status: number;
+  payload: CalendarActionResult;
 
-  constructor(code: string, detail: string, status: number) {
+  constructor(code: string, detail: string, status: number, payload: CalendarActionResult = {}) {
     super(detail || code || 'Calendar request failed.');
     this.name = 'CalendarApiError';
     this.code = code;
     this.detail = detail;
     this.status = status;
+    this.payload = payload;
   }
 }
 
@@ -90,7 +92,7 @@ async function request(appId: string, body: Record<string, unknown>, signal?: Ab
   });
   const data = (await response.json()) as CalendarActionResult;
   if (!response.ok || data.error) {
-    throw new CalendarApiError(data.error || 'calendar_request_failed', data.detail || data.error || 'Calendar request failed.', response.status);
+    throw new CalendarApiError(data.error || 'calendar_request_failed', data.detail || data.error || 'Calendar request failed.', response.status, data);
   }
   return data;
 }
@@ -123,12 +125,13 @@ export async function selectCalendar(
   appId: string,
   connectionId: string,
   calendarId: string,
-  options: { selected?: boolean; syncEnabled?: boolean },
+  options: { selected?: boolean; syncEnabled?: boolean; availabilityEnabled?: boolean },
 ): Promise<CalendarRemoteCalendar> {
   const data = await request(appId, {
     action: 'calendar_calendars.select',
     connection_id: connectionId,
     calendar_id: calendarId,
+    ...(options.availabilityEnabled !== undefined ? { availability_enabled: options.availabilityEnabled } : {}),
     ...(options.selected !== undefined ? { selected: options.selected } : {}),
     ...(options.syncEnabled !== undefined ? { sync_enabled: options.syncEnabled } : {}),
     ...noAppSecrets(),
@@ -181,10 +184,10 @@ export async function completeGoogleOAuth(
   };
 }
 
-export async function syncCalendar(
+async function performSync(
   appId: string,
   connectionId: string,
-  options: { calendarId?: string; fullSync?: boolean } = {},
+  options: { calendarId?: string; fullSync?: boolean; timeMin?: string; timeMax?: string; syncMode?: string } = {},
 ): Promise<CalendarSyncResult> {
   const body: Record<string, unknown> = {
     action: 'calendar_sync',
@@ -200,6 +203,9 @@ export async function syncCalendar(
   if (options.fullSync !== undefined) {
     body.full_sync = options.fullSync;
   }
+  if (options.timeMin) body.time_min = options.timeMin;
+  if (options.timeMax) body.time_max = options.timeMax;
+  if (options.syncMode) body.sync_mode = options.syncMode;
   const data = await request(appId, body);
   return {
     action: data.action,
@@ -224,19 +230,24 @@ export async function createEvent(
   const eventPayload = toPayload(event, { includeId: false, includeIdempotencyKey: true });
   const data = await request(appId, {
     action: 'create',
+    conflict_policy: 'warn',
     event: eventPayload,
     ...remoteMutationSecretRequest(eventPayload),
   });
   if (!data.event) {
     throw new Error('Calendar event was not created.');
   }
-  return fromPayload(data.event);
+  const result = fromPayload(data.event);
+  if (data.conflicts?.length) window.dispatchEvent(new CustomEvent("calendar-conflicts", { detail: data.conflicts }));
+  return result;
 }
 
 export async function updateEvent(appId: string, id: string, event: Partial<CalendarEvent>): Promise<CalendarEvent> {
   const eventPayload = toPayload(event);
   const body: Record<string, unknown> = {
     action: 'update',
+    conflict_policy: 'warn',
+    recurrence_scope: event.recurrence_scope || 'occurrence',
     id,
     event: eventPayload,
     ...remoteMutationSecretRequest(eventPayload),
@@ -248,13 +259,16 @@ export async function updateEvent(appId: string, id: string, event: Partial<Cale
   if (!data.event) {
     throw new Error('Calendar event was not saved.');
   }
-  return fromPayload(data.event);
+  const result = fromPayload(data.event);
+  if (data.conflicts?.length) window.dispatchEvent(new CustomEvent("calendar-conflicts", { detail: data.conflicts }));
+  return result;
 }
 
 export async function deleteEvent(appId: string, id: string, expectedRevision?: number, event?: Partial<CalendarEvent>): Promise<void> {
   const eventPayload = event ? toPayload(event) : {};
   const body: Record<string, unknown> = {
     action: 'delete',
+    recurrence_scope: event?.recurrence_scope || 'occurrence',
     id,
     ...remoteMutationSecretRequest(eventPayload),
   };
@@ -342,6 +356,7 @@ function toPayload(
   if (event.description !== undefined) payload.description = event.description;
   if (event.startTime !== undefined) payload.startTime = event.startTime.toISOString();
   if (event.endTime !== undefined) payload.endTime = event.endTime.toISOString();
+  if (event.transparency !== undefined) payload.transparency = event.transparency;
   if (event.status !== undefined) payload.status = event.status;
   if (event.timezone !== undefined) payload.timezone = event.timezone;
   if (event.location !== undefined) payload.location = event.location;
@@ -354,7 +369,36 @@ function toPayload(
   if (event.source !== undefined) payload.source = event.source;
   if (event.external_refs !== undefined) payload.external_refs = event.external_refs;
   if (event.recurrence !== undefined) payload.recurrence = event.recurrence;
+  if (event.reminders_use_default !== undefined) payload.reminders_use_default = event.reminders_use_default;
   if (event.reminders !== undefined) payload.reminders = event.reminders;
   if (options.includeIdempotencyKey && event.idempotency_key !== undefined) payload.idempotency_key = event.idempotency_key;
   return payload;
+}
+
+export async function searchEvents(appId: string, query: string, offset = 0, interval: { start_after?: string; end_before?: string } = {}, signal?: AbortSignal) {
+  const data = await request(appId, { action: 'list', query, offset, limit: 50, ...interval, ...noAppSecrets() }, signal);
+  return { events: (data.events || []).map(fromPayload), hasMore: data.pagination?.has_more || false };
+}
+export async function getFullEvent(appId: string, id: string, signal?: AbortSignal): Promise<CalendarEvent | null> {
+  const data = await request(appId, { action: 'references.resolve', entity_id: id, ...noAppSecrets() }, signal);
+  return data.event ? fromPayload(data.event) : null;
+}
+export async function findFreeTime(appId: string, body: Record<string, unknown>, signal?: AbortSignal) {
+  return request(appId, { action: 'find_free_time', ...body, ...noAppSecrets() }, signal);
+}
+export async function checkAvailability(appId: string, body: Record<string, unknown>, signal?: AbortSignal) {
+  return request(appId, { action: 'check_availability', ...body, ...noAppSecrets() }, signal);
+}
+
+export async function accountSummary(appId: string, signal?: AbortSignal) {
+  const data = await request(appId, { action: 'calendar_accounts.summary', ...noAppSecrets() }, signal);
+  return { connections: (data.connections || []).map(fromConnectionPayload), calendars: (data.calendars || []).map(row => fromCalendarPayload(row as CalendarRemoteCalendarPayload)), localEventCount: data.local_event_count || 0 };
+}
+
+const syncRequests = new Map<string, Promise<CalendarSyncResult>>();
+export function syncCalendar(appId: string, connectionId: string, options: Parameters<typeof performSync>[2] = {}) {
+  const key = JSON.stringify([appId, connectionId, options]);
+  const existing = syncRequests.get(key); if (existing) return existing;
+  const pending = performSync(appId, connectionId, options).finally(() => syncRequests.delete(key));
+  syncRequests.set(key, pending); return pending;
 }

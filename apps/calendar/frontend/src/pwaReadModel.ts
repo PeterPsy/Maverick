@@ -8,7 +8,7 @@ export function sanitizeCalendarReadModel(value: unknown): CalendarReadModel | n
   const events = displayList(model.events, (item) => {
     const raw = displayRecord(item);
     const event = displayFields(item, {
-      text: ['id', 'title', 'description', 'startTime', 'endTime', 'status', 'timezone', 'location', 'organizer', 'color', 'category', 'created_at', 'updated_at', 'source'],
+      text: ['id', 'title', 'description', 'startTime', 'endTime', 'status', 'timezone', 'location', 'organizer', 'color', 'category', 'created_at', 'updated_at', 'source', 'all_day_start', 'all_day_end', 'transparency', 'series_id', 'original_start_time'],
       number: ['revision'], boolean: ['all_day'],
     });
     if (!raw || !event || !event.id || typeof event.title !== 'string' || typeof event.color !== 'string'
@@ -21,10 +21,11 @@ export function sanitizeCalendarReadModel(value: unknown): CalendarReadModel | n
     const refs = displayFields(raw.external_refs ?? {}, { text: ['provider', 'calendar_connection_id', 'calendar_id', 'provider_calendar_id', 'account_id'] });
     if (!refs) return null;
     event.external_refs = refs;
+    event.reminders = displayList(raw.reminders ?? [], item => displayFields(item, { text: ['method'], number: ['minutes_before'] })) || [];
     return event as unknown as CalendarEventPayload;
   });
   const calendars = displayList(model.calendars, (item) => {
-    const calendar = displayFields(item, { text: ['id', 'connection_id', 'provider', 'provider_calendar_id', 'summary', 'description', 'timezone', 'color', 'updated_at'], boolean: ['primary', 'selected'] });
+    const calendar = displayFields(item, { text: ['id', 'connection_id', 'provider', 'provider_calendar_id', 'summary', 'description', 'timezone', 'color', 'updated_at', 'access_role'], boolean: ['primary', 'selected', 'sync_enabled', 'availability_enabled'] });
     return calendar && ['id', 'connection_id', 'provider', 'provider_calendar_id'].every((key) => typeof calendar[key] === 'string')
       ? calendar as unknown as CalendarRemoteCalendarPayload : null;
   });

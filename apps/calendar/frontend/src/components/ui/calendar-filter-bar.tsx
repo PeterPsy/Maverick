@@ -1,3 +1,4 @@
+import { t } from "@/preferences"
 import type { ReactNode, Dispatch, SetStateAction } from "react"
 import { Filter, RefreshCw, Search, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -43,9 +44,9 @@ export function FilterBar(props: {
       {props.showSearch !== false && (
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search events..." value={props.searchQuery} onChange={(event) => props.setSearchQuery(event.target.value)} className="pl-9" />
+          <Input placeholder={t("Search events...")} aria-label={t("Search events...")} value={props.searchQuery} onChange={(event) => props.setSearchQuery(event.target.value)} className="pl-9" />
           {props.searchQuery && (
-            <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2" onClick={() => props.setSearchQuery("")}>
+            <Button variant="ghost" size="icon" aria-label={t("Clear search")} className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2" onClick={() => props.setSearchQuery("")}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -56,7 +57,7 @@ export function FilterBar(props: {
         <div className="flex items-center justify-end">
           <MobileFiltersMenu {...props} showAccountFilters={showAccountFilters} />
           {showAccountFilters && (
-            <FilterMenu title="Accounts" count={props.selectedAccounts.length} align="start" mobile>
+            <FilterMenu title={t("Accounts")} count={props.selectedAccounts.length} align="start" mobile>
               {props.accountOptions.map((account) => (
                 <DropdownMenuCheckboxItem
                   key={account.value}
@@ -79,14 +80,14 @@ export function FilterBar(props: {
               className="gap-2 whitespace-nowrap flex-shrink-0"
             >
               <RefreshCw className={cn("h-4 w-4", props.isSyncingConnections && "animate-spin")} />
-              Sync
+              {t("Sync")}
             </Button>
           )}
         </div>
       </div>
 
       <div className="hidden sm:flex items-center gap-2">
-        <FilterMenu title="Colors" count={props.selectedColors.length}>
+        <FilterMenu title={t("Colors")} count={props.selectedColors.length}>
           {props.colors.map((color) => (
             <DropdownMenuCheckboxItem
               key={color.value}
@@ -97,12 +98,12 @@ export function FilterBar(props: {
             >
               <div className="flex items-center gap-2">
                 <div className={cn("h-3 w-3 rounded", color.bg)} />
-                {color.name}
+                {t(color.name)}
               </div>
             </DropdownMenuCheckboxItem>
           ))}
         </FilterMenu>
-        <FilterMenu title="Tags" count={props.selectedTags.length}>
+        <FilterMenu title={t("Tags")} count={props.selectedTags.length}>
           {props.availableTags.map((tag) => (
             <DropdownMenuCheckboxItem
               key={tag}
@@ -113,21 +114,21 @@ export function FilterBar(props: {
             </DropdownMenuCheckboxItem>
           ))}
         </FilterMenu>
-        <FilterMenu title="Categories" count={props.selectedCategories.length}>
+        <FilterMenu title={t("Categories")} count={props.selectedCategories.length}>
           {props.categories.map((category) => (
             <DropdownMenuCheckboxItem
-              key={category}
+              key={t(category)}
               checked={props.selectedCategories.includes(category)}
               onCheckedChange={(checked) =>
                 props.setSelectedCategories((prev) => checked ? [...prev, category] : prev.filter((item) => item !== category))
               }
             >
-              {category}
+              {t(category)}
             </DropdownMenuCheckboxItem>
           ))}
         </FilterMenu>
         {showAccountFilters && (
-          <FilterMenu title="Accounts" count={props.selectedAccounts.length}>
+          <FilterMenu title={t("Accounts")} count={props.selectedAccounts.length}>
             {props.accountOptions.map((account) => (
               <DropdownMenuCheckboxItem
                 key={account.value}
@@ -144,13 +145,13 @@ export function FilterBar(props: {
         {showAccountFilters && props.onSyncConnections && props.accountOptions.some((account) => account.provider === "google" && account.status === "connected") && (
           <Button variant="outline" size="sm" onClick={props.onSyncConnections} disabled={props.isSyncingConnections} className="gap-2">
             <RefreshCw className={cn("h-4 w-4", props.isSyncingConnections && "animate-spin")} />
-            {props.isSyncingConnections ? "Syncing" : "Sync"}
+            {t(props.isSyncingConnections ? "Syncing" : "Sync")}
           </Button>
         )}
         {props.hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={props.clearFilters} className="gap-2">
             <X className="h-4 w-4" />
-            Clear
+            {t("Clear")}
           </Button>
         )}
       </div>
@@ -178,8 +179,8 @@ export function FilterBar(props: {
             </Badge>
           ))}
           {props.selectedCategories.map((category) => (
-            <Badge key={category} variant="secondary" className="gap-1">
-              {category}
+            <Badge key={t(category)} variant="secondary" className="gap-1">
+              {t(category)}
               <button onClick={() => props.setSelectedCategories((prev) => prev.filter((item) => item !== category))} className="ml-1 hover:text-foreground">
                 <X className="h-3 w-3" />
               </button>
@@ -211,12 +212,12 @@ function MobileFiltersMenu(
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2 whitespace-nowrap bg-transparent">
           <Filter className="h-4 w-4" />
-          Filters
+          {t("Filters")}
           {activeFilterCount > 0 && <Badge variant="secondary" className="ml-1 h-5 px-1.5">{activeFilterCount}</Badge>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-[70vh] w-[min(calc(100vw-2rem),22rem)] overflow-y-auto">
-        <DropdownMenuLabel>Colors</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("Colors")}</DropdownMenuLabel>
         {props.colors.map((color) => (
           <DropdownMenuCheckboxItem
             key={color.value}
@@ -227,12 +228,12 @@ function MobileFiltersMenu(
           >
             <div className="flex items-center gap-2">
               <div className={cn("h-3 w-3 rounded", color.bg)} />
-              {color.name}
+              {t(color.name)}
             </div>
           </DropdownMenuCheckboxItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Tags</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("Tags")}</DropdownMenuLabel>
         {props.availableTags.map((tag) => (
           <DropdownMenuCheckboxItem
             key={tag}
@@ -243,16 +244,16 @@ function MobileFiltersMenu(
           </DropdownMenuCheckboxItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>Categories</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("Categories")}</DropdownMenuLabel>
         {props.categories.map((category) => (
           <DropdownMenuCheckboxItem
-            key={category}
+            key={t(category)}
             checked={props.selectedCategories.includes(category)}
             onCheckedChange={(checked) =>
               props.setSelectedCategories((prev) => checked ? [...prev, category] : prev.filter((item) => item !== category))
             }
           >
-            {category}
+            {t(category)}
           </DropdownMenuCheckboxItem>
         ))}
         {props.hasActiveFilters && (
@@ -260,7 +261,7 @@ function MobileFiltersMenu(
             <DropdownMenuSeparator />
             <Button variant="ghost" size="sm" onClick={props.clearFilters} className="w-full justify-start gap-2">
               <X className="h-4 w-4" />
-              Clear filters
+              {t("Clear filters")}
             </Button>
           </>
         )}

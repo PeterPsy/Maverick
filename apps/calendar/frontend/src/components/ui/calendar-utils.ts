@@ -1,3 +1,4 @@
+import { t, formatCalendarTime } from "@/preferences"
 import type {
   CalendarAccount,
   CalendarColor,
@@ -30,7 +31,7 @@ export function eventsForDate(events: Event[], date: Date) {
   const dayEnd = new Date(dayStart)
   dayEnd.setDate(dayEnd.getDate() + 1)
   return events
-    .filter((event) => event.startTime < dayEnd && event.endTime > dayStart)
+    .filter((event) => event.all_day && event.all_day_start && event.all_day_end ? event.all_day_start <= localDateKey(dayStart) && event.all_day_end > localDateKey(dayStart) : event.startTime < dayEnd && event.endTime > dayStart)
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 }
 
@@ -146,11 +147,11 @@ export function calendarSourceOptions(
   const byValue = new Map<string, CalendarSourceOption>()
   byValue.set("local", {
     value: "local",
-    name: "Local calendar",
+    name: t("Local calendar"),
     source: "calendar",
     accountName: "Local",
     accountValue: "calendar",
-    calendarName: "Local calendar",
+    calendarName: t("Local calendar"),
     externalRefs: {},
   })
   calendarAccountConnections(connections).forEach((connection) => {
@@ -361,7 +362,7 @@ export function viewportFromViewState(
     const firstVisibleEvent = ids.map((id) => events.find((event) => event.id === id)).find(Boolean)
     if (firstVisibleEvent) {
       return {
-        date: firstVisibleEvent.startTime,
+        date: eventDisplayDate(firstVisibleEvent),
         view: (ids.length === 1 ? "day" : "list") as CalendarView,
       }
     }
@@ -527,17 +528,20 @@ function stripCalendarRefs(value: unknown) {
 }
 
 export function validateDraft(event: DraftEvent | Event) {
-  if (!event.title?.trim()) return "Title is required."
-  if (!event.startTime || Number.isNaN(event.startTime.getTime())) return "Start time is required."
-  if (!event.endTime || Number.isNaN(event.endTime.getTime())) return "End time is required."
-  if (event.endTime <= event.startTime) return "End time must be after start time."
+  if (!event.title?.trim()) return t("Title is required.")
+  if (!event.startTime || Number.isNaN(event.startTime.getTime())) return t("Start time is required.")
+  if (!event.endTime || Number.isNaN(event.endTime.getTime())) return t("End time is required.")
+  if (event.endTime <= event.startTime) return t("End time must be after start time.")
   return ""
 }
 
-export function formatTime(date: Date) {
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-}
+export function formatTime(date: Date) { return formatCalendarTime(date) }
+export function localDateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}` }
 
 export function inputDate(date?: Date) {
   return date ? new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""
+}
+
+export function eventDisplayDate(event: Event) {
+  return event.all_day && event.all_day_start ? new Date(`${event.all_day_start}T12:00:00`) : event.startTime
 }

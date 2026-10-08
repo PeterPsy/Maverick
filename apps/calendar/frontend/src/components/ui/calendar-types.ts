@@ -5,6 +5,12 @@ export interface Event {
   startTime: Date
   endTime: Date
   status?: "confirmed" | "tentative" | "cancelled"
+  series_id?: string
+  original_start_time?: string
+  recurrence_scope?: "occurrence" | "future" | "series"
+  transparency?: "opaque" | "transparent"
+  all_day_start?: string
+  all_day_end?: string
   timezone?: string
   location?: string
   organizer?: string
@@ -19,6 +25,7 @@ export interface Event {
   source?: string
   external_refs?: Record<string, unknown>
   recurrence?: Record<string, unknown>
+  reminders_use_default?: boolean
   reminders?: unknown[]
   idempotency_key?: string
 }
@@ -33,6 +40,8 @@ export interface CalendarConnection {
   scopes?: string[]
   created_at?: string
   updated_at?: string
+  event_count?: number
+  sync_status?: { status?: string; last_sync_at?: string; stale?: boolean; error?: string }
   last_sync_at?: string
   token_resource?: {
     logical_name?: string
@@ -53,6 +62,8 @@ export interface CalendarRemoteCalendar {
   access_role?: string
   primary?: boolean
   selected?: boolean
+  availability_enabled?: boolean
+  sync_status?: { status?: string; last_sync_at?: string; time_min?: string; time_max?: string; error?: string; has_more?: boolean }
   sync_enabled?: boolean
   color?: string
   updated_at?: string
@@ -61,9 +72,7 @@ export interface CalendarRemoteCalendar {
 export interface EventManagerProps {
   onVisibleDateChange?: (date: Date) => void
   events?: Event[]
-  onEventCreate?: (event: Omit<Event, "id">) => void | Promise<void>
   onEventUpdate?: (id: string, event: Partial<Event>) => void | Promise<void>
-  onEventDelete?: (id: string, event?: Event) => void | Promise<void>
   categories?: string[]
   colors?: CalendarColor[]
   defaultView?: CalendarView
@@ -75,6 +84,8 @@ export interface EventManagerProps {
   onEventOpen?: (event: Event) => void
   runtimeAppId?: string
   calendarConnections?: CalendarConnection[]
+  onCreateAt?: (date: Date, hour?: number) => void
+  onDayOpen?: (date: Date) => void
   onSyncConnections?: () => void | Promise<void>
   isSyncingConnections?: boolean
   calendars?: CalendarRemoteCalendar[]
@@ -133,6 +144,8 @@ export interface CalendarExternalViewState {
 }
 
 export interface ViewProps {
+  onCreateAt?: (date: Date, hour?: number) => void
+  onDayOpen?: (date: Date) => void
   currentDate: Date
   events: Event[]
   onEventClick: (event: Event) => void

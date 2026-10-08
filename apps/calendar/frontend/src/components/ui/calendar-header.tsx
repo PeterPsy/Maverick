@@ -1,3 +1,5 @@
+import { t, formatCalendarDate } from "@/preferences"
+import { CalendarSettings } from "./calendar-settings"
 import type { ReactNode } from "react"
 import { Calendar, ChevronLeft, ChevronRight, Clock, Grid3x3, List, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -6,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { CalendarView } from "./calendar-types"
 
 export function Header({
+  onCreate,
   view,
   currentDate,
   setView,
@@ -15,6 +18,7 @@ export function Header({
   setSearchQuery,
   filters,
 }: {
+  onCreate: () => void
   view: CalendarView
   currentDate: Date
   setView: (value: CalendarView) => void
@@ -26,12 +30,12 @@ export function Header({
 }) {
   const title =
     view === "month"
-      ? currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+      ? formatCalendarDate(currentDate, { month: "long", year: "numeric" })
       : view === "week"
-        ? `Week of ${currentDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+        ? `${t("Week")} · ${formatCalendarDate(currentDate, { month: "short", day: "numeric" })}`
         : view === "day"
-          ? currentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
-          : `Events from ${currentDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`
+          ? formatCalendarDate(currentDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+          : `${t("List")} · ${formatCalendarDate(currentDate, { month: "long", day: "numeric", year: "numeric" })}`
 
   return (
     <div className="flex flex-col gap-3">
@@ -39,18 +43,18 @@ export function Header({
         <div className="flex items-center justify-between gap-3 sm:justify-start sm:gap-4">
           <h2 className="min-w-0 flex-1 truncate text-xl font-semibold sm:flex-none sm:text-2xl">{title}</h2>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => navigateDate("prev")} className="h-8 w-8 flex-shrink-0">
+            <Button variant="outline" size="icon" aria-label={t("Previous")} onClick={() => navigateDate("prev")} className="h-8 w-8 flex-shrink-0">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={setToday} className="h-8 w-8 flex-shrink-0 sm:hidden" aria-label="Today">
+            <Button variant="outline" size="icon" onClick={setToday} className="h-8 w-8 flex-shrink-0 sm:hidden" aria-label={t("Today")}>
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
             </Button>
             <div className="hidden sm:block">
               <Button variant="outline" size="sm" onClick={setToday}>
-                Today
+                {t("Today")}
               </Button>
             </div>
-            <Button variant="outline" size="icon" onClick={() => navigateDate("next")} className="h-8 w-8 flex-shrink-0">
+            <Button variant="outline" size="icon" aria-label={t("Next")} onClick={() => navigateDate("next")} className="h-8 w-8 flex-shrink-0">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -59,12 +63,13 @@ export function Header({
           <ViewControls view={view} setView={setView} mode="desktop" />
         </div>
       </div>
+      <div className="flex items-center gap-2"><Button onClick={onCreate}>{t("New event")}</Button><CalendarSettings /></div>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="relative w-full min-w-[14rem] lg:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search events..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="pl-9 pr-9" />
+          <Input aria-label={t("Search events...")} placeholder={t("Search events...")} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="pl-9 pr-9" />
           {searchQuery && (
-            <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2" onClick={() => setSearchQuery("")}>
+            <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2" aria-label={t("Clear search")} onClick={() => setSearchQuery("")}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -94,10 +99,10 @@ function ViewControls({
         <Select value={view} onValueChange={(value) => setView(value as CalendarView)}>
           <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="month"><IconLabel icon={<Calendar className="h-4 w-4" />} label="Month" /></SelectItem>
-            <SelectItem value="week"><IconLabel icon={<Grid3x3 className="h-4 w-4" />} label="Week" /></SelectItem>
-            <SelectItem value="day"><IconLabel icon={<Clock className="h-4 w-4" />} label="Day" /></SelectItem>
-            <SelectItem value="list"><IconLabel icon={<List className="h-4 w-4" />} label="List" /></SelectItem>
+            <SelectItem value="month"><IconLabel icon={<Calendar className="h-4 w-4" />} label={t("Month")} /></SelectItem>
+            <SelectItem value="week"><IconLabel icon={<Grid3x3 className="h-4 w-4" />} label={t("Week")} /></SelectItem>
+            <SelectItem value="day"><IconLabel icon={<Clock className="h-4 w-4" />} label={t("Day")} /></SelectItem>
+            <SelectItem value="list"><IconLabel icon={<List className="h-4 w-4" />} label={t("List")} /></SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -114,7 +119,7 @@ function ViewControls({
       ].map(([value, Icon, label]) => (
         <Button key={String(value)} variant={view === value ? "secondary" : "ghost"} size="sm" onClick={() => setView(value as CalendarView)} className="h-8">
           <Icon className="h-4 w-4" />
-          <span className="ml-1">{String(label)}</span>
+          <span className="ml-1">{t(String(label))}</span>
         </Button>
       ))}
     </div>

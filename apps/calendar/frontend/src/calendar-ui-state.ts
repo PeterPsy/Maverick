@@ -1,6 +1,8 @@
 export type CalendarSidebarMode = 'idle' | 'create' | 'details';
 
 export type CalendarUiState = {
+  createStart: string;
+  viewDate: string;
   searchQuery: string;
   selectedColors: string[];
   selectedTags: string[];
@@ -17,6 +19,8 @@ export const CALENDAR_UI_STATE_CHANGED_EVENT = 'maverick.calendar.ui-state-chang
 const STORAGE_PREFIX = 'maverick.calendar.uiState';
 
 const DEFAULT_UI_STATE: CalendarUiState = {
+  createStart: '',
+  viewDate: '',
   searchQuery: '',
   selectedColors: [],
   selectedTags: [],
@@ -41,7 +45,9 @@ export function readCalendarUiState(appId: string): CalendarUiState {
 }
 
 export function writeCalendarUiState(appId: string, patch: Partial<CalendarUiState>): CalendarUiState {
-  const next = normalizeUiState({ ...readCalendarUiState(appId), ...patch, requestId: patch.requestId || createRequestId() });
+  const previous = readCalendarUiState(appId);
+  const startsCreate = patch.sidebarMode === 'create';
+  const next = normalizeUiState({ ...previous, ...patch, requestId: patch.requestId || (startsCreate ? createRequestId() : previous.requestId || createRequestId()) });
   window.localStorage.setItem(storageKey(appId), JSON.stringify(next));
   return next;
 }
@@ -61,6 +67,8 @@ export function notifyCalendarUiStateChanged(appId: string, detail: Record<strin
 
 function normalizeUiState(value: Partial<CalendarUiState>): CalendarUiState {
   return {
+    createStart: scalarString(value.createStart),
+    viewDate: scalarString(value.viewDate),
     searchQuery: scalarString(value.searchQuery),
     selectedColors: stringList(value.selectedColors),
     selectedTags: stringList(value.selectedTags),

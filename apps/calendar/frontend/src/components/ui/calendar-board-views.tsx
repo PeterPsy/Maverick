@@ -10,7 +10,11 @@ export function CalendarBoardViews({
   onDragStart,
   onDragEnd,
   view,
+  onCreateAt,
+  onDayOpen,
 }: {
+  onCreateAt?: (date: Date, hour?: number) => void
+  onDayOpen?: (date: Date) => void
   currentDate: Date
   events: Event[]
   getColorClasses: (color: string) => ColorClasses
@@ -23,6 +27,8 @@ export function CalendarBoardViews({
   if (view === "month") {
     return (
       <MonthView
+        onCreateAt={onCreateAt}
+        onDayOpen={onDayOpen}
         currentDate={currentDate}
         events={events}
         onEventClick={onEventClick}
@@ -36,6 +42,8 @@ export function CalendarBoardViews({
   if (view === "week") {
     return (
       <WeekView
+        onCreateAt={onCreateAt}
+        onDayOpen={onDayOpen}
         currentDate={currentDate}
         events={events}
         onEventClick={onEventClick}
@@ -49,6 +57,8 @@ export function CalendarBoardViews({
   if (view === "day") {
     return (
       <DayView
+        onCreateAt={onCreateAt}
+        onDayOpen={onDayOpen}
         currentDate={currentDate}
         events={events}
         onEventClick={onEventClick}

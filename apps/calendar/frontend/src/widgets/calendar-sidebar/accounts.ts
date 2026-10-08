@@ -11,7 +11,7 @@ export type AccountGroup = {
   eventCount: number;
 };
 
-export function buildAccountGroups(events: Event[], connections: CalendarConnection[], calendars: CalendarRemoteCalendar[]): AccountGroup[] {
+export function buildAccountGroups(events: Event[], connections: CalendarConnection[], calendars: CalendarRemoteCalendar[], localCount?: number): AccountGroup[] {
   const localEvents = events.filter((event) => calendarAccountFilterValues(event).includes('calendar'));
   const groups: AccountGroup[] = [
     {
@@ -20,7 +20,7 @@ export function buildAccountGroups(events: Event[], connections: CalendarConnect
       provider: 'local',
       status: 'connected',
       calendars: [],
-      eventCount: localEvents.length,
+      eventCount: localCount ?? localEvents.length,
     },
   ];
   calendarAccountConnections(connections)
@@ -34,7 +34,7 @@ export function buildAccountGroups(events: Event[], connections: CalendarConnect
         status: connection.status || 'connected',
         connection,
         calendars: calendars.filter((calendar) => calendar.connection_id === connection.id),
-        eventCount: events.filter((event) => calendarAccountFilterValues(event).includes(accountId)).length,
+        eventCount: connection.event_count ?? events.filter((event) => calendarAccountFilterValues(event).includes(accountId)).length,
       });
     });
   return groups;

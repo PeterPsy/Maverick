@@ -2,10 +2,10 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { listCalendars, listConnections, listEvents } from '../../api';
+import { accountSummary } from '../../api';
 import { useCalendarSidebarReads } from './useCalendarSidebarReads';
 
-vi.mock('../../api', () => ({ listEvents: vi.fn(async () => []), listConnections: vi.fn(async () => []), listCalendars: vi.fn(async () => []) }));
+vi.mock('../../api', () => ({ accountSummary: vi.fn(async () => ({ connections: [], calendars: [], localEventCount: 0 })) }));
 
 class Socket {
   static instances: Socket[] = [];
@@ -31,7 +31,7 @@ it('keeps displayed accounts mounted, aborts reads on close and coalesces refres
     await act(async () => { root.render(<Probe />); });
     Socket.instances[0].onopen?.();
     expect(reads!.isLoading).toBe(false);
-    vi.mocked(listEvents).mockImplementationOnce((_app, signal) => new Promise((_resolve, reject) => {
+    vi.mocked(accountSummary).mockImplementationOnce((_app, signal) => new Promise((_resolve, reject) => {
       signal?.addEventListener('abort', () => reject(new Error('cancelled by close')));
     }));
     let pending: Promise<void>;
@@ -44,11 +44,9 @@ it('keeps displayed accounts mounted, aborts reads on close and coalesces refres
       await pending;
       vi.advanceTimersByTime(60_000);
     });
-    expect(vi.mocked(listEvents).mock.calls[1][1]?.aborted).toBe(true);
-    expect(vi.mocked(listConnections).mock.calls[1][1]?.aborted).toBe(true);
-    expect(vi.mocked(listCalendars).mock.calls[1][2]?.aborted).toBe(true);
+    expect(vi.mocked(accountSummary).mock.calls[1][1]?.aborted).toBe(true);
     expect(reads!.error).toBe('');
-    expect(listEvents).toHaveBeenCalledTimes(2);
+    expect(accountSummary).toHaveBeenCalledTimes(2);
     await act(async () => {
       hidden = false;
       document.dispatchEvent(new Event('visibilitychange'));
@@ -57,7 +55,7 @@ it('keeps displayed accounts mounted, aborts reads on close and coalesces refres
       reads!.scheduleRefresh();
       vi.advanceTimersByTime(120);
     });
-    expect(listEvents).toHaveBeenCalledTimes(3);
+    expect(accountSummary).toHaveBeenCalledTimes(3);
     expect(reads!.isLoading).toBe(false);
   } finally { act(() => root.unmount()); }
 });

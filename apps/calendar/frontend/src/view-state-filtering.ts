@@ -69,7 +69,7 @@ function eventHasConflict(event: Event, events: Event[]) {
 }
 
 function eventBlocksAvailability(event: Event) {
-  return (event.status || 'confirmed') !== 'cancelled';
+  return (event.status || 'confirmed') !== 'cancelled' && event.transparency !== 'transparent';
 }
 
 function eventSearchText(event: Event) {

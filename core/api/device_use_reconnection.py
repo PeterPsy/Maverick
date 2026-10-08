@@ -94,6 +94,7 @@ def _renewable_contract(previous, binding):
     # Reviewed additive companion upgrade: explicit idle reconnection retires the old
     # provider context. Owner, workspace, protocol and On/Full scope stay fixed.
     return (previous.executor_contract, previous.tool_contract_digest) in {
+        ("macos-v50", "4dd7bf89e6dd520294199f7b997e9388debf6004aaa6f618715033b77ed4b238"),
         ("macos-v49", "eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf"),
         ("macos-v48", "5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d"),
         ("macos-v47", "d0405d09ac1ff6903336a7fa7427c7c28e2922167a0dfe302a4db0bc48b00c71"),

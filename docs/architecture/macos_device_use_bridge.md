@@ -8,7 +8,42 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v50`.
+direct path was then removed. The current executor contract is `macos-v51`.
+
+## Full file and terminal authority (v51 / 0.2.4 build 55)
+
+Full activation itself authorizes Mac file and shell operations with the local
+user's macOS permissions. `mac_code` no longer needs a folder grant, a project
+handle or a resume call before reading/writing files or starting a command.
+Absolute, home-relative and working-directory-relative paths are supported.
+Canonical symlink targets use descriptor-relative IO; atomic writes still require
+the current hash and stop wins the existing synchronized commit boundary.
+POSIX/TCC/admin requirements are separate OS conditions, never granted by a picker.
+
+`FullProjectContext` stores a chat-owned working-directory preference shared by
+code and media tools, defaulting to Home. Its optional `local_` handle conveys
+context, never authority. `mac_code.select_project directory=...` and Full
+`mac_project directory=...` set it directly; only explicit `choose_directory=true`
+opens a picker. Home and `/` are valid directories. Context/resume results do not
+recursively inventory Home. `revoke_project` resets context/jobs; PC use Stop
+revokes native authority. Bounded On retains its native media-folder grants.
+Media primitives retain source immutability and generated-output semantics;
+general filesystem tasks use Full file/command tools.
+
+File failures distinguish Full-required, context mismatch, cancelled selection,
+missing paths and OS permission refusal without GUI-focus recovery instructions.
+Picker wait is recorded on successful, failed and cancelled outcomes. Native
+verification includes a new-chat command without a project, external absolute
+file paths, shared context and restart, canonical aliases, OS refusal mapping,
+explicit picker cancellation and stopped-activation persistence fencing.
+
+Core and native use `macos-v51`, digest
+`de5800e0240474b5108e40f3d35c0aa78532743949d9d8696a6ac43505762c76`.
+Reviewed v50 conversations can explicitly reconnect while idle, retiring the old
+provider context and preserving owner/workspace/On-or-Full scope. Deploy Core
+before installing the paired native release. macOS Full Disk Access requires
+system-settings consent; the executor neither claims it from Full mode nor
+modifies TCC.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
@@ -58,7 +93,7 @@ latency, text size and uncertain outcome counts. Missing historical measurements
 stay null. Numeric facts remain public; private text/JPEG evidence stays encrypted.
 Outside-bridge latency cannot be labelled model-processing time.
 
-## Mac-local coding companion (v49)
+## Mac-local coding companion (v49, historical folder-grant contract)
 
 The reviewed contract `macos-v49` has digest
 `eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf`.
@@ -66,7 +101,7 @@ Reviewed explicit idle reconnection from v44–v48 retires the old provider cont
 while preserving chat, owner, workspace and On/Full mode. Core must be deployed
 before the matching native client; unknown digests remain rejected.
 
-Full PC use now includes `mac_code`: a native folder picker, persistent chat-owned
+Before v51, Full PC use introduced `mac_code`: a native folder picker, persistent chat-owned
 coding bookmarks, guarded UTF-8 read/write/replace, directory listing/creation,
 and local shell jobs with opaque handles, independent output pagination, stdin
 and stop. The native app remains an executor; Core still owns the model,

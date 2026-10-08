@@ -20,7 +20,7 @@ class MacCodeContractTests(unittest.TestCase):
         self.assertEqual(properties["stdout_offset"]["minimum"], 0)
         self.assertEqual(properties["wait_ms"]["maximum"], 10000)
         for action in ("resume_project", "read_file", "write_file", "replace_text", "run_command",
-                       "read_process", "write_stdin", "stop_process", "revoke_project"):
+                       "read_process", "write_stdin", "stop_process", "revoke_project", "select_project"):
             self.assertIn(action, properties["action"]["enum"])
         self.assertNotIn("environment", properties)
 
@@ -31,7 +31,27 @@ class MacCodeContractTests(unittest.TestCase):
         self.assertIn("turn completion", full)
         self.assertIn("expected_sha256", full)
         bounded = device_use_instructions(mode="on", approved_apps=("com.apple.Finder",), initial_app="com.apple.Finder")
-        self.assertNotIn("For coding on the user's Mac use mac_code", bounded)
+        self.assertNotIn("For files, coding and installations on the user's Mac use mac_code", bounded)
+
+    def test_full_files_and_commands_do_not_require_a_folder_grant(self):
+        full = device_use_instructions(mode="full", approved_apps=(), initial_app="com.apple.Finder")
+        self.assertIn("no folder grant, project_id, resume_project or picker is required", full)
+        self.assertNotIn("authorize_project opens one native folder picker", full)
+        self.assertNotIn("Project IDs never grant access outside the user-picked folder", full)
+        code = next(item for item in device_use_dynamic_tools() if item["name"] == "mac_code")
+        self.assertEqual(code["inputSchema"]["required"], ["action"])
+        self.assertIn("Absolute paths", code["description"])
+        self.assertNotIn("authorize_project", code["inputSchema"]["properties"]["action"]["enum"])
+        media = next(item for item in device_use_dynamic_tools() if item["name"] == "mac_project")
+        self.assertIn("directory", media["inputSchema"]["properties"])
+        steps = media["inputSchema"]["properties"]["steps"]["items"]["properties"]
+        self.assertNotIn("directory", steps)
+        self.assertNotIn("choose_directory", steps)
+
+    def test_reviewed_v50_reconnects_to_full_file_contract(self):
+        old = SimpleNamespace(executor_contract="macos-v50", tool_contract_digest="4dd7bf89e6dd520294199f7b997e9388debf6004aaa6f618715033b77ed4b238")
+        current = SimpleNamespace(executor_contract=DEVICE_USE_EXECUTOR_CONTRACT, tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST)
+        self.assertTrue(_renewable_contract(old, current))
 
     def test_reviewed_v47_reconnects_without_accepting_unknown_contracts(self):
         current = SimpleNamespace(executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
@@ -43,7 +63,7 @@ class MacCodeContractTests(unittest.TestCase):
         self.assertFalse(_renewable_contract(old, current))
 
     def test_picker_budget_is_separate_from_short_process_wire_calls(self):
-        self.assertEqual(invocation_timeout_seconds("mac_code", "authorize_project"), 300)
+        self.assertEqual(invocation_timeout_seconds("mac_code", "select_project"), 300)
         self.assertEqual(invocation_timeout_seconds("mac_code", "run_command"), 180)
         self.assertEqual(invocation_timeout_seconds("mac_code", "read_process"), 180)
 

@@ -78,10 +78,10 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertIn("launch_app", tools["mac_peekaboo"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertIn("plain metadata", DEVICE_USE_COMPANION_GUIDANCE)
 
-    def test_contract_digest_is_the_frozen_macos_v49_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v51_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "4dd7bf89e6dd520294199f7b997e9388debf6004aaa6f618715033b77ed4b238",
+            "de5800e0240474b5108e40f3d35c0aa78532743949d9d8696a6ac43505762c76",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):
@@ -224,7 +224,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "device_use_execution_timeout"):
             service.invoke(binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
                 provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="slow",
-                tool_name="mac_code", arguments={"action": "authorize_project"}, task_text="select", timeout_seconds=.01)
+                tool_name="mac_code", arguments={"action": "select_project", "choose_directory": True}, task_text="select", timeout_seconds=.01)
         service.disconnect_executor(binding.activation_id)
         self.assertEqual(service._pending, {})
         self.assertEqual(service.journal()[-1].failure_reason_code, "device_use_execution_timeout")

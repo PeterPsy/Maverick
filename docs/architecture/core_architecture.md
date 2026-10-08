@@ -299,7 +299,11 @@ injection; the signed Mac app is only the native executor reached over the
 authenticated device WebSocket. Chat exposes a macOS-only PC use toggle:
 on starts Full Mac authority and off revokes only device access. Mac control is
 an additive capability chosen before the first message, independent of workspace
-execution permissions. The ordinary agent prompt, skills, project, app CLI tools,
+execution permissions. Full native file/command operations need no folder grant;
+the optional chat-owned working directory defaults to Home and is shared with
+media tools. Absolute local paths remain subject to macOS permissions. Only an
+explicit directory-choice request opens a picker; bounded On retains media
+folder grants. The ordinary agent prompt, skills, project, app CLI tools,
 attachments, references and delegation remain available. Native instructions and
 tools supplement the normal Codex/Antigravity runtime; a disconnected or stopped
 Mac does not block workspace turns. Native authority stays with the owning chat

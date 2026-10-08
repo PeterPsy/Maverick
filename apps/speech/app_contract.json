@@ -70,7 +70,8 @@
     "mcp_tools": [
       "speech_operations_manifest",
       "speech_reference_manifest",
-      "speech_transcribe_file"
+      "speech_transcribe_file",
+      "speech_prepare_subtitles"
     ],
     "cli_commands": [
       "speech"

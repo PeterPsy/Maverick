@@ -14,7 +14,8 @@
           "prewarm_synthesis_worker": "mutating",
           "prewarm_worker": "mutating",
           "set_engine": "mutating",
-          "transcribe_file": "read"
+          "transcribe_file": "read",
+          "prepare_subtitles": "read"
         }
       },
       "description": "Configure workspace Speech engine/language preferences, inspect health/settings, prewarm persistent workers, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
@@ -60,7 +61,8 @@
               "prewarm_synthesis_worker",
               "prewarm_worker",
               "set_engine",
-              "transcribe_file"
+              "transcribe_file",
+              "prepare_subtitles"
             ],
             "default": "operations.manifest",
             "description": "Speech app operation to run."
@@ -121,6 +123,47 @@
             "type": "boolean",
             "default": false,
             "description": "Force local-only one-shot file transcription without changing the workspace engine."
+          },
+          "word_timestamps": {
+            "type": "boolean",
+            "default": false,
+            "description": "Return measured word intervals for file transcription."
+          },
+          "subtitle_max_words": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "Prepare captions and SRT in the transcription call; implies word_timestamps."
+          },
+          "words": {
+            "type": "array",
+            "maxItems": 100000,
+            "description": "Measured words with start/end seconds and text."
+          },
+          "max_words": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "max_duration_seconds": {
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 30
+          },
+          "pause_threshold_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "time_offset_seconds": {
+            "type": "number",
+            "minimum": -86400,
+            "maximum": 86400
           }
         },
         "required": [],

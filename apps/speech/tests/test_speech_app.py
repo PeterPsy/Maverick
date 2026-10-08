@@ -313,6 +313,9 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(transcription["inline_default_profile"], "fast")
         self.assertFalse(transcription["inline_default_profile_available"])
         self.assertEqual(transcription["inline_default_profile_engine"], "")
+        self.assertTrue(transcription["word_timestamps_supported"])
+        self.assertEqual(transcription["word_timestamps_operations"], ["transcribe_file"])
+        self.assertTrue(transcription["subtitle_preparation_supported"])
 
     def test_capabilities_use_delivered_secrets_for_selected_remote_engines(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -3706,6 +3709,7 @@ class SpeechAppTests(unittest.TestCase):
                 "prewarm_worker",
                 "set_engine",
                 "transcribe_file",
+                "prepare_subtitles",
             ],
         )
         self.assertEqual(properties["include_voices"]["type"], "boolean")

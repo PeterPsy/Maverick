@@ -13,14 +13,16 @@ from service import handle_action, operations_manifest
 
 
 TOOL_ACTIONS = {
+    "speech_prepare_subtitles": "prepare_subtitles",
     "speech_operations_manifest": "operations.manifest",
     "speech_reference_manifest": "references.manifest",
     "speech_transcribe_file": "transcribe_file",
 }
 TOOL_ARGUMENT_FIELDS = {
+    "speech_prepare_subtitles": {"words", "max_words", "max_chars", "max_duration_seconds", "pause_threshold_seconds", "time_offset_seconds"},
     "speech_operations_manifest": set(),
     "speech_reference_manifest": set(),
-    "speech_transcribe_file": {"workspace_relative_path", "content_type", "language", "local_only"},
+    "speech_transcribe_file": {"workspace_relative_path", "content_type", "language", "local_only", "word_timestamps", "subtitle_max_words"},
 }
 
 
@@ -34,6 +36,7 @@ def _agent_manifest() -> dict:
         **manifest,
         "surface": "mcp",
         "operations": {
+            "prepare_subtitles": manifest["operations"]["prepare_subtitles"],
             "operations.manifest": {"description": "Describe Speech MCP operations.", "required_fields": []},
             "references.manifest": {"description": "Report that Speech exposes no reference entities.", "required_fields": []},
             "transcribe_file": manifest["operations"]["transcribe_file"],

@@ -1052,6 +1052,8 @@ def transcribe_audio_file(
     if engine == "faster-whisper":
         return _transcribe_with_faster_whisper(audio_path, settings=settings, language=language)
     if engine == "whisper.cpp":
+        if settings.get("_word_timestamps"):
+            raise SpeechProviderUnavailableError("This whisper.cpp adapter does not expose word timestamps; select a word-timing capable engine.")
         return _transcribe_with_whisper_cpp(audio_path, settings=settings, language=language)
     if engine == "deepgram":
         return _transcribe_with_deepgram(audio_path, settings=settings, language=language, operation=operation, mode=mode)
@@ -1143,6 +1145,10 @@ def _transcribe_with_deepgram(
     return {
         "text": text,
         "segments": _deepgram_segments(words, fallback_text=text),
+        **({"words": [{"start": word.get("start"), "end": word.get("end"),
+                        "text": word.get("punctuated_word") or word.get("word"),
+                        "confidence": word.get("confidence")} for word in words if isinstance(word, dict)]}
+           if settings.get("_word_timestamps") else {}),
         "duration_seconds": float(payload.get("metadata", {}).get("duration") or 0.0)
         if isinstance(payload.get("metadata"), dict)
         else 0.0,
@@ -1216,6 +1222,7 @@ def _transcribe_with_faster_whisper(audio_path: Path, *, settings: dict, languag
         "beam_size": faster_whisper_beam_size(settings),
         "data_root": str(settings.get("_data_root") or ""),
         "initial_prompt": faster_whisper_initial_prompt(),
+        "word_timestamps": settings.get("_word_timestamps") is True,
     }
     payload = _run_faster_whisper_worker_job(str(audio_path), config=config, language=language)
     if not payload.get("ok"):
@@ -1249,10 +1256,11 @@ def _run_faster_whisper_worker_job(audio_path: str, *, config: dict, language: s
 
 def _run_entrypoint_faster_whisper_worker_job(audio_path: str, *, config: dict, language: str) -> dict:
     with _FASTER_WHISPER_LOCK:
-        worker = _ensure_faster_whisper_worker(config)
+        worker = _ensure_faster_whisper_worker({key: value for key, value in config.items() if key != "word_timestamps"})
         job_id = f"fw_{uuid.uuid4().hex}"
         try:
-            worker["requests"].put({"job_id": job_id, "audio_path": audio_path, "language": language}, timeout=FASTER_WHISPER_QUEUE_TIMEOUT_SECONDS)
+            worker["requests"].put({"job_id": job_id, "audio_path": audio_path, "language": language,
+                                    "word_timestamps": config.get("word_timestamps") is True}, timeout=FASTER_WHISPER_QUEUE_TIMEOUT_SECONDS)
         except queue.Full as error:
             raise SpeechTranscriptionError("faster-whisper worker queue is full.") from error
         deadline = time.monotonic() + FASTER_WHISPER_TIMEOUT_SECONDS
@@ -1291,6 +1299,7 @@ def _run_external_faster_whisper_worker_job(audio_path: str, *, config: dict, la
             "audio_path": audio_path,
             "language": language,
             "initial_prompt": str(config.get("initial_prompt") or ""),
+            "word_timestamps": config.get("word_timestamps") is True,
         },
     )
 
@@ -1396,6 +1405,7 @@ def _remove_stale_external_worker_files(socket_path: Path, pid_path: Path, *, sc
 def _faster_whisper_worker_config(config: dict) -> dict:
     model = str(config.get("model") or DEFAULT_FASTER_WHISPER_MODEL)
     return {
+        "protocol_version": "speech.stt.worker.v2",
         "model": model,
         "model_label": str(config.get("model_label") or ""),
         "model_fingerprint": _file_fingerprint(model) if _looks_like_path(model) else {"configured": False},
@@ -1731,7 +1741,7 @@ def _faster_whisper_worker_loop(config: dict, request_queue: multiprocessing.Que
             result = _run_faster_whisper_with_model(
                 model,
                 Path(str(task.get("audio_path") or "")),
-                config=config,
+                config={**config, "word_timestamps": task.get("word_timestamps") is True},
                 language=str(task.get("language") or ""),
             )
             result["worker"] = {
@@ -1774,8 +1784,9 @@ def _run_faster_whisper_with_model(model: object, audio_path: Path, *, config: d
             initial_prompt=str(config.get("initial_prompt") or "") or None,
             vad_filter=True,
             beam_size=int(config.get("beam_size") or 1),
-            word_timestamps=False,
+            word_timestamps=config.get("word_timestamps") is True,
         )
+        segments_iter = list(segments_iter)
         segments = [
             {
                 "start": float(segment.start),
@@ -1785,6 +1796,15 @@ def _run_faster_whisper_with_model(model: object, audio_path: Path, *, config: d
             for segment in segments_iter
             if segment.text and segment.text.strip()
         ]
+        timing = {}
+        if config.get("word_timestamps"):
+            units = [word for segment in segments_iter for word in (getattr(segment, "words", None) or []) if word.word.strip()]
+            untimed = sum(word.end <= word.start for word in units)
+            untimed += sum(len(segment.text.split()) for segment in segments_iter
+                           if segment.text.strip() and not getattr(segment, "words", None))
+            timing = {"words": [{"start": float(word.start), "end": float(word.end), "text": word.word.strip(),
+                                 "confidence": float(word.probability)} for word in units if word.end > word.start],
+                      "untimed_word_count": untimed}
     except Exception as error:
         raise SpeechTranscriptionError(str(error)) from error
     return {
@@ -1796,6 +1816,7 @@ def _run_faster_whisper_with_model(model: object, audio_path: Path, *, config: d
         "language_probability": float(getattr(info, "language_probability", 0.0) or 0.0),
         "duration_seconds": float(getattr(info, "duration", 0.0) or 0.0),
         "segments": segments,
+        **timing,
         "text": " ".join(segment["text"] for segment in segments).strip(),
     }
 

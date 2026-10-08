@@ -18,7 +18,7 @@ import uuid
 import wave
 
 from engines import resolve_transcription_engine, transcribe_audio_file
-from errors import SpeechProviderUnavailableError, SpeechValidationError
+from errors import SpeechProviderUnavailableError, SpeechTranscriptionError, SpeechValidationError
 from flux_streaming import flux_streaming_supported, transcribe_deepgram_flux_audio_chunk
 from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
@@ -32,7 +32,8 @@ from models import (
     TRANSCRIPTION_PROFILE_MODELS,
 )
 from store import append_job, read_settings
-from transcription_policy import local_only_requested, local_transcription_settings
+from transcription_policy import file_timing_request, local_only_requested, local_transcription_settings
+from subtitles import normalized_words, prepare_subtitles
 
 HALLUCINATION_TRANSCRIPTS = {
     "bye",
@@ -196,6 +197,7 @@ def transcribe_file_payload(
     body: dict,
 ) -> dict:
     local_only = local_only_requested(body)
+    word_timestamps, subtitle_max_words = file_timing_request(body)
     request_started = time.monotonic()
     audio_path = resolve_workspace_audio_path(
         generated_storage_root=generated_storage_root,
@@ -222,6 +224,8 @@ def transcribe_file_payload(
         app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
         provider_config=body.get("_provider_config") if isinstance(body.get("_provider_config"), dict) else {},
         local_only=local_only,
+        word_timestamps=word_timestamps,
+        subtitle_max_words=subtitle_max_words,
     )
 
 
@@ -289,6 +293,8 @@ def transcribe_path(
     provider_config: dict | None = None,
     conversation_mode: bool = False,
     local_only: bool = False,
+    word_timestamps: bool = False,
+    subtitle_max_words: int | None = None,
 ) -> dict:
     if request_started is None:
         request_started = time.monotonic()
@@ -303,6 +309,7 @@ def transcribe_path(
         settings = {**settings, "_provider_config": dict(provider_config)}
     settings = local_transcription_settings(settings, local_only)
     settings["_data_root"] = str(data_root)
+    settings["_word_timestamps"] = word_timestamps
     dictation_stream_mode = deepgram_dictation_stream_enabled(
         settings,
         session=session,
@@ -347,6 +354,20 @@ def transcribe_path(
                 mode="chunked_dictation" if session else "one_shot",
             )
         transcription_seconds = time.monotonic() - transcription_started
+        timing_payload = {}
+        if word_timestamps:
+            words = normalized_words(result.get("words", []))
+            untimed = int(result.get("untimed_word_count") or 0)
+            complete = untimed == 0 and (bool(words) or not str(result.get("text") or "").strip())
+            timing_payload = {"words": words, "word_timing": {
+                "available": bool(words), "source": str(result.get("engine") or ""),
+                "precision": "provider_word_intervals", "word_count": len(words),
+                "complete": complete, "untimed_word_count": untimed,
+            }}
+            if subtitle_max_words is not None:
+                if not complete:
+                    raise SpeechTranscriptionError("The engine did not return complete word timing; subtitle timing cannot be inferred from sentence durations or omit untimed words.")
+                timing_payload["subtitles"] = prepare_subtitles({"words": words, "max_words": subtitle_max_words})
         if conversation_mode:
             return conversation_stream_response(
                 data_root=data_root,
@@ -441,6 +462,7 @@ def transcribe_path(
             "chunk_text": cleaned_text,
             "commands": commands,
             "segments": segments,
+            **timing_payload,
             "language": str(result.get("language") or language or ""),
             "language_probability": float(result.get("language_probability") or 0.0),
             "duration_seconds": duration_seconds,

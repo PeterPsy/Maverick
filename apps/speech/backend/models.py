@@ -28,6 +28,7 @@ SUPPORTED_TRANSCRIPTION_CONTENT_TYPES = [
     "video/webm",
 ]
 SUPPORTED_ACTIONS = [
+    "prepare_subtitles",
     "capabilities",
     "engine_health",
     "get_settings",

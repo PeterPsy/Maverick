@@ -79,6 +79,7 @@ def serve(*, socket_path: Path, pid_path: Path, config: dict, idle_timeout_secon
                 try:
                     request_config = dict(config)
                     request_config["initial_prompt"] = str(request.get("initial_prompt") or "")
+                    request_config["word_timestamps"] = request.get("word_timestamps") is True
                     result = _run_faster_whisper_with_model(
                         model,
                         Path(str(request.get("audio_path") or "")),

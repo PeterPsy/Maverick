@@ -79,6 +79,17 @@
             "type": "boolean",
             "default": false,
             "description": "Force local Whisper transcription for this request; never use a remote STT engine or change workspace settings."
+          },
+          "word_timestamps": {
+            "type": "boolean",
+            "default": false,
+            "description": "Return measured word intervals for file transcription."
+          },
+          "subtitle_max_words": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "Prepare captions and SRT in the transcription call; implies word_timestamps."
           }
         },
         "required": [
@@ -126,6 +137,78 @@
             "type": "object"
           },
           "retention": {
+            "type": "string"
+          },
+          "words": {
+            "type": "array"
+          },
+          "word_timing": {
+            "type": "object"
+          },
+          "subtitles": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "speech_prepare_subtitles": {
+      "effect_class": "read",
+      "description": "Prepare captions and SRT from measured words. Save returned content through Storage. Never interpolates sentence durations.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "words": {
+            "type": "array",
+            "maxItems": 100000,
+            "description": "Measured words with start/end seconds and text."
+          },
+          "max_words": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "max_duration_seconds": {
+            "type": "number",
+            "minimum": 0.05,
+            "maximum": 30
+          },
+          "pause_threshold_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "time_offset_seconds": {
+            "type": "number",
+            "minimum": -86400,
+            "maximum": 86400
+          }
+        },
+        "required": [
+          "words"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "captions": {
+            "type": "array"
+          },
+          "srt": {
+            "type": "string"
+          },
+          "caption_count": {
+            "type": "integer"
+          },
+          "word_count": {
+            "type": "integer"
+          },
+          "timing_source": {
             "type": "string"
           }
         }

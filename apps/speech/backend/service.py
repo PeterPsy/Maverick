@@ -44,6 +44,7 @@ from settings import (
     settings_with_app_secrets,
 )
 from store import read_jobs, read_settings
+from subtitles import prepare_subtitles
 from synthesis import selected_synthesis_language, selected_voice_id, synthesize_payload
 from transcription import transcribe_audio_payload, transcribe_file_payload
 
@@ -102,6 +103,8 @@ def handle_action(
         )
     if action == "transcribe_audio":
         return 200, transcribe_audio_payload(data_root=data_root, body=body)
+    if action == "prepare_subtitles":
+        return 200, prepare_subtitles(body)
     if action == "transcribe_file":
         return 200, transcribe_file_payload(
             data_root=data_root,
@@ -139,8 +142,12 @@ def operations_manifest() -> dict:
                 "required_fields": ["content_type", "audio_base64 or HTTP binary body"],
             },
             "transcribe_file": {
-                "description": "Transcribe a bounded workspace Storage audio file.",
+                "description": "Transcribe a bounded Storage audio file. Opt into word_timestamps, or subtitle_max_words for measured short captions and SRT in one call. Save deliverables through Storage; editor styling remains separate.",
                 "required_fields": ["workspace_relative_path"],
+            },
+            "prepare_subtitles": {
+                "description": "Prepare captions and SRT from measured words, with word/character/duration limits, pause boundaries and a time offset. Returns content; save through Storage. Never interpolates sentence durations into word times.",
+                "required_fields": ["words"],
             },
             "list_engines": {
                 "description": "List local speech engines and availability.",
@@ -310,7 +317,9 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "inline_default_profile": DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
                 "inline_default_profile_available": bool(inline_transcription_engine),
                 "inline_default_profile_engine": inline_transcription_engine,
-                "word_timestamps_supported": False,
+                "word_timestamps_supported": bool(transcription_selection["available"] and transcription_engine in {"deepgram", "faster-whisper"}),
+                "word_timestamps_operations": ["transcribe_file"] if transcription_selection["available"] and transcription_engine in {"deepgram", "faster-whisper"} else [],
+                "subtitle_preparation_supported": True,
                 "inputs": {
                     "audio_base64": True,
                     "http_binary_body": True,

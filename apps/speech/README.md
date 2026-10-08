@@ -56,6 +56,33 @@ maverick app speech cli run speech --action transcribe_file --workspace-relative
 
 `engine_health` and `list_engines` omit full voice arrays by default to keep CLI output compact. Pass `--include-voices true` when full voice metadata is needed.
 
+File transcription accepts opt-in `word_timestamps: true`. Deepgram and
+faster-whisper retain their measured word intervals as `words` with `start`,
+`end`, `text` and optional `confidence`; `word_timing` reports engine provenance,
+availability and completeness. These intervals are engine estimates, not verified
+lip sync. The whisper.cpp adapter does not currently provide this capability.
+The flag is per request: it does not reload the persistent faster-whisper model
+or change ordinary dictation. Untimed units are counted explicitly; no word is
+silently omitted from an automatically prepared subtitle result.
+
+Pass `subtitle_max_words: 1...20` to request word timing and grouped captions/SRT
+in the same transcription call. Alternatively, the read-only `prepare_subtitles`
+operation (MCP `speech_prepare_subtitles`) accepts existing measured `words` with
+`max_words` (default 3), `max_chars` (42), `max_duration_seconds` (3),
+`pause_threshold_seconds` (0.35), and `time_offset_seconds` (0). It splits at word,
+pause and punctuation boundaries and clips overlapping caption ends at the next
+measured start. It rejects sentence units that exceed the requested word limit,
+invalid intervals and multiline text; it never invents word boundaries by
+dividing a sentence duration. An individually overlong word is retained and
+counted in `overlong_word_count`. Empty speech yields an empty SRT. The operation
+returns data without writing a file; consumers save deliverables through Storage.
+Transcript and subtitle text do not enter persisted Speech job metadata.
+
+Use the exact requested source and verify captions against the edited timeline.
+A constant offset does not account for cuts, reordered clips or speed changes.
+Bulk import and global styling belong to the destination editor's supported
+operations; these Speech capabilities do not modify editor-private projects.
+
 MCP exposes the operations manifest, the empty reference manifest, and Storage-file transcription:
 
 ```bash

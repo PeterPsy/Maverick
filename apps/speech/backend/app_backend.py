@@ -243,6 +243,8 @@ def backend_worker_config() -> dict:
         Path(__file__).with_name("synthesis.py"),
         Path(__file__).with_name("streaming_synthesis.py"),
         Path(__file__).with_name("transcription.py"),
+        Path(__file__).with_name("transcription_policy.py"),
+        Path(__file__).with_name("subtitles.py"),
         Path(__file__).with_name("settings.py"),
         Path(__file__).with_name("store.py"),
     ]

@@ -13,6 +13,7 @@ from service import app_events_for_action, handle_action, operations_manifest
 
 
 CLI_ACTIONS = {
+    "prepare_subtitles",
     "engine_health",
     "get_settings",
     "list_engines",
@@ -24,6 +25,7 @@ CLI_ACTIONS = {
     "worker_status",
 }
 CLI_ARGUMENT_FIELDS_BY_ACTION = {
+    "prepare_subtitles": {"action", "words", "max_words", "max_chars", "max_duration_seconds", "pause_threshold_seconds", "time_offset_seconds"},
     "engine_health": {"action", "include_voices"},
     "get_settings": {"action"},
     "list_engines": {"action", "include_voices"},
@@ -31,7 +33,7 @@ CLI_ARGUMENT_FIELDS_BY_ACTION = {
     "prewarm_synthesis_worker": {"action"},
     "prewarm_worker": {"action"},
     "set_engine": {"action", "synthesis_engine", "synthesis_language", "transcription_engine", "transcription_profile"},
-    "transcribe_file": {"action", "workspace_relative_path", "content_type", "language"},
+    "transcribe_file": {"action", "workspace_relative_path", "content_type", "language", "local_only", "word_timestamps", "subtitle_max_words"},
     "worker_status": {"action"},
 }
 
@@ -56,6 +58,7 @@ def _agent_manifest() -> dict:
         **manifest,
         "surface": "cli",
         "operations": {
+            "prepare_subtitles": manifest["operations"]["prepare_subtitles"],
             "engine_health": manifest["operations"]["engine_health"],
             "get_settings": manifest["operations"]["get_settings"],
             "list_engines": manifest["operations"]["list_engines"],

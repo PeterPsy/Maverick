@@ -64,9 +64,9 @@ describe("chat sidebar unread response state", () => {
   it("renders a theme-aware accent border for completed unread responses", () => {
     const styles = readStyle("styles.css");
 
-    expect(styles).toContain(".bs-chat-list__item.is-unread:not(.is-busy)");
+    expect(styles).toContain(".bs-chat-list__item.is-unread:not(.is-busy):not(.is-expanded)");
     expect(styles).toContain("border-color: var(--maverick-accent);");
-    expect(styles.indexOf(".bs-chat-list__item.is-unread:not(.is-busy)")).toBeGreaterThan(styles.indexOf(".bs-chat-list__item.is-expanded"));
+    expect(styles.indexOf(".bs-chat-list__item.is-unread:not(.is-busy):not(.is-expanded)")).toBeGreaterThan(styles.indexOf(".bs-chat-list__item.is-expanded"));
   });
 });
 
@@ -81,7 +81,7 @@ describe("chat sidebar project delete confirmation", () => {
 });
 
 describe("chat sidebar multi-select affordance", () => {
-  it("keeps the circular selection control hidden until row interaction or selection", () => {
+  it("keeps the selection control hidden until row interaction or selection", () => {
     const styles = readStyle("styles.css");
 
     expect(styles).toContain(".bs-chat-list__trailing");

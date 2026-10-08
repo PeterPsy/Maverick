@@ -1,0 +1,189 @@
+.bs-chat-thread-editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.bs-chat-thread-editor__field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--maverick-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.bs-chat-thread-editor__field input,
+.bs-chat-thread-editor__project {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: 7px;
+  background: var(--chat-sidebar-edit-surface);
+  color: var(--maverick-text);
+  transition: background 140ms ease;
+}
+
+.bs-chat-thread-editor__field input {
+  padding: 0 9px;
+  font-size: 13px;
+}
+
+.bs-chat-thread-editor__project {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+}
+
+.bs-chat-thread-editor__project > svg {
+  color: var(--maverick-text-muted);
+  pointer-events: none;
+}
+
+.bs-chat-thread-editor__project select {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--maverick-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  color-scheme: var(--maverick-color-scheme);
+}
+
+.bs-chat-thread-editor__project option {
+  background: var(--chat-sidebar-select-bg);
+  color: var(--chat-sidebar-select-text);
+}
+
+.bs-chat-thread-editor__field input:focus,
+.bs-chat-thread-editor__project select:focus {
+  outline: none;
+}
+
+.bs-chat-thread-editor__field input:focus,
+.bs-chat-thread-editor__project:focus-within {
+  background: var(--chat-sidebar-soft-surface-hover);
+}
+
+.bs-chat-thread-editor__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.bs-chat-thread-editor__footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--maverick-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+  touch-action: manipulation;
+}
+
+.bs-chat-thread-editor__footer button:hover:not(:disabled),
+.bs-chat-thread-editor__footer button:focus-visible {
+  background: var(--chat-sidebar-soft-surface-hover);
+  color: var(--maverick-text);
+  outline: none;
+}
+
+.bs-chat-thread-editor__footer button.is-primary {
+  background: var(--chat-sidebar-soft-surface-active);
+  color: var(--maverick-text);
+  font-weight: 600;
+}
+
+.bs-chat-thread-editor__footer button.is-primary:hover:not(:disabled),
+.bs-chat-thread-editor__footer button.is-primary:focus-visible {
+  background: rgba(var(--maverick-contrast-rgb), 0.22);
+}
+
+.bs-chat-thread-editor__footer button.bs-chat-thread-editor__delete {
+  width: 30px;
+  padding: 0;
+  margin-right: auto;
+}
+
+.bs-chat-thread-editor__footer button.is-danger,
+.bs-chat-thread-editor__footer button.bs-chat-thread-editor__delete:hover,
+.bs-chat-thread-editor__footer
+  button.bs-chat-thread-editor__delete:focus-visible {
+  color: light-dark(#b42318, #fda29b);
+  background: light-dark(rgba(180, 35, 24, 0.08), rgba(253, 162, 155, 0.08));
+}
+
+.bs-chat-thread-editor button:disabled,
+.bs-chat-thread-editor input:disabled,
+.bs-chat-thread-editor select:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.bs-chat-thread-editor__confirmation {
+  display: grid;
+  gap: 6px;
+  padding-top: 9px;
+  border-top: 1px solid var(--chat-sidebar-soft-border);
+}
+
+.bs-chat-thread-editor__confirmation p,
+.bs-chat-thread-editor__error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bs-chat-thread-editor__error {
+  color: light-dark(#b42318, #fda29b);
+  overflow-wrap: anywhere;
+}
+
+.bs-chat-thread-editor .is-spinning {
+  animation: chat-thread-editor-spin 1s linear infinite;
+}
+
+@keyframes chat-thread-editor-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .bs-chat-thread-editor__field input,
+  .bs-chat-thread-editor__project {
+    height: 38px;
+  }
+  .bs-chat-thread-editor__field input,
+  .bs-chat-thread-editor__project select {
+    font-size: 16px;
+  }
+  .bs-chat-thread-editor__footer button {
+    min-height: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-chat-thread-editor .is-spinning {
+    animation: none;
+  }
+}

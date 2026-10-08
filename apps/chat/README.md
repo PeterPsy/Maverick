@@ -149,7 +149,16 @@ The project toolbar can expand/collapse all groups or create a project even when
 the current view is empty; successful creation returns to all conversations so
 the new project is visible. Project menus expose rename, new chat and the existing
 inline delete confirmation. Thread editing, selection, drag references, unread
-states and Busy glow animations retain their existing runtime behavior. Collapsed
+states and Busy glow animations retain their existing runtime behavior. Thread
+rows reveal compact checkbox and pencil controls on hover, keyboard focus or the
+existing mobile long press. The timestamp does not intercept clicks on these
+controls, and long presses do not select the row's title text.
+Editing opens one full-width panel with labeled title
+and project fields, separate delete action, Cancel and Save. Enter saves and Escape
+closes the panel with focus restored to the edit button. Save stays disabled for
+empty or unchanged drafts; pending requests lock the fields, and failures retain
+the draft for retry. Deletion requires an inline confirmation. Editing does not
+show unrelated row actions or a bright focus outline. Collapsed
 groups are inert and pause their hidden Busy animations.
 
 Chat already uses React, TypeScript and Lucide. Tailwind v4 is built through

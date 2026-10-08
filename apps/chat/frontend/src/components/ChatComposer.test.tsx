@@ -984,6 +984,24 @@ describe("ChatComposer reference search", () => {
     expect(element.textContent).toContain("Microphone permission was blocked");
   });
 
+  it.each(["unknown", "denied"] as const)("shows system privacy guidance for native microphone denial (%s)", async (permission) => {
+    vi.stubGlobal("__maverickNativeLoadingSurface", true);
+    if (permission === "denied") mockMicrophonePermission(permission);
+    const { element } = await renderComposer({
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    mockMicrophoneDenied();
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(element.textContent).toContain("device's privacy settings");
+    expect(element.textContent).not.toContain("browser site settings");
+  });
+
   it("still asks getUserMedia when the Permissions API reports denied", async () => {
     const { element, getValue } = await renderComposer({
       transcriptionProviderAppId: "speech",

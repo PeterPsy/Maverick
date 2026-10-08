@@ -303,6 +303,14 @@ first-paint color at document start. The web shell replaces it with the
 selected theme when ready; a default white WebKit canvas is never a loading
 state.
 
+Chat microphone recording is independent of Device Use activation. Native
+macOS 0.2.7 (58) declares its microphone purpose string so WebKit exposes audio
+capture. macOS and iOS compile the shared `MaverickWebMediaCapturePolicy` in the
+native repository: it accepts HTTPS microphone requests for the platform or an
+exact live shell-registered app origin with exact microphone delegation, then
+requests OS consent and revalidates the frame. External pages, popup receivers
+and camera requests remain denied. See the native `docs/native-chat-speech.md`.
+
 The composer exposes one **PC use** toggle beside Research and the other
 composer utilities. It shares their icon-button style, `aria-pressed` state and
 active label:

@@ -444,6 +444,9 @@ function microphoneRequestErrorMessage(error: unknown, permissionState: Permissi
     if (microphoneBlockedByFramePolicy()) {
       return "Maverick shell is blocking microphone access for Chat. Hard refresh the full Maverick page, then try again.";
     }
+    if ((window as Window & { __maverickNativeLoadingSurface?: boolean }).__maverickNativeLoadingSurface === true) {
+      return "Microphone permission was blocked. Allow microphone access for this app in your device's privacy settings, then try again.";
+    }
     if (permissionState === "denied") {
       return "Microphone permission was denied by the browser. Allow microphone access in browser site settings, then reload Maverick.";
     }

@@ -22,6 +22,12 @@ stop linked implementations and fence the consumed backlog, retaining its audit.
 
 ## Contract Notes
 
+Native macOS/iOS dictation uses WebKit recording with OS microphone consent.
+The native shells authorize the exact isolated app origins registered by the
+authenticated shell, including their explicit microphone delegation. When OS
+access is denied, Chat directs users to device privacy settings; browser/PWA
+sessions retain browser-site guidance.
+
 - Provider account telemetry (`account.updated`) is excluded from transcript cards and live activity labels, including saved history. Core drops these notifications before persistence and transport; Chat also filters historical steps. Authentication and plan metadata require no chat action.
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
 - Chat exposes two Core-owned runners outside the Agents catalog. `Free Agent` is the ordinary workspace-capable default. `Research` has a dedicated composer toggle that appears when the workspace is effectively full-access and a compatible agentic provider is available. Each new Research chat creates a fresh session whose model-facing context contains only that conversation and web research: hosted API models receive the exact read-only Browser tools `web_search` and `web_open`, while native adapters provide equivalent native web-only surfaces. Codex and Antigravity models retain their selected model and reasoning effort in Research. Codex uses a private auth-only home, an empty sandboxed workdir, a persistent chat-scoped thread, and native live web search. Antigravity uses an auth-only home, an empty outer-sandbox workdir, and a fixed primary agent with only `search_web` and `read_url_content`; its customization directories and empty MCP configuration are mounted read-only. Neither path receives the Maverick platform prompt, `AGENTS.md`, workspace files, agent persona, skills, attachments, app references, shell, writes, or delegation. All models on a reviewed runtime inherit the profile: Codex CLI `0.153.4`/`0.159.2`, Antigravity CLI `1.1.27`, and the shared hosted API loop. Unknown native versions and new CLI adapters fail closed until they implement its isolation contract. Successful model selection clears any previous compatibility error. Core validates the contract at creation, turn admission, live-authority refresh, process initialization, and tool execution; model training and provider/service safety policies still apply.

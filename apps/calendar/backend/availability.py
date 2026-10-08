@@ -300,3 +300,12 @@ def _conflict_record(event: dict[str, Any]) -> dict[str, Any]:
         "tags": event.get("tags", []),
         "revision": event.get("revision", 1),
     }
+
+
+def conflicts_for_saved_event(data_root, event):
+    """Mutation warnings share the same expanded, availability-filtered mirror."""
+    return conflicts_for_event(
+        _events_for_availability(data_root, event["startTime"], event["endTime"]),
+        event,
+        ignore_event_id=event["id"],
+    )

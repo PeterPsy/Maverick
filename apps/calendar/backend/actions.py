@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from availability import check_availability, conflicts_for_event, find_free_time
+from availability import conflicts_for_saved_event, check_availability, find_free_time
 from constants import AGENT_DEFAULT_LIST_LIMIT, MUTATING_ACTIONS, SCHEMA_VERSION, VIEW_STATE_ACTIONS
 from errors import CalendarConflictError, CalendarRevisionConflictError
 from google_oauth import (
@@ -446,7 +446,7 @@ def _mutation_payload(
     idempotent_replay: bool = False,
     remote_mutation: bool = False,
 ) -> dict[str, Any]:
-    conflicts = conflicts_for_event(list_events(data_root), event, ignore_event_id=event["id"])
+    conflicts = conflicts_for_saved_event(data_root, event)
     result: dict[str, Any] = {
         "action": action,
         "event": event,

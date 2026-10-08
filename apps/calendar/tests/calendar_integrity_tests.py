@@ -970,3 +970,73 @@ class CalendarIntegrityTest(unittest.TestCase):
             }
         )[1]["events"]
         self.assertEqual([e["title"] for e in rows], ["Series", "Series", "Series"])
+
+    def test_hidden_google_event_edits_still_update_google(self):
+        self.action(
+            {
+                "action": "calendar_calendars.select",
+                "connection_id": "cal_conn_work",
+                "calendar_id": "primary",
+                "selected": False,
+            }
+        )
+        methods = []
+
+        def remote(method, url, request):
+            methods.append(method)
+            return 200, {
+                "id": "google-event-old",
+                "summary": "Hidden edit",
+                "start": {"dateTime": "2026-05-27T09:00:00Z"},
+                "end": {"dateTime": "2026-05-27T10:00:00Z"},
+            }
+
+        status, result = self.action(
+            {
+                "action": "update",
+                "id": "evt_existing_google",
+                "expected_revision": 1,
+                "event": {"title": "Hidden edit"},
+            },
+            self.transport(remote),
+        )
+        self.assertEqual(status, 200, result)
+        self.assertEqual(methods, ["PATCH"])
+        self.assertTrue(result["remote_mutation"])
+        self.assertEqual(self.action({"action": "list"})[1]["events"], [])
+
+    def test_mutation_warnings_match_hidden_calendar_availability(self):
+        self.action(
+            {
+                "action": "calendar_calendars.select",
+                "connection_id": "cal_conn_work",
+                "calendar_id": "primary",
+                "selected": False,
+            }
+        )
+        payload = {
+            "action": "create",
+            "conflict_policy": "warn",
+            "event": {
+                "title": "Overlap",
+                "startTime": "2026-05-27T09:00:00Z",
+                "endTime": "2026-05-27T10:00:00Z",
+            },
+        }
+        status, result = self.action(payload)
+        self.assertEqual(status, 201)
+        self.assertEqual(result["availability"]["status"], "conflicting")
+        self.assertEqual(result["conflicts"][0]["id"], "evt_existing_google")
+        self.action(
+            {
+                "action": "calendar_calendars.select",
+                "connection_id": "cal_conn_work",
+                "calendar_id": "primary",
+                "availability_enabled": False,
+            }
+        )
+        self.action(
+            {"action": "delete", "id": result["event"]["id"], "expected_revision": 1}
+        )
+        status, result = self.action(payload)
+        self.assertEqual(result["availability"]["status"], "free")

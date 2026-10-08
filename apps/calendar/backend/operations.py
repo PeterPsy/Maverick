@@ -178,16 +178,9 @@ def delete_event(
     def updater(state: dict[str, Any]) -> dict[str, Any]:
         nonlocal deleted
         events = [normalize_event(item) for item in state.get("events", [])]
-        visible_event_ids = {
-            event["id"]
-            for event in filter_visible_events(events, state.get("calendars", []))
-        }
         next_events = []
         for event in events:
             if event["id"] == event_id:
-                if event_id not in visible_event_ids:
-                    next_events.append(event)
-                    continue
                 _check_expected_revision("delete", event, expected_revision)
                 deleted = True
                 continue
@@ -409,7 +402,7 @@ def _read_event(data_root: Path, event_id: str) -> dict[str, Any]:
 
 
 def get_event(data_root: Path, event_id: str) -> dict[str, Any] | None:
-    events = list_events(data_root)
+    events = read_state(data_root)["events"]
     for event in events:
         if event["id"] == event_id:
             return event

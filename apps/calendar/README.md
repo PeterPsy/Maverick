@@ -301,3 +301,7 @@ A temporary 5,000-event fixture measured account-summary reads at about 237 ms
 before that cleanup. A 500-event display page took about 528 ms. These are local
 single-run measurements, not production latency guarantees; JSON storage remains
 in place while the sidebar avoids returning thousands of event records.
+
+Visibility affects displayed lists. Explicit event ids still resolve hidden sources,
+and Google writes retain provider routing and write-permission checks. Mutation
+warnings use the same availability flags and recurrence expansion as planning.

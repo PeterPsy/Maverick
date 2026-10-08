@@ -83,6 +83,19 @@ class DeviceUseAuditTests(unittest.TestCase):
         with self.assertRaises(RuntimeTranscriptAccessError):
             self.read_call(turn_id="another-turn")
 
+    def test_observation_success_retains_uncertain_input_and_new_metric_coverage(self):
+        self.capture("one", result={"success": True, "contentItems": [{"text": "action_outcome=indeterminate; observation_succeeded=true; input_effect_confirmed=false"}]})
+        self.store.save_event(self.fixture.event("delivery", "runtime.tool_call.completed", {
+            "tool_kind": "device_use", "call_id": "one", "name": "mac_project", "action": "verify_media",
+            "outcome_state": "indeterminate", "native_success": True,
+            "provider_observation_delivery_ms": 25, "result_text_char_count": 100}))
+        result = read_device_use_audit(self.store, context=self.fixture.context(), thread_id="session-1")
+        self.assertEqual(result["turns"][0]["uncertain_outcome_count"], 1)
+        self.assertEqual(result["turns"][0]["provider_observation_delivery_ms"], 25)
+        self.assertEqual(result["turns"][0]["result_text_char_count"], 100)
+        self.assertIsNone(result["turns"][0]["outside_bridge_ms"])
+        self.assertEqual(result["turns"][0]["metric_measured_call_counts"]["bridge_end_to_end_ms"], 0)
+
     def test_image_chunks_round_trip_with_integrity_and_are_not_public_payloads(self):
         jpeg = b"\xff\xd8" + b"x" * 1_100_000 + b"\xff\xd9"
         self.capture("one", result={"success": True}, jpeg=jpeg)

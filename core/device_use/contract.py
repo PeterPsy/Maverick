@@ -9,7 +9,7 @@ from core.device_use.code_contract import CODE_GUIDANCE, code_tool_spec
 
 
 DEVICE_USE_PROTOCOL_VERSION = "maverick.device-use.v1"
-DEVICE_USE_EXECUTOR_CONTRACT = "macos-v49"
+DEVICE_USE_EXECUTOR_CONTRACT = "macos-v50"
 DEVICE_USE_MAX_JPEG_BYTES = 4_000_000
 # EventKit v40 admits a bounded 200 KB JSON read before it is wrapped as a
 # dynamic-tool result. The relay bound includes JSON string escaping so the
@@ -29,7 +29,7 @@ Use save_checkpoint at meaningful milestones with expected_revision and the late
 Inspect media once and reuse hash-bound results; source hashes are always rechecked. run_project_script validates every step before starting and reports the failing field/step and completed steps on failure. It is a declarative sequence of approved media operations, not source code or a shell. Immutable per-call artifacts retain previous analysis and verification evidence.
 For constant-frame-rate preparation specify expected_fps and whole-frame start/end boundaries (frame_index/fps); the native export uses that rendering timebase and verifies fps/duration. For variable-rate sources use their actual timestamps rather than assuming a frame grid. sample_frames delivers one timecoded contact sheet. generate_srt requires non-overlapping output captions.
 verify_media validates dimensions/fps/duration, eight samples, optional expected_cut_times_seconds, decoded audio levels/silence/clipping/timestamps and optional scan_all_frames for short exports. Read the coverage and failures; valid is technical acceptance only. Review silent/clipped intervals and repeated frames against the plan. Captions, preset, lip sync and creative content need separate real observation. Do not treat scene detection as proof of expected joins. If automatic export names already satisfy distinct outputs, avoid unnecessary renaming.
-Use compact mac_peekaboo observations by default; details=true expands the AX tree only when needed. For a known exact target, observe_after=true combines one input and a fresh read of the same window, stopping if outcome or capture is uncertain. No input replay or speculative sequences. Reconcile the latest user corrections before declaring completion or blocking. If device_use_session_not_connected appears, stop all native tool families and request explicit reconnection; do not probe through another engine. Keep source media immutable."""
+Use compact mac_peekaboo observations by default; details=true expands the AX tree only when needed. For a known exact target, observe_after=true combines one input and a fresh read of the same window, preserving classified uncertain outcomes for verification and stopping if capture fails. No input replay or speculative sequences. Reconcile the latest user corrections before declaring completion or blocking. If device_use_session_not_connected appears, stop all native tool families and request explicit reconnection; do not probe through another engine. Keep source media immutable."""
 
 DEVICE_USE_FULL_INSTRUCTIONS = """You are Maverick with Full Device Use authority on this Mac. Operate any running application, window, system surface, secure field, credential dialog, or consequential workflow needed for the user's request. There is no application allowlist, native confirmation, sensitive-action confirmation, per-turn request ceiling, action-count ceiling, or time ceiling. The application list supplied at activation is only a discovery snapshot and never limits authority. Do not ask the user to approve intermediate native Mac actions. Maverick app and workspace operations retain their own authorization rules.
 
@@ -132,8 +132,9 @@ def _peekaboo_spec() -> dict[str, object]:
                 "action": {"type": "string", "enum": ["launch_app", "list_windows", "observe", "observe_app", "click", "double_click", "right_click", "type", "replace", "click_point", "type_at_point", "replace_at_point", "press", "scroll"]},
                 "bundle_id": {"type": "string", "description": "Exact app bundle ID; launch_app can start an installed app without requesting activation. Other actions require it running. Bounded On requires native approval."},
                 "window_id": {"type": "integer", "minimum": 1, "description": "For observe: exact window ID from list_windows, including popups. Omit for observe_app."},
-                "details": {"type": "boolean", "description": "For observation only: expand AX metadata. Default returns a compact actionable tree."},
-                "observe_after": {"type": "boolean", "description": "For one GUI input: after a classified successful dispatch, capture the same exact window and return its fresh snapshot. Stops on divergence; never retries input."},
+                "details": {"type": "boolean", "description": "For observation or observe_after: expand AX metadata and retain original image resolution. Default caps image longest side at 1600 pixels and returns compact actionable text."},
+                "image_max_dimension": {"type": "integer", "minimum": 640, "maximum": 3840, "description": "Optional longest-side image limit, preserving aspect ratio and never upscaling. Normalized point coordinates retain the exact-window target."},
+                "observe_after": {"type": "boolean", "description": "For one GUI input: return a fresh same-window snapshot after dispatch, including classified indeterminate/suspected-noop delivery. Preserve action_outcome; image success does not confirm effect. Stops on capture failure; never retries input."},
                 "snapshot": {"type": "string", "description": "For every input: copy the latest ps1_ reference from observe. One input per observation."},
                 "element": {"type": "string", "description": "Exact element ID from that snapshot. Required for click/type/replace/scroll. Select the intended field, never assume current focus."},
                 "point_x": {"type": "number", "minimum": 0, "exclusiveMaximum": 1, "description": "For *_point actions only: normalized horizontal point in the exact attached observation image, at least 0 and less than 1."},
@@ -226,6 +227,21 @@ def _project_properties(*, include_script: bool = True) -> dict[str, object]:
                           "text": {"type": "string", "maxLength": 1000},
                       }},
         },
+        "words": {
+            "type": "array", "minItems": 1, "maxItems": 100000,
+            "items": {"type": "object", "additionalProperties": False,
+                      "required": ["start_seconds", "end_seconds", "text"],
+                      "properties": {"start_seconds": {"type": "number", "minimum": 0},
+                                     "end_seconds": {"type": "number", "exclusiveMinimum": 0},
+                                     "text": {"type": "string", "maxLength": 1000},
+                                     "confidence": {"type": "number", "minimum": 0, "maximum": 1}}},
+            "description": "For generate_srt: measured chronological word intervals, alternatively to captions. Never divide a sentence duration to invent word timing.",
+        },
+        "max_words": {"type": "integer", "minimum": 1, "maximum": 20, "description": "Caption word limit, default 3. With transcribe_media, prepare an SRT from native measured intervals in the same call."},
+        "max_chars": {"type": "integer", "minimum": 1, "maximum": 200},
+        "max_duration_seconds": {"type": "number", "minimum": 0.05, "maximum": 30},
+        "pause_threshold_seconds": {"type": "number", "minimum": 0, "maximum": 10},
+        "time_offset_seconds": {"type": "number", "minimum": -86400, "maximum": 86400},
         "expected_width": {"type": "integer", "minimum": 1, "maximum": 16384},
         "expected_height": {"type": "integer", "minimum": 1, "maximum": 16384},
         "expected_fps": {"type": "number", "exclusiveMinimum": 0, "maximum": 240},
@@ -260,6 +276,9 @@ def _project_spec() -> dict[str, object]:
     }
 
 
+DEVICE_USE_EFFICIENCY_GUIDANCE = """For repeated content edits, first look for declared structured operations, import/export or one bulk artifact (for example SRT) rather than repeating the same GUI gesture for every item. Inspect the actual requested source/view; match its identity before processing, and never substitute an arbitrary file because it is easier to access. For captions, obtain measured word timings with Speech transcribe_file word_timestamps=true/subtitle_max_words, or supported mac_project transcription; generate_srt accepts measured words and grouping limits. Imported timings must match the edited timeline: offsets do not account for cuts or speed changes. Verify representative output against the actual project before applying a bulk result. Do not transfer local media to cloud services unless that processing is authorized. Reuse the fresh snapshot and image returned by observe_after for the next distinct action; a separate observe is needed only when state changed, capture failed, or essential details are missing. Compact images preserve normalized coordinates; request details=true or image_max_dimension only for unreadable controls. An observation can succeed while action_outcome remains indeterminate or suspected_noop: establish the intended effect from the fresh image before continuing, and never replay uncertain input. A repeated failure with the same cause should change the method or end that method with a concrete blocker, not start another identical probe. Use core.runtime.device-use.audit.read and core.runtime.usage.read for measured latency, cached/uncached consumption and context; outside-bridge time is not a measurement of model processing time."""
+
+
 _DEVICE_USE_DYNAMIC_TOOLS = (
     _computer_spec(), _peekaboo_spec(), _calendar_spec(), _project_spec(), _browser_spec(), code_tool_spec()
 )
@@ -288,6 +307,7 @@ def device_use_instructions(
             + DEVICE_USE_PROJECT_GUIDANCE
             + "\n"
             + CODE_GUIDANCE
+            + "\n" + DEVICE_USE_EFFICIENCY_GUIDANCE
             + f"\nApplications visible at activation={apps}. Initial app={initial_app}."
         )
     if mode != "on":
@@ -301,6 +321,7 @@ def device_use_instructions(
         + DEVICE_USE_INTEGRATED_GUIDANCE
         + "\n"
         + DEVICE_USE_PROJECT_GUIDANCE
+        + "\n" + DEVICE_USE_EFFICIENCY_GUIDANCE
         + f"\nNative approved_apps={apps}. Initial app={initial_app}."
     )
 

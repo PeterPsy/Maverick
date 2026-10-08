@@ -8,11 +8,55 @@ shim.
 
 The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
-direct path was then removed. The current executor contract is `macos-v49`.
+direct path was then removed. The current executor contract is `macos-v50`.
 
 The native implementation lives in the sibling `maverick-glasses-ios`
 repository; its companion source document is
 `docs/maverick-macos-device-use.md`. Keep both sides synchronized.
+
+## General efficiency and diagnostics (v50 / 0.2.3 build 54)
+
+The reviewed paired contract is `macos-v50`, digest
+`4dd7bf89e6dd520294199f7b997e9388debf6004aaa6f618715033b77ed4b238`.
+Explicit idle reconnection additionally accepts the reviewed v49 pair and retires
+the old provider context. Deploy Core before the matching native client.
+
+Peekaboo's compact observations cap the image's longest side at 1600 pixels
+without upscaling and retain aspect ratio; text defaults to 3500 characters.
+`details=true` restores original resolution and extended AX text;
+`image_max_dimension=640...3840` overrides image size independently. The preview
+decodes the exact delivered JPEG. Capture-bound normalized pointer coordinates
+continue to use the original exact-window bounds; legacy pixel-based computer
+observations are unchanged. A clipped text result explicitly reports incomplete
+coverage so agents can request essential details instead of inventing targets.
+
+`observe_after=true` can capture the same exact window after classified
+`dispatched_unverified`, `indeterminate` or `suspected_noop` input outcomes.
+The returned observation preserves `action_outcome` and explicitly denies proof
+of effect. No input is replayed. Refusal, partial outcomes, unclassified dispatch,
+permission failures and capture failures retain their existing failure/recovery
+behavior. Agents must establish the requested effect from the fresh observation
+before continuing and can reuse its new snapshot for one distinct action.
+
+Native `generate_srt` accepts measured `words` (`start_seconds`, `end_seconds`,
+`text`, optional confidence) or existing captions. Word, character, duration,
+pause and offset limits prepare captions in one bounded operation; native
+`transcribe_media max_words` also writes SRT from on-device Speech intervals.
+Whole-sentence durations are never divided to simulate word precision. All
+direct media primitives now run the same pre-write validation as script steps.
+Source immutability, opaque project IDs and generated-output confinement remain
+mandatory. Server Speech independently provides measured word timing and pure
+subtitle preparation through its app-owned backend/CLI/MCP surfaces. Local Mac
+files do not become server Storage files or cloud-upload permissions implicitly.
+
+General runtime guidance prefers structured operations and bulk artifacts for
+repetitive content edits, verifies exact source/timeline identity, and reuses
+fresh post-input observations. It does not depend on any particular editor.
+`core.runtime.usage.read` exposes authorized cache/uncached and context metrics;
+Device Use audit includes this projection, provider image-delivery acknowledgement
+latency, text size and uncertain outcome counts. Missing historical measurements
+stay null. Numeric facts remain public; private text/JPEG evidence stays encrypted.
+Outside-bridge latency cannot be labelled model-processing time.
 
 ## Mac-local coding companion (v49)
 

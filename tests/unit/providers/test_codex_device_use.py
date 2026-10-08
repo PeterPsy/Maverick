@@ -267,6 +267,8 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.assertEqual(events[0].payload["tool_call_id"], "call")
         self.assertEqual(events[1].payload["status"], "completed")
+        self.assertGreaterEqual(events[1].payload["provider_observation_delivery_ms"], 0)
+        self.assertEqual(events[1].payload["result_text_char_count"], len("PRIVATE_DYNAMIC_METADATA"))
         self.assertNotIn("PRIVATE_DYNAMIC_METADATA", json.dumps([event.payload for event in events]))
 
     def test_failed_device_request_emits_a_visible_redacted_tool_lifecycle(self):
@@ -341,6 +343,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             ["runtime.tool_call.started", "runtime.tool_call.failed"],
         )
         self.assertNotIn("PRIVATE_NATIVE_FAILURE", json.dumps([event.payload for event in events]))
+        self.assertEqual(events[1].payload["provider_observation_delivery_ms"], 0)
 
     def _exit_runtime(self, *, active=False, completed=False):
         return _CodexAppServerRuntime(

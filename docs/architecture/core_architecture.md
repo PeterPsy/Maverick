@@ -1989,6 +1989,20 @@ The `document` Usage adapter remains an explicit transition exception: before cu
 
 The root runtime WebSocket snapshot includes an authoritative `usage` projection. Usage produced by the root session is direct; usage produced by inter-agent descendants linked through `creator_runtime_session_id` is delegated. Newly inserted samples publish disposable `runtime.usage.updated` snapshots to the root session through the existing event bus. Subscriber loops coalesce these notifications to at most two per second, flush the latest pending snapshot immediately at turn completion, and cancel pending callbacks on unsubscribe. The durable Usage store and reconnect snapshot are authoritative; there is no duplicate runtime-log write for every observation. `GET /api/runtime/sessions/<session_id>/usage` exposes the same session-authorized projection for diagnostics. `GET /api/usage/timeseries?resolution=hour|day&periods=<n>` is platform-admin-only, derives workspace scope from the authenticated session, supports provider/model filtering, fills empty UTC buckets, and returns only redaction-safe aggregate data plus provider/model facets for the requested period. Chat renders the current-context percentage and numeric non-cached tokens in the composer and keeps cached input and the complete processed breakdown behind a dialog. Settings defaults workspace charts to non-cached usage, exposes metric/provider/model/range filters, and keeps cached and processed totals visible while provider subscription gauges remain separate.
 
+Transcript-authorized CLI/MCP `core.runtime.usage.read` exposes the same Core
+Usage accounting to runtime diagnostics. It accepts `thread_id` and optional
+`turn_id`; a turn read includes only that session's direct samples, while the
+chat read includes its delegated descendants. Counts use redaction-safe numeric
+names (`uncached_input`, `cached_input`, `cache_write_input`, `output`,
+`reasoning_output`, `processed`, `non_cached`) with `unit=tokens`; generic secret
+redaction remains unchanged. Accuracy, sample count, historical coverage, active
+context and estimated cost remain explicit. An absent Usage dependency returns
+503, and an unknown turn returns a validation error rather than another chat's
+counts. Device Use audit includes the chat usage projection and separates native
+duration/user wait, bridge duration, provider image-delivery acknowledgement and
+result text size. Missing measurements remain null with coverage counts;
+outside-bridge time must never be presented as measured model-processing time.
+
 An operator may explicitly install `core.usage.startup_maintenance` as a temporary
 systemd prestart for a one-shot cutover. It verifies the stopped backend control
 group, runs existing owner migration phases under the exclusive fence, and stores

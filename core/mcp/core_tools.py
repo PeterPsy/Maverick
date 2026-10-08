@@ -34,6 +34,7 @@ def _core_tool_specs(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    usage_store=None,
     inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
@@ -64,6 +65,7 @@ def _core_tool_specs(
     specs.extend(
         runtime_transcript_tool_specs(
             runtime_store=runtime_store,
+            usage_store=usage_store,
             observability_store=observability_store,
             start_path=start_path,
         )

@@ -10,6 +10,7 @@ from core.device_use.audit import read_device_use_audit, read_device_use_call
 from core.device_use.evidence import DeviceUseEvidenceArchive
 from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptValidationError
 from core.runtime.store import RuntimeStore
+from core.runtime.usage_read import read_runtime_usage
 from core.runtime.transcript_models import RuntimeTranscriptReadContext
 from core.runtime.transcript_schemas import (
     THREAD_LIST_ARGUMENT_SCHEMA,
@@ -28,6 +29,7 @@ from core.runtime.transcript_service import (
 def runtime_transcript_tool_specs(
     *,
     runtime_store: RuntimeStore | None = None,
+    usage_store=None,
     observability_store=None,
     start_path=None,
 ) -> list[tuple[McpToolDefinition, Any]]:
@@ -79,11 +81,17 @@ def runtime_transcript_tool_specs(
             )
         )
 
+    def usage_read(arguments, context):
+        return _run(lambda: read_runtime_usage(
+            _required_store(runtime_store), usage_store=usage_store, context=_read_context(context),
+            thread_id=str(arguments.get("thread_id") or ""), turn_id=arguments.get("turn_id"),
+        ))
+
     def audit_read(arguments, context):
         return _run(lambda: read_device_use_audit(
             _required_store(runtime_store), context=_read_context(context),
             thread_id=str(arguments.get("thread_id") or ""), limit=arguments.get("limit", 30),
-            before_cursor=arguments.get("before_cursor"),
+            before_cursor=arguments.get("before_cursor"), usage_store=usage_store,
         ))
 
     def call_read(arguments, context):
@@ -96,6 +104,12 @@ def runtime_transcript_tool_specs(
         ))
 
     definitions = [
+        ("core.runtime.usage.read",
+         "Read authorized chat consumption, cached input, active context and estimated cost from Core Usage.",
+         {"type": "object", "properties": {"thread_id": {"type": "string", "minLength": 1, "maxLength": 240},
+          "turn_id": {"type": "string", "minLength": 1, "maxLength": 240, "description": "Optional direct-turn usage; excludes delegated children."}},
+          "required": ["thread_id"], "additionalProperties": False}, usage_read),
+
         (
             "core.runtime.device-use.audit.read",
             "Read authorized native call lifecycle, evidence availability and measured turn timings.",

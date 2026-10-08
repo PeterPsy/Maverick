@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from typing import Any
 
 from core.device_use.errors import DeviceUseError
@@ -65,8 +66,10 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
             task_text=task_text,
         )
         tool_result = result.result
+        observation_delivery_ms = 0.0
+        result_text_char_count = len(_tool_text(tool_result))
         if result.image_jpeg is not None:
-            _tool_text(tool_result)
+            delivery_started = time.monotonic()
             image_url = "data:image/jpeg;base64," + base64.b64encode(
                 result.image_jpeg
             ).decode("ascii")
@@ -93,6 +96,7 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
             )
             if str(acknowledgement.get("turnId") or "").strip() != provider_turn_id:
                 raise RuntimeError("device_use_provider_turn_changed")
+            observation_delivery_ms = (time.monotonic() - delivery_started) * 1000
         status = "failed" if tool_result.get("success") is False else "completed"
         _emit(
             runtime,
@@ -102,6 +106,8 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
                 "status": status,
                 "native_duration_ms": result.native_duration_ms,
                 "native_user_wait_ms": result.native_user_wait_ms,
+                "provider_observation_delivery_ms": observation_delivery_ms,
+                "result_text_char_count": result_text_char_count,
                 **native_result_facts(tool_result),
             },
         )

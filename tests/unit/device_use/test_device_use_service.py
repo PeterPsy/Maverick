@@ -81,7 +81,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
     def test_contract_digest_is_the_frozen_macos_v49_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf",
+            "4dd7bf89e6dd520294199f7b997e9388debf6004aaa6f618715033b77ed4b238",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):

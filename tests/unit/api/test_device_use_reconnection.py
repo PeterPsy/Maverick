@@ -25,6 +25,17 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_reviewed_v49_efficiency_upgrade_retires_old_context(self):
+        old = replace(self.before.device_use_binding, executor_contract="macos-v49",
+                      tool_contract_digest="eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf")
+        self.state.runtime_store.save_session(replace(self.before, device_use_binding=old))
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual(status, 200, payload)
+        current = self.state.runtime_store.get_session(self.session_id)
+        self.assertEqual(current.device_use_binding.executor_contract, DEVICE_USE_EXECUTOR_CONTRACT)
+        self.assertEqual(current.execution_binding, self.before.execution_binding)
+        self.assertEqual(current.device_use_binding.mode, old.mode)
+
     def test_reviewed_v48_coding_upgrade_retires_old_context(self):
         old = replace(self.before.device_use_binding, executor_contract="macos-v48",
                       tool_contract_digest="5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d")

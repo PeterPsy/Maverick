@@ -9,8 +9,8 @@ import {
   readCalendarUiState,
   type CalendarUiState,
 } from '../../calendar-ui-state';
-import type { CalendarConnection, CalendarRemoteCalendar, Event } from '../../components/ui/calendar-types';
-import { calendarAccountFilterValues } from '../../components/ui/calendar-utils';
+import type { CalendarConnection, CalendarRemoteCalendar } from '../../components/ui/calendar-types';
+import { buildAccountGroups, type AccountGroup } from './accounts';
 import {
   TreeExpander,
   TreeIcon,
@@ -23,16 +23,6 @@ import {
 } from '../../components/ui/tree';
 import { runtimeAppIdFromPathname } from '../../runtime';
 import './styles.css';
-
-type AccountGroup = {
-  id: string;
-  name: string;
-  provider: 'local' | string;
-  status: string;
-  connection?: CalendarConnection;
-  calendars: CalendarRemoteCalendar[];
-  eventCount: number;
-};
 
 type CalendarTreeNode = {
   account?: AccountGroup;
@@ -305,40 +295,6 @@ function calendarAccountIdentity(accountId: string) {
 
 function calendarIdentity(calendar: CalendarRemoteCalendar) {
   return `calendar:${calendar.connection_id}:${calendar.id}`;
-}
-
-function buildAccountGroups(events: Event[], connections: CalendarConnection[], calendars: CalendarRemoteCalendar[]): AccountGroup[] {
-  const localEvents = events.filter((event) => calendarAccountFilterValues(event).includes('calendar'));
-  const groups: AccountGroup[] = [
-    {
-      id: 'calendar',
-      name: 'Local',
-      provider: 'local',
-      status: 'connected',
-      calendars: [],
-      eventCount: localEvents.length,
-    },
-  ];
-  connections
-    .slice()
-    .sort((left, right) => accountName(left).localeCompare(accountName(right)))
-    .forEach((connection) => {
-      const accountId = connection.id || connection.account_id || accountName(connection);
-      groups.push({
-        id: accountId,
-        name: accountName(connection),
-        provider: connection.provider || 'google',
-        status: connection.status || 'connected',
-        connection,
-        calendars: calendars.filter((calendar) => calendar.connection_id === connection.id),
-        eventCount: events.filter((event) => calendarAccountFilterValues(event).includes(accountId)).length,
-      });
-    });
-  return groups;
-}
-
-function accountName(connection: CalendarConnection) {
-  return connection.account_label || connection.account_id || connection.id || 'Google Calendar';
 }
 
 function notifyCalendarDataChanged(appId: string, resource: string) {

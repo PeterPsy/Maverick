@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "2f0fcf78d7de1d2115e1bc0b208dc195512383d65a7fed436e22892799a936d0",
+  "build_id": "2f501de35dbe603cd59c8f66d6f52da4af8b38bc2cf800e9674aa55a2c101ebf",
   "entrypoints": [
     "index.html",
     "widgets/calendar-sidebar/index.html",
@@ -13,19 +13,19 @@
       "size_bytes": 3574
     },
     {
-      "path": "assets/app-Df63WUQy.js",
-      "sha256": "6d864dbbeded39c68a003967072c8f10c8768eccaf585847856aecd3e2f32e07",
-      "size_bytes": 138869
+      "path": "assets/app-BuLbh6LP.js",
+      "sha256": "233d3964e745159a3dd708d16601be4a859cdf837a86dcaaae6048c6e1d0b2fa",
+      "size_bytes": 138873
+    },
+    {
+      "path": "assets/app-Czq30C8_.js",
+      "sha256": "0e225b07ed2b688cea1a1b91f83c69c2b7b7b3c637c6ab032d3ea7c08ccc4fb8",
+      "size_bytes": 174591
     },
     {
       "path": "assets/app-DvZ_LrPW.css",
       "sha256": "fbd6e2003a215b9c11c626af8e8bbafa1d22b8c429294b7d54daec4f67cc0b36",
       "size_bytes": 40301
-    },
-    {
-      "path": "assets/app-a85iQUuU.js",
-      "sha256": "a82f7e8f25b648285d0a7b0f088aee94bdb32964a322cc2dc7c6ace9de4424e2",
-      "size_bytes": 174579
     },
     {
       "path": "assets/createLucideIcon-DOYno_ZD.js",
@@ -43,20 +43,20 @@
       "size_bytes": 8242
     },
     {
-      "path": "assets/utils-BfWxBybG.js",
-      "sha256": "8ef1a207f613fdc340315d11b3966232f706ee9957851794eac569f8043fb8d6",
-      "size_bytes": 14159
+      "path": "assets/utils-CQD4qcAK.js",
+      "sha256": "f89edbc39d5d64a7ee2822ce270fd05c66f8191a396b6db6e067cefdee76e2c2",
+      "size_bytes": 14229
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "a582e8869b606d7e12d8f4bf1c3796850b2f9152c50038a6a04e7b2fe12941c7",
+      "sha256": "8d5c4b3ae6985d567d219953c14d3b226de708bfabf9e8d11432418b876086a0",
       "size_bytes": 608
     },
     {
       "path": "widgets/calendar-sidebar/index.html",
-      "sha256": "aaee8cf7055df4fdbc820bbabaad9f7c8cfe004d5616b442c194d43f6206cbe3",
+      "sha256": "0f8f084c24d868397210d1a26823cf61bd7361bfdf5d39443e700c1cefa68a9e",
       "size_bytes": 627
     },
     {

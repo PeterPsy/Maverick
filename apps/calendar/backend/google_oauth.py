@@ -66,9 +66,11 @@ def provider_status(
     }
 
 
-def list_connections(data_root) -> dict[str, Any]:
+def list_connections(data_root, *, now: datetime | None = None) -> dict[str, Any]:
     """List redaction-safe Calendar connection records."""
-    state = _prune_expired_pending_connections(data_root)
+    current_time = (now or datetime.now(UTC)).astimezone(UTC)
+    update_state(data_root, lambda state: _prune_expired_pending_connections(state, now=current_time))
+    state = read_state(data_root)
     connections = [_public_connection(item) for item in state.get("connections", [])]
     return {"action": "calendar_connections.list", "connections": connections}
 
@@ -111,7 +113,10 @@ def start_oauth(
             "oauth_redirect_uri": redirect_uri,
         },
     }
-    update_state(data_root, lambda current: _replace_connection(current, pending_connection))
+    update_state(
+        data_root,
+        lambda current: _replace_connection(_prune_expired_pending_connections(current, now=issued_at), pending_connection),
+    )
     query = urlencode(
         {
             "client_id": client_id,
@@ -214,6 +219,7 @@ def complete_oauth(
             current,
             state_record=state_record,
             connection=connection,
+            now=current_time,
         ),
     )
     result: dict[str, Any] = {
@@ -556,6 +562,7 @@ def _replace_completed_connection(
     *,
     state_record: dict[str, Any],
     connection: dict[str, Any],
+    now: datetime,
 ) -> dict[str, Any]:
     completed_id = _connection_record_id(connection)
     pending_id = _connection_record_id(state_record)
@@ -566,26 +573,20 @@ def _replace_completed_connection(
         if isinstance(item, dict) and _connection_record_id(item) not in replaced_ids
     ]
     state["connections"].append(normalize_connection(connection))
-    return state
+    return _prune_expired_pending_connections(state, now=now)
 
 
 def _connection_record_id(connection: dict[str, Any]) -> str:
     return str(connection.get("id") or connection.get("connection_id") or connection.get("connectionId") or "").strip()
 
 
-def _prune_expired_pending_connections(data_root) -> dict[str, Any]:
-    now = datetime.now(UTC)
-
-    def updater(state: dict[str, Any]) -> dict[str, Any]:
-        state["connections"] = [
-            item
-            for item in state.get("connections", [])
-            if not _is_expired_pending_connection(item, now=now)
-        ]
-        return state
-
-    update_state(data_root, updater)
-    return read_state(data_root)
+def _prune_expired_pending_connections(state: dict[str, Any], *, now: datetime) -> dict[str, Any]:
+    state["connections"] = [
+        item
+        for item in state.get("connections", [])
+        if not _is_expired_pending_connection(item, now=now)
+    ]
+    return state
 
 
 def _is_expired_pending_connection(connection: dict[str, Any], *, now: datetime) -> bool:

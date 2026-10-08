@@ -22,6 +22,56 @@ GOOGLE_CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarl
 
 
 class CalendarGoogleOAuthTest(unittest.TestCase):
+    def test_start_oauth_prunes_expired_attempts_and_preserves_concurrent_flow(self) -> None:
+        fixed_now = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            attempts = []
+            for issued_at in (fixed_now - timedelta(seconds=600), fixed_now - timedelta(seconds=30), fixed_now):
+                status, started = _handle_action(
+                    data_root,
+                    {"action": "calendar_connections.start_oauth"},
+                    app_secrets={"google-oauth-client-id": TEST_CLIENT_ID},
+                    oauth_now=issued_at,
+                )
+                self.assertEqual(status, 200)
+                attempts.append(started)
+            persisted = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            [connection["id"] for connection in persisted["connections"]],
+            [attempt["connection"]["id"] for attempt in attempts[1:]],
+        )
+        self.assertTrue(persisted["connections"][0]["external_refs"]["oauth_state_hash"])
+
+    def test_list_connections_prunes_at_expiry_without_removing_connected_accounts(self) -> None:
+        fixed_now = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            _status, started = _handle_action(
+                data_root,
+                {"action": "calendar_connections.start_oauth"},
+                app_secrets={"google-oauth-client-id": TEST_CLIENT_ID},
+                oauth_now=fixed_now,
+            )
+            path = data_root / "state.json"
+            state = json.loads(path.read_text(encoding="utf-8"))
+            state["connections"].append({"id": "existing", "provider": "google", "status": "connected"})
+            path.write_text(json.dumps(state), encoding="utf-8")
+            status, fresh = _handle_action(
+                data_root, {"action": "calendar_connections.list"}, oauth_now=fixed_now + timedelta(seconds=599),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual([item["id"] for item in fresh["connections"]], [started["connection"]["id"], "existing"])
+            status, expired = _handle_action(
+                data_root, {"action": "calendar_connections.list"}, oauth_now=fixed_now + timedelta(seconds=600),
+            )
+            persisted = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertEqual([item["id"] for item in expired["connections"]], ["existing"])
+        self.assertEqual([item["id"] for item in persisted["connections"]], ["existing"])
+
     def test_provider_status_and_start_oauth_create_pending_connection(self) -> None:
         fixed_now = datetime.now(UTC)
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -73,12 +123,24 @@ class CalendarGoogleOAuthTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data"
+            _status, abandoned = _handle_action(
+                data_root,
+                {"action": "calendar_connections.start_oauth"},
+                app_secrets={"google-oauth-client-id": TEST_CLIENT_ID},
+                oauth_now=fixed_now - timedelta(seconds=580),
+            )
             _status, started = _handle_action(
                 data_root,
                 {"action": "calendar_connections.start_oauth"},
                 app_id="calendar",
                 app_secrets={"google-oauth-client-id": "client-id"},
                 oauth_now=fixed_now,
+            )
+            _status, concurrent = _handle_action(
+                data_root,
+                {"action": "calendar_connections.start_oauth"},
+                app_secrets={"google-oauth-client-id": TEST_CLIENT_ID},
+                oauth_now=fixed_now + timedelta(seconds=10),
             )
             status_code, completed = _handle_action(
                 data_root,
@@ -116,9 +178,15 @@ class CalendarGoogleOAuthTest(unittest.TestCase):
                 }
             ],
         )
-        self.assertEqual(persisted["connections"][0]["status"], "connected")
+        self.assertEqual(
+            [item["id"] for item in persisted["connections"]],
+            [concurrent["connection"]["id"], connection["id"]],
+        )
+        self.assertNotIn(abandoned["connection"]["id"], [item["id"] for item in persisted["connections"]])
+        self.assertEqual(persisted["connections"][0]["status"], "pending")
+        self.assertEqual(persisted["connections"][1]["status"], "connected")
         self.assertNotIn(TEST_OFFLINE_GRANT, json.dumps(persisted, sort_keys=True))
-        self.assertNotIn("oauth_state_hash", persisted["connections"][0]["external_refs"])
+        self.assertNotIn("oauth_state_hash", persisted["connections"][1]["external_refs"])
         self.assertEqual(calls[0][0], "POST")
         self.assertEqual(calls[1][0], "GET")
 

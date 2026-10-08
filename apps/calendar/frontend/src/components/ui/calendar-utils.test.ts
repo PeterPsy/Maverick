@@ -260,6 +260,18 @@ describe("calendar viewport helpers", () => {
     })
   })
 
+  it("excludes OAuth attempts from account filters and event destinations", () => {
+    const connections = [
+      { id: "attempt", provider: "google", account_label: "Google Calendar", status: "pending" },
+      { id: "work", provider: "google", account_id: "ana@example.com", status: "connected" },
+      { id: "reconnect", provider: "google", account_id: "other@example.com", status: "error" },
+    ]
+
+    expect(calendarAccountOptions([], connections).map((account) => account.value)).toEqual(["work", "reconnect"])
+    expect(calendarSourceOptions([], connections).map((source) => source.value)).not.toContain("connection:attempt")
+    expect(calendarSourceOptions([], connections).map((source) => source.value)).toContain("connection:work")
+  })
+
   it("marks Google reader calendars and events as non-writable", () => {
     expect(isWritableGoogleAccessRole("owner")).toBe(true)
     expect(isWritableGoogleAccessRole("writer")).toBe(true)

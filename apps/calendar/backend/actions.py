@@ -77,7 +77,7 @@ def handle_action(
         if action in {"provider_status", "calendar_connections.provider_status"}:
             return 200, provider_status(data_root, app_secrets=app_secrets, app_secret_errors=app_secret_errors)
         if action == "calendar_connections.list":
-            return 200, list_connections(data_root)
+            return 200, list_connections(data_root, now=oauth_now)
         if action == "calendar_calendars.list":
             return 200, list_calendars(data_root, body)
         if action == "calendar_calendars.select":

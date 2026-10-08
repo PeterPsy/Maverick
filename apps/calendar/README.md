@@ -29,6 +29,13 @@ Calendar also supplies account-tree and primary-action sidebar widgets. Their
 display reads suspend when the sidebar, app or document is hidden. Reopening
 coalesces a fresh read without replacing the already displayed account tree.
 
+Pending Google connections represent short-lived OAuth attempts, not connected
+accounts. They stay out of the account tree, account filters and event destinations
+until authorization completes. Starting or completing OAuth and listing connections
+prunes attempts whose ten-minute state has expired, while preserving other live
+OAuth flows and established accounts. Reauthorizing an existing Google account
+reuses its connection and removes the completed temporary attempt.
+
 The main view cancels window, preferences, metadata and event-detail reads on
 suspension, ignores late results and preserves current content. App-events owns
 the single online resume refresh. Offline foreground views may still paint the

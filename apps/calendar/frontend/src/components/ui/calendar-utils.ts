@@ -97,9 +97,14 @@ export function calendarAccountFilterValues(event: Event) {
   return uniqueStrings([refs.connectionId, refs.value, scalarString(event.source) || "calendar"])
 }
 
+/** OAuth attempts have no usable account or refresh token until completion. */
+export function calendarAccountConnections(connections: CalendarConnection[]) {
+  return connections.filter((connection) => connection.status !== "pending")
+}
+
 export function calendarAccountOptions(events: Event[], connections: CalendarConnection[] = []): CalendarAccount[] {
   const byValue = new Map<string, CalendarAccount>()
-  connections.forEach((connection) => {
+  calendarAccountConnections(connections).forEach((connection) => {
     const accountId = scalarString(connection.account_id)
     const connectionId = scalarString(connection.id)
     const value = connectionId || accountId
@@ -148,7 +153,7 @@ export function calendarSourceOptions(
     calendarName: "Local calendar",
     externalRefs: {},
   })
-  connections.forEach((connection) => {
+  calendarAccountConnections(connections).forEach((connection) => {
     const connectionId = scalarString(connection.id)
     if (!connectionId) {
       return

@@ -6,7 +6,9 @@ import http.client
 import json
 from threading import Lock
 import time
-from typing import Callable, Iterator
+from typing import Iterator
+
+from http_connection_pool import SpeechConnectionPool
 
 from errors import SpeechProviderUnavailableError
 
@@ -24,50 +26,6 @@ KOKORO_PCM_CHANNELS = 1
 KOKORO_PCM_SAMPLE_FORMAT = "s16le"
 KOKORO_STREAM_CHUNK_BYTES = 16 * 1024
 REMOTE_PROVIDER_TIMEOUT_SECONDS = 45
-KOKORO_CONNECTION_POOL_SIZE = 4
-
-
-ConnectionFactory = Callable[[str, float], http.client.HTTPSConnection]
-
-
-class KokoroConnectionPool:
-    """Small thread-safe keep-alive pool owned by the persistent Speech worker."""
-
-    def __init__(
-        self,
-        *,
-        host: str = KOKORO_OPENROUTER_HOST,
-        connection_factory: ConnectionFactory | None = None,
-        max_idle: int = KOKORO_CONNECTION_POOL_SIZE,
-    ) -> None:
-        self._connection_factory = connection_factory or _https_connection
-        self._host = host
-        self._max_idle = max(1, max_idle)
-        self._idle: list[http.client.HTTPSConnection] = []
-        self._lock = Lock()
-
-    def acquire(self, *, timeout: float) -> tuple[http.client.HTTPSConnection, bool]:
-        with self._lock:
-            if self._idle:
-                return self._idle.pop(), True
-        return self._connection_factory(self._host, timeout), False
-
-    def release(self, connection: http.client.HTTPSConnection) -> None:
-        with self._lock:
-            if len(self._idle) < self._max_idle:
-                self._idle.append(connection)
-                return
-        connection.close()
-
-    def discard(self, connection: http.client.HTTPSConnection) -> None:
-        connection.close()
-
-    def close(self) -> None:
-        with self._lock:
-            connections = self._idle
-            self._idle = []
-        for connection in connections:
-            connection.close()
 
 
 class KokoroHttpStream:
@@ -76,7 +34,7 @@ class KokoroHttpStream:
     def __init__(
         self,
         *,
-        pool: KokoroConnectionPool,
+        pool: SpeechConnectionPool,
         connection: http.client.HTTPSConnection,
         response: http.client.HTTPResponse,
         generation_id: str,
@@ -156,7 +114,7 @@ def open_kokoro_openrouter_stream(
     voice: str,
     settings: dict,
     response_format: str = "pcm",
-    pool: KokoroConnectionPool | None = None,
+    pool: SpeechConnectionPool | None = None,
 ) -> KokoroHttpStream:
     """Open a raw OpenRouter audio stream and measure its transport phases."""
     api_key = _runtime_secret(settings, "openrouter_api_key")
@@ -192,7 +150,7 @@ def open_kokoro_deepinfra_stream(
     language: str,
     settings: dict,
     response_format: str = "pcm",
-    pool: KokoroConnectionPool | None = None,
+    pool: SpeechConnectionPool | None = None,
 ) -> KokoroHttpStream:
     """Open DeepInfra's dedicated incremental Kokoro endpoint."""
     api_key = _runtime_secret(settings, "deepinfra_api_key")
@@ -229,7 +187,7 @@ def _open_kokoro_http_stream(
     body: bytes,
     api_key: str,
     response_format: str,
-    pool: KokoroConnectionPool,
+    pool: SpeechConnectionPool,
     generation_headers: tuple[str, ...],
 ) -> KokoroHttpStream:
     headers = {
@@ -312,10 +270,6 @@ def collect_kokoro_deepinfra_audio(
     return b"".join(stream.iter_chunks())
 
 
-def _https_connection(host: str, timeout: float) -> http.client.HTTPSConnection:
-    return http.client.HTTPSConnection(host, timeout=timeout)
-
-
 def _runtime_secret(settings: dict, logical_name: str) -> str:
     secrets = settings.get("_app_secrets") if isinstance(settings.get("_app_secrets"), dict) else {}
     value = secrets.get(logical_name)
@@ -344,5 +298,5 @@ def _elapsed_ms(started: float) -> float:
     return round(max(0.0, time.monotonic() - started) * 1000, 3)
 
 
-_OPENROUTER_CONNECTION_POOL = KokoroConnectionPool(host=KOKORO_OPENROUTER_HOST)
-_DEEPINFRA_CONNECTION_POOL = KokoroConnectionPool(host=KOKORO_DEEPINFRA_HOST)
+_OPENROUTER_CONNECTION_POOL = SpeechConnectionPool(host=KOKORO_OPENROUTER_HOST)
+_DEEPINFRA_CONNECTION_POOL = SpeechConnectionPool(host=KOKORO_DEEPINFRA_HOST)

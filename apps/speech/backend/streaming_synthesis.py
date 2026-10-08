@@ -10,6 +10,7 @@ from typing import Iterator
 import uuid
 
 from errors import SpeechProviderUnavailableError, SpeechValidationError
+from gemini_tts import open_gemini_stream, selected_gemini_voice
 from kokoro_streaming import (
     KOKORO_PCM_CHANNELS,
     KOKORO_PCM_CONTENT_TYPE,
@@ -129,7 +130,7 @@ class StreamingSynthesisPlan:
 
 
 def prepare_synthesis_stream(*, data_root: Path, body: dict) -> StreamingSynthesisPlan:
-    """Validate one Kokoro request and open its upstream response headers."""
+    """Validate one remote synthesis request and open its upstream response headers."""
     request_started = time.monotonic()
     text = normalized_text(body.get("text"))
     requested_voice = normalized_voice(body.get("voice"), default="")
@@ -145,13 +146,15 @@ def prepare_synthesis_stream(*, data_root: Path, body: dict) -> StreamingSynthes
     if isinstance(body.get("_app_secrets"), dict):
         settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
     requested_engine = str(settings.get("synthesis_engine") or "auto")
-    if requested_engine not in {"kokoro-openrouter", "kokoro-deepinfra"}:
+    if requested_engine not in {"kokoro-openrouter", "kokoro-deepinfra", "gemini"}:
         raise SpeechProviderUnavailableError(
-            "Progressive PCM synthesis requires a configured Kokoro remote engine."
+            "Progressive PCM synthesis requires a configured remote synthesis engine."
         )
     language = selected_synthesis_language(settings, requested=body.get("language"), text=text)
-    voice = selected_kokoro_voice_id(requested_voice, text=text, language=language)
-    if requested_engine == "kokoro-deepinfra":
+    voice = selected_gemini_voice(requested_voice) if requested_engine == "gemini" else selected_kokoro_voice_id(requested_voice, text=text, language=language)
+    if requested_engine == "gemini":
+        upstream = open_gemini_stream(text=text, voice=voice, language=language, settings=settings)
+    elif requested_engine == "kokoro-deepinfra":
         upstream = open_kokoro_deepinfra_stream(
             text=text,
             voice=voice,

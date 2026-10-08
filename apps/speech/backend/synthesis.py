@@ -26,6 +26,7 @@ from engines import run_kokoro_openrouter
 from engines import run_local_tts_engine as run_local_engine
 from engines import tts_engine_cache_fingerprint
 from errors import SpeechProviderUnavailableError, SpeechValidationError
+from gemini_tts import collect_gemini_wav, selected_gemini_voice
 from models import (
     DEFAULT_RATE,
     DEFAULT_VOICE,
@@ -51,23 +52,25 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
     requested_engine = str(settings.get("synthesis_engine") or "auto")
     language = selected_synthesis_language(settings, requested=body.get("language"), text=text)
-    if requested_engine in {"kokoro-openrouter", "kokoro-deepinfra"}:
-        voice = selected_kokoro_voice_id(
+    if requested_engine in {"kokoro-openrouter", "kokoro-deepinfra", "gemini"}:
+        voice = selected_gemini_voice(requested_voice) if requested_engine == "gemini" else selected_kokoro_voice_id(
             requested_voice,
             text=text,
             language=language,
         )
         output_format = normalized_output_format(
             body.get("format"),
-            default=KOKORO_OPENROUTER_CONTENT_TYPE,
-            formats={
+            default="audio/wav" if requested_engine == "gemini" else KOKORO_OPENROUTER_CONTENT_TYPE,
+            formats={"audio/wav": "audio/wav", "wav": "audio/wav"} if requested_engine == "gemini" else {
                 "audio/mpeg": KOKORO_OPENROUTER_CONTENT_TYPE,
                 "audio/mp3": KOKORO_OPENROUTER_CONTENT_TYPE,
                 "mp3": KOKORO_OPENROUTER_CONTENT_TYPE,
             },
         )
         engine_started = time.monotonic()
-        if requested_engine == "kokoro-deepinfra":
+        if requested_engine == "gemini":
+            audio = collect_gemini_wav(text=text, voice=voice, language=language, settings=settings)
+        elif requested_engine == "kokoro-deepinfra":
             audio = run_kokoro_deepinfra(
                 text=text,
                 voice=voice,
@@ -91,7 +94,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
                 "voice": voice,
                 "engine": requested_engine,
                 "quality_profile": "natural",
-                "latency_profile": "remote_streaming" if requested_engine == "kokoro-deepinfra" else "remote",
+                "latency_profile": "remote_streaming" if requested_engine in {"kokoro-deepinfra", "gemini"} else "remote",
                 "content_type": content_type,
                 "size_bytes": len(audio),
                 "cache_hit": False,
@@ -114,7 +117,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "rate": rate,
             "format": output_format,
             "quality_profile": "natural",
-            "latency_profile": "remote_streaming" if requested_engine == "kokoro-deepinfra" else "remote",
+            "latency_profile": "remote_streaming" if requested_engine in {"kokoro-deepinfra", "gemini"} else "remote",
             "cache_hit": False,
             "metrics": {
                 "engine_seconds": round(engine_seconds, 6),

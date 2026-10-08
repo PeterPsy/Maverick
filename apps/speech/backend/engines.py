@@ -26,6 +26,7 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError
+from gemini_tts import GEMINI_TTS_SECRET, gemini_engine_status
 from kokoro_streaming import (
     KOKORO_DEEPINFRA_MODEL,
     KOKORO_OPENROUTER_DEFAULT_VOICE,
@@ -678,6 +679,7 @@ def synthesis_engine_statuses(settings: dict | None = None, *, include_paths: bo
         *[_synthesis_engine_status(candidate, include_path=include_paths) for candidate in LOCAL_TTS_ENGINE_CANDIDATES],
         _remote_kokoro_openrouter_status(settings or {}),
         _remote_kokoro_deepinfra_status(settings or {}),
+        gemini_engine_status(settings or {}),
     ]
     _SYNTHESIS_STATUS_CACHE[key] = (now, copy.deepcopy(statuses))
     return statuses
@@ -696,6 +698,7 @@ def _synthesis_status_cache_key(*, include_paths: bool, settings: dict | None = 
         os.environ.get("MAVERICK_SPEECH_PIPER_VOICES_JSON", ""),
         bool(_runtime_secret(settings or {}, "openrouter_api_key")),
         bool(_runtime_secret(settings or {}, "deepinfra_api_key")),
+        bool(_runtime_secret(settings or {}, GEMINI_TTS_SECRET)),
     )
 
 

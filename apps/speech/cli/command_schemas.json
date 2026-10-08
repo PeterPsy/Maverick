@@ -15,29 +15,12 @@
           "prewarm_worker": "mutating",
           "set_engine": "mutating",
           "transcribe_file": "read",
-          "prepare_subtitles": "read"
+          "prepare_subtitles": "read",
+          "probe_synthesis": "mutating"
         }
       },
-      "description": "Configure workspace Speech engine/language preferences, inspect health/settings, prewarm persistent workers, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
+      "description": "Configure workspace Speech engine/language preferences, inspect health/settings, prewarm persistent workers, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI. probe_synthesis generates a short fixed sample and returns metadata only.",
       "secret_selectors": [
-        {
-          "when": {
-            "action": "list_engines"
-          },
-          "required_secrets": [
-            "deepgram-api-key",
-            "openrouter-api-key"
-          ]
-        },
-        {
-          "when": {
-            "action": "engine_health"
-          },
-          "required_secrets": [
-            "deepgram-api-key",
-            "openrouter-api-key"
-          ]
-        },
         {
           "when": {
             "action": "transcribe_file"
@@ -45,6 +28,65 @@
           "required_secrets": [
             "deepgram-api-key"
           ]
+        },
+        {
+          "when": {
+            "action": [
+              "list_engines",
+              "engine_health"
+            ]
+          },
+          "required_secrets": [
+            "deepgram-api-key"
+          ],
+          "resource_lookup": {
+            "kind": "selected_speech_engines"
+          }
+        },
+        {
+          "when": {
+            "action": [
+              "list_engines",
+              "engine_health",
+              "probe_synthesis"
+            ]
+          },
+          "required_secrets": [
+            "openrouter-api-key"
+          ],
+          "resource_lookup": {
+            "kind": "selected_speech_engines"
+          }
+        },
+        {
+          "when": {
+            "action": [
+              "list_engines",
+              "engine_health",
+              "probe_synthesis"
+            ]
+          },
+          "required_secrets": [
+            "deepinfra-api-key"
+          ],
+          "resource_lookup": {
+            "kind": "selected_speech_engines"
+          }
+        },
+        {
+          "when": {
+            "action": [
+              "list_engines",
+              "engine_health",
+              "probe_synthesis"
+            ]
+          },
+          "required_secrets": [
+            "google-ai-studio-api-key"
+          ],
+          "resource_lookup": {
+            "kind": "selected_speech_engines"
+          }
         }
       ],
       "argument_schema": {
@@ -62,7 +104,8 @@
               "prewarm_worker",
               "set_engine",
               "transcribe_file",
-              "prepare_subtitles"
+              "prepare_subtitles",
+              "probe_synthesis"
             ],
             "default": "operations.manifest",
             "description": "Speech app operation to run."
@@ -92,7 +135,8 @@
               "espeak",
               "espeak-ng",
               "kokoro-openrouter",
-              "kokoro-deepinfra"
+              "kokoro-deepinfra",
+              "gemini"
             ],
             "description": "Workspace synthesis engine selection used by set_engine."
           },

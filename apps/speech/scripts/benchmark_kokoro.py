@@ -14,12 +14,12 @@ import time
 BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
+from http_connection_pool import SpeechConnectionPool
 from kokoro_streaming import (
     KOKORO_DEEPINFRA_HOST,
     KOKORO_DEEPINFRA_MODEL,
     KOKORO_OPENROUTER_HOST,
     KOKORO_OPENROUTER_MODEL,
-    KokoroConnectionPool,
     open_kokoro_deepinfra_stream,
     open_kokoro_openrouter_stream,
 )
@@ -130,12 +130,12 @@ def run_benchmark(
     if not cases:
         raise ValueError("At least one benchmark case is required.")
     host = KOKORO_DEEPINFRA_HOST if provider == "deepinfra" else KOKORO_OPENROUTER_HOST
-    pooled = KokoroConnectionPool(host=host)
+    pooled = SpeechConnectionPool(host=host)
     results: list[dict] = []
     try:
         for request_index in range(request_count):
             case = cases[request_index % len(cases)]
-            pool = pooled if case["connection_mode"] == "pooled" else KokoroConnectionPool(host=host)
+            pool = pooled if case["connection_mode"] == "pooled" else SpeechConnectionPool(host=host)
             started = time.monotonic()
             try:
                 if provider == "deepinfra":

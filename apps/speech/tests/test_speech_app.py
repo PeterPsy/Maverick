@@ -3710,6 +3710,7 @@ class SpeechAppTests(unittest.TestCase):
                 "set_engine",
                 "transcribe_file",
                 "prepare_subtitles",
+                "probe_synthesis",
             ],
         )
         self.assertEqual(properties["include_voices"]["type"], "boolean")
@@ -3718,8 +3719,9 @@ class SpeechAppTests(unittest.TestCase):
         self.assertNotIn("synthesize", actions)
         self.assertNotIn("transcribe_audio", actions)
         selectors = command["secret_selectors"]
-        self.assertIn({"when": {"action": "list_engines"}, "required_secrets": ["deepgram-api-key", "openrouter-api-key"]}, selectors)
-        self.assertIn({"when": {"action": "engine_health"}, "required_secrets": ["deepgram-api-key", "openrouter-api-key"]}, selectors)
+        for secret in ("deepgram-api-key", "openrouter-api-key", "deepinfra-api-key", "google-ai-studio-api-key"):
+            actions_for_secret = ["list_engines", "engine_health"] + ([] if secret == "deepgram-api-key" else ["probe_synthesis"])
+            self.assertIn({"when": {"action": actions_for_secret}, "required_secrets": [secret], "resource_lookup": {"kind": "selected_speech_engines"}}, selectors)
         self.assertIn({"when": {"action": "transcribe_file"}, "required_secrets": ["deepgram-api-key"]}, selectors)
 
     def test_mcp_transcribe_file_declares_deepgram_secret(self) -> None:

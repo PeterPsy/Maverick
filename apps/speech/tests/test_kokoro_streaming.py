@@ -90,7 +90,7 @@ class KokoroStreamingTestCase(unittest.TestCase):
                 self.closed = True
 
         connection = FakeConnection()
-        pool = kokoro_streaming.KokoroConnectionPool(connection_factory=lambda _host, _timeout: connection)
+        pool = kokoro_streaming.SpeechConnectionPool(host=kokoro_streaming.KOKORO_OPENROUTER_HOST, connection_factory=lambda _host, _timeout: connection)
         settings = {"_app_secrets": {"openrouter-api-key": "openrouter-token"}}
 
         first = kokoro_streaming.open_kokoro_openrouter_stream(
@@ -163,7 +163,7 @@ class KokoroStreamingTestCase(unittest.TestCase):
             requested_hosts.append(host)
             return connection
 
-        pool = kokoro_streaming.KokoroConnectionPool(
+        pool = kokoro_streaming.SpeechConnectionPool(
             host=kokoro_streaming.KOKORO_DEEPINFRA_HOST,
             connection_factory=connection_factory,
         )
@@ -218,7 +218,8 @@ class KokoroStreamingTestCase(unittest.TestCase):
         response = BlockingResponse()
         connection = FakeConnection()
         stream = kokoro_streaming.KokoroHttpStream(
-            pool=kokoro_streaming.KokoroConnectionPool(
+            pool=kokoro_streaming.SpeechConnectionPool(
+                host=kokoro_streaming.KOKORO_OPENROUTER_HOST,
                 connection_factory=lambda _host, _timeout: connection,
             ),
             connection=connection,

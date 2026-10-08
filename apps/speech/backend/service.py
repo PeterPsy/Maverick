@@ -46,10 +46,11 @@ from settings import (
 from store import read_jobs, read_settings
 from subtitles import prepare_subtitles
 from synthesis import selected_synthesis_language, selected_voice_id, synthesize_payload
+from synthesis_probe import probe_synthesis_payload
 from transcription import transcribe_audio_payload, transcribe_file_payload
 
 DATA_CHANGED_ACTIONS = {"set_engine"}
-REMOTE_KOKORO_ENGINES = {"kokoro-openrouter", "kokoro-deepinfra"}
+REMOTE_SYNTHESIS_ENGINES = {"kokoro-openrouter", "kokoro-deepinfra", "gemini"}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
@@ -101,6 +102,10 @@ def handle_action(
             generated_storage_root=generated_storage_root,
             body=body,
         )
+    if action == "probe_synthesis":
+        return 200, probe_synthesis_payload(
+            data_root=data_root, generated_storage_root=generated_storage_root, body=body,
+        )
     if action == "transcribe_audio":
         return 200, transcribe_audio_payload(data_root=data_root, body=body)
     if action == "prepare_subtitles":
@@ -136,6 +141,10 @@ def operations_manifest() -> dict:
                     "inspect capabilities for content type, cache, and retention behavior."
                 ),
                 "required_fields": ["text"],
+            },
+            "probe_synthesis": {
+                "description": "Generate a short fixed Italian speech sample using the selected engine. Consumes provider quota and returns metadata only; audio is discarded.",
+                "required_fields": [],
             },
             "transcribe_audio": {
                 "description": "Transcribe a bounded inline audio upload.",
@@ -260,14 +269,14 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "language_preference": synthesis_language,
                 "language_hint_supported": True,
                 "languages": public_voice_languages(synthesis_voices),
-                "streaming_supported": synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES,
-                "streaming_content_type": KOKORO_PCM_CONTENT_TYPE if synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES else "",
+                "streaming_supported": synthesis_available and synthesis_engine in REMOTE_SYNTHESIS_ENGINES,
+                "streaming_content_type": KOKORO_PCM_CONTENT_TYPE if synthesis_available and synthesis_engine in REMOTE_SYNTHESIS_ENGINES else "",
                 "streaming_audio": {
                     "sample_rate": KOKORO_PCM_SAMPLE_RATE,
                     "channels": KOKORO_PCM_CHANNELS,
                     "sample_format": KOKORO_PCM_SAMPLE_FORMAT,
                 }
-                if synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES
+                if synthesis_available and synthesis_engine in REMOTE_SYNTHESIS_ENGINES
                 else None,
                 "prewarm_supported": bool(
                     synthesis_available
@@ -284,7 +293,7 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "cache": synthesis_cache,
                 "output": {
                     "audio_base64": True,
-                    "http_binary_stream": synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES,
+                    "http_binary_stream": synthesis_available and synthesis_engine in REMOTE_SYNTHESIS_ENGINES,
                     "workspace_relative_path": False,
                     "absolute_paths": False,
                     "retention": synthesis_retention,
@@ -373,13 +382,13 @@ def public_supported_formats_from_status(status: dict | None) -> list[str]:
 
 
 def public_synthesis_cache_from_status(status: dict | None) -> dict[str, object]:
-    if (status or {}).get("engine") in REMOTE_KOKORO_ENGINES:
+    if (status or {}).get("engine") in REMOTE_SYNTHESIS_ENGINES:
         return {"enabled": False, "scope": "none"}
     return {"enabled": True, "scope": "workspace"}
 
 
 def public_synthesis_retention_from_status(status: dict | None) -> str:
-    if (status or {}).get("engine") in REMOTE_KOKORO_ENGINES:
+    if (status or {}).get("engine") in REMOTE_SYNTHESIS_ENGINES:
         return "provider_response"
     return "derived_cache"
 

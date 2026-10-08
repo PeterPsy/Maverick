@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError, SpeechValidationError, validation_error_payload
 from service import app_events_for_action, handle_action, operations_manifest
+from store import read_settings
 
 
 CLI_ACTIONS = {
@@ -20,6 +21,7 @@ CLI_ACTIONS = {
     "operations.manifest",
     "prewarm_synthesis_worker",
     "prewarm_worker",
+    "probe_synthesis",
     "set_engine",
     "transcribe_file",
     "worker_status",
@@ -32,6 +34,7 @@ CLI_ARGUMENT_FIELDS_BY_ACTION = {
     "operations.manifest": {"action"},
     "prewarm_synthesis_worker": {"action"},
     "prewarm_worker": {"action"},
+    "probe_synthesis": {"action"},
     "set_engine": {"action", "synthesis_engine", "synthesis_language", "transcription_engine", "transcription_profile"},
     "transcribe_file": {"action", "workspace_relative_path", "content_type", "language", "local_only", "word_timestamps", "subtitle_max_words"},
     "worker_status": {"action"},
@@ -65,22 +68,37 @@ def _agent_manifest() -> dict:
             "operations.manifest": {"description": "Describe Speech CLI operations.", "required_fields": []},
             "prewarm_synthesis_worker": manifest["operations"]["prewarm_synthesis_worker"],
             "prewarm_worker": manifest["operations"]["prewarm_worker"],
+            "probe_synthesis": manifest["operations"]["probe_synthesis"],
             "set_engine": manifest["operations"]["set_engine"],
             "transcribe_file": manifest["operations"]["transcribe_file"],
             "worker_status": manifest["operations"]["worker_status"],
         },
         "notes": [
-            "CLI exposes workspace engine/language selection, engine inspection, persistent worker status, and file transcription for workspace Storage audio only.",
+            "CLI exposes workspace engine/language selection, engine inspection, a fixed synthesis probe, persistent worker status, and file transcription for workspace Storage audio.",
             "worker_status is observational by default; use prewarm_worker or prewarm_synthesis_worker when you explicitly want to load a local speech worker.",
             "Persistent worker stop/reload are backend administrative actions, not agent-facing CLI operations.",
             "Engine inspection omits voice arrays by default; pass include_voices=true when full voice metadata is needed.",
             "Inline microphone audio and live streaming are backend/UI surfaces, not CLI surfaces.",
-            "Synthesis is a backend consumer surface and is not exposed through CLI.",
+            "Synthesis audio is a backend consumer surface; probe_synthesis explicitly generates a short fixed sample and returns metadata only.",
         ],
     }
 
 
 payload = json.loads(sys.stdin.read() or "{}")
+if payload.get("surface") == "secret_selector":
+    settings = read_settings(Path(payload["data_root"]))
+    action = (payload.get("arguments") or {}).get("action")
+    selected_secret = {
+        "gemini": "google-ai-studio-api-key",
+        "kokoro-openrouter": "openrouter-api-key",
+        "kokoro-deepinfra": "deepinfra-api-key",
+    }.get(settings.get("synthesis_engine"))
+    requested_secrets = {selected_secret} if selected_secret else set()
+    if action in {"engine_health", "list_engines"} and settings.get("transcription_engine") == "deepgram":
+        requested_secrets.add("deepgram-api-key")
+    logical_names = (payload.get("app_secret_selector") or {}).get("logical_names", [])
+    print(json.dumps({"requires_secrets": bool(requested_secrets.intersection(logical_names))}))
+    sys.exit(0)
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
 action = str(arguments.get("action") or "operations.manifest").strip()
 body = {"action": action, **arguments}

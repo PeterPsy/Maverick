@@ -465,7 +465,10 @@ def _persistent_backend_worker_enabled() -> bool:
 
 
 def _event_type(event: dict[str, object]) -> str:
-    return str(event.get("type") or event.get("event") or "").strip()
+    envelope_type = str(event.get("type") or "").strip()
+    if envelope_type == "TurnInfo":
+        return str(event.get("event") or "").strip()
+    return envelope_type or str(event.get("event") or "").strip()
 
 
 def _event_text(event: dict[str, object]) -> str:

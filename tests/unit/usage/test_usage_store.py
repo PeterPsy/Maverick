@@ -26,6 +26,7 @@ class UsageDocumentStoreTest(unittest.TestCase):
             {"sample_id": "sample-2", "session_id": "session-1"},
             {"sample_id": "sample-3", "session_id": "session-2"},
             {"sample_id": "sample-4", "session_id": "session-kept"},
+            {"sample_id": "worker-1", "session_id": "session-1:computer_actor"},
         ]
         store = UsageDocumentStore(
             UsageCollections(
@@ -37,10 +38,11 @@ class UsageDocumentStoreTest(unittest.TestCase):
 
         deleted = store.delete_sessions(["session-1", "session-2", "session-1"])
 
-        self.assertEqual(deleted, {"session-1": 2, "session-2": 1})
+        self.assertEqual(deleted, {"session-1": 3, "session-2": 1})
         self.assertEqual(
             samples.delete_many_documents_queries,
-            [{"session_id": {"$in": ["session-1", "session-2"]}}],
+            [{"session_id": {"$in": ["session-1", "session-2",
+                                    "session-1:computer_actor", "session-2:computer_actor"]}}],
         )
         self.assertEqual(samples.documents, [{"sample_id": "sample-4", "session_id": "session-kept"}])
 

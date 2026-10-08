@@ -117,3 +117,6 @@ class ChatUsageSummary:
     sample_count: int
     coverage_since: datetime | None
     updated_at: datetime | None
+    internal_worker_tokens: TokenUsageBreakdown | None = None
+    visible_provider_ids: tuple[str, ...] | None = None
+    visible_model_ids: tuple[str, ...] | None = None

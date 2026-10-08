@@ -36,10 +36,12 @@ def ingest_runtime_usage(
         return None
     session = state.runtime_store.get_session(session_id)
     root_session_id = resolve_root_session_id(state.runtime_store, session)
+    from core.usage.worker_attribution import attributed_worker_session
+    reporting_session = attributed_worker_session(session, payload)
     result = store.ingest_observation(lambda history: normalized_usage_sample(
         state,
         history,
-        session=session,
+        session=reporting_session,
         root_session_id=root_session_id,
         turn_id=turn_id,
         payload=payload,
@@ -124,6 +126,9 @@ def summarize_samples(samples: list[UsageSampleRecord], *, workspace_id: str,
     direct_ids = direct_session_ids or {root_session_id}
     direct = [sample for sample in samples if sample.session_id in direct_ids]
     delegated = [sample for sample in samples if sample.session_id not in direct_ids]
+    internal = [sample for sample in samples if sample.session_id in {
+        session_id + ":computer_actor" for session_id in direct_ids}]
+    visible = [sample for sample in samples if not sample.session_id.endswith(":computer_actor")]
     root_context_samples = [sample for sample in direct if sample.context_tokens is not None]
     latest_context = root_context_samples[-1] if root_context_samples else None
     context_tokens = latest_context.context_tokens if latest_context else None
@@ -151,6 +156,9 @@ def summarize_samples(samples: list[UsageSampleRecord], *, workspace_id: str,
         sample_count=len(samples),
         coverage_since=samples[0].observed_at if samples else None,
         updated_at=samples[-1].observed_at if samples else None,
+        internal_worker_tokens=_breakdown(internal),
+        visible_provider_ids=tuple(sorted({sample.provider_id for sample in visible})),
+        visible_model_ids=tuple(sorted({sample.model_id for sample in visible if sample.model_id})),
     )
 
 

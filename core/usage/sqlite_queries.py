@@ -22,6 +22,9 @@ def chat_summary(connection, *, workspace_id: str, root_session_id: str, direct_
         (workspace_id, root_session_id)))
     direct = [row for row in rows if row['session_id'] in direct_session_ids]
     delegated = [row for row in rows if row['session_id'] not in direct_session_ids]
+    internal = [row for row in rows if row['session_id'] in {
+        session_id + ':computer_actor' for session_id in direct_session_ids}]
+    visible = [row for row in rows if not row['session_id'].endswith(':computer_actor')]
     context = connection.execute('''SELECT document FROM samples WHERE workspace_id=? AND root_session_id=?
         AND context_tokens IS NOT NULL AND session_id IN (SELECT value FROM json_each(?))
         ORDER BY observed_at DESC,sample_id DESC LIMIT 1''',
@@ -42,7 +45,10 @@ def chat_summary(connection, *, workspace_id: str, root_session_id: str, direct_
         estimated_cost_microusd=_totals(rows)['estimated_cost_microusd'],
         sample_count=sum(row['sample_count'] for row in rows),
         coverage_since=datetime.fromisoformat(min(row['first_at'] for row in rows)) if rows else None,
-        updated_at=datetime.fromisoformat(max(row['last_at'] for row in rows)) if rows else None)
+        updated_at=datetime.fromisoformat(max(row['last_at'] for row in rows)) if rows else None,
+        internal_worker_tokens=_tokens(internal),
+        visible_provider_ids=tuple(sorted({row['provider_id'] for row in visible})),
+        visible_model_ids=tuple(sorted({row['model_id'] for row in visible if row['model_id']})))
 
 
 def timeseries(connection, *, workspace_id: str, resolution: str, periods: int,

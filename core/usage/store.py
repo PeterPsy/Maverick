@@ -178,11 +178,13 @@ class UsageDocumentStore:
         deleted_by_session_id = {session_id: 0 for session_id in unique_session_ids}
         if not unique_session_ids:
             return deleted_by_session_id
+        from core.usage.worker_attribution import owned_usage_session_ids
+        owners = owned_usage_session_ids(unique_session_ids)
         deleted_documents = self.collections.samples.delete_many_documents(
-            {"session_id": {"$in": unique_session_ids}}
+            {"session_id": {"$in": list(owners)}}
         )
         for document in deleted_documents:
             session_id = document.get("session_id")
-            if isinstance(session_id, str) and session_id in deleted_by_session_id:
-                deleted_by_session_id[session_id] += 1
+            if isinstance(session_id, str) and session_id in owners:
+                deleted_by_session_id[owners[session_id]] += 1
         return deleted_by_session_id

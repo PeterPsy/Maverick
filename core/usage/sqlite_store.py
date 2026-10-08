@@ -196,11 +196,13 @@ class UsageSqliteStore:
         if not deleted:
             return deleted
         affected = set()
-        ids = json.dumps(list(deleted))
+        from core.usage.worker_attribution import owned_usage_session_ids
+        owners = owned_usage_session_ids(session_ids)
+        ids = json.dumps(list(owners))
         with self.transaction(write=True) as connection:
             for row in connection.execute('SELECT document FROM samples WHERE session_id IN (SELECT value FROM json_each(?))', (ids,)):
                 sample = decode_sample(row[0])
-                deleted[sample.session_id] += 1
+                deleted[owners[sample.session_id]] += 1
                 adjust_projections(connection, sample, -1)
                 for resolution in ('hour', 'day'):
                     affected.add((sample.workspace_id, resolution, usage_bucket_start(sample.observed_at, resolution), sample.provider_id, sample.model_id or ''))

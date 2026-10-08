@@ -304,12 +304,17 @@ selected theme when ready; a default white WebKit canvas is never a loading
 state.
 
 Chat microphone recording is independent of Device Use activation. Native
-macOS 0.2.7 (58) declares its microphone purpose string so WebKit exposes audio
-capture. macOS and iOS compile the shared `MaverickWebMediaCapturePolicy` in the
-native repository: it accepts HTTPS microphone requests for the platform or an
-exact live shell-registered app origin with exact microphone delegation, then
-requests OS consent and revalidates the frame. External pages, popup receivers
-and camera requests remain denied. See the native `docs/native-chat-speech.md`.
+macOS declares its microphone purpose string so WebKit exposes audio capture.
+macOS 0.2.8 (59) and iOS 0.1.2 (3) compile the shared
+`MaverickWebMediaCapturePolicy` in the native repository. WebKit's callback
+origin identifies the top page, while `WKFrameInfo.securityOrigin` identifies
+the requesting frame; these are checked separately. The top origin and actual
+document must match Maverick. The frame must be the platform or an exact live
+shell-registered app origin with exact microphone delegation. OS consent and
+live registration are revalidated before granting capture. External pages,
+popup receivers and camera requests remain denied. The opt-in signed Mac
+regression records a short in-memory clip from a distinct HTTPS iframe and
+verifies recorder bytes and track shutdown. See native `docs/native-chat-speech.md`.
 
 The composer exposes one **PC use** toggle beside Research and the other
 composer utilities. It shares their icon-button style, `aria-pressed` state and

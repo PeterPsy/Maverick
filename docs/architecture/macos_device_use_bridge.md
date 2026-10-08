@@ -10,7 +10,7 @@ The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
 direct path was then removed. The current executor contract is `macos-v51`.
 
-## Full file and terminal authority (v51 / 0.2.4 build 55)
+## Full file and terminal authority (v51 / 0.2.5 build 56)
 
 Full activation itself authorizes Mac file and shell operations with the local
 user's macOS permissions. `mac_code` no longer needs a folder grant, a project
@@ -29,6 +29,15 @@ recursively inventory Home. `revoke_project` resets context/jobs; PC use Stop
 revokes native authority. Bounded On retains its native media-folder grants.
 Media primitives retain source immutability and generated-output semantics;
 general filesystem tasks use Full file/command tools.
+
+Directory selection changes only the cwd for future operations. Existing
+commands retain their original cwd, chat-owned handles and stdin until completion,
+explicit process Stop, context revocation or PC use/app shutdown. Media containment
+uses physical paths for both existing roots and destinations with missing parents,
+so `/tmp` and `/private/tmp` aliases produce the same generated-artifact behavior.
+Native signed regression tests inspect a real one-second WAV, verify new JSON/SRT
+artifacts and source immutability through both aliases, and verify process
+completion plus explicit Stop/revocation after selecting the same or another cwd.
 
 File failures distinguish Full-required, context mismatch, cancelled selection,
 missing paths and OS permission refusal without GUI-focus recovery instructions.

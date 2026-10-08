@@ -877,6 +877,7 @@ input {
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .bs-chat-list__title {

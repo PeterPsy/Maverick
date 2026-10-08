@@ -84,6 +84,9 @@ describe("ToolCallInlineMessage", () => {
       disclosure?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector("[role='slider']")).toBeNull();
+    expect(container.querySelector("[data-slot='trace-play']")).toBeNull();
+    expect(container.querySelector("[data-slot='trace-live']")).toBeNull();
 
     const toolRow = container.querySelector<HTMLButtonElement>("[data-slot='trace-span-label']");
     expect(toolRow?.textContent).toContain("Listed files in apps/chat");
@@ -91,6 +94,12 @@ describe("ToolCallInlineMessage", () => {
       toolRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(container.querySelector(".chatapp-tool-call-panel")?.textContent).toContain("rg --files apps/chat");
+    act(() => {
+      container?.querySelector<HTMLButtonElement>("[aria-label='Close action details']")?.click();
+    });
+    expect(container.querySelector(".chatapp-tool-call-panel")).toBeNull();
+    expect(toolRow?.getAttribute("aria-expanded")).toBe("false");
+    expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("binds one-shot approval to the exact invocation digest and revision", async () => {
@@ -164,5 +173,9 @@ describe("ToolCallInlineMessage", () => {
       },
     );
     expect(container.textContent).toContain("Decision recorded · active");
+    act(() => {
+      container?.querySelector<HTMLButtonElement>("[aria-label='Close action details']")?.click();
+    });
+    expect(container.querySelector(".chatapp-tool-call-panel")).toBeNull();
   });
 });

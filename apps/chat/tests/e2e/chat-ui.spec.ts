@@ -119,12 +119,18 @@ test.describe("Chat app browser smoke", () => {
       const trace = page.locator("[data-slot=agent-trace]");
       const rows = trace.locator("[data-slot=trace-span]");
       await expect(trace).toBeVisible({ timeout: 20_000 });
+      await expect(trace.getByRole("slider")).toHaveCount(0);
+      await expect(trace.locator("[data-slot=trace-play], [data-slot=trace-live]")).toHaveCount(0);
       await expect(rows.first()).toHaveAttribute("data-state", "running");
       const clock = trace.locator("[data-part=dur]").first();
       const before = await clock.textContent();
       await expect.poll(() => clock.textContent()).not.toBe(before);
       await trace.locator("[data-slot=trace-span-label]").first().click();
       await expect(page.getByRole("region", { name: /Dettagli tool/ })).toContainText("React trace");
+      await page.getByRole("button", { name: "Close action details" }).click();
+      await expect(page.getByRole("region", { name: /Dettagli tool/ })).toHaveCount(0);
+      await expect(trace.locator("[data-slot=trace-span-label]").first()).toHaveAttribute("aria-expanded", "false");
+      await trace.locator("[data-slot=trace-span-label]").first().click();
       const send = (event: RuntimeEvent) => {
         state.runtimeSessionEvents[RUNTIME_SESSION_ID].push(event);
         state.runtimeSockets.forEach(ws => ws.send(JSON.stringify({ type: "runtime.event", event })));
@@ -134,10 +140,6 @@ test.describe("Chat app browser smoke", () => {
       await expect(rows).toHaveCount(2);
       await expect(rows.first()).toHaveAttribute("data-state", "done");
       await expect(page.getByRole("region", { name: /Dettagli tool/ })).toContainText("react.dev");
-      const rail = trace.getByRole("slider", { name: "Playhead" });
-      await rail.focus(); await rail.press("Home");
-      await expect(rows.nth(1)).toHaveAttribute("data-state", "queued");
-      await trace.getByRole("button", { name: "Follow live actions" }).click();
       await expect(rows.nth(1)).toHaveAttribute("data-state", "running");
       await page.screenshot({ path: `/tmp/chat-agent-trace-live-${width}.png` });
       send(action("test-failed", "failed", 2000, { name: "shell_command", tool_call_id: "tests", exit_code: 1, output: "1 passed", error: "2 failing" }));
@@ -146,11 +148,8 @@ test.describe("Chat app browser smoke", () => {
       await expect(trace.getByRole("button", { name: "Follow live actions" })).toHaveCount(0);
       await trace.locator("[data-slot=trace-span-label]").nth(1).click();
       await expect(page.getByRole("region", { name: /Dettagli tool/ })).toContainText("2 failing");
-      await rail.focus(); await rail.press("End");
-      await trace.getByRole("button", { name: "Play replay" }).click();
-      await expect(rows.nth(1)).toHaveAttribute("data-state", "queued");
-      await trace.getByRole("button", { name: "Pause replay" }).click();
-      await rail.focus(); await rail.press("End");
+      await expect(trace).toHaveAttribute("data-run", "error");
+      await expect(rows.nth(1)).toHaveAttribute("data-state", "error");
       const bounds = await trace.boundingBox();
       expect(bounds!.x).toBeGreaterThanOrEqual(0);
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
@@ -162,6 +161,8 @@ test.describe("Chat app browser smoke", () => {
       }, window.location.origin));
       await expect(page.locator(".chatapp-tool-trace > .chatapp-tool-inline__toggle")).toHaveCSS("color", "rgba(15, 23, 42, 0.58)");
       await page.screenshot({ path: `/tmp/chat-agent-trace-light-${width}.png` });
+      await page.getByRole("button", { name: "Close action details" }).click();
+      await expect(page.getByRole("region", { name: /Dettagli tool/ })).toHaveCount(0);
       const disclosure = page.locator(".chatapp-tool-trace > .chatapp-tool-inline__toggle");
       await disclosure.click();
       await expect(disclosure).toHaveAttribute("aria-expanded", "false");

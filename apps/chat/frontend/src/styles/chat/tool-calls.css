@@ -165,6 +165,31 @@
   min-width: 0;
 }
 
+.chatapp-tool-call-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--maverick-text-muted);
+  cursor: pointer;
+}
+
+.chatapp-tool-call-panel__close:hover {
+  background: var(--maverick-surface-hover);
+  color: var(--maverick-text);
+}
+
+.chatapp-tool-call-panel__close:focus-visible {
+  outline: 2px solid var(--maverick-focus);
+  outline-offset: 2px;
+}
+
 .chatapp-tool-call-panel__eyebrow {
   margin: 0;
   color: rgba(var(--maverick-contrast-rgb), 0.5);

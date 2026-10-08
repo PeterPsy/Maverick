@@ -14,6 +14,7 @@ export { TraceSpanRow } from "./agent-trace-row";
 export function AgentTrace({
   spans, duration, runId = "run", model, defaultTime = 0, autoPlay = true,
   loop = false, speed = 1, holdMs = 900, showRuler = true, showTransport = true,
+  interactive = true,
   showTokens = true, labelWidth = 200, rowHeight = 34, onSpanSelect,
   currentTime, live = false, selectedSpanId, detailsId, className, style, ref, ...rest
 }: AgentTraceProps) {
@@ -32,7 +33,7 @@ export function AgentTrace({
   const selectSpan = (span: LaidSpan) => {
     setSelected(span.id);
     // Inspecting an action keeps the live timeline moving; seek only during replay.
-    if (!head.following || !live) head.seek(span.start);
+    if (interactive && (!head.following || !live)) head.seek(span.start);
     onSpanSelect?.(span);
   };
   const scrubFrom = (clientX: number, el: HTMLElement) => {
@@ -77,7 +78,7 @@ export function AgentTrace({
       </div>
       <div className="relative [--gutter:96px] [--meta:3.75rem] @xs/trace:[--gutter:132px] @xs/trace:[--meta:5rem] @md/trace:[--gutter:var(--label-w)] @md/trace:[--meta:9rem]">
         {showRuler && (
-          <div data-slot="trace-ruler" {...scrubProps} className="border-border @max-sm/trace:hidden relative h-7 cursor-ew-resize touch-none border-b select-none">
+          <div data-slot="trace-ruler" {...(interactive ? scrubProps : {})} className={cn("border-border @max-sm/trace:hidden relative h-7 border-b select-none", interactive && "cursor-ew-resize touch-none")}>
             <div className={cn(trackBox, "inset-y-0")}>
               {ticks.map(t => <span key={t} className="text-muted-foreground absolute top-2 -translate-x-1/2 font-mono text-[10px] leading-none tabular-nums" style={{ left: `${t / total * 100}%` }}>{t < 1000 ? `${t}ms` : `${t / 1000}s`}</span>)}
             </div>
@@ -97,7 +98,7 @@ export function AgentTrace({
               <span className="bg-primary/70 absolute inset-y-0 w-px" /><span className="bg-primary absolute top-0 size-1.5 -translate-x-[2.5px] rotate-45" />
             </div>
           </div>
-          <div ref={trackRef} data-slot="trace-scrub" {...scrubProps} className={cn(trackBox, "inset-y-0 cursor-ew-resize touch-none select-none")} />
+          {interactive && <div ref={trackRef} data-slot="trace-scrub" {...scrubProps} className={cn(trackBox, "inset-y-0 cursor-ew-resize touch-none select-none")} />}
         </div>
       </div>
       {showTransport && (

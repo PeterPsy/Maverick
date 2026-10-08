@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type MouseEvent } from "react";
 import { requestParentExternalUrl } from "@maverick/pwa-cache";
+import { X } from "lucide-react";
 import {
   decideRuntimeToolConfirmation,
   getRuntimeToolConfirmation,
@@ -27,6 +28,8 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
   const selectedTool = toolCalls.find((tool, index) => toolTraceKey(tool, index) === selectedToolKey);
   const toolCount = toolCalls.length;
   const activityCreatedAt = createdAt || toolCalls.find((toolCall) => toolCall.createdAt)?.createdAt;
+  const pendingIndex = toolCalls.findIndex(toolCall => toolCall.status === "awaiting_confirmation");
+  const pendingToolKey = pendingIndex >= 0 ? toolTraceKey(toolCalls[pendingIndex], pendingIndex) : null;
 
   useEffect(() => {
     if (selectedToolKey && !toolCalls.some((toolCall, index) => toolTraceKey(toolCall, index) === selectedToolKey)) {
@@ -35,12 +38,8 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
   }, [selectedToolKey, toolCalls]);
 
   useEffect(() => {
-    if (selectedToolKey) return;
-    const pendingIndex = toolCalls.findIndex((toolCall) => toolCall.status === "awaiting_confirmation");
-    if (pendingIndex >= 0) {
-      setSelectedToolKey(toolTraceKey(toolCalls[pendingIndex], pendingIndex));
-    }
-  }, [selectedToolKey, toolCalls]);
+    if (pendingToolKey) setSelectedToolKey(current => current || pendingToolKey);
+  }, [pendingToolKey]);
 
   return (
     <ActivityDisclosure
@@ -51,18 +50,18 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
     >
       <AgentTrace
         spans={trace.spans} duration={trace.duration} currentTime={trace.duration} live={trace.live}
-        autoPlay={false} runId="Action timeline" labelWidth={240} rowHeight={44}
+        autoPlay={false} showTransport={false} interactive={false} runId="Action timeline" labelWidth={240} rowHeight={44}
         selectedSpanId={selectedToolKey} detailsId={panelId}
         onSpanSelect={span => setSelectedToolKey(current => current === span.id ? null : span.id)}
       />
       <div id={panelId}>
-        {selectedTool ? <ToolCallPanel key={selectedToolKey} toolCall={selectedTool} /> : null}
+        {selectedTool ? <ToolCallPanel key={selectedToolKey} toolCall={selectedTool} onClose={() => setSelectedToolKey(null)} /> : null}
       </div>
     </ActivityDisclosure>
   );
 }
 
-function ToolCallPanel({ toolCall }: { toolCall: ToolCallMessage }) {
+function ToolCallPanel({ toolCall, onClose }: { toolCall: ToolCallMessage; onClose: () => void }) {
   const summary = toolSummary(toolCall.detail);
   const command = stringValue(toolCall.detail.command) || stringValue(toolCall.detail.cmd);
   const query = stringValue(toolCall.detail.query);
@@ -84,6 +83,9 @@ function ToolCallPanel({ toolCall }: { toolCall: ToolCallMessage }) {
             {toolCall.createdAt ? <span className="chat-ui-badge chat-ui-badge--neutral">{formatToolTime(toolCall.createdAt)}</span> : null}
           </div>
         </div>
+        <button type="button" className="chatapp-tool-call-panel__close" aria-label="Close action details" onClick={onClose}>
+          <X aria-hidden="true" size={18} />
+        </button>
       </header>
       <div className="chatapp-tool-call-panel__content">
         {summary ? <ToolPanelText title="Summary" value={summary} /> : null}

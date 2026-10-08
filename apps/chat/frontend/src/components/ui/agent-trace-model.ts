@@ -29,6 +29,8 @@ export interface AgentTraceProps extends React.ComponentProps<"div"> {
   holdMs?: number;
   showRuler?: boolean;
   showTransport?: boolean;
+  /** Allow seeking and scrubbing; row selection remains available when disabled. */
+  interactive?: boolean;
   showTokens?: boolean;
   labelWidth?: number;
   rowHeight?: number;

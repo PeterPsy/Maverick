@@ -371,7 +371,9 @@ MaverickMac WebView / Chat iframe
 ```
 
 Model ownership, provider credentials, conversation state, image injection and
-audit remain in Core. WebKit exposes only `maverickDeviceUse`; live invocation
+audit remain in Core. WebKit exposes `maverickDeviceUse` for executor control
+and the platform-main-frame-only `maverickExternalURL` for system-browser links;
+the latter carries no Device Use authority. Live invocation
 arguments, results, screenshots and credentials do not travel through the bridge
 JavaScript. The separate owner-authorized audit UI can explicitly fetch historical
 results and images through Core; credentials and typed input text are withheld.
@@ -612,7 +614,8 @@ Native:
 - `DesktopSessionMonitor.swift` — On invalidation and Full lock-only monitor;
 - `NativeTextFocus.swift` / `NativeTextInput.swift` — exact input admission;
 - `PeekabooTools.swift` / `CalendarTools.swift` — GUI and EventKit motors;
-- `App.swift` / `MacWebView.swift` — chrome-free app and sole native bridge.
+- `App.swift` / `MacWebView.swift` — chrome-free app and Device Use bridge;
+  `MacExternalNavigation.swift` owns external links and temporary popup receivers.
 
 Do not recreate local transcript, provider runtime, Codex binary bundle,
 credential copy/provisioning or a second chat execution mode on the Mac.

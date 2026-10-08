@@ -28,6 +28,7 @@ export function useAgentTracePlayhead(options: PlayheadOptions) {
   const [playing, setPlaying] = React.useState(false);
   const [following, setFollowing] = React.useState(followingRef.current);
   const seekRef = React.useRef<(ms: number) => void>(() => {});
+  const paintRef = React.useRef<() => void>(() => {});
   const runRef = React.useRef<() => void>(() => {});
   const haltRef = React.useRef<() => void>(() => {});
   const opts = React.useRef(options);
@@ -86,7 +87,13 @@ export function useAgentTracePlayhead(options: PlayheadOptions) {
         if (timeRef.current >= o.total) {
           timeRef.current = o.total;
           if (o.loop && !o.live) holdUntil = now + o.holdMs;
-          else { playingRef.current = false; setPlaying(false); }
+          else {
+            playingRef.current = false; setPlaying(false);
+            if (o.currentTime != null) {
+              followingRef.current = true; setFollowing(true);
+              timeRef.current = clamp(o.currentTime, 0, o.total);
+            }
+          }
         }
       }
       paint();
@@ -100,6 +107,7 @@ export function useAgentTracePlayhead(options: PlayheadOptions) {
     const halt = () => { cancelAnimationFrame(raf); raf = 0; };
     runRef.current = start;
     haltRef.current = halt;
+    paintRef.current = paint;
     seekRef.current = ms => {
       timeRef.current = clamp(ms, 0, opts.current.total);
       holdUntil = 0; last = 0; paint();
@@ -127,7 +135,7 @@ export function useAgentTracePlayhead(options: PlayheadOptions) {
       halt(); io.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
       media.removeEventListener("change", onMedia);
-      runRef.current = () => {}; haltRef.current = () => {}; seekRef.current = () => {};
+      runRef.current = () => {}; haltRef.current = () => {}; seekRef.current = () => {}; paintRef.current = () => {};
     };
   }, [options.autoPlay]);
 
@@ -139,9 +147,23 @@ export function useAgentTracePlayhead(options: PlayheadOptions) {
   }, [options.defaultTime]);
 
   // Called after React has registered the latest rows, including new streamed actions.
-  const repaint = () => seekRef.current(followingRef.current ? opts.current.currentTime ?? opts.current.total : timeRef.current);
+  const repaint = () => {
+    timeRef.current = clamp(followingRef.current ? opts.current.currentTime ?? opts.current.total : timeRef.current, 0, opts.current.total);
+    paintRef.current();
+  };
   const stopFollowing = () => { followingRef.current = false; setFollowing(false); };
   const seek = (ms: number) => { stopFollowing(); seekRef.current(ms); };
+  const pause = () => {
+    playingRef.current = false; setPlaying(false); haltRef.current();
+  };
+  const resume = () => {
+    if (timeRef.current >= opts.current.total) {
+      if (opts.current.currentTime != null) followLive();
+      return;
+    }
+    stopFollowing();
+    playingRef.current = true; setPlaying(true); runRef.current();
+  };
   const togglePlay = () => {
     if (followingRef.current && opts.current.live) {
       stopFollowing(); return;
@@ -157,5 +179,5 @@ export function useAgentTracePlayhead(options: PlayheadOptions) {
     playingRef.current = false; setPlaying(false); haltRef.current();
     followingRef.current = true; setFollowing(true); repaint();
   };
-  return { rootRef, railRef, clockRef, statusRef, rowsRef, timeRef, playing, following, repaint, seek, togglePlay, followLive };
+  return { rootRef, railRef, clockRef, statusRef, rowsRef, timeRef, playing, following, repaint, seek, pause, resume, togglePlay, followLive };
 }

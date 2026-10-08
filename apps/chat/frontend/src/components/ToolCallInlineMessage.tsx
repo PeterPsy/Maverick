@@ -50,7 +50,7 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
     >
       <AgentTrace
         spans={trace.spans} duration={trace.duration} currentTime={trace.duration} live={trace.live}
-        autoPlay={false} showTransport={false} interactive={false} runId="Action timeline" labelWidth={240} rowHeight={44}
+        autoPlay={false} showTransport={false} replayOnSeek runId="Action timeline" labelWidth={240} rowHeight={44}
         selectedSpanId={selectedToolKey} detailsId={panelId}
         onSpanSelect={span => setSelectedToolKey(current => current === span.id ? null : span.id)}
       />

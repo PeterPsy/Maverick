@@ -84,7 +84,7 @@ describe("ToolCallInlineMessage", () => {
       disclosure?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
-    expect(container.querySelector("[role='slider']")).toBeNull();
+    expect(container.querySelector("[role='slider']")?.getAttribute("aria-label")).toBe("Timeline playhead");
     expect(container.querySelector("[data-slot='trace-play']")).toBeNull();
     expect(container.querySelector("[data-slot='trace-live']")).toBeNull();
 

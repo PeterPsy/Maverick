@@ -1,3 +1,13 @@
+/* Keep timeline geometry independent of the surrounding transcript's prose lists. */
+[data-slot="agent-trace"] [data-slot="trace-spans"] {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+[data-slot="agent-trace"] [data-slot="trace-spans"] > li {
+  margin: 0;
+}
+
 /* Maverick's native button inheritance is outside Tailwind's utility layer. */
 [data-slot="agent-trace"] [data-slot="trace-play"] {
   color: var(--maverick-text-on-accent);

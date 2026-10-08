@@ -1,1 +1,0 @@
-[data-slot=agent-trace] [data-slot=trace-play]{color:var(--maverick-text-on-accent)}[data-slot=agent-trace] [data-slot=trace-live]{font-size:11px;color:var(--maverick-text-muted)}[data-slot=agent-trace] [data-slot=trace-live][aria-pressed=true]{color:var(--maverick-accent)}

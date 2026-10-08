@@ -65,7 +65,7 @@ export const TraceSpanRow = React.memo(function TraceSpanRow({
         <div className="absolute top-1/2 h-2 min-w-[3px] -translate-y-1/2 overflow-hidden rounded-full"
           style={{ left: `${span.start / total * 100}%`, width: `${span.dur / total * 100}%` }}>
           <span aria-hidden="true" className="bg-foreground/10 absolute inset-0" />
-          <span aria-hidden="true" className={cn("absolute inset-0 origin-left",
+          <span data-part="fill" aria-hidden="true" className={cn("absolute inset-0 origin-left",
             span.status === "error" ? "bg-destructive" : accent ? "bg-primary"
               : span.status === "cached" ? "bg-foreground/25" : "bg-foreground/50",
           )} style={{ transform: "scaleX(var(--p,1))" }} />

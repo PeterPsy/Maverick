@@ -31,6 +31,8 @@ export interface AgentTraceProps extends React.ComponentProps<"div"> {
   showTransport?: boolean;
   /** Allow seeking and scrubbing; row selection remains available when disabled. */
   interactive?: boolean;
+  /** Resume the animation from the chosen time after dragging the graph. */
+  replayOnSeek?: boolean;
   showTokens?: boolean;
   labelWidth?: number;
   rowHeight?: number;

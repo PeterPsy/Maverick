@@ -43,6 +43,36 @@ function ChatSidebarWidget() {
       ) : null}
 
       <SidebarNav
+        actions={
+          <>
+            <button
+              aria-label={
+                sidebar.areAllSectionsCollapsed
+                  ? "Expand all projects"
+                  : "Collapse all projects"
+              }
+              className="dashboard-sidebar__icon-button"
+              disabled={!sidebar.sections.length}
+              onClick={sidebar.toggleAllSections}
+              type="button"
+            >
+              {sidebar.areAllSectionsCollapsed ? (
+                <ChevronsUpDown size={15} />
+              ) : (
+                <ChevronsDownUp size={15} />
+              )}
+            </button>
+            <button
+              aria-label="New project"
+              className="dashboard-sidebar__icon-button"
+              disabled={sidebar.isPending}
+              onClick={() => void sidebar.addProject()}
+              type="button"
+            >
+              <FolderPlus size={16} />
+            </button>
+          </>
+        }
         activeId={sidebar.threadFilter}
         groups={chatNavigationGroups(sidebar.threadFilterCounts)}
         onSearchChange={sidebar.setSearchQuery}
@@ -50,39 +80,6 @@ function ChatSidebarWidget() {
         searchQuery={sidebar.searchQuery}
       >
         <div className="bs-chat-list">
-          <div className="bs-chat-sidebar-projects-heading">
-            <span>
-              {sidebar.searchQuery.trim() ? "Search results" : "Projects"}
-            </span>
-            <div className="bs-chat-folder__header-actions">
-              <button
-                aria-label={
-                  sidebar.areAllSectionsCollapsed
-                    ? "Expand all projects"
-                    : "Collapse all projects"
-                }
-                className="dashboard-sidebar__icon-button"
-                disabled={!sidebar.sections.length}
-                onClick={sidebar.toggleAllSections}
-                type="button"
-              >
-                {sidebar.areAllSectionsCollapsed ? (
-                  <ChevronsUpDown size={15} />
-                ) : (
-                  <ChevronsDownUp size={15} />
-                )}
-              </button>
-              <button
-                aria-label="New project"
-                className="dashboard-sidebar__icon-button"
-                disabled={sidebar.isPending}
-                onClick={() => void sidebar.addProject()}
-                type="button"
-              >
-                <FolderPlus size={16} />
-              </button>
-            </div>
-          </div>
           {sidebar.isInitialLoading ? (
             <ChatSidebarSkeleton />
           ) : sidebar.sections.length ? (

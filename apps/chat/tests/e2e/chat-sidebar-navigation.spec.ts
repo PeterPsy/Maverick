@@ -149,6 +149,24 @@ for (const width of [280, 390]) {
     const viewBounds = await viewSwitcher.boundingBox();
     const searchBounds = await searchTrigger.boundingBox();
     expect(Math.abs(viewBounds!.y - searchBounds!.y)).toBeLessThan(1);
+    for (const name of ["Collapse all projects", "New project"]) {
+      const actionBounds = await page
+        .getByRole("button", { name, exact: true })
+        .boundingBox();
+      expect(
+        Math.abs(
+          actionBounds!.y +
+            actionBounds!.height / 2 -
+            (viewBounds!.y + viewBounds!.height / 2),
+        ),
+      ).toBeLessThan(1);
+      expect(actionBounds!.x).toBeGreaterThanOrEqual(
+        viewBounds!.x + viewBounds!.width,
+      );
+      expect(actionBounds!.x + actionBounds!.width).toBeLessThanOrEqual(
+        searchBounds!.x,
+      );
+    }
     expect(searchBounds!.x).toBeGreaterThanOrEqual(
       viewBounds!.x + viewBounds!.width,
     );
@@ -156,6 +174,9 @@ for (const width of [280, 390]) {
     const expandedSearch = page.getByRole("textbox", { name: "Search chats" });
     await expect(expandedSearch).toBeFocused();
     await expect(viewSwitcher).toBeHidden();
+    await expect(
+      page.locator(".dashboard-sidebar__toolbar-actions"),
+    ).toBeHidden();
     const searchFrame = page.locator(".bs-chat-sidebar-search-frame");
     expect((await searchFrame.boundingBox())!.width).toBeGreaterThan(
       viewBounds!.width,
@@ -170,9 +191,7 @@ for (const width of [280, 390]) {
     await searchTrigger.click();
     await expandedSearch.fill("Market research");
     await expect(page.locator(".bs-chat-list__item")).toHaveCount(1);
-    await page
-      .getByRole("button", { name: "New project", exact: true })
-      .focus();
+    await page.locator(".bs-chat-list__select-button").first().focus();
     await expect(viewSwitcher).toBeVisible();
     await expect(searchTrigger).toHaveAttribute(
       "title",
@@ -246,6 +265,18 @@ for (const width of [280, 390]) {
     await expect(
       page.getByRole("button", { name: "Build the new sidebar", exact: true }),
     ).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.locator(".bs-chat-folder__header").evaluateAll((headers) => {
+          const first = headers[0].getBoundingClientRect();
+          const second = headers[1].getBoundingClientRect();
+          return second.top - first.top;
+        }),
+      )
+      .toBeLessThanOrEqual(40);
+    await page.screenshot({
+      path: testInfo.outputPath(`sidebar-collapsed-${width}.png`),
+    });
     await page.getByRole("button", { name: "Expand all projects" }).click();
     await expect(
       page.getByRole("button", { name: "Build the new sidebar", exact: true }),

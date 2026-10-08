@@ -24,6 +24,7 @@ export function SidebarNav({
   onSelect,
   searchQuery,
   onSearchChange,
+  actions,
   children,
 }: {
   groups: NavGroupData[];
@@ -31,6 +32,7 @@ export function SidebarNav({
   onSelect: (id: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
@@ -43,7 +45,7 @@ export function SidebarNav({
   return (
     <div className="dashboard-sidebar flex min-h-0 flex-1 flex-col">
       <div
-        className={`dashboard-sidebar__toolbar ${isSearchExpanded ? "is-searching" : ""}`}
+        className={`dashboard-sidebar__toolbar ${actions ? "has-actions" : ""} ${isSearchExpanded ? "is-searching" : ""}`}
       >
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -125,6 +127,9 @@ export function SidebarNav({
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
+        {actions ? (
+          <div className="dashboard-sidebar__toolbar-actions">{actions}</div>
+        ) : null}
         <SidebarSearch
           expanded={isSearchExpanded}
           onExpandedChange={setIsSearchExpanded}

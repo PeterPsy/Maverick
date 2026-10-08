@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useId, useState, type MouseEvent } from "react";
 import { requestParentExternalUrl } from "@maverick/pwa-cache";
 import {
   decideRuntimeToolConfirmation,
@@ -8,6 +8,9 @@ import {
 } from "../api/client";
 import { isNoisyRuntimeLabel } from "../lib/runtimeStepLabels";
 import { toolActivityLabel } from "../lib/toolPresentation";
+import { toolTraceKey } from "../lib/toolTrace";
+import { useToolTrace } from "../hooks/useToolTrace";
+import { AgentTrace } from "./ui/agent-trace";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 import { DeviceUseAuditPanel } from "./DeviceUseAuditPanel";
 
@@ -19,11 +22,14 @@ type ToolCallInlineMessageProps = {
 
 export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolCalls }: ToolCallInlineMessageProps) {
   const [selectedToolKey, setSelectedToolKey] = useState<string | null>(null);
+  const panelId = useId();
+  const trace = useToolTrace(toolCalls, createdAt);
+  const selectedTool = toolCalls.find((tool, index) => toolTraceKey(tool, index) === selectedToolKey);
   const toolCount = toolCalls.length;
   const activityCreatedAt = createdAt || toolCalls.find((toolCall) => toolCall.createdAt)?.createdAt;
 
   useEffect(() => {
-    if (selectedToolKey && !toolCalls.some((toolCall, index) => toolRenderKey(toolCall, index) === selectedToolKey)) {
+    if (selectedToolKey && !toolCalls.some((toolCall, index) => toolTraceKey(toolCall, index) === selectedToolKey)) {
       setSelectedToolKey(null);
     }
   }, [selectedToolKey, toolCalls]);
@@ -32,7 +38,7 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
     if (selectedToolKey) return;
     const pendingIndex = toolCalls.findIndex((toolCall) => toolCall.status === "awaiting_confirmation");
     if (pendingIndex >= 0) {
-      setSelectedToolKey(toolRenderKey(toolCalls[pendingIndex], pendingIndex));
+      setSelectedToolKey(toolTraceKey(toolCalls[pendingIndex], pendingIndex));
     }
   }, [selectedToolKey, toolCalls]);
 
@@ -40,50 +46,23 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
     <ActivityDisclosure
       createdAt={activityCreatedAt}
       defaultExpanded={defaultExpanded}
+      className="chatapp-tool-trace"
       label={`${toolCalls.some((item) => item.status === "awaiting_confirmation") ? "Tool confirmation required" : "Actions"}${toolCount > 1 ? ` (${toolCount})` : ""}`}
     >
-      {toolCalls.map((toolCall, index) => {
-        const renderKey = toolRenderKey(toolCall, index);
-        const isSelected = selectedToolKey === renderKey;
-        const panelId = `chatapp-tool-call-panel-${renderKey.replace(/[^A-Za-z0-9_-]/g, "-")}`;
-        return (
-          <div className="chatapp-tool-inline__item" key={renderKey}>
-            <button
-              aria-controls={panelId}
-              aria-expanded={isSelected}
-              className={`chatapp-tool-inline__row ${toolCall.status === "failed" ? "is-failed" : ""} ${
-                toolCall.status === "started" || toolCall.status === "updated" || toolCall.status === "awaiting_confirmation" ? "is-active" : ""
-              } ${isSelected ? "is-selected" : ""}`}
-              onClick={() => {
-                setSelectedToolKey(isSelected ? null : renderKey);
-              }}
-              type="button"
-            >
-              <ToolStatusIcon status={toolCall.status} />
-              <span className="chatapp-tool-inline__label">{displayToolName(toolCall)}</span>
-              <span className={`chatapp-tool-inline__row-chevron ${isSelected ? "is-expanded" : ""}`} aria-hidden="true">
-                <span className="material-symbols-rounded">expand_more</span>
-              </span>
-            </button>
-            {isSelected ? <ToolCallPanel id={panelId} toolCall={toolCall} /> : null}
-          </div>
-        );
-      })}
+      <AgentTrace
+        spans={trace.spans} duration={trace.duration} currentTime={trace.duration} live={trace.live}
+        autoPlay={false} runId="Action timeline" labelWidth={240} rowHeight={44}
+        selectedSpanId={selectedToolKey} detailsId={panelId}
+        onSpanSelect={span => setSelectedToolKey(current => current === span.id ? null : span.id)}
+      />
+      <div id={panelId}>
+        {selectedTool ? <ToolCallPanel key={selectedToolKey} toolCall={selectedTool} /> : null}
+      </div>
     </ActivityDisclosure>
   );
 }
 
-function ToolStatusIcon({ status }: { status: ToolCallMessage["status"] }) {
-  const icon = status === "failed" ? "error" : status === "completed" ? "check_circle" : status === "awaiting_confirmation" ? "approval" : "progress_activity";
-  const animationClass = status === "started" || status === "updated" ? "chatapp-tool-inline__stroke--spin" : "";
-  return (
-    <span className="chatapp-tool-inline__icon" aria-hidden="true">
-      <span className={`material-symbols-rounded ${animationClass}`}>{icon}</span>
-    </span>
-  );
-}
-
-function ToolCallPanel({ id, toolCall }: { id: string; toolCall: ToolCallMessage }) {
+function ToolCallPanel({ toolCall }: { toolCall: ToolCallMessage }) {
   const summary = toolSummary(toolCall.detail);
   const command = stringValue(toolCall.detail.command) || stringValue(toolCall.detail.cmd);
   const query = stringValue(toolCall.detail.query);
@@ -94,7 +73,7 @@ function ToolCallPanel({ id, toolCall }: { id: string; toolCall: ToolCallMessage
   const error = stringValue(toolCall.detail.error) || stringValue(toolCall.detail.stderr);
 
   return (
-    <section className="chatapp-tool-call-panel" id={id} role="region" aria-label={`Dettagli tool ${displayToolName(toolCall)}`}>
+    <section className="chatapp-tool-call-panel" role="region" aria-label={`Dettagli tool ${displayToolName(toolCall)}`}>
       <header className="chatapp-tool-call-panel__header">
         <div className="chatapp-tool-call-panel__header-copy">
           <p className="chatapp-tool-call-panel__eyebrow">Tool Call</p>
@@ -319,10 +298,6 @@ function stringValue(value: unknown): string {
 
 function arrayRecords(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
-}
-
-function toolRenderKey(toolCall: ToolCallMessage, index: number): string {
-  return toolCall.id || `${toolCall.name}-${index}`;
 }
 
 function formatToolTime(value: string): string {

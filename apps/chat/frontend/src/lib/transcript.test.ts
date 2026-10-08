@@ -1041,13 +1041,14 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "tool-completed",
         event_type: "runtime.tool_call.completed",
+        created_at: "2026-04-19T00:00:03.500Z",
         payload: { name: command, command, exit_code: 0, tool_call_id: "call-1" },
       }),
     ]);
     expect(messages).toMatchObject([
       {
         role: "tool",
-        toolCalls: [{ status: "completed", detail: { exit_code: 0 } }],
+        toolCalls: [{ id: "tool-started", status: "completed", startedAt: "2026-04-19T00:00:00.000Z", endedAt: "2026-04-19T00:00:03.500Z", detail: { exit_code: 0 } }],
       },
     ]);
     expect(messages[0].toolCalls).toHaveLength(1);

@@ -81,6 +81,7 @@ type MockState = {
   createSessionBodies: JsonRecord[];
   executeRunBodies: JsonRecord[];
   interAgentSockets: WebSocketRoute[];
+  runtimeSockets: WebSocketRoute[];
   runtimeSessionEvents: Record<string, RuntimeEvent[]>;
   runtimeSessionTurns: Record<string, RuntimeTurn[]>;
   threads: ChatThread[];
@@ -98,6 +99,78 @@ const RUN_ID = "run-chat-e2e";
 const RESEARCHER_AGENT_ID = "agent-type-researcher";
 
 test.describe("Chat app browser smoke", () => {
+  for (const width of [900, 390]) {
+    test(`streams a collapsible navigable action timeline at ${width}px`, async ({ page }) => {
+      test.setTimeout(60_000);
+      await page.setViewportSize({ width, height: 1000 });
+      const state = await installChatMocks(page);
+      const turn = runtimeTurn("turn-trace", RUNTIME_SESSION_ID, "active", "Inspect the action trace");
+      state.threads = [chatThread({ title: "Action trace", last_user_message_at: NOW })];
+      state.runtimeSessionTurns[RUNTIME_SESSION_ID] = [turn];
+      const start = Date.now() - 2000;
+      const action = (id: string, status: string, offset: number, payload: JsonRecord): RuntimeEvent => ({
+        event_id: id, session_id: RUNTIME_SESSION_ID, turn_id: turn.turn_id,
+        event_type: `runtime.tool_call.${status}`, payload, created_at: new Date(start + offset).toISOString(),
+      });
+      state.runtimeSessionEvents[RUNTIME_SESSION_ID] = [
+        action("search-start", "started", 0, { name: "web_search", query: "React trace", tool_call_id: "search" }),
+      ];
+      await page.goto(`/apps/chat/?thread_id=${THREAD_ID}`);
+      const trace = page.locator("[data-slot=agent-trace]");
+      const rows = trace.locator("[data-slot=trace-span]");
+      await expect(trace).toBeVisible({ timeout: 20_000 });
+      await expect(rows.first()).toHaveAttribute("data-state", "running");
+      const clock = trace.locator("[data-part=dur]").first();
+      const before = await clock.textContent();
+      await expect.poll(() => clock.textContent()).not.toBe(before);
+      await trace.locator("[data-slot=trace-span-label]").first().click();
+      await expect(page.getByRole("region", { name: /Dettagli tool/ })).toContainText("React trace");
+      const send = (event: RuntimeEvent) => {
+        state.runtimeSessionEvents[RUNTIME_SESSION_ID].push(event);
+        state.runtimeSockets.forEach(ws => ws.send(JSON.stringify({ type: "runtime.event", event })));
+      };
+      send(action("search-done", "completed", 1000, { name: "web_search", tool_call_id: "search", results: [{ title: "React", url: "https://react.dev" }] }));
+      send(action("test-start", "started", 1000, { name: "shell_command", command: "npm test", tool_call_id: "tests" }));
+      await expect(rows).toHaveCount(2);
+      await expect(rows.first()).toHaveAttribute("data-state", "done");
+      await expect(page.getByRole("region", { name: /Dettagli tool/ })).toContainText("react.dev");
+      const rail = trace.getByRole("slider", { name: "Playhead" });
+      await rail.focus(); await rail.press("Home");
+      await expect(rows.nth(1)).toHaveAttribute("data-state", "queued");
+      await trace.getByRole("button", { name: "Follow live actions" }).click();
+      await expect(rows.nth(1)).toHaveAttribute("data-state", "running");
+      await page.screenshot({ path: `/tmp/chat-agent-trace-live-${width}.png` });
+      send(action("test-failed", "failed", 2000, { name: "shell_command", tool_call_id: "tests", exit_code: 1, output: "1 passed", error: "2 failing" }));
+      await expect(trace).toHaveAttribute("data-run", "error");
+      await expect(rows.nth(1)).toHaveAttribute("data-state", "error");
+      await expect(trace.getByRole("button", { name: "Follow live actions" })).toHaveCount(0);
+      await trace.locator("[data-slot=trace-span-label]").nth(1).click();
+      await expect(page.getByRole("region", { name: /Dettagli tool/ })).toContainText("2 failing");
+      await rail.focus(); await rail.press("End");
+      await trace.getByRole("button", { name: "Play replay" }).click();
+      await expect(rows.nth(1)).toHaveAttribute("data-state", "queued");
+      await trace.getByRole("button", { name: "Pause replay" }).click();
+      await rail.focus(); await rail.press("End");
+      const bounds = await trace.boundingBox();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      await expect.poll(() => trace.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await trace.locator("[data-slot=trace-header]").click();
+      await page.screenshot({ path: `/tmp/chat-agent-trace-complete-${width}.png` });
+      await page.evaluate(() => window.postMessage({
+        type: "maverick.shell.theme-changed", theme: { mode: "light", effective: "light", color_scheme: "light" },
+      }, window.location.origin));
+      await expect(page.locator(".chatapp-tool-trace > .chatapp-tool-inline__toggle")).toHaveCSS("color", "rgba(15, 23, 42, 0.58)");
+      await page.screenshot({ path: `/tmp/chat-agent-trace-light-${width}.png` });
+      const disclosure = page.locator(".chatapp-tool-trace > .chatapp-tool-inline__toggle");
+      await disclosure.click();
+      await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+      await expect(trace).toBeHidden();
+      await expect(page.locator(".chatapp-tool-trace .chatapp-tool-inline__body")).toHaveAttribute("inert", "");
+      await disclosure.click(); await expect(trace).toBeVisible();
+    });
+  }
+
   for (const width of [900, 390]) {
     test(`toggles PC use full access in the native frame at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
@@ -615,7 +688,7 @@ test.describe("Chat app browser smoke", () => {
     await expect(participantTranscript.getByText("Final risk review ready.")).toBeVisible();
     await expect(participantTranscript.getByText("Actions")).toBeVisible();
     await expect(participantTranscript.getByText("Searched the web for “launch risks”")).toBeVisible();
-    await expect(participantTranscript.locator(".chatapp-tool-inline__row")).toBeVisible();
+    await expect(participantTranscript.locator("[data-slot='trace-span-label']")).toBeVisible();
     await expect(participantTranscript.locator(".chatapp-agent-block")).toHaveCount(2);
     const participantHeaderBox = await participantTranscript.locator(".chatapp-inter-agent-graph__transcript-title summary").boundingBox();
     expect(participantHeaderBox?.height || 0).toBeGreaterThanOrEqual(68);
@@ -889,6 +962,7 @@ async function installChatMocks(page: Page): Promise<MockState> {
     }, 0);
   });
   await page.routeWebSocket(/\/ws\/runtime\/sessions\//, (ws) => {
+    state.runtimeSockets.push(ws);
     const sessionId = decodeURIComponent(new URL(ws.url()).pathname.split("/").at(-1) || RUNTIME_SESSION_ID);
     setTimeout(() => {
       ws.send(
@@ -950,6 +1024,7 @@ function createMockState(): MockState {
     createSessionBodies: [],
     executeRunBodies: [],
     interAgentSockets: [],
+    runtimeSockets: [],
     runtimeSessionEvents: {},
     runtimeSessionTurns: {},
     threads: [],

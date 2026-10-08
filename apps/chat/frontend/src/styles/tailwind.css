@@ -1,0 +1,18 @@
+/* Shared shadcn utilities, without a reset over Maverick's native styles. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source("../");
+
+@theme inline {
+  --color-background: var(--maverick-bg);
+  --color-card: var(--chat-sidebar-solid-surface, var(--chatapp-solid-surface));
+  --color-card-foreground: var(--maverick-text);
+  --color-foreground: var(--maverick-text);
+  --color-muted: var(--chatapp-soft-surface);
+  --color-muted-foreground: var(--maverick-text-muted);
+  --color-border: var(--chat-sidebar-soft-border, var(--chatapp-soft-border));
+  --color-primary: var(--maverick-accent);
+  --color-primary-foreground: var(--maverick-text-on-accent);
+  --color-ring: var(--maverick-accent);
+  --color-destructive: var(--maverick-danger);
+}

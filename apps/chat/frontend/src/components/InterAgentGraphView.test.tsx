@@ -515,7 +515,7 @@ describe("InterAgentGraphView", () => {
     expect(transcript?.textContent).toContain("Actions");
     expect(transcript?.textContent).toContain("Searched the web for “Maverick launch”");
     expect(transcript?.querySelectorAll(".chatapp-bubble").length).toBe(2);
-    expect(transcript?.querySelector(".chatapp-tool-inline__row")).not.toBeNull();
+    expect(transcript?.querySelector("[data-slot='trace-span-label']")).not.toBeNull();
     expect(transcript?.querySelector(".chatapp-agent-block")).not.toBeNull();
   });
 

@@ -5,9 +5,10 @@ type ActivityDisclosureProps = {
   createdAt?: string;
   defaultExpanded?: boolean;
   label: string;
+  className?: string;
 };
 
-export function ActivityDisclosure({ children, createdAt, defaultExpanded = false, label }: ActivityDisclosureProps) {
+export function ActivityDisclosure({ children, createdAt, defaultExpanded = false, label, className = "" }: ActivityDisclosureProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const disclosureId = useId();
   const timestamp = formatActivityTime(createdAt);
@@ -17,7 +18,7 @@ export function ActivityDisclosure({ children, createdAt, defaultExpanded = fals
   }, [defaultExpanded]);
 
   return (
-    <div className="chatapp-tool-inline">
+    <div className={`chatapp-tool-inline ${className}`}>
       <button
         aria-controls={disclosureId}
         aria-expanded={isExpanded}
@@ -37,6 +38,7 @@ export function ActivityDisclosure({ children, createdAt, defaultExpanded = fals
       </button>
       <div
         aria-hidden={!isExpanded}
+        inert={!isExpanded}
         className={`chatapp-tool-inline__body ${isExpanded ? "" : "is-collapsed"}`}
         id={disclosureId}
       >

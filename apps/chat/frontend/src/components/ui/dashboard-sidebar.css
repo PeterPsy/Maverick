@@ -1,17 +1,4 @@
-/* Tailwind utilities only: preserve the existing app's resets and Busy styles. */
-@layer theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities) source("../../");
-
-@theme inline {
-  --color-background: var(--maverick-bg);
-  --color-card: var(--chat-sidebar-solid-surface);
-  --color-foreground: var(--maverick-text);
-  --color-muted-foreground: var(--maverick-text-muted);
-  --color-border: var(--chat-sidebar-soft-border);
-  --color-primary: var(--maverick-accent);
-  --color-primary-foreground: var(--maverick-text-on-accent);
-}
+@import "../../styles/tailwind.css";
 
 .dashboard-sidebar__toolbar {
   flex: none;
@@ -107,7 +94,7 @@
   border: 1px solid var(--chat-sidebar-soft-border);
   border-radius: 12px;
   background: var(--chat-sidebar-solid-surface);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--maverick-popover-shadow);
   color: var(--maverick-text);
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
   animation: dashboard-sidebar-menu-in 140ms ease-out;

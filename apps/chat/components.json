@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "frontend/src/components/ui/dashboard-sidebar.css",
+    "css": "frontend/src/styles/tailwind.css",
     "baseColor": "neutral",
     "cssVariables": true
   },

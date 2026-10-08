@@ -123,6 +123,8 @@ function toolCallPayload(event: RuntimeEvent): ToolCallMessage | null {
     status,
     detail: { ...event.payload, turn_id: event.turn_id },
     createdAt: event.created_at,
+    startedAt: event.created_at,
+    endedAt: status === "completed" || status === "failed" ? event.created_at : undefined,
   };
 }
 
@@ -184,8 +186,11 @@ function mergeToolCall(previous: ToolCallMessage, next: ToolCallMessage): ToolCa
   return {
     ...previous,
     ...selected,
+    id: previous.id || next.id,
     detail: { ...previous.detail, ...next.detail },
     createdAt: selected.createdAt || previous.createdAt,
+    startedAt: previous.startedAt || next.startedAt,
+    endedAt: selected.endedAt,
   };
 }
 
@@ -293,6 +298,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
   let messageSequence = 0;
   const seenUserMessages = new Set<string>();
   const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map(messageTurnId));
+  const finalTimes = new Map(events.filter((event) => event.event_type === "runtime.output.final").map((event) => [messageTurnId(event), event.created_at]));
   const outputSegmentsByTurn = new Map<
     string,
     { text: string; messageId: string; createdAt: string; index: number; order: number; sourceFields: MessageSourceFields }
@@ -393,7 +399,9 @@ function projectEventsToMessages(events: RuntimeEvent[]): OrderedMessage[] {
       return;
     }
     const items = [...segment.itemsByKey.values()].map((item) =>
-      closeActive && (item.status === "started" || item.status === "updated") ? { ...item, status: "completed" as const } : item,
+      closeActive && (item.status === "started" || item.status === "updated")
+        ? { ...item, status: "completed" as const, endedAt: finalTimes.get(turnId) || item.createdAt }
+        : item,
     );
     if (items.length) {
       const hasFailedTool = items.some((item) => item.status === "failed");

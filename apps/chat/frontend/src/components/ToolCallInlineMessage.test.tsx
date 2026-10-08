@@ -22,9 +22,39 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("ToolCallInlineMessage", () => {
+  it("grows from live events, retains selected details and stops timing completed spans", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-08T10:00:01Z"));
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    const first = { id: "one", name: "shell", status: "started" as const, startedAt: "2026-10-08T10:00:00Z", detail: { command: "pwd" } };
+    act(() => { root?.render(<ToolCallInlineMessage toolCalls={[first]} />); });
+    const row = () => container!.querySelector("[data-slot='trace-span']");
+    expect(row()?.getAttribute("data-state")).toBe("running");
+    act(() => { container?.querySelector<HTMLButtonElement>("[data-slot='trace-span-label']")?.click(); });
+    expect(container.querySelector(".chatapp-tool-call-panel")?.textContent).toContain("pwd");
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(row()?.querySelector("[data-part='dur']")?.textContent).toBe("2.00s");
+    expect(container.querySelector("[data-slot='agent-trace']")?.getAttribute("data-live")).toBe("true");
+    act(() => { root?.render(<ToolCallInlineMessage toolCalls={[
+      { ...first, status: "completed", endedAt: "2026-10-08T10:00:02Z", detail: { ...first.detail, output: "/workspace" } },
+      { id: "two", name: "web_search", status: "started", startedAt: "2026-10-08T10:00:02Z", detail: { query: "React" } },
+    ]} />); });
+    expect(container.querySelectorAll("[data-slot='trace-span']")).toHaveLength(2);
+    expect(row()?.getAttribute("data-state")).toBe("done");
+    expect(container.querySelector(".chatapp-tool-call-panel")?.textContent).toContain("/workspace");
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(row()?.querySelector("[data-part='dur']")?.textContent).toBe("2.00s");
+    act(() => { root?.render(<ToolCallInlineMessage toolCalls={[{ ...first, status: "completed", endedAt: "2026-10-08T10:00:02Z" }]} />); });
+    expect(container.querySelector("[data-slot='agent-trace']")?.getAttribute("data-run")).toBe("complete");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("retains the expandable tool interaction through the shared activity disclosure", () => {
     container = document.createElement("div");
     document.body.append(container);
@@ -55,7 +85,7 @@ describe("ToolCallInlineMessage", () => {
     });
     expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
 
-    const toolRow = container.querySelector<HTMLButtonElement>(".chatapp-tool-inline__row");
+    const toolRow = container.querySelector<HTMLButtonElement>("[data-slot='trace-span-label']");
     expect(toolRow?.textContent).toContain("Listed files in apps/chat");
     act(() => {
       toolRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

@@ -833,6 +833,9 @@ export type ToolCallMessage = {
   status: "started" | "updated" | "awaiting_confirmation" | "completed" | "failed";
   detail: Record<string, unknown>;
   createdAt?: string;
+  /** Lifecycle timestamps retained when streamed tool events are merged. */
+  startedAt?: string;
+  endedAt?: string;
 };
 
 export type RuntimeToolConfirmation = {

@@ -14,7 +14,6 @@ from google_provider import (
     event_instance,
     patch_event,
     delete_event,
-    insert_event,
     refresh_access_token,
     transfer_event,
 )
@@ -24,17 +23,16 @@ from operations import (
     move_event_payload,
 )
 from event_records import normalize_event
-from recurrence_rules import split_rules
 from store import update_state, read_state
 from google_series_mirror import (
     belongs as _belongs,
     mirror_series as _mirror_series,
     original_start as _original_start,
-    series_exceptions,
 )
 from availability import raise_if_rejected_conflicts
 from calendar_visibility import filter_availability_events
-from recurrence import expand_events, shifted_exceptions
+from recurrence import expand_events
+from google_series_split import split_google_series
 from request_inputs import conflict_policy_from_body
 from time_values import format_time, iso_time
 from zoneinfo import ZoneInfo
@@ -182,79 +180,19 @@ def mutate_google_occurrence(
             ),
         )
     if scope == "future":
-        original_value = _original_start(current)
-        old, future = split_rules(master, original_value)
-        zone = ZoneInfo(master["timezone"])
-        delta = iso_time(
-            patch.get("startTime") or current["startTime"], "startTime"
-        ).astimezone(zone) - iso_time(original_value, "original").astimezone(zone)
-        exceptions = shifted_exceptions(
-            series_exceptions(baseline["events"], master, ref, series_remote_id),
-            delta,
-            cut=original_value,
-            timezone=master["timezone"],
-        )
-        candidate = normalize_event(
-            {
-                **current,
-                **patch,
-                "external_refs": master["external_refs"],
-                "recurrence": patch.get("recurrence")
-                or {"rules": future, "exceptions": exceptions},
-            },
-            event_id=master["id"],
-        )
-        trimmed = patch_event(
-            access_token=token,
-            calendar_id=ref["provider_calendar_id"],
-            event_id=series_remote_id,
-            event={"recurrence": old},
-            etag=remote_master.get("etag", ""),
-            transport=transport,
-        )
-        # Mirror the first accepted operation before attempting the second.
-        _mirror_series(
+        return split_google_series(
             data_root,
-            master,
-            trimmed,
-            connection,
-            calendar,
-            series_remote_id,
-            current,
-            baseline["events"],
-            cut=original_value,
-        )
-        if action == "delete":
-            return current
-        remote = insert_event(
-            access_token=token,
-            calendar_id=ref["provider_calendar_id"],
-            event=_google_event_body(candidate),
+            master=master,
+            current=current,
+            patch=patch,
+            connection=connection,
+            calendar=calendar,
+            token=token,
+            action=action,
             transport=transport,
+            baseline=baseline,
+            remote_master=remote_master,
         )
-        from uuid import uuid4
-
-        candidate["id"] = f"evt_{uuid4().hex[:12]}"
-        result = _mirror_series(
-            data_root,
-            candidate,
-            remote,
-            connection,
-            calendar,
-            remote["id"],
-            current,
-            [],
-            exceptions=exceptions,
-        )
-        _copy_exceptions(
-            token,
-            ref["provider_calendar_id"],
-            remote["id"],
-            candidate,
-            exceptions,
-            transport,
-        )
-        return result
     if action == "delete":
         delete_event(
             access_token=token,
@@ -265,6 +203,16 @@ def mutate_google_occurrence(
         if scope == "series":
 
             def remove(state):
+                expected = {
+                    e["id"]: e["revision"]
+                    for e in baseline["events"]
+                    if _belongs(e, ref, series_remote_id)
+                }
+                for event in state["events"]:
+                    if _belongs(event, ref, series_remote_id):
+                        _check_expected_revision(
+                            "delete", event, expected.get(event["id"], 0)
+                        )
                 state["events"] = [
                     e for e in state["events"] if not _belongs(e, ref, series_remote_id)
                 ]
@@ -317,51 +265,3 @@ def mutate_google_occurrence(
         "allow",
         body.get("expected_revision"),
     )
-
-
-def _copy_exceptions(token, calendar_id, series_id, master, exceptions, transport):
-    # Splitting creates a new provider series; explicitly migrate its exceptions.
-    for stamp, patch in exceptions.items():
-        instance = event_instance(
-            access_token=token,
-            calendar_id=calendar_id,
-            series_id=series_id,
-            original_start=stamp,
-            transport=transport,
-        )
-        if not instance:
-            continue  # The updated rule may exclude this occurrence.
-        if patch.get("deleted"):
-            delete_event(
-                access_token=token,
-                calendar_id=calendar_id,
-                event_id=instance["id"],
-                transport=transport,
-            )
-            continue
-        payload = normalize_event(
-            {
-                **master,
-                **patch,
-                "startTime": patch.get("startTime") or stamp,
-                "endTime": patch.get("endTime")
-                or format_time(
-                    iso_time(stamp, "original")
-                    + (
-                        iso_time(master["endTime"], "endTime")
-                        - iso_time(master["startTime"], "startTime")
-                    )
-                ),
-            },
-            event_id=master["id"],
-        )
-        body = _google_event_body(payload)
-        body.pop("recurrence", None)
-        patch_event(
-            access_token=token,
-            calendar_id=calendar_id,
-            event_id=instance["id"],
-            event=body,
-            etag=instance.get("etag", ""),
-            transport=transport,
-        )

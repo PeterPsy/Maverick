@@ -265,6 +265,8 @@ def _raise_google_error(status: int, payload: Any) -> None:
     if status < 400:
         return
     error_code = _google_error_code(payload)
+    if status == 404:
+        raise CalendarOAuthError("google_calendar_event_not_found", "Google event was not found.", status_code=404)
     if status == 409:
         raise CalendarOAuthError("google_calendar_duplicate", "Google event id already exists.", status_code=409)
     if status == 412:

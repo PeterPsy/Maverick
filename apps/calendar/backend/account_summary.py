@@ -1,22 +1,25 @@
 """Compact account tree metadata, counts and redaction-safe freshness diagnostics."""
 
 from datetime import UTC, datetime
-from google_calendars import list_calendars
-from google_oauth import list_connections
+from google_calendars import public_calendars
+from google_oauth import _public_connection, _prune_expired_pending_connections
 from store import read_state
 from time_values import iso_time
 
 
 def account_summary(data_root):
     state = read_state(data_root)
-    connections = list_connections(data_root)["connections"]
+    now = datetime.now(UTC)
+    state = _prune_expired_pending_connections(state, now=now)
+    connections = [
+        _public_connection(connection) for connection in state["connections"]
+    ]
     counts = {"calendar": 0}
     for event in state["events"]:
         connection = (event.get("external_refs") or {}).get(
             "calendar_connection_id"
         ) or "calendar"
         counts[connection] = counts.get(connection, 0) + 1
-    now = datetime.now(UTC)
     for connection in connections:
         cursors = [
             c for c in state["sync_state"] if c["connection_id"] == connection["id"]
@@ -41,6 +44,6 @@ def account_summary(data_root):
     return {
         "action": "calendar_accounts.summary",
         "connections": connections,
-        "calendars": list_calendars(data_root)["calendars"],
+        "calendars": public_calendars(state),
         "local_event_count": counts["calendar"],
     }

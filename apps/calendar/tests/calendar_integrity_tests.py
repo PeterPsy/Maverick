@@ -915,3 +915,58 @@ class CalendarIntegrityTest(unittest.TestCase):
         status, result = self.action(body, self.transport(remote))
         self.assertEqual(status, 200, result)
         self.assertEqual(self.action({"action": "list"})[1]["events"], [])
+
+    def test_failed_google_future_insert_restores_original_series(self):
+        from event_records import normalize_event
+        from google_event_mapping import google_event_payload
+        from store import update_state
+
+        master = {
+            "id": "series",
+            "summary": "Series",
+            "etag": "master",
+            "recurrence": ["RRULE:FREQ=WEEKLY;COUNT=3"],
+            "start": {"dateTime": "2026-05-28T09:00:00Z"},
+            "end": {"dateTime": "2026-05-28T10:00:00Z"},
+        }
+        local = normalize_event(
+            google_event_payload(
+                master,
+                connection={"id": "cal_conn_work"},
+                calendar={"timezone": "UTC", "provider_calendar_id": "primary"},
+            ),
+            event_id="series",
+        )
+        update_state(self.root, lambda s: {**s, "events": [local]})
+
+        def remote(method, url, request):
+            if method == "GET":
+                return (
+                    (200, master)
+                    if url.endswith("/series")
+                    else (404, {"error": {"message": "Not found"}})
+                )
+            if method == "POST":
+                return 403, {"error": {"message": "Denied"}}
+            return 200, {**master, **request["json"]}
+
+        status, result = self.action(
+            {
+                "action": "update",
+                "id": "series@20260604T090000Z",
+                "expected_revision": 1,
+                "recurrence_scope": "future",
+                "event": {"title": "Future"},
+            },
+            self.transport(remote),
+        )
+        self.assertEqual(status, 502, result)
+        self.assertEqual(result["error"], "google_series_split_failed")
+        rows = self.action(
+            {
+                "action": "list",
+                "start_after": "2026-05-28T00:00:00Z",
+                "end_before": "2026-06-15T00:00:00Z",
+            }
+        )[1]["events"]
+        self.assertEqual([e["title"] for e in rows], ["Series", "Series", "Series"])

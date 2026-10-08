@@ -14,21 +14,50 @@ from store import read_state, update_state
 from time_values import format_time
 
 
-def list_calendars(data_root: Path, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def list_calendars(
+    data_root: Path, body: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Return redaction-safe Google calendar sources known to Calendar."""
     connection_id = _optional_string(body or {}, "connection_id")
     state = read_state(data_root)
-    cursors = {(c["connection_id"], c["provider_calendar_id"]): c for c in state["sync_state"]}
+    calendars = public_calendars(state)
+    if connection_id:
+        calendars = [
+            item for item in calendars if item.get("connection_id") == connection_id
+        ]
+    return {"action": "calendar_calendars.list", "calendars": calendars}
+
+
+def public_calendars(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project source metadata from one consistent snapshot, without another read."""
+    cursors = {
+        (c["connection_id"], c["provider_calendar_id"]): c for c in state["sync_state"]
+    }
     calendars = [_public_calendar(item) for item in state["calendars"]]
     for calendar in calendars:
-        cursor = cursors.get((calendar["connection_id"], calendar["provider_calendar_id"]), {})
-        calendar["sync_status"] = {key: cursor.get(key, "") for key in
-            ("status", "last_sync_at", "time_min", "time_max", "error", "error_code")}
+        cursor = cursors.get(
+            (calendar["connection_id"], calendar["provider_calendar_id"]), {}
+        )
+        calendar["sync_status"] = {
+            key: cursor.get(key, "")
+            for key in (
+                "status",
+                "last_sync_at",
+                "time_min",
+                "time_max",
+                "error",
+                "error_code",
+            )
+        }
         calendar["sync_status"]["has_more"] = bool(cursor.get("page_token"))
-    if connection_id:
-        calendars = [item for item in calendars if item.get("connection_id") == connection_id]
-    calendars.sort(key=lambda item: (str(item.get("connection_id") or ""), 0 if item.get("primary") else 1, str(item.get("summary") or "")))
-    return {"action": "calendar_calendars.list", "calendars": calendars}
+    calendars.sort(
+        key=lambda item: (
+            str(item.get("connection_id") or ""),
+            0 if item.get("primary") else 1,
+            str(item.get("summary") or ""),
+        )
+    )
+    return calendars
 
 
 def select_calendar(
@@ -40,8 +69,11 @@ def select_calendar(
     """Enable or disable local sync selection for one known remote calendar."""
     connection_id = _required_string(body, "connection_id")
     calendar_id = _required_string(body, "calendar_id")
-    flags = {key: optional_bool(body[key], default=True) for key in
-             ("selected", "sync_enabled", "availability_enabled") if key in body}
+    flags = {
+        key: optional_bool(body[key], default=True)
+        for key in ("selected", "sync_enabled", "availability_enabled")
+        if key in body
+    }
     if "syncEnabled" in body:
         flags["sync_enabled"] = optional_bool(body["syncEnabled"], default=True)
     if not flags:
@@ -56,7 +88,9 @@ def select_calendar(
             if not isinstance(item, dict):
                 continue
             calendar = normalize_calendar(item)
-            if _matches_calendar(calendar, connection_id=connection_id, calendar_id=calendar_id):
+            if _matches_calendar(
+                calendar, connection_id=connection_id, calendar_id=calendar_id
+            ):
                 calendar = normalize_calendar(
                     {
                         **calendar,
@@ -103,10 +137,12 @@ def _public_calendar(calendar: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _matches_calendar(calendar: dict[str, Any], *, connection_id: str, calendar_id: str) -> bool:
-    return (
-        calendar.get("connection_id") == connection_id
-        and (calendar.get("id") == calendar_id or calendar.get("provider_calendar_id") == calendar_id)
+def _matches_calendar(
+    calendar: dict[str, Any], *, connection_id: str, calendar_id: str
+) -> bool:
+    return calendar.get("connection_id") == connection_id and (
+        calendar.get("id") == calendar_id
+        or calendar.get("provider_calendar_id") == calendar_id
     )
 
 

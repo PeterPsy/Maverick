@@ -290,3 +290,14 @@ preservation and undo. Provider checks use temporary state and simulated respons
 no real appointments are changed by the test suite. Browser Lab verification of
 `http://hostmachine:8014/app/calendar` reaches the sign-in page in its isolated
 session, so authenticated desktop/mobile visual acceptance remains unverified.
+
+Google future-series creation uses a deterministic successor id. A lost insert
+response is resolved by reading that id; a confirmed failed insert restores the
+original series. Uncertain results report the completed step and direct the user
+to sync and review before retrying.
+
+A temporary 5,000-event fixture measured account-summary reads at about 237 ms
+(after removing repeated state reads and OAuth cleanup writes), versus 1,311 ms
+before that cleanup. A 500-event display page took about 528 ms. These are local
+single-run measurements, not production latency guarantees; JSON storage remains
+in place while the sidebar avoids returning thousands of event records.

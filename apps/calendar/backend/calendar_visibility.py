@@ -8,15 +8,15 @@ from constants import GOOGLE_PROVIDER
 from event_records import normalize_external_refs
 
 
-def filter_visible_events(events: list[dict[str, Any]], calendars: Any) -> list[dict[str, Any]]:
+def filter_visible_events(events: list[dict[str, Any]], calendars: Any, *, setting: str = "selected") -> list[dict[str, Any]]:
     """Return events that should be visible through Calendar read surfaces."""
-    disabled_keys = _disabled_google_calendar_keys(calendars)
+    disabled_keys = _disabled_google_calendar_keys(calendars, setting)
     if not disabled_keys:
         return list(events)
     return [event for event in events if not _matches_disabled_google_calendar(event, disabled_keys)]
 
 
-def _disabled_google_calendar_keys(calendars: Any) -> set[tuple[str, str]]:
+def _disabled_google_calendar_keys(calendars: Any, setting: str) -> set[tuple[str, str]]:
     if not isinstance(calendars, list):
         return set()
     disabled: set[tuple[str, str]] = set()
@@ -38,8 +38,7 @@ def _disabled_google_calendar_keys(calendars: Any) -> set[tuple[str, str]]:
         ).strip()
         if not connection_id or not provider_calendar_id:
             continue
-        sync_enabled = item.get("sync_enabled") if "sync_enabled" in item else item.get("syncEnabled")
-        if item.get("selected") is False or sync_enabled is False:
+        if item.get(setting) is False:
             disabled.add((connection_id, provider_calendar_id))
     return disabled
 
@@ -55,3 +54,7 @@ def _matches_disabled_google_calendar(event: dict[str, Any], disabled_keys: set[
     if not connection_id or not provider_calendar_id:
         return False
     return (connection_id, provider_calendar_id) in disabled_keys
+
+
+def filter_availability_events(events, calendars):
+    return filter_visible_events(events, calendars, setting="availability_enabled")

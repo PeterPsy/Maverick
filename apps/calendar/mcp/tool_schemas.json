@@ -8,84 +8,55 @@
     },
     "calendar_connections.list": {
       "effect_class": "read",
-      "description": "List Google Calendar connection records known to Calendar. Provider implementation is intentionally not included in this contract slice.",
-      "input_schema": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
+      "description": "List Google Calendar connection records known to Calendar.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"connections": {"type": "array"}}}
     },
     "calendar_calendars.list": {
       "effect_class": "read",
       "description": "List known Google calendars and local sync selection for each connection.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "connection_id": {"type": "string"}
-        },
-        "additionalProperties": false
-      },
+      "input_schema": {"type": "object", "properties": {"connection_id": {"type": "string"}}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"calendars": {"type": "array"}}}
     },
     "calendar_calendars.select": {
       "effect_class": "mutating",
-      "description": "Enable or disable local sync selection for one known Google calendar.",
+      "description": "Set visibility (selected), synchronization and availability independently for one calendar identified by connection and provider calendar id.",
       "input_schema": {
         "type": "object",
         "properties": {
           "connection_id": {"type": "string"},
           "calendar_id": {"type": "string"},
           "selected": {"type": "boolean"},
-          "sync_enabled": {"type": "boolean"}
+          "sync_enabled": {"type": "boolean"},
+          "availability_enabled": {"type": "boolean"}
         },
         "required": ["connection_id", "calendar_id"],
-        "anyOf": [{"required": ["selected"]}, {"required": ["sync_enabled"]}],
+        "anyOf": [{"required": ["selected"]}, {"required": ["sync_enabled"]}, {"required": ["availability_enabled"]}],
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"calendar": {"type": "object"}}}
     },
     "calendar_connections.start_oauth": {
       "effect_class": "mutating",
-      "description": "Start Google Calendar OAuth for a workspace account and return an authorization URL. Provider implementation is intentionally not included in this contract slice.",
+      "description": "Start Google Calendar OAuth for a workspace account and return an authorization URL.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "redirect_uri": {"type": "string", "format": "uri"},
-          "scope": {"type": "array", "items": {"type": "string"}}
-        },
+        "properties": {"redirect_uri": {"type": "string", "format": "uri"}, "scope": {"type": "array", "items": {"type": "string"}}},
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"authorization_url": {"type": "string"}, "state": {"type": "string"}}},
-      "secret_selectors": [
-        {
-          "required_secrets": ["google-oauth-client-id"]
-        }
-      ]
+      "secret_selectors": [{"required_secrets": ["google-oauth-client-id"]}]
     },
     "calendar_connections.disconnect": {
       "effect_class": "destructive",
-      "description": "Disconnect one Google Calendar connection and revoke or retire its resource-scoped refresh token. Provider implementation is intentionally not included in this contract slice.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "connection_id": {"type": "string"}
-        },
-        "required": ["connection_id"],
-        "additionalProperties": false
-      },
+      "description": "Disconnect one Google Calendar connection and revoke or retire its resource-scoped refresh token.",
+      "input_schema": {"type": "object", "properties": {"connection_id": {"type": "string"}}, "required": ["connection_id"], "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"disconnected": {"type": "boolean"}, "connection_id": {"type": "string"}}},
-      "secret_selectors": [
-        {
-          "required_secrets": ["google-calendar-refresh-token"],
-          "resource_type": "calendar_connection",
-          "resource_id_argument": "connection_id"
-        }
-      ]
+      "secret_selectors": [{"required_secrets": ["google-calendar-refresh-token"], "resource_type": "calendar_connection", "resource_id_argument": "connection_id"}]
     },
     "calendar_sync": {
       "effect_class": "mutating",
-      "description": "Synchronize events for one Google Calendar connection. Provider implementation is intentionally not included in this contract slice.",
+      "description": "Synchronize events for one Google Calendar connection.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -102,14 +73,8 @@
       },
       "output_schema": {"type": "object", "properties": {"connection_id": {"type": "string"}, "synced": {"type": "boolean"}, "events_changed": {"type": "integer"}}},
       "secret_selectors": [
-        {
-          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"]
-        },
-        {
-          "required_secrets": ["google-calendar-refresh-token"],
-          "resource_type": "calendar_connection",
-          "resource_id_argument": "connection_id"
-        }
+        {"required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"]},
+        {"required_secrets": ["google-calendar-refresh-token"], "resource_type": "calendar_connection", "resource_id_argument": "connection_id"}
       ]
     },
     "calendar_list_events": {
@@ -159,17 +124,16 @@
           "idempotency_key": {"type": "string"},
           "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"], "default": "allow"},
           "event": {"type": "object"},
-          "payload": {"type": "object"}
+          "payload": {"type": "object"},
+          "transparency": {"type": "string", "enum": ["opaque", "transparent"], "description": "opaque occupies time; transparent is free."},
+          "reminders_use_default": {"type": "boolean"}
         },
         "anyOf": [{"required": ["title", "startTime", "endTime"]}, {"required": ["event"]}, {"required": ["payload"]}],
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"event": {"type": "object"}}},
       "secret_selectors": [
-        {
-          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
-          "resource_lookup": {"kind": "calendar_remote_mutation"}
-        },
+        {"required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"], "resource_lookup": {"kind": "calendar_remote_mutation"}},
         {
           "required_secrets": ["google-calendar-refresh-token"],
           "resource_type": "calendar_connection",
@@ -204,17 +168,17 @@
           "expected_revision": {"type": "integer", "minimum": 1},
           "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"], "default": "allow"},
           "event": {"type": "object"},
-          "payload": {"type": "object"}
+          "payload": {"type": "object"},
+          "transparency": {"type": "string", "enum": ["opaque", "transparent"], "description": "opaque occupies time; transparent is free."},
+          "reminders_use_default": {"type": "boolean"},
+          "recurrence_scope": {"type": "string", "enum": ["occurrence", "future", "series"], "default": "occurrence"}
         },
         "required": ["id", "expected_revision"],
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"event": {"type": "object"}}},
       "secret_selectors": [
-        {
-          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
-          "resource_lookup": {"kind": "calendar_remote_mutation"}
-        },
+        {"required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"], "resource_lookup": {"kind": "calendar_remote_mutation"}},
         {
           "required_secrets": ["google-calendar-refresh-token"],
           "resource_type": "calendar_connection",
@@ -229,17 +193,15 @@
         "type": "object",
         "properties": {
           "id": {"type": "string"},
-          "expected_revision": {"type": "integer", "minimum": 1}
+          "expected_revision": {"type": "integer", "minimum": 1},
+          "recurrence_scope": {"type": "string", "enum": ["occurrence", "future", "series"], "default": "occurrence"}
         },
         "required": ["id", "expected_revision"],
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"deleted": {"type": "boolean"}, "id": {"type": "string"}}},
       "secret_selectors": [
-        {
-          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
-          "resource_lookup": {"kind": "calendar_remote_mutation"}
-        },
+        {"required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"], "resource_lookup": {"kind": "calendar_remote_mutation"}},
         {
           "required_secrets": ["google-calendar-refresh-token"],
           "resource_type": "calendar_connection",
@@ -263,7 +225,13 @@
           "attendee": {"type": "string"},
           "attendees": {"type": "array", "items": {"type": "string"}},
           "expected_revision": {"type": "integer", "minimum": 1},
-          "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"], "default": "allow"}
+          "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"], "default": "allow"},
+          "recurrence_scope": {"type": "string", "enum": ["occurrence", "future", "series"], "default": "occurrence"},
+          "timezone": {"type": "string"},
+          "work_start": {"type": "string", "description": "Civil working-hour start HH:MM"},
+          "work_end": {"type": "string", "description": "Civil working-hour end HH:MM"},
+          "work_days": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 6}},
+          "buffer_minutes": {"type": "integer", "minimum": 0, "maximum": 1440}
         },
         "required": ["id", "expected_revision"],
         "anyOf": [
@@ -275,10 +243,7 @@
       },
       "output_schema": {"type": "object", "properties": {"event": {"type": "object"}}},
       "secret_selectors": [
-        {
-          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
-          "resource_lookup": {"kind": "calendar_remote_mutation"}
-        },
+        {"required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"], "resource_lookup": {"kind": "calendar_remote_mutation"}},
         {
           "required_secrets": ["google-calendar-refresh-token"],
           "resource_type": "calendar_connection",
@@ -288,7 +253,7 @@
     },
     "calendar_check_availability": {
       "effect_class": "read",
-      "description": "Check whether a specific time window is free and return compact conflicting events.",
+      "description": "Check whether a specific time window is free and return compact conflicting events. Availability covers known local events; it cannot establish complete invitee calendar availability.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -305,7 +270,7 @@
     },
     "calendar_find_free_time": {
       "effect_class": "read",
-      "description": "Find available slots in a bounded time window.",
+      "description": "Find available slots in a bounded time window. Availability covers known local events; it cannot establish complete invitee calendar availability.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -315,7 +280,12 @@
           "attendee": {"type": "string"},
           "attendees": {"type": "array", "items": {"type": "string"}},
           "ignore_event_id": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 50}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+          "timezone": {"type": "string"},
+          "work_start": {"type": "string", "description": "Civil working-hour start HH:MM"},
+          "work_end": {"type": "string", "description": "Civil working-hour end HH:MM"},
+          "work_days": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 6}},
+          "buffer_minutes": {"type": "integer", "minimum": 0, "maximum": 1440}
         },
         "required": ["start_after", "end_before"],
         "additionalProperties": false
@@ -381,10 +351,7 @@
       "description": "Search calendar event references for mentions and agent context.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "query": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 50}
-        },
+        "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}},
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"results": {"type": "array"}}}
@@ -394,11 +361,7 @@
       "description": "Resolve one calendar event reference.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "entity_type": {"type": "string", "enum": ["event"], "default": "event"},
-          "entity_id": {"type": "string"},
-          "id": {"type": "string"}
-        },
+        "properties": {"entity_type": {"type": "string", "enum": ["event"], "default": "event"}, "entity_id": {"type": "string"}, "id": {"type": "string"}},
         "oneOf": [{"required": ["entity_id"]}, {"required": ["id"]}],
         "additionalProperties": false
       },
@@ -409,15 +372,17 @@
       "description": "Return a token-efficient summary for one calendar event reference.",
       "input_schema": {
         "type": "object",
-        "properties": {
-          "entity_type": {"type": "string", "enum": ["event"], "default": "event"},
-          "entity_id": {"type": "string"},
-          "id": {"type": "string"}
-        },
+        "properties": {"entity_type": {"type": "string", "enum": ["event"], "default": "event"}, "entity_id": {"type": "string"}, "id": {"type": "string"}},
         "oneOf": [{"required": ["entity_id"]}, {"required": ["id"]}],
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"summary": {"type": "string"}, "safe_fields": {"type": "object"}}}
+    },
+    "calendar_accounts.summary": {
+      "effect_class": "read",
+      "description": "Read compact Calendar account counts, calendar settings, sync coverage and freshness diagnostics.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object"}
     }
   }
 }

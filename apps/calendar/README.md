@@ -53,8 +53,8 @@ their existing completion semantics.
 - References: Calendar declares `event` as a searchable, resolvable, summarizable reference entity. Reference payloads include `app_id`, `entity_type`, `entity_id`, `title`, `subtitle`, `summary`, `app_page`, `deep_link`, and `safe_fields`.
 - View surface: Calendar declares the standard `calendar` view surface with `view_filter`, `set_view_filter`, `set_custom_view`, and `clear_custom_view` actions so references can open or curate event views through official surfaces. `set_view_filter` accepts `conflicts_only` for conflict-focused views and `preserve_custom` to refine a curated event set. The frontend reads that persisted state, listens for `view-state` data events, and shifts the active calendar viewport to the requested time window, conflict list, or curated event list.
 - Skills: `skills/calendar-ops/SKILL.md` is declared through `capabilities.skills` and guides agents to use scoped Calendar MCP/CLI surfaces, avoid direct state-file access, resolve timezone ambiguity, and check availability before conflict-sensitive mutations.
-- Google Calendar provider actions: `calendar_connections.list` and `calendar_connections.start_oauth` expose connection setup through agent surfaces. OAuth completion is backend-only because it writes the account refresh token through app-managed Core Secrets. `calendar_calendars.list` exposes known remote calendars, including empty calendars discovered during sync, and `calendar_calendars.select` controls local sync enablement per calendar. Disabling a remote calendar preserves its existing local mirror records but hides those events from Calendar read, reference, availability, and conflict surfaces until the calendar is re-enabled. `calendar_sync` reads enabled Google calendars and events into local Calendar state with per-calendar sync cursors. New calendars without an existing cursor use a bounded cache by default, from 365 days in the past to 730 days in the future, and can be overridden with `time_min`, `time_max`, or `sync_mode: "full_history"`. Existing cursors with Google sync tokens continue using incremental full-history sync unless the caller requests bounded mode. When event import would exceed Calendar's storage cap, Calendar still persists discovered calendar sources and a structured `calendar_sync_event_limit` cursor error so users can disable unnecessary calendars or narrow the sync window before retrying. Google-backed create, update, delete, and move operations are allowed only for Google calendars where the connected account has `owner` or `writer` access; read-only imported events remain visible but are not offered as editable local mutations. Accepted remote mutations update Google first and then mirror the accepted remote event locally; account-level Google creates default to the provider's `primary` calendar when no specific `provider_calendar_id` is supplied. `calendar_connections.disconnect` revokes the Google token delivered through the resource-scoped Core Secrets grant and disables the local connection record.
-- Widgets are still omitted from this product slice.
+- Google Calendar provider actions: `calendar_connections.list` and `calendar_connections.start_oauth` expose connection setup through agent surfaces. OAuth completion is backend-only because it writes the account refresh token through app-managed Core Secrets. `calendar_calendars.list` exposes known remote calendars, including empty calendars discovered during sync, and `calendar_calendars.select` controls local sync enablement per calendar. The independent `selected`, `sync_enabled` and `availability_enabled` settings control display, provider fetching and planning. Hiding or pausing sync preserves the mirror and its busy intervals. Only disabling availability excludes a calendar from conflict and free-time checks. `calendar_sync` reads enabled Google calendars and events into local Calendar state with per-calendar sync cursors. New calendars without an existing cursor use a bounded cache by default, from 365 days in the past to 730 days in the future, and can be overridden with `time_min`, `time_max`, or `sync_mode: "full_history"`. Existing cursors with Google sync tokens continue using incremental full-history sync unless the caller requests bounded mode. When event import would exceed Calendar's storage cap, Calendar still persists discovered calendar sources and a structured `calendar_sync_event_limit` cursor error so users can disable unnecessary calendars or narrow the sync window before retrying. Google-backed create, update, delete, and move operations are allowed only for Google calendars where the connected account has `owner` or `writer` access; read-only imported events remain visible but are not offered as editable local mutations. Accepted remote mutations update Google first and then mirror the accepted remote event locally; account-level Google creates default to the provider's `primary` calendar when no specific `provider_calendar_id` is supplied. `calendar_connections.disconnect` revokes the Google token delivered through the resource-scoped Core Secrets grant and disables the local connection record.
+- Widgets: account tree and create/connect footer are mounted in the native shell sidebar. The tree uses `calendar_accounts.summary`, without downloading the event list.
 
 Agent-facing discovery should use the workspace's installed local app id. The examples below use `<calendar_app_id>`; in the default workspace binding this is `calendar`.
 
@@ -70,6 +70,7 @@ maverick app <calendar_app_id> cli run calendar --json
 The MCP tools are:
 
 - `calendar_operations_manifest`
+- `calendar_accounts.summary`
 - `calendar_connections.list`
 - `calendar_calendars.list`
 - `calendar_calendars.select`
@@ -92,7 +93,7 @@ The MCP tools are:
 - `calendar_reference_resolve`
 - `calendar_reference_summarize`
 
-The `calendar` CLI command supports `calendar_connections.list`, `calendar_calendars.list`, `calendar_calendars.select`, `calendar_connections.start_oauth`, `calendar_connections.disconnect`, `calendar_sync`, `list`, `create`, `update`, `delete`, `move`, `check_availability`, `find_free_time`, `view_filter`, `set_view_filter`, `set_custom_view`, and `clear_custom_view`. The `calendar-reference` CLI command supports `references.manifest`, `references.search`, `references.resolve`, and `references.summarize`.
+The `calendar` CLI command supports `calendar_accounts.summary`, `calendar_connections.list`, `calendar_calendars.list`, `calendar_calendars.select`, `calendar_connections.start_oauth`, `calendar_connections.disconnect`, `calendar_sync`, `list`, `create`, `update`, `delete`, `move`, `check_availability`, `find_free_time`, `view_filter`, `set_view_filter`, `set_custom_view`, and `clear_custom_view`. The `calendar-reference` CLI command supports `references.manifest`, `references.search`, `references.resolve`, and `references.summarize`.
 
 ## Google Calendar Security Model
 
@@ -174,11 +175,11 @@ The state file stores `schema_version`, `events`, `view_filter`, `connections`, 
 
 Event ids are generated by the Calendar backend. Mutating requests validate required title and time fields, reject events whose end time is not after the start time, and bound free-form strings and list fields before writing to `state.json`.
 
-Events include a `status` field with `confirmed`, `tentative`, or `cancelled`; omitted status defaults to `confirmed`. Availability, conflict checks, and free-time search ignore cancelled events.
+Events include a `status` field with `confirmed`, `tentative`, or `cancelled`; omitted status defaults to `confirmed`. Availability, conflict checks, and free-time search ignore cancelled and transparent events.
 
 Every event is normalized with orchestration fields for agent workflows. Omitted `timezone` defaults to `UTC`, `all_day` defaults to `false`, `source` defaults to `calendar`, `revision` defaults to `1`, and legacy records missing `created_at`/`updated_at` receive stable timestamp defaults from their `startTime`. Create operations generate `created_at`, `updated_at`, and `revision: 1`; update and move operations preserve `created_at` while incrementing `revision` and refreshing `updated_at`. `external_refs` and `recurrence` are bounded JSON objects, while `reminders` is a bounded JSON array. Google-sourced event references may include `calendar_account_id`, `calendar_account_label`, `calendar_connection_id`, `provider_calendar_id`, `provider_calendar_access_role`, `provider_event_id`, `html_link`, `etag`, and `ical_uid`.
 
-Schema `3` adds normalized Google Calendar preparation records while preserving existing events. `connections` stores `calendar_connection` records with provider, account metadata, status, scopes, timestamps, and a Core Secrets token resource pointer for `google-calendar-refresh-token`; it never stores refresh token values. `calendars` stores remote calendar/source metadata keyed by connection and provider calendar id, including local `selected` and `sync_enabled` flags that are preserved when Google calendar metadata is refreshed. `sync_state` stores per-connection or per-calendar sync cursor records with sync/page tokens, bounded sync windows, status, timestamps, non-secret error text, and structured event-count diagnostics for capacity failures.
+Schema `3` adds normalized Google Calendar preparation records while preserving existing events. `connections` stores `calendar_connection` records with provider, account metadata, status, scopes, timestamps, and a Core Secrets token resource pointer for `google-calendar-refresh-token`; it never stores refresh token values. `calendars` stores remote calendar/source metadata keyed by connection and provider calendar id, including independent local `selected`, `sync_enabled` and `availability_enabled` flags that are preserved when Google calendar metadata is refreshed. `sync_state` stores per-connection or per-calendar sync cursor records with sync/page tokens, bounded sync windows, status, timestamps, non-secret error text, and structured event-count diagnostics for capacity failures.
 
 Create operations with an `idempotency_key` are replay-safe: a repeated create with the same key returns the existing event with `idempotent_replay: true` and does not emit a data-changed event. `idempotency_key` is create-only and cannot be changed by later updates. Update, move, and delete operations require `expected_revision`; when the stored event revision differs, Calendar returns HTTP 409 with `revision_conflict`, the expected and actual revisions, and a compact `current_event`.
 
@@ -218,3 +219,74 @@ maverick app <calendar_app_id> cli list --json
 maverick app <calendar_app_id> mcp list --json
 maverick app <calendar_app_id> frontend build --json
 ```
+
+
+## Calendar reliability and everyday workflows
+
+Remote fetching, event mapping, reconciliation and cursor persistence have separate
+app-owned modules. Sync reconciles with the latest state under the SDK state lock.
+Concurrent revisions and deletions are preserved and reported, and independent
+accounts retain each other's events and cursors. Partial pagination has `synced:
+false`, `status: partial` and a persisted continuation token. Repeating the sync
+continues the identical query; absence-based deletion happens only after the final
+page, using the revisions tracked across the whole pagination run. Errors do not
+advance completion timestamps. Discovered calendars and local settings survive
+incomplete calendar discovery. The account tree reports completion time, coverage,
+partial results and errors; a visible online app refreshes stale provider data
+(after fifteen minutes), coalesces requests and backs off after failures.
+
+All-day events retain civil `all_day_start`/`all_day_end` dates in the event's IANA
+timezone. The end is exclusive. Google serialization and drag moves preserve
+civil dates across positive/negative offsets and daylight-saving transitions.
+`transparency` is `opaque` (busy) or `transparent` (free), including Google imports.
+
+Local recurrence accepts iCalendar `rules` or `frequency`, `interval`, `count`
+and `until`. The recurrence engine is python-dateutil (declared in pyproject.toml).
+Bounded lists, offline read models and availability expand series in the requested
+window. Unbounded lists expose series records. Occurrence ids are stable
+`<series-id>@<UTC-original-start>`; records include `series_id` and
+`original_start_time`. Local edits use revision-guarded exceptions.
+`recurrence_scope` accepts `occurrence`, `future` or `series`. Future edits split
+the series and preserve the remaining repetition count. Google full-history
+masters use the same expansion, with provider exceptions overriding generated
+occurrences; Google series edits address the provider master and future edits
+trim the old series before inserting its successor.
+
+Google calendar transfers use `events.move`, require verified destination write
+permissions and stay within one connected account. The accepted destination is
+mirrored before applying accompanying edits, so a later edit failure leaves the
+transfer visible. Other accounts and local destinations are excluded from the
+transfer selector. UI creates carry a stable idempotency key; Google inserts
+also derive a provider event id from it so retries after a lost response cannot
+create another event.
+
+Day/week views draw one block per timed event, with minute positions and columns
+for overlaps. All-day rows are separate. Month moves keep the original time,
+time-grid drops use fifteen-minute slots, month navigation clamps the selected
+day and overflow opens the full day. Day/slot clicks create events at that time.
+Global paginated search queries the local mirror across months; optional date
+bounds also expand recurring series. Results navigate to the event.
+
+The event panel includes location, attendees, timezone, status, busy/free, all-day,
+recurrence, reminders and advanced metadata. Dirty drafts survive refresh, revision
+errors retain the draft and offer explicit reload or retry, and dismissal checks
+unsaved changes. Focus stays in the dialog and returns to the invoking control.
+Events support Enter/Space and fields have labels. Mobile defaults to agenda and
+has a visible create action. Language (Italian/English), first weekday and time
+format are browser preferences. Working hours, weekdays and buffers are applied
+by the shared free-slot planner for UI, CLI/MCP and first-free moves. Participant
+results explicitly cover known local events, not all invitee calendars.
+
+UI deletion has an eight-second undo window before any local or provider delete
+is committed. Closing the app cancels an uncommitted deletion. Local popup
+reminders appear in the open Calendar app; Google remains responsible for its
+own reminders. Background delivery with a closed app is not claimed.
+
+
+Regression verification covers concurrent accounts and edits, page continuation,
+all-day roundtrips and DST, recurring exceptions and series transfers, workday
+windows and buffers, month/time-grid interactions, keyboard event opening, draft
+preservation and undo. Provider checks use temporary state and simulated responses;
+no real appointments are changed by the test suite. Browser Lab verification of
+`http://hostmachine:8014/app/calendar` reaches the sign-in page in its isolated
+session, so authenticated desktop/mobile visual acceptance remains unverified.

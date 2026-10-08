@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 
+from apps.calendar.tests.calendar_integrity_tests import CalendarIntegrityTest
 from apps.calendar.tests.calendar_agent_payload_tests import CalendarAgentPayloadTest
 from apps.calendar.tests.calendar_backend_api_tests import CalendarBackendApiTest
 from apps.calendar.tests.calendar_conflict_tests import CalendarConflictTest
@@ -20,6 +21,7 @@ from apps.calendar.tests.calendar_reference_view_tests import CalendarReferenceV
 def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: str | None) -> unittest.TestSuite:
     suite = unittest.TestSuite()
     for case in (
+        CalendarIntegrityTest,
         CalendarContractTest,
         CalendarBackendApiTest,
         CalendarEventModelTest,

@@ -364,7 +364,7 @@ class CalendarGoogleSyncTest(unittest.TestCase):
             _write_state(data_root)
             actions = _import_calendar_actions()
             try:
-                with patch("google_sync.MAX_EVENTS", 5):
+                with patch("google_sync_persistence.MAX_EVENTS", 5):
                     status_code, rejected = actions.handle_action(
                         data_root,
                         {"action": "calendar_sync", "connection_id": "cal_conn_work"},
@@ -484,7 +484,7 @@ class CalendarGoogleSyncTest(unittest.TestCase):
         self.assertTrue(calendars_by_provider["team@example.com"]["sync_enabled"])
         self.assertEqual(persisted["events"][0]["external_refs"]["provider_calendar_id"], "team@example.com")
 
-    def test_disabled_calendar_hides_existing_mirror_events_without_deleting_them(self) -> None:
+    def test_settings_can_explicitly_hide_and_exclude_mirror_without_deleting_it(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data"
             _write_state(data_root, include_remote_event=True)
@@ -495,6 +495,8 @@ class CalendarGoogleSyncTest(unittest.TestCase):
                     "connection_id": "cal_conn_work",
                     "calendar_id": "primary",
                     "sync_enabled": False,
+                    "selected": False,
+                    "availability_enabled": False,
                 },
             )
             list_status, listed = _handle_action(data_root, {"action": "list"})

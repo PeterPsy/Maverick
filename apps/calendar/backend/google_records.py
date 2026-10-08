@@ -57,6 +57,7 @@ def normalize_calendar(payload: dict[str, Any]) -> dict[str, Any]:
         "access_role": clean_string(payload.get("access_role") or payload.get("accessRole"), "access_role", max_length=MAX_LIST_ITEM_LENGTH),
         "primary": optional_bool(payload.get("primary"), default=False),
         "selected": optional_bool(payload.get("selected"), default=True),
+        "availability_enabled": optional_bool(payload.get("availability_enabled"), default=True),
         "sync_enabled": optional_bool(payload.get("sync_enabled") if "sync_enabled" in payload else payload.get("syncEnabled"), default=True),
         "color": clean_string(payload.get("color") or payload.get("backgroundColor"), "color", max_length=MAX_LIST_ITEM_LENGTH),
         "etag": clean_string(payload.get("etag"), "etag", max_length=MAX_PROVIDER_ID_LENGTH),
@@ -95,6 +96,9 @@ def normalize_sync_cursor(payload: dict[str, Any]) -> dict[str, Any]:
         "status": _sync_status(payload.get("status")),
         "sync_mode": clean_string(payload.get("sync_mode") or payload.get("syncMode"), "sync_mode", max_length=MAX_LIST_ITEM_LENGTH),
         "sync_token": clean_string(payload.get("sync_token") or payload.get("syncToken"), "sync_token", max_length=MAX_EXTERNAL_LINK_LENGTH),
+        "reconcile_versions": {str(k): list(v) for k, v in payload.get("reconcile_versions", {}).items() if isinstance(v, list) and len(v) == 2 and isinstance(v[0], str) and isinstance(v[1], int)},
+        "page_size": optional_int(payload.get("page_size"), field="page_size", minimum=1, maximum=250) or 250,
+        "seen_remote_ids": [str(item)[:320] for item in payload.get("seen_remote_ids", [])[:10000]],
         "page_token": clean_string(payload.get("page_token") or payload.get("pageToken"), "page_token", max_length=MAX_EXTERNAL_LINK_LENGTH),
         "time_min": optional_time_string(payload.get("time_min") or payload.get("timeMin"), "time_min"),
         "time_max": optional_time_string(payload.get("time_max") or payload.get("timeMax"), "time_max"),
@@ -140,5 +144,5 @@ def _connection_id(payload: dict[str, Any]) -> str:
 def _sync_status(value: Any) -> str:
     status = str(value or "idle").strip().lower()
     if status not in ALLOWED_SYNC_STATUSES:
-        raise ValueError("Calendar sync status must be one of: disabled, error, idle, ok, syncing.")
+        raise ValueError("Calendar sync status must be one of: disabled, error, idle, ok, partial, syncing.")
     return status

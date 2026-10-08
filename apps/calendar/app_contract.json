@@ -81,7 +81,8 @@
       "calendar_reference_manifest",
       "calendar_reference_search",
       "calendar_reference_resolve",
-      "calendar_reference_summarize"
+      "calendar_reference_summarize",
+      "calendar_accounts.summary"
     ],
     "cli_commands": [
       "calendar",

@@ -9,8 +9,8 @@ from pathlib import Path
 from google_calendars import list_calendars
 from operations import get_event, list_events
 
-EVENT_FIELDS = ('id', 'title', 'description', 'startTime', 'endTime', 'status', 'timezone', 'location', 'organizer', 'color', 'category', 'created_at', 'updated_at', 'source', 'revision', 'all_day', 'attendees', 'tags')
-CALENDAR_FIELDS = ('id', 'connection_id', 'provider', 'provider_calendar_id', 'summary', 'description', 'timezone', 'color', 'updated_at', 'primary', 'selected')
+EVENT_FIELDS = ('id', 'title', 'description', 'startTime', 'endTime', 'status', 'timezone', 'location', 'organizer', 'color', 'category', 'created_at', 'updated_at', 'source', 'revision', 'all_day', 'all_day_start', 'all_day_end', 'transparency', 'series_id', 'original_start_time', 'reminders', 'attendees', 'tags')
+CALENDAR_FIELDS = ('id', 'connection_id', 'provider', 'provider_calendar_id', 'summary', 'description', 'timezone', 'color', 'updated_at', 'primary', 'selected', 'access_role', 'sync_enabled', 'availability_enabled')
 REF_FIELDS = ('provider', 'calendar_connection_id', 'calendar_id', 'provider_calendar_id', 'account_id')
 
 

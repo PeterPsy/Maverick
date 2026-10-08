@@ -27,7 +27,7 @@ ALLOWED_COLORS = {"blue", "green", "purple", "orange", "pink", "red"}
 ALLOWED_CONFLICT_POLICIES = {"allow", "reject", "warn"}
 ALLOWED_EVENT_STATUSES = {"confirmed", "tentative", "cancelled"}
 ALLOWED_CONNECTION_STATUSES = {"pending", "connected", "disabled", "error"}
-ALLOWED_SYNC_STATUSES = {"idle", "syncing", "ok", "error", "disabled"}
+ALLOWED_SYNC_STATUSES = {"idle", "syncing", "partial", "ok", "error", "disabled"}
 GOOGLE_PROVIDER = "google"
 GOOGLE_REFRESH_TOKEN_LOGICAL_NAME = "google-calendar-refresh-token"
 EVENT_FIELDS = {
@@ -42,6 +42,7 @@ EVENT_FIELDS = {
     "attendees",
     "tags",
     "status",
+    "transparency",
     "timezone",
     "location",
     "organizer",
@@ -52,6 +53,7 @@ EVENT_FIELDS = {
     "externalRefs",
     "recurrence",
     "reminders",
+    "reminders_use_default",
     "idempotency_key",
     "idempotencyKey",
 }

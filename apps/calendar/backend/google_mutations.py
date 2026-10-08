@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zoneinfo import ZoneInfo
+import hashlib
 from typing import Any
 
 from availability import raise_if_rejected_conflicts
-from calendar_visibility import filter_visible_events
+from calendar_visibility import filter_availability_events
 from connection_records import normalize_connection
 from constants import GOOGLE_PROVIDER, MAX_EVENTS
 from event_records import normalize_event, normalize_external_refs
 from google_oauth import CalendarOAuthError, HttpTransport
 from google_provider import delete_event as delete_google_event
-from google_provider import insert_event, patch_event, refresh_access_token
+from google_provider import (
+    insert_event,
+    patch_event,
+    refresh_access_token,
+    transfer_event,
+    get_event as get_google_event,
+)
 from google_records import normalize_calendar
-from google_sync import google_event_payload
+from google_event_mapping import google_event_payload
 from operations import (
     create_event,
     delete_event,
@@ -25,9 +33,9 @@ from operations import (
     update_event,
 )
 from request_inputs import idempotency_key_from_payload
+from recurrence import recurrence_rules, expand_events
 from store import read_state
 from time_values import iso_time, now_string
-
 
 REMOTE_MUTATION_FLAG = "remote_mutation"
 DEFAULT_GOOGLE_CALENDAR_ID = "primary"
@@ -35,7 +43,9 @@ WRITABLE_GOOGLE_ACCESS_ROLES = {"owner", "writer"}
 
 
 def is_google_create_request(event_payload: dict[str, Any]) -> bool:
-    refs = normalize_external_refs(event_payload.get("external_refs") or event_payload.get("externalRefs"))
+    refs = normalize_external_refs(
+        event_payload.get("external_refs") or event_payload.get("externalRefs")
+    )
     source = str(event_payload.get("source") or "").strip().lower()
     provider = str(refs.get("provider") or "").strip().lower()
     return bool(
@@ -48,7 +58,9 @@ def is_google_event(event: dict[str, Any]) -> bool:
     return _remote_ref(event) is not None
 
 
-def secret_lookup_for_remote_mutation(data_root: Path, arguments: dict[str, Any]) -> dict[str, Any]:
+def secret_lookup_for_remote_mutation(
+    data_root: Path, arguments: dict[str, Any]
+) -> dict[str, Any]:
     action = str(arguments.get("action") or "").strip()
     if action == "create":
         payload = arguments.get("event") or arguments.get("payload") or arguments
@@ -82,21 +94,50 @@ def create_google_event(
     transport: HttpTransport | None,
 ) -> tuple[dict[str, Any], bool]:
     """Insert a Google event first, then persist the mirrored local event."""
-    preview, idempotent_replay = _preview_create_event(data_root, event_payload, conflict_policy=conflict_policy)
+    preview, idempotent_replay = _preview_create_event(
+        data_root, event_payload, conflict_policy=conflict_policy
+    )
     if idempotent_replay:
         return preview, True
 
     ref = _create_ref(event_payload)
-    connection, calendar = _connection_and_calendar(data_root, ref, fallback_event=preview)
+    connection, calendar = _connection_and_calendar(
+        data_root, ref, fallback_event=preview
+    )
     _ensure_writable_calendar(calendar, operation="create")
-    access_token = refresh_access_token(app_secrets=app_secrets, app_secret_errors=app_secret_errors, transport=transport)
-    remote = insert_event(
-        access_token=access_token,
-        calendar_id=ref["provider_calendar_id"],
-        event=_google_event_body(preview),
+    access_token = refresh_access_token(
+        app_secrets=app_secrets,
+        app_secret_errors=app_secret_errors,
         transport=transport,
     )
-    local_payload = _local_payload_from_remote(remote, fallback=preview, connection=connection, calendar=calendar, for_update=False)
+    remote_body = _google_event_body(preview)
+    if preview.get("idempotency_key"):
+        remote_body["id"] = hashlib.sha256(
+            preview["idempotency_key"].encode()
+        ).hexdigest()
+    try:
+        remote = insert_event(
+            access_token=access_token,
+            calendar_id=ref["provider_calendar_id"],
+            event=remote_body,
+            transport=transport,
+        )
+    except CalendarOAuthError as error:
+        if error.code != "google_calendar_duplicate" or not remote_body.get("id"):
+            raise
+        remote = get_google_event(
+            access_token=access_token,
+            calendar_id=ref["provider_calendar_id"],
+            event_id=remote_body["id"],
+            transport=transport,
+        )
+    local_payload = _local_payload_from_remote(
+        remote,
+        fallback=preview,
+        connection=connection,
+        calendar=calendar,
+        for_update=False,
+    )
     return create_event(data_root, local_payload, conflict_policy=conflict_policy)
 
 
@@ -120,16 +161,28 @@ def attach_google_event(
         expected_revision=expected_revision,
     )
     ref = _create_ref(preview)
-    connection, calendar = _connection_and_calendar(data_root, ref, fallback_event=preview)
+    connection, calendar = _connection_and_calendar(
+        data_root, ref, fallback_event=preview
+    )
     _ensure_writable_calendar(calendar, operation="create")
-    access_token = refresh_access_token(app_secrets=app_secrets, app_secret_errors=app_secret_errors, transport=transport)
+    access_token = refresh_access_token(
+        app_secrets=app_secrets,
+        app_secret_errors=app_secret_errors,
+        transport=transport,
+    )
     remote = insert_event(
         access_token=access_token,
         calendar_id=ref["provider_calendar_id"],
         event=_google_event_body(preview),
         transport=transport,
     )
-    local_payload = _local_payload_from_remote(remote, fallback=preview, connection=connection, calendar=calendar, for_update=True)
+    local_payload = _local_payload_from_remote(
+        remote,
+        fallback=preview,
+        connection=connection,
+        calendar=calendar,
+        for_update=True,
+    )
     return update_event(
         data_root,
         event_id,
@@ -167,9 +220,56 @@ def update_google_event(
             conflict_policy=conflict_policy,
             expected_revision=expected_revision,
         )
-    connection, calendar = _connection_and_calendar(data_root, ref, fallback_event=preview)
+    connection, calendar = _connection_and_calendar(
+        data_root, ref, fallback_event=preview
+    )
     _ensure_writable_calendar(calendar, operation="update")
-    access_token = refresh_access_token(app_secrets=app_secrets, app_secret_errors=app_secret_errors, transport=transport)
+    access_token = refresh_access_token(
+        app_secrets=app_secrets,
+        app_secret_errors=app_secret_errors,
+        transport=transport,
+    )
+    destination = _create_ref(preview) if is_google_create_request(preview) else ref
+    if destination["calendar_connection_id"] != ref["calendar_connection_id"]:
+        raise CalendarOAuthError(
+            "calendar_transfer_account_mismatch",
+            "Transfers require a calendar in the same connected account.",
+            status_code=400,
+        )
+    if destination["provider_calendar_id"] != ref["provider_calendar_id"]:
+        connection, calendar = _connection_and_calendar(
+            data_root, destination, fallback_event=preview
+        )
+        if not calendar.get("access_role"):
+            raise CalendarOAuthError(
+                "calendar_transfer_unknown_permissions",
+                "Sync the destination calendar to verify write permissions.",
+                status_code=403,
+            )
+        _ensure_writable_calendar(calendar, operation="transfer")
+        remote = transfer_event(
+            access_token=access_token,
+            calendar_id=ref["provider_calendar_id"],
+            event_id=ref["provider_event_id"],
+            destination=destination["provider_calendar_id"],
+            etag=ref.get("etag", ""),
+            transport=transport,
+        )
+        # Persist accepted destination immediately, even if the subsequent edit fails.
+        moved = update_event(
+            data_root,
+            event_id,
+            _local_payload_from_remote(
+                remote,
+                fallback=current,
+                connection=connection,
+                calendar=calendar,
+                for_update=True,
+            ),
+            expected_revision=expected_revision,
+        )
+        expected_revision = moved["revision"]
+        ref = _remote_ref(moved)
     remote = patch_event(
         access_token=access_token,
         calendar_id=ref["provider_calendar_id"],
@@ -178,7 +278,13 @@ def update_google_event(
         etag=ref.get("etag", ""),
         transport=transport,
     )
-    local_payload = _local_payload_from_remote(remote, fallback=preview, connection=connection, calendar=calendar, for_update=True)
+    local_payload = _local_payload_from_remote(
+        remote,
+        fallback=preview,
+        connection=connection,
+        calendar=calendar,
+        for_update=True,
+    )
     return update_event(
         data_root,
         event_id,
@@ -197,15 +303,23 @@ def delete_google_event_local_first_validated(
     app_secret_errors: list[dict[str, Any]] | None,
     transport: HttpTransport | None,
 ) -> bool:
-    event = preview_delete_event(data_root, event_id, expected_revision=expected_revision)
+    event = preview_delete_event(
+        data_root, event_id, expected_revision=expected_revision
+    )
     ref = _remote_ref(event)
     if ref is None:
         delete_event(data_root, event_id, expected_revision=expected_revision)
         return False
 
-    _connection, calendar = _connection_and_calendar(data_root, ref, fallback_event=event)
+    _connection, calendar = _connection_and_calendar(
+        data_root, ref, fallback_event=event
+    )
     _ensure_writable_calendar(calendar, operation="delete")
-    access_token = refresh_access_token(app_secrets=app_secrets, app_secret_errors=app_secret_errors, transport=transport)
+    access_token = refresh_access_token(
+        app_secrets=app_secrets,
+        app_secret_errors=app_secret_errors,
+        transport=transport,
+    )
     delete_google_event(
         access_token=access_token,
         calendar_id=ref["provider_calendar_id"],
@@ -264,26 +378,37 @@ def _preview_create_event(
         updated_at=current_time,
         revision=1,
     )
-    conflict_events = filter_visible_events(events, state.get("calendars", []))
+    conflict_events = expand_events(
+        filter_availability_events(events, state.get("calendars", [])),
+        candidate["startTime"],
+        candidate["endTime"],
+    )
     raise_if_rejected_conflicts("create", conflict_policy, candidate, conflict_events)
     return candidate, False
 
 
 def _create_ref(event_payload: dict[str, Any]) -> dict[str, str]:
-    refs = normalize_external_refs(event_payload.get("external_refs") or event_payload.get("externalRefs"))
+    refs = normalize_external_refs(
+        event_payload.get("external_refs") or event_payload.get("externalRefs")
+    )
     connection_id = _ref_value(refs, "calendar_connection_id")
     if not connection_id:
-        raise ValueError("Google Calendar create requires external_refs.calendar_connection_id.")
+        raise ValueError(
+            "Google Calendar create requires external_refs.calendar_connection_id."
+        )
     return {
         "calendar_connection_id": connection_id,
-        "provider_calendar_id": _ref_value(refs, "provider_calendar_id") or DEFAULT_GOOGLE_CALENDAR_ID,
+        "provider_calendar_id": _ref_value(refs, "provider_calendar_id")
+        or DEFAULT_GOOGLE_CALENDAR_ID,
         "provider_event_id": _ref_value(refs, "provider_event_id"),
         "etag": _ref_value(refs, "etag"),
     }
 
 
 def _remote_ref(event: dict[str, Any]) -> dict[str, str] | None:
-    refs = normalize_external_refs(event.get("external_refs") or event.get("externalRefs"))
+    refs = normalize_external_refs(
+        event.get("external_refs") or event.get("externalRefs")
+    )
     connection_id = _ref_value(refs, "calendar_connection_id")
     provider_calendar_id = _ref_value(refs, "provider_calendar_id")
     provider_event_id = _ref_value(refs, "provider_event_id")
@@ -317,7 +442,11 @@ def _ensure_writable_calendar(calendar: dict[str, Any], *, operation: str) -> No
     access_role = str(calendar.get("access_role") or "").strip().lower()
     if not access_role or access_role in WRITABLE_GOOGLE_ACCESS_ROLES:
         return
-    calendar_name = str(calendar.get("summary") or calendar.get("provider_calendar_id") or "Google Calendar").strip()
+    calendar_name = str(
+        calendar.get("summary")
+        or calendar.get("provider_calendar_id")
+        or "Google Calendar"
+    ).strip()
     raise CalendarOAuthError(
         "google_calendar_read_only",
         f"Google Calendar `{calendar_name}` is read-only for this account and cannot be used for {operation}.",
@@ -325,7 +454,9 @@ def _ensure_writable_calendar(calendar: dict[str, Any], *, operation: str) -> No
     )
 
 
-def _connected_google_connection(state: dict[str, Any], connection_id: str) -> dict[str, Any]:
+def _connected_google_connection(
+    state: dict[str, Any], connection_id: str
+) -> dict[str, Any]:
     for item in state.get("connections", []):
         if not isinstance(item, dict):
             continue
@@ -333,11 +464,22 @@ def _connected_google_connection(state: dict[str, Any], connection_id: str) -> d
         if connection["id"] != connection_id:
             continue
         if connection["provider"] != GOOGLE_PROVIDER:
-            raise CalendarOAuthError("calendar_mutation_unsupported_provider", "Calendar remote mutations support Google connections only.")
+            raise CalendarOAuthError(
+                "calendar_mutation_unsupported_provider",
+                "Calendar remote mutations support Google connections only.",
+            )
         if connection["status"] != "connected":
-            raise CalendarOAuthError("calendar_mutation_connection_unavailable", "Calendar connection is not connected.", status_code=400)
+            raise CalendarOAuthError(
+                "calendar_mutation_connection_unavailable",
+                "Calendar connection is not connected.",
+                status_code=400,
+            )
         return connection
-    raise CalendarOAuthError("calendar_mutation_connection_not_found", f"Calendar connection `{connection_id}` was not found.", status_code=404)
+    raise CalendarOAuthError(
+        "calendar_mutation_connection_not_found",
+        f"Calendar connection `{connection_id}` was not found.",
+        status_code=404,
+    )
 
 
 def _calendar_for_ref(
@@ -350,14 +492,18 @@ def _calendar_for_ref(
         if not isinstance(item, dict):
             continue
         calendar = normalize_calendar(item)
-        if calendar["connection_id"] == ref["calendar_connection_id"] and calendar["provider_calendar_id"] == ref["provider_calendar_id"]:
+        if (
+            calendar["connection_id"] == ref["calendar_connection_id"]
+            and calendar["provider_calendar_id"] == ref["provider_calendar_id"]
+        ):
             return calendar
     refs = normalize_external_refs(fallback_event.get("external_refs") or {})
     return normalize_calendar(
         {
             "connection_id": ref["calendar_connection_id"],
             "provider_calendar_id": ref["provider_calendar_id"],
-            "summary": refs.get("provider_calendar_summary") or ref["provider_calendar_id"],
+            "summary": refs.get("provider_calendar_summary")
+            or ref["provider_calendar_id"],
             "timeZone": fallback_event.get("timezone") or "UTC",
             "selected": True,
             "sync_enabled": True,
@@ -371,20 +517,24 @@ def _google_event_body(event: dict[str, Any]) -> dict[str, Any]:
         "description": event.get("description") or "",
         "location": event.get("location") or "",
         "status": event.get("status") or "confirmed",
+        "transparency": event.get("transparency") or "opaque",
         "start": _google_time(event["startTime"], event, "start"),
         "end": _google_time(event["endTime"], event, "end"),
     }
-    attendees = [{"email": item} for item in event.get("attendees") or [] if isinstance(item, str) and item.strip()]
-    if attendees:
-        body["attendees"] = attendees
-    recurrence = event.get("recurrence")
-    if isinstance(recurrence, dict) and isinstance(recurrence.get("rules"), list):
-        body["recurrence"] = recurrence["rules"]
-    elif isinstance(recurrence, list):
-        body["recurrence"] = recurrence
+    attendees = [
+        {"email": item}
+        for item in event.get("attendees") or []
+        if isinstance(item, str) and item.strip()
+    ]
+    body["attendees"] = attendees
+    if not (event.get("external_refs") or {}).get("recurring_event_id"):
+        body["recurrence"] = recurrence_rules(event.get("recurrence"))
     reminders = _google_reminders(event.get("reminders"))
-    if reminders:
-        body["reminders"] = {"useDefault": False, "overrides": reminders}
+    body["reminders"] = (
+        {"useDefault": True}
+        if event.get("reminders_use_default")
+        else {"useDefault": False, "overrides": reminders}
+    )
     color_id = _google_color_id(str(event.get("color") or ""))
     if color_id:
         body["colorId"] = color_id
@@ -394,7 +544,12 @@ def _google_event_body(event: dict[str, Any]) -> dict[str, Any]:
 def _google_time(value: Any, event: dict[str, Any], _field: str) -> dict[str, str]:
     timezone_name = str(event.get("timezone") or "UTC")
     if event.get("all_day"):
-        return {"date": iso_time(value, "event_time").date().isoformat()}
+        return {
+            "date": iso_time(value, "event_time")
+            .astimezone(ZoneInfo(timezone_name))
+            .date()
+            .isoformat()
+        }
     return {"dateTime": str(value), "timeZone": timezone_name}
 
 
@@ -406,7 +561,11 @@ def _google_reminders(value: Any) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             continue
         method = str(item.get("method") or "").strip()
-        minutes = item.get("minutes_before") if "minutes_before" in item else item.get("minutesBefore")
+        minutes = (
+            item.get("minutes_before")
+            if "minutes_before" in item
+            else item.get("minutesBefore")
+        )
         if method and isinstance(minutes, int):
             reminders.append({"method": method, "minutes": minutes})
     return reminders
@@ -431,11 +590,18 @@ def _local_payload_from_remote(
     calendar: dict[str, Any],
     for_update: bool,
 ) -> dict[str, Any]:
-    remote_payload = google_event_payload(remote_event, connection=connection, calendar=calendar) or {}
+    remote_payload = (
+        google_event_payload(remote_event, connection=connection, calendar=calendar)
+        or {}
+    )
     local_payload = {**fallback, **remote_payload, "source": "google_calendar"}
     fallback_refs = normalize_external_refs(fallback.get("external_refs") or {})
     remote_refs = normalize_external_refs(remote_payload.get("external_refs") or {})
-    local_payload["external_refs"] = {**fallback_refs, **remote_refs, "provider": GOOGLE_PROVIDER}
+    local_payload["external_refs"] = {
+        **fallback_refs,
+        **remote_refs,
+        "provider": GOOGLE_PROVIDER,
+    }
     if fallback.get("idempotency_key"):
         local_payload["idempotency_key"] = fallback["idempotency_key"]
     if for_update:

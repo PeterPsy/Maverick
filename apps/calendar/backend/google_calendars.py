@@ -17,7 +17,14 @@ from time_values import format_time
 def list_calendars(data_root: Path, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """Return redaction-safe Google calendar sources known to Calendar."""
     connection_id = _optional_string(body or {}, "connection_id")
-    calendars = [_public_calendar(item) for item in read_state(data_root).get("calendars", []) if isinstance(item, dict)]
+    state = read_state(data_root)
+    cursors = {(c["connection_id"], c["provider_calendar_id"]): c for c in state["sync_state"]}
+    calendars = [_public_calendar(item) for item in state["calendars"]]
+    for calendar in calendars:
+        cursor = cursors.get((calendar["connection_id"], calendar["provider_calendar_id"]), {})
+        calendar["sync_status"] = {key: cursor.get(key, "") for key in
+            ("status", "last_sync_at", "time_min", "time_max", "error", "error_code")}
+        calendar["sync_status"]["has_more"] = bool(cursor.get("page_token"))
     if connection_id:
         calendars = [item for item in calendars if item.get("connection_id") == connection_id]
     calendars.sort(key=lambda item: (str(item.get("connection_id") or ""), 0 if item.get("primary") else 1, str(item.get("summary") or "")))
@@ -33,14 +40,12 @@ def select_calendar(
     """Enable or disable local sync selection for one known remote calendar."""
     connection_id = _required_string(body, "connection_id")
     calendar_id = _required_string(body, "calendar_id")
-    has_selected = "selected" in body
-    has_sync_enabled = "sync_enabled" in body or "syncEnabled" in body
-    if not has_selected and not has_sync_enabled:
-        raise ValueError("`selected` or `sync_enabled` is required.")
-    selected = optional_bool(body.get("selected"), default=True) if has_selected else None
-    sync_enabled = optional_bool(body.get("sync_enabled") if "sync_enabled" in body else body.get("syncEnabled"), default=True) if has_sync_enabled else selected
-    if selected is None:
-        selected = sync_enabled
+    flags = {key: optional_bool(body[key], default=True) for key in
+             ("selected", "sync_enabled", "availability_enabled") if key in body}
+    if "syncEnabled" in body:
+        flags["sync_enabled"] = optional_bool(body["syncEnabled"], default=True)
+    if not flags:
+        raise ValueError("A visibility, sync or availability setting is required.")
     updated_at = format_time((now or datetime.now(UTC)).astimezone(UTC))
     updated_calendar: dict[str, Any] | None = None
 
@@ -55,8 +60,7 @@ def select_calendar(
                 calendar = normalize_calendar(
                     {
                         **calendar,
-                        "selected": selected,
-                        "sync_enabled": sync_enabled,
+                        **flags,
                         "updated_at": updated_at,
                     }
                 )
@@ -93,6 +97,7 @@ def _public_calendar(calendar: dict[str, Any]) -> dict[str, Any]:
         "primary": bool(normalized.get("primary")),
         "selected": bool(normalized.get("selected")),
         "sync_enabled": bool(normalized.get("sync_enabled")),
+        "availability_enabled": normalized["availability_enabled"],
         "color": normalized.get("color", ""),
         "updated_at": normalized.get("updated_at", ""),
     }

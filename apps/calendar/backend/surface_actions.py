@@ -21,6 +21,7 @@ ALLOWED_ACTIONS = [
     "operations.manifest",
     "describe",
     "status",
+    "calendar_accounts.summary",
     "calendar_connections.list",
     "calendar_calendars.list",
     "calendar_calendars.select",
@@ -53,7 +54,7 @@ EXPECTED_FIELDS_BY_ACTION = {
     "check_availability": ["startTime", "endTime"],
     "find_free_time": ["start_after", "end_before"],
     "set_custom_view": ["entity_ids"],
-    "calendar_calendars.select": ["connection_id", "calendar_id", "selected or sync_enabled"],
+    "calendar_calendars.select": ["connection_id", "calendar_id", "selected, sync_enabled or availability_enabled"],
     "references.resolve": ["entity_id"],
     "references.summarize": ["entity_id"],
 }

@@ -8,7 +8,6 @@ from typing import Any
 from availability import check_availability, conflicts_for_event, find_free_time
 from constants import AGENT_DEFAULT_LIST_LIMIT, MUTATING_ACTIONS, SCHEMA_VERSION, VIEW_STATE_ACTIONS
 from errors import CalendarConflictError, CalendarRevisionConflictError
-from event_records import filter_events
 from google_oauth import (
     CalendarOAuthError,
     complete_oauth,
@@ -53,6 +52,8 @@ from surface_contract import (
 from view_state import clear_custom_view, read_view_filter, set_custom_view, set_view_filter
 from store import read_state
 from pwa_read_model import read_model
+from account_summary import account_summary
+from recurrence_mutations import mutate_occurrence
 
 
 def handle_action(
@@ -76,6 +77,8 @@ def handle_action(
             return 200, describe(data_root, app_id=app_id)
         if action in {"provider_status", "calendar_connections.provider_status"}:
             return 200, provider_status(data_root, app_secrets=app_secrets, app_secret_errors=app_secret_errors)
+        if action == "calendar_accounts.summary":
+            return 200, account_summary(data_root)
         if action == "calendar_connections.list":
             return 200, list_connections(data_root, now=oauth_now)
         if action == "calendar_calendars.list":
@@ -147,6 +150,25 @@ def handle_action(
                 idempotent_replay=idempotent_replay,
                 remote_mutation=remote_mutation and not idempotent_replay,
             )
+        if action in {"update", "delete", "move"} and "@" in str(body.get("id", "")):
+            current = get_event(data_root, body["id"])
+            if current and is_google_event(current):
+                from google_recurrence import mutate_google_occurrence
+                event = mutate_google_occurrence(data_root, {**body, "event": event_payload(body)}, action, app_secrets, app_secret_errors, oauth_transport)
+            else:
+                event = mutate_occurrence(data_root, {**body, "event": event_payload(body)}, action,
+                    conflict_policy_from_body(body), expected_revision(body))
+            if action == "delete":
+                return 200, {"action": action, "deleted": True, "id": body["id"]}
+            return 200, _mutation_payload(action, event, data_root, conflict_policy=conflict_policy_from_body(body))
+        if action in {"update", "delete", "move"}:
+            current = get_event(data_root, str(body.get("id", "")))
+            if current and is_google_event(current) and (current.get("recurrence") or body.get("recurrence_scope") in {"series", "future"} and (current.get("external_refs") or {}).get("recurring_event_id")):
+                from google_recurrence import mutate_google_occurrence
+                event = mutate_google_occurrence(data_root, {**body, "event": event_payload(body)}, action, app_secrets, app_secret_errors, oauth_transport)
+                if action == "delete":
+                    return 200, {"action": action, "deleted": True, "id": body["id"], "remote_mutation": True}
+                return 200, _mutation_payload(action, event, data_root, conflict_policy=conflict_policy_from_body(body), remote_mutation=True)
         if action == "update":
             event_id = required_string(body, "id")
             selected_conflict_policy = conflict_policy_from_body(body)
@@ -279,7 +301,7 @@ def handle_action(
 
 
 def list_payload(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    total = len(filter_events(list_events(data_root), **filter_kwargs(body)))
+    total = len(list_events(data_root, **filter_kwargs(body)))
     offset = optional_int(body.get("offset"), field="offset", minimum=0) or 0
     limit = optional_int(body.get("limit"), field="limit", minimum=1, maximum=500)
     profile = str(body.get("profile") or "full").strip().lower()
@@ -386,6 +408,7 @@ def mcp_result_for_tool(
         "calendar_reference_search": "references.search",
         "calendar_reference_resolve": "references.resolve",
         "calendar_reference_summarize": "references.summarize",
+        "calendar_accounts.summary": "calendar_accounts.summary",
         "calendar_connections.list": "calendar_connections.list",
         "calendar_calendars.list": "calendar_calendars.list",
         "calendar_calendars.select": "calendar_calendars.select",

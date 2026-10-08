@@ -176,6 +176,23 @@ def patch_event(
     )
 
 
+def get_event(*, access_token: str, calendar_id: str, event_id: str, transport=None):
+    return _google_get(f"{GOOGLE_CALENDAR_API_BASE}/calendars/{quote(calendar_id, safe='')}/events/{quote(event_id, safe='')}", access_token=access_token, transport=transport)
+
+
+def event_instance(*, access_token: str, calendar_id: str, series_id: str, original_start: str, transport=None):
+    """Resolve a provider occurrence by its immutable original start, including moved exceptions."""
+    url = f"{GOOGLE_CALENDAR_API_BASE}/calendars/{quote(calendar_id, safe='')}/events/{quote(series_id, safe='')}/instances?{urlencode({'originalStart': original_start, 'showDeleted': 'true'})}"
+    payload = _google_get(url, access_token=access_token, transport=transport)
+    return next((item for item in payload.get("items", []) if item.get("recurringEventId") == series_id), None)
+
+
+def transfer_event(*, access_token: str, calendar_id: str, event_id: str, destination: str, etag: str = "", transport=None):
+    """Move an event using Google's explicit organizer transfer operation."""
+    url = f"{GOOGLE_CALENDAR_API_BASE}/calendars/{quote(calendar_id, safe='')}/events/{quote(event_id, safe='')}/move?{urlencode({'destination': destination})}"
+    return _google_json_request("POST", url, access_token=access_token, transport=transport, body={}, etag=etag)
+
+
 def delete_event(
     *,
     access_token: str,
@@ -248,6 +265,8 @@ def _raise_google_error(status: int, payload: Any) -> None:
     if status < 400:
         return
     error_code = _google_error_code(payload)
+    if status == 409:
+        raise CalendarOAuthError("google_calendar_duplicate", "Google event id already exists.", status_code=409)
     if status == 412:
         raise CalendarOAuthError(
             "google_calendar_revision_conflict",

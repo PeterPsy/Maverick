@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from core.device_use.contract import device_use_instructions
+from core.device_use.computer_actor_contract import planner_device_use_instructions
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.workspace_instructions import (
     resolve_workspace_instruction_chain,
@@ -86,11 +86,7 @@ def native_runtime_input(*, session, input_text: str, skills=()) -> str:
         )
     if device_use_binding is not None:
         sections.append(
-            "[Additional Mac capability]\n" + device_use_instructions(
-                mode=device_use_binding.mode,
-                approved_apps=device_use_binding.approved_apps,
-                initial_app=device_use_binding.initial_app,
-            )
+            "[Additional Mac capability]\n" + planner_device_use_instructions(device_use_binding)
         )
     sections.append("[Maverick user input]\n" + input_text)
     return "\n\n".join(sections)

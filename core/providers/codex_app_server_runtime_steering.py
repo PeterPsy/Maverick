@@ -49,6 +49,18 @@ def steer_codex_app_server_turn(
             )
 
         backpressure_retries = 0
+        if getattr(runtime, "device_use_binding", None) is not None:
+            from core.device_use.computer_actor_registry import cancel_computer_actor
+            from core.device_use.runtime_registry import device_use_service_for_session
+            from core.device_use.errors import DeviceUseError
+            cancel_computer_actor(session_id)
+            service = device_use_service_for_session(session_id)
+            if service is not None and runtime.current_runtime_turn_id:
+                try:
+                    service.end_turn(runtime.device_use_binding,
+                        runtime_session_id=session_id, turn_id=runtime.current_runtime_turn_id)
+                except DeviceUseError:
+                    pass
         while True:
             params: dict[str, object] = {
                 "threadId": provider_thread_id,

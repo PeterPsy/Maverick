@@ -12,6 +12,8 @@ from core.runtime.process_control import (
 
 def interrupt_codex_app_server_turn(session_id: str) -> bool:
     """Ask the live Codex app-server to interrupt the active turn."""
+    from core.device_use.computer_actor_registry import cancel_computer_actor
+    cancel_computer_actor(session_id)
     with _RUNTIMES_LOCK:
         runtime = _RUNTIMES.get(session_id)
     if runtime is None or runtime.process.poll() is not None:
@@ -35,6 +37,8 @@ def interrupt_codex_app_server_turn(session_id: str) -> bool:
 
 def close_codex_app_server_runtime(session_id: str) -> int:
     """Terminate and forget a live Codex app-server runtime."""
+    from core.device_use.computer_actor_registry import cancel_computer_actor
+    cancel_computer_actor(session_id, close=True)
     with _RUNTIMES_LOCK:
         runtime = _RUNTIMES.pop(session_id, None)
     if runtime is None:

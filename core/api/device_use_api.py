@@ -6,7 +6,10 @@ from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.session_api import require_session
 from core.api.device_use_reconnection import reconnect_device_use_session
-from core.device_use.contract import device_use_dynamic_tools
+from core.device_use.computer_actor_contract import (
+    COMPUTER_INTERACT_TOOL, planner_action_allowed, planner_device_use_tools,
+)
+from core.device_use.computer_actor_registry import invoke_computer_actor
 from core.device_use.errors import DeviceUseError
 from core.device_use.runtime_registry import device_use_service_for_session
 from core.runtime.workspace_api_token import validate_workspace_api_token_lifecycle
@@ -27,6 +30,8 @@ def _authenticate_device_use_caller(
     state: PlatformState,
     environ: dict,
     start_response: StartResponse,
+    *,
+    requested_session_id: str | None = None,
 ) -> tuple[str | None, str, object | None] | list[bytes]:
     """Resolve (runtime_session_id, workspace_id, binding) via Bearer token or user session."""
     auth_header = str(environ.get("HTTP_AUTHORIZATION") or "").strip()
@@ -55,12 +60,22 @@ def _authenticate_device_use_caller(
     context = require_session(state, environ, start_response)
     if isinstance(context, list):
         return context
-    session_id = str(environ.get("HTTP_X_MAVERICK_SESSION_ID") or "").strip() or None
+    session_id = str(environ.get("HTTP_X_MAVERICK_SESSION_ID") or requested_session_id or "").strip() or None
     binding = None
     if session_id:
         try:
             session = state.runtime_store.get_session(session_id)
+            if (session.owner_user_id != context.user.user_id
+                or session.workspace_id != context.workspace_id):
+                return json_response(start_response, {"error": "device_use_activation_forbidden"},
+                                     status="403 Forbidden")
             binding = getattr(session, "device_use_binding", None)
+            if binding is not None:
+                state.device_use_service.binding_snapshot(binding.activation_id,
+                    owner_user_id=context.user.user_id, workspace_id=context.workspace_id,
+                    auth_session_id=context.session.session_id, bound_session_id=session_id)
+        except DeviceUseError as error:
+            return json_response(start_response, {"error": error.reason_code}, status="403 Forbidden")
         except Exception:
             binding = None
     return session_id, context.workspace_id, binding
@@ -104,7 +119,7 @@ def handle_device_use_api(
                 "description": tool["description"],
                 "inputSchema": tool["inputSchema"],
             }
-            for tool in device_use_dynamic_tools()
+            for tool in planner_device_use_tools()
         ]
         return json_response(start_response, {"tools": tools})
 
@@ -115,19 +130,12 @@ def handle_device_use_api(
                 {"error": "method_not_allowed"},
                 status="405 Method Not Allowed",
             )
-        auth = _authenticate_device_use_caller(state, environ, start_response)
+        body = read_json_body(environ)
+        auth = _authenticate_device_use_caller(state, environ, start_response,
+            requested_session_id=str(body.get("session_id") or ""))
         if isinstance(auth, list):
             return auth
         session_id, workspace_id, binding = auth
-        body = read_json_body(environ)
-        if not session_id:
-            session_id = str(body.get("session_id") or "").strip() or None
-            if session_id:
-                try:
-                    session = state.runtime_store.get_session(session_id)
-                    binding = getattr(session, "device_use_binding", None)
-                except Exception:
-                    binding = None
         if not session_id or binding is None:
             return json_response(
                 start_response,
@@ -183,17 +191,24 @@ def handle_device_use_api(
         call_id = str(body.get("call_id") or f"call_{uuid4().hex[:12]}").strip()
 
         try:
-            invoke_result = service.invoke(
+            if tool_name != COMPUTER_INTERACT_TOOL and not planner_action_allowed(tool_name, arguments):
+                return json_response(start_response, {"error": "computer_actor_delegation_required",
+                    "is_error": True, "result": {"success": False, "contentItems": [
+                        {"type": "inputText", "text": "Delegate UI input through computer_interact."}]}},
+                    status="403 Forbidden")
+            authority = dict(
                 binding=binding,
-                runtime_session_id=session_id,
                 turn_id=turn_id,
                 provider_thread_id=provider_thread_id,
                 provider_turn_id=provider_turn_id,
                 call_id=call_id,
-                tool_name=tool_name,
                 arguments=arguments,
                 task_text=task_text,
             )
+            if tool_name == COMPUTER_INTERACT_TOOL:
+                invoke_result = invoke_computer_actor(session_id, **authority)
+            else:
+                invoke_result = service.invoke(runtime_session_id=session_id, tool_name=tool_name, **authority)
             image_b64 = None
             if invoke_result.image_jpeg is not None:
                 image_b64 = base64.b64encode(invoke_result.image_jpeg).decode("ascii")
@@ -246,19 +261,12 @@ def handle_device_use_api(
                 {"error": "method_not_allowed"},
                 status="405 Method Not Allowed",
             )
-        auth = _authenticate_device_use_caller(state, environ, start_response)
+        body = read_json_body(environ)
+        auth = _authenticate_device_use_caller(state, environ, start_response,
+            requested_session_id=str(body.get("session_id") or ""))
         if isinstance(auth, list):
             return auth
         session_id, workspace_id, binding = auth
-        body = read_json_body(environ)
-        if not session_id:
-            session_id = str(body.get("session_id") or "").strip() or None
-            if session_id:
-                try:
-                    session = state.runtime_store.get_session(session_id)
-                    binding = getattr(session, "device_use_binding", None)
-                except Exception:
-                    binding = None
         if not session_id or binding is None:
             return json_response(
                 start_response,

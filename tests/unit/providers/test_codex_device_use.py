@@ -69,6 +69,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.assertEqual(params["sandbox"], "danger-full-access")
         self.assertEqual({item["name"] for item in params["dynamicTools"]}, {
             "mac_computer", "mac_peekaboo", "mac_calendar", "mac_project", "mac_browser", "mac_code",
+            "computer_interact",
         })
         self.assertEqual(params["config"], {
             "mcp_servers": {}, "features": {"code_mode_host": True, "code_mode": False},
@@ -344,6 +345,22 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         )
         self.assertNotIn("PRIVATE_NATIVE_FAILURE", json.dumps([event.payload for event in events]))
         self.assertEqual(events[1].payload["provider_observation_delivery_ms"], 0)
+
+    def test_planner_ui_input_requires_internal_delegation_before_dispatch(self):
+        stdin = io.StringIO()
+        events = []
+        runtime = _CodexAppServerRuntime(
+            session_id="runtime", workspace_id="default", runtime_root="/tmp/runtime",
+            process=SimpleNamespace(stdin=stdin, pid=1, poll=lambda: None),
+            device_use_binding=self.binding, provider_thread_id="provider-thread",
+            current_provider_turn_id="provider-turn", current_runtime_turn_id="runtime-turn",
+            current_task_text="Select a target", current_event_sink=events.append)
+        process_device_use_request(runtime, {"id": 10, "method": "item/tool/call", "params": {
+            "threadId": "provider-thread", "turnId": "provider-turn", "callId": "call",
+            "tool": "mac_peekaboo", "arguments": {"action": "click", "snapshot": "old"}}})
+        self.assertFalse(json.loads(stdin.getvalue())["result"]["success"])
+        self.assertTrue(self.outbound.empty())
+        self.assertEqual(events[-1].payload["failure_reason_code"], "computer_actor_delegation_required")
 
     def _exit_runtime(self, *, active=False, completed=False):
         return _CodexAppServerRuntime(

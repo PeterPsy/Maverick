@@ -8,6 +8,8 @@ import time
 from typing import Any
 
 from core.device_use.errors import DeviceUseError
+from core.device_use.computer_actor_contract import COMPUTER_INTERACT_TOOL, planner_action_allowed
+from core.device_use.computer_actor_registry import invoke_computer_actor
 from core.device_use.runtime_registry import device_use_service_for_session
 from core.device_use.result_facts import native_result_facts
 from core.providers.codex_app_server_runtime_transport import _send_request
@@ -54,17 +56,26 @@ def process_device_use_request(runtime, payload: dict[str, Any]) -> None:
     event_payload["turn_id"] = runtime_turn_id
     _emit(runtime, "runtime.tool_call.started", event_payload)
     try:
-        result = service.invoke(
+        if tool_name != COMPUTER_INTERACT_TOOL and not planner_action_allowed(tool_name, arguments):
+            _send_tool_failure(runtime, request_id, "Delegate UI input through computer_interact.")
+            _emit(runtime, "runtime.tool_call.failed", {**event_payload, "status": "failed",
+                  "failure_reason_code": "computer_actor_delegation_required"})
+            return
+        invoke = invoke_computer_actor if tool_name == COMPUTER_INTERACT_TOOL else service.invoke
+        authority = dict(
             binding=binding,
-            runtime_session_id=runtime.session_id,
             turn_id=runtime_turn_id,
             provider_thread_id=provider_thread_id,
             provider_turn_id=provider_turn_id,
             call_id=call_id,
-            tool_name=tool_name,
             arguments=arguments,
             task_text=task_text,
         )
+        if tool_name == COMPUTER_INTERACT_TOOL:
+            result = invoke(runtime.session_id, **authority,
+                            current_task=lambda: runtime.current_task_text)
+        else:
+            result = invoke(runtime_session_id=runtime.session_id, tool_name=tool_name, **authority)
         tool_result = result.result
         observation_delivery_ms = 0.0
         result_text_char_count = len(_tool_text(tool_result))

@@ -158,7 +158,7 @@ if __name__ == "__main__":
 
 def runtime_device_use_mcp_wrapper_source() -> str:
     """Return the workspace-local Device Use MCP stdio wrapper installed into runtime/bin."""
-    from core.device_use.contract import device_use_dynamic_tools
+    from core.device_use.computer_actor_contract import planner_device_use_tools
     from core.device_use.invocation_deadline import (
         DEFAULT_INVOCATION_TIMEOUT_SECONDS,
         RESULT_DELIVERY_GRACE_SECONDS,
@@ -171,14 +171,15 @@ def runtime_device_use_mcp_wrapper_source() -> str:
             "description": tool["description"],
             "inputSchema": tool["inputSchema"],
         }
-        for tool in device_use_dynamic_tools()
+        for tool in planner_device_use_tools()
     ]
     tools_repr = repr(tools)
     timeouts = {
         (tool["name"], action): invocation_timeout_seconds(tool["name"], action)
         for tool in tools
-        for action in tool["inputSchema"]["properties"]["action"]["enum"]
+        for action in tool["inputSchema"]["properties"].get("action", {}).get("enum", [])
     }
+    timeouts[("computer_interact", "")] = 225.0
     return f"""#!/usr/bin/env python3
 import json
 import os

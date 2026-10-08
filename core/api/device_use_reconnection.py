@@ -77,7 +77,7 @@ def reconnect_device_use_session(
             if isinstance(error, RuntimeProviderStateError):
                 raise DeviceUseAuthorizationError("device_use_binding_changed") from error
             raise
-        register_device_use_session(session_id, service, activation_id=activation_id)
+        register_device_use_session(session_id, service, activation_id=activation_id, state=state)
         service.stop_activation(previous.activation_id, reason="device_use_reconnected")
         thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=session_id)
         if thread is not None:

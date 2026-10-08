@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.device_use.contract import (
-    device_use_instructions,
-    device_use_dynamic_tools,
-)
+from core.device_use.computer_actor_contract import planner_device_use_tools, planner_device_use_instructions
 from core.providers.codex_prompt_budget import (
     CODEX_EXPLICIT_BASE_INSTRUCTIONS,
     CODEX_EXPLICIT_PROJECT_DOC_MAX_BYTES,
@@ -138,14 +135,10 @@ def codex_thread_params(
             "model": model_id,
             "modelProvider": "openai",
             "ephemeral": False,
-            "dynamicTools": device_use_dynamic_tools(),
+            "dynamicTools": planner_device_use_tools(),
             "developerInstructions": "\n\n".join(filter(None, (
                 params["developerInstructions"],
-                device_use_instructions(
-                    mode=binding.mode,
-                    approved_apps=binding.approved_apps,
-                    initial_app=binding.initial_app,
-                ),
+                planner_device_use_instructions(binding),
             ))),
         })
         # Native dynamic calls require the bundled host, alongside the ordinary

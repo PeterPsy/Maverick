@@ -517,6 +517,8 @@ class DeviceUseService:
         """Release native per-turn state after the provider reaches a terminal turn."""
         session_id = _bounded_identifier(runtime_session_id, "runtime_session_id")
         turn = _bounded_identifier(turn_id, "turn_id")
+        from core.device_use.computer_actor_registry import cancel_computer_actor
+        cancel_computer_actor(session_id, activation_id=binding.activation_id)
         with self._lock:
             activation = self._activation_for_binding_locked(binding, session_id=session_id)
             try:
@@ -754,6 +756,8 @@ class DeviceUseService:
         return pending
 
     def _stop_locked(self, activation: _Activation, reason: str) -> None:
+        from core.device_use.computer_actor_registry import cancel_activation_computer_actors
+        cancel_activation_computer_actors(activation.activation_id)
         outbound = activation.outbound
         activation.outbound = None
         activation.status = "stopped"

@@ -6,7 +6,7 @@ import queue
 import threading
 from typing import Any, Callable
 
-from core.device_use.contract import device_use_dynamic_tools
+from core.device_use.computer_actor_contract import planner_device_use_tools
 from core.device_use.runtime_registry import stop_registered_device_use_session
 from core.providers.codex_app_server_device_use import (
     process_device_use_request,
@@ -15,7 +15,7 @@ from core.providers.codex_app_server_device_use import (
 
 
 ServerRequestFallback = Callable[[object, dict[str, Any]], None]
-_NATIVE_TOOL_NAMES = frozenset(tool["name"] for tool in device_use_dynamic_tools())
+_NATIVE_TOOL_NAMES = frozenset(tool["name"] for tool in planner_device_use_tools())
 
 
 def start_device_use_request_worker(runtime) -> None:

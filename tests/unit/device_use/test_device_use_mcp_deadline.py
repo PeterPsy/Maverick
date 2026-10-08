@@ -13,6 +13,7 @@ class DeviceUseMCPDeadlineTestCase(unittest.TestCase):
         exec(compile(runtime_device_use_mcp_wrapper_source(), "device_use_wrapper", "exec"), namespace)
         for tool, action, expected in (
             ("mac_computer", "observe", 195.0),
+            ("computer_interact", "", 240.0),
             ("mac_project", "sample_frames", 315.0),
             ("mac_project", "transcribe_media", 915.0),
             ("mac_project", "prepare_subclip", 915.0),

@@ -531,9 +531,18 @@ human/agent text through the ordinary classified provider-input capture. It keep
 the current request separate, excludes raw tool calls/results, tickets, images
 and receipts, and instructs the model to observe current state before continuing.
 No message POST, native operation or uncertain action is automatically retried.
-The current paired wire contract is `macos-v47`; the installed executor is compatible.
+The v47 milestone used `macos-v47`; the current paired contract is declared above.
 
 ## Invocation and image transport
+
+UI input is exposed to the conversation model through the internal
+`computer_interact` tool; its read-only native observations and structured media,
+code and calendar tools remain direct. The hidden Luna `low` operator receives
+only a bounded task card and exact `prepared_text` values, and uses native UI
+tools through the original parent's lease and turn identifiers. It cannot invent
+typed content or acquire an independent native grant. Its observations return
+to its private provider context; only the final evidence image and compact result
+return to the planner. See `computer_use_actor.md` for lifecycle and accounting.
 
 Each invocation carries exact activation/session/turn/provider/call identities,
 canonical JSON arguments and SHA-256 digest, frozen contract digest, original

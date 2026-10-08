@@ -31,6 +31,8 @@ def claim_runtime_turn_cancellation(
         reason=reason,
         now=now or utcnow(),
     )
+    from core.device_use.computer_actor_registry import cancel_computer_actor
+    cancel_computer_actor(turn.session_id)
     return RuntimeTurnCancellationIntentResult(turn=turn, claimed=claimed)
 
 

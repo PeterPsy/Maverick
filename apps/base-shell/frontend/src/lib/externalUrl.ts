@@ -5,6 +5,7 @@ export type ExternalUrlDisposition = "new-window" | "same-window";
 type ExternalUrlEffects = {
   assign: (url: string) => void;
   open: (url: string, target: string, features: string) => Window | null;
+  nativeOpen?: (url: string) => Promise<void>;
   standalone?: boolean;
 };
 
@@ -27,14 +28,23 @@ export function externalUrlDispositionFromMessage(value: unknown): ExternalUrlDi
   return value === "same-window" ? "same-window" : "new-window";
 }
 
-export function openExternalUrl(
+export async function openExternalUrl(
   url: string,
   disposition: ExternalUrlDisposition = "new-window",
   effects: ExternalUrlEffects = {
     assign: (target) => window.location.assign(target),
     open: (target, name, features) => window.open(target, name, features),
+    nativeOpen: nativeExternalUrlOpener(),
   },
-): void {
+): Promise<void> {
+  if (effects.nativeOpen) {
+    try {
+      await effects.nativeOpen(url);
+      return;
+    } catch {
+      // A rejected native request can still use WebKit's navigation delegate.
+    }
+  }
   if (disposition === "same-window" || (effects.standalone ?? isStandaloneWebApp())) {
     effects.assign(url);
     return;
@@ -50,4 +60,16 @@ export function openExternalUrl(
     return;
   }
   effects.assign(url);
+}
+
+function nativeExternalUrlOpener(): ExternalUrlEffects["nativeOpen"] {
+  const native = (window as unknown as {
+    webkit?: { messageHandlers?: { maverickExternalURL?: { postMessage(value: unknown): Promise<unknown> } } };
+  }).webkit?.messageHandlers?.maverickExternalURL;
+  if (!native) return undefined;
+  return async (url) => {
+    if (await native.postMessage({ url }) !== true) {
+      throw new Error("Native external URL request was refused.");
+    }
+  };
 }

@@ -141,6 +141,18 @@ not use `window.open`, which iOS keeps inside the installed web app. Normal
 browser sessions retain popup-first behavior with same-window fallback when a
 popup is blocked.
 
+The native macOS shell exposes a main-frame, platform-origin-only
+`maverickExternalURL` WebKit handler. The shell broker uses it before browser
+effects so `noopener`'s null popup result cannot cause two system-browser
+launches. Without that handler, browser and standalone-PWA behavior above is
+unchanged. Native WebKit also receives `window.open`, `target=_blank` and external
+top-level navigation, opening validated HTTP(S) destinations in the default
+browser rather than loading them inside Maverick or clearing Device Use.
+App-owned iframe navigation remains embedded. A Storage OAuth `about:blank`
+popup is a temporary native URL receiver with no native bridge, released after
+handoff or cancellation. OAuth completes in the browser's session using the
+existing authenticated callback; native cookies are not transferred.
+
 The public app id declared by the app artifact and the local app id used for one workspace binding are separate identities:
 
 - `public_app_id` is the catalog or source identity declared by the app contract and used for distribution, upgrade lineage, compatibility, and publisher ownership.

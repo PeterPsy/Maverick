@@ -33,11 +33,11 @@
     "browser": {
       "cli": {
         "descriptor_sha256": "5975554e6d022ed3491f525d69ef616fd679a0896e6b37b529da69331a2be505",
-        "execution_sha256": "77ba292843c43238b5d86a30efc12b43220d7488b8481c31680c2da534ba5b7e"
+        "execution_sha256": "30cccb3bf2c4682f87862bbd41ab3dbb942a4ee32f09902a5721dc0b38331fa2"
       },
       "mcp": {
-        "descriptor_sha256": "b7e28dd695dc4c088c1e39b93af08eab20751cf52e3063c20d9dfe5090d48b21",
-        "execution_sha256": "ba3aecda1b4c024c88629e78f1faae45007e8df8da17659d7c37059bf5b828f9"
+        "descriptor_sha256": "28117a8ac1657a66e134789e293952dee30b580446ea59ba602dcf80722373ac",
+        "execution_sha256": "d06b8bb3b2746b137bca1327d6c75c266d92db2c504e62ff7b402bb33aea7054"
       }
     },
     "calendar": {
@@ -221,6 +221,6 @@
       }
     }
   },
-  "audit_revision": "2026-10-06-browser-companion-local-speech-reviewed-v9",
+  "audit_revision": "2026-10-09-browser-inspection-reviewed-v10",
   "schema_version": "2"
 }

@@ -13,6 +13,18 @@ from core.egress.networks import METADATA_HOSTS, RESTRICTED_HOSTS, RESTRICTED_NE
 
 
 class BrowserEgressPolicyTests(unittest.TestCase):
+    def test_named_dev_platform_and_exact_app_frames_require_admin_enablement(self):
+        frame = "af-" + "a" * 24 + ".sidecars.maverick.localhost"
+        for host in ("maverick.localhost", frame):
+            url = f"http://{host}:8000/apps/calendar/"
+            self.assertFalse(evaluate_browser_egress_url(url).allowed)
+            allowed = evaluate_browser_egress_url(url, allow_admin_dev_targets=True)
+            self.assertTrue(allowed.allowed)
+            self.assertEqual(allowed.reason, "allowed_admin_dev_target")
+        for host in ("other.localhost", frame + ".evil", frame.replace("af-", "sc-"), "anything.sidecars.maverick.localhost"):
+            self.assertFalse(evaluate_browser_egress_url(f"http://{host}:8000/", allow_admin_dev_targets=True).allowed)
+        self.assertFalse(evaluate_browser_egress_url(f"http://{frame}:9000/", allow_admin_dev_targets=True).allowed)
+
     def test_policy_uses_shared_manifest_static_targets_and_ranges(self) -> None:
         manifest = browser_egress_policy_manifest()
         admin_targets = {

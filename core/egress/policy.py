@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
@@ -290,6 +291,10 @@ def _normalize_url(parsed: SplitResult, *, scheme: str, host: str, port: int) ->
 
 
 def _is_admin_dev_target(*, scheme: str, host: str, port: int, policy: BrowserEgressPolicy) -> bool:
+    # Only Core's exact app-frame labels inherit an allowlisted named local host.
+    frame = re.fullmatch(r"af-[0-9a-f]{24}\.sidecars\.([a-z0-9-]+\.localhost)", host)
+    if frame:
+        host = frame.group(1)
     candidate = EgressTarget(scheme=scheme, host=host, port=port).normalized()
     return candidate in {target.normalized() for target in policy.admin_dev_targets}
 

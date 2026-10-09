@@ -127,6 +127,8 @@ def handle_action(
     action = str(body.get("action") or "status").strip()
     admin_dev_targets_enabled = is_admin_authority(platform_role=platform_role, workspace_role=workspace_role)
     try:
+        if action == "reference.manifest":
+            return 200, {"app_id": app_id, "entity_types": []}
         if action in {"service.status", "service.start", "service.stop"}:
             from lab_runtime_control import control, ensure_running, stop
             if action != "service.status" and not admin_dev_targets_enabled:

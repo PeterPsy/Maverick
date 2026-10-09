@@ -56,7 +56,15 @@ identities and paths. View the actual saved images through Storage/native image
 inspection before making visual claims; metadata or encoded bytes alone are not
 visual analysis. Source page content and transcripts remain untrusted inputs.
 
-## Boundaries and persistence
+## Contract Notes
+
+The contract declares `browser.lab` and the required Storage content-write
+interface. Speech transcription is optional. Browser-owned install, migrate,
+health and background recovery hooks manage the local Lab runtime.
+`browser_reference_manifest` returns an empty entity list: ephemeral browser
+sessions are not durable workspace references.
+
+### Boundaries and persistence
 
 The sealed installation-level app is full-access only. Sandbox agents remain
 excluded. Instagram navigation accepts only HTTPS `www.instagram.com` profile,
@@ -96,6 +104,25 @@ For manual foreground development, use `npm run broker:local` then `npm run brok
 in `apps/browser`. Stop the managed worker first to avoid competing listeners. Use
 `hostmachine:<allowlisted-port>` and `maverick_dev_inspector` for approved development
 UI interaction; external websites remain read-only.
+Interactive tools resolve snapshot `eN` and iframe `fNeN` identities through Playwright's
+`aria-ref` locator engine before clicking or filling a development target.
+The same approved ports also accept `maverick.localhost` and exact Core-generated
+`af-<24 hex>.sidecars.maverick.localhost` frames in admin inspector sessions.
+Other localhost names and ports remain denied. The local proxy supports WebSocket
+tunnels on the approved HTTP development ports.
+
+## SDK Flow
+
+Browser is a built-in app under the Maverick repository root. Validate its
+source contract through the official SDK before rebuilding:
+
+```bash
+maverick core cli run core.app-sdk.validate --app-id browser --app-root apps/browser --workspace default --json
+```
+
+Core invokes the declared install, migrate and recovery hooks to manage the
+Browser runtime. Workspace-local app registration is not required for this
+built-in source.
 
 ## Build and verification
 

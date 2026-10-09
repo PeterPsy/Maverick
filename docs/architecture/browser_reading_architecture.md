@@ -127,7 +127,17 @@ foreground and terminate their descendants.
 Core's reviewed execution closure includes Browser's Python controller, Node
 broker, companion source/build artifacts, frontend, hooks and dependency pins.
 Exact descriptor/execution audits must be refreshed after executable changes.
-Only Browser and the changed Speech records are updated by this implementation.
+Only records for reviewed changed apps are updated; unrelated app digests remain
+unchanged.
+
+Authenticated development inspection uses the named `maverick.localhost` platform
+host on the existing allowlisted ports 8000 and 8014, including Core-generated
+`af-<24 hex>.sidecars.maverick.localhost` app frames. Only these exact labels inherit
+the named host/port permission. All require the existing administrator inspector
+authority; other localhost hosts, sidecar labels and ports remain denied. Core and
+the Node proxy enforce the same target grammar. A proxy CONNECT to an allowlisted
+HTTP dev port is resolved with its declared HTTP permission so plaintext WebSocket
+connections work. Public HTTPS and other private destinations retain their checks.
 
 ## Open-source sources
 

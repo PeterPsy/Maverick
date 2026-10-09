@@ -85,7 +85,8 @@
       "browser_operation_get",
       "browser_operation_cancel",
       "browser_instagram_collect",
-      "browser_video_analyze"
+      "browser_video_analyze",
+      "browser_reference_manifest"
     ],
     "cli_commands": [
       "browser"

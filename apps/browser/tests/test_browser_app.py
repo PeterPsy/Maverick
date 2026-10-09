@@ -84,6 +84,7 @@ class BrowserAppTests(unittest.TestCase):
         cli_descriptor = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
 
         expected_tools = {
+            "browser_reference_manifest",
             "web_search",
             "web_open",
             "browser_session_create",

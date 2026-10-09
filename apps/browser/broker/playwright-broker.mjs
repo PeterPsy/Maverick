@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { snapshotReferenceSelector } from "./snapshot-reference.mjs";
+import { isAdminDevTarget as matchesAdminDevTarget, proxyTunnelUrl } from "./admin-dev-targets.mjs";
 import http from "node:http";
 import { createRequire } from "node:module";
 import { lookup } from "node:dns/promises";
@@ -812,7 +814,7 @@ function defaultPort(scheme) {
 }
 
 function isAdminDevTarget(scheme, host, port) {
-  return adminDevTargets.has(adminDevTargetKey(scheme, host, port));
+  return matchesAdminDevTarget(adminDevTargets, scheme, host, port);
 }
 
 function adminDevTargetKey(scheme, host, port) {
@@ -970,7 +972,7 @@ function requireSelector(payload) {
   if (typeof selector !== "string" || selector.trim() === "") {
     throw brokerError(400, "validation_error", "selector or ref is required.");
   }
-  return selector.trim();
+  return snapshotReferenceSelector(selector);
 }
 
 function assertNoPersistenceOptions(payload) {
@@ -1050,7 +1052,7 @@ async function handleProxyHttpRequest(request, response) {
 
 async function handleProxyConnect(request, socket, head) {
   const policyContext = proxyPolicyContext(request);
-  const requestUrl = new URL(`https://${request.url}`);
+  const requestUrl = proxyTunnelUrl(request.url, adminDevTargets);
   const target = await resolveAllowedConnection(requestUrl, policyContext);
   const upstream = net.connect({ host: target.address, port: target.port }, () => {
     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");

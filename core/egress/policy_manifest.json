@@ -11,6 +11,16 @@
       "scheme": "http",
       "host": "hostmachine",
       "port": 8014
+    },
+    {
+      "scheme": "http",
+      "host": "maverick.localhost",
+      "port": 8000
+    },
+    {
+      "scheme": "http",
+      "host": "maverick.localhost",
+      "port": 8014
     }
   ],
   "restricted_hosts": [

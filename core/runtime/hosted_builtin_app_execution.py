@@ -72,6 +72,8 @@ def hosted_builtin_app_execution_roots(
                 "broker/playwright-broker.mjs",
                 "broker/session-lifecycle.mjs",
                 "broker/reading-actions.mjs",
+                "broker/snapshot-reference.mjs",
+                "broker/admin-dev-targets.mjs",
                 "companion/manifest.json",
                 "companion/build.mjs",
                 "companion/scope.mjs",

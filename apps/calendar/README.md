@@ -279,17 +279,44 @@ results explicitly cover known local events, not all invitee calendars.
 
 UI deletion has an eight-second undo window before any local or provider delete
 is committed. Closing the app cancels an uncommitted deletion. Local popup
-reminders appear in the open Calendar app; Google remains responsible for its
-own reminders. Background delivery with a closed app is not claimed.
+reminders are collected by the existing backend `background_tick` scheduler
+without an open Calendar frontend. The app provides `notifications.inbox` version
+`1`; Base Shell shows unread alerts from any active app and opens the event from
+its notification. Dismissal is idempotent and scoped to the trusted user.
+
+`data/calendar/reminders.json` stores the scheduler watermark, stable delivery
+identities and per-user acknowledgements separately from event state. Recovery
+catches up at most seven days after a backend outage; the first activation checks
+the preceding minute to avoid flooding the inbox with historical appointments.
+Notifications and deduplication receipts are retained for thirty days. Each tick
+collects at most 1,000 new alerts and drains a backlog in subsequent ticks. Moves,
+cancellations, deleted occurrences and reminder edits retract stale alerts; local
+recurrences use the same timezone/DST expansion as calendar views. Google remains
+responsible for its own reminders; local `email` reminders do not imply email
+delivery. With the whole browser closed, alerts persist for the next login. OS
+push is a separate channel and is not implemented by this inbox.
 
 
 Regression verification covers concurrent accounts and edits, page continuation,
 all-day roundtrips and DST, recurring exceptions and series transfers, workday
 windows and buffers, month/time-grid interactions, keyboard event opening, draft
 preservation and undo. Provider checks use temporary state and simulated responses;
-no real appointments are changed by the test suite. Browser Lab verification of
-`http://hostmachine:8014/app/calendar` reaches the sign-in page in its isolated
-session, so authenticated desktop/mobile visual acceptance remains unverified.
+no real appointments are changed by the test suite. Authenticated Browser Lab
+acceptance uses a temporary PlatformAsgiHost instance with the real login, backend
+routes and isolated app frames at `http://maverick.localhost:8000/app/calendar`.
+Desktop (1440×1000) and mobile (390×844) screenshots and accessibility snapshots
+cover the time grid, separate all-day row, overlapping columns, mobile agenda,
+contextual creation, draft preservation during another session's update and the
+notification inbox while Checklist is active. This fixture exercises local events;
+live Google-account visual acceptance is not implied.
+
+Run `.venv/bin/python -m apps.calendar.tests.visual_fixture` from the repository
+root with port 8000 free. The disposable account is `calendar-visual-test` with
+password `calendar-visual-fixture`. State, identity and secrets are temporary;
+Ctrl-C stops the scheduler and removes the fixture. No production workspace data
+or Google credentials are read or changed. Use an admin Browser inspector session
+for the allowlisted development origin. Service workers are intentionally blocked
+by the isolated Browser Lab; offline behavior has separate cache tests.
 
 Google future-series creation uses a deterministic successor id. A lost insert
 response is resolved by reading that id; a confirmed failed insert restores the

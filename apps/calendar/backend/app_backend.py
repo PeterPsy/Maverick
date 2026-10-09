@@ -29,6 +29,7 @@ try:
         payload.body,
         app_id=local_app_id,
         workspace_id=payload.workspace_id,
+        user_id=payload.user_id,
         app_secrets=dict(payload.raw.get("app_secrets") or {}),
         app_secret_errors=list(payload.raw.get("app_secret_errors") or []),
         allow_platform_secret_writes=True,

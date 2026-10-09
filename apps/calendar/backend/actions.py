@@ -53,6 +53,7 @@ from view_state import clear_custom_view, read_view_filter, set_custom_view, set
 from store import read_state
 from pwa_read_model import read_model
 from account_summary import account_summary
+from reminders import list_notifications, dismiss_notification
 from recurrence_mutations import mutate_occurrence
 
 
@@ -62,6 +63,7 @@ def handle_action(
     *,
     app_id: str = "calendar",
     workspace_id: str | None = None,
+    user_id: str | None = None,
     app_secrets: dict[str, str] | None = None,
     app_secret_errors: list[dict[str, Any]] | None = None,
     allow_platform_secret_writes: bool = False,
@@ -79,6 +81,10 @@ def handle_action(
             return 200, provider_status(data_root, app_secrets=app_secrets, app_secret_errors=app_secret_errors)
         if action == "calendar_accounts.summary":
             return 200, account_summary(data_root)
+        if action == "notifications.list":
+            return 200, list_notifications(data_root, body, user_id=user_id)
+        if action == "notifications.dismiss":
+            return 200, dismiss_notification(data_root, body.get("id"), user_id=user_id)
         if action == "calendar_connections.list":
             return 200, list_connections(data_root, now=oauth_now)
         if action == "calendar_calendars.list":
@@ -331,8 +337,13 @@ def list_payload(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 def app_events_for_action(action: str, *, app_id: str = "calendar") -> list[dict[str, str]]:
     normalized = normalize_action(action)
+    if normalized == "notifications.dismiss":
+        return [{"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "notifications"}]
     if normalized in MUTATING_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "events"}]
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "events"},
+            {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "notifications"},
+        ]
     if normalized == "calendar_sync":
         return [
             {"type": "maverick.app.data-changed", "owner_app_id": app_id, "resource": "events"},

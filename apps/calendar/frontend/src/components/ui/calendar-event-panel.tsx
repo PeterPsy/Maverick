@@ -380,7 +380,7 @@ export function EventPanel(props: {
               />
             </Field>
             {draft?.source !== "google_calendar" && (
-              <p>{t("Local reminders appear while Calendar is open.")}</p>
+              <p>{t("Local reminders are saved in Maverick notifications, even when Calendar is closed.")}</p>
             )}
             <Field label="Category">
               <select

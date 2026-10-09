@@ -53,7 +53,7 @@ export function App() {
     visibleDate,
     load,
   );
-  const notices = useCalendarNotices(events);
+  const notices = useCalendarNotices();
   const deletion = usePendingDeletion(deleteOverlayEvent);
   const [focusEventId, setFocusEventId] = useState("");
   const [focusVersion, setFocusVersion] = useState(0);

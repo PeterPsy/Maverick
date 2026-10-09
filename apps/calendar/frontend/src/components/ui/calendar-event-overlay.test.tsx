@@ -3,7 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CalendarEventOverlay } from './calendar-event-overlay';
-import { notifyCalendarUiStateChanged, writeCalendarUiState } from '@/calendar-ui-state';
+import { notifyCalendarUiStateChanged, readCalendarUiState, writeCalendarUiState } from '@/calendar-ui-state';
 import type { Event } from './calendar-types';
 vi.mock('@/api', () => ({ CalendarApiError: class extends Error {}, getFullEvent: vi.fn(async () => null) }));
 vi.mock('./find-time', () => ({ FindTime: () => null }));
@@ -39,6 +39,10 @@ it('retries a lost create response with the same idempotency key and contextual 
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[0][0].idempotency_key).toBe(create.mock.calls[1][0].idempotency_key);
     expect(create.mock.calls[0][0].startTime.toISOString()).toBe('2026-10-04T09:15:00.000Z');
+    expect(host.querySelector('[role=dialog]')).toBeNull();
+    expect(readCalendarUiState('calendar').sidebarMode).toBe('idle');
+    await act(async () => { notifyCalendarUiStateChanged('calendar'); });
+    expect(host.querySelector('[role=dialog]')).toBeNull();
   } finally { act(() => root.unmount()); }
 });
 it('keeps full event details when a display refresh has the same revision', async () => {

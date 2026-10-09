@@ -351,6 +351,9 @@ export function CalendarEventOverlay({
     detail: Record<string, unknown> = {},
   ) {
     const next = writeCalendarUiState(runtimeAppId, patch);
+    // Own commits must be visible to the synchronous UI-state listener before
+    // broadcasting, otherwise the save guard restores the previous open draft.
+    uiStateRef.current = next;
     setUiState(next);
     notifyCalendarUiStateChanged(runtimeAppId, detail);
   }

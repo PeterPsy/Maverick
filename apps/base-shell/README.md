@@ -30,6 +30,17 @@ Maverick product shell app that hosts enabled app frontends through the platform
 
 ## SDK Flow
 
+Enabled apps providing `notifications.inbox` version `1` expose durable alerts in
+the shell, including while another app is active. The shell reads and acknowledges
+them through app backends and the shared app-event transport; it does not own
+reminder schedules. Pending alerts return after reconnect. Reads stop when hidden
+or offline, and inbox state is discarded with the authenticated workspace/session.
+The current channel is in-app delivery; it does not send OS push notifications
+while the browser is closed. See the notification contract in
+[`app_contract_architecture.md`](../../docs/architecture/app_contract_architecture.md).
+Shell frame generations use the SDK's unique identifier helper, so approved
+HTTP development origins also work when `crypto.randomUUID` is unavailable.
+
 ```bash
 ./scripts/maverick core cli run core.app-sdk.validate --app-id base-shell --workspace default --json
 ./scripts/maverick core cli run core.app-sdk.register-local --app-id base-shell --workspace default --json

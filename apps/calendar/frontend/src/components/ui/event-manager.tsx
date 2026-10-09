@@ -36,8 +36,10 @@ import {
 
 export type { Event, EventManagerProps } from "./calendar-types";
 
+const EMPTY_EVENTS: Event[] = [];
+
 export function EventManager({
-  events: initialEvents = [],
+  events: initialEvents = EMPTY_EVENTS,
   onVisibleDateChange,
   onEventUpdate,
   colors = defaultColors,
@@ -62,9 +64,12 @@ export function EventManager({
     onVisibleDateChange?.(currentDate);
     writeCalendarUiState(runtimeAppId, { viewDate: currentDate.toISOString() });
   }, [currentDate, onVisibleDateChange]);
-  const [view, setView] = useState<CalendarView>(() =>
-    window.matchMedia?.("(max-width: 640px)").matches ? "list" : defaultView,
+  const preferredDefaultView = useMemo<CalendarView>(
+    () =>
+      window.matchMedia?.("(max-width: 640px)").matches ? "list" : defaultView,
+    [defaultView],
   );
+  const [view, setView] = useState<CalendarView>(preferredDefaultView);
   const selectedDay = useRef(new Date().getDate());
   useCalendarPreferences();
   const [dropError, setDropError] = useState("");
@@ -145,7 +150,11 @@ export function EventManager({
     if (signature === handledViewStateSignature.current) {
       return;
     }
-    const viewport = viewportFromViewState(viewState, events, defaultView);
+    const viewport = viewportFromViewState(
+      viewState,
+      events,
+      preferredDefaultView,
+    );
     if (!viewport) {
       return;
     }
@@ -154,7 +163,7 @@ export function EventManager({
     if (!viewport.pendingEventResolution) {
       handledViewStateSignature.current = signature;
     }
-  }, [defaultView, events, viewState]);
+  }, [preferredDefaultView, events, viewState]);
 
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {

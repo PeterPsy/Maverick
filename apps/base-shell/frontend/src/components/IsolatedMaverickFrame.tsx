@@ -1,4 +1,5 @@
 import { reportShellAuthorizationFailure } from "../shellAuthorization";
+import { createIdempotencyKey } from "@maverick/pwa-cache";
 import {
   forwardRef,
   useEffect,
@@ -63,12 +64,12 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
     ...iframeProps
   }, forwardedRef) {
     const frameRef = useRef<HTMLIFrameElement | null>(null);
-    const frameNameRef = useRef(`maverick-app-frame-${crypto.randomUUID()}`);
+    const frameNameRef = useRef(`maverick-app-frame-${createIdempotencyKey("frame")}`);
     const bootstrapPendingRef = useRef(false);
     const pendingLaunchRef = useRef<PendingAppFrameLaunch | null>(null);
     const activeBootstrapIdRef = useRef<string | null>(null);
     const loadingThemeRef = useRef(loadingTheme);
-    const loadingDocumentRef = useRef(maverickLoadingDocument(loadingTheme, crypto.randomUUID()));
+    const loadingDocumentRef = useRef(maverickLoadingDocument(loadingTheme, createIdempotencyKey("loader")));
     loadingThemeRef.current = loadingTheme;
 
     useEffect(() => {
@@ -95,7 +96,7 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
             // the shell origin because this frame uses srcdoc, not src.
             frame.allow = isolatedFrameBrowserFeaturePolicy(allow, launch.origin) || "";
             bootstrapPendingRef.current = true;
-            const bootstrapId = crypto.randomUUID();
+            const bootstrapId = createIdempotencyKey("bootstrap");
             activeBootstrapIdRef.current = bootstrapId;
             pendingLaunchRef.current = { bootstrapId, launch };
             frame.srcdoc = maverickLoadingDocument(loadingThemeRef.current, bootstrapId);

@@ -31,6 +31,22 @@ afterEach(() => {
 });
 
 describe("IsolatedMaverickFrame authorization recovery", () => {
+  it("launches on HTTP development origins without crypto.randomUUID", async () => {
+    vi.stubGlobal("crypto", { randomUUID: undefined });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(launchPayload(
+      "http://af-test.sidecars.maverick.localhost:8000", "fixture-ticket",
+    )))));
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () => root.render(<IsolatedMaverickFrame appId="calendar" frameScope={FRAME_SCOPE} launchPath="/app/calendar" />));
+    const frame = host.querySelector("iframe")!;
+    expect(frame.name).toContain("maverick-app-frame-frame:");
+    expect(frame.srcdoc).toContain("bootstrap:");
+    expect(frame.dataset.maverickFrameOrigin).toBeDefined();
+  });
+
   it("relaunches only for an exact message from its registered frame and preserves the current route", async () => {
     const origin = "http://af-123.sidecars.maverick.localhost:8000";
     const initialLaunch = launchPayload(origin, "initial-ticket");

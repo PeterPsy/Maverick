@@ -1,0 +1,91 @@
+.bs-notifications {
+  position: fixed;
+  left: 20px;
+  top: 16px;
+  z-index: 65;
+}
+.bs-notifications button {
+  font: inherit;
+  color: var(--maverick-text);
+  cursor: pointer;
+}
+.bs-notifications__toggle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 6px;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: 50%;
+  background: var(--maverick-surface);
+}
+.bs-notifications__badge {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  min-width: 18px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+  font-size: 11px;
+}
+.bs-notifications__inbox {
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: 12px;
+  margin-top: 8px;
+  border: 1px solid var(--maverick-border);
+  border-radius: 12px;
+  background: var(--maverick-dialog-surface);
+  box-shadow: 0 12px 32px #0004;
+}
+.bs-notifications__inbox article {
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--maverick-border);
+}
+.bs-notifications__inbox small,
+.bs-notifications__inbox time {
+  color: var(--maverick-text-muted);
+}
+.bs-notifications__inbox button {
+  background: var(--maverick-surface-hover);
+  border: 1px solid var(--maverick-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.bs-notifications__inbox .bs-notifications__open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.bs-notifications__announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.bs-notifications button:focus-visible {
+  outline: 2px solid var(--maverick-accent);
+  outline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .bs-notifications {
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+  }
+  .bs-notifications__inbox {
+    position: absolute;
+    bottom: 48px;
+    left: 0;
+  }
+}

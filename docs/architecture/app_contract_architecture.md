@@ -871,6 +871,33 @@ This is the correct boundary for headless app-owned orchestration. For example, 
 
 Backend recovery may invoke a declared app hook such as `backend_recovery` on enabled apps. A hosted backend may also invoke a declared `background_tick` hook periodically for active workspaces. These hooks follow the same rule: they may return generic runtime requests, but all app-specific recovery, scheduling, and orchestration decisions remain inside the app backend.
 
+### App-owned notification inboxes
+
+Apps may provide `notifications.inbox`, version `1`, with the `backend` surface
+to expose durable notifications in Base Shell while another app is active.
+The shell discovers enabled providers from its authorized app registry. It
+does not calculate calendar deadlines or read app persistence.
+
+The provider implements `notifications.list` with integer `offset` (default 0)
+and `limit` (default 50, maximum 100), returning `notifications`, `total` and
+`has_more`. Each notification has a stable `id`, `title`, optional ISO
+`scheduled_at` and IANA `timezone`, and optional `open_params` containing
+primitive app navigation parameters. The shell opens the owning app with those
+parameters. `notifications.dismiss` takes `id` and acknowledges it for the
+trusted entrypoint `user_id`; caller-supplied actor fields confer no authority.
+Receipts belong to the provider and are excluded from notification projections.
+Inbox reads and acknowledgements require no provider credentials. The shell
+explicitly requests no app secrets on these backend actions.
+
+Providers declare and publish the `notifications` data-event resource on
+arrival, retraction and dismissal. Base Shell uses the existing shared app-event
+transport, bootstrap and reconnect/resume reads; hidden/offline reads stop and
+late responses cannot cross session/workspace boundaries. Inbox state is held
+in memory and is discarded on logout or workspace change. Backend hooks keep
+collecting notifications without an open browser. Display with the whole browser
+closed requires a separate device push channel; the inbox provides delivery
+on return, not an OS push guarantee.
+
 Source runtime events include the owning streamed request ID when available. Background hooks also receive source-owned stream request/session/turn/status projections and active runtime session IDs, including
 unfinished linked orchestration. Recovery includes a bounded recent terminal
 snapshot (at most 100 turns, ten per source-owned user chat); apps apply their own

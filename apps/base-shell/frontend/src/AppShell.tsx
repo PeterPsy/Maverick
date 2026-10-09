@@ -1,5 +1,6 @@
 import { reportShellAuthorizationFailure, resetShellAuthorizationChecks } from "./shellAuthorization";
 import { useShellSessionRecovery } from "./hooks/useShellSessionRecovery";
+import { createIdempotencyKey } from "@maverick/pwa-cache";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { flushSync } from "react-dom";
@@ -62,6 +63,7 @@ import { MobileShellHeader } from "./components/MobileShellHeader";
 import { MobilePinnedAppsPanel } from "./components/MobilePinnedAppsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { AppSettingsDialog } from "./components/AppSettingsDialog";
+import { AppNotifications } from "./components/AppNotifications";
 import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
 import { ShellPendingIndicator } from "./components/ShellPendingIndicator";
 import { WorkspaceView } from "./components/WorkspaceView";
@@ -140,7 +142,7 @@ export function AppShell() {
   const frameScope = useMemo<MaverickFrameScope | null>(() => (
     authenticatedFrameScopeIdentity && authenticatedFrameWorkspaceId
       ? Object.freeze({
-          sessionGeneration: crypto.randomUUID(),
+          sessionGeneration: createIdempotencyKey("shellFrame"),
           workspaceId: authenticatedFrameWorkspaceId,
         })
       : null
@@ -951,6 +953,7 @@ export function AppShell() {
           shellTheme={shellTheme}
         />
       ) : null}
+      <AppNotifications key={frameScope.sessionGeneration} apps={apps} scope={frameScope} onOpenApp={openApp} />
       {isMobileLayout ? (
         <MobilePinnedAppsPanel
           activeAppId={activeApp?.app_id ?? activeAppId}

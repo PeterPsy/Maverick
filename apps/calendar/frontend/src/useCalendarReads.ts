@@ -134,7 +134,7 @@ export function useCalendarReads(appId: string) {
     };
     const stopEvents = connectAppEventSocket<{ type?: string; owner_app_id?: string; resource?: string }>((payload) => {
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === appId
-          && payload.resource !== CALENDAR_UI_STATE_RESOURCE) schedule(payload.resource);
+          && payload.resource !== CALENDAR_UI_STATE_RESOURCE && payload.resource !== 'notifications') schedule(payload.resource);
     }, () => schedule());
     return () => { suspend(); stopVisibility(); stopEvents(); window.removeEventListener('offline', suspend); };
   }, [appId]);

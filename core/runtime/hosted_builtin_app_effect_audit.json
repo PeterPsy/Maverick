@@ -42,12 +42,12 @@
     },
     "calendar": {
       "cli": {
-        "descriptor_sha256": "4233b2b289c9d39c3b292539824110b125964d415b882edfaf2726256d6e0ea7",
-        "execution_sha256": "00e074cf4eb05cb1b8785d6b852f9e0d0145dbff175d59c02988605c93bdbd69"
+        "descriptor_sha256": "cf8dd93bf63e21edf5028684e29a03fb4e4626bd9a874fa898a2f61362f37e6f",
+        "execution_sha256": "bb6d5aed89ebbaca351a6aa512623a598a364689af1cfce32bf4237b391b14d4"
       },
       "mcp": {
-        "descriptor_sha256": "9b093e5a8c2edd76d6795bc93af713443f876d3a8c711c984aab01114de4040b",
-        "execution_sha256": "735cdb83a6d84294bb23b5ac3e8fec31f0b89276a489a12ce6a315842ce79b20"
+        "descriptor_sha256": "b9cfad611d7d13d36586d16fe406481ddf68eef92bd1e7ad7f01a54c5107fb0b",
+        "execution_sha256": "a745225c31939c61ad971f113a17181de987c9d20bccd74dc8922ec9d24ff9da"
       }
     },
     "chat": {
@@ -221,6 +221,6 @@
       }
     }
   },
-  "audit_revision": "2026-10-09-browser-inspection-reviewed-v10",
+  "audit_revision": "2026-10-09-calendar-reminders-browser-inspection-reviewed-v11",
   "schema_version": "2"
 }

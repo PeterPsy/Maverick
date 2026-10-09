@@ -18,6 +18,14 @@
         "mcp",
         "cli"
       ]
+    },
+    {
+      "interface": "notifications.inbox",
+      "version": "1",
+      "description": "Durable local reminder notifications with per-user dismissal.",
+      "surfaces": [
+        "backend"
+      ]
     }
   ],
   "requires": [],
@@ -110,6 +118,10 @@
       {
         "resource": "calendars",
         "description": "Emitted when Google Calendar source discovery or local sync selection changes."
+      },
+      {
+        "resource": "notifications",
+        "description": "Emitted when background reminders arrive, change or are dismissed."
       }
     ],
     "view_surfaces": [
@@ -201,14 +213,16 @@
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
-      "health_check": "hooks/health_check.py"
+      "health_check": "hooks/health_check.py",
+      "background_tick": "hooks/background_tick.py"
     }
   },
   "storage": {
     "storage_kind": "json",
     "data_schema_version": "3",
     "primary_paths": [
-      "data/calendar/state.json"
+      "data/calendar/state.json",
+      "data/calendar/reminders.json"
     ],
     "indices": null,
     "supports_export": true,

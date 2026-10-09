@@ -21,7 +21,7 @@ from core.shared.tool_effects import resolve_tool_effect_class
 
 
 HOSTED_BUILTIN_APP_EFFECT_AUDIT_REVISION = (
-    "2026-10-09-browser-inspection-reviewed-v10"
+    "2026-10-09-calendar-reminders-browser-inspection-reviewed-v11"
 )
 _AUDIT_PATH = Path(__file__).with_name("hosted_builtin_app_effect_audit.json")
 _REPOSITORY_APPS_ROOT = Path(__file__).resolve().parents[2] / "apps"

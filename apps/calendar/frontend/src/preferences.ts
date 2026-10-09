@@ -150,8 +150,8 @@ const it: Record<string, string> = {
   "End date is exclusive": "La data finale è esclusiva",
   Connect: "Connetti",
   Connecting: "Connessione...",
-  "Local reminders appear while Calendar is open.":
-    "I promemoria locali compaiono mentre Calendar è aperto.",
+  "Local reminders are saved in Maverick notifications, even when Calendar is closed.":
+    "I promemoria locali vengono conservati nelle notifiche Maverick, anche con Calendar chiuso.",
   "Overlapping events": "Eventi sovrapposti",
   "Event title": "Titolo evento",
   "Event description": "Descrizione evento",

@@ -27,6 +27,35 @@ provider receipts and preserves the execution/model binding. Deploy paired Core
 and Mac builds. Stop, known screen lock, exact target/receipt validation,
 read-only verification after uncertainty and anti-replay remain enforced.
 
+### Exact pixel-only observations (v52 / 0.3.2 build 63)
+
+The Calculator acceptance failure occurred before input: its visible window had
+no matching Accessibility tree. The pinned Peekaboo 4.3.1 CLI can capture with
+`--no-elements`, but its MCP `see` schema does not expose that option. The native
+executor now recognizes only that engine's read-only AX-incomplete error and
+captures the explicitly selected window through ScreenCaptureKit. Process birth,
+PID, exact visible normal-layer window ID and unchanged bounds are validated
+before and after capture and immediately before pointer dispatch.
+
+The native `px1_` receipt admits only `mac_peekaboo.click_point`; it does not
+authorize AX controls, typing, keyboard input or scroll. One click consumes it,
+and `observe_after` can return a new same-window image without replay. Effects
+must still be verified from the image. Unknown errors and permission refusals
+remain errors. Ambiguous app-level window selection still requires a current
+inventory and an explicit `window_id`. The public schemas and v52 contract are
+unchanged, so this native-only correction does not require a backend restart.
+
+Native commits `05fde65` and `c157c1d` were built and installed by workflow
+`38089725365` on 2026-10-10 at the existing `MaverickMac.app` path. The pipeline
+passed the Swift suite, all 16 signed physical-host tests with empty failure
+diagnostics, Peekaboo catalog smoke checks, signing continuity and update tests.
+It reported the running client as 0.3.2 (63), source `c157c1d7617c`. Earlier runs
+stopped on unrelated external focus changes; the fixture/preview regression now
+audits activation of its owned processes throughout the operation rather than
+comparing two global focus samples. The post-install native bridge returned
+`device_use_session_not_connected`; physical Calculator acceptance awaits the
+chat's reconnection and is not inferred from the fixture.
+
 ## Full file and terminal authority
 
 Full activation itself authorizes Mac file and shell operations with the local

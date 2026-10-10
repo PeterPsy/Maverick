@@ -221,6 +221,18 @@ Core's native audit and Usage surfaces recorded the live operations and operator
 consumption, but these unmatched tasks do not establish a latency improvement.
 The final saved selection remains Luna `low`.
 
+The subsequent Calculator repair identified a native observation defect rather
+than an input/model failure. Peekaboo 4.3.1's CLI could capture the exact window
+with `--no-elements`, but its MCP `see` schema omitted that mode. Native 0.3.2
+(63) now supplies a capture-bound ScreenCaptureKit pixel observation for the
+specific read-only AX-incomplete failure; its `px1_` receipt permits only native
+`click_point`, with same-window observation and verification after each input.
+The public schemas and v52 contract remain unchanged. Source `c157c1d7617c`
+passed build/install run `38089725365`, including 16 signed physical-host tests.
+The app restart disconnected PC use from this chat. At that post-install
+checkpoint the physical Calculator calculations were still unverified; the
+user was asked to reconnect. This does not change the saved Luna `low` choice.
+
 Authenticated Codex evaluations used a synthetic native callback with a rendered
 calculator, newly numbered element IDs for every observation and delayed input
 effects. The fixture has no physical Mac connection. Results were:

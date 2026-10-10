@@ -71,6 +71,8 @@ fresh image evidence or a validated native companion tab inventory, which can
 verify a closed tab's absence without a screenshot of a nonexistent page.
 After an uncertain close, that inventory is also an allowed recovery read and
 settles the pending effect only when it proves the exact tab is absent.
+Absence requires `tabs_complete=true`; a truncated or malformed inventory
+cannot prove closure or certify completion.
 Unverified completion retains the operator's evidence for the planner to assess.
 
 Actor usage has an internal attribution scoped to the parent session and provider

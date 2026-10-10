@@ -125,6 +125,7 @@ class ComputerActorRecovery:
         try:
             inventory = json.loads(items[0]["text"])
             if (inventory.get("execution_environment") == "parallel_companion"
+                and inventory.get("tabs_complete") is True
                 and isinstance(inventory.get("tabs"), list)
                 and all(isinstance(tab, dict) and isinstance(tab.get("tab_id"), str)
                         and tab["tab_id"] for tab in inventory["tabs"])):

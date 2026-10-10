@@ -106,20 +106,25 @@ class ComputerActorRecoveryTests(unittest.TestCase):
         read = {"action": "list_tabs"}
         self.assertTrue(self.recovery.permits("mac_browser", read))
         self.recovery.record("mac_browser", read, self.result(
-            '{"execution_environment":"parallel_companion","tabs":[{"tab_id":"A"}]}', True))
+            '{"execution_environment":"parallel_companion","tabs_complete":true,"tabs":[{"tab_id":"A"}]}', True))
         self.assertIsNotNone(self.recovery.pending)
         self.recovery.record("mac_browser", read, self.result(
-            '{"execution_environment":"parallel_companion","tabs":[]}', True))
+            '{"execution_environment":"parallel_companion","tabs_complete":false,"tabs":[]}', True))
+        self.assertIsNotNone(self.recovery.pending)
+        self.recovery.record("mac_browser", read, self.result(
+            '{"execution_environment":"parallel_companion","tabs_complete":true,"tabs":[]}', True))
         self.assertIsNone(self.recovery.pending)
         self.assertTrue(self.recovery.completion_verified)
         self.assertFalse(self.recovery.permits("mac_browser", close))
 
     def test_invalid_inventory_or_blind_input_cannot_verify_completion(self):
         for text in ("not json", "[]", '{"execution_environment":"other","tabs":[]}',
-                     '{"execution_environment":"parallel_companion","tabs":[{}]}'):
+                     '{"execution_environment":"parallel_companion","tabs":[{}]}',
+                     '{"execution_environment":"parallel_companion","tabs":[]}',
+                     '{"execution_environment":"parallel_companion","tabs_complete":false,"tabs":[]}'):
             self.recovery.record("mac_browser", {"action": "list_tabs"}, self.result(text, True))
             self.assertFalse(self.recovery.completion_verified)
-        inventory = '{"execution_environment":"parallel_companion","tabs":[]}'
+        inventory = '{"execution_environment":"parallel_companion","tabs_complete":true,"tabs":[]}'
         self.recovery.record("mac_browser", {"action": "list_tabs"}, self.result(inventory, True))
         self.assertTrue(self.recovery.completion_verified)
         self.recovery.record("mac_browser", {"action": "click", "tab_id": "A"}, self.result(inventory, True))

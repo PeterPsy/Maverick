@@ -108,7 +108,8 @@ class CodexComputerActorTests(unittest.TestCase):
 
     def browser_invoke(self, tool, arguments, call_id):
         self.calls.append((tool, arguments, call_id))
-        text = json.dumps({"execution_environment": "parallel_companion", "tabs": [{"tab_id": "remaining"}]})
+        text = json.dumps({"execution_environment": "parallel_companion", "tabs_complete": True,
+                           "tabs": [{"tab_id": "remaining"}]})
         return DeviceUseResult("invocation", call_id, {"success": True, "contentItems": [
             {"type": "inputText", "text": text}]},
             b"fresh-browser" if arguments["action"] == "observe" else None, None, 1.0)

@@ -24,6 +24,8 @@ requires the exact platform origin, live runtime owner, unchanged current
 workspace and digest of active human login IDs.
 WebSocket verification maps `ws`/`wss` to the corresponding exact HTTP/HTTPS
 platform origin so the same bounded login covers live app and runtime streams.
+Runtime stream adapters preserve the request Host and transport scheme for that
+verification, including streams forwarded from isolated app frames.
 Human logout/password reset, login-generation changes, runtime termination or
 expiry invalidate delegation.
 Logging out the temporary browser revokes only its own app-frame sessions; it

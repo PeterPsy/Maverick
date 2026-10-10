@@ -61,6 +61,8 @@ def _websocket_environ(scope: dict[str, Any]) -> dict[str, str]:
     }
     return {
         "HTTP_COOKIE": headers.get("cookie", ""),
+        "HTTP_HOST": headers.get("host", ""),
+        "wsgi.url_scheme": str(scope.get("scheme") or "http"),
         "PATH_INFO": str(scope.get("path") or ""),
         "REQUEST_METHOD": "GET",
         "QUERY_STRING": scope.get("query_string", b"").decode("latin1"),

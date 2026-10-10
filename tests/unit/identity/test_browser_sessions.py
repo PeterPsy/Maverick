@@ -8,6 +8,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from core.api.session_api import RequestSession, handle_session_api, resolve_request_session
+from core.api.runtime_websocket import websocket_environ
+from core.api.runtime_thread_websocket import _websocket_environ as thread_websocket_environ
 from core.identity.browser_sessions import browser_session_is_current, issue_platform_browser_session, platform_browser_origin
 from core.identity.service import build_auth_session, build_user_record
 from core.identity.session_lifecycle import renew_auth_session
@@ -113,6 +115,19 @@ class BrowserSessionTests(unittest.TestCase):
             with patch("core.api.session_api._now", return_value=self.now), patch("core.api.session_api.resolve_active_workspace_for_user", return_value=self.workspace):
                 self.assertIsNotNone(resolve_request_session(state, env), scheme)
                 self.assertIsNone(resolve_request_session(state, {**env, "HTTP_HOST": "another.example"}), scheme)
+
+    def test_runtime_websocket_handlers_preserve_the_trusted_transport_origin(self):
+        state = SimpleNamespace(identity_store=self.identity, runtime_store=self.runtime_store, workspace_store=object())
+        self.identity.save_auth_session(replace(self.session, browser_origin="https://maverick.example"))
+        scope = {"scheme": "wss", "path": "/ws/runtime/threads", "headers": [
+            (b"host", b"maverick.example"), (b"cookie", f"maverick_session={self.session.session_id}".encode()),
+        ]}
+        for build in (websocket_environ, thread_websocket_environ):
+            with self.subTest(handler=build.__module__), patch("core.api.session_api._now", return_value=self.now), patch("core.api.session_api.resolve_active_workspace_for_user", return_value=self.workspace):
+                self.assertIsNotNone(resolve_request_session(state, build(scope)))
+                self.assertIsNone(resolve_request_session(state, build({**scope, "headers": [
+                    (b"host", b"another.example"), scope["headers"][1],
+                ]})))
 
 
 if __name__ == "__main__":

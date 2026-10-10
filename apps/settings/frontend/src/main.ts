@@ -4,11 +4,12 @@ import './styles/learning-tickets.css';
 import './styles/speech-settings.css';
 import { createSpeechSynthesisController } from './speechSynthesisSettings';
 import { createComputerUseController } from './computerUseSettings';
+import { loadSettingsBootstrap, requestPersistenceStatusQuiet } from './settingsBootstrap';
 import { createLearningController } from './learningController';
 import { learningPageHtml } from './learningPage';
 import { bindSettingsHostEvents, settingsHostVisible } from './settingsHostEvents';
 import { createAdminUser, deleteAdminUser, installWorkspaceApp as installWorkspaceAppBinding, resetAdminUserPassword, setWorkspaceAppEnabled, uninstallWorkspaceApp as uninstallWorkspaceAppBinding, updateAdminUser, updateAdminUserMemberships } from './adminActions';
-import { clearRuntimeSessions, getPlatformSettings, loadUsers, loadWorkspaces, loadWorkspaceApps, logout, requestJson } from './adminApi';
+import { clearRuntimeSessions, getPlatformSettings, logout, requestJson } from './adminApi';
 import type { AppDependenciesPayload, PlatformSettings, PersistenceStatus, RuntimeCleanupPayload, User, Workspace, WorkspaceApp } from './adminApi';
 import { mergeRuntimeSessionInventory, requestRuntimeSessionInventoryQuiet } from './settingsRuntimeInventory';
 import {
@@ -51,6 +52,8 @@ const initialNavigationParams = Object.fromEntries(new URLSearchParams(window.lo
 let selectedPageId: SettingsPageId = settingsPageIdFromParams(initialNavigationParams) || DEFAULT_SETTINGS_PAGE_ID;
 let selectedUserId = userIdFromNavigationParams(initialNavigationParams);
 let isLoading = true;
+let isInventoryLoading = true;
+let refreshGeneration = 0;
 let pendingDeleteUserId = '';
 let notice: SettingsNotice | null = null;
 let lastPublishedPageId = '';
@@ -202,76 +205,52 @@ function publishUserDataChanged() {
   );
 }
 
-async function requestPersistenceStatus(): Promise<PersistenceStatus | null> {
-  try {
-    return await requestJson<PersistenceStatus>('/api/admin/persistence');
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Persistence API unavailable';
-    notice = { tone: 'error', message };
-    return null;
-  }
-}
-
-async function requestPersistenceStatusQuiet(): Promise<PersistenceStatus | null> {
-  try {
-    return await requestJson<PersistenceStatus>('/api/admin/persistence');
-  } catch {
-    return null;
-  }
-}
-
-async function requestPlatformSettingsQuiet(): Promise<PlatformSettings | null> {
-  try {
-    return await getPlatformSettings();
-  } catch {
-    return null;
-  }
-}
-
 async function refresh() {
+  const generation = ++refreshGeneration;
   isLoading = true;
+  isInventoryLoading = true;
   render();
-  try {
-    const [usersPayload, workspacesPayload, workspaceAppsPayload, persistencePayload, settingsPayload] = await Promise.all([
-      loadUsers(),
-      loadWorkspaces(),
-      loadWorkspaceApps(),
-      requestPersistenceStatus(),
-      requestPlatformSettingsQuiet()
-    ]);
-    const previousWorkspaceId = platformSettings?.workspace.workspace_id || '';
-    const nextWorkspaceId = settingsPayload?.workspace.workspace_id || '';
-    users = usersPayload;
-    workspaces = workspacesPayload;
-    workspaceApps = workspaceAppsPayload;
-    persistence = persistencePayload;
-    platformSettings = settingsPayload;
-    if (previousWorkspaceId !== nextWorkspaceId) {
-      appLinksController.reset();
-      learningController.reset();
-      runtimeInventoryWorkspaceId = '';
-      providerUsageController.reset();
-      speechSynthesisController.reset();
-    }
-    syncSettingsPanelDraft(settingsPanelState, platformSettings);
-    if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
-      selectedUserId = users[0]?.user_id || '';
-    }
-  } finally {
-    isLoading = false;
-  }
-  render();
+  await loadSettingsBootstrap({
+    isCurrent: () => generation === refreshGeneration,
+    reportError: showError,
+    publishPlatform: (settingsPayload) => {
+      const previousWorkspaceId = platformSettings?.workspace.workspace_id || '';
+      const nextWorkspaceId = settingsPayload?.workspace.workspace_id || '';
+      platformSettings = settingsPayload;
+      if (previousWorkspaceId !== nextWorkspaceId) {
+        users = []; workspaces = []; workspaceApps = []; persistence = null;
+        appLinksController.reset();
+        learningController.reset();
+        runtimeInventoryWorkspaceId = '';
+        providerUsageController.reset();
+        speechSynthesisController.reset();
+      }
+      syncSettingsPanelDraft(settingsPanelState, platformSettings);
+      isLoading = false;
+      render();
+      if (selectedPageId === 'platform-settings') {
+        void ensureRuntimeInventoryLoaded();
+        void providerUsageController.ensureLoaded();
+        void speechSynthesisController.load(nextWorkspaceId, true);
+      }
+      if (selectedPageId === 'learning') void learningController.load();
+      if (selectedPageId === 'cache') void cacheDiagnosticsController.ensureLoaded();
+    },
+    publishInventory: (inventory) => {
+      isInventoryLoading = false;
+      users = inventory.users;
+      workspaces = inventory.workspaces;
+      workspaceApps = inventory.workspaceApps;
+      persistence = inventory.persistence;
+      if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
+        selectedUserId = users[0]?.user_id || '';
+      }
+      render();
+    },
+  });
+  if (generation !== refreshGeneration) return;
   if (selectedPageId === 'app-links') {
     void ensureAppLinksLoaded();
-  }
-  if (selectedPageId === 'platform-settings') {
-    void ensureRuntimeInventoryLoaded();
-    void providerUsageController.ensureLoaded();
-    void speechSynthesisController.load(platformSettings?.workspace.workspace_id || '', true);
-  }
-  if (selectedPageId === 'learning') void learningController.load();
-  if (selectedPageId === 'cache') {
-    void cacheDiagnosticsController.ensureLoaded();
   }
 }
 
@@ -477,15 +456,17 @@ function platformSettingsPageHtml() {
 
 function render() {
   const root = document.getElementById('app');
-  const user = isLoading ? undefined : selectedUser();
   const page = settingsPageById(selectedPageId);
+  const pageIsLoading = isLoading || (isInventoryLoading &&
+    ['users', 'workspace-access', 'workspace-apps', 'app-links', 'persistence'].includes(selectedPageId));
+  const user = pageIsLoading ? undefined : selectedUser();
   if (!root) return;
   unmountUsageVisualizations();
   root.innerHTML = `<main class="settings-shell">
     <section class="settings-main">
       <div class="settings-content">
         ${
-          isLoading
+          pageIsLoading
             ? settingsAppSkeletonHtml(page)
             : `<header class="detail-header">
           <div class="detail-title-block">

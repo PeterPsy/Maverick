@@ -130,7 +130,7 @@ def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
 
 
 class CodexModelMixin:
-    def model_options(self, *, refresh: bool = False) -> list[ProviderModelOption]:
+    def model_options(self, *, refresh: bool = False, require_discovery: bool = False) -> list[ProviderModelOption]:
         """Return model options currently reported by the configured Codex binary."""
         command = self._runtime_command(self.codex_command)
         cached = None if refresh else self._cached_model_options(command)
@@ -141,7 +141,7 @@ class CodexModelMixin:
             self._store_model_options_cache(command, options)
         elif refresh:
             _MODEL_OPTIONS_CACHE.pop(command, None)
-        return list(options)
+        return list(options) if cacheable or not require_discovery else []
 
 
     def _cached_model_options(self, command: str) -> list[ProviderModelOption] | None:

@@ -46,7 +46,7 @@ class SettingsAgenticAdminTest(unittest.TestCase):
         )
         build_projection_context.assert_called_once_with(
             self.state,
-            refresh_model_catalog=True,
+            reconcile_model_catalog=True,
         )
         provider_status.assert_called_once_with(
             self.state,

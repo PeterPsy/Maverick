@@ -13,6 +13,7 @@ import unittest
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.api.app_frame_scope import bind_app_frame_scope
 from core.apps.contracts import parse_app_contract_file
 from core.apps.models import WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
 from tests.support.markers import slow_test_class
@@ -341,6 +342,7 @@ function transpile(relativePath) {
 transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/html.ts');
 transpile('frontend/src/speechSynthesisSettings.ts');
+transpile('frontend/src/computerUseSettings.ts');
 transpile('frontend/src/bouncyToggle.ts');
 transpile('frontend/src/providerModelOptions.ts');
 transpile('frontend/src/providerUsageSummary.ts');
@@ -1192,7 +1194,7 @@ function makeController() {
         self.assertIn("mountUsageHistoryCharts", visualizations_source)
 
 
-@slow_test_class("slow settings app integration suite; run with scripts/test_suite.py --level slow")
+@slow_test_class("settings app integration suite; run with scripts/test_suite.py --level integration")
 class SettingsApiTestCase(unittest.TestCase):
     """Verify the core exposes app-agnostic administration APIs."""
 
@@ -1204,6 +1206,8 @@ class SettingsApiTestCase(unittest.TestCase):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         source_apps_root = Path(__file__).resolve().parents[3] / "apps"
+        source_sdk = source_apps_root.parent / "core" / "app_sdk"
+        shutil.copytree(source_sdk, repo_root / "core" / "app_sdk", ignore=shutil.ignore_patterns("__pycache__"))
         for app_id in ("base-shell", "chat", "agents", "settings"):
             source = source_apps_root / app_id
             if source.exists():
@@ -1218,6 +1222,7 @@ class SettingsApiTestCase(unittest.TestCase):
         method: str = "GET",
         body: dict | None = None,
         cookie: str | None = None,
+        isolated_app_id: str | None = None,
     ) -> tuple[int, dict, dict[str, str]]:
         payload = json.dumps(body or {}).encode("utf-8") if body is not None else b""
         headers: dict[str, str] = {}
@@ -1231,6 +1236,11 @@ class SettingsApiTestCase(unittest.TestCase):
         }
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
+            environ["HTTP_HOST"] = "settings.test"
+            environ["HTTP_ORIGIN"] = "http://settings.test"
+        if isolated_app_id:
+            environ = bind_app_frame_scope(environ, app_id=isolated_app_id,
+                mount_app_id=isolated_app_id, origin="http://settings.test")
 
         def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
             headers.update(dict(response_headers))
@@ -1245,6 +1255,7 @@ class SettingsApiTestCase(unittest.TestCase):
         *,
         path: str,
         cookie: str | None = None,
+        isolated_app_id: str | None = None,
     ) -> tuple[int, bytes, dict[str, str]]:
         headers: dict[str, str] = {}
         environ = {
@@ -1257,6 +1268,9 @@ class SettingsApiTestCase(unittest.TestCase):
         }
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
+        if isolated_app_id:
+            environ = bind_app_frame_scope(environ, app_id=isolated_app_id,
+                mount_app_id=isolated_app_id, origin="http://settings.test")
 
         def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
             headers.update(dict(response_headers))
@@ -1464,12 +1478,15 @@ class SettingsApiTestCase(unittest.TestCase):
 
         status_admin_api, forbidden, _forbidden_headers = self.invoke(app, path="/api/admin/users", cookie=member_cookie)
         status_apps, apps, _apps_headers = self.invoke(app, path="/api/apps", cookie=member_cookie)
-        status_direct, direct, _direct_headers = self.invoke(app, path="/apps/settings/", cookie=member_cookie)
+        status_unisolated, unisolated, _ = self.invoke(app, path="/apps/settings/", cookie=member_cookie)
+        status_direct, direct, _direct_headers = self.invoke(app, path="/apps/settings/", cookie=member_cookie, isolated_app_id="settings")
 
         self.assertEqual(status_admin_api, 403)
         self.assertEqual(forbidden["error"], "admin_required")
         self.assertEqual(status_apps, 200)
         self.assertNotIn("settings", {item["app_id"] for item in apps["items"]})
+        self.assertEqual(status_unisolated, 403)
+        self.assertEqual(unisolated["error"], "app_frame_isolation_required")
         self.assertEqual(status_direct, 403)
         self.assertEqual(direct["error"], "app_forbidden")
 
@@ -1519,7 +1536,7 @@ class SettingsApiTestCase(unittest.TestCase):
         restarted_state = bootstrap_platform_state(start_path=repo_root)
         restarted_app = PlatformHost(restarted_state, start_path=restarted_state.repository_root)
         status_apps, apps, _apps_headers = self.invoke(restarted_app, path="/api/apps", cookie=admin_cookie)
-        status_admin_app, admin_body, _admin_headers = self.invoke_raw(restarted_app, path="/apps/settings/", cookie=admin_cookie)
+        status_admin_app, admin_body, _admin_headers = self.invoke_raw(restarted_app, path="/apps/settings/", cookie=admin_cookie, isolated_app_id="settings")
 
         self.assertEqual(status_apps, 200)
         self.assertEqual(workspace["workspace_id"], "ceida")
@@ -1553,6 +1570,7 @@ class SettingsApiTestCase(unittest.TestCase):
             app,
             path="/apps/chat/",
             cookie=admin_cookie,
+            isolated_app_id="chat",
         )
         status_enable, enabled, _enable_headers = self.invoke(
             app,

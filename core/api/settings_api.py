@@ -43,7 +43,7 @@ def platform_settings_payload(state: PlatformState, context: RequestSession) -> 
     """Return shell-visible platform settings without secrets."""
     projection_context = provider_projection_context(
         state,
-        refresh_model_catalog=True,
+        reconcile_model_catalog=True,
     )
     provider_status = workspace_provider_status(
         state,

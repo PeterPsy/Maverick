@@ -104,10 +104,11 @@ def provider_projection_context(
     state: PlatformState,
     *,
     refresh_model_catalog: bool = False,
+    reconcile_model_catalog: bool = False,
 ) -> ProviderProjectionContext:
     """Capture one registry and provider read snapshot for a bulk projection."""
     registry = getattr(state, "provider_registry", None)
-    if registry is None or refresh_model_catalog:
+    if registry is None or refresh_model_catalog or reconcile_model_catalog:
         registry = effective_provider_registry(
             state.provider_store,
             registry=registry,

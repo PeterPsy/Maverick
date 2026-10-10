@@ -26,9 +26,9 @@ function setup(initial = selection()) {
     setSelection: (computer_use) => { settings = { ...settings, computer_use }; }, render, notify });
   render();
   return { state, controller, notify, render, getSettings: () => settings,
-    switchWorkspace: () => {
-      settings = { ...settings, workspace: { ...settings.workspace, workspace_id: 'other' },
-        computer_use: selection({ workspace_id: 'other' }) };
+    switchWorkspace: (workspace_id = 'other') => {
+      settings = { ...settings, workspace: { ...settings.workspace, workspace_id },
+        computer_use: selection({ workspace_id }) };
       syncComputerUseDraft(state, settings);
       render();
     } };
@@ -99,5 +99,40 @@ describe('PC use decision model settings', () => {
     expect(state.workspaceId).toBe('other');
     expect(state.effort).toBe('low');
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('fences old saves after returning to the same workspace (new response first: %s)', async (newFirst) => {
+    const responses: Array<(value: unknown) => void> = [];
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => responses.push(resolve))));
+    const { controller, state, switchWorkspace, getSettings, notify } = setup();
+    state.effort = 'medium';
+    const oldSave = controller.save();
+    switchWorkspace();
+    switchWorkspace('default');
+    state.modelId = 'gpt-6-sol';
+    const newSave = controller.save();
+    if (!newFirst) {
+      responses[0]({ ok: true, json: async () => selection({ reasoning_effort: 'medium' }) });
+      await oldSave;
+      expect(state.saving).toBe(true);
+      expect(state.modelId).toBe('gpt-6-sol');
+      expect(notify).not.toHaveBeenCalled();
+    }
+    responses[1]({ ok: true, json: async () => selection({ model_id: 'gpt-6-sol' }) });
+    await newSave;
+    if (newFirst) {
+      responses[0]({ ok: true, json: async () => selection({ reasoning_effort: 'medium' }) });
+      await oldSave;
+    }
+    expect(getSettings().computer_use?.model_id).toBe('gpt-6-sol');
+    expect(state.modelId).toBe('gpt-6-sol');
+    expect(state.saving).toBe(false);
+  });
+
+  it('preserves unsaved edits when unrelated runtime inventory refreshes', () => {
+    const { state, getSettings } = setup();
+    state.effort = 'medium';
+    syncComputerUseDraft(state, getSettings());
+    expect(state.effort).toBe('medium');
   });
 });

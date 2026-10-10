@@ -29,8 +29,8 @@ def computer_actor_adapter(provider_id):
 
 
 def computer_actor_model_options(adapter):
-    return [option for option in adapter.model_options()
-            if not option.input_modalities or "image" in option.input_modalities]
+    return [option for option in adapter.model_options(require_discovery=True)
+            if "image" in option.input_modalities]
 
 
 def configure_computer_actor(store, *, workspace_id, provider_id, model_id, reasoning_effort):

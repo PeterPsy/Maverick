@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -18,12 +19,13 @@ from core.providers.computer_actor_settings import (
 )
 from core.providers.errors import ProviderSelectionError
 from core.providers.models import ProviderModelOption, ProviderReasoningOption
+from core.providers.provider_codex import CodexProviderAdapter
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.shared.in_memory_collection import InMemoryCollection
 
 
 class CatalogAdapter:
-    def model_options(self):
+    def model_options(self, **_kwargs):
         return [ProviderModelOption(model, label, None, 'medium', [
             ProviderReasoningOption('low', 'Low'), ProviderReasoningOption('medium', 'Medium')],
             input_modalities=modalities) for model, label, modalities in (
@@ -74,7 +76,7 @@ class ComputerActorSettingsTests(unittest.TestCase):
 
     def test_unavailable_saved_selection_is_reported_without_silent_fallback(self):
         selected = self.configure()
-        self.adapter.model_options = lambda: []
+        self.adapter.model_options = lambda **_kwargs: []
         payload = computer_actor_settings_payload(self.store, 'workspace-a')
         self.assertEqual(payload['model_id'], selected.model_id)
         self.assertFalse(payload['available'])
@@ -88,6 +90,24 @@ class ComputerActorSettingsTests(unittest.TestCase):
         with patch('core.providers.computer_actor_factory.CodexComputerActor') as actor:
             create_computer_actor('session', 'binding', selection=selected)
             actor.assert_called_once_with('session', 'binding', selection=selected)
+
+    def test_catalog_failure_does_not_offer_or_save_a_guessed_fallback(self):
+        adapter = CodexProviderAdapter()
+        with patch('core.providers.computer_actor_settings.CodexProviderAdapter', return_value=adapter), patch.object(
+            adapter, '_runtime_command', return_value='review-catalog-unavailable'), patch(
+            'core.providers.provider_codex_models.subprocess.run',
+            side_effect=subprocess.TimeoutExpired('codex debug models', 5)):
+            payload = computer_actor_settings_payload(self.store, 'workspace-a')
+            self.assertEqual(payload['providers'][0]['models'], [])
+            self.assertFalse(payload['available'])
+            with self.assertRaises(ProviderSelectionError):
+                self.configure(model_id='gpt-6.1-sol')
+        self.assertIsNone(self.store.get_task_provider_selection(workspace_id='workspace-a', task_kind='computer_use'))
+
+    def test_unknown_image_capability_is_not_admitted(self):
+        self.adapter.model_options = lambda **_kwargs: [ProviderModelOption('unknown', 'Unknown', None, None)]
+        payload = computer_actor_settings_payload(self.store, 'workspace-a')
+        self.assertEqual(payload['providers'][0]['models'], [])
 
     def test_selection_survives_store_reconstruction_and_has_unique_control_plane_identity(self):
         with tempfile.TemporaryDirectory() as directory:

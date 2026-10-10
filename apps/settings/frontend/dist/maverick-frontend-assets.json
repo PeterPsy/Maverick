@@ -1,15 +1,15 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "fd2b9068cb1efc43535449843e6fa043b5592e9f4165da63b743b238afb2b8c0",
+  "build_id": "17aa66a4daf32aa4b9fc1c2db37f55a674f8dde4c1d7abf18321d3a2b23fe063",
   "entrypoints": [
     "index.html",
     "widgets/settings-sidebar/index.html"
   ],
   "immutable": [
     {
-      "path": "assets/app-CVihMawf.js",
-      "sha256": "f5c34685681b86c8140005699b8c7c841cd146de9dab667c63e9bf499ef4603f",
-      "size_bytes": 357406
+      "path": "assets/app-D1lNbLwF.js",
+      "sha256": "86abb605c3690f2e548723b3e0c033bb2d302b66de1dd13600f3c21cd57b1e34",
+      "size_bytes": 358118
     },
     {
       "path": "assets/app-dsnLUrRh.css",
@@ -35,7 +35,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "538473364721692618a49e2bedd66a914a407594c8071a085a673f0d0a801cfa",
+      "sha256": "060d63e906a5208964cb1654e79e927079b778de9ef3d7a57f47a319fcd61178",
       "size_bytes": 691
     },
     {

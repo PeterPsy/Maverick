@@ -8,21 +8,27 @@ export type ComputerUseDraft = {
   effort: string;
   saving: boolean;
   error: string;
+  generation: number;
+  savedSelection: string;
 };
 
 export function createComputerUseDraft(): ComputerUseDraft {
-  return { workspaceId: '', providerId: '', modelId: '', effort: '', saving: false, error: '' };
+  return { workspaceId: '', providerId: '', modelId: '', effort: '', saving: false, error: '', generation: 0, savedSelection: '' };
 }
 
-export function syncComputerUseDraft(state: ComputerUseDraft, settings: PlatformSettings | null) {
+export function syncComputerUseDraft(state: ComputerUseDraft, settings: PlatformSettings | null, replaceDraft = false) {
   const selection = settings?.computer_use;
   const workspaceId = settings?.workspace.workspace_id || '';
-  if (state.workspaceId !== workspaceId) {
+  const workspaceChanged = state.workspaceId !== workspaceId;
+  const savedSelection = JSON.stringify([selection?.provider_id, selection?.model_id, selection?.reasoning_effort]);
+  if (workspaceChanged) {
+    state.generation += 1;
     state.saving = false;
     state.error = '';
   }
+  if (!workspaceChanged && state.savedSelection === savedSelection && !replaceDraft) return;
   Object.assign(state, { workspaceId, providerId: selection?.provider_id || '',
-    modelId: selection?.model_id || '', effort: selection?.reasoning_effort || '' });
+    modelId: selection?.model_id || '', effort: selection?.reasoning_effort || '', savedSelection });
 }
 
 function selectedModel(settings: PlatformSettings | null, state: ComputerUseDraft) {
@@ -80,11 +86,16 @@ type ControllerContext = {
 
 export function createComputerUseController(context: ControllerContext) {
   const { state, getSettings, render } = context;
+  let requestVersion = 0;
   async function save() {
     const settings = getSettings();
     if (!settings?.computer_use?.can_configure || state.saving) return;
     const workspaceId = settings.workspace.workspace_id;
     if (workspaceId !== state.workspaceId) return;
+    const generation = state.generation;
+    const request = ++requestVersion;
+    const current = () => state.generation === generation && request === requestVersion
+      && getSettings()?.workspace.workspace_id === workspaceId;
     state.saving = true;
     state.error = '';
     const payload = { workspace_id: workspaceId, provider_id: state.providerId,
@@ -94,17 +105,19 @@ export function createComputerUseController(context: ControllerContext) {
       const selection = await requestJson<ComputerUseSettings>('/api/settings/computer-use', {
         method: 'POST', body: JSON.stringify(payload),
       });
-      if (getSettings()?.workspace.workspace_id !== workspaceId || selection.workspace_id !== workspaceId) return;
+      if (!current() || selection.workspace_id !== workspaceId) return;
       context.setSelection(selection);
-      syncComputerUseDraft(state, getSettings());
+      syncComputerUseDraft(state, getSettings(), true);
       context.notify('PC use decision model updated.');
     } catch (error) {
-      if (getSettings()?.workspace.workspace_id === workspaceId) {
+      if (current()) {
         state.error = error instanceof Error ? error.message : 'Unable to update the decision model.';
       }
     } finally {
-      if (state.workspaceId === workspaceId) state.saving = false;
-      render();
+      if (current()) {
+        state.saving = false;
+        render();
+      }
     }
   }
   function bind() {

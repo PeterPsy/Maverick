@@ -64,6 +64,9 @@ class IdentityStore(Protocol):
     def get_auth_session(self, session_id: str) -> AuthSessionRecord:
         ...
 
+    def list_auth_sessions_for_user(self, user_id: str) -> list[AuthSessionRecord]:
+        ...
+
     def delete_auth_sessions_for_user(self, user_id: str) -> None:
         ...
 
@@ -141,6 +144,9 @@ class IdentityDocumentStore:
         if document is None:
             raise SessionNotFoundError(f"Auth session `{session_id}` was not found.")
         return AuthSessionRecord(**document)
+
+    def list_auth_sessions_for_user(self, user_id: str) -> list[AuthSessionRecord]:
+        return [AuthSessionRecord(**document) for document in self.collections.auth_sessions.find({"user_id": user_id})]
 
     def extend_auth_session(self, session: AuthSessionRecord, *, expires_at, now) -> None:
         """Compare expiry/status and never upsert a deleted login session."""

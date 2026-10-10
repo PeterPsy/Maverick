@@ -75,6 +75,7 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         },
         "capabilities": {
             **({"backend_workspace_apps": False} if not parsed.contract.capabilities.backend_workspace_apps else {}),
+            **({"platform_browser_sessions": True} if parsed.contract.capabilities.platform_browser_sessions else {}),
             "mcp_tools": parsed.contract.capabilities.mcp_tools,
             "cli_commands": parsed.contract.capabilities.cli_commands,
             "skills": parsed.contract.capabilities.skills,

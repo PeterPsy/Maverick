@@ -279,6 +279,9 @@ class SidecarBrowserSessionStore:
     def revoke_actor(self, actor_user_id: str) -> None:
         self._revoke(lambda binding: binding.actor_user_id == actor_user_id)
 
+    def revoke_platform_session(self, platform_session_id: str) -> None:
+        self._revoke(lambda binding: binding.platform_session_id == platform_session_id)
+
     def revoke_app(self, *, workspace_id: str, app_id: str) -> None:
         self._revoke(lambda binding: binding.workspace_id == workspace_id and binding.app_id == app_id)
 

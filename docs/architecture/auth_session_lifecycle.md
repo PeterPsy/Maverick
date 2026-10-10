@@ -16,6 +16,16 @@ login; extending expiry never changes it. The raw cookie is never included in
 JSON. Isolated app-frame requests cannot renew or receive the platform cookie.
 Their existing idle/absolute leases and exact-parent relaunch flow are separate.
 
+Browser Lab delegation creates a separate four-hour session with optional
+`browser_workspace_id`, `browser_origin`, `browser_runtime_session_id` and
+`browser_login_generation` bindings. These fields are unset on ordinary human
+sessions. Delegated sessions never renew. Every platform and app-frame request
+requires the exact platform origin, live runtime owner, unchanged current
+workspace and digest of active human login IDs. Human logout/password reset,
+login-generation changes, runtime termination or expiry invalidate delegation.
+Logging out the temporary browser revokes only its own app-frame sessions; it
+preserves human cookies, device sessions and other temporary browsers.
+
 Base Shell checks the session on foreground, connectivity restoration,
 `pageshow`, the native `maverick.session-changed` hint, and every five minutes
 while visible and online. Only a server response grants authorization.

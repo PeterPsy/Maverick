@@ -668,6 +668,19 @@ compatibility. An app that does not consume the backend payload's
 receive an empty list. This is an app-owned contract choice, never a caller
 request hint. It does not change app visibility, dependencies or authorization.
 
+`capabilities.platform_browser_sessions` is an optional boolean, default false.
+An opted-in app can declare `platform_browser_session: true` on an MCP tool's
+execution descriptor. Core then delivers a private `platform_browser_session`
+entrypoint field for an authenticated runtime owner and current workspace. It
+contains a distinct, nonrenewable four-hour platform cookie, exact platform origin,
+generated app-frame host suffix, expiry and user/workspace binding. The field is
+never a tool argument or result. The app must retain it only in the temporary
+browser context and release its login on context close. Core rechecks the live
+human login generation, runtime owner and selected workspace on platform and
+app-frame requests. A failed tool invocation revokes the issued login. Neither
+this capability nor the descriptor grants administrator authority or general
+development-port access.
+
 
 The recommended mental model is:
 
@@ -2984,6 +2997,9 @@ The descriptor files must stay app-owned and declarative:
 
 - CLI descriptors use a top-level `commands` object keyed by declared command name, with optional `description`, `argument_schema`, `required_secrets`, `secret_selectors`, execution timeout/retry metadata, and effect metadata.
 - MCP descriptors use a top-level `tools` object keyed by declared tool name, with optional `description`, `input_schema`, `output_schema`, `required_secrets`, `secret_selectors`, retry metadata, and effect metadata.
+- MCP descriptors may opt into the declared platform browser capability with the
+  boolean `platform_browser_session`; callers cannot supply a cookie or override
+  its actor, workspace or origin.
 - Executable app surfaces declare a conservative `effect_class` of `read`,
   `mutating`, or `destructive`. A mixed surface may additionally declare
   `effect_class_by_argument` with one top-level `argument_name`, an explicit

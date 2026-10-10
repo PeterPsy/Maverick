@@ -7,6 +7,7 @@ function requirePositiveDuration(value, field) {
 
 
 function clearSessionReferences(session) {
+  session.beforeClose = null;
   session.pages?.clear?.();
   session.activePage = null;
   if (Array.isArray(session.console)) {
@@ -119,9 +120,14 @@ export class SessionLifecycle {
       return false;
     }
     this.sessions.delete(session.id);
-    this.revokeProxy(session.proxyPassword);
     session.closedAtMs = this.now();
     session.closeReason = reason;
+    try {
+      await session.beforeClose?.();
+    } catch {
+      // Authentication cleanup must not prevent context destruction.
+    }
+    this.revokeProxy(session.proxyPassword);
     try {
       await session.context.close();
     } catch (error) {

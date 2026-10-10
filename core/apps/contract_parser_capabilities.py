@@ -38,6 +38,7 @@ def parse_capabilities_section(payload: dict[str, object]) -> AppCapabilities:
         view_surfaces=view_surfaces,
         reference_entities=reference_entities,
         backend_workspace_apps=_expect_bool(payload, "backend_workspace_apps", default=True),
+        platform_browser_sessions=_expect_bool(payload, "platform_browser_sessions", default=False),
     )
 
 
@@ -54,6 +55,7 @@ def _parse_reference_entities(payload: dict[str, object]) -> list[AppReferenceEn
             "view_surfaces",
             "reference_entities",
             "backend_workspace_apps",
+            "platform_browser_sessions",
         },
         label="capabilities",
     )

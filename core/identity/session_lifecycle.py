@@ -12,6 +12,8 @@ SESSION_RENEWAL_INTERVAL = timedelta(days=1)
 
 def renew_auth_session(store: IdentityStore, session: AuthSessionRecord, *, now: datetime) -> AuthSessionRecord:
     """Extend a live session conditionally; revocation and deletion always win."""
+    if any((session.browser_origin, session.browser_workspace_id, session.browser_runtime_session_id, session.browser_login_generation)):
+        return store.get_auth_session(session.session_id)
     if session.status != "active" or session.expires_at <= now:
         return session
     expiry = min(now + timedelta(days=SESSION_IDLE_DAYS), session.created_at + timedelta(days=SESSION_ABSOLUTE_DAYS))

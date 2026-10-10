@@ -84,6 +84,7 @@ def build_core_mcp_registry(
             try:
                 app_definitions = _workspace_app_tool_definitions(
                     app_store,
+                    identity_store=identity_store,
                     workspace_id=workspace_id,
                     bindings=[binding],
                     only_tool_name=only_tool_name,

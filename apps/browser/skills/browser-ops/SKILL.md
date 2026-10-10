@@ -16,9 +16,8 @@ rendered text and media metadata, bounded scrolling, video frames, tab state,
 or controlled Maverick development UI inspection.
 
 Do not use Browser for ordinary web search, product research, or facts that can
-be answered through a normal search surface. Browser is a full-access-only
-utility and must be invoked only through official Maverick app CLI or MCP
-surfaces.
+be answered through a normal search surface. Invoke Browser only through official
+Maverick app CLI or MCP surfaces.
 
 ## Discovery
 
@@ -31,10 +30,29 @@ maverick app browser mcp list --json
 maverick app browser mcp inspect browser_session_create --json
 ```
 
-The Browser command and tools report `requires_full_access: true` and
-`sandbox_agent_allowed: false`. Do not try to invoke Browser from a sandbox
-runtime. Leave this restriction in place unless a later policy review creates a
-separate read-only sandbox mode.
+The Browser command and tools report `requires_full_access: false` and
+`sandbox_agent_allowed: true`. Public reading and the invoking user's Maverick
+workspace are available to sandbox and full-access agents. Arbitrary development
+ports and Lab lifecycle changes still require a full-access administrator.
+
+## Temporary Maverick access
+
+For Maverick UI work, call `browser_session_create` with
+`mode: "maverick_dev_inspector"`. Core automatically gives the temporary context
+a separate, bounded login for the human user who owns the runtime. Navigate to
+the result's `platform_origin` plus the app path, such as `/app/chat`. No manual
+browser login or activation is needed. The exact origin and generated isolated
+app frames are permitted; a sandbox runtime does not gain other local targets.
+
+The cookie stays private to Core and the broker, is HttpOnly, expires within four
+hours, and is never returned by tools or stored in a browser profile. Session
+close, expiry, user logout, workspace changes and runtime termination invalidate
+the delegated access. Other agents of the same user and workspace can operate
+the context; other actors cannot. Close sessions after inspection.
+
+Use the MCP tools, including `maverick app browser mcp call`, for authenticated
+Maverick inspection. The standalone CLI development smoke remains an anonymous
+development-target smoke.
 
 ## CLI
 
@@ -140,7 +158,8 @@ mutating MCP effects; they do not authorize forms or account actions.
 Read results cover the currently rendered document. Link and media URL queries
 are redacted; returned media URLs are not signed download handles. A bottom-of-page
 result does not establish complete feed coverage. If a site requires login,
-use the user-shared Chrome flow above. The isolated Lab does not hold user login state.
+use the user-shared Chrome flow above. External sites do not inherit the temporary
+Maverick login.
 
 ## Lab Boundaries
 

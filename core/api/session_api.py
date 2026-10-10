@@ -11,6 +11,7 @@ from core.api.http import StartResponse, json_response, read_json_body, request_
 from core.api.platform_state import PlatformState
 from core.identity.errors import SessionNotFoundError, UserNotFoundError
 from core.identity.models import AuthSessionRecord, UserRecord
+from core.identity.browser_sessions import browser_session_is_current, is_browser_session
 from core.identity.session_lifecycle import SESSION_ABSOLUTE_DAYS, renew_auth_session
 from core.identity.service import (
     authenticate_password,
@@ -66,6 +67,16 @@ def resolve_request_session(state: PlatformState, environ: dict) -> RequestSessi
     now = _now()
     if session.status != "active" or session.expires_at <= now or session.created_at + timedelta(days=SESSION_ABSOLUTE_DAYS) <= now:
         return None
+    if is_browser_session(session):
+        from core.api.app_frame_launch import request_platform_origin
+        from core.apps.errors import AppHostingError
+        try:
+            origin = request_platform_origin(environ)
+        except AppHostingError:
+            return None
+        if not browser_session_is_current(state.identity_store, state.workspace_store, state.runtime_store,
+                session, origin=origin, now=now):
+            return None
     try:
         user = state.identity_store.get_user(session.user_id)
     except UserNotFoundError:
@@ -119,7 +130,7 @@ def handle_session_api(state: PlatformState, environ: dict, start_response: Star
     method = environ.get("REQUEST_METHOD", "GET").upper()
     if path == "/api/session" and method == "GET":
         context = resolve_request_session(state, environ)
-        if context is not None and not environ.get("maverick.app_frame_proxy"):
+        if context is not None and not is_browser_session(context.session) and not environ.get("maverick.app_frame_proxy"):
             try:
                 renewed = renew_auth_session(state.identity_store, context.session, now=_now())
                 context = replace(context, session=renewed) if renewed.status == "active" and renewed.expires_at > _now() else None
@@ -156,8 +167,11 @@ def handle_session_api(state: PlatformState, environ: dict, start_response: Star
     if path == "/api/auth/logout" and method == "POST":
         context = resolve_request_session(state, environ)
         if context is not None:
-            state.sidecar_browser_sessions.revoke_actor(context.user.user_id)
-            state.device_use_service.stop_auth_session(context.session.session_id)
+            if is_browser_session(context.session):
+                state.sidecar_browser_sessions.revoke_platform_session(context.session.session_id)
+            else:
+                state.sidecar_browser_sessions.revoke_actor(context.user.user_id)
+                state.device_use_service.stop_auth_session(context.session.session_id)
             revoke_auth_session(state.identity_store, session=context.session)
         return json_response(start_response, {"authenticated": False}, headers=[clear_session_cookie_header(secure=_request_is_https(environ))])
     return None

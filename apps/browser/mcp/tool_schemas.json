@@ -37,8 +37,9 @@
       }
     },
     "browser_session_create": {
+      "platform_browser_session": true,
       "effect_class": "mutating",
-      "description": "Create an isolated Browser Lab session through the Playwright broker.",
+      "description": "Create a temporary Browser Lab session. Core automatically authenticates Maverick for the invoking user's current workspace. Use maverick_dev_inspector for Maverick UI; the result's platform_origin is the authenticated entry point. Public research uses read_only.",
       "input_schema": {
         "type": "object",
         "properties": {

@@ -63,6 +63,7 @@
     }
   },
   "capabilities": {
+    "platform_browser_sessions": true,
     "mcp_tools": [
       "web_search",
       "web_open",
@@ -138,7 +139,7 @@
   },
   "compatibility": {
     "workspace_modes": [
-      "full-access"
+      "sandbox"
     ]
   },
   "hook_timeouts": {

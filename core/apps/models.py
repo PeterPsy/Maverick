@@ -75,6 +75,7 @@ class AppCapabilities:
     view_surfaces: list["AppViewSurfaceDeclaration"]
     reference_entities: list["AppReferenceEntityDeclaration"]
     backend_workspace_apps: bool = True
+    platform_browser_sessions: bool = False
 
 
 @dataclass(frozen=True)

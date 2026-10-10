@@ -13,6 +13,7 @@ from core.apps.surface_descriptors import (
     AppSurfaceSecretSelector,
     app_cli_command_execution_metadata,
     app_mcp_tool_metadata,
+    app_mcp_tool_execution_metadata,
     app_secret_requests_for_arguments,
 )
 
@@ -100,10 +101,20 @@ class SurfaceDescriptorSecretSelectorTest(unittest.TestCase):
             self.assertEqual(app_cli_command_execution_metadata(root, "dev").timeout_seconds, 600)
 
             descriptor.write_text(
-                json.dumps({"commands": {"dev": {"timeout_seconds": 901}}}),
+                json.dumps({"commands": {"dev": {"timeout_seconds": 1000}}}),
                 encoding="utf-8",
             )
             self.assertIsNone(app_cli_command_execution_metadata(root, "dev").timeout_seconds)
+
+    def test_platform_browser_delegation_requires_boolean_mcp_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "mcp").mkdir()
+            descriptor = root / "mcp/tool_schemas.json"
+            descriptor.write_text(json.dumps({"tools": {"create": {"platform_browser_session": True}}}))
+            self.assertTrue(app_mcp_tool_execution_metadata(root, "create").platform_browser_session)
+            descriptor.write_text(json.dumps({"tools": {"create": {"platform_browser_session": "invalid"}}}))
+            self.assertFalse(app_mcp_tool_execution_metadata(root, "create").platform_browser_session)
 
     def test_lookup_does_not_scope_non_resource_selector(self) -> None:
         selector = AppSurfaceSecretSelector(

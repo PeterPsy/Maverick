@@ -28,6 +28,7 @@ status_code, result = mcp_result_for_tool(
     surface=payload.raw.get("surface"),
     runtime_session_id=payload.runtime_session_id,
     dependencies=payload.raw.get("app_dependencies"),
+    platform_browser_session=payload.raw.get("platform_browser_session"),
 )
 result.update({"app_id": local_app_id, "workspace_id": payload.workspace_id, "tool_name": tool_name, "status_code": status_code})
 if status_code < 400:

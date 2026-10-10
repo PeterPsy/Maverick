@@ -49,7 +49,8 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(parsed.contract.presentation.frontend_role, "workspace")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertTrue(app_frontend_is_launchable(parsed.contract))
-        self.assertEqual(parsed.contract.compatibility.supported_workspace_modes, ["full-access"])
+        self.assertEqual(parsed.contract.compatibility.supported_workspace_modes, ["sandbox"])
+        self.assertTrue(parsed.contract.capabilities.platform_browser_sessions)
         self.assertEqual(parsed.contract.storage.primary_paths, ["data/browser/state.json", "data/browser/companion.sqlite3"])
         self.assertEqual(parsed.contract.capabilities.views, ["main"])
         self.assertEqual(parsed.contract.capabilities.skills, ["browser-ops"])
@@ -65,7 +66,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertTrue(skill.exists())
         skill_text = skill.read_text(encoding="utf-8")
         broker_text = (APP_ROOT / "broker" / "playwright-broker.mjs").read_text(encoding="utf-8")
-        self.assertIn("sandbox_agent_allowed: false", skill_text)
+        self.assertIn("sandbox_agent_allowed: true", skill_text)
         self.assertIn("browser_session_create", skill_text)
         self.assertIn("The broker serializes actions per `session_id`", skill_text)
         self.assertIn("const sessionLifecycle = new SessionLifecycle", broker_text)
@@ -77,6 +78,42 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(package["scripts"]["broker"], "node broker/playwright-broker.mjs")
         self.assertEqual(package["scripts"]["broker:docker"], "node broker/playwright-server-docker.mjs")
         self.assertEqual(package["scripts"]["broker:local"], "node broker/playwright-server-local.mjs")
+
+    def test_authenticated_sandbox_session_is_private_actor_scoped_and_bounded_to_platform(self):
+        grant = {"origin": "http://maverick.localhost:8014", "frame_host_suffix": ".sidecars.maverick.localhost",
+                 "cookie_name": "maverick_session", "cookie_value": "private-cookie", "user_id": "user:one", "workspace_id": "default"}
+        metadata = {"session_id": "owned-session", "user_id": "user:one", "platform_origin": grant["origin"],
+                    "frame_host_suffix": grant["frame_host_suffix"], "admin_dev_targets_enabled": False}
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            calls = []
+            def broker(action, payload):
+                calls.append((action, payload))
+                return SimpleNamespace(status_code=200, payload=dict(metadata if action == "session.create" else {"session_id": "owned-session"}))
+            with patch("service.call_broker_action", side_effect=broker):
+                status, created = mcp_result_for_tool(root, "browser_session_create", {"mode": "maverick_dev_inspector"},
+                    user_id="user:one", workspace_id="default", effective_mode="sandbox", workspace_role="admin", platform_browser_session=grant)
+                self.assertEqual(status, 200)
+                self.assertEqual(calls[0][1]["platform_browser_session"], grant)
+                self.assertFalse(calls[0][1]["policy_context"]["allow_admin_dev_targets"])
+                self.assertNotIn("private-cookie", json.dumps(created))
+                state = load_state(str(root))
+                self.assertNotIn("private-cookie", json.dumps(state))
+                options = {"user_id": "user:one", "workspace_id": "default", "effective_mode": "sandbox", "workspace_role": "admin"}
+                status, _ = handle_action(root, {"action": "navigate", "session_id": "owned-session", "url": grant["origin"] + "/app/chat"}, **options)
+                self.assertEqual(status, 200)
+                status, _ = handle_action(root, {"action": "click", "session_id": "owned-session", "ref": "1", "target_url": grant["origin"], "mode": "maverick_dev_inspector"}, **options)
+                self.assertEqual(status, 200)
+                for user_id, url in (("user:two", grant["origin"]), ("user:one", "http://hostmachine:8014")):
+                    status, _ = handle_action(root, {"action": "navigate", "session_id": "owned-session", "url": url}, **{**options, "user_id": user_id})
+                    self.assertEqual(status, 403)
+                status, view = handle_action(root, {"action": "status"}, **{**options, "user_id": "user:two"})
+                self.assertEqual(view["sessions"], [])
+                status, view = handle_action(root, {"action": "status"}, **options)
+                self.assertEqual(len(view["sessions"]), 1)
+                status, _ = handle_action(root, {"action": "session.create", "platform_browser_session": grant}, **options)
+                self.assertEqual(status, 400)
+                self.assertEqual([action for action, _ in calls], ["session.create", "navigate", "click"])
 
     def test_mcp_descriptor_matches_p0_tool_scope(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)

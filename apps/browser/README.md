@@ -74,8 +74,20 @@ sessions are not durable workspace references.
 
 ### Boundaries and persistence
 
-The sealed installation-level app is full-access only. Sandbox agents remain
-excluded. Shared-tab navigation accepts only reviewed HTTPS hosts, platform routes and
+`browser_session_create` automatically authenticates a temporary Maverick
+context for the invoking runtime's human owner. Use `maverick_dev_inspector` and
+navigate to the returned `platform_origin` plus `/app/<app-id>`. No user login
+activation is required. The separate HttpOnly cookie expires within four hours,
+cannot renew, never appears in tool results, and is discarded on close. Core
+invalidates it when the user logs out, changes workspace or ends the runtime.
+Sessions are bound to the user/workspace, so that user's other agents can operate
+them. External websites use the separate Companion sharing flow. Standalone CLI
+development smoke remains an anonymous development-target check.
+
+The sealed installation-level app supports sandbox and full-access agents.
+Temporary Maverick access uses the invoking runtime's user and current workspace;
+full-access administrator authority is still required for arbitrary development
+targets and Lab lifecycle changes. Shared-tab navigation accepts only reviewed HTTPS hosts, platform routes and
 source query keys declared in `companion/platforms.json`. Python and Chrome use
 matching policies. Login, messages, settings, challenge routes, credentials,
 arbitrary selectors and script execution are rejected. The user

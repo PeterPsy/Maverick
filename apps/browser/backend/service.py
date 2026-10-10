@@ -16,6 +16,7 @@ from core.egress import (
     evaluate_browser_egress_url,
     resolve_browser_egress_url_addresses,
 )
+from core.egress.platform_browser import is_platform_browser_target
 
 from broker_client import broker_health, call_broker_action
 from companion_service import handle as handle_companion, handles as handles_companion
@@ -65,7 +66,7 @@ FORBIDDEN_PROFILE_FIELDS = frozenset(
     }
 )
 FORBIDDEN_TRUSTED_FIELDS = frozenset(
-    {"allow_admin_dev_targets", "caller_context", "policy_context", "resolved_addresses"}
+    {"allow_admin_dev_targets", "caller_context", "policy_context", "resolved_addresses", "platform_browser_session"}
 )
 FORBIDDEN_ARTIFACT_FIELDS = frozenset(
     {
@@ -123,9 +124,10 @@ def handle_action(
     surface: str | None = None,
     runtime_session_id: str | None = None,
     dependencies: dict | None = None,
+    platform_browser_session: dict | None = None,
 ) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "status").strip()
-    admin_dev_targets_enabled = is_admin_authority(platform_role=platform_role, workspace_role=workspace_role)
+    admin_dev_targets_enabled = effective_mode != "sandbox" and is_admin_authority(platform_role=platform_role, workspace_role=workspace_role)
     try:
         if action == "reference.manifest":
             return 200, {"app_id": app_id, "entity_types": []}
@@ -151,6 +153,7 @@ def handle_action(
                 app_id=app_id,
                 workspace_id=workspace_id,
                 admin_dev_targets_enabled=admin_dev_targets_enabled,
+                user_id=user_id,
             )
             if action == "operations.manifest":
                 result["operations"] = operations_manifest()
@@ -160,7 +163,7 @@ def handle_action(
             return 200, {"policy": policy}
         if action == "audit.list":
             state = load_state(str(data_root))
-            audit = visible_audit_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled)
+            audit = visible_audit_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled, user_id=user_id)
             return 200, {"audit": audit, "limit": len(audit)}
         if action in RESEARCH_ACTIONS:
             status_code, result = research_web_result(
@@ -180,6 +183,7 @@ def handle_action(
                 status="ok" if status_code < 400 else "failed",
                 reason=result.get("error"),
                 mode="read_only",
+                user_id=user_id,
             )
             return status_code, result
         if action in AUDITED_ACTIONS:
@@ -189,6 +193,8 @@ def handle_action(
                 body,
                 workspace_id=workspace_id,
                 admin_dev_targets_enabled=admin_dev_targets_enabled,
+                user_id=user_id,
+                platform_browser_session=platform_browser_session,
             )
             audit_browser_action(
                 data_root,
@@ -197,17 +203,18 @@ def handle_action(
                 status="ok" if status_code < 400 else "failed",
                 reason=result.get("error"),
                 mode=str(result.get("mode") or ""),
+                user_id=user_id,
             )
             return status_code, result
     except BrowserValidationError as error:
         if action in ACTION_EVENTS:
-            audit_browser_action(data_root, action, body, status="invalid", reason="validation_error")
+            audit_browser_action(data_root, action, body, status="invalid", reason="validation_error", user_id=user_id)
         return 400, {"error": "validation_error", "detail": str(error), "field": error.field}
     except BrowserPolicyError as error:
-        audit_browser_action(data_root, action, body, status="denied", reason=error.decision.get("reason"))
+        audit_browser_action(data_root, action, body, status="denied", reason=error.decision.get("reason"), user_id=user_id)
         return 403, {"error": "policy_denied", "detail": str(error), "policy": error.decision}
     except BrowserBrokerUnavailableError as error:
-        audit_browser_action(data_root, action, body, status="blocked", reason="broker_unavailable")
+        audit_browser_action(data_root, action, body, status="blocked", reason="broker_unavailable", user_id=user_id)
         return 503, {"error": "broker_unavailable", "detail": str(error), "action": action}
     return 400, {"error": "unsupported_action", "detail": f"Unsupported Browser action: {action}.", "action": action}
 
@@ -226,6 +233,7 @@ def mcp_result_for_tool(
     surface: str | None = None,
     runtime_session_id: str | None = None,
     dependencies: dict | None = None,
+    platform_browser_session: dict | None = None,
 ) -> tuple[int, dict[str, Any]]:
     action = MCP_TOOL_ACTIONS.get(tool_name)
     if action is None:
@@ -252,6 +260,7 @@ def mcp_result_for_tool(
         surface=surface,
         runtime_session_id=runtime_session_id,
         dependencies=dependencies,
+        platform_browser_session=platform_browser_session,
     )
 
 
@@ -369,6 +378,7 @@ def status_payload(
     app_id: str,
     workspace_id: str | None,
     admin_dev_targets_enabled: bool,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     state = load_state(str(data_root))
     broker = dict(state["broker"])
@@ -376,8 +386,8 @@ def status_payload(
     broker.update(live_health)
     if "detail" not in live_health and broker.get("status") == "ready":
         broker.pop("detail", None)
-    sessions = visible_session_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled)
-    audit = visible_audit_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled)
+    sessions = visible_session_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled, user_id=user_id)
+    audit = visible_audit_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled, user_id=user_id)
     return {
         "app_id": app_id,
         "workspace_id": workspace_id,
@@ -400,26 +410,28 @@ def status_payload(
             "bounded_scroll": True,
             "video_frames": True,
             "audio_transcription": "local_only_via_speech",
-            "authenticated_browser": "user_shared_chrome",
+            "authenticated_browser": "temporary_maverick_and_user_shared_chrome",
         },
     }
 
 
-def visible_session_records(state: dict[str, Any], *, admin_dev_targets_enabled: bool) -> list[dict[str, Any]]:
+def visible_session_records(state: dict[str, Any], *, admin_dev_targets_enabled: bool, user_id: str | None = None) -> list[dict[str, Any]]:
     sessions = state.get("sessions")
     if not isinstance(sessions, dict):
         return []
-    records = [record for record in sessions.values() if isinstance(record, dict)]
+    records = [record for record in sessions.values() if isinstance(record, dict)
+               and (not record.get("user_id") or record["user_id"] == user_id)]
     if admin_dev_targets_enabled:
         return records
-    return [record for record in records if record.get("mode") != "maverick_dev_inspector"]
+    return [record for record in records if record.get("mode") != "maverick_dev_inspector" or record.get("platform_origin")]
 
 
-def visible_audit_records(state: dict[str, Any], *, admin_dev_targets_enabled: bool) -> list[dict[str, Any]]:
+def visible_audit_records(state: dict[str, Any], *, admin_dev_targets_enabled: bool, user_id: str | None = None) -> list[dict[str, Any]]:
     audit = state.get("audit")
     if not isinstance(audit, list):
         return []
-    records = [record for record in audit if isinstance(record, dict)]
+    records = [record for record in audit if isinstance(record, dict)
+               and (not record.get("user_id") or record["user_id"] == user_id)]
     if admin_dev_targets_enabled:
         return records
     dev_session_ids = {
@@ -430,7 +442,8 @@ def visible_audit_records(state: dict[str, Any], *, admin_dev_targets_enabled: b
     return [
         record
         for record in records
-        if record.get("mode") != "maverick_dev_inspector" and str(record.get("session_id") or "") not in dev_session_ids
+        if (record.get("user_id") and record["user_id"] == user_id) or
+           (record.get("mode") != "maverick_dev_inspector" and str(record.get("session_id") or "") not in dev_session_ids)
     ]
 
 
@@ -891,18 +904,24 @@ def broker_action_result(
     *,
     workspace_id: str | None,
     admin_dev_targets_enabled: bool,
+    user_id: str | None = None,
+    platform_browser_session: dict | None = None,
 ) -> tuple[int, dict[str, Any]]:
     validate_broker_action(action, body)
-    session = require_authorized_session(data_root, action, body, admin_dev_targets_enabled=admin_dev_targets_enabled)
+    session = require_authorized_session(data_root, action, body, admin_dev_targets_enabled=admin_dev_targets_enabled, user_id=user_id)
     mode = session["mode"] if session is not None else str(body.get("mode") or "read_only")
-    if mode == "maverick_dev_inspector" and not admin_dev_targets_enabled:
+    platform = session or platform_browser_session or {}
+    platform_origin = platform.get("platform_origin") or platform.get("origin")
+    frame_host_suffix = platform.get("frame_host_suffix")
+    if mode == "maverick_dev_inspector" and not admin_dev_targets_enabled and not platform_origin:
         raise BrowserPolicyError(
             "Maverick dev inspector sessions require admin authority.",
             decision={"allowed": False, "reason": "blocked_admin_dev_target_not_enabled"},
         )
     allow_admin_dev_targets = mode == "maverick_dev_inspector" and admin_dev_targets_enabled
     if action == "navigate":
-        preflight = preflight_payload({**body, "mode": mode}, admin_dev_targets_enabled=admin_dev_targets_enabled)
+        preflight = preflight_payload({**body, "mode": mode}, admin_dev_targets_enabled=admin_dev_targets_enabled,
+                                      platform_origin=platform_origin, frame_host_suffix=frame_host_suffix)
         if not preflight["allowed"]:
             raise BrowserPolicyError("Navigation target was denied by Browser egress policy.", decision=preflight)
     if action in DEV_INSPECTOR_ACTIONS:
@@ -917,6 +936,8 @@ def broker_action_result(
             mode=mode,
             allow_admin_dev_targets=allow_admin_dev_targets,
             admin_dev_targets_enabled=admin_dev_targets_enabled,
+            user_id=user_id,
+            platform_browser_session=platform_browser_session,
         ),
     )
     payload = response.payload
@@ -984,6 +1005,8 @@ def broker_payload(
     mode: str,
     allow_admin_dev_targets: bool,
     admin_dev_targets_enabled: bool,
+    user_id: str | None = None,
+    platform_browser_session: dict | None = None,
 ) -> dict[str, Any]:
     payload = {key: value for key, value in body.items() if key != "policy_context"}
     payload.pop("action", None)
@@ -992,10 +1015,17 @@ def broker_payload(
         payload["workspace_id"] = workspace_id
     payload["policy_context"] = {"allow_admin_dev_targets": allow_admin_dev_targets}
     payload["caller_context"] = {"admin_dev_targets_enabled": admin_dev_targets_enabled}
+    if user_id:
+        payload["caller_context"]["user_id"] = user_id
+    if workspace_id:
+        payload["caller_context"]["workspace_id"] = workspace_id
+    if platform_browser_session:
+        payload["platform_browser_session"] = platform_browser_session
     return payload
 
 
-def preflight_payload(body: dict[str, Any], *, admin_dev_targets_enabled: bool = False) -> dict[str, Any]:
+def preflight_payload(body: dict[str, Any], *, admin_dev_targets_enabled: bool = False,
+                      platform_origin: str | None = None, frame_host_suffix: str | None = None) -> dict[str, Any]:
     url = require_string(body, "url")
     mode = str(body.get("mode") or "read_only")
     if mode not in {"read_only", "maverick_dev_inspector"}:
@@ -1011,6 +1041,8 @@ def preflight_payload(body: dict[str, Any], *, admin_dev_targets_enabled: bool =
             field="allow_admin_dev_targets",
         )
     allow_admin_dev_targets = mode == "maverick_dev_inspector" and admin_dev_targets_enabled
+    if is_platform_browser_target(url, platform_origin, frame_host_suffix):
+        return {"allowed": True, "reason": "allowed_platform_browser_target", "url": redact_url(url), "redacted_url": redact_url(url)}
     resolved_addresses = resolve_browser_egress_url_addresses(url)
     decision = evaluate_browser_egress_url(
         url,
@@ -1100,6 +1132,7 @@ def require_authorized_session(
     body: dict[str, Any],
     *,
     admin_dev_targets_enabled: bool,
+    user_id: str | None = None,
 ) -> dict[str, Any] | None:
     if action not in SESSION_ACTIONS:
         return None
@@ -1108,10 +1141,13 @@ def require_authorized_session(
     session = state["sessions"].get(session_id)
     if not isinstance(session, dict):
         raise BrowserValidationError(f"Unknown Browser session: {session_id}.", field="session_id")
+    if session.get("user_id") and session["user_id"] != user_id:
+        raise BrowserPolicyError("Browser session belongs to another user.",
+                                 decision={"allowed": False, "reason": "blocked_browser_session_owner"})
     requested_mode = body.get("mode")
     if isinstance(requested_mode, str) and requested_mode.strip() and requested_mode.strip() != session["mode"]:
         raise BrowserValidationError("mode must match the Browser session mode.", field="mode")
-    if session["mode"] == "maverick_dev_inspector" and not admin_dev_targets_enabled:
+    if session["mode"] == "maverick_dev_inspector" and not admin_dev_targets_enabled and session.get("admin_dev_targets_enabled", not session.get("platform_origin")):
         raise BrowserPolicyError(
             "Maverick dev inspector session access requires admin authority.",
             decision={"allowed": False, "reason": "blocked_admin_dev_session_not_authorized"},
@@ -1139,8 +1175,9 @@ def validate_dev_inspector_action(
     decision = preflight_payload(
         {"url": target_url, "mode": "maverick_dev_inspector"},
         admin_dev_targets_enabled=admin_dev_targets_enabled,
+        platform_origin=session.get("platform_origin"), frame_host_suffix=session.get("frame_host_suffix"),
     )
-    if not decision["allowed"] or decision["reason"] != "allowed_admin_dev_target":
+    if not decision["allowed"] or decision["reason"] not in {"allowed_admin_dev_target", "allowed_platform_browser_target"}:
         raise BrowserPolicyError("Interactive browser action target is not an admin-enabled Maverick dev URL.", decision=decision)
 
 
@@ -1183,6 +1220,9 @@ def state_updates_for_action(
     if workspace_id:
         updates["workspace_id"] = workspace_id
     if action == "session.create":
+        for field in ("user_id", "platform_origin", "frame_host_suffix", "admin_dev_targets_enabled"):
+            if field in payload:
+                updates[field] = payload[field]
         updates.update(
             {
                 "created_at": timestamp,
@@ -1286,6 +1326,7 @@ def audit_browser_action(
     status: str,
     reason: str | None = None,
     mode: str | None = None,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     session_id = str(body.get("session_id") or "")[:120]
     audit_mode = mode or str(body.get("mode") or "")
@@ -1294,6 +1335,7 @@ def audit_browser_action(
         if isinstance(session, dict):
             audit_mode = str(session.get("mode") or "")
     record = {
+        "user_id": user_id,
         "action": action,
         "status": status,
         "reason": reason,

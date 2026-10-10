@@ -48,3 +48,7 @@ class AuthSessionRecord:
     last_seen_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    browser_workspace_id: str | None = None
+    browser_origin: str | None = None
+    browser_runtime_session_id: str | None = None
+    browser_login_generation: str | None = None

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { snapshotReferenceSelector } from "./snapshot-reference.mjs";
+import { isPlatformTarget, privatePlatformGrant, installPlatformAuthentication, releasePlatformAuthentication, assertBrowserOwner } from "./platform-auth.mjs";
 import { isAdminDevTarget as matchesAdminDevTarget, proxyTunnelUrl } from "./admin-dev-targets.mjs";
 import http from "node:http";
 import { createRequire } from "node:module";
@@ -269,8 +270,13 @@ async function createSession(payload) {
     throw brokerError(503, "broker_shutting_down", "Browser broker is shutting down.");
   }
   assertNoPersistenceOptions(payload);
+  const platformAuthentication = privatePlatformGrant(payload);
   const connectedBrowser = await getBrowser();
   const policyContext = policyContextFromPayload(payload);
+  if (platformAuthentication) {
+    policyContext.platform_origin = platformAuthentication.origin;
+    policyContext.frame_host_suffix = platformAuthentication.frame_host_suffix;
+  }
   if (policyContext.allow_admin_dev_targets && !callerCanAccessAdminDevTargets(payload)) {
     throw brokerError(403, "session_forbidden", "Admin dev Browser sessions require admin authority.");
   }
@@ -309,11 +315,16 @@ async function createSession(payload) {
       mode: payload.mode === "maverick_dev_inspector" ? "maverick_dev_inspector" : "read_only",
       viewport,
       policyContext,
+      userId: payload.caller_context?.user_id || null,
+      workspaceId: payload.caller_context?.workspace_id || null,
+      platformAuthentication,
       proxyPassword,
       lastPolicyBlock: null,
       console: [],
       network: [],
     };
+    session.beforeClose = () => releasePlatformAuthentication(session);
+    await installPlatformAuthentication(context, platformAuthentication);
     await context.route("**/*", (route) => enforceRoutePolicy(session, route));
     const page = await context.newPage();
     session.pages.add(page);
@@ -324,6 +335,7 @@ async function createSession(payload) {
     }
     sessionLifecycle.register(session);
   } catch (error) {
+    if (session) await releasePlatformAuthentication(session);
     sessionLifecycle.revokeProxy(proxyPassword);
     await context?.close().catch(() => undefined);
     throw error;
@@ -335,6 +347,10 @@ async function createSession(payload) {
     isolated: true,
     persistent_profile: false,
     login_state_persisted: false,
+    user_id: session.userId,
+    platform_origin: policyContext.platform_origin || null,
+    frame_host_suffix: policyContext.frame_host_suffix || null,
+    admin_dev_targets_enabled: policyContext.allow_admin_dev_targets,
     accept_downloads: false,
     file_upload: false,
     viewport_width: viewport.width,
@@ -507,7 +523,7 @@ async function assertResponseServerAddress(session, response) {
     return;
   }
   const decision = await evaluateBrokerEgressUrl(response.url(), session.policyContext);
-  if (decision.allowed && decision.reason === "allowed_admin_dev_target") {
+  if (decision.allowed && ["allowed_admin_dev_target", "allowed_platform_browser_target"].includes(decision.reason)) {
     return;
   }
   const blockedAddress = restrictedAddress(ipAddress);
@@ -554,6 +570,9 @@ async function evaluateBrokerEgressUrl(rawUrl, policyContext = {}) {
     return policyDecision(false, "blocked_missing_host", rawUrl, { scheme });
   }
   const port = Number.parseInt(url.port || defaultPort(scheme), 10);
+  if (isPlatformTarget(rawUrl, policyContext)) {
+    return policyDecision(true, "allowed_platform_browser_target", rawUrl, { scheme, host, port });
+  }
   if (isAdminDevTarget(scheme, host, port)) {
     if (policyContext.allow_admin_dev_targets === true) {
       return policyDecision(true, "allowed_admin_dev_target", rawUrl, { scheme, host, port });
@@ -730,6 +749,7 @@ function callerCanAccessAdminDevTargets(payload) {
 }
 
 function assertSessionAccessAllowed(session, payload) {
+  assertBrowserOwner(session, payload);
   if (session.policyContext.allow_admin_dev_targets && !callerCanAccessAdminDevTargets(payload)) {
     throw brokerError(403, "session_forbidden", "Admin dev Browser session access requires admin authority.");
   }
@@ -742,12 +762,12 @@ async function assertDevInspectorActionAllowed(session, payload) {
   }
   const targetUrl = requireString(payload, "target_url");
   const targetDecision = await evaluateBrokerEgressUrl(targetUrl, session.policyContext);
-  if (!targetDecision.allowed || targetDecision.reason !== "allowed_admin_dev_target") {
+  if (!targetDecision.allowed || !["allowed_admin_dev_target", "allowed_platform_browser_target"].includes(targetDecision.reason)) {
     throw policyBrokerError(targetDecision);
   }
   const activeUrl = session.activePage?.url?.() || "";
   const activeDecision = await evaluateBrokerEgressUrl(activeUrl, session.policyContext);
-  if (!activeDecision.allowed || activeDecision.reason !== "allowed_admin_dev_target") {
+  if (!activeDecision.allowed || !["allowed_admin_dev_target", "allowed_platform_browser_target"].includes(activeDecision.reason)) {
     throw policyBrokerError(activeDecision);
   }
 }
@@ -1053,6 +1073,9 @@ async function handleProxyHttpRequest(request, response) {
 async function handleProxyConnect(request, socket, head) {
   const policyContext = proxyPolicyContext(request);
   const requestUrl = proxyTunnelUrl(request.url, adminDevTargets);
+  const plaintext = new URL(requestUrl);
+  plaintext.protocol = "http:";
+  if (isPlatformTarget(plaintext, policyContext)) requestUrl.protocol = "http:";
   const target = await resolveAllowedConnection(requestUrl, policyContext);
   const upstream = net.connect({ host: target.address, port: target.port }, () => {
     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
@@ -1091,7 +1114,8 @@ async function resolveAllowedConnection(requestUrl, policyContext) {
   const scheme = requestUrl.protocol.replace(":", "").toLowerCase();
   const host = normalizeHost(requestUrl.hostname);
   const port = Number.parseInt(requestUrl.port || defaultPort(scheme), 10);
-  if (isAdminDevTarget(scheme, host, port) && policyContext.allow_admin_dev_targets === true) {
+  if ((isAdminDevTarget(scheme, host, port) && policyContext.allow_admin_dev_targets === true) ||
+      (host.endsWith(".localhost") && isPlatformTarget(requestUrl, policyContext))) {
     return { address: "127.0.0.1", host, port };
   }
   const hostAddress = parseIpAddress(host);
@@ -1100,7 +1124,7 @@ async function resolveAllowedConnection(requestUrl, policyContext) {
   }
   const addresses = await resolveHostAddresses(host);
   for (const address of addresses) {
-    if (!restrictedAddress(address)) {
+    if (!restrictedAddress(address) || isPlatformTarget(requestUrl, policyContext)) {
       return { address, host, port };
     }
   }

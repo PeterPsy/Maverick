@@ -23,6 +23,7 @@ from core.apps.surface_descriptors import (
 from core.apps.surface_policies import app_requires_full_access_runtime
 from core.authorization.service import can_mount_app_visibility
 from core.mcp.models import McpInvocationContext, McpInvocationPolicy, McpToolDefinition
+from core.identity.browser_sessions import issue_platform_browser_session, revoke_platform_browser_session
 from core.secrets.app_delivery import resolve_app_secret_payload_requests
 from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
@@ -45,6 +46,7 @@ def _workspace_app_tool_definitions(
     *,
     workspace_id: str,
     bindings: list[WorkspaceAppBindingRecord] | None = None,
+    identity_store=None,
     only_tool_name: str | None = None,
     workspace_store=None,
     provider_store=None,
@@ -123,6 +125,8 @@ def _workspace_app_tool_definitions(
                 _workspace_store=workspace_store,
                 _provider_store=provider_store,
                 _runtime_store=runtime_store,
+                _identity_store=identity_store,
+                _platform_browser_session=execution_metadata.platform_browser_session,
                 _observability_store=observability_store,
                 _app_event_bus=app_event_bus,
                 _start_path: Path | None = start_path,
@@ -158,48 +162,61 @@ def _workspace_app_tool_definitions(
                     observability_store=_observability_store,
                     request_context={"surface": "mcp", "tool_name": _tool_name},
                 )
-                result = run_json_entrypoint_with_sidecars(
-                    _entrypoint_path,
-                    payload={
-                        "surface": "mcp",
-                        "tool_name": _tool_name,
-                        "workspace_id": context.workspace_id,
-                        "agent_id": context.agent_id,
-                        "effective_mode": context.effective_mode,
-                        "platform_role": context.platform_role,
-                        "user_id": context.user_id,
-                        "workspace_role": context.workspace_role,
-                        "runtime_session_id": context.runtime_session_id,
-                        "app_id": _app_id,
-                        "public_app_id": _public_app_id,
-                        "workspace_root": _workspace_root,
-                        "data_root": _data_root,
-                        "uploaded_storage_root": _uploaded_storage_root,
-                        "generated_storage_root": _generated_storage_root,
-                        "app_dependencies": _app_dependencies_payload(
-                            store,
-                            workspace_id=str(context.workspace_id),
-                            app_id=_app_id,
-                            workspace_store=_workspace_store,
-                            platform_role=context.platform_role,
-                            workspace_role=context.workspace_role,
-                            start_path=_start_path,
-                        ),
-                        "app_secrets": app_secret_result.secrets,
-                        "app_secret_errors": app_secret_result.errors,
-                        "arguments": arguments,
-                    },
-                    cwd=_source_root,
-                    timeout_seconds=app_mcp_entrypoint_timeout_seconds(context),
-                    binding=_binding,
-                    parsed=_parsed,
-                    surface=context.entrypoint_surface,
-                    start_path=_start_path or _source_root,
-                    actor_user_id=context.user_id,
-                    runtime_session_id=context.runtime_session_id,
-                    observability_store=_observability_store,
-                    shutdown_controller=context.shutdown_controller,
-                )
+                browser_context = None
+                if _platform_browser_session and _parsed.contract.capabilities.platform_browser_sessions and context.user_id and context.runtime_session_id:
+                    browser_context = issue_platform_browser_session(
+                        _identity_store, _workspace_store, _runtime_store,
+                        user_id=context.user_id, workspace_id=str(context.workspace_id),
+                        runtime_session_id=context.runtime_session_id,
+                    )
+                result = None
+                try:
+                    result = run_json_entrypoint_with_sidecars(
+                        _entrypoint_path,
+                        payload={
+                            "surface": "mcp",
+                            "tool_name": _tool_name,
+                            "workspace_id": context.workspace_id,
+                            "agent_id": context.agent_id,
+                            "effective_mode": context.effective_mode,
+                            "platform_role": context.platform_role,
+                            "user_id": context.user_id,
+                            "workspace_role": context.workspace_role,
+                            "runtime_session_id": context.runtime_session_id,
+                            "app_id": _app_id,
+                            "public_app_id": _public_app_id,
+                            "workspace_root": _workspace_root,
+                            "data_root": _data_root,
+                            "uploaded_storage_root": _uploaded_storage_root,
+                            "generated_storage_root": _generated_storage_root,
+                            "app_dependencies": _app_dependencies_payload(
+                                store,
+                                workspace_id=str(context.workspace_id),
+                                app_id=_app_id,
+                                workspace_store=_workspace_store,
+                                platform_role=context.platform_role,
+                                workspace_role=context.workspace_role,
+                                start_path=_start_path,
+                            ),
+                            "app_secrets": app_secret_result.secrets,
+                            "app_secret_errors": app_secret_result.errors,
+                            "arguments": arguments,
+                            "platform_browser_session": browser_context,
+                        },
+                        cwd=_source_root,
+                        timeout_seconds=app_mcp_entrypoint_timeout_seconds(context),
+                        binding=_binding,
+                        parsed=_parsed,
+                        surface=context.entrypoint_surface,
+                        start_path=_start_path or _source_root,
+                        actor_user_id=context.user_id,
+                        runtime_session_id=context.runtime_session_id,
+                        observability_store=_observability_store,
+                        shutdown_controller=context.shutdown_controller,
+                    )
+                finally:
+                    if browser_context and (result is None or not result.get("session_id") or int(result.get("status_code", 200)) >= 400):
+                        revoke_platform_browser_session(_identity_store, browser_context["cookie_value"])
                 publish_declared_app_events(
                     _app_event_bus,
                     result,

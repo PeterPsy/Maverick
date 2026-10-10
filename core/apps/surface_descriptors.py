@@ -33,6 +33,7 @@ class AppSurfaceExecutionMetadata:
     safe_to_retry: bool
     timeout_seconds: int | None = None
     argument_effects: ToolArgumentEffectMap | None = None
+    platform_browser_session: bool = False
 
 
 CLI_COMMAND_DESCRIPTOR_FIELDS = {
@@ -48,6 +49,7 @@ CLI_COMMAND_DESCRIPTOR_FIELDS = {
     "timeout_seconds",
 }
 MCP_TOOL_DESCRIPTOR_FIELDS = {
+    "platform_browser_session",
     "description",
     "input_schema",
     "output_schema",
@@ -314,9 +316,17 @@ def _app_surface_execution_metadata(
             safe_to_retry,
             timeout_seconds,
             argument_effects,
+            _descriptor_boolean(item, "platform_browser_session"),
         )
     except ValueError:
         return default
+
+
+def _descriptor_boolean(item: dict, field: str) -> bool:
+    value = item.get(field, False)
+    if not isinstance(value, bool):
+        raise ValueError(f"App surface descriptor field `{field}` must be boolean.")
+    return value
 
 
 def _argument_effect_map(

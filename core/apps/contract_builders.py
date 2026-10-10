@@ -108,6 +108,7 @@ def build_app_capabilities(
     view_surfaces: list[AppViewSurfaceDeclaration] | None = None,
     reference_entities: list[AppReferenceEntityDeclaration] | None = None,
     backend_workspace_apps: bool = True,
+    platform_browser_sessions: bool = False,
 ) -> AppCapabilities:
     """Build one capability declaration."""
     return AppCapabilities(
@@ -119,6 +120,7 @@ def build_app_capabilities(
         view_surfaces=view_surfaces or [],
         reference_entities=reference_entities or [],
         backend_workspace_apps=backend_workspace_apps,
+        platform_browser_sessions=platform_browser_sessions,
     )
 
 def build_view_surface_declaration(

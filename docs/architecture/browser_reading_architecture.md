@@ -120,6 +120,32 @@ untrusted evidence, distinct from the agent's interpretation.
 
 ## Managed Lab lifecycle and audit
 
+`browser_session_create` opts into Core's `platform_browser_sessions` app
+capability and `platform_browser_session` MCP execution metadata. Core issues a
+distinct four-hour `maverick_session` for the trusted runtime owner, current
+workspace and configured platform origin. A digest of active human login session
+IDs binds delegation to the user's current login generation. Only the private
+entrypoint payload and broker receive the opaque cookie. The public result
+exposes `platform_origin`, ownership and lifecycle metadata, never the cookie.
+
+The broker installs a host-scoped HttpOnly cookie into the fresh RAM context.
+Delegated policy permits the exact platform origin and Core-generated app-frame
+hosts; sandbox agents receive no general loopback exemption. The broker enforces
+user/workspace ownership on every session action. Other agents of that same
+actor and workspace can use the context. Interactive actions still require
+`maverick_dev_inspector` and a permitted active page and target URL.
+
+HTTP session resolution and isolated app-frame validation recheck human login
+generation, active user, active workspace and originating runtime. Delegated
+cookies never renew. Workspace changes, human logout/password reset, runtime
+termination and the four-hour limit invalidate access. Explicit close, idle/hard
+expiry and broker shutdown log out the delegated cookie before destroying the
+context and proxy. That logout revokes only its own app-frame leases and leaves
+the user's human login and device sessions intact. Failed context creation
+revokes the issued login. External sites remain anonymous unless separately
+shared through Companion. Authenticated UI inspection uses MCP; standalone CLI
+development smoke remains anonymous.
+
 The isolated Playwright Lab retains governed DNS, redirect and subresource egress,
 trusted caller policy, finite sessions and admin development-target exceptions.
 Pinned Playwright 1.60.0 and the installation's supported Node runtime are used.

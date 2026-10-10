@@ -32,6 +32,7 @@ from core.api.app_frame_scope import (
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, SESSION_COOKIE
+from core.identity.browser_sessions import browser_session_is_current, is_browser_session
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.sidecar_browser_sessions import (
     MAX_TICKET_TTL_SECONDS,
@@ -516,6 +517,10 @@ def _current_app_frame(
         return None
     now = datetime.now(tz=UTC)
     if auth_session.user_id != user.user_id or auth_session.status != "active" or auth_session.expires_at <= now or not user.is_active:
+        return None
+    if is_browser_session(auth_session) and not browser_session_is_current(
+            state.identity_store, state.workspace_store, state.runtime_store,
+            auth_session, origin=binding.platform_origin, now=now):
         return None
     selection = resolve_active_workspace_for_user(state.workspace_store, user_id=user.user_id, now=now)
     if selection is None or selection.workspace_id != binding.workspace_id:

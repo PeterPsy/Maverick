@@ -72,6 +72,7 @@ def hosted_builtin_app_execution_roots(
             for relative in (
                 "broker/playwright-broker.mjs",
                 "broker/session-lifecycle.mjs",
+                "broker/platform-auth.mjs",
                 "broker/reading-actions.mjs",
                 "broker/snapshot-reference.mjs",
                 "broker/admin-dev-targets.mjs",

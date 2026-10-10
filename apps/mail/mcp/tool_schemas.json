@@ -188,6 +188,8 @@
         "properties": {
           "connection_id": { "type": "string" },
           "thread_id": { "type": "string" },
+          "reply_message_id": { "type": "string", "description": "Cached message id to reply to; defaults to the latest message in thread_id." },
+          "reply_mode": { "type": "string", "enum": ["reply", "reply_all"], "default": "reply" },
           "to": { "type": "array", "items": { "type": "object" } },
           "cc": { "type": "array", "items": { "type": "object" } },
           "bcc": { "type": "array", "items": { "type": "object" } },
@@ -320,6 +322,8 @@
         "properties": {
           "connection_id": { "type": "string" },
           "thread_id": { "type": "string" },
+          "reply_message_id": { "type": "string", "description": "Cached message id to reply to; defaults to the latest message in thread_id." },
+          "reply_mode": { "type": "string", "enum": ["reply", "reply_all"], "default": "reply" },
           "to": { "type": "array", "items": { "type": "object" } },
           "cc": { "type": "array", "items": { "type": "object" } },
           "bcc": { "type": "array", "items": { "type": "object" } },

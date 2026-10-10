@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
 from email_rendering import BODY_SOURCE_LIMIT, truncate_sanitized_html
+from search_index import search_predicate
 
 
 DEFAULT_BODY_TEXT_CHARS = 8_000
@@ -268,16 +269,15 @@ def mailbox_counts(data_root: Path) -> dict[str, dict[str, dict[str, int]]]:
             connection_id = str(row["id"])
             result[connection_id] = {}
             for mailbox in mailboxes:
-                pattern = f'%"{mailbox}"%'
                 count_row = db.execute(
                     """
                     SELECT
                       COUNT(*) AS total_count,
                       COALESCE(SUM(CASE WHEN unread = 1 THEN 1 ELSE 0 END), 0) AS unread_count
                     FROM threads
-                    WHERE connection_id = ? AND labels_json LIKE ?
+                    WHERE connection_id = ? AND id IN (SELECT thread_id FROM thread_labels WHERE label = ?)
                     """,
-                    (connection_id, pattern),
+                    (connection_id, mailbox),
                 ).fetchone()
                 local_draft_count = 0
                 if mailbox == "drafts":
@@ -311,36 +311,14 @@ def _thread_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]
             clauses.append("connection_id = ?")
             params.append(connection_id)
         if label:
-            clauses.append("labels_json LIKE ?")
-            params.append(f'%"{label}"%')
+            clauses.append("id IN (SELECT thread_id FROM thread_labels WHERE label = ?)")
+            params.append(label)
     query = _optional_string(payload.get("query"))
     unread = payload.get("unread")
     if query:
-        clauses.append(
-            """
-            (
-              subject LIKE ?
-              OR snippet LIKE ?
-              OR EXISTS (
-                SELECT 1 FROM messages
-                WHERE messages.thread_id = threads.id
-                  AND (
-                    messages.body_text LIKE ?
-                    OR messages.body_html_sanitized LIKE ?
-                    OR messages.body_html_gmail_sanitized LIKE ?
-                    OR messages.body_html_rendered LIKE ?
-                    OR messages.sender_json LIKE ?
-                    OR messages.recipients_json LIKE ?
-                  )
-              )
-              OR EXISTS (
-                SELECT 1 FROM attachments JOIN messages ON attachments.message_id = messages.id
-                WHERE messages.thread_id = threads.id AND attachments.filename LIKE ?
-              )
-            )
-            """
-        )
-        params.extend([f"%{query}%"] * 9)
+        predicate, search_params = search_predicate(query, "threads.id", search_field="thread_id")
+        clauses.append(predicate)
+        params.extend(search_params)
     if isinstance(unread, bool):
         clauses.append("unread = ?")
         params.append(1 if unread else 0)
@@ -355,13 +333,12 @@ def _mailbox_scope_clauses(value: object) -> tuple[list[str], list[object]]:
     for connection_id, mailbox in scopes:
         if connection_id and mailbox in aggregate_mailboxes:
             continue
-        label_pattern = f'%"{mailbox}"%'
         if connection_id:
-            clauses.append("(connection_id = ? AND labels_json LIKE ?)")
-            params.extend([connection_id, label_pattern])
+            clauses.append("(connection_id = ? AND id IN (SELECT thread_id FROM thread_labels WHERE label = ?))")
+            params.extend([connection_id, mailbox])
         else:
-            clauses.append("labels_json LIKE ?")
-            params.append(label_pattern)
+            clauses.append("id IN (SELECT thread_id FROM thread_labels WHERE label = ?)")
+            params.append(mailbox)
     return clauses, params
 
 
@@ -419,7 +396,7 @@ def get_thread(
             thread_row = _legacy_gmail_thread_row(db, thread_id)
         if thread_row is None:
             raise ValueError(f"Thread `{thread_id}` was not found")
-        message_rows = db.execute("SELECT * FROM messages WHERE thread_id = ? ORDER BY sent_at", (thread_row["id"],)).fetchall()
+        message_rows = db.execute("SELECT * FROM messages WHERE thread_id = ? ORDER BY sent_at, id", (thread_row["id"],)).fetchall()
         attachments = _attachments_for_messages(db, [str(row["id"]) for row in message_rows])
     thread = _thread(thread_row)
     thread["messages"] = [
@@ -458,27 +435,18 @@ def get_message(
 
 def search_messages(data_root: Path, query: str, limit: int = 25) -> list[dict[str, object]]:
     ensure_schema(data_root)
-    needle = f"%{query.strip()}%"
+    message_filter, params = search_predicate(query.strip(), "messages.id", search_field="message_id")
+    thread_filter, thread_params = search_predicate(query.strip(), "messages.thread_id", search_field="thread_id", thread_documents_only=True)
     with connect(data_root) as db:
         rows = db.execute(
-            """
+            f"""
             SELECT messages.*, threads.subject
             FROM messages JOIN threads ON messages.thread_id = threads.id
-            WHERE messages.body_text LIKE ?
-              OR messages.body_html_sanitized LIKE ?
-              OR messages.body_html_gmail_sanitized LIKE ?
-              OR messages.body_html_rendered LIKE ?
-              OR messages.sender_json LIKE ?
-              OR messages.recipients_json LIKE ?
-              OR threads.subject LIKE ?
-              OR EXISTS (
-                SELECT 1 FROM attachments
-                WHERE attachments.message_id = messages.id AND attachments.filename LIKE ?
-              )
+            WHERE {message_filter} OR {thread_filter}
             ORDER BY messages.sent_at DESC
             LIMIT ?
             """,
-            (needle, needle, needle, needle, needle, needle, needle, needle, _bounded_int(limit, default=25, minimum=1, maximum=100)),
+            (*params, *thread_params, _bounded_int(limit, default=25, minimum=1, maximum=100)),
         ).fetchall()
         attachments = _attachments_for_messages(db, [str(row["id"]) for row in rows])
     return [_message(row, max_body_chars=1200, attachments=attachments.get(str(row["id"]), [])) for row in rows]
@@ -655,6 +623,9 @@ def _message(
     item["body_html_original_available"] = bool(original_html)
     item["body_html_original_size"] = len(original_html)
     item["render_policy"] = _loads_object(item.pop("render_policy_json", "{}"))
+    if not item["render_policy"] and legacy_html:
+        item["render_policy"] = {"version": 0, "source": "legacy_body_html_sanitized", "rendered_from": "body_html_sanitized"}
+    item["labels"] = _loads_list(item.pop("labels_json", "[]"))
     item["body_render_mode"] = str(item.get("body_render_mode") or ("html" if rendered_html else "plain"))
     item["body_preview"] = str(item.get("body_preview") or body_text[:180])
     item["body_source_truncated"] = source_truncated

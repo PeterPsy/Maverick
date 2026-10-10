@@ -16,11 +16,15 @@ from pathlib import Path
 import re
 import smtplib
 import ssl
+import time
 from uuid import uuid4
 
 from connections import IMAP_PASSWORD_SECRET, MAILBOX_PASSWORD_SECRET, SMTP_PASSWORD_SECRET
 from database import connect, ensure_schema, now_timestamp
 from drafts import get_draft
+from delivery import envelope_recipients, finish_local_delivery, record_delivery, require_sendable
+from provider_errors import ProviderError, error_code
+from replies import set_conversation_headers
 from email_rendering import render_email_body
 from store import audit, get_attachment, get_thread, list_threads
 from storage_attachments import (
@@ -34,6 +38,7 @@ from storage_attachments import (
 )
 
 from .base import ProviderCapability
+from .imap_sync import aggregate_thread
 
 
 ImapFactory = Callable[[dict[str, object]], object]
@@ -77,23 +82,25 @@ class ImapSmtpProvider:
             with self._imap(settings) as client:
                 _imap_login(client, str(settings["username"]), imap_password)
                 folders = _list_folders(client)
-        except Exception:
+        except Exception as error:
             return {
                 "ok": False,
                 "imap": "failed",
                 "smtp": "not_tested",
                 "detail": "IMAP authentication or connection failed.",
+                "error_code": error_code(error),
                 "folders": [],
             }
         try:
             with self._smtp(settings) as client:
                 client.login(str(settings["username"]), smtp_password)
-        except Exception:
+        except Exception as error:
             return {
                 "ok": False,
                 "imap": "ok",
                 "smtp": "failed",
                 "detail": "SMTP authentication or connection failed.",
+                "error_code": error_code(error),
                 "folders": folders[:25],
             }
         return {"ok": True, "imap": "ok", "smtp": "ok", "folders": folders[:25]}
@@ -113,65 +120,16 @@ class ImapSmtpProvider:
         connection_id = _required_string(connection_id, "connection_id")
         settings = _connection_settings(data_root, connection_id)
         password = _imap_password(app_secrets)
-        cursor = _load_cursor(data_root, connection_id)
-        synced = 0
-        max_total = _bounded_int(max_threads, 100, 1, 2000)
-        folder_rows: list[dict[str, str]] = []
-        folder_cursors = cursor.get("folders") if continue_cursor and isinstance(cursor.get("folders"), dict) else {}
-        with self._imap(settings) as client:
-            _imap_login(client, str(settings["username"]), password)
-            folders = _list_folders(client)
-            folder_rows = folders
-            _cache_folders(data_root, connection_id, folders)
-            for folder in folders:
-                if synced >= max_total:
-                    break
-                folder_name = folder["name"]
-                typ, _ = client.select(f'"{folder_name}"', readonly=True)
-                if str(typ).upper() != "OK":
-                    continue
-                uidvalidity = _uidvalidity(client)
-                previous = folder_cursors.get(folder_name) if isinstance(folder_cursors, dict) else {}
-                last_uid = int(previous.get("last_uid") or 0) if isinstance(previous, dict) and previous.get("uidvalidity") == uidvalidity else 0
-                search_args = ("UID", f"{last_uid + 1}:*") if last_uid else ("ALL",)
-                typ, data = client.uid("SEARCH", None, *search_args)
-                if str(typ).upper() != "OK":
-                    continue
-                uids = _uid_values(data)
-                if query:
-                    uids = uids[-max_total:]
-                for uid in uids[-(max_total - synced) :]:
-                    raw, flags = _fetch_message(client, uid)
-                    if raw is None:
-                        continue
-                    _cache_message(data_root, connection_id, folder, uid, uidvalidity, raw, flags=flags)
-                    synced += 1
-                    folder_cursors[folder_name] = {"uidvalidity": uidvalidity, "last_uid": max(uid, last_uid)}
-        now = now_timestamp()
-        cursor["folders"] = folder_cursors
-        with connect(data_root) as db:
-            db.execute(
-                """
-                INSERT INTO sync_state(connection_id, last_sync_at, last_error, cursor, last_full_sync_at, last_incremental_sync_at, provider_history_id)
-                VALUES (?, ?, ?, ?, COALESCE((SELECT last_full_sync_at FROM sync_state WHERE connection_id = ?), ?), ?, ?)
-                ON CONFLICT(connection_id) DO UPDATE SET
-                  last_sync_at = excluded.last_sync_at,
-                  last_error = '',
-                  cursor = excluded.cursor,
-                  last_incremental_sync_at = excluded.last_incremental_sync_at,
-                  provider_history_id = excluded.provider_history_id
-                """,
-                (connection_id, now, "", json.dumps(cursor, ensure_ascii=True, sort_keys=True), connection_id, now, now, ""),
-            )
-        audit(data_root, "imap_smtp.sync", "mail_connection", connection_id, {"synced_messages": synced, "folders": len(folder_rows)})
-        return {
-            "connection_id": connection_id,
-            "synced_at": now,
-            "synced_threads": synced,
-            "synced_messages": synced,
-            "has_more": False,
-            "mode": "imap_smtp",
-        }
+        from .imap_sync import sync_mailbox
+        for attempt in range(2):
+            try:
+                return sync_mailbox(self, data_root, connection_id, settings, password,
+                                    max_total=_bounded_int(max_threads, 100, 1, 2000),
+                                    continue_cursor=continue_cursor, persist_cursor=persist_cursor)
+            except (imaplib.IMAP4.abort, TimeoutError, ConnectionError):
+                if attempt:
+                    raise ProviderError("IMAP read failed after reconnecting", code="provider_connection_failed") from None
+                time.sleep(0.1)
 
     def send_draft(
         self,
@@ -185,6 +143,7 @@ class ImapSmtpProvider:
         use_latest_confirmation: bool = False,
     ) -> dict[str, object]:
         draft = get_draft(data_root, draft_id)
+        require_sendable(draft)
         _require_recipients(draft)
         settings = _connection_settings(data_root, str(draft["connection_id"]))
         message, attachments = _draft_message(
@@ -208,18 +167,29 @@ class ImapSmtpProvider:
                 "draft": preview_draft,
                 "confirmation_preview": preview_with_confirmation_token(data_root, confirmation_preview),
             }
+        smtp_password = _smtp_password(app_secrets)
         if use_latest_confirmation:
             require_latest_confirmation(data_root=data_root, draft_id=draft_id, preview=confirmation_preview)
         else:
             require_confirmation_token(data_root=data_root, draft_id=draft_id, preview=confirmation_preview, confirmation_token=confirmation_token)
-        with self._smtp(settings) as client:
-            client.login(str(settings["username"]), _smtp_password(app_secrets))
-            client.send_message(message)
-        _append_sent_copy(settings, self._imap_factory, _imap_password(app_secrets), message)
-        now = now_timestamp()
-        with connect(data_root) as db:
-            db.execute("UPDATE drafts SET status = 'sent', dirty = 0, sent_at = ?, updated_at = ? WHERE id = ?", (now, now, draft_id))
-        _cache_message(
+        submission_started = False
+        try:
+            with self._smtp(settings) as client:
+                client.login(str(settings["username"]), smtp_password)
+                submission_started = True
+                refused = client.send_message(message) or {}
+        except Exception as error:
+            rejected = not submission_started or isinstance(error, (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError, smtplib.SMTPSenderRefused))
+            refused = _refused_recipients(getattr(error, "recipients", {}))
+            return record_delivery(data_root, draft_id, "failed" if rejected else "unknown", refused=refused, error_code=error_code(error))
+        refused = _refused_recipients(refused)
+        accepted = [email for email in envelope_recipients(draft) if email.casefold() not in {value.casefold() for value in refused}]
+        local_thread_id = str(draft.get("thread_id") or f"email_thread_imap_{_safe_id(draft['connection_id'])}_{_safe_id(_thread_key(message, str(draft['subject'])))}")
+        result = record_delivery(data_root, draft_id, "partially_sent" if refused else "sent", provider_message_id=str(message["Message-ID"] or ""), thread_id=local_thread_id, accepted=accepted, refused=refused)
+        result["attachments"] = attachments
+        return finish_local_delivery(result,
+            ("sent_copy_failed", lambda: _append_sent_copy(settings, self._imap_factory, _imap_password(app_secrets), message)),
+            ("cache_refresh_failed", lambda: _cache_message(
             data_root,
             str(draft["connection_id"]),
             {"name": str(settings.get("sent_folder") or "Sent"), "canonical": "sent", "type": "sent"},
@@ -227,14 +197,9 @@ class ImapSmtpProvider:
             "",
             message.as_bytes(),
             flags={"\\Seen"},
+        )),
+            ("audit_failed", lambda: audit(data_root, "imap_smtp.draft.send", "mail_draft", draft_id, {"provider": "smtp", "status": result["status"]})),
         )
-        audit(data_root, "imap_smtp.draft.send", "mail_draft", draft_id, {"provider": "smtp"})
-        return {
-            "sent": True,
-            "provider_message_id": str(message["Message-ID"] or ""),
-            "thread_id": str(draft.get("thread_id") or ""),
-            "attachments": attachments,
-        }
 
     def mark_read(
         self,
@@ -251,10 +216,21 @@ class ImapSmtpProvider:
             for message in thread.get("messages", []):
                 folder, uid = _message_location(message)
                 if folder and uid:
-                    client.select(f'"{folder}"', readonly=False)
-                    client.uid("STORE", str(uid), "+FLAGS.SILENT" if read else "-FLAGS.SILENT", r"(\Seen)")
+                    typ, _ = client.select(f'"{folder}"', readonly=False)
+                    if str(typ).upper() != "OK":
+                        raise ProviderError("IMAP folder selection failed", code="provider_protocol_error")
+                    typ, _ = client.uid("STORE", str(uid), "+FLAGS.SILENT" if read else "-FLAGS.SILENT", r"(\Seen)")
+                    if str(typ).upper() != "OK":
+                        raise ProviderError("IMAP read-state update failed", code="provider_protocol_error")
         with connect(data_root) as db:
-            db.execute("UPDATE threads SET unread = ?, updated_at = ? WHERE id = ?", (0 if read else 1, now_timestamp(), thread_id))
+            for message in thread.get("messages", []):
+                labels = set(message.get("labels", []))
+                if read:
+                    labels.discard("unread")
+                else:
+                    labels.add("unread")
+                db.execute("UPDATE messages SET labels_json=? WHERE id=?", (json.dumps(sorted(labels)), message["id"]))
+            aggregate_thread(db, thread_id)
         audit(data_root, "imap_smtp.mark_read", "email_thread", thread_id, {"read": read})
         return get_thread(data_root, thread_id)
 
@@ -321,6 +297,8 @@ class ImapSmtpProvider:
             return metadata
         if max_bytes is None:
             return {**metadata, "status": "limit_required", "detail": "Attachment bytes require an explicit max_bytes limit."}
+        if int(attachment.get("size_bytes") or 0) > max_bytes:
+            return {**metadata, "status": "too_large", "max_bytes": max_bytes}
         folder, uid, part_index = _attachment_location(str(attachment.get("provider_attachment_id") or ""))
         if not folder or not uid:
             return {**metadata, "status": "invalid_payload", "detail": "Attachment location metadata is unavailable."}
@@ -329,7 +307,10 @@ class ImapSmtpProvider:
         with self._imap(settings) as client:
             _imap_login(client, str(settings["username"]), _imap_password(app_secrets))
             client.select(f'"{folder}"', readonly=True)
-            raw = _fetch_message_bytes(client, uid)
+            try:
+                raw = _fetch_message_bytes(client, uid, max_bytes=max_bytes * 2 + 1024 * 1024)
+            except ValueError:
+                return {**metadata, "status": "too_large", "max_bytes": max_bytes, "detail": "Containing MIME message exceeds the bounded download limit."}
         if raw is None:
             return {**metadata, "status": "invalid_payload", "detail": "Provider message was not found."}
         message = BytesParser(policy=policy.default).parsebytes(raw)
@@ -427,9 +408,14 @@ def _open_smtp(settings: dict[str, object]):
 
 
 def _imap_login(client: object, username: str, password: str) -> None:
-    typ, _ = client.login(username, password)
+    try:
+        typ, _ = client.login(username, password)
+    except imaplib.IMAP4.abort:
+        raise
+    except imaplib.IMAP4.error:
+        raise ProviderError("IMAP authentication failed", code="provider_authentication") from None
     if str(typ).upper() != "OK":
-        raise ValueError("IMAP authentication failed")
+        raise ProviderError("IMAP authentication failed", code="provider_authentication")
 
 
 def _connection_settings(data_root: Path, connection_id: str) -> dict[str, object]:
@@ -454,7 +440,7 @@ def _connection_settings(data_root: Path, connection_id: str) -> dict[str, objec
 def _list_folders(client: object) -> list[dict[str, str]]:
     typ, rows = client.list()
     if str(typ).upper() != "OK":
-        return [{"name": "INBOX", "canonical": "inbox", "type": "inbox"}]
+        raise ProviderError("IMAP folder inventory failed", code="provider_protocol_error")
     folders: list[dict[str, str]] = []
     for row in rows or []:
         text = row.decode("utf-8", errors="replace") if isinstance(row, bytes) else str(row)
@@ -495,19 +481,37 @@ def _cache_folders(data_root: Path, connection_id: str, folders: list[dict[str, 
 
 
 def _fetch_message(client: object, uid: int | str) -> tuple[bytes | None, set[str]]:
-    typ, data = client.uid("FETCH", str(uid), "(RFC822 FLAGS)")
+    typ, data = client.uid("FETCH", str(uid), "(BODY.PEEK[]<0.33554432> FLAGS)")
     if str(typ).upper() != "OK":
         return None, set()
     flags = _fetch_flags(data)
     for item in data or []:
         if isinstance(item, tuple) and len(item) > 1 and isinstance(item[1], bytes):
+            if len(item[1]) >= 33554432:
+                raise ValueError("IMAP message exceeds the 32 MiB sync download limit")
             return item[1], flags
     return None, flags
 
 
-def _fetch_message_bytes(client: object, uid: int | str) -> bytes | None:
-    raw, _flags = _fetch_message(client, uid)
-    return raw
+def _fetch_message_bytes(client: object, uid: int | str, *, max_bytes: int) -> bytes | None:
+    typ, data = client.uid("FETCH", str(uid), "(RFC822.SIZE)")
+    if str(typ).upper() != "OK":
+        return None
+    for item in data or []:
+        text = item[0] if isinstance(item, tuple) else item
+        text = text.decode("ascii", errors="ignore") if isinstance(text, bytes) else str(text)
+        size = re.search(r"RFC822.SIZE\s+(\d+)", text, re.I)
+        if size and int(size[1]) > max_bytes:
+            raise ValueError("MIME message exceeds the download limit")
+    typ, data = client.uid("FETCH", str(uid), f"(BODY.PEEK[]<0.{max_bytes + 1}>)")
+    if str(typ).upper() != "OK":
+        return None
+    for item in data or []:
+        if isinstance(item, tuple) and len(item) > 1 and isinstance(item[1], bytes):
+            if len(item[1]) > max_bytes:
+                raise ValueError("MIME message exceeds the download limit")
+            return item[1]
+    return None
 
 
 def _fetch_flags(data: object) -> set[str]:
@@ -622,6 +626,8 @@ def _cache_message(
                 1 if parsed["attachments"] else 0,
             ),
         )
+        db.execute("UPDATE messages SET labels_json = ? WHERE id = ?", (json.dumps(labels), message_id))
+        aggregate_thread(db, thread_id)
         for attachment in parsed["attachments"]:
             attachment_id = f"mail_attachment_imap_{_safe_id(connection_id)}_{_safe_id(provider_message_id)}_{attachment['part_index']}"
             db.execute(
@@ -699,9 +705,11 @@ def _parse_message(message: EmailMessage, *, flags: set[str] | None = None) -> d
             )
     rendered = render_email_body(plain_chunks, html_chunks)
     labels = []
-    flag_values = flags if flags is not None else set(str(message.get("X-Maverick-Flags") or "").split())
-    if "\\Seen" not in flag_values:
+    flag_values = {flag.casefold() for flag in (flags if flags is not None else set(str(message.get("X-Maverick-Flags") or "").split()))}
+    if "\\seen" not in flag_values:
         labels.append("unread")
+    if "\\flagged" in flag_values:
+        labels.append("starred")
     return {
         "subject": str(message.get("Subject") or "(no subject)"),
         "sender": _first_address(str(message.get("From") or "")),
@@ -746,7 +754,9 @@ def _draft_message(
         message["Reply-To"] = ", ".join(_format_address(item) for item in draft.get("reply_to", []))
     message["Subject"] = str(draft.get("subject") or "")
     message["Date"] = formatdate(localtime=False)
-    message["Message-ID"] = f"<{uuid4().hex}@maverick.mail>"
+    set_conversation_headers(message, draft)
+    if not message["Message-ID"]:
+        message["Message-ID"] = f"<{uuid4().hex}@maverick.mail>"
     message.set_content(str(draft.get("body_text") or ""))
     body_html = str(draft.get("body_html") or "")
     if body_html:
@@ -761,12 +771,16 @@ def _draft_message(
 
 
 def _append_sent_copy(settings: dict[str, object], imap_factory: ImapFactory, password: str, message: EmailMessage) -> None:
-    try:
-        with _ClientContext(imap_factory(settings)) as client:
-            _imap_login(client, str(settings["username"]), password)
-            client.append(str(settings.get("sent_folder") or "Sent"), "\\Seen", None, message.as_bytes())
-    except Exception:
-        return
+    with _ClientContext(imap_factory(settings)) as client:
+        _imap_login(client, str(settings["username"]), password)
+        typ, _ = client.append(str(settings.get("sent_folder") or "Sent"), "\\Seen", None, message.as_bytes())
+        if str(typ).upper() != "OK":
+            raise ValueError("IMAP sent copy failed")
+
+
+def _refused_recipients(refused):
+    # Provider text may echo message content; persist only address and SMTP code.
+    return {str(email): {"smtp_code": int(detail[0])} for email, detail in refused.items()}
 
 
 def _uidvalidity(client: object) -> str:

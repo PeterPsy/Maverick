@@ -110,7 +110,7 @@ class MailboxFiltersTest(unittest.TestCase):
         self.assertEqual(items[0]["labels"], ["drafts", "starred"])
         self.assertEqual(mailbox_counts(self.root)["a"]["drafts"]["total"], 1)
         with connect(self.root) as db:
-            self.assertEqual(db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()[0], "10")
+            self.assertEqual(db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()[0], "11")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -21,6 +22,9 @@ from uuid import uuid4
 from database import connect, ensure_schema, now_timestamp
 from email_rendering import render_email_body
 from drafts import get_draft
+from delivery import envelope_recipients, finish_local_delivery, record_delivery, require_sendable
+from provider_errors import ProviderError, error_code
+from replies import set_conversation_headers
 from store import audit, get_attachment, get_thread, list_threads
 from storage_attachments import (
     attach_workspace_attachments,
@@ -33,6 +37,8 @@ from storage_attachments import (
 )
 
 from .base import ProviderCapability
+from .cache_reconciliation import remove_messages, remove_thread
+from .gmail_history import refresh_history, save_history
 
 
 GMAIL_SCOPES = [
@@ -174,6 +180,7 @@ class GmailProvider:
         use_latest_confirmation: bool = False,
     ) -> dict[str, object]:
         draft = get_draft(data_root, draft_id)
+        require_sendable(draft)
         _require_recipients(draft)
         connection = _connection(data_root, str(draft["connection_id"]))
         message, attachments = _draft_message(
@@ -197,33 +204,42 @@ class GmailProvider:
                 "draft": preview_draft,
                 "confirmation_preview": preview_with_confirmation_token(data_root, confirmation_preview),
             }
-        if use_latest_confirmation:
-            require_latest_confirmation(data_root=data_root, draft_id=draft_id, preview=confirmation_preview)
-        else:
-            require_confirmation_token(data_root=data_root, draft_id=draft_id, preview=confirmation_preview, confirmation_token=confirmation_token)
-        secrets = _require_app_secrets(app_secrets)
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
         payload: dict[str, object] = {"raw": raw}
         if draft.get("thread_id"):
             thread = get_thread(data_root, str(draft["thread_id"]), max_body_chars=200)
             payload["threadId"] = thread["provider_thread_id"]
-        access_token = self._access_token(secrets)
-        sent = self._gmail_json("POST", "messages/send", access_token=access_token, payload=payload)
+        if use_latest_confirmation:
+            require_latest_confirmation(data_root=data_root, draft_id=draft_id, preview=confirmation_preview)
+        else:
+            require_confirmation_token(data_root=data_root, draft_id=draft_id, preview=confirmation_preview, confirmation_token=confirmation_token)
+        try:
+            secrets = _require_app_secrets(app_secrets)
+            access_token = self._access_token(secrets)
+        except Exception:
+            record_delivery(data_root, draft_id, "failed", error_code="provider_authentication")
+            raise
+        try:
+            sent = self._gmail_json("POST", "messages/send", access_token=access_token, payload=payload)
+        except Exception as error:
+            rejected = isinstance(error, ProviderError) and error.delivery_rejected
+            return record_delivery(data_root, draft_id, "failed" if rejected else "unknown", error_code=error.code if isinstance(error, ProviderError) else "delivery_unknown")
+        if not isinstance(sent, dict) or not sent.get("id"):
+            return record_delivery(data_root, draft_id, "unknown", error_code="invalid_provider_response")
         provider_thread_id = str(sent.get("threadId") or "")
-        now = now_timestamp()
-        with connect(data_root) as db:
-            db.execute("UPDATE drafts SET status = 'sent', dirty = 0, sent_at = ?, updated_at = ? WHERE id = ?", (now, now, draft_id))
+        local_thread_id = _local_thread_id(str(draft["connection_id"]), provider_thread_id) if provider_thread_id else str(draft.get("thread_id") or "")
+        result = record_delivery(data_root, draft_id, "sent", provider_message_id=str(sent.get("id") or ""), thread_id=local_thread_id, accepted=envelope_recipients(draft))
+        result["attachments"] = attachments
+        operations = [("audit_failed", lambda: audit(data_root, "gmail.draft.send", "mail_draft", draft_id, {"provider_message_id": str(sent.get("id") or "")}))]
         if provider_thread_id:
-            self._fetch_and_cache_thread(
+            operations.append(("cache_refresh_failed", lambda: self._fetch_and_cache_thread(
                 data_root,
                 str(draft["connection_id"]),
                 provider_thread_id,
                 secrets,
                 access_token=access_token,
-            )
-        audit(data_root, "gmail.draft.send", "mail_draft", draft_id, {"provider_message_id": str(sent.get("id") or "")})
-        local_thread_id = _local_thread_id(str(draft["connection_id"]), provider_thread_id) if provider_thread_id else str(draft.get("thread_id") or "")
-        return {"sent": True, "provider_message_id": str(sent.get("id") or ""), "thread_id": local_thread_id, "attachments": attachments}
+            )))
+        return finish_local_delivery(result, *operations)
 
     def sync_incremental(
         self,
@@ -241,6 +257,21 @@ class GmailProvider:
         secrets = _require_app_secrets(app_secrets)
         access_token = self._access_token(secrets)
         max_total = _bounded_int(max_threads, 100, 1, 2000)
+        history_more = False
+        history_synced = 0
+        if persist_cursor:
+            history = refresh_history(self, data_root, connection_id, access_token, max_total)
+            save_history(data_root, connection_id, history)
+            history_more = history["has_more"]
+            history_synced = history["synced_threads"]
+            if history.get("recovery") or history_more or history_synced >= max_total:
+                return {"connection_id": connection_id, "synced_at": now_timestamp(), "synced_threads": history_synced,
+                        "has_more": history_more or bool(_sync_cursor_blob(data_root, connection_id) and _sync_cursor(data_root, connection_id, _gmail_cursor_scope(str(query or "")))),
+                        "mode": "gmail", "sync_phase": "recovery" if history.get("recovery") else "history"}
+        with connect(data_root) as db:
+            history_row = db.execute("SELECT provider_history_id FROM sync_state WHERE connection_id=?", (connection_id,)).fetchone()
+        history_id = str(history_row[0] or "") if history_row else ""
+        max_total -= history_synced
         query_text = str(query or "").strip()
         cursor_scope = _gmail_cursor_scope(query_text)
         synced = 0
@@ -304,15 +335,15 @@ class GmailProvider:
                     connection_id,
                     now,
                     now,
-                    str(response.get("historyId") or ""),
+                    history_id,
                 ),
             )
         audit(data_root, "gmail.sync", "mail_connection", connection_id, {"synced_threads": synced, "has_more": bool(next_page_token)})
         return {
             "connection_id": connection_id,
             "synced_at": now,
-            "synced_threads": synced,
-            "has_more": bool(next_page_token),
+            "synced_threads": synced + history_synced,
+            "has_more": bool(next_page_token) or history_more,
             "next_page_token": next_page_token,
             "result_size_estimate": result_size_estimate,
             "mode": "gmail",
@@ -479,14 +510,30 @@ class GmailProvider:
         )
 
     def _transport_json(self, request: Request, *, operation: str) -> dict[str, object]:
+        attempts = 3 if request.get_method() == "GET" else 1
+        for attempt in range(attempts):
+            try:
+                return self._transport_once(request, operation=operation)
+            except ProviderError as error:
+                transient = error.code in {"provider_connection_failed", "provider_timeout", "provider_rate_limit"} or (error.status is not None and error.status >= 500)
+                if not transient or attempt == attempts - 1:
+                    raise
+                time.sleep(0.1 * (2 ** attempt))
+
+    def _transport_once(self, request: Request, *, operation: str) -> dict[str, object]:
         try:
             return self._transport(request)
         except HTTPError as error:
-            raise ValueError(_google_http_error_message(error, operation=operation)) from None
+            status = error.code
+            message = _google_http_error_message(error, operation=operation)
+            rate_limited = status == 429 or (status == 403 and any(term in message.lower() for term in ("ratelimit", "rate limit", "quota")))
+            code = "provider_rate_limit" if rate_limited else "provider_authentication" if status in {401, 403} or "invalid_grant" in message or "invalid_client" in message else "provider_http_error"
+            raise ProviderError(message, code=code, status=status, delivery_rejected=400 <= status < 500) from None
         except URLError as error:
-            raise ValueError(f"{operation} failed: {_bounded_error_text(getattr(error, 'reason', error))}") from None
+            code = error_code(getattr(error, "reason", error))
+            raise ProviderError(f"{operation} connection failed", code=code if code != "local_error" else "provider_connection_failed") from None
         except TimeoutError:
-            raise ValueError(f"{operation} timed out") from None
+            raise ProviderError(f"{operation} timed out", code="provider_timeout") from None
 
 
 def _urlopen_json(request: Request) -> dict[str, object]:
@@ -606,7 +653,10 @@ def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]
     provider_thread_id = _required_string(thread.get("id"), "thread.id")
     messages = thread.get("messages") if isinstance(thread.get("messages"), list) else []
     parsed_messages = [_parse_message(item) for item in messages if isinstance(item, dict)]
+    local_thread_id = _local_thread_id(connection_id, provider_thread_id)
     if not parsed_messages:
+        with connect(data_root) as db:
+            remove_thread(db, local_thread_id)
         return
     subject = parsed_messages[-1]["subject"] or "(no subject)"
     participants = _participants(parsed_messages)
@@ -615,9 +665,11 @@ def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]
     starred = any("STARRED" in item["labels"] for item in parsed_messages)
     last_message_at = max(str(item["sent_at"]) for item in parsed_messages)
     snippet = str(thread.get("snippet") or parsed_messages[-1]["body_text"][:180])
-    local_thread_id = _local_thread_id(connection_id, provider_thread_id)
     now = now_timestamp()
     with connect(data_root) as db:
+        keep = {_local_message_id(connection_id, str(item["provider_message_id"])) for item in parsed_messages}
+        old_ids = [row[0] for row in db.execute("SELECT id FROM messages WHERE thread_id=?", (local_thread_id,)) if row[0] not in keep]
+        remove_messages(db, old_ids)
         db.execute(
             """
             INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
@@ -704,6 +756,11 @@ def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]
                     1 if item["attachments"] else 0,
                 ),
             )
+            db.execute("UPDATE messages SET labels_json=? WHERE id=?", (json.dumps(["drafts" if label == "DRAFT" else label.lower() for label in item["labels"]]), local_message_id))
+            attachment_ids = {_local_attachment_id(connection_id, provider_message_id, str(attachment["provider_attachment_id"])) for attachment in item["attachments"]}
+            for row in db.execute("SELECT id FROM attachments WHERE message_id=?", (local_message_id,)).fetchall():
+                if row[0] not in attachment_ids:
+                    db.execute("DELETE FROM attachments WHERE id=?", (row[0],))
             for attachment in item["attachments"]:
                 db.execute(
                     """
@@ -959,6 +1016,7 @@ def _draft_message(
     if draft.get("reply_to"):
         message["Reply-To"] = ", ".join(_format_address(item) for item in draft.get("reply_to", []))
     message["Subject"] = str(draft.get("subject") or "")
+    set_conversation_headers(message, draft)
     message.set_content(str(draft.get("body_text") or ""))
     body_html = str(draft.get("body_html") or "")
     if body_html:
@@ -1017,7 +1075,7 @@ def _sync_cursor_payload(
             cursor_map.setdefault(cursor_scope, next_page_token)
         else:
             cursor_map[cursor_scope] = next_page_token
-    else:
+    elif not preserve_existing:
         cursor_map.pop(cursor_scope, None)
     return json.dumps({"gmail": cursor_map}, ensure_ascii=True, sort_keys=True)
 

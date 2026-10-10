@@ -16,6 +16,7 @@ import tempfile
 from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
+from delivery import claim_send, require_sendable
 
 
 MAX_OUTBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024
@@ -121,6 +122,11 @@ def draft_confirmation_preview(
     preview = {
         "draft_id": draft.get("id") or "",
         "thread_id": draft.get("thread_id") or "",
+        "draft_updated_at": draft.get("updated_at"),
+        "reply_message_id": draft.get("reply_message_id") or "",
+        "reply_mode": draft.get("reply_mode") or "reply",
+        "in_reply_to": draft.get("in_reply_to") or "",
+        "references": draft.get("references") or [],
         "from": {"email": sender_email, "name": sender_name},
         "to": draft.get("to", []),
         "cc": draft.get("cc", []),
@@ -149,6 +155,13 @@ def preview_with_confirmation_token(data_root: Path, preview: dict[str, object])
     token_hash = _hash_token(token)
     snapshot_hash = draft_confirmation_snapshot_hash(preview)
     with connect(data_root) as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT status, updated_at FROM drafts WHERE id = ?", (draft_id,)).fetchone()
+        if row is None:
+            raise ValueError("Draft was not found")
+        require_sendable(row)
+        if row["updated_at"] != preview.get("draft_updated_at"):
+            raise ValueError("Draft changed; run a new dry-run preview")
         db.execute("DELETE FROM send_confirmations WHERE draft_id = ? AND used_at = ''", (draft_id,))
         db.execute("DELETE FROM send_confirmations WHERE expires_at <= ? OR used_at != ''", (now,))
         db.execute(
@@ -193,6 +206,7 @@ def require_confirmation_token(
             (now, draft_id, token_hash, now, actual),
         )
         if result.rowcount == 1:
+            claim_send(db, draft_id, preview)
             return
         row = db.execute(
             """
@@ -241,6 +255,7 @@ def require_latest_confirmation(
             (now, draft_id, now, actual),
         )
         if result.rowcount == 1:
+            claim_send(db, draft_id, preview)
             return
         row = db.execute(
             """
@@ -306,6 +321,10 @@ def _is_redacted_placeholder(value: str) -> bool:
 def _confirmation_material(preview: dict[str, object]) -> dict[str, object]:
     return {
         "thread_id": preview.get("thread_id") or "",
+        "reply_message_id": preview.get("reply_message_id") or "",
+        "reply_mode": preview.get("reply_mode") or "reply",
+        "in_reply_to": preview.get("in_reply_to") or "",
+        "references": preview.get("references") or [],
         "from": preview.get("from") or {},
         "to": preview.get("to") or [],
         "cc": preview.get("cc") or [],

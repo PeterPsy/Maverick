@@ -11,7 +11,7 @@ import re
 import sqlite3
 
 
-SCHEMA_VERSION = "10"
+SCHEMA_VERSION = "11"
 REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
 REQUIRED_TABLES = [
     "schema_metadata",
@@ -29,6 +29,10 @@ REQUIRED_TABLES = [
     "sync_state",
     "entity_links",
     "audit_log",
+    "mail_search",
+    "mail_fts",
+    "thread_labels",
+    "gmail_sync_inventory",
 ]
 
 
@@ -43,7 +47,7 @@ def db_path(data_root: Path) -> Path:
 @contextmanager
 def connect(data_root: Path) -> Iterator[sqlite3.Connection]:
     data_root.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(db_path(data_root))
+    connection = sqlite3.connect(db_path(data_root), timeout=10)
     connection.row_factory = sqlite3.Row
     try:
         yield connection
@@ -56,7 +60,16 @@ def connect(data_root: Path) -> Iterator[sqlite3.Connection]:
 
 
 def ensure_schema(data_root: Path) -> None:
+    from search_index import install_search_index
     with connect(data_root) as db:
+        try:
+            version = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
+        except sqlite3.OperationalError:
+            version = None
+        if version and version["value"] == SCHEMA_VERSION:
+            return
+        if version and int(version["value"]) > int(SCHEMA_VERSION):
+            raise ValueError("Mail database was created by a newer app version")
         db.executescript("""
             CREATE TABLE IF NOT EXISTS schema_metadata (
               key TEXT PRIMARY KEY,
@@ -251,14 +264,24 @@ def ensure_schema(data_root: Path) -> None:
         _ensure_column(db, "drafts", "reply_to_json", "TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(db, "drafts", "body_html", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "drafts", "workspace_attachments_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "drafts", "reply_message_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "drafts", "reply_mode", "TEXT NOT NULL DEFAULT 'reply'")
+        _ensure_column(db, "drafts", "in_reply_to", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "drafts", "references_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "drafts", "outgoing_message_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "drafts", "send_started_at", "TEXT")
+        _ensure_column(db, "drafts", "send_result_json", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(db, "messages", "labels_json", "TEXT NOT NULL DEFAULT '[]'")
         _backfill_message_render_columns(db)
-        db.execute(
-            "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
-            ("schema_version", SCHEMA_VERSION),
-        )
         _remove_mock_provider_rows(db)
         _migrate_legacy_gmail_cache_ids(db)
         _migrate_gmail_draft_labels(db)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_threads_order ON threads(last_message_at DESC, id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_threads_connection_order ON threads(connection_id, last_message_at DESC, id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_drafts_connection_order ON drafts(connection_id, updated_at DESC, id)")
+        db.execute("CREATE TABLE IF NOT EXISTS gmail_sync_inventory (connection_id TEXT NOT NULL, provider_thread_id TEXT NOT NULL, PRIMARY KEY(connection_id, provider_thread_id))")
+        install_search_index(db)
+        db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES ('schema_version', ?)", (SCHEMA_VERSION,))
 
 
 def health_payload(data_root: Path, *, initialize: bool = True) -> dict[str, object]:

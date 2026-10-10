@@ -8,14 +8,22 @@ from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
 from storage_attachments import normalize_workspace_attachments
-from store import audit, get_thread, list_connections
+from store import audit, list_connections
+from delivery import require_sendable
+from replies import reply_context
+from search_index import search_predicate
 
 
 def create_draft(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
     ensure_schema(data_root)
     connection_id = _required_string(payload.get("connection_id") or _default_connection_id(data_root), "connection_id")
     thread_id = _optional_string(payload.get("thread_id"))
-    to_recipients, cc_recipients, bcc_recipients = _draft_recipients(data_root, connection_id, thread_id, payload)
+    connection = _connection_for_draft(data_root, connection_id)
+    context, default_to, default_cc = reply_context(data_root, connection_id, str(connection["email_address"]), thread_id, payload)
+    recipients_payload = dict(payload)
+    if not any(_address_list(payload.get(field)) for field in ("to", "cc", "bcc")):
+        recipients_payload.update(to=default_to, cc=default_cc)
+    to_recipients, cc_recipients, bcc_recipients = _draft_recipients(recipients_payload)
     reply_to = _address_list(payload.get("reply_to") or payload.get("replyTo"))
     subject = _required_string(payload.get("subject"), "subject")
     body_text = _required_string(payload.get("body_text"), "body_text")
@@ -47,16 +55,20 @@ def create_draft(data_root: Path, payload: dict[str, object]) -> dict[str, objec
                 now,
             ),
         )
+        db.execute(
+            "UPDATE drafts SET reply_message_id = ?, reply_mode = ?, in_reply_to = ?, references_json = ?, outgoing_message_id = ? WHERE id = ?",
+            (context["reply_message_id"], context["reply_mode"], context["in_reply_to"], json.dumps(context["references"]), f"<{uuid4().hex}@maverick.mail>", draft_id),
+        )
     audit(data_root, "draft.create", "mail_draft", draft_id, {"subject": subject, "workspace_attachments": len(workspace_attachments)})
     return get_draft(data_root, draft_id)
 
 
 def update_draft(data_root: Path, draft_id: str, payload: dict[str, object]) -> dict[str, object]:
     draft = get_draft(data_root, draft_id)
+    require_sendable(draft)
+    if any(key in payload for key in ("thread_id", "reply_message_id", "reply_mode")):
+        raise ValueError("Create a new draft to change the reply message or mode")
     to_recipients, cc_recipients, bcc_recipients = _draft_recipients(
-        data_root,
-        str(draft["connection_id"]),
-        _optional_string(draft.get("thread_id")),
         {
             "to": payload.get("to", draft["to"]),
             "cc": payload.get("cc", draft["cc"]),
@@ -79,11 +91,11 @@ def update_draft(data_root: Path, draft_id: str, payload: dict[str, object]) -> 
         "updated_at": now_timestamp(),
     }
     with connect(data_root) as db:
-        db.execute(
+        result = db.execute(
             """
             UPDATE drafts
             SET to_json = ?, cc_json = ?, bcc_json = ?, reply_to_json = ?, subject = ?, body_text = ?, body_html = ?, workspace_attachments_json = ?, dirty = 1, updated_at = ?
-            WHERE id = ? AND status != 'sent'
+            WHERE id = ? AND status IN ('draft', 'failed') AND updated_at = ?
             """,
             (
                 values["to_json"],
@@ -96,8 +108,11 @@ def update_draft(data_root: Path, draft_id: str, payload: dict[str, object]) -> 
                 values["workspace_attachments_json"],
                 values["updated_at"],
                 draft_id,
+                draft["updated_at"],
             ),
         )
+        if result.rowcount != 1:
+            raise ValueError("Draft changed or delivery is in progress")
     audit(data_root, "draft.update", "mail_draft", draft_id, {"subject": values["subject"]})
     return get_draft(data_root, draft_id)
 
@@ -141,35 +156,18 @@ def count_drafts(data_root: Path, payload: dict[str, object]) -> int:
 
 
 def delete_draft(data_root: Path, draft_id: str) -> dict[str, object]:
-    get_draft(data_root, draft_id)
+    require_sendable(get_draft(data_root, draft_id))
     with connect(data_root) as db:
+        result = db.execute("DELETE FROM drafts WHERE id = ? AND status IN ('draft', 'failed')", (draft_id,))
+        if result.rowcount != 1:
+            raise ValueError("Draft cannot be deleted while sending or after delivery")
         db.execute("DELETE FROM send_confirmations WHERE draft_id = ?", (draft_id,))
-        db.execute("DELETE FROM drafts WHERE id = ? AND status != 'sent'", (draft_id,))
     audit(data_root, "draft.delete", "mail_draft", draft_id, {})
     return {"deleted": True, "id": draft_id}
 
 
 def search_drafts(data_root: Path, query: str, limit: int = 20) -> list[dict[str, object]]:
-    ensure_schema(data_root)
-    needle = f"%{query.strip()}%"
-    with connect(data_root) as db:
-        rows = db.execute(
-            """
-            SELECT * FROM drafts
-            WHERE status != 'sent'
-              AND (
-                subject LIKE ?
-                OR body_text LIKE ?
-                OR to_json LIKE ?
-                OR cc_json LIKE ?
-                OR bcc_json LIKE ?
-              )
-            ORDER BY updated_at DESC
-            LIMIT ?
-            """,
-            (needle, needle, needle, needle, needle, _bounded_int(limit, default=20, minimum=1, maximum=50)),
-        ).fetchall()
-    return [_draft(row) for row in rows]
+    return list_drafts(data_root, {"query": query, "limit": _bounded_int(limit, default=20, minimum=1, maximum=50)})
 
 
 def _draft_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]:
@@ -181,10 +179,9 @@ def _draft_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]:
         clauses.append("connection_id = ?")
         params.append(connection_id)
     if query:
-        clauses.append(
-            "(subject LIKE ? OR body_text LIKE ? OR to_json LIKE ? OR cc_json LIKE ? OR bcc_json LIKE ?)"
-        )
-        params.extend([f"%{query}%"] * 5)
+        predicate, search_params = search_predicate(query, "drafts.id", search_field="draft_id")
+        clauses.append(predicate)
+        params.extend(search_params)
     return clauses, params
 
 
@@ -195,6 +192,8 @@ def _draft(row) -> dict[str, object]:
     item["bcc"] = _loads_list(item.pop("bcc_json"))
     item["reply_to"] = _loads_list(item.pop("reply_to_json", "[]"))
     item["workspace_attachments"] = _loads_list(item.pop("workspace_attachments_json", "[]"))
+    item["references"] = _loads_list(item.pop("references_json", "[]"))
+    item["send_result"] = json.loads(item.pop("send_result_json", "{}"))
     item["dirty"] = bool(item["dirty"])
     item["deep_link"] = f"/app/mail?draft={item['id']}"
     return item
@@ -217,44 +216,14 @@ def _json_list(value: object) -> str:
 
 
 def _draft_recipients(
-    data_root: Path,
-    connection_id: str,
-    thread_id: str | None,
     payload: dict[str, object],
 ) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
     to_recipients = _address_list(payload.get("to"))
     cc_recipients = _address_list(payload.get("cc"))
     bcc_recipients = _address_list(payload.get("bcc"))
-    if not _has_any_recipient(to_recipients, cc_recipients, bcc_recipients) and thread_id:
-        to_recipients = _reply_recipients(data_root, connection_id, thread_id)
     if not _has_any_recipient(to_recipients, cc_recipients, bcc_recipients):
         raise ValueError("At least one recipient in to, cc, or bcc is required")
     return to_recipients, cc_recipients, bcc_recipients
-
-
-def _reply_recipients(data_root: Path, connection_id: str, thread_id: str) -> list[dict[str, str]]:
-    connection = _connection_for_draft(data_root, connection_id)
-    own_email = str(connection.get("email_address") or "").strip().lower()
-    thread = get_thread(data_root, thread_id, max_body_chars=200)
-    recipients: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for participant in thread.get("participants", []):
-        address = _address(participant)
-        email = address.get("email", "").lower()
-        if not email or email == own_email or email in seen:
-            continue
-        seen.add(email)
-        recipients.append(address)
-    return recipients
-
-
-def _require_recipients(draft: dict[str, object]) -> None:
-    if not _has_any_recipient(
-        _address_list(draft.get("to")),
-        _address_list(draft.get("cc")),
-        _address_list(draft.get("bcc")),
-    ):
-        raise ValueError("At least one recipient in to, cc, or bcc is required")
 
 
 def _has_any_recipient(*recipient_groups: list[dict[str, str]]) -> bool:

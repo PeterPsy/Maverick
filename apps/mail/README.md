@@ -58,7 +58,23 @@ Primary data lives in:
 data/mail/mail.sqlite
 ```
 
-Schema version `10` stores connections, non-sensitive provider settings, OAuth flow metadata, redaction-safe credential references, folders, labels, threads, messages, bounded original HTML bodies, Gmail-sanitized HTML bodies, rendered HTML bodies, render policy metadata, MIME part metadata, inline asset metadata, attachment metadata, plain-text and optional HTML draft bodies, draft reply-to recipients, Storage-backed draft attachments, sync state, app-to-app entity links, and audit log entries. The install and migrate hooks are idempotent and create or upgrade the schema. The schema migration removes legacy local mock provider rows and preserves Gmail connections/cache. Version `10` normalizes cached Gmail `draft` labels to the canonical `drafts` mailbox; new Gmail reads apply the same mapping, so Drafts filters and counts work without requiring a provider resync.
+Schema version `11` adds per-message labels, message-specific reply metadata,
+stable outgoing Message-IDs, persisted send outcomes, an FTS5 visible-text index,
+normalized indexed thread labels and bounded Gmail recovery inventory. Install
+and migrate hooks upgrade the schema once. Subsequent schema guards perform only
+a version read; they do not scan, backfill, normalize or write mail records.
+Composite indexes cover connection filtering and deterministic date/id ordering.
+Rollback journaling remains the default: WAL was evaluated but is not forced on
+workspace roots because their storage may use a network filesystem; enabling WAL
+requires a deployment-level same-host/local-filesystem decision and backup handling.
+
+Search treats Unicode words as literal case-insensitive prefixes joined with AND
+within each indexed document. Punctuation-only queries (including `%` and `_`)
+use literal substring matching. FTS operators in user input are ordinary words.
+The index contains subjects, snippets, plain/visible body text, address values,
+participant names and attachment filenames, never HTML markup or JSON property
+names. Database triggers maintain the index and normalized labels on cache writes,
+updates and deletions. Search results cover locally synchronized content.
 
 Provider tokens, OAuth client secrets, and mailbox passwords must not be stored in this repository, frontend, logs, app events, SQLite raw fields, or Storage files. Providers resolve them through Vault/Core Secrets. The app database stores only connection metadata, non-sensitive IMAP/SMTP settings, `secret_ref`, `grant_id`, and non-sensitive token/credential metadata.
 
@@ -87,11 +103,55 @@ The legacy root-shell path `/app/mail/oauth/callback` is accepted for existing f
 
 Gmail sync follows Gmail `nextPageToken` pagination up to the requested `max_threads` limit. `threads.sync` defaults to a 25-thread interactive head refresh so mounted backend, CLI, and widget calls return before the platform entrypoint timeout. A head refresh preserves an existing query-scoped backfill cursor instead of resetting it; `continue_cursor=true` advances that cursor. The account-level sidebar action combines the bounded head refresh with a 15-thread backfill batch, sized to remain below the broker timeout even for heavier MIME threads, and tells the user when another sync is needed for older mail. Each batch refreshes its OAuth access token once, fetches Gmail thread payloads with bounded concurrency, and writes them to the cache serially. Gmail mailbox filters map to Gmail search queries such as `in:sent`, and Gmail cursors are stored per connection plus query scope so an inbox sync cannot advance or consume a sent-mail cursor. `threads.list` is cache-first and never performs provider prefetch; its `total_count` is the number of locally cached threads matching the requested mailbox, query, connection, or mailbox scopes. Gmail `resultSizeEstimate` remains available on explicit sync results as `result_size_estimate`, but UI pagination should use cached totals unless a provider-backed paging flow is implemented.
 
-Private Email sync discovers IMAP folders, maps common folder names such as INBOX, Sent, Drafts, Trash, Junk, and Spam, stores per-folder UID cursors in `sync_state.cursor`, and performs bounded incremental fetches. Threading is local and based on `Message-ID`, `In-Reply-To`, `References`, with normalized subject fallback. SMTP sends multipart drafts using the configured mailbox identity and appends a best-effort sent copy through IMAP.
+Private Email sync discovers folders and stores version-2 per-folder cursors.
+The recent high-water UID and historical `backfill_before` boundary are separate.
+Head refreshes fetch new UIDs; `continue_cursor=true` also loads older UIDs newest
+first without skipping them. Folder turns rotate across batches, `has_more` covers
+both backfill and queued updates, and `persist_cursor=false` preserves cursors.
+UID inventories reconcile deletions and UIDVALIDITY resets; bounded flag fetches
+refresh already-cached read/starred state. Thread labels, unread state,
+participants and date/snippet are aggregated from every remaining message. Sync
+uses BODY.PEEK with a 32 MiB message limit, so reading does not mark mail seen.
+Attachment fetches reject known oversize attachments before opening a connection,
+check RFC822.SIZE, and request bounded partial MIME bytes before decoding. A large
+containing message may therefore be refused even when one attachment is small.
+
+Gmail maintains an account-wide `history.list` cursor separately from query-scoped
+thread backfill tokens. A profile history baseline is captured before initial
+loading. Added/deleted messages and label changes refresh authoritative thread
+snapshots; disappeared messages and attachments are removed. History pagination
+and pending thread ids survive bounded batches without prematurely advancing the
+history id. An expired history cursor starts a bounded full account scan including
+Spam/Trash. Old cache rows are reconciled only after its final page; a profile
+baseline captured before that scan ensures subsequent changes can be replayed.
+Only transient reads are retried; sends and provider mutations are never retried
+automatically. Provider authentication, rate limit, timeout, transport and local
+errors have separate redaction-safe error codes.
 
 Outgoing draft APIs accept `body_text`, optional `body_html`, optional `reply_to` recipients, and optional `workspace_attachments` entries pointing at `storage/generated/...` or `storage/uploaded/...` files. Mail stores attachment metadata on the draft, then dry-run send previews rebuild the MIME message and return a `confirmation_preview` with current recipients, body, thread id, Storage attachment snapshots including path, size, and sha256, plus an opaque `confirmation_token` and `confirmation_expires_at`. Preview tokens are stored server-side as hashes with a 15 minute TTL. Confirmed sends may either pass the preview token with `confirm=true` or call `mail_send_approved` / `mail_send_draft_approved` after explicit user approval; the approved-send actions consume the latest unexpired preview for the draft without exposing the token to the caller. Changed recipients, body, thread, sender, or attachment bytes are rejected before external delivery. If a caller passes the placeholder `<redacted>` as `confirmation_token`, Mail returns a diagnostic explaining that the runtime output profile redacted the token and points to the approved-send path. Gmail and SMTP sends build MIME multipart messages with the selected Storage files attached, and confirmed sends require the Gmail/IMAP connection secret selectors declared in the CLI/MCP descriptors.
 
-Gmail thread fetches parse recursive MIME payloads and preserve both `text/plain` and bounded `text/html` bodies. MIME extraction stays in `backend/providers/gmail.py`; HTML rendering policy lives in `backend/email_rendering.py`, which owns body bounding, text fallback, preview generation, sanitizer rules, CSS policy, image placeholders, and safe HTML truncation for response limits. Messages persist `body_html_original_bounded` for server-side regeneration, `body_html_gmail_sanitized` for Gmail-oriented sanitizer output, `body_html_rendered` for the reader payload, and `render_policy_json` to make the renderer decision auditable. Read APIs keep `max_body_chars` as the text/plain limit and accept `max_body_html_chars` separately so the interactive reader can request full bounded HTML without forcing large plain-text previews. Response flags distinguish source, text, and HTML truncation with `body_source_truncated`, `body_text_truncated`, and `body_html_truncated`. The legacy `body_html_sanitized` field remains the bounded reader alias for current CLI/MCP/frontend consumers. The sanitizer allowlists common email tags, safe attributes, class/id selectors, and sanitized style blocks for responsive email layouts. Its CSS declaration allowlist follows Google's Gmail CSS support list, while media at-rules are limited to Gmail-supported `all`/`screen` width, device-width, orientation, and resolution queries. It strips scripts/forms/event handlers, blocks CSS resource URLs including escaped `url(...)` variants, removes unsupported at-rules such as imports/font faces/supports, and neutralizes image `src` and background-image resources so remote resources are not auto-loaded by default. Inline `cid:` image metadata is linked to the matching attachment record when Gmail exposes an attachment id; the reader fetches bounded inline image bytes on demand through `attachments.get` and injects them as data URLs inside the isolated iframe. Remote images and background images stay blocked by default with dimensioned placeholders, and the reader recalculates iframe height after image and layout changes. The reader iframe uses only a minimal document reset, preserves email-owned fonts, link colors, line heights, and table layout, and expands to the measured content width so wide email layouts scroll horizontally in the reader wrapper. The reader prefers rendered HTML when available, keeps a plain-text toggle, lets the user explicitly load remote images and background images for a message, folds Gmail quote blocks behind a native disclosure control, can refetch larger cached message bodies when a response-limit trim is shown, and separates reply and forward composer modes so replies stay threaded while forwards start a new draft.
+A reply binds to `reply_message_id` within `thread_id` (the latest message by
+date/id when omitted). `reply_mode=reply` derives only that message's Reply-To or
+sender; `reply_all` adds its To/Cc recipients, deduplicates addresses and excludes
+the account identity. Explicit recipients remain visible in the confirmation.
+Both providers emit In-Reply-To, References and a stable outgoing Message-ID.
+Parents without a valid Message-ID require a thread refresh before replying.
+Existing reply drafts without conversation metadata must be recreated before sending.
+Changing the parent or reply mode requires a new draft.
+
+Draft delivery states are `draft`, `sending`, `sent`, `partially_sent`, `failed`
+and `unknown`. Consuming a confirmation and claiming the unchanged draft happen
+atomically. Sent, partially sent, unknown and sending drafts cannot be previewed,
+edited, deleted or resubmitted. Definitive rejection records `failed` and requires
+a new preview before retry; an ambiguous submission records `unknown`. Provider
+acceptance is persisted before cache refresh, audit or SMTP Sent-copy maintenance.
+SMTP results expose accepted recipients and refused addresses with SMTP codes.
+`sent=true` means all recipients were accepted by the provider, not end-to-end
+inbox delivery. `local_warnings` report subsequent local failures separately.
+A crash between claiming/submitting and recording the result can leave `sending`;
+Mail conservatively blocks another attempt until provider evidence is reconciled.
+
+Gmail thread fetches parse recursive MIME payloads and preserve both `text/plain` and bounded `text/html` bodies. MIME extraction stays in `backend/providers/gmail.py`; HTML rendering policy lives in `backend/email_rendering.py`, which owns body bounding, text fallback, preview generation, sanitizer rules, CSS policy, image placeholders, and safe HTML truncation for response limits. Messages persist `body_html_original_bounded` for server-side regeneration, `body_html_gmail_sanitized` for Gmail-oriented sanitizer output, `body_html_rendered` for the reader payload, and `render_policy_json` to make the renderer decision auditable. Read APIs keep `max_body_chars` as the text/plain limit and accept `max_body_html_chars` separately so the interactive reader can request full bounded HTML without forcing large plain-text previews. Response flags distinguish source, text, and HTML truncation with `body_source_truncated`, `body_text_truncated`, and `body_html_truncated`. The legacy `body_html_sanitized` field remains the bounded reader alias for current CLI/MCP/frontend consumers. The sanitizer allowlists common email tags, safe attributes, class/id selectors, and sanitized style blocks for responsive email layouts. Its CSS declaration allowlist follows Google's Gmail CSS support list, while media at-rules are limited to Gmail-supported `all`/`screen` width, device-width, orientation, and resolution queries. It strips scripts/forms/event handlers, blocks CSS resource URLs including escaped `url(...)` variants, removes unsupported at-rules such as imports/font faces/supports, and neutralizes image `src` and background-image resources so remote resources are not auto-loaded by default. Inline `cid:` image metadata is linked to the matching attachment record when Gmail exposes an attachment id; the reader fetches bounded inline image bytes on demand through `attachments.get` and injects them as data URLs inside the isolated iframe. Remote images and background images stay blocked by default with dimensioned placeholders, and the reader recalculates iframe height after image and layout changes. The reader iframe uses only a minimal document reset, preserves email-owned fonts, link colors, line heights, and table layout, and expands to the measured content width so wide email layouts scroll horizontally in the reader wrapper. The reader prefers rendered HTML when available, keeps a plain-text toggle, lets the user explicitly load remote images and background images for a message, folds Gmail quote blocks behind a native disclosure control, can refetch larger cached message bodies when a response-limit trim is shown, and opens local drafts in a display-only preview. Composition and sending are exposed through the backend, CLI and MCP surfaces.
 
 ## SDK Flow
 

@@ -583,6 +583,7 @@ class MailServiceTest(unittest.TestCase):
             ensure_schema(data_root)
             now = now_timestamp()
             with connect(data_root) as db:
+                db.execute("UPDATE schema_metadata SET value = '9' WHERE key = 'schema_version'")
                 db.execute(
                     """
                     INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
@@ -1056,6 +1057,7 @@ class MailServiceTest(unittest.TestCase):
             ensure_schema(data_root)
             now = now_timestamp()
             with connect(data_root) as db:
+                db.execute("UPDATE schema_metadata SET value = '9' WHERE key = 'schema_version'")
                 db.execute(
                     """
                     INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
@@ -2225,6 +2227,8 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             self._insert_gmail_fixture(data_root)
+            with connect(data_root) as db:
+                db.execute("UPDATE messages SET headers_json = ?", (json.dumps({"message-id": "<parent@example.com>"}),))
             _, listed = handle_action(data_root, {"action": "threads.list"})
             thread_id = listed["items"][0]["id"]
             status, payload = handle_action(
@@ -2268,7 +2272,7 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "health.check"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["schema_version"], "10")
+            self.assertEqual(payload["schema_version"], "11")
             self.assertEqual(payload["health_status"], "healthy")
             self.assertEqual(payload["database"], "mail.sqlite")
             with connect(Path(tmp)) as db:
@@ -2412,6 +2416,10 @@ class MailServiceTest(unittest.TestCase):
         calls: list[str] = []
 
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             calls.append(url)
             if url == "https://oauth2.googleapis.com/token":
@@ -2474,7 +2482,7 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["thread"]["messages"][0]["body_text"], "Hello from Gmail")
             self.assertGreaterEqual(calls.count("https://oauth2.googleapis.com/token"), 1)
 
-    def test_gmail_sync_google_http_error_returns_validation_payload(self) -> None:
+    def test_gmail_sync_google_http_error_returns_provider_payload(self) -> None:
         def failing_transport(request) -> dict[str, object]:
             body = b'{"error":"invalid_grant","error_description":"Token has been expired or revoked."}'
             raise HTTPError(request.full_url, 400, "Bad Request", {}, BytesIO(body))
@@ -2507,8 +2515,8 @@ class MailServiceTest(unittest.TestCase):
                     },
                 )
 
-            self.assertEqual(status, 400)
-            self.assertEqual(payload["error"], "validation_error")
+            self.assertEqual(status, 502)
+            self.assertEqual(payload["error"], "provider_authentication")
             self.assertIn("Gmail access token refresh failed (400)", payload["detail"])
             self.assertIn("invalid_grant", payload["detail"])
             self.assertNotIn("refresh-token", payload["detail"])
@@ -2521,6 +2529,10 @@ class MailServiceTest(unittest.TestCase):
         html_body = (FIXTURE_ROOT / "newsletter_table_responsive.html").read_text(encoding="utf-8")
 
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             if url == "https://oauth2.googleapis.com/token":
                 return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
@@ -2800,6 +2812,10 @@ class MailServiceTest(unittest.TestCase):
 
     def test_gmail_sync_scopes_local_thread_ids_by_connection(self) -> None:
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             if url == "https://oauth2.googleapis.com/token":
                 return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
@@ -2906,6 +2922,10 @@ class MailServiceTest(unittest.TestCase):
             }
 
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             calls.append(url)
             if url == "https://oauth2.googleapis.com/token":
@@ -2976,6 +2996,10 @@ class MailServiceTest(unittest.TestCase):
             }
 
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             if url == "https://oauth2.googleapis.com/token":
                 return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
@@ -3057,6 +3081,10 @@ class MailServiceTest(unittest.TestCase):
             }
 
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             if url == "https://oauth2.googleapis.com/token":
                 return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
@@ -3274,6 +3302,10 @@ class MailServiceTest(unittest.TestCase):
         calls: list[str] = []
 
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             calls.append(url)
             if url == "https://oauth2.googleapis.com/token":
@@ -3364,6 +3396,10 @@ class MailServiceTest(unittest.TestCase):
             }
 
         def fake_transport(request) -> dict[str, object]:
+            if request.full_url.endswith("/profile"):
+                return {"historyId": "100"}
+            if "/history?" in request.full_url:
+                return {"historyId": "100", "history": []}
             url = request.full_url
             if url == "https://oauth2.googleapis.com/token":
                 return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}

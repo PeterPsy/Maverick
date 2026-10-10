@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "89fbf50256c43a9784b3846fb0e4539f1daa062eb0da73c22f0a6ea0dbbf5024",
+  "build_id": "ac184b45b0154ee27e3413d3d5bac1eb2bc74fdd616549c8dbcb516cb566987f",
   "entrypoints": [
     "index.html",
     "widgets/mail-sidebar/index.html",
@@ -8,14 +8,14 @@
   ],
   "immutable": [
     {
-      "path": "assets/app-C2BPDCtI.css",
-      "sha256": "872614c83d6045f7fe6c162776dc6d9ef1e35483a22da492a8a2b08fbb8ff40f",
-      "size_bytes": 24625
+      "path": "assets/app-BGBdJ5Hq.css",
+      "sha256": "b2a4cb08afc5285557c1f6b2647cba44a34d2f7a135916d0375fbbbc1daba639",
+      "size_bytes": 24567
     },
     {
-      "path": "assets/app-C2xu6OwW.js",
-      "sha256": "ed6b5e71906f1943dc81f7c8da57552ec5694ce9836cebffb8edd00b969ea3cc",
-      "size_bytes": 42995
+      "path": "assets/app-BTBGP6lY.js",
+      "sha256": "0eeb5f69dc7138bb7194b9aa2cee052b6abc45a3b904e439fa3606a009c8efd1",
+      "size_bytes": 47540
     },
     {
       "path": "assets/createLucideIcon-CwCer74m.js",
@@ -33,14 +33,14 @@
       "size_bytes": 1969
     },
     {
-      "path": "assets/mailboxSelection-BqkQ6bkx.js",
-      "sha256": "024a90b5b679db1815fdeb76c29b33882c941c8c6237d2813f48a2b4f611032b",
-      "size_bytes": 35577
+      "path": "assets/mailboxSelection-Gi0lxcsv.js",
+      "sha256": "ae15c4af4df9d067ea69e235279628953675cf58a12e6bd78e55aedff0c0b2bd",
+      "size_bytes": 35656
     },
     {
-      "path": "assets/widgets/mail-sidebar/index-D65n3Hcw.js",
-      "sha256": "6c7a77af1237a434f788cb79d039e066d0c0501883bfb427fc0ad637846de99b",
-      "size_bytes": 142584
+      "path": "assets/widgets/mail-sidebar/index-5eoDoEfz.js",
+      "sha256": "8a472cdd0e24c171d1226db0fc1132a25caa0ab8aab96540af2327d60e47798a",
+      "size_bytes": 142520
     },
     {
       "path": "assets/widgets/mail-sidebar-footer/index-CR-QvGq2.js",
@@ -51,12 +51,12 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "80573fd0b874793818fc364be435b2a7dd811f3ababf3b934251fb3027b1dd58",
+      "sha256": "7465dfed3feee7c31534236d055203a7923b1d4bf12ae7dede55fa9cda21fb2b",
       "size_bytes": 599
     },
     {
       "path": "widgets/mail-sidebar/index.html",
-      "sha256": "71a33e7c41eb949cc9ee230d090a7e9d11949a36a217e568038e43b029d824aa",
+      "sha256": "c3ce1275d2a478f47c8d63b2319f9c9917e7c68edb2724fd6edca2a867945776",
       "size_bytes": 645
     },
     {

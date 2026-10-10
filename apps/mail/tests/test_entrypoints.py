@@ -2252,6 +2252,14 @@ class MailServiceTest(unittest.TestCase):
         events = app_events_for_action("connections.disconnect")
         self.assertEqual(events, [{"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": "connections"}])
 
+    def test_thread_mutations_publish_an_opaque_entity_hint(self) -> None:
+        import hashlib
+        for action in ("messages.mark_read", "mail_mark_read", "labels.modify", "mail_modify_labels"):
+            with self.subTest(action=action):
+                events = app_events_for_action(action, {"thread": {"id": "email_thread_test", "subject": "Private subject"}})
+                self.assertEqual(events[0]["scope_keys"], [hashlib.sha256(b"mail:thread:email_thread_test").hexdigest()])
+                self.assertNotIn("Private subject", str(events))
+
     def test_attachment_get_emits_thread_event_only_after_storage_save(self) -> None:
         for action in ("attachments.get", "mail_get_attachment"):
             with self.subTest(action=action):

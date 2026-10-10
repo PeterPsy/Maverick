@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 
 from pwa_read_model import read_model
 
@@ -393,7 +394,7 @@ def resolve_secret_resource_inventory(data_root: Path) -> dict[str, object]:
     return secret_resource_inventory(data_root)
 
 
-def app_events_for_action(action: str, result: dict[str, object] | None = None) -> list[dict[str, str]]:
+def app_events_for_action(action: str, result: dict[str, object] | None = None) -> list[dict[str, object]]:
     if action in ATTACHMENT_GET_ACTIONS:
         if action in {"attachments.save_all", "mail_save_attachments"}:
             saved = result.get("saved") if isinstance(result, dict) else None
@@ -411,10 +412,15 @@ def app_events_for_action(action: str, result: dict[str, object] | None = None) 
         resource = "connections"
     else:
         resource = "threads"
-    return [_data_changed_event(resource)]
+    event = _data_changed_event(resource)
+    if action in {"labels.modify", "mail_modify_labels", "messages.mark_read", "mail_mark_read"}:
+        thread = result.get("thread") if isinstance(result, dict) else None
+        if isinstance(thread, dict) and isinstance(thread.get("id"), str) and thread["id"]:
+            event["scope_keys"] = [hashlib.sha256(f"mail:thread:{thread['id']}".encode()).hexdigest()]
+    return [event]
 
 
-def _data_changed_event(resource: str) -> dict[str, str]:
+def _data_changed_event(resource: str) -> dict[str, object]:
     return {"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": resource}
 
 

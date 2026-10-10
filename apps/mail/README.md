@@ -21,7 +21,10 @@ those scopes as a union so sidebar checkbox selections add together instead of
 replacing each other.
 
 The frontend starts with one 200-row page of locally cached thread headers across
-folders. “Load more mail” requests the next bounded page; the UI explicitly marks
+folders. The single header refresh icon loads the next cached page without
+rereading earlier pages, account metadata or local drafts. Once cached pages are
+loaded, the same icon runs a bounded provider sync and resumes pending work;
+there is no separate load-more button. The UI explicitly marks
 the collection as incomplete while more rows remain and does not present an empty
 filtered subset as a complete mailbox. Sidebar checkbox changes filter loaded
 rows immediately without replacing them with skeletons. Aggregate and per-account
@@ -30,7 +33,13 @@ Inbox implicitly. Search uses a 250 ms debounce and aborts superseded requests;
 search results retain the same local mailbox filtering and 50-row UI pagination.
 Refresh preserves loaded rows until replacement pages finish. Direct backend reads
 have caller cancellation and bounded timeouts. Local drafts follow `total_count`
-through 200-row live pages, including collections larger than 200.
+through 200-row live pages, including collections larger than 200, and are fetched
+only when a Drafts scope is selected. Read/label/trash results update the affected
+row and reader metadata in place, retaining message bodies. Their data events
+carry an opaque SHA-256 thread hint so other mounted Mail views reread only that
+thread; events without a matching hint revalidate the thread pages. Search and
+navigation occupy separate rows below 900px; phones use previous/next controls
+with a page counter to keep large page counts clear of the search field.
 On narrow screens, opening a thread or draft replaces the list with the reader;
 the close control restores the retained list and its filters.
 
@@ -120,7 +129,10 @@ folders per attempt (fewer with a smaller budget), rotating across calls. Flag
 sweeps persist their upper UID boundary and last checked UID; pages contain at
 most 200 UIDs and consume only the remaining budget. Message and flag work share
 the budget, alternating when it is one UID. `has_more` includes uninspected
-folders and unfinished flag sweeps. Unchanged flags cause no message, thread or
+folders, unfinished flag sweeps and pending recent UID targets in folders that
+the current batch did not visit. Completed flag sweeps restart as one mailbox-wide
+cycle, including folders visited only by continuations; unfinished cycles retain
+their progress. Unchanged flags cause no message, thread or
 search-index writes. The sidebar performs one bounded continuation batch for
 either provider, and sync notices distinguish pending updates from completion.
 Thread labels, unread state,

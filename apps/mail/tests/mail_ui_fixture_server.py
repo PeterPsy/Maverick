@@ -14,12 +14,16 @@ from urllib.parse import urlparse
 
 DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 ACCOUNT = {"id": "fixture", "provider": "gmail", "email_address": "fixture@example.com", "display_name": "Fixture", "status": "connected"}
-THREADS = [{
+def make_threads(count):
+    return [{
     "id": f"thread-{index:03}", "connection_id": "fixture", "subject": f"Synthetic message {index:03}",
     "participants": [{"email": "sender@example.com", "name": "Test Sender"}],
     "last_message_at": "2026-10-10T12:00:00Z", "snippet": "Synthetic UI verification content.",
     "unread": index % 2 == 0, "starred": False, "labels": ["inbox"],
-} for index in range(251)]
+    } for index in range(count)]
+
+
+THREADS = make_threads(251)
 DRAFTS = [{
     "id": f"draft-{index:03}", "connection_id": "fixture", "subject": f"Synthetic draft {index:03}",
     "to": [{"email": "recipient@example.com"}], "body_text": "Synthetic draft. Never sent.",
@@ -37,7 +41,7 @@ def thread_by_id(thread_id):
     return {**thread, "messages": [{
         "id": "fixture-message", "thread_id": thread_id, "sender": {"email": "sender@example.com"},
         "recipients": [{"email": "fixture@example.com"}], "sent_at": thread["last_message_at"],
-        "body_text": "Synthetic reader content.", "has_attachments": False,
+        "body_text": "Synthetic reader content.", "has_attachments": False, "labels": thread["labels"],
         "body_html_rendered": '<table style="width:600px"><tr><td><h2>Synthetic reader</h2><p>Visible content with a bounded HTML frame.</p></td></tr></table>',
     }]}
 
@@ -63,6 +67,15 @@ class Handler(SimpleHTTPRequestHandler):
             payload = {"draft": next(item for item in DRAFTS if item["id"] == body["draft_id"])}
         elif action == "threads.get":
             payload = {"thread": thread_by_id(body["thread_id"])}
+        elif action in {"messages.mark_read", "labels.modify"}:
+            thread = next(item for item in THREADS if item["id"] == body["thread_id"])
+            if action == "messages.mark_read":
+                thread["unread"] = not body["read"]
+            else:
+                thread["labels"] = sorted((set(thread["labels"]) - set(body.get("remove", []))) | set(body.get("add", [])))
+                thread["unread"] = "unread" in thread["labels"]
+                thread["starred"] = "starred" in thread["labels"]
+            payload = {"thread": thread_by_id(thread["id"])}
         elif action == "pwa.read_model":
             kind = body["kind"]
             if kind == "mailboxes":
@@ -76,7 +89,7 @@ class Handler(SimpleHTTPRequestHandler):
                 data = {"message": thread_by_id("thread-000")["messages"][0]}
             payload = {"revision": "fixture-v1", "payload": {"kind": kind, "data": data}}
         else:
-            self.send_error(405, "Fixture accepts display reads only")
+            self.send_error(405, "Fixture accepts display reads and synthetic state updates only")
             return
         data = json.dumps(payload).encode()
         self.send_response(200)
@@ -92,7 +105,11 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--thread-count", type=int, default=251)
     args = parser.parse_args()
+    if not 1 <= args.thread_count <= 100000:
+        parser.error("thread-count must be between 1 and 100000")
+    THREADS = make_threads(args.thread_count)
     with ThreadingHTTPServer(("0.0.0.0", args.port), Handler) as server:
         print(f"Synthetic Mail fixture: http://maverick.localhost:{args.port}/apps/mail/", flush=True)
         server.serve_forever()

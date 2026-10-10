@@ -44,6 +44,7 @@ export type MailMessage = {
   bcc?: MailAddress[];
   sent_at: string;
   body_text: string;
+  labels?: string[];
   body_html_sanitized?: string;
   body_html_gmail_sanitized?: string;
   body_html_rendered?: string;

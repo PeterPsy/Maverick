@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { callBackend, type MailDraft, type MailThread } from './api';
 import { readMailDisplay } from './pwaCache';
+import { threadScopeKey } from './threadUpdates';
 
 vi.mock('./pwaCache', () => ({ readMailDisplay: vi.fn() }));
 vi.mock('./api', async (original) => ({ ...await original<object>(), callBackend: vi.fn() }));
@@ -43,6 +44,12 @@ describe('Live Mail sidebar filtering', () => {
       return { items: result.slice(offset, offset + 200), total_count: result.length, limit: 200, offset } as never;
     });
     vi.mocked(callBackend).mockImplementation(async (params) => {
+      if (params.action === 'messages.mark_read' || params.action === 'labels.modify') {
+        data = data.map((item) => item.id !== params.thread_id ? item : params.action === 'messages.mark_read'
+          ? { ...item, unread: !params.read }
+          : { ...item, labels: item.labels.filter((label) => !(params.remove as string[]).includes(label)).concat(params.add as string[]) });
+        return { thread: data.find((item) => item.id === params.thread_id) } as never;
+      }
       if (params.action === 'threads.get') return { thread: data.find((item) => item.id === params.thread_id) } as never;
       if (params.action === 'drafts.list') return { items: drafts.slice(Number(params.offset || 0), Number(params.offset || 0) + 200), total_count: drafts.length } as never;
       if (params.action === 'drafts.get') return { draft: drafts.find((item) => item.id === params.draft_id) } as never;
@@ -64,6 +71,101 @@ describe('Live Mail sidebar filtering', () => {
   }
   function rows() { return [...container.querySelectorAll('.thread-title')].map((row) => row.textContent); }
   function skeleton() { return container.querySelector('.mail-thread-skeleton'); }
+
+  it('loads the next page from the header without rereading existing pages, accounts or drafts', async () => {
+    data = Array.from({ length: 451 }, (_, index) => thread(`Mail ${index}`, ['inbox']));
+    await mount();
+    const firstRow = container.querySelector('.thread-row');
+    const backendReads = vi.mocked(callBackend).mock.calls.length;
+    const button = container.querySelector<HTMLButtonElement>('header.toolbar [aria-label="Load more mail"]')!;
+    expect(button).not.toBeNull();
+    await act(async () => button.click());
+    expect(vi.mocked(readMailDisplay).mock.calls.filter(([params]) => params.kind === 'threads').map(([params]) => params.offset)).toEqual([0, 200]);
+    expect(vi.mocked(callBackend)).toHaveBeenCalledTimes(backendReads);
+    expect(container.querySelector('.thread-row')).toBe(firstRow);
+    expect(skeleton()).toBeNull();
+  });
+
+  it('uses the same header icon for bounded provider sync and resumes pending work', async () => {
+    await mount();
+    vi.mocked(callBackend).mockImplementation(async (params) => params.action === 'threads.sync'
+      ? { sync: { synced_messages: 2, has_more: true } } as never : { items: accounts } as never);
+    const button = container.querySelector<HTMLButtonElement>('header.toolbar [aria-label="Load more mail"]')!;
+    await act(async () => button.click());
+    await act(async () => button.click());
+    const calls = vi.mocked(callBackend).mock.calls.filter(([params]) => params.action === 'threads.sync');
+    expect(calls).toHaveLength(2);
+    expect(calls[0][0]).toMatchObject({ max_threads: 25, continue_cursor: false });
+    expect(calls[1][0]).toMatchObject({ max_threads: 25, continue_cursor: true });
+    expect(container.querySelectorAll('header.toolbar [aria-label="Load more mail"]')).toHaveLength(1);
+    expect(container.querySelector('.mail-load-more')).toBeNull();
+  });
+
+  it('updates read state locally and refreshes only the affected thread for its data event', async () => {
+    await mount();
+    const reads = vi.mocked(readMailDisplay).mock.calls.length;
+    const firstRow = container.querySelector('.thread-row')!;
+    await act(async () => firstRow.querySelector<HTMLButtonElement>('.thread-read-button')!.click());
+    expect(firstRow.querySelector('.thread-read-button')?.getAttribute('aria-label')).toBe('Mark read');
+    const scopeKey = await threadScopeKey('A inbox');
+    await act(async () => window.dispatchEvent(new MessageEvent('message', {
+      source: window, origin: window.location.origin,
+      data: { type: 'maverick.app.data-changed', owner_app_id: 'mail', resource: 'threads', scope_keys: [scopeKey] },
+    })));
+    await vi.waitFor(() => expect(vi.mocked(callBackend).mock.calls.filter(([params]) => params.action === 'threads.get')).toHaveLength(1));
+    expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(reads);
+    expect(container.querySelector('.thread-row')).toBe(firstRow);
+    expect(skeleton()).toBeNull();
+  });
+
+  it('removes a trashed row without reloading the collection or replacing other rows', async () => {
+    await mount();
+    const otherRow = container.querySelectorAll('.thread-row')[1];
+    const reads = vi.mocked(readMailDisplay).mock.calls.length;
+    await act(async () => container.querySelector<HTMLButtonElement>('.thread-trash-button')!.click());
+    expect(rows()).toEqual(['B inbox']);
+    expect(container.querySelector('.thread-row')).toBe(otherRow);
+    expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(reads);
+    expect(skeleton()).toBeNull();
+  });
+
+  it('does not let an earlier data-event response undo a completed local read mutation', async () => {
+    await mount();
+    let resolve!: (value: unknown) => void;
+    vi.mocked(callBackend).mockImplementationOnce(() => new Promise((done) => { resolve = done; }) as never);
+    const stale = { ...data[0] };
+    const scopeKey = await threadScopeKey(stale.id);
+    await act(async () => window.dispatchEvent(new MessageEvent('message', {
+      source: window, origin: window.location.origin,
+      data: { type: 'maverick.app.data-changed', owner_app_id: 'mail', resource: 'threads', scope_keys: [scopeKey] },
+    })));
+    await vi.waitFor(() => expect(resolve).toBeDefined());
+    const button = container.querySelector<HTMLButtonElement>('.thread-read-button')!;
+    await act(async () => button.click());
+    expect(button.getAttribute('aria-label')).toBe('Mark read');
+    await act(async () => resolve({ thread: stale }));
+    expect(button.getAttribute('aria-label')).toBe('Mark read');
+  });
+
+  it('does not fetch drafts until Drafts is selected and then reuses the loaded headers', async () => {
+    await mount();
+    expect(vi.mocked(callBackend).mock.calls.some(([params]) => params.action === 'drafts.list')).toBe(false);
+    const reads = vi.mocked(readMailDisplay).mock.calls.length;
+    await navigate({ mailbox_scopes: 'all:drafts' });
+    await vi.waitFor(() => expect(vi.mocked(callBackend).mock.calls.some(([params]) => params.action === 'drafts.list')).toBe(true));
+    expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(reads);
+  });
+
+  it('can still load Inbox pages after a failed Drafts read', async () => {
+    data = Array.from({ length: 451 }, (_, index) => thread(`Mail ${index}`, ['inbox']));
+    await mount();
+    vi.mocked(callBackend).mockImplementationOnce(async () => { throw new Error('Drafts unavailable'); });
+    await navigate({ mailbox_scopes: ['all:drafts'] });
+    expect(container.textContent).toContain('Drafts unavailable');
+    await navigate({ mailbox_scopes: ['all:inbox'] });
+    await act(async () => container.querySelector<HTMLButtonElement>('header.toolbar [aria-label="Load more mail"]')!.click());
+    expect(vi.mocked(readMailDisplay).mock.calls.filter(([params]) => params.kind === 'threads').map(([params]) => params.offset)).toEqual([0, 200]);
+  });
 
   it('adds/removes only matching rows without another read or skeleton, including clearing all', async () => {
     await mount();
@@ -103,7 +205,7 @@ describe('Live Mail sidebar filtering', () => {
     data = Array.from({ length: 251 }, (_, index) => thread(`Mail ${index}`, [index < 200 ? 'inbox' : 'sent']));
     await mount();
     expect(vi.mocked(readMailDisplay).mock.calls.filter(([params]) => params.kind === 'threads')).toHaveLength(1);
-    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Load more mail')!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>('header.toolbar [aria-label="Load more mail"]')!.click());
     const reads = vi.mocked(readMailDisplay).mock.calls.length;
     await navigate({ mailbox_scopes: 'all:sent' });
     expect(rows()).toHaveLength(50);
@@ -179,7 +281,7 @@ describe('Live Mail sidebar filtering', () => {
     vi.mocked(readMailDisplay).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
     await act(async () => container.querySelector<HTMLButtonElement>('.thread-row__body')!.click());
     await navigate({ mailbox_scopes: '' });
-    expect(container.querySelector<HTMLButtonElement>('[aria-label="Refresh mailbox"]')?.disabled).toBe(false);
+    expect(container.querySelector<HTMLButtonElement>('[aria-label="Load more mail"]')?.disabled).toBe(false);
     const backendReads = vi.mocked(callBackend).mock.calls.length;
     await act(async () => resolve({ thread: data[1] } as never));
     expect(container.querySelector('.reader-column')).toBeNull();

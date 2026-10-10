@@ -6,6 +6,8 @@ import {
 } from '@maverick/pwa-cache';
 import { readMailDisplay } from './pwaCache';
 import { useMailList } from './useMailList';
+import { MailToolbar } from './MailToolbar';
+import { mergeThreadState, threadScopeKey } from './threadUpdates';
 import { DraftReader } from './DraftReader';
 import { MailHtmlFrame } from './MailHtmlFrame';
 import { filterThreadsByMailboxScopes } from './threadFilters';
@@ -32,7 +34,6 @@ import {
   type MailMessage,
   type MailThread
 } from './api';
-import SlidingPagination from './components/ui/sliding-pagination';
 import { mailThreadDragPayloadFromThread, mountMailThreadDragPreview, writeMailThreadDragData } from './lib/mailThreadDragDrop';
 import {
   isMailbox,
@@ -700,7 +701,6 @@ export function App() {
   ));
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get('query') || '');
-  const [searchFocused, setSearchFocused] = useState(false);
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -715,15 +715,16 @@ export function App() {
   const selectedThreadRef = useRef<MailThread | null>(null);
   const selectedDraftRef = useRef<MailDraft | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
+  const syncContinuationRef = useRef<{ scope: string; pending: boolean } | null>(null);
   const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
   const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
   const mailbox = primaryScope.mailbox;
   const {
     connections, liveConnections, threads: loadedThreads,
     loading: threadListLoading, refreshing: threadListRefreshing,
-    incomplete: threadListIncomplete, refresh: loadThreads,
+    incomplete: threadListIncomplete, refresh: loadThreads, updateThread,
     hasMore: threadListHasMore, loadMore: loadMoreThreads, searching: threadListSearching,
-  } = useMailList(query, setNotice);
+  } = useMailList(query, setNotice, mailboxScopeIds.some((scope) => scope.endsWith(':drafts')));
   const filteredThreads = useMemo(
     () => filterThreadsByMailboxScopes(loadedThreads, mailboxScopeIds),
     [loadedThreads, mailboxScopeIds],
@@ -937,7 +938,7 @@ export function App() {
       if (!isExactMaverickParentMessage(event)) {
         return;
       }
-      const data = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: MailNavigateParams };
+      const data = event.data as { type?: string; owner_app_id?: string; resource?: string; scope_keys?: unknown; params?: MailNavigateParams };
       if (data?.type === 'maverick.app.navigate') {
         const params = data.params || {};
         if (data.params?.add_account) {
@@ -1002,12 +1003,33 @@ export function App() {
         typeof data.resource === 'string' &&
         MAIL_DATA_RESOURCES.has(data.resource);
       if (mailDataChanged) {
-        loadThreads().catch((error: Error) => setNotice(error.message));
+        const keys = Array.isArray(data.scope_keys) ? data.scope_keys.filter((key: unknown): key is string =>
+          typeof key === 'string' && /^[0-9a-f]{64}$/.test(key)) : [];
+        if (data.resource === 'threads' && keys.length) {
+          void Promise.all(loadedThreads.filter((thread) => thread.item_kind !== 'draft').map(async (thread) =>
+            keys.includes(await threadScopeKey(thread.id)) ? thread.id : null)).then(async (ids) => {
+            const matching = ids.filter((id): id is string => Boolean(id));
+            if (!matching.length) { await loadThreads('threads'); return; }
+            await Promise.all(matching.map(async (id) => {
+              const controller = beginDisplayRead(`state:${id}`);
+              try {
+                const next = await callBackend<{ thread: MailThread }>({ action: MAIL_BACKEND_ACTIONS.threadsGet,
+                  thread_id: id, max_body_chars: 200, max_body_html_chars: 200, ...noSecretRequest() },
+                { signal: controller.signal, timeoutMs: 15_000 });
+                if (!controller.signal.aborted) applyThreadState(next.thread);
+              } catch (error) {
+                if (!controller.signal.aborted) throw error;
+              }
+            }));
+          }).catch((error: Error) => setNotice(error.message));
+        } else if (data.resource !== 'view-state') {
+          loadThreads(data.resource).catch((error: Error) => setNotice(error.message));
+        }
       }
     };
     window.addEventListener('message', listener);
     return () => window.removeEventListener('message', listener);
-  }, [closeThread, connectionId, loadThreads, loadedThreads, mailbox, mailboxScopeIds, openDraft, openThread, serializedMailboxScopes]);
+  }, [closeThread, connectionId, loadThreads, loadedThreads, mailbox, mailboxScopeIds, openDraft, openThread, query, serializedMailboxScopes, updateThread]);
 
   const connection = (connectionId ? connections.find((item) => item.id === connectionId) : null) || connections.find((item) => item.status !== 'disconnected') || connections[0];
   const connectionById = useMemo(() => new Map(connections.map((item) => [item.id, item])), [connections]);
@@ -1094,12 +1116,17 @@ export function App() {
   }
 
   async function refreshMailbox() {
+    if (threadListHasMore) {
+      await loadMoreThreads();
+      return;
+    }
     if (!canUseConnection || !connection) {
       setNotice('Connect a mail account before refreshing.');
       return;
     }
     setBusy(true);
     try {
+      const scope = JSON.stringify([connection.id, serializedMailboxScopes, query]);
       const payload = await callBackend<SyncPayload>({
         action: MAIL_BACKEND_ACTIONS.threadsSync,
         connection_id: connection.id,
@@ -1107,17 +1134,29 @@ export function App() {
         mailbox_scopes: serializedMailboxScopes,
         ...(query ? { query } : {}),
         max_threads: MAIL_INTERACTIVE_SYNC_THREADS,
+        continue_cursor: syncContinuationRef.current?.scope === scope && syncContinuationRef.current.pending,
         ...connectionSecretRequest(connection)
       });
+      syncContinuationRef.current = { scope, pending: Boolean(payload.sync?.has_more) };
       const synced = payload.sync?.synced_messages ?? payload.sync?.synced_threads ?? 0;
       setNotice(payload.sync?.has_more
         ? `Synced ${synced} message${synced === 1 ? '' : 's'}. More mail updates remain.`
         : synced > 0 ? `Synced ${synced} message${synced === 1 ? '' : 's'}.` : 'Sync completed. No new messages found.');
-      await loadThreads();
+      await loadThreads('threads');
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function applyThreadState(thread: MailThread) {
+    displayReads.current.get(`state:${thread.id}`)?.abort();
+    updateThread(thread);
+    if (selectedThreadRef.current?.id === thread.id) {
+      displayReads.current.get('thread')?.abort();
+      if (!filterThreadsByMailboxScopes([thread], mailboxScopeIds).length) closeThread();
+      else setSelectedThread((current) => current?.id === thread.id ? mergeThreadState(current, thread) : current);
     }
   }
 
@@ -1133,8 +1172,7 @@ export function App() {
         read,
         ...connectionSecretRequest(connectionById.get(selectedThread.connection_id))
       });
-      setSelectedThread(payload.thread);
-      await loadThreads();
+      applyThreadState(payload.thread);
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -1155,8 +1193,7 @@ export function App() {
         remove,
         ...connectionSecretRequest(connectionById.get(selectedThread.connection_id))
       });
-      setSelectedThread(payload.thread);
-      await loadThreads();
+      applyThreadState(payload.thread);
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -1173,8 +1210,7 @@ export function App() {
         read,
         ...connectionSecretRequest(connectionById.get(thread.connection_id))
       });
-      setSelectedThread((current) => current?.id === payload.thread.id ? payload.thread : current);
-      await loadThreads();
+      applyThreadState(payload.thread);
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -1192,9 +1228,8 @@ export function App() {
         remove: ['inbox'],
         ...connectionSecretRequest(connectionById.get(thread.connection_id))
       });
-      setSelectedThread((current) => current?.id === payload.thread.id ? payload.thread : current);
+      applyThreadState(payload.thread);
       setNotice('Moved to trash.');
-      await loadThreads();
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -1225,42 +1260,11 @@ export function App() {
 
   return (
     <main className={`mail-shell ${selectedThread || selectedDraft || threadOpenLoading ? 'is-reading' : 'is-list-only'}`}>
-      <div className={`toolbar ${searchFocused ? 'is-search-focused' : ''}`}>
-        <label className="mail-search">
-          <span className="mail-search__icon" aria-hidden="true" />
-          <input
-            aria-label="Search in Mail"
-            value={query}
-            onBlur={() => setSearchFocused(false)}
-            onChange={(event) => setQuery(event.target.value)}
-            onFocus={() => setSearchFocused(true)}
-            placeholder="Search in Mail"
-          />
-        </label>
-        <div className="mail-page-controls" aria-label="Mail pagination">
-          <span className={`mail-page-range ${threadListLoading ? 'is-loading' : ''}`}>
-            {threadListLoading ? <span aria-hidden="true" /> : `${visibleStart}-${visibleEnd}`}
-          </span>
-          <button
-            type="button"
-            className="mail-icon-button"
-            onClick={refreshMailbox}
-            disabled={busy || threadListLoading || !canUseConnection}
-            aria-label="Refresh mailbox"
-            title="Refresh mailbox"
-          >
-            <RefreshCw size={16} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          {totalPages > 1 ? (
-            <SlidingPagination
-              totalPages={totalPages}
-              currentPage={visiblePage}
-              onPageChange={setPage}
-              maxVisiblePages={7}
-            />
-          ) : null}
-        </div>
-      </div>
+      <MailToolbar query={query} onQueryChange={setQuery} loading={threadListLoading}
+        refreshing={threadListRefreshing || threadListSearching || busy}
+        refreshDisabled={busy || threadListLoading || threadListRefreshing || threadListSearching || (!threadListHasMore && !canUseConnection)}
+        onRefresh={refreshMailbox}
+        start={visibleStart} end={visibleEnd} page={visiblePage} totalPages={totalPages} onPageChange={setPage} />
 
       {accountModalOpen ? (
         <div className="mail-modal-backdrop" role="presentation" onMouseDown={(event) => {
@@ -1314,9 +1318,9 @@ export function App() {
           <div className="thread-list" aria-busy={threadListLoading || threadListRefreshing}>
             {threadListLoading ? <MailThreadListSkeleton /> : null}
             {!threadListLoading && threadListRefreshing ? <div className="thread-list-status" role="status">Updating cached mail…</div> : null}
+            {!threadListLoading && !threadListRefreshing && threadListHasMore ? <div className="thread-list-status" role="status">More mail is available. Use the header icon to load it.</div> : null}
             {threadListIncomplete ? <div className="thread-list-status" role="status">Some cached mail could not be loaded. Refresh or narrow the search.</div> : null}
             {threadListSearching ? <div className="thread-list-status" role="status">Searching…</div> : null}
-            {threadListHasMore ? <div className="thread-list-status thread-list-status--more" role="status"><span>Showing loaded mail.</span><button className="mail-load-more" type="button" onClick={loadMoreThreads} disabled={threadListRefreshing}>Load more mail</button></div> : null}
             {!threadListLoading && !threadListRefreshing && !threadListIncomplete && !threadListHasMore && !threadListSearching && threads.length === 0 ? (
               <div className="thread-empty">
                 {canUseConnection ? 'No threads match this view.' : 'Connect a mail account to load mail.'}
@@ -1343,6 +1347,8 @@ export function App() {
                 >
                   <button
                     className="thread-row__body"
+                    draggable={!isDraft}
+                    title={isDraft ? undefined : "Open email. Drag to chat to reference it."}
                     type="button"
                     onClick={() => isDraft ? openDraft(thread.draft_id!) : openThread(thread.id, thread.connection_id)}
                   >

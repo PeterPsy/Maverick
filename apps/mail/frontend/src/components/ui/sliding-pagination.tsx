@@ -46,13 +46,14 @@ export default function SlidingPagination({
 
     pages.push(first);
 
-    let left = Math.max(safeCurrentPage - Math.floor(middleCount / 2), sideCount + 1);
-    const right = Math.min(safeCurrentPage + Math.floor(middleCount / 2), safeTotalPages - sideCount);
+    const left = Math.min(
+      Math.max(safeCurrentPage - Math.floor(middleCount / 2), sideCount + 1),
+      safeTotalPages - middleCount,
+    );
+    const right = Math.min(left + middleCount - 1, safeTotalPages - sideCount);
 
     if (left > sideCount + 1) {
       pages.push(-1);
-    } else {
-      left = sideCount + 1;
     }
 
     for (let page = left; page <= right; page += 1) {

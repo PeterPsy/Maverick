@@ -21,7 +21,7 @@ function hasMore(page: ThreadListPayload) {
 export async function readMailThreadList(
   query: string,
   signal: AbortSignal,
-  onUpdate: (threads: MailThread[], complete: boolean) => void,
+  onUpdate: (threads: MailThread[], complete: boolean, pages: ThreadListPayload[]) => void,
   onError: (error: unknown) => void,
   pageCount = 1,
 ) {
@@ -37,7 +37,7 @@ export async function readMailThreadList(
         // into an earlier, freshly revalidated page.
         if (!threads.has(thread.id)) threads.set(thread.id, thread);
       }
-      onUpdate([...threads.values()], !pages.length || !hasMore(pages[pages.length - 1]));
+      onUpdate([...threads.values()], !pages.length || !hasMore(pages[pages.length - 1]), pages);
     },
     readPage: (offset, onRevalidated) => {
       // The store caps offsets; never loop over its last page or silently claim

@@ -209,23 +209,10 @@ p {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 640px) auto;
+  grid-template-columns: minmax(180px, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 12px;
-}
-
-.toolbar.is-search-focused {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.toolbar.is-search-focused .mail-search {
-  width: 100%;
-}
-
-.toolbar.is-search-focused .mail-page-range,
-.toolbar.is-search-focused .sliding-pagination {
-  display: none;
 }
 
 .mail-icon-button {
@@ -431,6 +418,16 @@ p {
   justify-content: flex-end;
   gap: 10px;
   min-width: 0;
+  flex-wrap: wrap;
+}
+
+.mail-pagination-compact {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--maverick-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .mail-page-range {
@@ -513,26 +510,14 @@ p {
   font-size: 12px;
 }
 
-.thread-list-status--more {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
+.mail-icon-button .is-spinning {
+  animation: mail-loading-spin 1s linear infinite;
 }
 
-.mail-load-more {
-  min-height: 36px;
-  padding: 6px 14px;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: var(--maverick-control-radius);
-  background: var(--mail-control);
-  color: var(--maverick-text);
-  transition: background 140ms ease;
-}
+@keyframes mail-loading-spin { to { transform: rotate(360deg); } }
 
-.mail-load-more:hover,
-.mail-load-more:focus-visible {
-  background: var(--mail-control-hover);
+@media (prefers-reduced-motion: reduce) {
+  .mail-icon-button .is-spinning { animation: none; }
 }
 
 .thread-empty {
@@ -1444,6 +1429,18 @@ p {
   }
 }
 
+@media (max-width: 900px) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mail-search {
+    width: 100%;
+  }
+  .mail-page-controls {
+    justify-content: space-between;
+  }
+}
+
 @media (max-width: 780px) {
   .mail-shell {
     padding-top: calc(var(--mail-shell-padding) + var(--mail-shell-top-offset));
@@ -1470,7 +1467,7 @@ p {
   }
 
   .toolbar {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -1487,9 +1484,8 @@ p {
   }
 
   .mail-page-controls {
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: 6px;
-    overflow: hidden;
   }
 
   .mail-page-range {
@@ -1503,6 +1499,14 @@ p {
 
   .sliding-pagination {
     gap: 0;
+  }
+
+  .mail-pagination-full {
+    display: none;
+  }
+
+  .mail-pagination-compact {
+    display: flex;
   }
 
   .sliding-pagination button {

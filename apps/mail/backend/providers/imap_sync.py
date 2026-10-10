@@ -39,6 +39,11 @@ def sync_mailbox(provider, data_root, connection_id, settings, password, *, budg
         _reconcile_removed_folders(data_root, connection_id, {folder["name"] for folder in folders})
         folder_names = {folder["name"] for folder in folders}
         states = {name: state for name, state in states.items() if name in folder_names}
+        # A new sweep belongs to the whole mailbox, including folders visited
+        # only by continuations. Keep an unfinished sweep across refreshes.
+        if not continue_cursor and all(state.get("flags", {}).get("complete", False) for state in states.values()):
+            states = {name: {key: value for key, value in state.items() if key != "flags"}
+                      for name, state in states.items()}
         uninspected = set(cursor.get("inventory_remaining", [])) & folder_names
         uninspected.update(folder_names - states.keys())
         if not uninspected and not continue_cursor:
@@ -74,9 +79,10 @@ def sync_mailbox(provider, data_root, connection_id, settings, password, *, budg
             queue = deque([(uid, "recent") for uid in new] + [(uid, "history") for uid in history if initial or continue_cursor])
             if initial:
                 state["last_uid"] = max(inventory, default=0)
+            state["recent_through_uid"] = max(new, default=state["last_uid"])
             states[folder["name"]] = state
             queues.append((folder, state, queue))
-            prepare_flag_sweep(data_root, connection_id, folder, state, restart=not continue_cursor)
+            prepare_flag_sweep(data_root, connection_id, folder, state, restart=False)
             uninspected.discard(folder["name"])
         body_pending = any(queue for _, _, queue in queues)
         flags_pending = any(not states[folder["name"]]["flags"]["complete"] for folder in selected_folders)
@@ -120,7 +126,10 @@ def sync_mailbox(provider, data_root, connection_id, settings, password, *, budg
             state = states[folder["name"]]
             # The inventory already reconciles deleted historical UIDs.
             state["history_complete"] = not any(uid < int(state["backfill_before"]) for uid in inventories[folder["name"]])
-        has_more |= any(not state.get("history_complete", False) or not state.get("flags", {}).get("complete", True) for state in states.values())
+        has_more |= any(not state.get("history_complete", False)
+                        or int(state.get("last_uid", 0)) < int(state.get("recent_through_uid", state.get("last_uid", 0)))
+                        or not state.get("flags", {}).get("complete", False)
+                        for state in states.values())
     now = now_timestamp()
     with connect(data_root) as db:
         db.execute("""INSERT INTO sync_state(connection_id, last_sync_at, last_error, cursor, last_incremental_sync_at)

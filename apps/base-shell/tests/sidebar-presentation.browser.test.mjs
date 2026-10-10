@@ -29,7 +29,7 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
       const style = getComputedStyle(element);
       return [parseFloat(style.paddingTop), parseFloat(style.paddingBottom)];
     });
-    assert.ok(railPadding.every((padding) => padding >= 12));
+    assert.ok(railPadding.every((padding) => padding < 8));
     assert.equal(await rail.locator(".bs-sidebar__rail-background-dot").count(), 0);
     assert.equal(await page.locator(".bs-sidebar.is-open").count(), 0);
     assert.equal(await page.locator(".bs-sidebar__resize-handle").count(), 0);
@@ -138,6 +138,23 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await page.waitForFunction(() => document.querySelector('.bs-sidebar__rail-button[aria-current="page"] .bs-sidebar__rail-background-dot') === null);
     assert.equal(await rail.locator(".bs-sidebar__rail-background-dot").count(), 1);
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x < 100);
+    for (const height of [320, 240]) {
+      await page.setViewportSize({ width: 1440, height });
+      await page.waitForFunction(() => {
+        const rail = document.querySelector(".bs-sidebar__rail").getBoundingClientRect();
+        return rail.y >= 32 && rail.bottom <= innerHeight - 32;
+      });
+      const compactRailBox = await rail.boundingBox();
+      assert.ok(compactRailBox.y >= 32 && compactRailBox.y + compactRailBox.height <= height - 32);
+      const backgroundDot = rail.locator(".bs-sidebar__rail-background-dot");
+      await backgroundDot.scrollIntoViewIfNeeded();
+      const compactDotBox = await backgroundDot.boundingBox();
+      const scrollport = await rail.locator(".bs-sidebar__rail-apps").boundingBox();
+      assert.ok(compactDotBox.x >= scrollport.x && compactDotBox.x + compactDotBox.width <= scrollport.x + scrollport.width);
+      const backgroundButtonBox = await backgroundDot.locator("..").boundingBox();
+      assert.ok(backgroundButtonBox.y >= scrollport.y && backgroundButtonBox.y + backgroundButtonBox.height <= scrollport.y + scrollport.height);
+      if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, `sidebar-rail-margin-${height}.png`) });
+    }
     await context.close();
 
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });

@@ -15,7 +15,7 @@
   --bs-sidebar-rail-shadow:
     inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.032),
     0 24px 80px var(--maverick-shadow-panel);
-  --bs-sidebar-rail-padding-block: 0.8rem;
+  --bs-sidebar-rail-padding-block: 0.34rem;
   --bs-sidebar-rail-padding-inline: 0.42rem;
   position: fixed;
   top: 0;
@@ -130,8 +130,13 @@
   flex-direction: column;
   align-self: center;
   width: var(--bs-sidebar-rail-width, var(--maverick-sidebar-rail-width));
-  max-height: calc(100dvh - 2rem);
+  max-height: calc(100dvh - 4rem);
   padding: var(--bs-sidebar-rail-padding-block) var(--bs-sidebar-rail-padding-inline);
+}
+
+.bs-sidebar__rail:hover,
+.bs-sidebar.is-open .bs-sidebar__rail {
+  --bs-sidebar-rail-padding-block: 0.42rem;
 }
 
 .bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-sidebar__rail,
@@ -148,6 +153,7 @@
 }
 
 .bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-sidebar__rail {
+  --bs-sidebar-rail-padding-block: 0.42rem;
   align-self: center;
   box-shadow: var(--bs-sidebar-rail-shadow);
   z-index: 8;
@@ -169,7 +175,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   gap: 0.48rem;
   min-height: 0;
   max-height: none;

@@ -3,9 +3,9 @@ import type { CSSProperties } from "react";
 const PREFERRED_ICON_SIZE_REM = 2.4;
 const MIN_ICON_SIZE_REM = 2.05;
 const RAIL_WIDTH_EXTRA_REM = 0.95;
-const RAIL_VIEWPORT_MARGIN_REM = 2;
+const RAIL_VIEWPORT_MARGIN_REM = 4;
 const RAIL_ITEM_GAP_REM = 0.48;
-const RAIL_PADDING_REM = 0.8 * 2;
+const RAIL_PADDING_REM = 0.42 * 2;
 
 export type SidebarRailMetricsInput = {
   itemCount: number;

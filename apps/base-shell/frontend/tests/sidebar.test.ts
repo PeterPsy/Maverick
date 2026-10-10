@@ -75,7 +75,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain("margin-left: var(--bs-shell-desktop-fixed-sidebar-space);");
     expect(panelsStyles).not.toContain("calc(var(--maverick-sidebar-width) + 2rem)");
     expect(sidebarStyles).toContain("left: var(--bs-sidebar-desktop-rail-left, 1rem);");
-    expect(railLayoutRule).toContain("max-height: calc(100dvh - 2rem);");
+    expect(railLayoutRule).toContain("max-height: calc(100dvh - 4rem);");
     expect(railLayoutRule).not.toContain("min(38rem");
     expect(railAppsRule).toContain("flex: 1 1 auto;");
     expect(railAppsRule).toContain("gap: 0.48rem;");
@@ -264,7 +264,7 @@ describe("Sidebar desktop rail metrics", () => {
     const metrics = calculateSidebarRailMetrics({
       itemCount: 8,
       rootFontSizePx: 16,
-      viewportHeightPx: 380,
+      viewportHeightPx: 420,
     }) as Record<string, string>;
     const iconSize = Number.parseFloat(metrics["--bs-sidebar-icon-size"]);
 

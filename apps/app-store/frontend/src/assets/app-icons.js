@@ -116,7 +116,8 @@
       const image = document.createElement("img");
       image.alt = "";
       image.loading = "lazy";
-      image.src = String(logo.value);
+      const platformOrigin = window.__MAVERICK_PLATFORM_ORIGIN__;
+      image.src = platformOrigin ? new URL(String(logo.value), platformOrigin).href : String(logo.value);
       frame.classList.add("is-image");
       frame.append(image);
       return frame;

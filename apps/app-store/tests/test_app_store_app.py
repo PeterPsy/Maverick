@@ -543,7 +543,7 @@ function createElement(tagName) {{
     append(...nodes) {{ this.children.push(...nodes); }},
   }};
 }}
-const context = {{ window: {{}}, document: {{ createElement }} }};
+const context = {{ window: {{ __MAVERICK_PLATFORM_ORIGIN__: "https://maverick.example" }}, document: {{ createElement }}, URL }};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/frontend-presentation.js`, "utf8"), context);
 vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/app-icons.js`, "utf8"), context);
@@ -585,6 +585,16 @@ const icon = icons.renderIcon(
 );
 assert(icon.classList.classes.includes("is-supporting-frontend"), "icons use installed binding role");
 assert(icon.classList.classes.includes("is-non-launchable"), "icons use installed binding launchability");
+const imageIcon = icons.renderIcon({{
+  app_id: "browser", frontend_role: "workspace", surfaces: ["frontend"],
+  logo: {{kind: "image", value: "/apps/browser/maverick-icon-compact.png"}},
+}}, "test-icon");
+assert(imageIcon.children[0].src === "https://maverick.example/apps/browser/maverick-icon-compact.png", "public icons use the platform origin across app frames");
+const externalIcon = icons.renderIcon({{
+  app_id: "external", frontend_role: "workspace", surfaces: ["frontend"],
+  logo: {{kind: "image", value: "https://cdn.example/icon.png"}},
+}}, "test-icon");
+assert(externalIcon.children[0].src === "https://cdn.example/icon.png", "absolute icon origins are preserved");
 """
         result = subprocess.run(["node", "-e", script], check=False, capture_output=True, text=True)
 

@@ -1,25 +1,25 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "0fa9f7eabb3587ec2725bc0cca4215c21bb6975d26f2946616b912dd72dd90da",
+  "build_id": "40a9f3576c28d42005fc5b8dd7b4e25376d6e3212bf2a5584ac9de4c6af50f5d",
   "entrypoints": [
     "index.html",
     "widgets/app-shortcuts/index.html"
   ],
   "immutable": [
     {
+      "path": "assets/app-BNTp6ps5.js",
+      "sha256": "bb60eb307c3c6b13e387ec47c189f34bfb9131e0c3a94599b4804f42fc611ee4",
+      "size_bytes": 74114
+    },
+    {
       "path": "assets/app-DGXlyoJH.css",
       "sha256": "920e12adb5ed482345aac4bc9259951b764a7db7bb54952d686d509efcad5b6f",
       "size_bytes": 33135
     },
     {
-      "path": "assets/app-icons-BA-XArPW.js",
-      "sha256": "9ba3bee82cb8a77f0431739c5db9ec34eea76515e122cc0d45b00067495354a8",
-      "size_bytes": 4522
-    },
-    {
-      "path": "assets/app-oJF-aDSZ.js",
-      "sha256": "906e8051cd68e09ad6ba6b58443b48df93c1a3357338626215350cecd8662fcd",
-      "size_bytes": 74102
+      "path": "assets/app-icons-CioHTMa7.js",
+      "sha256": "a67cf19cd6e5b4885c827fa8579761c6972139fadc7caab3f1f3093855429c8a",
+      "size_bytes": 4626
     },
     {
       "path": "assets/index-bYI1O_RF.css",
@@ -27,20 +27,20 @@
       "size_bytes": 8121
     },
     {
-      "path": "assets/widgets/app-shortcuts/index-C92Af8BX.js",
-      "sha256": "7753f18d38fabd048d2f4aad2ff6fe93250336c42fd926cd87aa9fc7ff5cdad6",
+      "path": "assets/widgets/app-shortcuts/index-AGIZZj54.js",
+      "sha256": "6323c13cfdc776df44f6735fc1500dc73a10069173aaa3d66644ed2149f78ab3",
       "size_bytes": 6494
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "256286da49301c3ce1928a8d1afddb67562de0eec8eb14cc8e8514cd98b7250e",
+      "sha256": "8e1fcfa7cf85f57d62ff460264da9784021b01b3b6e5cd7ee976c1024cc9a73a",
       "size_bytes": 2515
     },
     {
       "path": "widgets/app-shortcuts/index.html",
-      "sha256": "02d5609f9328bb2c282fd6dc1000b21e8d6fd23f0b99dde8508423708e815bc7",
+      "sha256": "ea28d038d0851162c7a185edac34826aee3f784b589ffcda275c788c468b3886",
       "size_bytes": 1724
     }
   ]

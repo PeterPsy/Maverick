@@ -294,6 +294,14 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                                 "frame_ancestors": sidecar.browser_origin.frame_ancestors,
                                 "connect_src": sidecar.browser_origin.connect_src,
                                 **(
+                                    {"style_origins": sidecar.browser_origin.style_origins}
+                                    if sidecar.browser_origin.style_origins else {}
+                                ),
+                                **(
+                                    {"font_origins": sidecar.browser_origin.font_origins}
+                                    if sidecar.browser_origin.font_origins else {}
+                                ),
+                                **(
                                     {"immutable_asset_prefixes": sidecar.browser_origin.immutable_asset_prefixes}
                                     if sidecar.browser_origin.immutable_asset_prefixes
                                     else {}

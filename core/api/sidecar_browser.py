@@ -161,6 +161,8 @@ def handle_sidecar_browser_launch(
         content_security_policy=_content_security_policy(
             platform_origin,
             parent_origin=parent_origin,
+            style_origins=target.sidecar.browser_origin.style_origins,
+            font_origins=target.sidecar.browser_origin.font_origins,
         ),
         parent_origin=parent_origin,
         parent_app_id=parent_app_id,
@@ -705,6 +707,8 @@ def _content_security_policy(
     platform_origin: str,
     *,
     parent_origin: str = "",
+    style_origins: list[str] | None = None,
+    font_origins: list[str] | None = None,
 ) -> str:
     # Core stamps this policy onto every proxied response, including documents
     # that the hosted application embeds from its own isolated origin. Allow
@@ -719,9 +723,9 @@ def _content_security_policy(
             "base-uri 'self'",
             "object-src 'none'",
             "script-src 'self' 'unsafe-inline'",
-            "style-src 'self' 'unsafe-inline'",
+            "style-src " + " ".join(["'self'", "'unsafe-inline'", *(style_origins or [])]),
             "img-src 'self' data: blob:",
-            "font-src 'self' data:",
+            "font-src " + " ".join(["'self'", "data:", *(font_origins or [])]),
             "connect-src 'self'",
             "worker-src 'self' blob:",
             f"frame-ancestors {' '.join(ancestors)}",

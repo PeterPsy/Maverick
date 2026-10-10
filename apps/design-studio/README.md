@@ -53,6 +53,17 @@ frontend. Core keeps the main session `SameSite=Strict` and accepts a separate
 host-only resource cookie only for those declared preview-media `GET`/`HEAD`
 routes; other sidecar responses retain the stricter resource policy.
 
+The browser CSP allows OpenDesign's Google Fonts stylesheet from
+`https://fonts.googleapis.com` and font files from `https://fonts.gstatic.com`.
+These two contract declarations apply only to styles and fonts. Native scripts,
+API connections, and the isolated sidecar process retain their existing bounds.
+
+Upstream cloud panels remain subject to the isolated installation's capabilities:
+Vela/AMR requires an unavailable Vela runtime and cloud identity, while GitHub,
+the Vela message center, and external media catalogs require outbound network
+access. Their upstream error responses do not imply that the native editor or
+Maverick model bridge is unavailable. The official frontend is kept unchanged.
+
 ## Optional naked-model bridge
 
 The sidecar requests the optional `services.http_sidecars[].model_access`

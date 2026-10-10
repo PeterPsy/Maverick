@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, fields
 from typing import Any, Protocol
 
+from core.apps.sidecar_browser_asset_origins import parse_browser_asset_origins
 from core.apps.errors import (
     AppSourceNotFoundError,
     WorkspaceAppBindingNotFoundError,
@@ -561,6 +562,8 @@ def _app_sidecar_browser_origin(payload: Any) -> HttpSidecarBrowserOriginSpec | 
             for value in payload.get("sandboxed_frame_resource_prefixes", [])
             if isinstance(value, str)
         ],
+        style_origins=parse_browser_asset_origins(payload, "style_origins", label="browser_origin"),
+        font_origins=parse_browser_asset_origins(payload, "font_origins", label="browser_origin"),
     )
 
 

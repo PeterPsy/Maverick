@@ -160,7 +160,11 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
     async def _assert_browser_origin_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(Path(temp_dir))
-            state = self._state_with_sidecar(repo_root)
+            state = self._state_with_sidecar(
+                repo_root,
+                style_origins=["https://fonts.googleapis.com"],
+                font_origins=["https://fonts.gstatic.com"],
+            )
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
             app = PlatformAsgiHost(state, shutdown_controller=shutdown)
@@ -324,6 +328,9 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             self.assertEqual(projects_headers["cache-control"], "no-store")
             csp = projects_headers["content-security-policy"]
             self.assertIn("connect-src 'self'", csp)
+            self.assertIn("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;", csp)
+            self.assertIn("font-src 'self' data: https://fonts.gstatic.com;", csp)
+            self.assertIn("script-src 'self' 'unsafe-inline';", csp)
             self.assertIn(f"frame-ancestors 'self' {platform_origin}", csp)
             self.assertNotIn("frame-ancestors *", csp)
             self.assertEqual(projects_headers["cross-origin-resource-policy"], "same-origin")

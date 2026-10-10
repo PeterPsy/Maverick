@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from core.execution_policy.models import ExecutionMode
@@ -380,6 +380,8 @@ class HttpSidecarBrowserOriginSpec:
     connect_src: list[str]
     immutable_asset_prefixes: list[str]
     sandboxed_frame_resource_prefixes: list[str]
+    style_origins: list[str] = field(default_factory=list)
+    font_origins: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

@@ -1312,7 +1312,16 @@ host configuration:
 }
 ```
 
-Core rejects weakened or unknown values. An authenticated mounted app obtains a
+Core rejects weakened or unknown values. Browser-only `style_origins` and
+`font_origins` may each declare up to eight distinct exact HTTPS origins.
+Core adds them only to `style-src` and `font-src`, respectively; paths,
+credentials, wildcards and injected CSP syntax are rejected. An omitted list
+grants no external origins. Scripts and API connections retain their existing
+policy, and these declarations grant no sidecar process egress. Design Studio
+declares Google Fonts stylesheet and font origins because unchanged OpenDesign
+previews use them.
+
+An authenticated mounted app obtains a
 body-only launch ticket with `POST /api/app-sidecars/browser-launch`, providing
 only its app id, declared sidecar id, and a clean root-relative landing path.
 Core resolves actor/workspace/install generation from the Maverick session,
@@ -1790,6 +1799,11 @@ its CacheStorage authority in Chromium. Core therefore serves only that exact
 root asset with `default-src 'none'; connect-src 'self'`, preserving the
 same-origin fetches required for verified precache while continuing to block
 all unrelated subresources.
+
+App Store resolves public app identity images against the Core-injected
+`window.__MAVERICK_PLATFORM_ORIGIN__`, so icons belonging to other apps use the
+platform asset routes instead of the App Store's owner-scoped isolated origin.
+
 Gzip or Brotli content encoding and cross-origin headers allow isolated app and
 widget frames plus Vite-generated `crossorigin` module/style tags to load
 bundles without platform session cookies on every asset request. When Core

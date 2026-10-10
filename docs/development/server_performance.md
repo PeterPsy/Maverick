@@ -14,6 +14,43 @@ SQLite owner is explicitly prepared, validated and selected with
 
 ## Reproducible baseline
 
+### Host memory pressure
+
+On the migrated Azure host, the 2026-10-10 incident exhausted a 4 GiB machine
+without swap. Linux memory pressure reported full stalls above 50%, and native
+sidecar readiness probes timed out alongside unrelated requests. A 2 GiB,
+root-owned mode-600 swap file at `/mnt/maverick-swapfile`, registered in
+`/etc/fstab`, reduced full memory stalls below 1% without terminating active
+work. Check `free -m`, `swapon --show`, and `/proc/pressure/memory` before
+starting additional builds or browser tests. Swap cushions temporary peaks;
+sustained pressure requires fewer concurrent workloads or more host RAM.
+
+Design Studio also retained an empty generated profile directory owned by the
+old migrated uid. Its writer deliberately requires mode 700 and could not
+chmod another user's directory. Only the empty
+`workspaces/default/data/design-studio/opendesign-native/sandbox/agent-home/.maverick`
+directory was reassigned to the current Core service uid (1000), preserving the
+migrated data gid (1003), and set to mode 700. Do not recursively change project
+or conversation ownership. Restart the declared Design Studio sidecar through
+its official CLI and verify `native-host-status.json` model-profile readiness.
+
+After the coordinated Core restart, the native model bridge reported both
+profiles ready (seven Codex models and five API models); OpenDesign's supported
+app config selected `installed-codex-cli`. The official App Store frontend build
+published its refresh event. Public health/session/PWA endpoints and the three
+reported app icons returned HTTP 200. The isolated-browser integration checks
+verified that external font origins do not expand script/API authority.
+
+The reported historical Chat prewarm 409 was assessed separately as
+`workspace_profile_binding_disabled` for its pinned profile. That is a concrete
+restart requirement, not permission to re-enable a disabled profile. Create a
+new chat with an available profile and hand off the prior transcript. Recent
+new-session prewarm and inter-agent requests succeeded. Vela/AMR and remote
+OpenDesign cloud panels still require capabilities outside the declared native
+installation; their upstream failures are preserved and documented by the app.
+
+### Probe fixture
+
 `scripts/server_performance_probe.py` creates and deletes its own synthetic
 fixture. It never reads or mutates a workspace. Run the same fixture and
 runtime before and after an adapter change:

@@ -367,6 +367,57 @@ class AppContractServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(AppContractValidationError, field):
                     parse_app_contract_file(app_root)
 
+    def test_browser_font_origins_round_trip_without_granting_api_egress(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = self._write_sidecar_app(Path(temp_dir))
+            payload = json.loads((app_root / "app_contract.json").read_text())
+            origin = payload["services"]["http_sidecars"][0]["browser_origin"]
+            origin["style_origins"] = ["https://fonts.googleapis.com"]
+            origin["font_origins"] = ["https://fonts.gstatic.com"]
+            (app_root / "app_contract.json").write_text(json.dumps(payload))
+
+            loaded = parse_app_contract_file(app_root)
+            restored = _contract_store()._app_contract(asdict(loaded.contract))
+            sidecar = restored.services.http_sidecars[0]
+            self.assertEqual(sidecar.browser_origin.style_origins, origin["style_origins"])
+            self.assertEqual(sidecar.browser_origin.font_origins, origin["font_origins"])
+            self.assertEqual(app_contract_payload(loaded), payload)
+            self.assertEqual(sidecar.browser_origin.connect_src, ["self"])
+            self.assertEqual(sidecar.process_policy.outbound, [])
+
+    def test_browser_font_origins_reject_ambiguous_or_injected_sources(self) -> None:
+        invalid = (
+            ["*"], ["https:"], ["http://fonts.example"],
+            ["https://*.example.com"], ["https://fonts.example/path"],
+            ["https://fonts.example?query=1"], ["https://fonts.example#fragment"],
+            ["https://user@fonts.example"], ["https://fonts.example; script-src *"],
+            ["https://fonts.example\\evil"], ["https://fonts.example:bad"],
+            ["https://fonts.example:65536"], ["https://fonts.example:0"],
+            ["https://fonts.example", "https://fonts.example"],
+            [f"https://fonts{i}.example" for i in range(9)],
+        )
+        for field in ("style_origins", "font_origins"):
+            for value in invalid:
+                with self.subTest(field=field, value=value), TemporaryDirectory() as temp_dir:
+                    app_root = self._write_sidecar_app(Path(temp_dir))
+                    payload = json.loads((app_root / "app_contract.json").read_text())
+                    payload["services"]["http_sidecars"][0]["browser_origin"][field] = value
+                    (app_root / "app_contract.json").write_text(json.dumps(payload))
+                    with self.assertRaisesRegex(AppContractValidationError, field):
+                        parse_app_contract_file(app_root)
+
+    def test_restoring_font_origins_rejects_unsafe_persisted_sources(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            loaded = parse_app_contract_file(self._write_sidecar_app(Path(temp_dir)))
+            persisted = asdict(loaded.contract)
+            origin = persisted["services"]["http_sidecars"][0]["browser_origin"]
+            for field in ("style_origins", "font_origins"):
+                with self.subTest(field=field):
+                    origin[field] = ["https://fonts.example; script-src *"]
+                    with self.assertRaisesRegex(AppContractValidationError, field):
+                        _contract_store()._app_contract(persisted)
+                    origin[field] = []
+
     def test_parse_contract_rejects_unsafe_immutable_asset_prefixes(self) -> None:
         invalid_values = (
             ["/"],

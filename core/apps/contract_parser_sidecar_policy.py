@@ -13,6 +13,7 @@ from core.apps.contract_validation import (
     _reject_unexpected_fields,
 )
 from core.apps.errors import AppContractValidationError
+from core.apps.sidecar_browser_asset_origins import parse_browser_asset_origins
 from core.apps.models import (
     HttpSidecarBrowserOriginSpec,
     HttpSidecarProcessPolicy,
@@ -145,6 +146,8 @@ def parse_browser_origin(payload: dict[str, Any], *, label: str) -> HttpSidecarB
             "connect_src",
             "immutable_asset_prefixes",
             "sandboxed_frame_resource_prefixes",
+            "style_origins",
+            "font_origins",
         },
         label=origin_label,
     )
@@ -199,6 +202,8 @@ def parse_browser_origin(payload: dict[str, Any], *, label: str) -> HttpSidecarB
         connect_src=connect_src,
         immutable_asset_prefixes=immutable_asset_prefixes,
         sandboxed_frame_resource_prefixes=sandboxed_frame_resource_prefixes,
+        style_origins=parse_browser_asset_origins(payload, "style_origins", label=origin_label),
+        font_origins=parse_browser_asset_origins(payload, "font_origins", label=origin_label),
     )
 
 

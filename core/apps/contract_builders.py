@@ -504,6 +504,8 @@ def build_http_sidecar_browser_origin(
     *,
     immutable_asset_prefixes: list[str] | None = None,
     sandboxed_frame_resource_prefixes: list[str] | None = None,
+    style_origins: list[str] | None = None,
+    font_origins: list[str] | None = None,
 ) -> HttpSidecarBrowserOriginSpec:
     """Build the strict isolated-origin policy supported by core."""
     return HttpSidecarBrowserOriginSpec(
@@ -513,6 +515,8 @@ def build_http_sidecar_browser_origin(
         connect_src=["self"],
         immutable_asset_prefixes=list(immutable_asset_prefixes or []),
         sandboxed_frame_resource_prefixes=list(sandboxed_frame_resource_prefixes or []),
+        style_origins=list(style_origins or []),
+        font_origins=list(font_origins or []),
     )
 
 

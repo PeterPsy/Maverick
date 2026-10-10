@@ -300,6 +300,12 @@
           "connect_src": [
             "self"
           ],
+          "style_origins": [
+            "https://fonts.googleapis.com"
+          ],
+          "font_origins": [
+            "https://fonts.gstatic.com"
+          ],
           "immutable_asset_prefixes": [
             "/_next/static/"
           ],

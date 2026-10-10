@@ -92,6 +92,13 @@ material before a response reaches the browser.
 
 ## Request And Response Policy
 
+The self-hosted CSP permits only same-origin scripts and API connections.
+An app may declare `browser_origin.style_origins` and `font_origins`, each
+containing at most eight distinct exact HTTPS origins. Core adds them only to
+`style-src` and `font-src`, respectively. Wildcards, URL paths, credentials,
+and CSP syntax are rejected during parsing and control-plane restoration.
+These browser resource declarations grant no sidecar process network access.
+
 The bootstrap `POST` is the sole exception to normal unsafe-method CSRF checks.
 Every other unsafe request requires:
 

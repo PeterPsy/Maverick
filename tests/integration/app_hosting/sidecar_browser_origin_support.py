@@ -207,6 +207,8 @@ class SidecarBrowserOriginTestSupport:
         *,
         startup_delay_seconds: float = 0,
         health_timeout_ms: int = 5000,
+        style_origins: list[str] | None = None,
+        font_origins: list[str] | None = None,
     ):
         from core.api.platform_state import bootstrap_platform_state
 
@@ -235,6 +237,8 @@ class SidecarBrowserOriginTestSupport:
                                 "SIDECAR_STARTUP_DELAY": str(startup_delay_seconds),
                             },
                             browser_origin=build_http_sidecar_browser_origin(
+                                style_origins=style_origins,
+                                font_origins=font_origins,
                                 immutable_asset_prefixes=["/_next/static/"],
                                 sandboxed_frame_resource_prefixes=[
                                     "/_sandbox/",

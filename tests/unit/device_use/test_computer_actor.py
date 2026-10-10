@@ -155,7 +155,6 @@ class ComputerActorTests(unittest.TestCase):
         self.assertFalse(planner_action_allowed("mac_browser", {"action": "type_text"}))
         self.assertTrue(planner_action_allowed("mac_project", {"action": "generate_srt"}))
         self.assertEqual({tool["name"] for tool in actor_device_use_tools()}, {"mac_computer", "mac_peekaboo", "mac_browser"})
-        self.assertNotIn("mac_browser", {tool["name"] for tool in actor_device_use_tools("on")})
 
     def test_invalid_or_unbounded_task_is_rejected(self):
         for value in ({}, {"objective": "x", "completion_criterion": "y", "model": "other"},

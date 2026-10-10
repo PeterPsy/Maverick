@@ -244,9 +244,11 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     ):
         raise ValueError("Hosted text execution binding must be an object.")
     payload.setdefault("hosted_text_binding", None)
-    payload["device_use_binding"] = device_use_binding_from_document(
-        payload.get("device_use_binding")
-    )
+    native_binding = payload.get("device_use_binding")
+    # Retired limited leases become Off. Never elevate stored authority to Full.
+    if isinstance(native_binding, Mapping) and native_binding.get("mode") == "on":
+        native_binding = None
+    payload["device_use_binding"] = device_use_binding_from_document(native_binding)
     _validate_runtime_family_pins(payload)
     valid_keys = {f.name for f in fields(RuntimeSessionRecord)}
     sanitized = {k: v for k, v in payload.items() if k in valid_keys}

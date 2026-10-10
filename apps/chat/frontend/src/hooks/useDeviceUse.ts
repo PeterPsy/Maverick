@@ -24,7 +24,6 @@ const emptySnapshot: NativeDeviceUseSnapshot = {
   notice: "",
   apps: [],
   permissions: { screen: false, accessibility: false, input: false },
-  settings: { selectedApp: "", additionalApps: [], consentMode: "perAction" },
 };
 
 export function providerSupportsDeviceUse(provider: ProviderItem | null): provider is ProviderItem {
@@ -86,14 +85,11 @@ export function useDeviceUse({
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
 
-  const pinnedMode = threadBinding?.mode === "full" || threadBinding?.mode === "on"
+  const pinnedMode = threadBinding?.mode === "full"
     ? threadBinding.mode : null;
   const reconnectMessage = useCallback(() => {
     if (activeThread?.device_use_enabled && !pinnedMode) {
       return bindingError || "Attendi il caricamento della modalità Device Use originale.";
-    }
-    if (pinnedMode === "on") {
-      return "Questa chat usa la vecchia modalità limitata. Avvia una nuova chat e attiva PC use.";
     }
     return "Mac scollegato. Attiva PC use per ricollegare questa chat, poi invia il messaggio.";
   }, [activeThread?.device_use_enabled, bindingError, pinnedMode]);
@@ -233,7 +229,7 @@ export function useDeviceUse({
     } catch (activationError) {
       const message = activationError instanceof Error ? activationError.message : "Impossibile attivare Device Use.";
       setError(message === "device_use_reconnect_scope_changed"
-        ? "Le impostazioni On sono diverse da quelle di questa chat. Ripristinale prima di ricollegarti, oppure avvia una nuova chat."
+        ? "Il contratto del client Mac è cambiato. Aggiorna l’app Mac e ricollega questa chat."
         : message === "device_use_session_busy"
           ? "Attendi la fine del turno o interrompilo prima di ricollegare il Mac."
           : message);

@@ -47,7 +47,7 @@ describe("PC use toggle", () => {
     expect(onModeChange).toHaveBeenCalledWith("full");
   });
 
-  it.each([null, "on"] as const)("requires a new chat instead of changing a %s binding", async (pinnedMode) => {
+  it.each([null] as const)("requires a new chat instead of changing a %s binding", async (pinnedMode) => {
     const { button, onModeChange } = await render({ locked: true, pinnedMode });
     expect(button.disabled).toBe(true);
     expect(button.title).toContain("nuova chat");
@@ -55,12 +55,6 @@ describe("PC use toggle", () => {
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
-  it("allows an old bounded activation to be stopped", async () => {
-    const { button, onModeChange } = await render({ locked: true, pinnedMode: "on", mode: "on" });
-    expect(button.disabled).toBe(false);
-    await act(async () => { button.click(); });
-    expect(onModeChange).toHaveBeenCalledWith("off");
-  });
 
   it("prevents a second transition while a connection is pending", async () => {
     const { button, onModeChange } = await render({ busy: true });

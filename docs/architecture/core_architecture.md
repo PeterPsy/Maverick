@@ -308,18 +308,19 @@ The macOS Device Use path is described in
 turn, transcript, provider credentials, tool-call ledger and same-turn image
 injection; the signed Mac app is only the native executor reached over the
 authenticated device WebSocket. Chat exposes a macOS-only PC use toggle:
-on starts Full Mac authority and off revokes only device access. Mac control is
+`full` grants Mac authority and `off` revokes device access. These are the only
+supported Device Use states. Mac control is
 an additive capability chosen before the first message, independent of workspace
 execution permissions. Full native file/command operations need no folder grant;
 the optional chat-owned working directory defaults to Home and is shared with
 media tools. Absolute local paths remain subject to macOS permissions. Only an
-explicit directory-choice request opens a picker; bounded On retains media
-folder grants. The ordinary agent prompt, skills, project, app CLI tools,
+explicit directory-choice request opens a picker. The ordinary agent prompt, skills, project, app CLI tools,
 attachments, references and delegation remain available. Native instructions and
 tools supplement the normal Codex/Antigravity runtime; a disconnected or stopped
 Mac does not block workspace turns. Native authority stays with the owning chat
-and is never inherited by collaborators. Historical bounded On chat bindings
-remain immutable and require a new chat to enable Full. There is no separate
+and is never inherited by collaborators. Retired limited chat bindings
+load without native authority; their workspace conversation remains readable.
+Full requires explicit activation in a new chat. There is no separate
 local provider conversation, credential export or browser-mediated tool path.
 The retired direct-provider design is recorded only as removed history in
 `docs/architecture/mac_local_runtime.md` and must not be reintroduced.

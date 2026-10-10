@@ -63,7 +63,7 @@ class DeviceUseWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
                         "protocol_version": DEVICE_USE_PROTOCOL_VERSION,
                         "executor_contract": DEVICE_USE_EXECUTOR_CONTRACT,
                         "tool_contract_digest": DEVICE_USE_TOOL_CONTRACT_DIGEST,
-                        "mode": "on",
+                        "mode": "full",
                         "initial_app": "com.apple.Safari",
                         "approved_apps": ["com.apple.Safari"],
                     }
@@ -99,7 +99,7 @@ class DeviceUseWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             if "device_use.ready.v1" in str(item.get("text"))
         )
         self.assertEqual(ready["activation_id"], activation["activation_id"])
-        self.assertEqual(ready["mode"], "on")
+        self.assertEqual(ready["mode"], "full")
         self.assertTrue(ready["ready"])
 
         await incoming.put({"type": "websocket.disconnect"})

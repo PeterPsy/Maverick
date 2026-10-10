@@ -18,8 +18,8 @@ from core.providers.models import RuntimeBackendLaunchSpec
 
 
 class CodexDeviceUseContinuationTests(unittest.TestCase):
-    def test_replacement_process_resumes_the_same_private_thread_in_both_modes(self):
-        for mode in ("on", "full"):
+    def test_replacement_process_resumes_the_same_private_thread_in_full(self):
+        for mode in ("full",):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 home = root / "codex-home"

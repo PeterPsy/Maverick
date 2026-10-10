@@ -83,13 +83,13 @@ class CodexComputerActor:
         last_image = None
         steps = 0
         completed = False
-        recovery = ComputerActorRecovery(self.binding.initial_app, mode=self.binding.mode)
+        recovery = ComputerActorRecovery(self.binding.initial_app)
         self.transport.output = ""
         self.transport.usage_sink = usage_sink
         self.transport.thread_id = None
         self.transport.turn_id = None
         scope = actor_device_use_instructions(self.binding)
-        tools = actor_device_use_tools(self.binding.mode)
+        tools = actor_device_use_tools()
         try:
             if not active() or self.cancelled.is_set():
                 return self._result("blocked", "computer_actor_cancelled", steps), None

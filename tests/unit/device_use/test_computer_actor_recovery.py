@@ -8,7 +8,7 @@ from core.device_use.models import DeviceUseResult
 
 class ComputerActorRecoveryTests(unittest.TestCase):
     def setUp(self):
-        self.recovery = ComputerActorRecovery("com.apple.Safari", mode="on")
+        self.recovery = ComputerActorRecovery("com.apple.Safari")
 
     @staticmethod
     def result(text, success=False, image=None):
@@ -62,12 +62,13 @@ class ComputerActorRecoveryTests(unittest.TestCase):
                 self.assertFalse(self.recovery.permits("mac_peekaboo", {**click, "snapshot": "fresh", **options}))
         self.assertTrue(self.recovery.permits("mac_peekaboo", {**click, "element": "B2", "snapshot": "fresh"}))
 
-    def test_partial_input_in_on_is_terminal_even_with_a_full_recovery_diagnostic(self):
+    def test_partial_input_requires_explicit_native_recovery(self):
         click = {"action": "click", "bundle_id": "com.apple.Safari", "element": "B1"}
-        for text in ("MC-PEEKABOO-22: partial input; stop",
-                     "MC-PEEKABOO-22: Full resta attivo: acquisisci una nuova osservazione e continua dal nuovo stato."):
-            with self.subTest(text=text):
-                self.assertFalse(self.recovery.record("mac_peekaboo", click, self.result(text)))
+        self.assertFalse(self.recovery.record("mac_peekaboo", click,
+                         self.result("MC-PEEKABOO-22: partial input; stop")))
+        self.assertTrue(self.recovery.record("mac_peekaboo", click,
+                        self.result("MC-PEEKABOO-22: Full resta attivo: acquisisci una nuova osservazione")))
+        self.assertFalse(self.recovery.permits("mac_peekaboo", click))
 
     def test_point_input_identity_uses_numeric_coordinates_and_actual_text(self):
         typing = {"action": "type_at_point", "bundle_id": "com.apple.Safari", "point_x": 0,

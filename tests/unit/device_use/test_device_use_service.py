@@ -78,10 +78,10 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertIn("launch_app", tools["mac_peekaboo"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertIn("plain metadata", DEVICE_USE_COMPANION_GUIDANCE)
 
-    def test_contract_digest_is_the_frozen_macos_v51_digest(self):
+    def test_contract_digest_is_the_frozen_macos_v52_digest(self):
         self.assertEqual(
             DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            "de5800e0240474b5108e40f3d35c0aa78532743949d9d8696a6ac43505762c76",
+            "5ce62581d33f71c356157db865bae897090af046aa54d869a51958d630c5a460",
         )
 
     def test_media_deadlines_reach_executor_and_stop_still_unblocks_worker(self):
@@ -140,10 +140,16 @@ class DeviceUseServiceTestCase(unittest.TestCase):
         self.assertEqual(binding.mode, "full")
         with self.assertRaisesRegex(ValueError, "mode"):
             device_use_binding_from_document({key: value for key, value in document.items() if key != "mode"})
-        with self.assertRaisesRegex(ValueError, "initial app"):
+        with self.assertRaisesRegex(ValueError, "mode"):
             device_use_binding_from_document({**document, "mode": "on"})
 
-    def connected(self, *, mode="on"):
+    def test_only_full_can_redeem_an_executor_ticket(self):
+        for mode in ("on", "off", "unknown"):
+            with self.subTest(mode=mode):
+                with self.assertRaisesRegex(DeviceUseAuthorizationError, "device_use_mode_invalid"):
+                    self.connected(mode=mode)
+
+    def connected(self, *, mode="full"):
         service = DeviceUseService()
         activation, ticket = service.create_activation(
             owner_user_id="user-1",
@@ -210,14 +216,6 @@ class DeviceUseServiceTestCase(unittest.TestCase):
                 self.assertEqual(outbound.get(timeout=1)["type"], "device_use.turn_end.v1")
                 self.assertTrue(service.binding_connected(binding, "runtime-1"))
 
-    def test_bounded_on_timeout_retains_its_existing_revocation_contract(self):
-        service, binding, outbound = self.connected()
-        with self.assertRaisesRegex(Exception, "device_use_execution_timeout"):
-            service.invoke(binding=binding, runtime_session_id="runtime-1", turn_id="turn-1",
-                provider_thread_id="provider-thread", provider_turn_id="provider-turn", call_id="slow",
-                tool_name="mac_computer", arguments={"action": "observe"}, task_text="observe", timeout_seconds=.01)
-        self.assertEqual(outbound.get(timeout=1)["type"], "device_use.stop.v1")
-        self.assertFalse(service.binding_connected(binding, "runtime-1"))
 
     def test_full_timeout_fence_is_cleaned_on_real_transport_loss(self):
         service, binding, outbound = self.connected(mode="full")
@@ -491,7 +489,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
             protocol_version=DEVICE_USE_PROTOCOL_VERSION,
             executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
             tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
-            mode="on",
+            mode="full",
             initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"],
             outbound=outbound,
@@ -519,7 +517,7 @@ class DeviceUseServiceTestCase(unittest.TestCase):
                 protocol_version=DEVICE_USE_PROTOCOL_VERSION,
                 executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
                 tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
-                mode="on",
+                mode="full",
                 initial_app="com.apple.Safari",
                 approved_apps=["com.apple.Safari"],
                 outbound=queue.Queue(maxsize=8),

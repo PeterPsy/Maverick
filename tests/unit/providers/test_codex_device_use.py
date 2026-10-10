@@ -43,7 +43,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.outbound: queue.Queue = queue.Queue(maxsize=8)
         self.service.connect_executor(
             ticket=ticket, protocol_version="maverick.device-use.v1", executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
-            tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="on", initial_app="com.apple.Safari",
+            tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST, mode="full", initial_app="com.apple.Safari",
             approved_apps=["com.apple.Safari"], outbound=self.outbound,
         )
         self.binding = self.service.binding_snapshot(
@@ -97,14 +97,14 @@ class CodexDeviceUseTestCase(unittest.TestCase):
         self.assertIn("not source code or a shell", instructions)
         self.assertNotIn("Never operate credential or security UI", instructions)
 
-    def test_scoped_mode_requires_source_app_grounding_and_milestone_updates(self):
+    def test_full_requires_source_app_grounding_and_milestone_updates(self):
         instructions = device_use_instructions(
-            mode="on",
+            mode="full",
             approved_apps=("com.apple.Safari",),
             initial_app="com.apple.Safari",
         )
 
-        self.assertIn("Inspect the source project/view", instructions)
+        self.assertIn("inspect the source project/view", instructions)
         self.assertIn("brief intermediate updates", instructions)
         self.assertNotIn("Do not narrate intermediate tool progress", instructions)
 

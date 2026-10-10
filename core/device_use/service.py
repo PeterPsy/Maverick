@@ -44,8 +44,6 @@ from core.device_use.result_facts import native_result_facts
 
 
 ACTIVATION_TTL_SECONDS = 60
-MAX_APPROVED_APPS = 24
-MAX_CALLS_PER_TURN = 512
 MAX_JOURNAL_RECORDS = 2048
 MAX_BINARY_HEADER_BYTES = 4096
 MAX_TASK_TEXT_CHARACTERS = 4000
@@ -179,10 +177,8 @@ class DeviceUseService:
                 self._stop_locked(activation, "device_use_contract_mismatch")
                 raise DeviceUseUnavailableError("device_use_contract_mismatch")
             access_mode = _device_use_mode(mode)
-            apps = _approved_app_ids(approved_apps, unlimited=access_mode == "full")
+            apps = _approved_app_ids(approved_apps)
             selected = _bundle_identifier(initial_app)
-            if access_mode == "on" and selected not in apps:
-                raise DeviceUseUnavailableError("device_use_initial_app_not_approved")
             activation.ticket_digest = ""
             activation.protocol_version = protocol_version
             activation.executor_contract = executor_contract
@@ -400,9 +396,7 @@ class DeviceUseService:
                 raise DeviceUseUnavailableError("device_use_previous_execution_pending")
             seen_key = (activation.activation_id, turn)
             seen = self._seen_calls.setdefault(seen_key, set())
-            if call in seen or (
-                binding.mode == "on" and len(seen) >= MAX_CALLS_PER_TURN
-            ):
+            if call in seen:
                 raise DeviceUseAuthorizationError("device_use_duplicate_or_exhausted_call")
             seen.add(call)
             self._pending[invocation_id] = pending
@@ -454,7 +448,7 @@ class DeviceUseService:
                     )
                     activation = self._activations.get(binding.activation_id)
                     if activation is not None:
-                        if activation.mode == "full" and activation.outbound is not None:
+                        if activation.outbound is not None:
                             # Keep the lease. Gate further calls until the exact
                             # native operation settles; late results never replay it.
                             pending.failure_reason_code = "device_use_execution_timeout"
@@ -1008,12 +1002,11 @@ def _bundle_identifier(value: object) -> str:
 
 
 def _approved_app_ids(
-    values: list[str] | tuple[str, ...], *, unlimited: bool = False
+    values: list[str] | tuple[str, ...]
 ) -> tuple[str, ...]:
     if (
         not isinstance(values, (list, tuple))
         or not values
-        or (not unlimited and len(values) > MAX_APPROVED_APPS)
     ):
         raise DeviceUseAuthorizationError("device_use_approved_apps_invalid")
     apps = tuple(sorted({_bundle_identifier(item) for item in values}))
@@ -1024,7 +1017,7 @@ def _approved_app_ids(
 
 def _device_use_mode(value: object) -> str:
     mode = str(value or "").strip()
-    if mode not in {"on", "full"}:
+    if mode != "full":
         raise DeviceUseAuthorizationError("device_use_mode_invalid")
     return mode
 

@@ -618,7 +618,7 @@ export type DeviceUseActivation = {
   ready: boolean;
   bound: boolean;
   reason?: string | null;
-  mode?: "on" | "full" | null;
+  mode?: "full" | null;
   initial_app?: string | null;
   approved_app_count?: number;
   ticket?: string;

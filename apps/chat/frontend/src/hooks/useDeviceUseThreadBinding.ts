@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getRuntimeThread, type ChatThread, type DeviceUseThreadBinding } from "../api/client";
 
 function completeBinding(binding: DeviceUseThreadBinding | null | undefined): boolean {
-  return Boolean(binding?.activation_id && ["on", "full"].includes(binding.mode || ""));
+  return Boolean(binding?.activation_id && binding.mode === "full");
 }
 
 // Older cached display catalogs contain only the Device Use classifier. Read

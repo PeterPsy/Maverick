@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 import queue
 import tempfile
@@ -20,11 +20,34 @@ from core.runtime.provider_input_capture_context import capture_runtime_provider
 from core.runtime.runtime_process_lifecycle import release_idle_runtime_processes
 from core.runtime.runtime_idle_deadlines import runtime_idle_deadlines
 from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.runtime_session import runtime_session_from_document
 from core.runtime.runtime_threads import create_runtime_thread
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_retired_limited_lease_loads_as_off_without_losing_chat_authority(self):
+        document = asdict(self.before)
+        document["device_use_binding"]["mode"] = "on"
+        retired = runtime_session_from_document(document)
+        self.assertIsNone(retired.device_use_binding)
+        self.assertEqual(retired.execution_binding, self.before.execution_binding)
+        self.assertEqual(retired.session_id, self.before.session_id)
+        self.state.runtime_store.save_session(retired)
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual((status, payload["error"]), (403, "device_use_session_forbidden"))
+
+    def test_reviewed_v51_full_only_upgrade_retires_old_context(self):
+        old = replace(self.before.device_use_binding, executor_contract="macos-v51",
+                      tool_contract_digest="de5800e0240474b5108e40f3d35c0aa78532743949d9d8696a6ac43505762c76")
+        self.state.runtime_store.save_session(replace(self.before, device_use_binding=old))
+        status, payload = self._reconnect(self._ready_activation())
+        self.assertEqual(status, 200, payload)
+        current = self.state.runtime_store.get_session(self.session_id)
+        self.assertEqual(current.device_use_binding.mode, "full")
+        self.assertEqual(current.device_use_binding.executor_contract, DEVICE_USE_EXECUTOR_CONTRACT)
+        self.assertEqual(current.execution_binding, self.before.execution_binding)
+
     def test_reviewed_v49_efficiency_upgrade_retires_old_context(self):
         old = replace(self.before.device_use_binding, executor_contract="macos-v49",
                       tool_contract_digest="eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf")
@@ -114,7 +137,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         self.addCleanup(unregister_device_use_session, self.session_id)
         self.before = self.state.runtime_store.get_session(self.session_id)
 
-    def _ready_activation(self, *, mode="on", apps=None, initial_app="com.apple.Safari", cookie=None):
+    def _ready_activation(self, *, mode="full", apps=None, initial_app="com.apple.Safari", cookie=None):
         status, activation, _ = self._invoke(
             self.app, path="/api/device-use/activations", method="POST",
             body={"client_generation": "reconnected-window"}, cookie=cookie or self.cookie,
@@ -178,7 +201,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         self.state.device_use_service.stop_activation(self.original["activation_id"], reason="stopped_by_user")
         status, payload = self._reconnect(self._ready_activation())
         self.assertEqual(status, 200, payload)
-        self.assertEqual(payload["mode"], "on")
+        self.assertEqual(payload["mode"], "full")
 
     def test_reconnect_publishes_the_new_binding_to_other_thread_views(self):
         create_runtime_thread(
@@ -192,7 +215,7 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
         event = publish.call_args.kwargs
         self.assertEqual(event["workspace_id"], "default")
         self.assertEqual(event["event"]["thread"]["device_use"], {
-            "activation_id": activation["activation_id"], "mode": "on",
+            "activation_id": activation["activation_id"], "mode": "full",
         })
 
     def test_active_and_queued_turns_cannot_be_rebound(self):
@@ -206,16 +229,16 @@ class DeviceUseReconnectionTestCase(AppReferenceApiTestSupport, unittest.TestCas
                 close.assert_not_called()
                 self.assertEqual(self.state.runtime_store.get_session(self.session_id), self.before)
 
-    def test_mode_or_on_scope_changes_are_rejected(self):
+    def test_running_app_discovery_changes_do_not_change_full_authority(self):
         for options in (
-            {"mode": "full"},
             {"apps": ["com.apple.Safari", "com.apple.Notes"]},
             {"initial_app": "com.apple.Notes", "apps": ["com.apple.Notes"]},
         ):
             with self.subTest(options=options):
+                self.state.runtime_store.save_session(self.before)
                 status, payload = self._reconnect(self._ready_activation(**options))
-                self.assertEqual((status, payload["error"]), (409, "device_use_reconnect_scope_changed"))
-                self.assertEqual(self.state.runtime_store.get_session(self.session_id), self.before)
+                self.assertEqual(status, 200, payload)
+                self.assertEqual(payload["mode"], "full")
 
     def test_stale_reconnect_cannot_replace_a_newer_lease(self):
         first = self._ready_activation()

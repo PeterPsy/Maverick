@@ -28,7 +28,7 @@ class CodexComputerActorTests(unittest.TestCase):
         server = Path(__file__).resolve().parents[2] / "support" / "computer_actor_server.py"
         self.actor = CodexComputerActor(
             SimpleNamespace(session_id="actor-test", workspace_id="default", runtime_root=str(root)),
-            SimpleNamespace(mode="on", approved_apps=("com.apple.Safari",), initial_app="com.apple.Safari"),
+            SimpleNamespace(mode="full", approved_apps=("com.apple.Safari",), initial_app="com.apple.Safari"),
             command_runner=lambda _command, **kwargs: subprocess.Popen([sys.executable, "-I", "-u", str(server)], **kwargs),
         )
         self.calls = []
@@ -225,11 +225,10 @@ class CodexComputerActorTests(unittest.TestCase):
                 self.assertEqual(output["summary"], "computer_actor_recovery_action_denied")
                 self.assertEqual([call[1]["element"] for call in self.calls if call[1]["action"] == "click"], ["B1"])
 
-    def test_partial_input_respects_mode_and_native_recovery_declaration(self):
+    def test_partial_input_respects_native_recovery_declaration(self):
         original = self.invoke
         guidance = " Full resta attivo: acquisisci una nuova osservazione e continua dal nuovo stato senza duplicare un effetto già avvenuto."
-        for mode, declared, expected in (("on", False, "blocked"), ("on", True, "blocked"),
-                                         ("full", False, "blocked"), ("full", True, "completed")):
+        for mode, declared, expected in (("full", False, "blocked"), ("full", True, "completed")):
             with self.subTest(mode=mode, declared=declared):
                 self.calls.clear()
                 self.invoke = original

@@ -1,9 +1,9 @@
 """Internal UI delegation, separate from the frozen native wire contract."""
 
 from core.device_use.contract import (
-    DEVICE_USE_COMPANION_GUIDANCE, DEVICE_USE_COMPUTER_INSTRUCTIONS,
+    DEVICE_USE_COMPANION_GUIDANCE,
     DEVICE_USE_EFFICIENCY_GUIDANCE, DEVICE_USE_FULL_INSTRUCTIONS,
-    DEVICE_USE_INTEGRATED_GUIDANCE, device_use_dynamic_tools, device_use_instructions,
+    device_use_dynamic_tools, device_use_instructions,
 )
 
 
@@ -74,19 +74,16 @@ def planner_device_use_tools():
     return tools
 
 
-def actor_device_use_tools(mode=None):
-    return [tool for tool in device_use_dynamic_tools() if tool["name"] in UI_TOOLS
-            and (mode != "on" or tool["name"] != "mac_browser")]
+def actor_device_use_tools():
+    return [tool for tool in device_use_dynamic_tools() if tool["name"] in UI_TOOLS]
 
 
 def actor_device_use_instructions(binding):
-    if binding.mode not in {"on", "full"}:
+    if binding.mode != "full":
         raise ValueError("Unsupported Device Use mode.")
-    scope = (DEVICE_USE_FULL_INSTRUCTIONS if binding.mode == "full"
-             else DEVICE_USE_COMPUTER_INSTRUCTIONS + "\n" + DEVICE_USE_INTEGRATED_GUIDANCE)
-    app_label = "approved_apps" if binding.mode == "on" else "applications_visible_at_activation"
-    return "\n\n".join((scope, DEVICE_USE_COMPANION_GUIDANCE, DEVICE_USE_EFFICIENCY_GUIDANCE,
-        f"Native mode={binding.mode}; {app_label}={','.join(binding.approved_apps)}; initial_app={binding.initial_app}."))
+    return "\n\n".join((DEVICE_USE_FULL_INSTRUCTIONS, DEVICE_USE_COMPANION_GUIDANCE,
+        DEVICE_USE_EFFICIENCY_GUIDANCE,
+        f"Native mode=full; applications_visible_at_activation={','.join(binding.approved_apps)}; initial_app={binding.initial_app}."))
 
 
 def planner_device_use_instructions(binding):

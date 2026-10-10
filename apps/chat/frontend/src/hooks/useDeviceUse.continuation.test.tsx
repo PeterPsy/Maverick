@@ -62,7 +62,7 @@ beforeEach(() => {
   native = {
     available: true, active: true, activationId: oldId, mode: "full", phase: "ready", notice: "",
     apps: [], permissions: { screen: true, accessibility: true, input: true },
-    settings: { selectedApp: "com.apple.Safari", additionalApps: [], consentMode: "perTask" },
+
   };
   vi.mocked(getDeviceUseActivation).mockImplementation(async (id) => activation(id));
   vi.mocked(getRuntimeThread).mockResolvedValue(originalThread);
@@ -81,8 +81,7 @@ afterEach(() => { act(() => root?.unmount()); root = null; document.body.innerHT
 
 describe("Device Use conversation continuation", () => {
   it("starts a new chat with full native authority and no configured app requirement", async () => {
-    native = { ...native, active: false, activationId: null, mode: "off", apps: [],
-      settings: { selectedApp: "", additionalApps: [], consentMode: "perAction" } };
+    native = { ...native, active: false, activationId: null, mode: "off", apps: [] };
     await render(null);
     await act(async () => { await result.selectMode("full"); });
     expect(requestNativeDeviceUse).toHaveBeenCalledWith("start", expect.objectContaining({ mode: "full" }));
@@ -92,16 +91,9 @@ describe("Device Use conversation continuation", () => {
 
   it("does not create a bounded activation from the new control", async () => {
     await render(null);
-    await act(async () => { await result.selectMode("on"); });
+    await act(async () => { await result.selectMode("on" as never); });
     expect(createDeviceUseActivation).not.toHaveBeenCalled();
     expect(result.error).toContain("solo accesso completo");
-  });
-
-  it("does not promote a historical bounded chat to full access", async () => {
-    await render({ ...originalThread, device_use: { activation_id: oldId, mode: "on" } });
-    await act(async () => { await result.selectMode("full"); });
-    expect(createDeviceUseActivation).not.toHaveBeenCalled();
-    expect(result.error).toContain("nuova chat");
   });
 
   it("reconnects Full when selected from the minimal thread catalog", async () => {
@@ -123,12 +115,12 @@ describe("Device Use conversation continuation", () => {
     expect(reconnectDeviceUseSession).toHaveBeenCalledWith("session", newId, oldId);
   });
 
-  it("never assumes On if the original binding cannot be read", async () => {
+  it("never assumes Full if the original binding cannot be read", async () => {
     vi.mocked(getRuntimeThread).mockRejectedValue(new Error("offline"));
     await render({ ...originalThread, device_use: undefined });
     expect(result.pinnedMode).toBeNull();
     expect(result.error).toContain("modalità Device Use originale");
-    await act(async () => { await result.selectMode("on"); });
+    await act(async () => { await result.selectMode("full"); });
     expect(createDeviceUseActivation).not.toHaveBeenCalled();
     expect(requestNativeDeviceUse).not.toHaveBeenCalledWith("start", expect.anything());
   });
@@ -242,7 +234,7 @@ describe("Device Use conversation continuation", () => {
   it("rejects mode changes and conversion of an ordinary existing conversation", async () => {
     native = { ...native, active: false, mode: "off" };
     await render();
-    await act(async () => { await result.selectMode("on"); });
+    await act(async () => { await result.selectMode("on" as never); });
     expect(result.error).toContain("solo accesso completo");
     await render({ ...originalThread, device_use_enabled: false, device_use: null });
     await act(async () => { await result.selectMode("full"); });
@@ -285,7 +277,7 @@ describe("Device Use conversation continuation", () => {
     await act(async () => { await result.selectMode("full"); });
     expect(stopDeviceUseActivation).toHaveBeenCalledWith(newId);
     expect(result.mode).toBe("off");
-    expect(result.error).toContain("impostazioni On sono diverse");
+    expect(result.error).toContain("contratto del client Mac è cambiato");
     expect(onReconnected).not.toHaveBeenCalled();
   });
 });

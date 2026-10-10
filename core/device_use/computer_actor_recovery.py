@@ -25,9 +25,8 @@ _PEEKABOO_INPUT_FIELDS = {
 
 
 class ComputerActorRecovery:
-    def __init__(self, initial_app, *, mode):
+    def __init__(self, initial_app):
         self.selected_app = initial_app
-        self.mode = mode
         self.pending = None
         self.refresh_required = False
         self.uncertain_inputs = set()
@@ -70,7 +69,7 @@ class ComputerActorRecovery:
             self.refresh_required = True
         elif (tool == "mac_peekaboo" and (code in _UNCERTAIN_INPUT or code == _PARTIAL_INPUT)
               and action not in _PEEKABOO_READS):
-            if code == _PARTIAL_INPUT and (self.mode != "full" or _FULL_RECOVERY not in text):
+            if code == _PARTIAL_INPUT and _FULL_RECOVERY not in text:
                 return False
             self.pending = (tool, bundle)
             self.uncertain_inputs.add(self._input_key(tool, arguments))

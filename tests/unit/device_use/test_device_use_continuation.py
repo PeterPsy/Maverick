@@ -85,7 +85,7 @@ class DeviceUseContinuationTestCase(unittest.TestCase):
                 protocol_version="maverick.device-use.v1",
                 executor_contract="macos-v46",
                 tool_contract_digest="a" * 64,
-                mode="on",
+                mode="full",
                 initial_app="com.apple.Safari",
                 approved_apps=("com.apple.Safari",),
                 created_at=NOW,

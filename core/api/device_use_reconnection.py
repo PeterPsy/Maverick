@@ -46,10 +46,6 @@ def reconnect_device_use_session(
             binding.mode != previous.mode
             or binding.protocol_version != previous.protocol_version
             or not _renewable_contract(previous, binding)
-            or (binding.mode == "on" and (
-                binding.initial_app != previous.initial_app
-                or set(binding.approved_apps) != set(previous.approved_apps)
-            ))
         ):
             raise DeviceUseAuthorizationError("device_use_reconnect_scope_changed")
         # Retire any idle provider carrying the old binding before publishing the
@@ -92,8 +88,9 @@ def _renewable_contract(previous, binding):
     if (previous.executor_contract, previous.tool_contract_digest) == (binding.executor_contract, binding.tool_contract_digest):
         return True
     # Reviewed additive companion upgrade: explicit idle reconnection retires the old
-    # provider context. Owner, workspace, protocol and On/Full scope stay fixed.
+    # provider context. Owner, workspace, protocol and Full authority stay fixed.
     return (previous.executor_contract, previous.tool_contract_digest) in {
+        ("macos-v51", "de5800e0240474b5108e40f3d35c0aa78532743949d9d8696a6ac43505762c76"),
         ("macos-v50", "4dd7bf89e6dd520294199f7b997e9388debf6004aaa6f618715033b77ed4b238"),
         ("macos-v49", "eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf"),
         ("macos-v48", "5682ddabb352ada6e227e2294e8026ae3f47ce095e3de9466aab11627d6a5b8d"),

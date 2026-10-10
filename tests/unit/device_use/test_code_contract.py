@@ -30,8 +30,8 @@ class MacCodeContractTests(unittest.TestCase):
         self.assertIn("cwd is not a security sandbox", full)
         self.assertIn("turn completion", full)
         self.assertIn("expected_sha256", full)
-        bounded = device_use_instructions(mode="on", approved_apps=("com.apple.Finder",), initial_app="com.apple.Finder")
-        self.assertNotIn("For files, coding and installations on the user's Mac use mac_code", bounded)
+        with self.assertRaisesRegex(ValueError, "Unsupported"):
+            device_use_instructions(mode="on", approved_apps=(), initial_app="com.apple.Finder")
 
     def test_full_files_and_commands_do_not_require_a_folder_grant(self):
         full = device_use_instructions(mode="full", approved_apps=(), initial_app="com.apple.Finder")

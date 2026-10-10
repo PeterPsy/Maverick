@@ -10,7 +10,24 @@ The final paired v40 acceptance test took **4m48s through Maverick** and **4m44s
 direct** (+4s / +1.4%) with equivalent functional coverage and no replay. The
 direct path was then removed. The current executor contract is `macos-v51`.
 
-## Full file and terminal authority (v51 / 0.2.5 build 56)
+## Full-only contract (v52 / 0.3.0 build 61)
+
+Device Use has exactly two product states: `off` and `full`. The active native
+hello, stored lease, thread catalog, actor catalog and reconnection accept only
+`full`; Off is represented by the absence of native authority. The trusted shell
+broker and native command validator reject unsupported activation modes before
+dispatch. Native app-selection settings, consent modes, approval panels,
+allowlists, per-turn call ceilings, blocking-error latches and folder grants
+have been removed. `confirm_action` is absent from the tool catalog.
+
+Old limited leases are retired to Off during session hydration, without granting
+Full or losing ordinary workspace/chat authority. Full leases from the reviewed
+v51 contract can explicitly reconnect while idle to v52; renewal discards old
+provider receipts and preserves the execution/model binding. Deploy paired Core
+and Mac builds. Stop, known screen lock, exact target/receipt validation,
+read-only verification after uncertainty and anti-replay remain enforced.
+
+## Full file and terminal authority
 
 Full activation itself authorizes Mac file and shell operations with the local
 user's macOS permissions. `mac_code` no longer needs a folder grant, a project
@@ -26,7 +43,7 @@ context, never authority. `mac_code.select_project directory=...` and Full
 `mac_project directory=...` set it directly; only explicit `choose_directory=true`
 opens a picker. Home and `/` are valid directories. Context/resume results do not
 recursively inventory Home. `revoke_project` resets context/jobs; PC use Stop
-revokes native authority. Bounded On retains its native media-folder grants.
+revokes native authority.
 Media primitives retain source immutability and generated-output semantics;
 general filesystem tasks use Full file/command tools.
 
@@ -49,7 +66,7 @@ explicit picker cancellation and stopped-activation persistence fencing.
 Core and native use `macos-v51`, digest
 `de5800e0240474b5108e40f3d35c0aa78532743949d9d8696a6ac43505762c76`.
 Reviewed v50 conversations can explicitly reconnect while idle, retiring the old
-provider context and preserving owner/workspace/On-or-Full scope. Deploy Core
+provider context and preserving owner/workspace/Full scope. Deploy Core
 before installing the paired native release. macOS Full Disk Access requires
 system-settings consent; the executor neither claims it from Full mode nor
 modifies TCC.
@@ -101,70 +118,6 @@ Device Use audit includes this projection, provider image-delivery acknowledgeme
 latency, text size and uncertain outcome counts. Missing historical measurements
 stay null. Numeric facts remain public; private text/JPEG evidence stays encrypted.
 Outside-bridge latency cannot be labelled model-processing time.
-
-## Mac-local coding companion (v49, historical folder-grant contract)
-
-The reviewed contract `macos-v49` has digest
-`eb8c2b9ca42c9c03ee516283fd39490d1ca5957d89c665bade60c126a1169abf`.
-Reviewed explicit idle reconnection from v44–v48 retires the old provider context
-while preserving chat, owner, workspace and On/Full mode. Core must be deployed
-before the matching native client; unknown digests remain rejected.
-
-Before v51, Full PC use introduced `mac_code`: a native folder picker, persistent chat-owned
-coding bookmarks, guarded UTF-8 read/write/replace, directory listing/creation,
-and local shell jobs with opaque handles, independent output pagination, stdin
-and stop. The native app remains an executor; Core still owns the model,
-transcript, credentials, tool ledger and encrypted evidence. No provider runtime
-is copied to the Mac, and no server permission is inherited from native access.
-
-The selected cwd confines file-tool paths but is not a shell sandbox. Native
-consent explicitly states that commands have the user's macOS permissions and
-network access. The motor runs `/bin/zsh -c` with an explicit local environment,
-without Terminal, global input or app activation. Core's wire calls remain short
-(180s; picker 300s); the native command has its own 1–3600s lifetime budget.
-Transport success and exit success are separate in result facts.
-
-Full operation deadlines cancel the exact native invocation without revoking the
-activation. The executor enforces its own deadline and accepts an owner-bound
-`device_use.cancel.v1` frame containing activation, invocation and call IDs.
-Core fences further operations while a timed-out invocation is settling; late
-acceptance, text or declared images are validated and discarded without changing
-its execution-unknown journal or replaying it. Stop, lock and actual transport
-loss still cancel work. Turn completion releases jobs and receipts while keeping
-the chat connected. Bounded On retains its existing timeout revocation contract.
-
-File cancellation is synchronized with final rename and each directory creation;
-prepared writes cannot commit after cancellation wins that boundary. Directory
-pages use a sorted entry-index `offset`/`next_offset` (256 entries, up to 100,000
-entries per scan). Re-read changed listings before continuing. Process output
-pages preserve valid UTF-8 scalars, wait for incomplete pipe bytes while running,
-and retain replacement decoding for invalid output or a discarded terminal tail.
-
-Jobs are owned by the active chat/turn and stop on turn completion, Stop, lock,
-disconnect and app exit/crash. A signed bundled command host monitors a lifetime
-pipe and monotonic deadline, terminates the shell group/ordinary descendants,
-and removes leftover group children after shell completion. Deliberate detachment
-is unsupported. There is no automatic replay. File writes use expected hashes,
-exclusive creation and atomic replacement; there is no universal filesystem lock
-against concurrent user writes. Existing bounded media primitives remain shell-free.
-
-Native 0.2.0 (51) also packages the user's supplied SVG as AppIcon.icns and assigns
-the running Dock image. Core revision `62c3cfc8` passed 65 focused contract/service/audit/provider/API
-checks and the unused-import check before deployment. The verified managed
-backend restarted from PID 916947 to 945651 and returned healthy.
-
-Native SHA `3b2d1330a2c56a072f665ef4345483d8c861f0d7` passed build run
-`37690246211` and explicit install run `37691007515`: 44 script tests, 273 Swift
-tests including 13 coding regressions, seven signed physical-host background
-checks with no diagnostics, release build and signing continuity. The real code
-fixture edited and executed a source file while the foreground app stayed the
-same; its bookmark and folder are isolated fixtures, not a user's picker grant.
-The installer confirmed `Installed and running: 0.2.0 (51)`.
-
-Read-only diagnostic run `37691363550` confirmed the exact installed revision,
-one running installed copy, valid app/command-host signatures, and the declared
-208657-byte AppIcon.icns. Native-picker selection and a model-led coding task
-with a real user project remain separate from these automated acceptance checks.
 
 ## Product contract
 
@@ -223,9 +176,9 @@ The additive contract is `macos-v47`, digest
 `d0405d09ac1ff6903336a7fa7427c7c28e2922167a0dfe302a4db0bc48b00c71`.
 Core admits companion images through its existing WSS/binary JPEG path and
 adds companion guidance to both provider adapters. Full admits the browser;
-bounded On retains existing native scope and cannot use it. Reviewed v44/v45/v46
+ Reviewed v44/v45/v46
 conversations can upgrade only by explicit idle reconnection, retiring provider
-context without changing their model or On/Full binding. Deploy Core before
+context without changing their model or Full binding. Deploy Core before
 installing this native contract. The companion source document owns native
 module/resource/lifecycle details and physical acceptance results.
 
@@ -341,9 +294,9 @@ while access is off. The emergency **Interrompi PC use** command retains
 limits still apply.
 
 Mode remains immutable when a Device Use chat is materialized. Disconnected or
-stopped Full chats reconnect through the same toggle. Historical bounded On
-chats retain their original binding and can be stopped; the new control cannot
-reactivate or promote them, so Full requires a new chat. Ordinary existing chats
+stopped Full chats reconnect through the same toggle. Retired limited leases
+load as Off without native authority; their conversations remain readable.
+They require a new chat to activate Full. Ordinary existing chats
 also require a new chat to enable device access.
 
 Chat probes native/Core status on navigation, foreground return, turn state
@@ -373,10 +326,10 @@ or the native executor confirms revocation; if both fail, the active state and
 activation ID are retained and an error offers the native emergency stop.
 
 REST and WebSocket thread catalogs, including the bounded display cache, retain
-the public activation ID and original On/Full mode. They omit native credentials
+the public activation ID and Full mode. They omit native credentials
 and live readiness. Selecting a cached Device Use thread without that summary
 loads its authorized detail before enabling a mode; missing metadata never
-defaults to On. Explicit reconnection publishes the updated catalog binding so
+infers active authority. Explicit reconnection publishes the updated catalog binding so
 other Chat views keep the new lease ID. This is a Core/Chat change and retains
 the native transport; the current paired contract is `macos-v47`.
 
@@ -425,7 +378,7 @@ provider adapters:
   lease while leaving ordinary workspace admission intact. Collaborators never
   inherit the native binding;
 - Research remains its separate web-only profile and cannot acquire Mac access;
-- one native `mac_project` capability is limited to a user-picked media project.
+- native media and code tools share an optional working directory, with no folder grant.
 
 Compatible models from these admitted native families use the ordinary model
 selector. The Antigravity adapter was added before v44; v44 does not broaden
@@ -434,33 +387,16 @@ budget plus Core result-delivery grace and 10 seconds of client margin, rather
 than aborting every media operation after 200 seconds. Other provider families
 require a separate design.
 
-## Off, On and Full authority
+## Off and Full authority
 
 ### Off
 
 No activation or device lease exists. Selecting Off stops both Core and native
 sides when an activation is present.
 
-### On
-
-On preserves the bounded v40 policy:
-
-- the chosen running app plus at most 23 additional running apps form the exact
-  allowlist;
-- start requires native approval;
-- mutations use per-action confirmation or one unlimited per-task consent;
-- sensitive effects keep their explicit confirmation and secure fields remain
-  unavailable;
-- ordinary blocking diagnostics latch the current turn;
-- Stop, known lock/sleep/session/display invalidation or scope loss revokes;
-- Core admits at most 512 unique calls in one turn.
-
-Observation receipts, scene/focus identity, point hit-testing and non-replay are
-mandatory in both modes.
-
 ### Full
 
-Full is an explicit operator break-glass mode. Policy deliberately imposes:
+Full is the sole active Device Use mode. Policy deliberately imposes:
 
 - no app allowlist; the handshake app list is discovery only, and every current
   or newly launched running application is eligible;
@@ -491,11 +427,11 @@ current native-window generation. Core returns a random bearer ticket valid for
 the WSS directly and sends:
 
 - protocol `maverick.device-use.v1`;
-- executor `macos-v47`;
+- executor `macos-v52`;
 - tool digest
-  `d0405d09ac1ff6903336a7fa7427c7c28e2922167a0dfe302a4db0bc48b00c71`;
-- mode `on` or `full`;
-- initial app and the running-app discovery/allowlist snapshot.
+  `5ce62581d33f71c356157db865bae897090af046aa54d869a51958d630c5a460`;
+- mode `full`;
+- initial app and the running-app discovery snapshot.
 
 v41 added mode to the hello, ready frame, immutable `DeviceUseSessionBinding`,
 public thread projection and provider instructions. v42 removed the
@@ -504,23 +440,21 @@ changes the frozen tool digest. v44 keeps the same schemas/digest and aligns
 native/Core media deadlines while improving precise timebases and cancellable
 sampling. Runtime session creation still records the
 selected Codex model and effort in the ordinary immutable
-`RuntimeExecutionBinding`, and both thread/start requests read that binding. In
-On, Core validates the initial app against the admitted list and applies the
-call ceiling. In Full it does neither.
+`RuntimeExecutionBinding`, and both thread/start requests read that binding.
+The app list is discovery only and there is no per-turn call ceiling.
 
 A binding is exact to activation, user, workspace, runtime session and contract.
 Only one activation per login generation and one physical call at a time are
 allowed. A new activation supersedes the prior lease. Tickets and raw private
 bindings never appear in public thread/status payloads. Compact public thread
 catalogs expose `device_use_enabled`, the public activation ID and original
-On/Full mode so Chat can label, filter and reconnect the conversation without
+Full mode so Chat can label, filter and reconnect the conversation without
 receiving tickets or native authority material.
 
 `POST /api/device-use/sessions/<session_id>/reconnect` accepts a fresh ready
 activation and the expected previous activation ID. It requires the owning user,
 workspace and current login, an existing Device Use chat, the same mode and wire
-contract, and the same initial app/app set in On. Full's running-app discovery
-snapshot may change. The persisted session lifecycle fence excludes active,
+contract. The running-app discovery snapshot may change. The persisted session lifecycle fence excludes active,
 queued and confirmation-waiting turns. A field-only CAS changes the native lease
 without overwriting session metadata or its immutable model/execution binding.
 Late cleanup of an older provider cannot unregister the renewed activation.
@@ -541,7 +475,7 @@ human/agent text through the ordinary classified provider-input capture. It keep
 the current request separate, excludes raw tool calls/results, tickets, images
 and receipts, and instructs the model to observe current state before continuing.
 No message POST, native operation or uncertain action is automatically retried.
-The v47 milestone used `macos-v47`; the current paired contract is declared above.
+The v47 milestone used `macos-v52`; the current paired contract is declared above.
 
 ## Invocation and image transport
 
@@ -571,12 +505,13 @@ are not sent through the WebView or stored by the relay. EventKit retains the 51
 
 ## Governed project media
 
-`mac_project` is the sole v45 filesystem exception. `authorize_project` opens a
-native directory picker and persists a security-scoped bookmark behind a random
-opaque `project_id`. Neither Core nor the model receives an absolute path.
-Every later argument is project-relative; absolute paths, traversal, symlinks,
-CapCut application-support/package/database roots and paths outside the selected
-folder fail closed.
+`mac_project` uses the same optional chat-owned working directory as `mac_code`.
+An explicit `directory` changes that context; otherwise it defaults to Home.
+`project_id` is optional and carries context identity rather than a folder grant.
+`authorize_project` and `resume_project` return metadata without scanning Home.
+Only explicit `choose_directory=true` opens a picker. Media operations retain
+relative source paths and source-preserving output roots; general file and shell
+operations use `mac_code` with the local user's macOS permissions.
 
 Source media is read-only. Native writes are limited to:
 
@@ -609,7 +544,7 @@ operations.
 A disconnect or timeout after dispatch is `device_use_execution_unknown`.
 Neither side retries or replays it. A fresh observation may establish outcome;
 a mutation is repeated only when new state proves it did not occur. Terminal
-turn handling clears native per-turn observations and On consent in order.
+turn handling clears native per-turn observations and receipts in order.
 
 `mac_peekaboo.observe_app` is the fast normal observation: it resolves and
 captures one stable exact main window in one read-only call. Use
@@ -623,10 +558,10 @@ same-window capture to that input; it never repeats or sequences GUI inputs.
 
 Core:
 
-- `core/device_use/contract.py` — v46 identity, tool schemas and On/Full prompts;
+- `core/device_use/contract.py` — v46 identity, tool schemas and Full prompts;
 - `core/device_use/models.py` — immutable mode binding;
 - `core/device_use/service.py` — activation, lease, serialization, ledger,
-  binary images and On-only quota;
+  binary images and duplicate-call rejection;
 - `core/api/device_use_api.py` / `device_use_websocket.py` — HTTP activation and
   private executor WSS;
 - `core/providers/codex_app_server_device_use*.py` — dynamic-tool and same-turn
@@ -643,7 +578,7 @@ Native:
 - `CompanionBrowser*.swift` / `CompanionPreview.swift` — owned browser, exact-tab input and independent preview;
 - `ProjectAccess.swift` — native picker, opaque bookmarks and path confinement;
 - `ProjectTools.swift` / `ProjectMedia*.swift` — bounded media operations;
-- `DesktopSessionMonitor.swift` — On invalidation and Full lock-only monitor;
+- `DesktopSessionMonitor.swift` — Full lock-only monitor;
 - `NativeTextFocus.swift` / `NativeTextInput.swift` — exact input admission;
 - `PeekabooTools.swift` / `CalendarTools.swift` — GUI and EventKit motors;
 - `App.swift` / `MacWebView.swift` — chrome-free app and Device Use bridge;
@@ -760,7 +695,7 @@ The additive tool contract is `macos-v45`, digest
 Explicit idle reconnection permits the reviewed v44 digest
 `d525d61fc31a5d873b189166be26d90bd613dc1e2e430f69a07744d920ea4dd1`
 to upgrade to v45. It retires the old provider context, retains the execution
-binding/history, and preserves owner, workspace, protocol and On/Full scope.
+binding/history, and preserves owner, workspace, protocol and Full scope.
 Other version transitions are rejected. Deploy Core first, then install the
 matching native client. The installer requests normal Quit only for an explicit
 install; if the app does not close it refuses replacement. Xcode and its checkout
@@ -770,7 +705,7 @@ are untouched.
 | --- | --- | --- |
 | P0 window identity | Remember the last visible owner-bound primary; recover missing AX metadata only with a prior root or one unique visible primary. Associate a tiny Finder rename overlay with its uniquely containing document. Auxiliary roles/frames and inference basis are returned. | Native window/scene and recovery tests; ambiguity remains a precise failure. |
 | P0 repeated picker/reconnection | Persist chat-to-project opaque ID beside security-scoped bookmarks. `resume_project` returns inventory and checkpoint without a picker. `save_checkpoint` uses CAS revisions and explicit export stages. Disconnected native sessions reject every native family while retaining ordinary workspace prewarm and turns. | Checkpoint, project binding, Core reconnection and offline-prewarm tests. |
-| P0 uncertain input | Consume receipts before dispatch; unknown, partial, suspected no-op and transport loss require same-app observation in On and Full, across turn boundaries. No other engine or input can bypass verification. | Peekaboo recovery tests including Full and end-turn. |
+| P0 uncertain input | Consume receipts before dispatch; unknown, partial, suspected no-op and transport loss require same-app observation in Full, across turn boundaries. No other engine or input can bypass verification. | Peekaboo recovery tests including Full and end-turn. |
 | P1 late prerequisites | `preflight` batches at most 24 sources, durations, hash duplicates, inventory coverage and local Speech capability. Empty inventory fails early; unavailable analysis is distinct from absent speech. Preset/project GUI checks remain explicitly unverified until observed. | Media/cache and validation tests. |
 | P1 redundant decisions/rounding | Hash-bound inspection reuse, whole-frame CFR subclip preparation and output fps/duration check. Compact AX observations with `details=true`; `observe_after=true` performs exactly one input then captures the same window, without replay. | Native 30fps multi-range fixture and bridge image-admission tests. |
 | P1 limited quality checks | Planned cut samples at ±one frame, optional all-frame decode up to 120s, timestamp discontinuities, repeated imagery, black frames, decoded audio peak/RMS, clipping, silence, gaps and duration mismatch. | Generated media pipeline tests. Technical validity does not certify captions, preset, lip sync or creative quality. |

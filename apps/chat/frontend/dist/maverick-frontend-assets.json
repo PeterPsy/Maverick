@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "0b7ee3c310d46e6763db8fb2d1aaa01142287b7b678a46e3835bf8199054af32",
+  "build_id": "2a69e073a550ed23ea03c188cd0e303946f2b4e8da02d6abab12b5b326832eb7",
   "entrypoints": [
     "index.html",
     "widgets/chat-floating/index.html",
@@ -11,9 +11,9 @@
   ],
   "immutable": [
     {
-      "path": "assets/App-CosXsgMn.js",
-      "sha256": "e505c643ae2f723797b3a51be451f107914fc084f8ad4a5858c841eeb4090216",
-      "size_bytes": 434732
+      "path": "assets/App-CdAJKLZ3.js",
+      "sha256": "09d63febeb217a1c9d9d7b214785874506b0d273f1db56df3b16aa0fec985c33",
+      "size_bytes": 434011
     },
     {
       "path": "assets/BusyChatGlow-5xf5OAGB.js",
@@ -21,8 +21,8 @@
       "size_bytes": 4023
     },
     {
-      "path": "assets/InterAgentGraphView-C-1cQHSS.js",
-      "sha256": "46b33a7c8ed3d0d00943b9f0bda53b65101398197363a1e09d7fd6aad0fc8ff6",
+      "path": "assets/InterAgentGraphView-B-LO8XQ0.js",
+      "sha256": "2836da484f17bb0507fad54d5e0a5cfd06f278bbd9020ece2be0d35d28e43d18",
       "size_bytes": 204719
     },
     {
@@ -31,13 +31,13 @@
       "size_bytes": 15869
     },
     {
-      "path": "assets/MarkdownMessage-C9uKPX4-.js",
-      "sha256": "43a89c031c70efb9e576eb7d410a3e5f082762a4cd0ff777174a8b129f76a095",
+      "path": "assets/MarkdownMessage-CzSwLsVN.js",
+      "sha256": "dcbce66cf8b5e66a3190e45d8cd7366410919dd14b15758225f481729b40c2ff",
       "size_bytes": 163522
     },
     {
-      "path": "assets/app-CGcuTHAS.js",
-      "sha256": "d0ddf67ad5acb936baff299571e3500f2759e3b10c0b053b5260930f62a0981a",
+      "path": "assets/app-z9R-RI7p.js",
+      "sha256": "9206dfd148c82e72b04362bf4f44530ed44cef1a548c938e54624bb17ca16530",
       "size_bytes": 458
     },
     {
@@ -46,8 +46,8 @@
       "size_bytes": 1829
     },
     {
-      "path": "assets/floatingWidgetRuntime-CnXiSOr8.js",
-      "sha256": "f429c41ab058750ce7cdd0e0d1c339bd67a17d2c6f87ae5915b5927af69ce4ba",
+      "path": "assets/floatingWidgetRuntime-DKiLtTlx.js",
+      "sha256": "13057b0bd17b4ae69d8a25988c7d41b1db0a8336ccee49829139b9ff1fd45ee1",
       "size_bytes": 15160
     },
     {
@@ -101,13 +101,13 @@
       "size_bytes": 14547
     },
     {
-      "path": "assets/widgets/chat-floating/index-Cd7aLoIV.js",
-      "sha256": "cdc75d5e6e51de245cfbd6fc2c5ce45825846f3ea4618833e5533b18f8a194a7",
+      "path": "assets/widgets/chat-floating/index-Du6LliG9.js",
+      "sha256": "268ca86dec51821f5afa3d870f0edf73c3d6684667572372107107ff32bf0953",
       "size_bytes": 6867
     },
     {
-      "path": "assets/widgets/chat-floating-dock/index-CRQFlOwX.js",
-      "sha256": "818ed857db8fd214dabd19f441d73125c547f1e0d7dc1ab8af552030d5fcedd9",
+      "path": "assets/widgets/chat-floating-dock/index-DAhf9Scv.js",
+      "sha256": "b6bc386c9458d7319c31682d9098e57dde7d81a0d4a12b718bf4bb22ae5c3cca",
       "size_bytes": 3609
     },
     {
@@ -149,17 +149,17 @@
     },
     {
       "path": "index.html",
-      "sha256": "c8123d95ff563bc4c84ee4e8216de20953704f2a62c43663cc26da379327a8ce",
+      "sha256": "3ce9978e790e8869594af582c913d05240ba3fe6cf3c3f72ce2c68674f3578f7",
       "size_bytes": 2393
     },
     {
       "path": "widgets/chat-floating/index.html",
-      "sha256": "3a051f94cd437e7173f82b886e44c2f9e509747988021e2f0b3f25867716a2cf",
+      "sha256": "7fbbebeb25d156430f006f07dfc99205e16ffa3e6a48621fa5a614b9cb4aa8d6",
       "size_bytes": 2261
     },
     {
       "path": "widgets/chat-floating-dock/index.html",
-      "sha256": "93cdcc0bd5299916b0b4bf0e166a10c8f19ae7004d62c989be8100795ff6c2b5",
+      "sha256": "edb3ebb4d36901d44c966625b1f6c9111c36b2c290cdbdcf97f20090abd8ac5b",
       "size_bytes": 2271
     },
     {

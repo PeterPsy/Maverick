@@ -13,14 +13,20 @@ describe("Device Use native protocol", () => {
       mode: "full", phase: "ready", notice: "ok", ticket: "secret",
       apps: [{ bundle_id: "com.apple.Notes", name: "Note", private: "discard" }],
       permissions: { screen: true, accessibility: false, input: true, other: true },
-      settings: { selected_app: "com.apple.Notes", additional_apps: [], consent_mode: "perTask" },
+
     })).toEqual({
       available: true, active: true, activationId: "01234567-89ab-cdef-0123-456789abcdef",
       mode: "full", phase: "ready", notice: "ok",
       apps: [{ bundleId: "com.apple.Notes", name: "Note" }],
       permissions: { screen: true, accessibility: false, input: true },
-      settings: { selectedApp: "com.apple.Notes", additionalApps: [], consentMode: "perTask" },
+
     });
+  });
+
+  it.each(["on", "unknown"])("rejects unsupported native mode %s", (mode) => {
+    expect(() => parseNativeDeviceUseSnapshot({
+      available: true, active: true, mode, phase: "ready", apps: [], permissions: {},
+    })).toThrow("Risposta Device Use non valida");
   });
 
   it("rejects unrecognized native phases", () => {
@@ -41,7 +47,7 @@ describe("Device Use native protocol", () => {
       notice: "",
       apps,
       permissions: { screen: true, accessibility: true, input: true },
-      settings: { selected_app: "", additional_apps: [], consent_mode: "perAction" },
+
     }).apps).toHaveLength(300);
   });
 });

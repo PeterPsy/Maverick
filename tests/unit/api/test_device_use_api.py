@@ -102,7 +102,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             self.assertEqual(stopped, {"status": "stopped"})
 
     def test_runtime_session_consumes_one_activation_with_the_selected_codex_pin(self) -> None:
-        self._assert_codex_activation_consumed(source_app_id="chat", agent_id="chat", agent_type_id="", mode="on")
+        self._assert_codex_activation_consumed(source_app_id="chat", agent_id="chat", agent_type_id="", mode="full")
 
     def test_custom_agent_session_preserves_its_identity_with_full_mac_access(self) -> None:
         self._assert_codex_activation_consumed(
@@ -267,7 +267,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                     protocol_version=DEVICE_USE_PROTOCOL_VERSION,
                     executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
                     tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
-                    mode="on",
+                    mode="full",
                     initial_app="com.apple.Safari",
                     approved_apps=["com.apple.Safari"],
                     outbound=queue.Queue(maxsize=8),
@@ -353,7 +353,7 @@ class DeviceUseHttpApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                     protocol_version=DEVICE_USE_PROTOCOL_VERSION,
                     executor_contract=DEVICE_USE_EXECUTOR_CONTRACT,
                     tool_contract_digest=DEVICE_USE_TOOL_CONTRACT_DIGEST,
-                    mode="on",
+                    mode="full",
                     initial_app="com.apple.Safari",
                     approved_apps=["com.apple.Safari"],
                     outbound=outbound,

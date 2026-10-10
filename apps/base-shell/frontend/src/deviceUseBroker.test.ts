@@ -36,24 +36,25 @@ describe("Device Use broker", () => {
     });
   });
 
-  it("forwards only bounded native settings fields", async () => {
-    const native = { postMessage: vi.fn(async () => ({ available: true, phase: "idle" })) };
+  it.each(["on", "off", "unknown"])("rejects unsupported activation mode %s before native dispatch", (mode) => {
+    const native = { postMessage: vi.fn() };
     const broker = new DeviceUseBroker(scope, native);
-    const { event } = request("configure", {
-      selectedApp: "com.apple.Notes",
-      additionalApps: ["com.apple.TextEdit"],
-      consentMode: "perTask",
-      privateValue: "discarded",
+    const { event, port } = request("start", {
+      activationId: "01234567-89ab-cdef-0123-456789abcdef",
+      ticket: "t".repeat(64), websocketPath: "/ws/device-use/executor", mode,
     });
-    broker.handle(event); await Promise.resolve(); await Promise.resolve();
-    expect(native.postMessage).toHaveBeenCalledWith({
-      action: "configure",
-      selectedApp: "com.apple.Notes",
-      additionalApps: ["com.apple.TextEdit"],
-      consentMode: "perTask",
-      workspace: "default",
-      generation: "login-1",
-    });
+    broker.handle(event);
+    expect(native.postMessage).not.toHaveBeenCalled();
+    expect(port.postMessage).toHaveBeenCalledWith({ ok: false });
+  });
+
+  it("rejects removed configuration commands", () => {
+    const native = { postMessage: vi.fn() };
+    const broker = new DeviceUseBroker(scope, native);
+    const { event, port } = request("configure");
+    broker.handle(event);
+    expect(native.postMessage).not.toHaveBeenCalled();
+    expect(port.postMessage).toHaveBeenCalledWith({ ok: false });
   });
 
   it("does not expose the bridge outside the native host", () => {

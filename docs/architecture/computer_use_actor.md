@@ -18,7 +18,8 @@ remains available to start a fresh process on the next authorized subtask.
 Provider context is reset between bounded tasks so old screenshots, receipts and cumulative usage
 cannot cross tasks. Its output and reasoning never become Chat messages. Normal
 native operation evidence and aggregated usage remain on the owning conversation.
-Its catalog omits companion-browser tools in bounded On mode. Actor instructions
+Its catalog always includes native computer, Peekaboo and companion-browser tools.
+Actor instructions
 retain native UI rules while omitting workspace, project and code guidance that
 belongs to the planner. The parent tool lifecycle reports summed native timings
 when every delegated operation supplies them.
@@ -54,10 +55,8 @@ authorize replay of the same uncertain input. Peekaboo input identity uses the
 action, app and fields that determine its actual effect (target, text, key or
 scroll parameters). Receipt and observation-only arguments (`window_id`,
 `observe_after`, `details` and `image_max_dimension`) do not authorize another click.
-The partial outcome `MC-PEEKABOO-22` is terminal in bounded On mode. Full mode
-permits same-bundle read-only verification only when the native result explicitly
-declares that Full remains active and requests a fresh observation; mode alone
-does not grant recovery. Explicit native pre-dispatch
+The partial outcome `MC-PEEKABOO-22` permits same-bundle read-only verification only when the native result explicitly
+declares that Full remains active and requests a fresh observation. Explicit native pre-dispatch
 recovery permits a fresh observation through the same engine and app. Refusals,
 unknown failures, engine/app changes during recovery and unverified completion
 remain blocked. Final evidence preserves recovered native failure codes.
@@ -94,7 +93,7 @@ measure physical Mac or CapCut performance.
 
 The follow-up recovery review is covered by 84 passing focused tests, including
 same-target replay with changed observation options, numeric point identity,
-partial outcomes in On and Full, and anti-replay after explicitly authorized
+partial outcomes with and without declared recovery, and anti-replay after explicitly authorized
 Full verification. The partial-outcome classification matches the current native
 `PeekabooFailure` and `ComputerTools.failureMessage` contract; protocol tests use
 simulated native results and do not exercise the physical Mac.

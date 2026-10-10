@@ -47,3 +47,13 @@ The default-off M5 adapter may reuse only the authorized public catalog through 
 ./scripts/maverick core cli run core.app-sdk.status --app-id app-store --workspace default --json
 ./scripts/maverick core cli run core.app-sdk.package --app-id app-store --workspace default --json
 ```
+
+## App-owned icons
+
+The Store uses public icon metadata from the active workspace app registry when
+catalog/server summaries omit a logo. Matching uses the public app identity so
+workspace forks cannot replace an unrelated catalog icon. Explicit catalog logos
+remain authoritative. Icons keep the normal Store renderer, and shell and Store
+resolve the same mounted asset without app-specific maps or filesystem probing.
+The registry is refreshed with installation state and is never persisted into the
+public catalog cache.

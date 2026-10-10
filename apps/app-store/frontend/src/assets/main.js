@@ -1,10 +1,12 @@
 import { loadCachedCatalog, requestJson } from "./appStoreApi.js";
+import { withRegistryLogo } from "./appIconIdentity.js";
 import { isExactMaverickParentMessage } from "@maverick/pwa-cache";
 
 const state = {
   apps: [],
   catalogApps: [],
   serverApps: [],
+  iconRegistry: [],
   installations: [],
   localApps: [],
   pinnedApps: [],
@@ -510,6 +512,7 @@ function renderWorkspaces() {
 }
 
 function renderAppIcon(app, installation = null) {
+  app = withRegistryLogo(app, state.iconRegistry);
   if (window.MaverickAppIcons?.renderIcon) {
     return window.MaverickAppIcons.renderIcon(app, "app-row-icon", installation);
   }
@@ -1709,7 +1712,11 @@ async function setWorkspaceAssignment(app, version, mode, workspaceId, shouldIns
 }
 
 async function refreshInstallations() {
-  const payload = await requestJson("/api/app-store/installations");
+  const [payload, registry] = await Promise.all([
+    requestJson("/api/app-store/installations"),
+    requestJson("/api/apps").catch(() => ({ items: [] })),
+  ]);
+  state.iconRegistry = registry.items || [];
   state.installations = payload.items || [];
   state.localApps = payload.local_apps || [];
 }
@@ -1792,6 +1799,7 @@ async function refreshCatalog() {
 }
 
 async function load() {
+  state.iconRegistry = [];
   state.isLoading = true;
   state.catalogReady = false;
   state.authorityReady = false;
@@ -1799,7 +1807,7 @@ async function load() {
   render();
   try {
     const catalogRead = refreshCatalog();
-    const [workspaces, catalog, serverApps, installations, pinned] = await Promise.all([
+    const [workspaces, catalog, serverApps, installations, pinned, registry] = await Promise.all([
       requestJson("/api/workspaces"),
       catalogRead,
       requestJson("/api/app-store/server-apps"),
@@ -1808,7 +1816,9 @@ async function load() {
         method: "POST",
         body: JSON.stringify({ action: "pinned_apps.list" }),
       }),
+      requestJson("/api/apps").catch(() => ({ items: [] })),
     ]);
+    state.iconRegistry = registry.items || [];
     state.workspaces = workspaces.items || [];
     state.serverApps = serverApps.items || [];
     state.catalogApps = catalog.items || [];

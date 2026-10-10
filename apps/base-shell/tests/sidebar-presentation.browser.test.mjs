@@ -25,6 +25,12 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await page.locator(".bs-sidebar--disabled").waitFor();
     assert.equal(await page.locator(".bs-shell.is-sidebar-mode-rail").count(), 1, await page.locator(".bs-shell").getAttribute("class"));
     await rail.hover();
+    const railPadding = await rail.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return [parseFloat(style.paddingTop), parseFloat(style.paddingBottom)];
+    });
+    assert.ok(railPadding.every((padding) => padding >= 12));
+    assert.equal(await rail.locator(".bs-sidebar__rail-background-dot").count(), 0);
     assert.equal(await page.locator(".bs-sidebar.is-open").count(), 0);
     assert.equal(await page.locator(".bs-sidebar__resize-handle").count(), 0);
     assert.ok((await page.locator(".bs-workspace-view-shell").boundingBox()).x < 100);
@@ -104,6 +110,17 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-bottom-light.png") });
     await page.getByRole("button", { name: "chat. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-shell.is-sidebar-mode-fixed").waitFor();
+    const canvasButton = page.getByRole("button", { name: "canvas. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true });
+    const canvasDot = canvasButton.locator(".bs-sidebar__rail-background-dot");
+    await canvasDot.waitFor({ state: "visible" });
+    assert.equal(await canvasButton.getAttribute("aria-description"), "Open in background");
+    const dotBox = await canvasDot.boundingBox();
+    const canvasBox = await canvasButton.boundingBox();
+    const railBox = await rail.boundingBox();
+    assert.ok(dotBox.x >= railBox.x && dotBox.x + dotBox.width < canvasBox.x);
+    assert.ok(Math.abs(dotBox.y + dotBox.height / 2 - canvasBox.y - canvasBox.height / 2) < 1);
+    assert.equal(await rail.locator(".bs-sidebar__rail-button.is-active .bs-sidebar__rail-background-dot").count(), 0);
+    if (process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR) await page.screenshot({ path: resolve(process.env.MAVERICK_SIDEBAR_SCREENSHOT_DIR, "sidebar-background-light.png") });
     assert.equal(await page.getByRole("button", { name: "Sidebar fissa", exact: true }).getAttribute("aria-pressed"), "true");
     assert.equal(await page.getByRole("button", { name: "Solo app in overlay", exact: true }).count(), 1);
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x > 300);
@@ -118,6 +135,8 @@ test("built shell supports app sidebar opt-out, desktop menus, saved preferences
     await page.waitForFunction(() => document.querySelector(".bs-notifications__toggle")?.getAttribute("aria-expanded") === "false");
     await page.getByRole("button", { name: "canvas. Alt+ArrowUp or Alt+ArrowDown to reorder.", exact: true }).click();
     await page.locator(".bs-sidebar--disabled").waitFor();
+    await page.waitForFunction(() => document.querySelector('.bs-sidebar__rail-button[aria-current="page"] .bs-sidebar__rail-background-dot') === null);
+    assert.equal(await rail.locator(".bs-sidebar__rail-background-dot").count(), 1);
     await page.waitForFunction(() => document.querySelector(".bs-workspace-view-shell").getBoundingClientRect().x < 100);
     await context.close();
 

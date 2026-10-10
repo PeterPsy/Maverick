@@ -13,7 +13,7 @@
 .bs-sidebar--disabled .bs-sidebar__rail::before {
   inset: 0;
   background: var(--bs-sidebar-composer-surface);
-  box-shadow: var(--bs-sidebar-composer-shadow);
+  box-shadow: var(--bs-sidebar-rail-shadow);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   opacity: 1;

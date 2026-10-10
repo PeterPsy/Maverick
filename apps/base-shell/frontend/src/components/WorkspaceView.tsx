@@ -15,6 +15,7 @@ export function WorkspaceView({
   frameScope,
   isLoading,
   isMobileLayout,
+  onMountedAppsChange,
   onOpenApp,
   sessionExpiresAt,
   shellTheme,
@@ -28,6 +29,7 @@ export function WorkspaceView({
   frameScope: MaverickFrameScope;
   isLoading: boolean;
   isMobileLayout: boolean;
+  onMountedAppsChange?: (appIds: string[]) => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
   sessionExpiresAt: string;
   shellTheme: ShellThemeState;
@@ -47,6 +49,7 @@ export function WorkspaceView({
       cacheUserId={cacheUserId}
       frameScope={frameScope}
       isMobileLayout={isMobileLayout}
+      onMountedAppsChange={onMountedAppsChange}
       onOpenApp={onOpenApp}
       sessionExpiresAt={sessionExpiresAt}
       shellTheme={shellTheme}

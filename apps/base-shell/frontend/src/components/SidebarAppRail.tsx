@@ -12,6 +12,7 @@ export function SidebarAppRail({
   className = "",
   enableReorder,
   isInitialLoading,
+  mountedAppIds = [],
   onOpenApp,
   onOpenSettings,
   onReorderPinnedApps,
@@ -23,6 +24,7 @@ export function SidebarAppRail({
   className?: string;
   enableReorder: boolean;
   isInitialLoading: boolean;
+  mountedAppIds?: string[];
   onOpenApp: (appId: string) => void;
   onOpenSettings: () => void;
   onReorderActiveChange?: (active: boolean) => void;
@@ -52,6 +54,7 @@ export function SidebarAppRail({
   const renderedApps = canReorder ? reorderedRailAppsForRender(appsToRender, activeRailReorder) : appsToRender;
   const renderedReorderableIds = renderedApps.filter((app) => isDesktopRailReorderableApp(app.app_id)).map((app) => app.app_id);
   const isReorderActive = Boolean(activeRailReorder);
+  const backgroundAppIds = new Set(mountedAppIds.filter((appId) => appId !== activeAppId));
 
   function handleOpenApp(appId: string, event?: ReactMouseEvent<HTMLButtonElement>) {
     if (suppressClickIfNeeded(appId, event)) {
@@ -94,6 +97,7 @@ export function SidebarAppRail({
             >
               <button
                 aria-current={activeAppId === app.app_id ? "page" : undefined}
+                aria-description={backgroundAppIds.has(app.app_id) ? "Open in background" : undefined}
                 aria-keyshortcuts={isReorderable ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
                 aria-label={isReorderable ? `${app.name}. Alt+ArrowUp or Alt+ArrowDown to reorder.` : app.name}
                 className={sidebarRailButtonClassName(app.app_id, activeAppId, { isDragging, isDropTarget, isReorderable })}
@@ -106,6 +110,7 @@ export function SidebarAppRail({
                 title={activeRailReorder ? undefined : app.name}
                 type="button"
               >
+                {backgroundAppIds.has(app.app_id) ? <span aria-hidden="true" className="bs-sidebar__rail-background-dot" /> : null}
                 <AppLogo app={app} className="bs-app-logo--rail" />
                 <span className="bs-sidebar__rail-tooltip" role="tooltip">{app.name}</span>
               </button>
@@ -118,12 +123,14 @@ export function SidebarAppRail({
           <div className="bs-sidebar__rail-item" role="listitem">
             <button
               aria-current={activeAppId === SETTINGS_APP_ID ? "page" : undefined}
+              aria-description={backgroundAppIds.has(SETTINGS_APP_ID) ? "Open in background" : undefined}
               aria-label={settingsApp.name}
               className={sidebarRailButtonClassName(SETTINGS_APP_ID, activeAppId)}
               onClick={onOpenSettings}
               title={settingsApp.name}
               type="button"
             >
+              {backgroundAppIds.has(SETTINGS_APP_ID) ? <span aria-hidden="true" className="bs-sidebar__rail-background-dot" /> : null}
               <span className="bs-app-logo is-glyph bs-app-logo--rail">
                 <span aria-hidden="true" className="material-symbols-rounded">settings</span>
               </span>

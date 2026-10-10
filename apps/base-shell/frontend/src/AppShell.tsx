@@ -86,6 +86,7 @@ export function AppShell() {
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [settings, setSettings] = useState<ProviderSetupSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
+  const [mountedAppState, setMountedAppState] = useState<{ scope: MaverickFrameScope; appIds: string[] } | null>(null);
   const [appSettingsScope, setAppSettingsScope] = useState<{ appId: string; sessionGeneration: string } | null>(null);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
@@ -150,6 +151,9 @@ export function AppShell() {
         })
       : null
   ), [authenticatedFrameScopeIdentity, authenticatedFrameWorkspaceId]);
+  const handleMountedAppsChange = useCallback((appIds: string[]) => {
+    if (frameScope) setMountedAppState({ scope: frameScope, appIds });
+  }, [frameScope]);
   useEffect(() => { setAppSettingsScope(null); }, [activeAppId, frameScope?.sessionGeneration]);
   useDeviceUseBroker(frameScope);
   useShellAppEvents(frameScope);
@@ -993,6 +997,7 @@ export function AppShell() {
           isLoading={isLoading}
           isMobileLayout={isMobileLayout}
           frameScope={frameScope}
+          onMountedAppsChange={handleMountedAppsChange}
           onOpenApp={openApp}
           sessionExpiresAt={authenticatedSession.expires_at}
           shellTheme={shellTheme}
@@ -1004,6 +1009,7 @@ export function AppShell() {
         activeWorkspaceId={activeWorkspaceId}
         apps={apps}
         frameScope={frameScope}
+        mountedAppIds={mountedAppState?.scope === frameScope ? mountedAppState.appIds : []}
         isLoading={isLoading}
         isWorkspacesLoading={isWorkspacesLoading}
         isOpen={isSidebarOpen}

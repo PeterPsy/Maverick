@@ -95,6 +95,23 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).not.toHaveBeenCalled();
   });
 
+  it("marks only mounted background apps, including static shortcuts, and removes stale dots", async () => {
+    const railApps = [...apps, app("settings", "Settings")];
+    await renderSidebar({ apps: railApps, mountedAppIds: ["chat", "agents", "app-store", "settings"] });
+    expect(railButton("Chat").querySelector(".bs-sidebar__rail-background-dot")).toBeNull();
+    expect(railButton("Skills").querySelector(".bs-sidebar__rail-background-dot")).toBeNull();
+    for (const name of ["Agents", "App Store", "Settings"]) {
+      expect(railButton(name).querySelector(".bs-sidebar__rail-background-dot")).not.toBeNull();
+      expect(railButton(name).getAttribute("aria-description")).toBe("Open in background");
+    }
+    await renderSidebar({ apps: railApps, activeAppId: "agents", mountedAppIds: ["chat", "agents"] });
+    expect(container.querySelectorAll(".bs-sidebar__rail-background-dot")).toHaveLength(1);
+    expect(railButton("Chat").querySelector(".bs-sidebar__rail-background-dot")).not.toBeNull();
+    expect(railButton("Agents").getAttribute("aria-description")).toBeNull();
+    await renderSidebar({ apps: railApps, mountedAppIds: [] });
+    expect(container.querySelectorAll(".bs-sidebar__rail-background-dot")).toHaveLength(0);
+  });
+
   it("reorders after long press and suppresses the trailing click", async () => {
     await renderSidebar();
     stubRailRects([
@@ -262,17 +279,18 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).toHaveBeenCalledWith(["agents", "skills", "docs", "chat"]);
   });
 
-  async function renderSidebar(overrides: Partial<{ apps: AppRegistryItem[]; isMobileLayout: boolean; pinnedAppIds: string[] }> = {}) {
+  async function renderSidebar(overrides: Partial<{ activeAppId: string; apps: AppRegistryItem[]; isMobileLayout: boolean; mountedAppIds: string[]; pinnedAppIds: string[] }> = {}) {
     await act(async () => {
       root.render(
         <Sidebar
-          activeAppId="chat"
+          activeAppId={overrides.activeAppId ?? "chat"}
           activeAppParams={{}}
           activeWorkspaceId="default"
           apps={overrides.apps ?? apps}
           frameScope={{ sessionGeneration: "session-default", workspaceId: "default" }}
           isLoading={false}
           isMobileLayout={overrides.isMobileLayout ?? false}
+          mountedAppIds={overrides.mountedAppIds}
           isOpen={true}
           isPinned={false}
           mobilePrimaryActionRequestId={0}

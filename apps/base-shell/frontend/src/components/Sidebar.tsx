@@ -40,6 +40,7 @@ export function Sidebar({
   isMobileLayout,
   isPinned,
   mode,
+  mountedAppIds = [],
   mobilePrimaryActionRequestId,
   notifications,
   onClose,
@@ -73,6 +74,7 @@ export function Sidebar({
   isMobileLayout: boolean;
   isPinned: boolean;
   mode: SidebarMode;
+  mountedAppIds?: string[];
   mobilePrimaryActionRequestId: number;
   notifications?: ReactNode;
   onClose: () => void;
@@ -331,6 +333,7 @@ export function Sidebar({
             appsToRender={railApps}
             enableReorder={true}
             isInitialLoading={isInitialLoading}
+            mountedAppIds={mountedAppIds}
             onOpenApp={onOpenApp}
             onOpenSettings={onOpenSettings}
             onReorderActiveChange={setIsRailReordering}

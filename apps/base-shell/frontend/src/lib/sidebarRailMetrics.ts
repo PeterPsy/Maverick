@@ -5,7 +5,7 @@ const MIN_ICON_SIZE_REM = 2.05;
 const RAIL_WIDTH_EXTRA_REM = 0.95;
 const RAIL_VIEWPORT_MARGIN_REM = 2;
 const RAIL_ITEM_GAP_REM = 0.48;
-const RAIL_INTERACTIVE_PADDING_REM = 0.42 * 2;
+const RAIL_PADDING_REM = 0.8 * 2;
 
 export type SidebarRailMetricsInput = {
   itemCount: number;
@@ -36,7 +36,7 @@ export function calculateSidebarRailMetrics({
 function fitIconSizeToViewport(itemCount: number, viewportHeightRem: number): number {
   const availableRailHeight = availableRailHeightForViewport(viewportHeightRem);
   const gapHeight = Math.max(0, itemCount - 1) * RAIL_ITEM_GAP_REM;
-  const fitSize = (availableRailHeight - RAIL_INTERACTIVE_PADDING_REM - gapHeight) / itemCount;
+  const fitSize = (availableRailHeight - RAIL_PADDING_REM - gapHeight) / itemCount;
 
   return Math.max(MIN_ICON_SIZE_REM, Math.min(PREFERRED_ICON_SIZE_REM, fitSize));
 }
@@ -47,7 +47,7 @@ function requiresOverflowAtMinimum(itemCount: number, viewportHeightRem: number 
   }
   const availableRailHeight = availableRailHeightForViewport(viewportHeightRem);
   const minimumContentHeight =
-    itemCount * MIN_ICON_SIZE_REM + Math.max(0, itemCount - 1) * RAIL_ITEM_GAP_REM + RAIL_INTERACTIVE_PADDING_REM;
+    itemCount * MIN_ICON_SIZE_REM + Math.max(0, itemCount - 1) * RAIL_ITEM_GAP_REM + RAIL_PADDING_REM;
 
   return minimumContentHeight > availableRailHeight;
 }

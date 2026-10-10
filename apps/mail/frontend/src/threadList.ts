@@ -23,11 +23,12 @@ export async function readMailThreadList(
   signal: AbortSignal,
   onUpdate: (threads: MailThread[], complete: boolean) => void,
   onError: (error: unknown) => void,
+  pageCount = 1,
 ) {
   await readAppCachePages<ThreadListPayload>({
     signal,
     pageSize: READ_PAGE_SIZE,
-    hasMore,
+    hasMore: (page) => hasMore(page) && page.offset + READ_PAGE_SIZE < pageCount * READ_PAGE_SIZE,
     onError,
     onUpdate: (pages) => {
       const threads = new Map<string, MailThread>();

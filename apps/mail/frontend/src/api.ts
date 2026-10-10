@@ -101,6 +101,11 @@ export type MailDraft = {
   id: string;
   connection_id: string;
   thread_id?: string;
+  reply_message_id?: string;
+  reply_mode?: 'reply' | 'reply_all';
+  in_reply_to?: string;
+  references?: string[];
+  send_result?: { status: string; accepted_recipients: string[]; refused_recipients: Record<string, { smtp_code: number }> };
   subject: string;
   body_text: string;
   body_html?: string;
@@ -153,15 +158,26 @@ export const MAIL_BACKEND_ACTIONS = {
 export const MAIL_INTERACTIVE_SYNC_THREADS = 25;
 export const MAIL_ACCOUNT_BACKFILL_SYNC_THREADS = 15;
 
-export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
-  const response = await fetch('/api/apps/mail/backend', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const payload = (await response.json()) as T & { error?: string; detail?: string };
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.error || `Backend request failed with ${response.status}`);
+export async function callBackend<T>(body: Record<string, unknown>, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<T> {
+  const controller = new AbortController();
+  const abort = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) abort();
+  else options.signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => controller.abort(new DOMException('Mail request timed out', 'TimeoutError')), options.timeoutMs ?? 30_000);
+  try {
+    const response = await fetch('/api/apps/mail/backend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const payload = (await response.json()) as T & { error?: string; detail?: string };
+    if (!response.ok) {
+      throw new Error(payload.detail || payload.error || `Backend request failed with ${response.status}`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abort);
   }
-  return payload;
 }

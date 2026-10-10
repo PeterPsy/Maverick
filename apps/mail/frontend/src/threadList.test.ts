@@ -17,10 +17,19 @@ function page(offset: number, total: number): ThreadListPayload {
 describe('Mail header collection', () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it('reads every cached page without narrowing to a mailbox or UI page', async () => {
+  it('loads only the initial 200 headers and truthfully reports remaining mail', async () => {
     vi.mocked(readMailDisplay).mockImplementation(async (params) => page(Number(params.offset), 451) as never);
     const update = vi.fn();
-    await readMailThreadList('attachment-name.pdf', new AbortController().signal, update, vi.fn());
+    await readMailThreadList('', new AbortController().signal, update, vi.fn());
+    expect(readMailDisplay).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls.at(-1)?.[0]).toHaveLength(200);
+    expect(update.mock.calls.at(-1)?.[1]).toBe(false);
+  });
+
+  it('reads requested pages without narrowing to a mailbox or UI page', async () => {
+    vi.mocked(readMailDisplay).mockImplementation(async (params) => page(Number(params.offset), 451) as never);
+    const update = vi.fn();
+    await readMailThreadList('attachment-name.pdf', new AbortController().signal, update, vi.fn(), 3);
     expect(vi.mocked(readMailDisplay).mock.calls.map(([params]) => params)).toEqual([0, 200, 400].map((offset) => ({
       kind: 'threads', offset, max_threads: 200, query: 'attachment-name.pdf',
     })));
@@ -31,7 +40,7 @@ describe('Mail header collection', () => {
   it('follows revalidation growth and shrinkage instead of retaining stale pages', async () => {
     vi.mocked(readMailDisplay).mockImplementation(async (params) => page(Number(params.offset), 201) as never);
     const update = vi.fn();
-    await readMailThreadList('', new AbortController().signal, update, vi.fn());
+    await readMailThreadList('', new AbortController().signal, update, vi.fn(), 2);
     const revalidate = vi.mocked(readMailDisplay).mock.calls[0][1]!.onRevalidated!;
     revalidate(page(0, 1));
     expect(update.mock.calls.at(-1)?.[0]).toHaveLength(1);
@@ -57,7 +66,7 @@ describe('Mail header collection', () => {
       return result as never;
     });
     const update = vi.fn();
-    await readMailThreadList('', new AbortController().signal, update, vi.fn());
+    await readMailThreadList('', new AbortController().signal, update, vi.fn(), 2);
     expect(update.mock.calls.at(-1)?.[0]).toHaveLength(200);
     expect(update.mock.calls.at(-1)?.[0][0].labels).toEqual(['inbox']);
     expect(update.mock.calls.at(-1)?.[1]).toBe(true);
@@ -69,7 +78,7 @@ describe('Mail header collection', () => {
       return page(0, 201) as never;
     });
     const update = vi.fn();
-    await expect(readMailThreadList('', new AbortController().signal, update, vi.fn())).rejects.toThrow('Offline');
+    await expect(readMailThreadList('', new AbortController().signal, update, vi.fn(), 2)).rejects.toThrow('Offline');
     expect(update.mock.calls.at(-1)?.[1]).toBe(false);
   });
 });

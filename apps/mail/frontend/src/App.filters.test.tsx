@@ -44,7 +44,7 @@ describe('Live Mail sidebar filtering', () => {
     });
     vi.mocked(callBackend).mockImplementation(async (params) => {
       if (params.action === 'threads.get') return { thread: data.find((item) => item.id === params.thread_id) } as never;
-      if (params.action === 'drafts.list') return { items: drafts, total_count: drafts.length } as never;
+      if (params.action === 'drafts.list') return { items: drafts.slice(Number(params.offset || 0), Number(params.offset || 0) + 200), total_count: drafts.length } as never;
       if (params.action === 'drafts.get') return { draft: drafts.find((item) => item.id === params.draft_id) } as never;
       return { items: accounts } as never;
     });
@@ -53,6 +53,7 @@ describe('Live Mail sidebar filtering', () => {
     await act(async () => root.unmount());
     container.remove();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
   async function mount() { await act(async () => root.render(<App />)); }
   async function navigate(params: Record<string, unknown>) {
@@ -101,6 +102,8 @@ describe('Live Mail sidebar filtering', () => {
   it('filters the whole loaded collection, not only the first backend or UI page', async () => {
     data = Array.from({ length: 251 }, (_, index) => thread(`Mail ${index}`, [index < 200 ? 'inbox' : 'sent']));
     await mount();
+    expect(vi.mocked(readMailDisplay).mock.calls.filter(([params]) => params.kind === 'threads')).toHaveLength(1);
+    await act(async () => [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Load more mail')!.click());
     const reads = vi.mocked(readMailDisplay).mock.calls.length;
     await navigate({ mailbox_scopes: 'all:sent' });
     expect(rows()).toHaveLength(50);
@@ -130,21 +133,36 @@ describe('Live Mail sidebar filtering', () => {
 
     expect(container.querySelector('.draft-reader')?.textContent).toContain('Draft · not sent');
     expect(container.querySelector('.draft-reader')?.textContent).toContain('Prepared, not sent.');
-    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({ action: 'drafts.list' }));
-    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({ action: 'drafts.get', draft_id: 'draft-1' }));
+    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({ action: 'drafts.list' }), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(vi.mocked(callBackend)).toHaveBeenCalledWith(expect.objectContaining({ action: 'drafts.get', draft_id: 'draft-1' }), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(vi.mocked(readMailDisplay).mock.calls.some(([params]) => params.kind === 'draft')).toBe(false);
   });
 
   it('keeps server-side body/attachment search semantics while filtering its results locally', async () => {
     await mount();
     await navigate({ query: 'filename-not-in-the-header.pdf', mailbox_scopes: 'all:sent' });
-    expect(rows()).toEqual(['A sent']);
+    await vi.waitFor(() => expect(vi.mocked(readMailDisplay).mock.calls.some(([params]) => params.query === 'filename-not-in-the-header.pdf')).toBe(true));
+    await vi.waitFor(() => expect(rows()).toEqual(['A sent']));
     const reads = vi.mocked(readMailDisplay).mock.calls.length;
     await navigate({ mailbox_scopes: 'all:inbox' });
     expect(rows()).toEqual([]);
     await navigate({ mailbox_scopes: 'all:sent' });
     expect(rows()).toEqual(['A sent']);
     expect(vi.mocked(readMailDisplay)).toHaveBeenCalledTimes(reads);
+  });
+
+  it('debounces rapid search changes and requests only the last query', async () => {
+    await mount();
+    vi.useFakeTimers();
+    const reads = vi.mocked(readMailDisplay).mock.calls.length;
+    await navigate({ query: 'first' });
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    await navigate({ query: 'final' });
+    await act(async () => vi.advanceTimersByTimeAsync(249));
+    expect(readMailDisplay).toHaveBeenCalledTimes(reads);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    const queries = vi.mocked(readMailDisplay).mock.calls.map(([params]) => params.query).filter(Boolean);
+    expect(queries).toEqual(['final']);
   });
 
   it('preserves a matching reader and prevents a hidden pending thread from reopening', async () => {
@@ -218,8 +236,9 @@ describe('Live Mail sidebar filtering', () => {
       return { items: [data[1]], total_count: 1, limit: 200, offset: 0 } as never;
     });
     await navigate({ query: 'first', mailbox_scopes: 'all:sent,all:inbox' });
+    await vi.waitFor(() => expect(vi.mocked(readMailDisplay).mock.calls.some(([params]) => params.query === 'first')).toBe(true));
     await navigate({ query: 'second' });
-    expect(rows()).toEqual(['A sent']);
+    await vi.waitFor(() => expect(rows()).toEqual(['A sent']));
     await act(async () => resolve({ items: [data[0]], total_count: 1, limit: 200, offset: 0 } as never));
     expect(rows()).toEqual(['A sent']);
   });

@@ -4129,8 +4129,11 @@ class MailServiceTest(unittest.TestCase):
 
     def test_frontend_renders_html_email_in_isolated_frame(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        app_source += (APP_ROOT / "frontend" / "src" / "MailHtmlFrame.tsx").read_text(encoding="utf-8")
         styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
         self.assertIn("function MailHtmlFrame", app_source)
+        self.assertIn("Content-Security-Policy", app_source)
+        self.assertIn("script-src 'none'", app_source)
         self.assertIn('sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"', app_source)
         self.assertIn("<MailHtmlFrame htmlBody={renderedHtml} />", app_source)
         self.assertIn("INLINE_IMAGE_MAX_BYTES", app_source)

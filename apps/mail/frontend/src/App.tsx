@@ -7,6 +7,7 @@ import {
 import { readMailDisplay } from './pwaCache';
 import { useMailList } from './useMailList';
 import { DraftReader } from './DraftReader';
+import { MailHtmlFrame } from './MailHtmlFrame';
 import { filterThreadsByMailboxScopes } from './threadFilters';
 import { mailboxScopeIdsForConnections } from './mailboxSelection';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -55,9 +56,6 @@ function maverickPlatformOrigin(): string {
 const READER_TEXT_BODY_CHARS = 12_000;
 const READER_FULL_TEXT_BODY_CHARS = 50_000;
 const READER_HTML_BODY_CHARS = 250_000;
-const EMAIL_FRAME_MIN_HEIGHT = 180;
-const EMAIL_FRAME_MAX_HEIGHT = 12_000;
-const EMAIL_FRAME_MAX_WIDTH = 3_200;
 
 type MailNavigateParams = {
   add_account?: boolean;
@@ -478,165 +476,6 @@ function foldQuotedHtml(htmlBody: string) {
   return root.innerHTML;
 }
 
-function emailSrcDoc(htmlBody: string) {
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      background: #ffffff;
-    }
-
-    body {
-      overflow-wrap: normal;
-      word-break: normal;
-    }
-
-    img {
-      border: 0;
-    }
-
-    .mail-blocked-image {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 2rem;
-      min-height: 2rem;
-      border: 1px dashed #cbd5e1;
-      border-radius: 6px;
-      background: #f8fafc;
-      color: #64748b;
-      padding: 0 10px;
-      box-sizing: border-box;
-      font: 12px Arial, Helvetica, sans-serif;
-    }
-
-    .mail-quote-fold {
-      margin: 12px 0 0;
-    }
-
-    .mail-quote-fold > summary {
-      display: inline-flex;
-      align-items: center;
-      min-height: 24px;
-      border-radius: 999px;
-      background: #f1f5f9;
-      color: #475569;
-      cursor: pointer;
-      padding: 0 10px;
-      font: 12px Arial, Helvetica, sans-serif;
-    }
-
-    .mail-quote-fold[open] > summary {
-      margin-bottom: 8px;
-    }
-  </style>
-</head>
-<body>${htmlBody}</body>
-</html>`;
-}
-
-function MailHtmlFrame({ htmlBody }: { htmlBody: string }) {
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const [height, setHeight] = useState(320);
-  const [frameWidth, setFrameWidth] = useState<number | null>(null);
-  const srcDoc = useMemo(() => emailSrcDoc(htmlBody), [htmlBody]);
-
-  const resizeFrame = useCallback(() => {
-    const frame = frameRef.current;
-    const doc = frame?.contentDocument;
-    if (!doc) {
-      return;
-    }
-    const docElement = doc.documentElement;
-    const body = doc.body;
-    const contentHeight = Math.max(
-      docElement.scrollHeight,
-      docElement.offsetHeight,
-      body?.scrollHeight || 0,
-      body?.offsetHeight || 0
-    );
-    const contentWidth = Math.max(
-      docElement.scrollWidth,
-      docElement.offsetWidth,
-      body?.scrollWidth || 0,
-      body?.offsetWidth || 0
-    );
-    const parentWidth = frame.parentElement?.clientWidth || frame.clientWidth || 0;
-    const nextHeight = Math.max(EMAIL_FRAME_MIN_HEIGHT, Math.min(EMAIL_FRAME_MAX_HEIGHT, Math.ceil(contentHeight)));
-    const nextWidth = parentWidth && contentWidth > parentWidth + 1
-      ? Math.min(EMAIL_FRAME_MAX_WIDTH, Math.ceil(contentWidth))
-      : null;
-
-    setHeight((current) => current === nextHeight ? current : nextHeight);
-    setFrameWidth((current) => current === nextWidth ? current : nextWidth);
-  }, []);
-
-  useEffect(() => {
-    setFrameWidth(null);
-    const id = window.setTimeout(resizeFrame, 120);
-    return () => window.clearTimeout(id);
-  }, [srcDoc, resizeFrame]);
-
-  useEffect(() => {
-    if (!frameWidth) {
-      return undefined;
-    }
-    const id = window.setTimeout(resizeFrame, 50);
-    return () => window.clearTimeout(id);
-  }, [frameWidth, resizeFrame]);
-
-  useEffect(() => {
-    const frame = frameRef.current;
-    const doc = frame?.contentDocument;
-    if (!doc) {
-      return undefined;
-    }
-    let animationFrame = 0;
-    const scheduleResize = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(resizeFrame);
-    };
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleResize);
-    if (observer) {
-      observer.observe(doc.documentElement);
-      if (doc.body) {
-        observer.observe(doc.body);
-      }
-    }
-    doc.querySelectorAll('img').forEach((image) => {
-      image.addEventListener('load', scheduleResize);
-      image.addEventListener('error', scheduleResize);
-    });
-    scheduleResize();
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      observer?.disconnect();
-      doc.querySelectorAll('img').forEach((image) => {
-        image.removeEventListener('load', scheduleResize);
-        image.removeEventListener('error', scheduleResize);
-      });
-    };
-  }, [srcDoc, resizeFrame]);
-
-  return (
-    <iframe
-      ref={frameRef}
-      title="Email HTML message"
-      className="message-html-frame"
-      sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
-      srcDoc={srcDoc}
-      style={{ height, width: frameWidth ? `${frameWidth}px` : undefined }}
-      onLoad={resizeFrame}
-    />
-  );
-}
-
 function MailMessageBody({
   message,
   connection,
@@ -712,6 +551,7 @@ function MailMessageBody({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setInlineImages((current) => {
       const next: Record<string, InlineImageState> = {};
       inlineAssetsToFetch.forEach((asset) => {
@@ -737,7 +577,7 @@ function MailMessageBody({
         metadata_only: false,
         max_bytes: INLINE_IMAGE_MAX_BYTES,
         ...connectionSecretRequest(connection)
-      })
+      }, { signal: controller.signal, timeoutMs: 15_000 })
         .then((payload) => {
           if (cancelled) {
             return;
@@ -761,6 +601,7 @@ function MailMessageBody({
     });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [connection, inlineAssetsToFetch]);
 
@@ -880,6 +721,7 @@ export function App() {
     connections, liveConnections, threads: loadedThreads,
     loading: threadListLoading, refreshing: threadListRefreshing,
     incomplete: threadListIncomplete, refresh: loadThreads,
+    hasMore: threadListHasMore, loadMore: loadMoreThreads, searching: threadListSearching,
   } = useMailList(query, setNotice);
   const filteredThreads = useMemo(
     () => filterThreadsByMailboxScopes(loadedThreads, mailboxScopeIds),
@@ -925,6 +767,7 @@ export function App() {
   };
 
   const openThread = useCallback(async (threadId: string, connectionId?: string, refresh = false) => {
+    displayReads.current.get('draft')?.abort();
     const controller = beginDisplayRead('thread');
     const requestId = threadOpenRequestRef.current + 1;
     threadOpenRequestRef.current = requestId;
@@ -950,7 +793,7 @@ export function App() {
         action: MAIL_BACKEND_ACTIONS.threadsGet, thread_id: threadId,
         max_body_chars: READER_TEXT_BODY_CHARS, max_body_html_chars: READER_HTML_BODY_CHARS,
         ...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest()),
-      }).then((next) => { if (!controller.signal.aborted && threadOpenRequestRef.current === requestId) setSelectedThread(next.thread); }).catch(() => undefined);
+      }, { signal: controller.signal, timeoutMs: 20_000 }).then((next) => { if (!controller.signal.aborted && threadOpenRequestRef.current === requestId) setSelectedThread(next.thread); }).catch(() => undefined);
       setSelectedThread(payload.thread);
       setConnectionId(payload.thread.connection_id);
       notifySelection({
@@ -973,6 +816,7 @@ export function App() {
 
   const openDraft = useCallback(async (draftId: string) => {
     displayReads.current.get('thread')?.abort();
+    const controller = beginDisplayRead('draft');
     const requestId = threadOpenRequestRef.current + 1;
     threadOpenRequestRef.current = requestId;
     setBusy(true);
@@ -986,7 +830,7 @@ export function App() {
         action: MAIL_BACKEND_ACTIONS.draftsGet,
         draft_id: draftId,
         ...noSecretRequest(),
-      });
+      }, { signal: controller.signal, timeoutMs: 15_000 });
       if (threadOpenRequestRef.current !== requestId) return;
       selectedDraftRef.current = payload.draft;
       setSelectedDraft(payload.draft);
@@ -1013,6 +857,7 @@ export function App() {
   const closeThread = useCallback((notify = true) => {
     threadOpenRequestRef.current += 1;
     displayReads.current.get('thread')?.abort();
+    displayReads.current.get('draft')?.abort();
     selectedThreadRef.current = null;
     setSelectedThread(null);
     selectedDraftRef.current = null;
@@ -1467,7 +1312,9 @@ export function App() {
             {threadListLoading ? <MailThreadListSkeleton /> : null}
             {!threadListLoading && threadListRefreshing ? <div className="thread-list-status" role="status">Updating cached mail…</div> : null}
             {threadListIncomplete ? <div className="thread-list-status" role="status">Some cached mail could not be loaded. Refresh or narrow the search.</div> : null}
-            {!threadListLoading && !threadListRefreshing && !threadListIncomplete && threads.length === 0 ? (
+            {threadListSearching ? <div className="thread-list-status" role="status">Searching…</div> : null}
+            {threadListHasMore ? <div className="thread-list-status thread-list-status--more" role="status"><span>Showing loaded mail.</span><button className="mail-load-more" type="button" onClick={loadMoreThreads} disabled={threadListRefreshing}>Load more mail</button></div> : null}
+            {!threadListLoading && !threadListRefreshing && !threadListIncomplete && !threadListHasMore && !threadListSearching && threads.length === 0 ? (
               <div className="thread-empty">
                 {canUseConnection ? 'No threads match this view.' : 'Connect a mail account to load mail.'}
               </div>

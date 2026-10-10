@@ -3,15 +3,15 @@ import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
   type MailConnection,
-  type MailDraft,
   type MailThread,
 } from './api';
 import { readMailDisplay } from './pwaCache';
 import { readMailThreadList } from './threadList';
+import { readMailDraftList } from './draftList';
+import type { MailDraft } from './api';
 
 type ConnectionPayload = { items: MailConnection[] };
 type ThreadSnapshot = { query: string; items: MailThread[]; complete: boolean };
-type DraftPayload = { items: MailDraft[]; total_count: number };
 type DraftSnapshot = { query: string; items: MailThread[] };
 
 function draftListItem(draft: MailDraft): MailThread {
@@ -40,7 +40,16 @@ export function useMailList(query: string, onError: (message: string) => void) {
   const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(null);
   const [draftSnapshot, setDraftSnapshot] = useState<DraftSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [requestedPages, setRequestedPages] = useState({ query, count: 1 });
+  const [searchQuery, setSearchQuery] = useState(query);
   const controllerRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    if (query !== searchQuery) controllerRef.current?.abort();
+    const timer = setTimeout(() => setSearchQuery(query), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const pageCount = requestedPages.query === searchQuery ? requestedPages.count : 1;
 
   const refresh = useCallback(async () => {
     controllerRef.current?.abort();
@@ -48,8 +57,12 @@ export function useMailList(query: string, onError: (message: string) => void) {
     controllerRef.current = controller;
     const { signal } = controller;
     setRefreshing(true);
+    setFailed(false);
     const report = (error: unknown) => {
-      if (!signal.aborted) onError(error instanceof Error ? error.message : 'Unable to load mail.');
+      if (!signal.aborted) {
+        setFailed(true);
+        onError(error instanceof Error ? error.message : 'Unable to load mail.');
+      }
     };
     let receivedLiveConnections = false;
     const displayConnections = (next: ConnectionPayload) => {
@@ -64,7 +77,7 @@ export function useMailList(query: string, onError: (message: string) => void) {
     void callBackend<ConnectionPayload>({
       action: MAIL_BACKEND_ACTIONS.connectionsList,
       _app_secret_request: { logical_names: [], required: false },
-    }).then((next) => {
+    }, { signal, timeoutMs: 15_000 }).then((next) => {
       if (!signal.aborted) {
         receivedLiveConnections = true;
         setConnections(next.items);
@@ -72,53 +85,49 @@ export function useMailList(query: string, onError: (message: string) => void) {
       }
     }).catch(() => undefined);
 
-    const draftRequest = callBackend<DraftPayload>({
-      action: MAIL_BACKEND_ACTIONS.draftsList,
-      ...(query ? { query } : {}),
-      limit: 200,
-      _app_secret_request: { logical_names: [], required: false },
-    }).then((next) => {
-      if (!signal.aborted) setDraftSnapshot({ query, items: next.items.map(draftListItem).sort(newestFirst) });
+    const draftRequest = readMailDraftList(searchQuery, signal).then((next) => {
+      if (!signal.aborted) setDraftSnapshot({ query: searchQuery, items: next.map(draftListItem).sort(newestFirst) });
     }).catch((error) => {
       if (!signal.aborted) {
-        setDraftSnapshot({ query, items: [] });
         report(error);
       }
     });
 
     try {
       await Promise.all([
-        readMailThreadList(query, signal, (items, complete) => {
+        readMailThreadList(searchQuery, signal, (items, complete) => {
           if (!signal.aborted) {
-            setSnapshot((current) => current?.query === query && current.complete && !complete
-              ? current : { query, items, complete });
-            setRefreshing(!complete);
+            setSnapshot((current) => current?.query === searchQuery && current.items.length > items.length && !complete
+              ? current : { query: searchQuery, items, complete });
           }
-        }, report),
+        }, report, pageCount),
         draftRequest,
       ]);
     } catch (error) {
       if (!signal.aborted) {
-        setSnapshot((current) => current?.query === query ? current : { query, items: [], complete: false });
+        setSnapshot((current) => current?.query === searchQuery ? current : { query: searchQuery, items: [], complete: false });
         report(error);
       }
     } finally {
       if (!signal.aborted) setRefreshing(false);
     }
-  }, [query, onError]);
+  }, [searchQuery, pageCount, onError]);
 
   useEffect(() => {
     void refresh();
     return () => controllerRef.current?.abort();
   }, [refresh]);
 
-  const threads = snapshot?.query === query ? snapshot.items : [];
-  const drafts = draftSnapshot?.query === query ? draftSnapshot.items : [];
+  const threads = snapshot?.query === searchQuery ? snapshot.items : [];
+  const drafts = draftSnapshot?.query === searchQuery ? draftSnapshot.items : [];
 
   return {
     connections, liveConnections, refresh, refreshing,
     threads: [...threads, ...drafts].sort(newestFirst),
-    loading: snapshot?.query !== query,
-    incomplete: snapshot?.query === query && !snapshot.complete && !refreshing,
+    loading: snapshot?.query !== searchQuery,
+    searching: query !== searchQuery,
+    incomplete: failed && !refreshing,
+    hasMore: snapshot?.query === searchQuery && !snapshot.complete && !failed,
+    loadMore: () => setRequestedPages({ query: searchQuery, count: pageCount + 1 }),
   };
 }

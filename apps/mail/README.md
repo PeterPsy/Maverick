@@ -20,19 +20,19 @@ such as `all:inbox` and `connection:<connection_id>:sent`; `threads.list` treats
 those scopes as a union so sidebar checkbox selections add together instead of
 replacing each other.
 
-The frontend loads locally cached thread headers across folders in bounded
-200-row display-read pages, then applies sidebar scopes and 50-row UI pagination
-in memory. Checkbox changes do not reload the app, refetch the list, or replace
-loaded rows with skeletons. Aggregate and per-account scopes form a union without
-duplicates; clearing every checkbox shows no threads and never restores Inbox
-implicitly. A reader stays open while its thread still matches the selection.
-Search remains server-side across cached subjects, bodies, addresses and attachment
-names, then the same local mailbox scopes apply to its results. Sync and data
-events refresh the header collection in the background; complete loaded lists stay
-visible until replacement pages finish. Initial page loading reports progress,
-and exceeding the store's pagination limit asks the user to narrow the search
-instead of silently returning a complete-looking partial list. Thread ordering
-uses the thread id to break equal timestamp ties consistently across pages.
+The frontend starts with one 200-row page of locally cached thread headers across
+folders. “Load more mail” requests the next bounded page; the UI explicitly marks
+the collection as incomplete while more rows remain and does not present an empty
+filtered subset as a complete mailbox. Sidebar checkbox changes filter loaded
+rows immediately without replacing them with skeletons. Aggregate and per-account
+scopes form a union without duplicates, and clearing all checkboxes never restores
+Inbox implicitly. Search uses a 250 ms debounce and aborts superseded requests;
+search results retain the same local mailbox filtering and 50-row UI pagination.
+Refresh preserves loaded rows until replacement pages finish. Direct backend reads
+have caller cancellation and bounded timeouts. Local drafts follow `total_count`
+through 200-row live pages, including collections larger than 200.
+On narrow screens, opening a thread or draft replaces the list with the reader;
+the close control restores the retained list and its filters.
 
 The Drafts mailbox combines provider-synchronized draft threads with Mail's own
 local, unsent draft records. Local drafts are read through the live-only
@@ -151,6 +151,13 @@ inbox delivery. `local_warnings` report subsequent local failures separately.
 A crash between claiming/submitting and recording the result can leave `sending`;
 Mail conservatively blocks another attempt until provider evidence is reconciled.
 
+The HTML iframe has a dedicated CSP denying scripts, connections, frames, objects,
+forms and base-URL changes. Inline style and image sources are allowed for the
+existing sanitized reader and explicit image-loading controls. PWA display models
+continue to exclude drafts, credentials, send approvals and mutation authority.
+Mail cache tests verify user/workspace key isolation and deletion on logout and
+identity changes through the platform cache lifecycle.
+
 Gmail thread fetches parse recursive MIME payloads and preserve both `text/plain` and bounded `text/html` bodies. MIME extraction stays in `backend/providers/gmail.py`; HTML rendering policy lives in `backend/email_rendering.py`, which owns body bounding, text fallback, preview generation, sanitizer rules, CSS policy, image placeholders, and safe HTML truncation for response limits. Messages persist `body_html_original_bounded` for server-side regeneration, `body_html_gmail_sanitized` for Gmail-oriented sanitizer output, `body_html_rendered` for the reader payload, and `render_policy_json` to make the renderer decision auditable. Read APIs keep `max_body_chars` as the text/plain limit and accept `max_body_html_chars` separately so the interactive reader can request full bounded HTML without forcing large plain-text previews. Response flags distinguish source, text, and HTML truncation with `body_source_truncated`, `body_text_truncated`, and `body_html_truncated`. The legacy `body_html_sanitized` field remains the bounded reader alias for current CLI/MCP/frontend consumers. The sanitizer allowlists common email tags, safe attributes, class/id selectors, and sanitized style blocks for responsive email layouts. Its CSS declaration allowlist follows Google's Gmail CSS support list, while media at-rules are limited to Gmail-supported `all`/`screen` width, device-width, orientation, and resolution queries. It strips scripts/forms/event handlers, blocks CSS resource URLs including escaped `url(...)` variants, removes unsupported at-rules such as imports/font faces/supports, and neutralizes image `src` and background-image resources so remote resources are not auto-loaded by default. Inline `cid:` image metadata is linked to the matching attachment record when Gmail exposes an attachment id; the reader fetches bounded inline image bytes on demand through `attachments.get` and injects them as data URLs inside the isolated iframe. Remote images and background images stay blocked by default with dimensioned placeholders, and the reader recalculates iframe height after image and layout changes. The reader iframe uses only a minimal document reset, preserves email-owned fonts, link colors, line heights, and table layout, and expands to the measured content width so wide email layouts scroll horizontally in the reader wrapper. The reader prefers rendered HTML when available, keeps a plain-text toggle, lets the user explicitly load remote images and background images for a message, folds Gmail quote blocks behind a native disclosure control, can refetch larger cached message bodies when a response-limit trim is shown, and opens local drafts in a display-only preview. Composition and sending are exposed through the backend, CLI and MCP surfaces.
 
 ## SDK Flow
@@ -175,7 +182,16 @@ maverick app mail cli list --json
 maverick app mail mcp list --json
 python3 -m unittest discover -s apps/mail/tests -p 'test_*.py'
 npm --prefix apps/mail test
+npm --prefix apps/mail audit
 ```
+
+The regression suite uses temporary databases, simulated providers and a local
+TLS server. For desktop/mobile verification without mailbox access, run
+`python3 apps/mail/tests/mail_ui_fixture_server.py --port 8000` and open
+`http://maverick.localhost:8000/apps/mail/` in the approved development inspector.
+The fixture serves 251 synthetic threads, 205 drafts and a wide HTML message;
+all backend mutations return 405. Stop the fixture server after verification.
+Frontend build tools include Vitest 4.1.11 and patched transitive dependencies.
 
 ## Known Gaps
 

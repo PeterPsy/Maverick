@@ -513,6 +513,28 @@ p {
   font-size: 12px;
 }
 
+.thread-list-status--more {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mail-load-more {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: var(--maverick-control-radius);
+  background: var(--mail-control);
+  color: var(--maverick-text);
+  transition: background 140ms ease;
+}
+
+.mail-load-more:hover,
+.mail-load-more:focus-visible {
+  background: var(--mail-control-hover);
+}
+
 .thread-empty {
   display: grid;
   min-height: 160px;
@@ -1362,6 +1384,24 @@ p {
 
   .reader-column {
     min-height: 560px;
+  }
+
+  .mail-shell.is-reading {
+    height: 100dvh;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .mail-shell.is-reading > .toolbar,
+  .mail-shell.is-reading .thread-column {
+    display: none;
+  }
+
+  .mail-shell.is-reading .mail-workspace,
+  .mail-shell.is-reading .reader-column {
+    min-height: 0;
+    overflow: hidden;
   }
 }
 

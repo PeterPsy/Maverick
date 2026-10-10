@@ -34,14 +34,12 @@ CODEX_MANAGED_TOP_LEVEL_CONFIG_KEYS = {
     "model_reasoning_effort",
     "experimental_use_unified_exec_tool",
 }
-CODEX_MANAGED_TOP_LEVEL_RUNTIME_CONFIG = {
-    "experimental_use_unified_exec_tool": False,
-}
 CODEX_MANAGED_RUNTIME_FEATURES = {
     "apps": False,
     "hooks": True,
     "plugins": False,
     "skill_mcp_dependency_install": False,
+    "unified_exec": False,
 }
 
 
@@ -236,11 +234,6 @@ class CodexRuntimeConfigMixin:
 
     def _managed_runtime_skill_lines(self, *, include_instructions: bool) -> list[str]:
         return ["[skills]", f"include_instructions = {str(include_instructions).lower()}"]
-
-
-
-    def _managed_top_level_runtime_config_lines(self) -> list[str]:
-        return [f"{name} = {str(enabled).lower()}" for name, enabled in CODEX_MANAGED_TOP_LEVEL_RUNTIME_CONFIG.items()]
 
 
 

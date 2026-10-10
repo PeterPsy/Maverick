@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -719,7 +720,8 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertIn("ignore_default_excludes = true", runtime_config)
         self.assertIn('"MAVERICK_RUNTIME_API_TOKEN"', runtime_config)
         self.assertNotIn(launch_spec.env_overrides["MAVERICK_RUNTIME_API_TOKEN"], runtime_config)
-        self.assertIn("experimental_use_unified_exec_tool = false", runtime_config)
+        self.assertFalse(tomllib.loads(runtime_config)["features"]["unified_exec"])
+        self.assertNotIn("experimental_use_unified_exec_tool", runtime_config)
         self.assertIn("[skills]", runtime_config)
         self.assertIn("include_instructions = true", runtime_config)
         self.assertIn("[shell_environment_policy.set]", runtime_config)
@@ -1129,6 +1131,8 @@ class ProvidersTestCase(unittest.TestCase):
                     "apps = true",
                     "plugins = true",
                     "skill_mcp_dependency_install = true",
+                    "unified_exec = true",
+                    "experimental_use_unified_exec_tool = true",
                     "",
                     "[skills]",
                     "include_instructions = true",
@@ -1185,8 +1189,8 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertIn('model_reasoning_effort = "xhigh"', runtime_config)
         self.assertNotIn('model = "gpt-5.4"', runtime_config)
         self.assertNotIn('model_reasoning_effort = "medium"', runtime_config)
-        self.assertIn("experimental_use_unified_exec_tool = false", runtime_config)
-        self.assertNotIn("experimental_use_unified_exec_tool = true", runtime_config)
+        self.assertFalse(tomllib.loads(runtime_config)["features"]["unified_exec"])
+        self.assertNotIn("experimental_use_unified_exec_tool", runtime_config)
         self.assertIn("[profiles.default]", runtime_config)
         self.assertNotIn("[mcp_servers.legacy]", runtime_config)
         self.assertNotIn("127.0.0.1:8002", runtime_config)

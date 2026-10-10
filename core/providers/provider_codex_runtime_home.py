@@ -266,7 +266,6 @@ class CodexRuntimeHomeMixin:
         output_lines = [f'model = "{selected_model}"']
         if selected_reasoning:
             output_lines.append(f'model_reasoning_effort = "{selected_reasoning}"')
-        output_lines.extend(self._managed_top_level_runtime_config_lines())
         if sanitized_lines:
             output_lines.append("")
             output_lines.extend(sanitized_lines)

@@ -164,6 +164,7 @@ class CodexDeviceUseTestCase(unittest.TestCase):
             self.assertIn("shell_environment_policy", config)
 
     def test_device_runtime_mounts_the_bundled_code_mode_host(self):
+            self.assertFalse(config["features"]["unified_exec"])
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             vendor_bin = root / "vendor" / "target" / "bin"

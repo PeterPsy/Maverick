@@ -19,6 +19,13 @@ remains available to start a fresh process on the next authorized subtask.
 Provider context is reset between bounded tasks so old screenshots, receipts and cumulative usage
 cannot cross tasks. Its output and reasoning never become Chat messages. Normal
 native operation evidence and aggregated usage remain on the owning conversation.
+Each screenshot and its textual native receipt are paired in one raw history
+message through Codex `thread/inject_items` while the dynamic tool is pending.
+The tool reply follows only after injection is acknowledged. This does not steer
+the active turn or replace its objective. The installed Codex dynamic-tool
+`inputImage` response shape alone did not provide reliable visual input in a
+live Luna check; the raw `input_image` history path did. Receipt IDs and element
+IDs remain observation-specific, and the operator must resolve targets anew.
 Its catalog always includes native computer, Peekaboo and companion-browser tools.
 Actor instructions
 retain native UI rules while omitting workspace, project and code guidance that
@@ -28,7 +35,11 @@ when every delegated operation supplies them.
 The planner supplies objective, completion criterion, constraints and an explicit
 `prepared_text` list of exact strings to enter. Core rejects actor text absent from
 that list. The operator returns verified completion, a decision needed
-or a blocker. It does not compose content or make business/creative decisions.
+or a blocker. Its private result explicitly attests whether the entire completion
+criterion was met; Core rejects `completed` with a false attestation and strips
+that internal field from the planner-facing response. Fresh visual evidence is
+still required, and the planner must assess whether it proves the requested
+outcome. The operator does not compose content or make business/creative decisions.
 Ambiguous input cannot be replayed. Cancellation, parent-turn completion, lease
 revocation, owner changes and user corrections fence further actor calls and stop
 active inference. Actor failure does not transparently replay writes or silently
@@ -58,7 +69,11 @@ scroll parameters). Receipt and observation-only arguments (`window_id`,
 `observe_after`, `details` and `image_max_dimension`) do not authorize another click.
 The partial outcome `MC-PEEKABOO-22` permits same-bundle read-only verification only when the native result explicitly
 declares that Full remains active and requests a fresh observation. Explicit native pre-dispatch
-recovery permits a fresh observation through the same engine and app. Refusals,
+recovery permits a fresh observation through the same engine and app.
+`MC-INTEGRATION-01` also permits this recovery only when native evidence explicitly
+says no action was sent and Full remains active. Invalid parameters then require
+a new same-target observation before the operator can correct them; the failure
+code alone cannot authorize recovery. Refusals,
 unknown failures, engine/app changes during recovery and unverified completion
 remain blocked. Final evidence preserves recovered native failure codes.
 
@@ -90,7 +105,9 @@ is independent of the conversation model and hosted-provider profiles. Settings
 projects it through `/api/settings/platform` and owns the authenticated
 `GET`/`POST /api/settings/computer-use` route. Mutations use the existing provider
 selection authority, reject another workspace's identity, and validate the provider
-catalog and reasoning effort. The UI offers image-capable models from the installed
+catalog and reasoning effort. The UI requires successful discovery and explicit
+image modality; an unverified generic model fallback cannot enter this catalog.
+It offers image-capable models from the installed
 Codex catalog; an unavailable saved model remains visible and blocks operator launch
 instead of silently falling back.
 
@@ -150,3 +167,12 @@ target-selection reliability. No model configuration was changed by these checks
 The Mac companion browser reached the actual Maverick Settings URL but showed
 the unauthenticated login page. Live Settings save/reload and desktop/mobile
 visual acceptance still require an authenticated companion session.
+
+The corrective review on 2026-10-10 passed 98 focused backend tests with SQLite
+3.51.3, 41 Settings frontend tests, and all 23 Settings integration tests. The
+integration fixture now includes the SDK used by installation hooks, same-origin
+proof for cookie mutations and explicit isolated app-frame scope for document
+requests; ordinary direct app requests remain denied. A live authenticated Luna
+`low` check read the user-provided Settings screenshot correctly through the paired
+history path. It used a read-only mock native callback, so physical Mac acceptance
+is recorded separately after backend activation.

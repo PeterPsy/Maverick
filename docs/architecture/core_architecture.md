@@ -300,6 +300,9 @@ context chooses and verifies UI actions. Its workspace-scoped provider/model/eff
 selection is configured in Settings and defaults to Codex Luna `low`. Only Codex
 has an executable operator adapter today. Each bounded task captures the selection;
 changes replace the operator at the next task without changing the chat model.
+Screenshots and native receipt text enter the private history together without
+turn steering. Completion requires fresh evidence and an explicit full-criterion
+attestation; the planner still verifies that evidence against its original task.
 Core brokers those
 calls through the original parent authority and fences them on cancellation,
 correction, turn completion or native revocation. The operator has no general

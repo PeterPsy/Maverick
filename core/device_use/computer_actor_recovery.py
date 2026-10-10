@@ -97,7 +97,10 @@ class ComputerActorRecovery:
                 return False
             self.pending = (tool, bundle)
             self.uncertain_inputs.add(self._input_key(tool, arguments))
-        elif tool in {"mac_computer", "mac_peekaboo"} and _PRE_DISPATCH_RECOVERY in text:
+        elif (tool in {"mac_computer", "mac_peekaboo", "mac_browser"}
+              and ((_PRE_DISPATCH_RECOVERY in text and tool != "mac_browser")
+                   or (code == "MC-INTEGRATION-01" and _FULL_RECOVERY in text
+                       and "nessuna azione inviata" in text.lower()))):
             self.pending = (tool, bundle)
             if tool == "mac_computer":
                 self.selected_app = bundle

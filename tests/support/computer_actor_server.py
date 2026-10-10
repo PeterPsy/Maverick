@@ -10,6 +10,7 @@ turn_id = ""
 mode = ""
 step = 0
 sequence = 0
+injected = False
 
 
 def send(value):
@@ -48,7 +49,8 @@ def next_call():
             actions = ["observe_app", "click", "observe_app"]
     if step >= len(actions):
         evidence = "Native tab inventory excludes the closed tab." if mode.startswith("browser-close") else "Latest screen shows the target."
-        output = {"status": "completed", "summary": "Subtask complete", "evidence": evidence}
+        output = {"status": "completed", "summary": "Subtask complete", "evidence": evidence,
+                  "completion_criterion_met": mode != "partial"}
         if mode == "invalid":
             output["status"] = "invented"
         notify("item/completed", {"turnId": turn_id, "item": {
@@ -112,10 +114,26 @@ for line in sys.stdin:
         assert params["model"] == thread_model
         mode = json.loads(params["input"][0]["text"])["objective"]
         step = 0
+        injected = False
         turn_id = "operator-turn-" + str(sequence)
         result = {"turn": {"id": turn_id}}
     elif method == "turn/steer":
+        assert mode != 'paired-image', 'Observations must not steer the user objective.'
         result = {"turnId": turn_id}
+    elif method == 'thread/inject_items':
+        if mode == 'image-injection-failure':
+            send({'id': request['id'], 'error': {'code': -32603, 'message': 'Image history unavailable'}})
+            continue
+        assert params['threadId'] == thread_id
+        content = params['items'][0]['content']
+        assert content[0]['type'] == 'input_text'
+        assert 'pending tool call call-' + str(step - 1) in content[0]['text']
+        if mode == 'paired-image':
+            assert 'native result' in content[0]['text']
+        assert content[1]['type'] == 'input_image'
+        assert content[1]['image_url'].startswith('data:image/jpeg;base64,')
+        assert content[1]['detail'] == 'high'
+        injected = True
     send({"id": request.get("id"), "result": result})
     if method == "turn/interrupt":
         usage = emit_usage()
@@ -126,4 +144,7 @@ for line in sys.stdin:
         if mode != "wait":
             next_call()
     elif method is None and str(request.get("id", "")).startswith("native-"):
+        if mode == 'paired-image' and step in {1, 3}:
+            assert injected, 'Receipt and image must arrive before the tool resumes.'
+            injected = False
         next_call()

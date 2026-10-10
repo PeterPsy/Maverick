@@ -30,6 +30,24 @@ class ComputerActorRecoveryTests(unittest.TestCase):
         self.assertFalse(self.recovery.record("mac_computer", {"action": "click"},
                                              self.result("MC-FOCUS-01: failure")))
 
+    def test_invalid_parameters_with_explicit_no_dispatch_recover_on_same_target(self):
+        arguments = {"action": "wait", "bundle_id": "com.apple.Safari", "milliseconds": 1200}
+        self.assertTrue(self.recovery.record("mac_peekaboo", arguments, self.result(
+            "MC-INTEGRATION-01: parametri non validi; nessuna azione inviata. "
+            "Full resta attivo: acquisisci una nuova osservazione")))
+        self.assertFalse(self.recovery.permits("mac_peekaboo", arguments))
+        self.assertFalse(self.recovery.permits("mac_peekaboo", {"action": "observe_app", "bundle_id": "com.apple.Notes"}))
+        read = {"action": "observe_app", "bundle_id": "com.apple.Safari"}
+        self.assertTrue(self.recovery.permits("mac_peekaboo", read))
+        self.recovery.record("mac_peekaboo", read, self.result("fresh", True, b"jpeg"))
+        self.assertTrue(self.recovery.permits("mac_peekaboo", {"action": "click", "bundle_id": "com.apple.Safari", "snapshot": "new", "element": "B1"}))
+
+    def test_invalid_parameter_code_without_no_dispatch_and_full_proof_is_terminal(self):
+        for text in ("MC-INTEGRATION-01: invalid parameters",
+                     "MC-INTEGRATION-01: Full resta attivo: acquisisci una nuova osservazione",
+                     "MC-INTEGRATION-01: nessuna azione inviata"):
+            self.assertFalse(self.recovery.record("mac_peekaboo", {"action": "click", "bundle_id": "com.apple.Safari"}, self.result(text)))
+
     def test_recovery_code_on_wrong_engine_or_read_action_cannot_authorize_more_work(self):
         for tool, arguments, code in (
             ("mac_computer", {"action": "observe"}, "MC-PEEKABOO-25"),

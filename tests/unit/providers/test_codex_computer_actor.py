@@ -74,6 +74,22 @@ class CodexComputerActorTests(unittest.TestCase):
         self.assertTrue(self.usage)
         self.assertTrue(all(item["model_id"] == "gpt-6-sol" for item in self.usage))
 
+    def test_images_and_receipts_are_injected_together_without_steering(self):
+        output, _ = self.run_actor('paired-image')
+        self.assertEqual(output['status'], 'completed')
+
+    def test_failed_image_injection_stops_before_native_input(self):
+        output, _ = self.run_actor('image-injection-failure')
+        self.assertEqual(output['status'], 'blocked')
+        self.assertEqual(output['summary'], 'computer_actor_execution_interrupted')
+        self.assertEqual([call[1]['action'] for call in self.calls], ['observe_app'])
+
+    def test_partial_progress_cannot_be_reported_as_completed(self):
+        output, _ = self.run_actor('partial')
+        self.assertEqual(output['status'], 'needs_decision')
+        self.assertEqual(output['summary'], 'computer_actor_criterion_not_met')
+        self.assertNotIn('completion_criterion_met', output)
+
     def test_process_is_confined_to_private_operator_filesystem(self):
         scope = self.launch_mock.call_args.kwargs
         self.assertEqual(scope["execution_mode"], "sandbox")
